@@ -339,10 +339,19 @@ def room_exposure(scene, room_id):
 
 
 # Barriers that do not muffle: an open doorway is not a layer of building
-# between you and the rain. IMPORTED from spatial.py rather than restated, so
+# between you and the rain. READ from spatial.py rather than restated, so
 # ambient sound has one definition in this engine -- a copy here would drift
-# the day someone adds a rung to that set.
-from world.spatial import _AMBIENT_BARRIERS as _OPEN_TO_SOUND  # noqa: E402
+# the day someone adds a rung to that set. Read at CALL time, not import:
+# three `world/spatial_*` siblings import this module (for `room_exposure`
+# and `weather_for_room`), and the facade imports every sibling at module
+# scope, so a module-level `from world.spatial import ...` here was an
+# import cycle waiting on import order -- it held only because each sibling
+# happened to import weather inside a function (flagged 2026-09-04).
+def _open_to_sound():
+    from world.spatial import _AMBIENT_BARRIERS
+    return _AMBIENT_BARRIERS
+
+
 # A wall conducts nothing in this engine's model, so it is not an edge sound
 # can walk. Everything else (a closed door, a window, a curtain) is one layer.
 _SOUND_BLOCKS = ("wall",)
@@ -428,7 +437,7 @@ def weather_depth(scene, room_id):
                 barrier = str(edge.get("barrier") or "open").strip().casefold()
                 if not target or target in seen or barrier in _SOUND_BLOCKS:
                     continue
-                if barrier in _OPEN_TO_SOUND:
+                if barrier in _open_to_sound():
                     seen.add(target)
                     frontier.add(target)
                     pending.append(target)

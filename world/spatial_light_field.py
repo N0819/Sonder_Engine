@@ -63,24 +63,31 @@ import json
 import math
 from typing import Optional
 
+from world.spatial_barriers import _SIGHT_BARRIERS, normalize_barrier
 from world.spatial_containment import container_of
 from world.spatial_fov import (
     _FRONT_SECTORS,
     _HEIGHT_RANK,
     _centre,
+    _cone_sector,
     _line,
+    _observer_cell,
     _on_wall_line,
+    _sector_verdict,
+    _visible_set,
     _wall_verdict,
     HEIGHTS,
     body_cell,
     eye_rank,
+    feature_visibility,
     grid_side,
     height_rank,
     normalize_height,
     room_field,
     shadowcast,
+    wall_aperture_cells,
 )
-from world.spatial_geometry import effective_facing
+from world.spatial_geometry import door_anchor_id, effective_facing
 from world.spatial_identity import room_of
 from world.spatial_light import LIGHT_LEVELS, normalize_light, room_light
 from world.spatial_orientation import _BEARING_DEG, normalize_bearing, relative_bearing
@@ -175,9 +182,48 @@ BOUNCE_PASSES_CAP = 4
 
 #: Glare: a source of at least this power, inside the observer's front cone
 #: at no more than this many cells, with the target on the far side of it,
-#: caps sight at `shapes`. The flashlight in your face.
+#: caps sight at `shapes`. The flashlight in your face -- and the all-round
+#: lantern held up between two faces, decided 2026-09-04: glare is about
+#: POWER IN THE EYES, not about the source's shape; a cone decides only
+#: whether the power reaches the eye at all (`per_source` at the observer's
+#: cell), so a cone pointed away dazzles nobody and a lantern does.
 GLARE_POWER = POWER["lit"]
 GLARE_CELLS = 2
+
+#: THE AMBIENT FLOOR SPILLS THROUGH DOORWAYS (the owner agreed, 2026-09-04;
+#: the note's open question 1). Each aperture cell of a wall between two
+#: placed rooms emits the GIVING room's floor into the TAKING room at height
+#: `full`, power FLOOR_SPILL * POWER[floor word] * the aperture's pass,
+#: inverse-square from the aperture cell, summed over the aperture's cells
+#: (a wide door spills more), quantised last with everything else. Through
+#: whatever passes light -- an open doorway, a window (glass passes light
+#: and not bodies, so the light composite places it where sight's does not,
+#: `light_passes`) -- never through a wall or a closed door. 0 reproduces
+#: the field as first built (no spill).
+#:
+#: Tuned so a dark medium room with an open door onto a `lit` room reads
+#: `dim` at the door cell and `dark` in the far corner, and so no floor's
+#: spill alone reads `lit` at the door (the room-level rule it replaces
+#: never lifted borrowed light past dim). Measured on the synthetic pair
+#: (`tests/test_light_field.py`, the door cell d=1 from the aperture,
+#: bounce on):
+#:
+#:   FLOOR_SPILL   lit neighbour: d=1 / d=2 / far corner   bright neighbour: d=1 / d=2 / d=3
+#:   0.00          dark / dark / dark                       dark / dark / dark
+#:   0.20          dim  / dark / dark                       dim  / dim  / dark
+#:   0.25          dim  / dark / dark                       dim  / dim  / dim
+#:   0.33          dim  / dark / dark                       lit  / dim  / dim
+#:   0.50          dim  / dim  / dark                       lit  / dim  / dim
+#:
+#: (intensities at 0.25: lit 0.79 / 0.35 / 0.02, bright 2.43 / 1.11 / 0.58;
+#: the cells beside the doorframe read dim from 0.25 up, as a doorway's glow
+#: does.) 0.25 is the largest value at which a bright floor's spill still
+#: reads dim at the door. On the owner's corpus it returns chats 73 and
+#: 74's "Hotel back office" (small, dark, an open edge onto the lit lobby)
+#: to `dim` in the three cells at its doorway -- the two rooms the field
+#: alone had made dark, § 9.4 of the note -- while the room's median stays
+#: dark, as a small dark room with one lit doorway is.
+FLOOR_SPILL = 0.25
 
 #: Steadiness, as "one beat in N": a `flickering` source drops one level on
 #: beats where hash(beat, source) % FLICKER_RATE == 0; a `failing` source
@@ -222,6 +268,19 @@ def beat_index(scene: dict) -> int:
         return int((scene or {}).get(BEAT_KEY) or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def light_passes(scene, room_id, edge):
+    """The light field's placement predicate for `spatial_fov.room_field`:
+    1.0 for every barrier sight crosses (`_SIGHT_BARRIERS` -- an open
+    doorway, a window, a grille, a one-way pane), None for a wall, a closed
+    door or a curtain. WIDER than `sight_passes`, which leaves glass and
+    grilles unplaced because a grid cannot be walked into through them; a
+    lamp behind a window lights this room all the same, and so does the lit
+    room's floor through it. One grid derivation, three predicates
+    (`spatial_fov._placed_neighbours`)."""
+    barrier = normalize_barrier(edge.get("barrier"))
+    return 1.0 if barrier in _SIGHT_BARRIERS else None
 
 
 # ---------------------------------------------------------------------------
@@ -510,8 +569,10 @@ class LightField:
         self.room_id = room_id
         self.field = field
         self.sources = []
-        self.direct = {}        # cell -> summed direct intensity
+        self.direct = {}        # cell -> summed direct intensity (spill included)
         self.per_source = {}    # source id -> {cell -> intensity}
+        self.spill = {}         # cell -> intensity arriving as a floor's spill
+        self.spill_from = {}    # giving room id -> {cells of the taking room lit}
         self.bounced = {}       # cell -> intensity added by bounce
         self.floor = {}         # room_id -> ambient floor power
         self.intensity = {}     # cell -> final intensity (bounce + floor)
@@ -600,13 +661,60 @@ def _bounce(scene, lf: LightField, memo: dict, *, enabled=True) -> None:
         current = added
 
 
+def _spill(scene, lf: LightField, memo: dict, *, spill=True) -> None:
+    """The ambient floor through the doorways (FLOOR_SPILL, the table beside
+    it). For each wall between two placed rooms and each direction across
+    it, the GIVING room's floor power times FLOOR_SPILL times the aperture's
+    pass is emitted from every aperture cell at `full` height -- shadowed by
+    nothing lower than a wall, as a doorway's glow is -- and lands on the
+    TAKING room's cells alone at inverse-square from the aperture cell. The
+    giving room already has its floor; adding the spill to its own cells
+    would lift the cells beside its own door above its floor for no reason
+    the world has. Records `lf.spill` (per cell) and `lf.spill_from` (per
+    giving room, the taking cells it reached) so the composer can name the
+    opening the light comes through."""
+    lf.spill = {}
+    lf.spill_from = {}
+    if not spill or FLOOR_SPILL <= 0.0:
+        return
+    field = lf.field
+    done = set()
+    for wall in field.walls:
+        other = wall["to"]
+        if other not in field.offsets:
+            continue
+        for giver, taker in ((lf.room_id, other), (other, lf.room_id)):
+            power = (FLOOR_SPILL * POWER.get(room_light(scene, giver), 0.0)
+                     * float(wall.get("pass", 1.0)))
+            if power <= 0.0:
+                continue
+            radius = reach_radius(power)
+            if radius <= 0:
+                continue
+            reached = lf.spill_from.setdefault(giver, set())
+            for ap in wall_aperture_cells(wall):
+                # A diagonal doorway is a gap in two wall lines that meet at
+                # one band cell; that cell emits once.
+                if (giver, ap) in done:
+                    continue
+                done.add((giver, ap))
+                for cell in _cast(field, ap, radius, _HEIGHT_RANK["full"], memo):
+                    if field.inside.get(cell) != taker:
+                        continue
+                    d2 = (cell[0] - ap[0]) ** 2 + (cell[1] - ap[1]) ** 2
+                    intensity = power / (1.0 + d2)
+                    lf.spill[cell] = lf.spill.get(cell, 0.0) + intensity
+                    lf.direct[cell] = lf.direct.get(cell, 0.0) + intensity
+                    reached.add(cell)
+
+
 def compute_light_field(scene: dict, room_id, *, beat=None,
-                        bounce=True) -> Optional[LightField]:
+                        bounce=True, spill=True) -> Optional[LightField]:
     """The light field over `room_id`'s composite field, uncached. None
     when the room has no geometry to compute over (§ 7: fail-open)."""
     if not light_geometry_exists(scene, room_id):
         return None
-    field = room_field(scene, room_id)
+    field = room_field(scene, room_id, through=light_passes)
     if field is None:
         return None
     if beat is None:
@@ -628,6 +736,11 @@ def compute_light_field(scene: dict, room_id, *, beat=None,
             contrib[cell] = intensity
             lf.direct[cell] = lf.direct.get(cell, 0.0) + intensity
         lf.per_source[src["id"]] = contrib
+    # 6a. The ambient floor's SPILL through every aperture (FLOOR_SPILL): the
+    # giving room's floor, emitted from the aperture cells at `full` height
+    # into the taking room's cells only, summed like any other direct light
+    # so bounce fills behind the doorframe as it does behind a counter.
+    _spill(scene, lf, memo, spill=spill)
     # 7. Bounce, on the summed direct field.
     _bounce(scene, lf, memo, enabled=bounce)
     # 6. Ambient floor -- a FLOOR, never a source: applied to the room's
@@ -694,18 +807,28 @@ def observer_light_field(scene: dict, observer: str) -> Optional[LightField]:
 
 def field_light_at(scene: dict, name: str) -> Optional[str]:
     """The quantised level of the body's cell in its own field, or None
-    when the body's room has no geometry or the body has no measured
-    station (a body with no station is somewhere in the room, and
-    'somewhere' has no cell to read)."""
+    when the body's room has no geometry.
+
+    A BODY WITHOUT A CELL READS THE ROOM'S MEDIAN (2026-09-04). It used to
+    keep the room-level `light_at` answer, which reads `light_radius` and
+    proximity and knows nothing of the grid -- so one room had two answers:
+    chat 115's 'Sublevel Four Shelter Approach' (declared dim, one `lit`
+    fixture at its centre, every body unstationed) read `dim` as a room
+    (`effective_light`, the field's median) while every body in it read
+    `lit` (room-level, the fixture filling the room). A body with no station
+    is somewhere in the room, and the room's typical light is the one
+    statistic the field already answers for 'somewhere'. Same class as an
+    unstationed SOURCE standing at the room's centre: the field's own
+    approximation, not the room-level model's."""
     room_id = room_of(scene, name)
     if not room_id or not light_geometry_exists(scene, room_id):
-        return None
-    cell = body_cell(scene, name)
-    if cell is None:
         return None
     lf = light_field(scene, room_id)
     if lf is None:
         return None
+    cell = body_cell(scene, name)
+    if cell is None:
+        return lf.room_level(room_id)
     return lf.level(lf.field.cell_of(room_id, cell))
 
 
@@ -773,6 +896,122 @@ def glare_between(scene: dict, observer: str, target: str) -> bool:
 def _bearing_word(angle: float) -> str:
     from world.spatial_orientation import _BEARINGS
     return _BEARINGS[int(round(angle / 45.0)) % 8]
+
+
+# ---------------------------------------------------------------------------
+# The shape of the light, for the composer (§ 4b, last bullet)
+# ---------------------------------------------------------------------------
+
+def light_shape(scene: dict, observer: str, *, sweep=False) -> Optional[dict]:
+    """Where the light falls, as the composer's closed-vocabulary input, or
+    None when there is nothing to add. The owner's five rules (2026-09-04),
+    shared word for word with `spatial_sound_field.sound_shape`:
+
+      a. speak only when the room is UNEVEN -- the observer's own room's
+         cells do not all quantise to one word. Even, None, and the
+         composer's flat sentence stands byte-identically.
+      b. grade by ANCHOR, not by cell -- the VISIBLE anchors of the room
+         (`feature_visibility`: cone and line already subtracted) grouped by
+         the level at each anchor's nearest cell (the mapping
+         `neighbour_feature_visibility` uses), bright to dark. Four words,
+         no number, no cell, no sector name leaves this function.
+      c. name the source only when it is IN VIEW -- a source in this room
+         the observer's eyes reach (the cone's rear arc and the line of
+         occluders subtract exactly as they do for furniture); light from a
+         placed neighbour, whether a source there or the neighbour's floor
+         spilling, is named by the OPENING it comes through when that
+         opening is in view; anything else is not mentioned.
+      d. say where the observer stands in it -- the level at their own
+         measured cell; no cell, no claim.
+      e. subtract, never add -- every item is an anchor description the
+         eyes already reach or the label of a source they already see.
+
+    Returns {"groups": [{"level": word, "items": [desc, ...]}, ...],
+             "sources": [label, ...], "openings": [desc, ...],
+             "self": word | None}.
+    """
+    room_id = room_of(scene, observer)
+    if not room_id:
+        return None
+    lf = light_field(scene, room_id)
+    if lf is None:
+        return None
+    cells = lf.room_cells(room_id)
+    if not cells or len({lf.level(c) for c in cells}) <= 1:
+        return None                         # rule (a): even; the flat sentence stands
+    field = lf.field
+    origin, how = _observer_cell(scene, observer)
+    facing = None if sweep else effective_facing(scene, observer)
+    eye = eye_rank(scene, observer)
+    rows = feature_visibility(scene, observer, sweep=bool(sweep))
+    placed = field.anchors.get(room_id) or {}
+    groups = {}
+    visible_doors = set()
+    for row in rows:
+        if not row.get("visible"):
+            continue
+        if row.get("implicit"):
+            visible_doors.add(row["anchor"])
+            continue
+        rec = placed.get(row["anchor"]) or {}
+        anchor_cells = rec.get("cells") or ()
+        if not anchor_cells:
+            continue
+        target = min(anchor_cells, key=lambda c: (c[0] - origin[0]) ** 2
+                     + (c[1] - origin[1]) ** 2)
+        groups.setdefault(lf.level(target), []).append(row["desc"])
+    # Rule (c): sources in view, else the opening their light comes through.
+    sources = []
+    openings = []
+    seen_cache = {}
+
+    def in_view(cell, top):
+        if how == "measured":
+            key = top
+            if key not in seen_cache:
+                seen_cache[key] = _visible_set(field, origin, eye, top)
+            if cell not in seen_cache[key]:
+                return False
+        if facing:
+            dist = math.hypot(cell[0] - origin[0], cell[1] - origin[1])
+            if _sector_verdict(_cone_sector(facing, origin, cell)) == "rear" \
+                    and dist > 1.5:
+                return False
+        return _wall_verdict(field, origin, cell)
+
+    for src in lf.sources:
+        if src["room"] == room_id:
+            if src["cell"] != origin and not in_view(src["cell"], src["height"]):
+                continue
+            if src["label"] not in sources:
+                sources.append(src["label"])
+            continue
+        # Beyond a doorway: named by the opening, when the opening is seen
+        # and the light actually reaches this room.
+        if not any(field.inside.get(c) == room_id and v > 0.0
+                   for c, v in lf.per_source.get(src["id"], {}).items()):
+            continue
+        door = door_anchor_id(src["room"])
+        if door in visible_doors:
+            desc = str((placed.get(door) or {}).get("desc") or "").strip()
+            if desc and desc not in openings:
+                openings.append(desc)
+    for giver, reached in lf.spill_from.items():
+        if giver == room_id or not any(field.inside.get(c) == room_id
+                                       for c in reached):
+            continue
+        door = door_anchor_id(giver)
+        if door in visible_doors:
+            desc = str((placed.get(door) or {}).get("desc") or "").strip()
+            if desc and desc not in openings:
+                openings.append(desc)
+    ordered = [{"level": word, "items": groups[word]}
+               for word in reversed(LIGHT_LEVELS) if groups.get(word)]
+    self_word = lf.level(origin) if how == "measured" else None
+    if not ordered and self_word is None:
+        return None
+    return {"groups": ordered, "sources": sources, "openings": openings,
+            "self": self_word}
 
 
 # ---------------------------------------------------------------------------

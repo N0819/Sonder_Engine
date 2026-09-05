@@ -50,23 +50,24 @@ import heapq
 import json
 from typing import Optional
 
-from world.spatial_barriers import effective_adjacent, normalize_barrier
+from world.spatial_barriers import normalize_barrier
 from world.spatial_containment import container_of
 from world.spatial_fov import (
     _Field,
     _HEIGHT_RANK,
-    _UNIT,
     _centre,
-    _door_cells,
+    _observer_cell,
     _wall_verdict,
     body_cell,
+    feature_visibility,
     grid_side,
+    room_field,
     room_has_geometry,
 )
+from world.spatial_geometry import door_anchor_id
 from world.spatial_identity import _ci_get, room_of
 from world.spatial_light_field import (
     _beat_hash, FAIL_RATE, FLICKER_RATE, normalize_steadiness, STEADINESS)
-from world.spatial_orientation import normalize_bearing
 from world.spatial_senses import _material_shifted_barrier
 
 
@@ -182,6 +183,32 @@ FULL_SNR = 2.0
 #: `fragment` when signal >= FRAGMENT_SNR * noise (and >= HEAR_FLOOR). Kept.
 FRAGMENT_SNR = 0.8
 
+#: THE NOISE LADDER the composer speaks (2026-09-04, the owner's rule b: the
+#: sentence grades by a closed set, never a number). Three words for what
+#: the noise at a cell does to a NORMAL VOICE ONE PACE OFF -- the yardstick
+#: a body has for a room's loudness, "could I hear someone beside me" --
+#: derived from the two SNR thresholds above, not set beside them:
+#:
+#:   quiet    a normal voice one pace off is `full`      noise <= 6.0 / FULL_SNR     (3.0)
+#:   din      ... is a `fragment`                        noise <= 6.0 / FRAGMENT_SNR (7.5)
+#:   drowned  ... is `none`                              above that
+#:
+#: where 6.0 is SPEECH_POWER["normal"] at a path of one cell, 12 / (1 + 1).
+#: Move FULL_SNR or FRAGMENT_SNR and the words move with them.
+NOISE_WORDS = ("quiet", "din", "drowned")
+VOICE_ONE_PACE = SPEECH_POWER["normal"] / 2.0
+
+
+def noise_word(noise: float) -> str:
+    """One of NOISE_WORDS for a noise floor, by what it does to a normal
+    voice one pace off."""
+    noise = float(noise or 0.0)
+    if VOICE_ONE_PACE >= FULL_SNR * noise:
+        return "quiet"
+    if VOICE_ONE_PACE >= FRAGMENT_SNR * noise:
+        return "din"
+    return "drowned"
+
 #: Steadiness rates: see the light field's FLICKER_RATE / FAIL_RATE, imported
 #: above -- one hash, two senses, one pair of rates.
 
@@ -282,65 +309,25 @@ def _aperture_pass(scene, room_id, edge) -> float:
     return float(APERTURE_PASS.get(shifted, 0.0))
 
 
-def _acoustic_grid(scene, room_id) -> Optional[_Field]:
-    """The listener's room plus every neighbour a sound can reach through a
-    placed aperture -- an open doorway, a curtain, a shut door, a window, a
-    grille -- laid beyond the wall band with the door cells aligned, exactly
-    as `observer_field` lays a SIGHT neighbour. Sight places only what an
-    open doorway shows; sound places whatever a wall lets through, so the
-    placement is repeated here for the wider predicate, and each wall record
-    additionally carries `pass`, the aperture's factor. (The room-shapes work
-    on `_Field` may lift this placement into a method; until then the two
-    copies must agree, and `tests/test_sound_field.py` checks the open-door
-    case lands on the same cells `observer_field` does.)"""
+def sound_passes(scene, room_id, edge):
+    """The sound field's placement predicate for `spatial_fov.room_field`:
+    the aperture's pass for any barrier that is not a wall -- an open
+    doorway, a curtain, a shut door, a window, a grille -- and None for a
+    wall, which is never an aperture. Sight places what a body walks into;
+    sound places whatever a wall lets through. ONE grid derivation serves
+    both since 2026-09-04: `_acoustic_grid` was a second copy of the
+    placement loop, and it still laid rooms out as tier squares after the
+    room-shapes work had taught `room_field` about L and round rooms."""
+    factor = _aperture_pass(scene, room_id, edge)
+    return factor if factor > 0 else None
+
+
+def acoustic_grid(scene, room_id) -> Optional[_Field]:
+    """The listener's composite for sound: `room_field` under
+    `sound_passes`, every wall record carrying its aperture's `pass`."""
     if not room_id:
         return None
-    field = _Field()
-    field.add_room(scene, room_id, (0, 0))
-    side = grid_side(scene, room_id)
-    rooms = scene.get("rooms") or {}
-    for edge in effective_adjacent(scene, room_id):
-        if not isinstance(edge, dict) or not edge.get("to"):
-            continue
-        other = str(edge["to"])
-        if other not in rooms or other == room_id:
-            continue
-        factor = _aperture_pass(scene, room_id, edge)
-        if factor <= 0:
-            continue
-        b1 = normalize_bearing(edge.get("dir"))
-        if not b1 or b1 not in _UNIT:
-            continue
-        d1s, door_bearing = _door_cells(scene, room_id, other)
-        d2s, _b2 = _door_cells(scene, other, room_id)
-        if not d1s or not d2s:
-            continue
-        b1 = door_bearing or b1
-        d1, d2 = d1s[0], d2s[0]
-        ux, uy = _UNIT[b1]
-        band = (d1[0] + ux, d1[1] + uy)
-        anchor_far = (band[0] + ux, band[1] + uy)
-        offset = (anchor_far[0] - d2[0], anchor_far[1] - d2[1])
-        far_side = grid_side(scene, other)
-        if any(cell in field.inside for cell in (
-                (x + offset[0], y + offset[1])
-                for x in range(far_side) for y in range(far_side))):
-            continue                        # two doorways on one wall overlap
-        field.add_room(scene, other, offset)
-        aperture_cells = [(x + ux, y + uy) for x, y in d1s]
-        for axis in ((1,) if b1 in ("n", "s") else
-                     (0,) if b1 in ("e", "w") else (0, 1)):
-            along = 1 - axis
-            lo = min(0, offset[along]) - 0.5
-            hi = max(side, offset[along] + far_side) - 0.5
-            field.walls.append({
-                "axis": axis, "coord": band[axis], "extent": (lo, hi),
-                "aperture": (min(c[along] for c in aperture_cells) - 0.5,
-                             max(c[along] for c in aperture_cells) + 0.5),
-                "to": other,
-                "pass": factor,
-            })
-    return field
+    return room_field(scene, room_id, through=sound_passes)
 
 
 def _crossing_pass(field, a, b) -> float:
@@ -374,11 +361,17 @@ def spread(field: _Field, origin) -> dict:
     """{cell: (path length, pass)} for every cell the flood reaches from
     `origin`: Dijkstra over the field's cells. A side step costs 1, a
     diagonal DIAGONAL_COST. A cell holding an occluder at waist height or
-    above is not entered (the flood goes round it; it blocks nothing by
-    itself), except the origin's own cell. A step into another room leaps the
-    wall band -- the wall is a line of no thickness -- and is allowed only
-    where `_wall_verdict` puts the segment inside an aperture, carrying that
-    aperture's `pass`. Deterministic: a tie breaks on the cell."""
+    above is REACHED but never passed through -- the flood steps onto the
+    counter's cell and goes round it, so a body standing at the counter
+    hears and the cells behind it are reached by the path round the end.
+    (Until 2026-09-04 such a cell was not entered at all, and a listener
+    whose station resolved onto another anchor's cell -- a body at the
+    hearth where the seeded shelf also landed -- heard NOTHING at any
+    volume: signal 0, a shout beside them `none`.) A step into another room
+    leaps the wall band -- the wall is a line of no thickness -- and is
+    allowed only where `_wall_verdict` puts the segment inside an aperture,
+    carrying that aperture's `pass`. Deterministic: a tie breaks on the
+    cell."""
     inside = field.inside
     if origin not in inside:
         return {}
@@ -389,6 +382,8 @@ def spread(field: _Field, origin) -> dict:
         dist, cell, factor = heapq.heappop(heap)
         if best.get(cell, (float("inf"),))[0] < dist:
             continue
+        if cell != origin and heights.get(cell, -1.0) >= _ROUND_RANK:
+            continue                    # reached, not passed through
         x, y = cell
         here = inside[cell]
         for dx, dy, cost in _STEPS:
@@ -396,15 +391,11 @@ def spread(field: _Field, origin) -> dict:
             if nxt in inside:
                 if inside[nxt] != here:
                     continue            # rooms never touch; the band is between
-                if heights.get(nxt, -1.0) >= _ROUND_RANK:
-                    continue
                 nd, nf = dist + cost, factor
             else:
                 # Across the band: the cell two steps on, in another room.
                 nxt = (x + 2 * dx, y + 2 * dy)
                 if nxt not in inside or inside[nxt] == here:
-                    continue
-                if heights.get(nxt, -1.0) >= _ROUND_RANK:
                     continue
                 pf = _crossing_pass(field, cell, nxt)
                 if pf <= 0:
@@ -508,7 +499,7 @@ def sound_sources(scene: dict, *, turn_idx=None, crowds=None, events=None,
                 cell = _centre(grid_side(scene, room))
             out.append({"id": str(eid), "kind": "entity", "room": str(room),
                         "cell": cell, "power": power, "level": level,
-                        "holder": holder, "beat": beat})
+                        "holder": holder, "beat": beat, "label": label})
     for crowd in crowds or []:
         if not isinstance(crowd, dict):
             continue
@@ -547,10 +538,39 @@ def sound_sources(scene: dict, *, turn_idx=None, crowds=None, events=None,
 
 
 def sound_notices(scene: dict, turn_idx) -> list:
-    """The engine notices this beat's failing sources file, scene-wide (a
-    failure is a fact about the source, not about who is listening)."""
+    """The notices this beat's failing sources carry on the field
+    (`SoundField.notices`), scene-wide -- a failure is a fact about the
+    source, not about who is listening. The notice the DIRECTOR reads is
+    filed once, at commit, by `persist/commit_scene_state.py`'s failed-source
+    block, which reads `failing_sound_sources_out` beside the light field's
+    `failing_sources_out` and writes the switch as well: one notice per
+    thing, whichever senses it fails in."""
     _sources, notices = sound_sources(scene, turn_idx=turn_idx)
     return notices
+
+
+def failing_sound_sources_out(scene: dict, beat) -> list:
+    """`[(entity_id, label)]` for every running `failing` sound source the
+    beat hash puts out on `beat` -- the sound field's half of the commit's
+    failed-source block (the light field's is `failing_sources_out`). The
+    same hash `steadiness_this_beat` reads at perception time, so the two
+    agree without a write; a thing that both lights and hums lands in both
+    lists on the same beat and the commit files ONE notice for it."""
+    out = []
+    entities = (scene or {}).get("entities") or {}
+    if not isinstance(entities, dict):
+        return out
+    for eid, entity in sorted(entities.items()):
+        if not isinstance(entity, dict):
+            continue
+        if not normalize_sound_level(entity.get("sound_source")):
+            continue
+        if not _running(entity):
+            continue
+        if steadiness_this_beat(entity.get("steadiness"), beat, eid) != "out":
+            continue
+        out.append((str(eid), str(entity.get("name") or eid)))
+    return out
 
 
 def _ambient_floor(scene, room_id) -> float:
@@ -715,7 +735,7 @@ def sound_field(scene: dict, listener: str, *, room=None, turn_idx=None,
     cached = _SOUND_FIELD_CACHE.get(key)
     if cached is not None and cached.scene is scene:
         return cached
-    grid = _acoustic_grid(scene, room)
+    grid = acoustic_grid(scene, room)
     if grid is None:
         return None
     sources, notices = sound_sources(scene, turn_idx=turn_idx, crowds=crowds,
@@ -789,3 +809,104 @@ def heard_events(scene: dict, listener: str, events, *, room=None,
         if level != "none":
             out.append((event, level))
     return out
+
+
+# ---------------------------------------------------------------------------
+# The shape of the sound, for the composer (DESIGN_SOUND_FIELD.md § 4b)
+# ---------------------------------------------------------------------------
+
+def sound_shape(scene: dict, observer: str, *, sound=None, room=None,
+                sweep=False) -> Optional[dict]:
+    """Where the sound is, as the composer's closed-vocabulary input, or None
+    when there is nothing to say. The owner's five rules (2026-09-04), the
+    same five the light field's `light_shape` follows:
+
+      a. speak only when the room is UNEVEN -- the noise word is not the
+         same at every cell of the listener's own room; even, None, and
+         whatever the composer says today stands byte-identically;
+      b. grade by ANCHOR, not by cell -- the VISIBLE anchors of the room
+         (`feature_visibility`, cone and line already subtracted) grouped by
+         the noise word at the anchor's nearest cell (the mapping
+         `neighbour_feature_visibility` uses), loud to quiet; no number,
+         cell or sector name leaves this function;
+      c. name the source only when the observer has a channel to it -- a
+         running entity in this room the observer HEARS is named by its
+         label; one in a placed neighbour is named by the OPENING it comes
+         through, when that opening is in view; a source neither heard nor
+         in view is not mentioned;
+      d. say where the observer stands in it -- the noise word at their own
+         measured cell; no cell, no claim;
+      e. subtract, never add -- every item here is an anchor description the
+         observer's eyes already reach or a label of a thing they already
+         hear.
+
+    Returns {"groups": [{"level": word, "items": [desc, ...]}, ...],
+             "sources": [label, ...], "openings": [desc, ...],
+             "self": word | None}.
+
+    `sound` is the observer's precomputed field for the beat (crowds and the
+    turn index included); absent, one is derived from the scene alone.
+    """
+    room = room or room_of(scene, observer)
+    if not room:
+        return None
+    field = sound if sound is not None else sound_field(scene, observer, room=room)
+    if field is None or field.room != room:
+        return None
+    grid = field.grid
+    own_cells = [c for c, r in grid.inside.items() if r == room]
+    if not own_cells:
+        return None
+
+    def noise_at_cell(cell):
+        total = field.ambient.get(room, AMBIENT["enclosed"])
+        for source in field.sources:
+            total += field.intensity_at(source, cell)
+        return total
+
+    words = {noise_word(noise_at_cell(c)) for c in own_cells}
+    if len(words) <= 1:
+        return None                         # rule (a): even; nothing to add
+    origin, how = _observer_cell(scene, observer)
+    rows = feature_visibility(scene, observer, sweep=bool(sweep))
+    placed = grid.anchors.get(room) or {}
+    groups = {}
+    visible_doors = set()
+    for row in rows:
+        if not row.get("visible"):
+            continue
+        if row.get("implicit"):
+            visible_doors.add(row["anchor"])
+            continue
+        rec = placed.get(row["anchor"]) or {}
+        cells = rec.get("cells") or ()
+        if not cells:
+            continue
+        target = min(cells, key=lambda c: (c[0] - origin[0]) ** 2
+                     + (c[1] - origin[1]) ** 2)
+        groups.setdefault(noise_word(noise_at_cell(target)), []).append(
+            row["desc"])
+    sources = []
+    openings = []
+    for source in field.sources:
+        if source.get("kind") not in ("entity", "crowd"):
+            continue                        # a line and a one-beat event are the beat's, not the room's
+        if field.level_of(observer, source["id"], room=room) == "none":
+            continue                        # rule (c): not heard, not named
+        if source["room"] == room:
+            label = str(source.get("label") or "").strip()
+            if label and label not in sources:
+                sources.append(label)
+            continue
+        door = door_anchor_id(source["room"])
+        if door in visible_doors:
+            desc = str((placed.get(door) or {}).get("desc") or "").strip()
+            if desc and desc not in openings:
+                openings.append(desc)
+    ordered = [{"level": word, "items": groups[word]}
+               for word in reversed(NOISE_WORDS) if groups.get(word)]
+    self_word = noise_word(noise_at_cell(origin)) if how == "measured" else None
+    if not ordered and self_word is None:
+        return None
+    return {"groups": ordered, "sources": sources, "openings": openings,
+            "self": self_word}

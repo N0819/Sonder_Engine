@@ -30,6 +30,20 @@ the proposal and § 9.3 records the consequence. Three assertions in
 scene which carries geometry now pin both contracts (§ 9.4). The § 9.5 live
 beats were not played.
 
+**Extended 2026-09-04 at the merge with the sound field**, under the
+owner's ruling of the same day, each item pinned: ONE grid derivation for
+every sense (`spatial_fov.room_field` takes a placement predicate;
+`light_passes` places every barrier sight crosses, glass included -- § 4,
+§ 4a); the ambient floor SPILLS through apertures (`FLOOR_SPILL` 0.25,
+§ 4.6, the note's open question 1 answered yes); the composer says WHERE the
+light falls (`light_shape`, § 4b, `tests/test_field_sentences.py`); a body
+with no station reads the room's MEDIAN, not the room-level model (§ 4b);
+glare counts an all-round lantern (§ 4b, decided); and the commit's
+failed-source block is shared with the sound field (§ 5). The corpus was
+re-measured (§ 9.6): the room, body and pair distributions are unchanged
+from § 9.4, chats 73 and 74's back office reads `dim` in the three cells at
+its doorway, and the light sentence would speak in 3 of 321 live rooms.
+
 The ask, in the owner's words across one conversation: make lighting
 realistic; allow a held conical flashlight and all-round lights like a
 lantern, a torch or a phone, WITHOUT a vocabulary of devices ("a lighting
@@ -131,9 +145,18 @@ source looks like on the grid.
 
 ## 4. The field
 
-Computed once per (scene, observer) alongside `observer_field`, over the
-same composite grid (own room plus sight-neighbours beyond their doorways),
-cached with it for the turn. Steps, each a small pure function:
+Computed once per (scene, room) over the composite grid `room_field`
+derives -- the own room plus every neighbour placed beyond its aperture --
+and cached for the turn. ONE derivation serves three senses (2026-09-04):
+`room_field(scene, room, through=...)` takes a placement PREDICATE, and the
+three are `sight_passes` (what a body walks into: open, open_door -- the
+rule `observer_field` always had, byte-identical on every scene shape,
+`tests/test_one_grid_two_senses.py`), `light_passes` (every barrier sight
+crosses, glass and grilles included: a lamp behind a window lights this
+room, and so does the lit room's floor through it) and the sound field's
+`sound_passes` (whatever is not a wall, at the aperture's drop). Each wall
+record carries the predicate's `pass` beside its five keys. Steps, each a
+small pure function:
 
 1. **Power.** Each active source (`state.lit` not false, this beat not a
    flicker-out, § 5) has power `P = POWER[light_source]`. Power is in
@@ -172,11 +195,25 @@ cached with it for the turn. Steps, each a small pure function:
 6. **Ambient floor.** Every cell of a room is lifted to at least
    `POWER[room_light(scene, room)]` -- the sky through `sun_light`
    outdoors, the declared `light` indoors, exactly as `room_light` answers
-   today. This is the one place the room-level word survives, and it is a
-   FLOOR, never a source: it casts nothing, shadows nothing, and does not
-   spill. (A daylit room's floor is `lit`; the doorway spill into the
-   cellar comes from the sources and bounce below, not from the floor.
-   § 9 asks whether the floor should spill and by how much.)
+   today. This is the one place the room-level word survives, and within
+   its own room it is a FLOOR, never a source: it casts nothing and shadows
+   nothing there.
+
+   **6a. The floor spills through doorways** (the owner agreed, 2026-09-04;
+   this note's open question 1). Each aperture cell of every wall between
+   two placed rooms emits the GIVING room's floor into the TAKING room at
+   height `full`, power `FLOOR_SPILL * POWER[floor word] * pass`,
+   inverse-square from the aperture cell, summed over the aperture's cells
+   (a wide door spills more) and with everything else, quantised last.
+   Through whatever passes light -- an open doorway, a window -- never
+   through a wall or a closed door; onto the taking room's cells only (the
+   giver already has its floor). `FLOOR_SPILL` = 0.25, the largest value at
+   which a `bright` floor's spill still reads `dim` at the door (0.33 makes
+   it `lit`; the room-level rule this replaces never lifted borrowed light
+   past dim); a `lit` neighbour makes a dark medium room `dim` at the door
+   cell and the two beside the frame, `dark` two paces in and in the far
+   corner, its median still dark. `FLOOR_SPILL = 0` reproduces the field as
+   first built. The table is beside the constant in the module.
 
 7. **Bounce.** Indirect fill, iterated: on each pass every cell with
    intensity I above `DARK_THRESHOLD` re-emits `BOUNCE[exposure] * I`
@@ -211,6 +248,11 @@ by decay, which is why it can be dropped without a special case.
 
   * `light_at(scene, body)` -> the quantised level of the body's cell in
     its own field (the body's room is always the own room of its field).
+    A body with NO cell reads the room's median (2026-09-04): it is
+    somewhere in the room, and the room's typical light is the one
+    statistic the field already answers for 'somewhere'. It used to keep
+    the room-level answer, so one room had two -- chat 115's corridor read
+    `dim` as a room and `lit` for every unstationed body in it.
   * `effective_light(scene, room)` -> the level of the room's MEDIAN cell
     intensity, so a room reads as its typical light, not its brightest
     corner or its darkest; callers that gate on "is this room dark" keep
@@ -223,14 +265,34 @@ by decay, which is why it can be dropped without a special case.
     far side of it (the source's cell lies on the target's line), caps
     sight at `shapes`. The flashlight in your face is the whole reason a
     cone exists in fiction, and it is one line once the field is there.
+    An all-round lantern held up between two faces counts too (decided
+    2026-09-04): glare is about power in the eyes, not the source's shape;
+    the cone only decides whether the power reaches the eye at all.
   * The composer's darkness sentences, the Director's dark-room check
     (`agents/director.py`, "any room not lit") and `spatial_routing`'s
     light gates all read through these three and change nothing.
-  * The Narrator and the Director payload get, per room in view, the
-    field's SHAPE in the composer's words -- "the lamp lights the table and
-    the near wall; the far end of the room is dark" -- from the same
-    per-anchor cell mapping `neighbour_feature_visibility` uses. Prose,
-    from geometry, never a number.
+  * **Where the light falls** (built 2026-09-04: `light_shape`, rendered by
+    `composer.render_light_shape` and the Japanese adapter from templates
+    over the four words; `tests/test_field_sentences.py`). Five rules, the
+    owner's, shared word for word with the sound field: (a) speak only when
+    the room is UNEVEN -- every cell one word and the flat `light_dim` /
+    `light_dark` sentence stands, byte-identically; (b) grade by ANCHOR,
+    not by cell -- the visible anchors (`feature_visibility`, cone and line
+    already subtracted) grouped by the word at each anchor's nearest cell,
+    the mapping `neighbour_feature_visibility` uses, bright to dark, as
+    templates over the closed set, never free text, no number, cell or
+    sector reaching prose; (c) name the source when it is IN VIEW, else the
+    opening its light comes through when that opening is in view ("the
+    light from the open doorway"), never a source the observer cannot see;
+    (d) say where the observer stands in it -- with a cell; no cell, no
+    claim; (e) subtract, never add -- `observations_from_render` re-derives
+    the same sentence and an observer receives only their own view's. When
+    the shape is present it REPLACES the flat sentence, which spoke for the
+    whole room. The same sentences reach the Director's sight digest
+    (`payload.sightlines.light[name]`, through
+    `composer.field_shape_sentence`). "The light from the lamp falls on the
+    table, thins to half-light at the shelf, and leaves the hearth in the
+    dark. You stand in half-light."
 
 ## 5. Steadiness
 
@@ -244,6 +306,14 @@ of the beat sees the same light as the beat it replaces (the same reason
 anchor placement is seeded on (room, anchor)). Nothing about a device:
 `failing` is true of a guttering candle, a dying torch battery and a spell
 running out alike.
+
+The commit's failed-source block is ONE block for both fields
+(`persist/commit_scene_state._record_failed_sources`, 2026-09-04): it reads
+`failing_sources_out` and the sound field's `failing_sound_sources_out` --
+the same hash -- writes every switch the thing carries (`state.lit`,
+`state.running`), and files one notice per THING: a lamp "has gone out", a
+generator "has stopped", a thing that both lights and hums "has failed",
+once. Perception no longer files the sound notice itself.
 
 ## 6. Constants the owner sets
 
@@ -264,6 +334,7 @@ four, and reaches the far wall as `dark`, and so that a `bright` fixture at
     BOUNCE_REACH    3 cells    BOUNCE_PASSES_CAP 4
     GLARE_POWER     = POWER[lit]   GLARE_CELLS 2
     FLICKER_RATE    1 beat in 4    FAIL_RATE 1 beat in 12
+    FLOOR_SPILL     0.25   (added 2026-09-04, § 4.6a; 0 = no spill)
 
 The cap on bounce passes is a SAFETY ceiling, expected never to bind: with
 BOUNCE <= 0.25 and inverse-square decay the second pass already adds under
@@ -469,3 +540,37 @@ without geometry beside the field's answer with it.
 
 Not played. The standing grant covers it; two beats with a held cone in a
 fresh non-explicit scenario are the next measurement.
+
+### 9.6 After the merge (2026-09-04; read-only, streamed, chat 111 excluded)
+
+The § 9.4 comparison re-run with three configurations over the same 104
+scenes / 589 rooms / 823 entities and the same 321 gated rooms: A the
+room-level model alone, B the field as merged at `c3f274ea`, C the field
+with the unified grid (glass placed), `FLOOR_SPILL` 0.25 and unstationed
+bodies at the median. (The database could not be copied -- 3.9 GB free
+against a 3.4 GB file -- so rows were streamed from a `mode=ro` connection
+and nothing content-bearing was written.)
+
+    effective_light, 321 rooms   A dark 9 / dim 43 / lit 269
+                                 B dark 11 / dim 42 / lit 268
+                                 C dark 11 / dim 42 / lit 268   (B -> C: 0 rooms)
+    light_at, 106 bodies whose room carries the gate
+                                 A = B = C  dark 4 / dim 3 / lit 99
+    sight_level, 176 pairs of such bodies
+                                 A = B = C  full 142 / none 32 / shapes 2
+
+(§ 9.4 counted 171 bodies and 312 pairs by a wider rule -- every body in a
+scene with any gated room; the three configurations agree under either.)
+The spill changes no room's MEDIAN: chats 73 and 74's 'Hotel back office'
+(small, dark, an open edge onto the lit lobby) now reads `dim` in the three
+cells at its doorway and `dark` in its other thirteen, so `effective_light`
+stays dark -- "dim by the door", as the owner asked, not dim as a room, which
+is what the room-level rule had said. Chat 115's corridor keeps dim, with
+its lit fixture's 3x3 pool at the centre. No live body changed: chat 74's
+night clerk is unstationed and both models read the room dark for it. Six
+light composites now place a glass neighbour sight's does not. The light
+sentence would speak in 3 of 321 live rooms (the two back offices and the
+corridor) and is handed to 1 live body -- the night clerk, whose sentence
+names the opening and grades the two anchors it can see; the sound
+sentence to none (2 live rooms carry the sound field's gate and neither is
+uneven).

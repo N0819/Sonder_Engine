@@ -668,13 +668,69 @@ def _surface_suddenness(surface):
 # Layer A -- standing-state percepts
 # --------------------------------------------------------------------------
 
+#: The two fields' closed vocabularies, as the composer knows them: a shape
+#: row whose level is not one of these is dropped, so no other word can
+#: reach a template. Light's is `spatial_light.LIGHT_LEVELS`; sound's is
+#: `spatial_sound_field.NOISE_WORDS`, both spelled here rather than imported
+#: because the composer reads no scene module.
+LIGHT_SHAPE_LEVELS = ("bright", "lit", "dim", "dark")
+SOUND_SHAPE_LEVELS = ("drowned", "din", "quiet")
+
+
+def _clean_shape(shape, levels):
+    """A field shape as the templates will read it, or None. Groups keep
+    only levels in the closed set and non-empty descriptions; `sources`
+    and `openings` are labels the observer already has; `self` is one of
+    the levels or None. Nothing numeric survives -- there is nothing
+    numeric to keep."""
+    if not isinstance(shape, dict):
+        return None
+    groups = []
+    for group in shape.get("groups") or ():
+        if not isinstance(group, dict):
+            continue
+        level = str(group.get("level") or "")
+        items = [str(i).strip() for i in (group.get("items") or ())
+                 if str(i or "").strip()]
+        if level in levels and items:
+            groups.append({"level": level, "items": items})
+    sources = [str(s).strip() for s in (shape.get("sources") or ())
+               if str(s or "").strip()]
+    openings = [str(o).strip() for o in (shape.get("openings") or ())
+                if str(o or "").strip()]
+    self_word = shape.get("self")
+    self_word = self_word if self_word in levels else None
+    if not groups and self_word is None:
+        return None
+    return {"groups": groups, "sources": sources, "openings": openings,
+            "self": self_word}
+
+
+def _shape_signature(shape):
+    if not shape:
+        return ""
+    return "|".join(
+        ["%s=%s" % (g["level"], ",".join(g["items"])) for g in shape["groups"]]
+        + ["from=" + ",".join(shape["sources"] + shape["openings"]),
+           "self=%s" % (shape["self"] or "")])
+
+
 def environment_percept(room_id, room_name, room_notes="", light="",
-                        features=None, openings=None):
+                        features=None, openings=None, light_shape=None):
     """The room as standing state -- or None when the observer has no
     resolvable room. A mind in unloaded space perceives NOTHING here; the
     old path fabricated "You are in an unspecified area." for it, which
     became 812 identical memory rows (97.3% collision). No room, no
     percept, no view sentence, no episode.
+
+    `light_shape` is where the light FALLS, for a room the light field
+    finds uneven (`world.spatial_light_field.light_shape`): visible anchors
+    grouped by the four light words, the sources or openings the light comes
+    from, and the observer's own standing. Absent -- an even room, no
+    geometry, no station -- the percept and its sentence are byte-identical
+    to what they always were. Present, the renderer says where the light
+    falls INSTEAD of the flat `light_dim`/`light_dark` sentence, which spoke
+    for the whole room.
 
     `features` is what THIS observer's eyes reach of the room's furniture
     (`world.spatial_fov.feature_visibility`, already subtracted by cone and
@@ -734,6 +790,9 @@ def environment_percept(room_id, room_name, room_notes="", light="",
         data["features"] = rows
     if ways:
         data["openings"] = ways
+    shape = _clean_shape(light_shape, LIGHT_SHAPE_LEVELS)
+    if shape:
+        data["light_shape"] = shape
     # The visible set is part of the CONTENT: turning to face the hearth
     # changes what this observer has of the room, and the ledger must read
     # that as the room changed for them, not as the same fact said again.
@@ -754,8 +813,95 @@ def environment_percept(room_id, room_name, room_notes="", light="",
             "env", (room_id,),
             (room_name, room_notes, light)
             + ((feature_sig,) if rows else ())
-            + ((opening_sig,) if ways else ())),
+            + ((opening_sig,) if ways else ())
+            + ((_shape_signature(shape),) if shape else ())),
     )
+
+
+def soundscape_percept(shape, room_id):
+    """Where the sound is, as one standing HEARING percept -- or None when
+    the sound field found the room even, or has nothing to say
+    (`world.spatial_sound_field.sound_shape`). An `ambient` kind, because
+    that is what it is: a standing feature of the room and not a body, an
+    event or a sensation on this body. The dedupe key carries the shape, so
+    a generator that starts or a door that opens is a room that CHANGED for
+    this observer and an unchanged din is furniture."""
+    shape = _clean_shape(shape, SOUND_SHAPE_LEVELS)
+    if not shape or not room_id:
+        return None
+    return Percept(
+        kind="ambient", channel="hearing",
+        data={"soundscape": shape},
+        salience=0.3,
+        dedupe_key=standing_key("soundscape", (room_id,),
+                                (_shape_signature(shape),)),
+    )
+
+
+def _shape_clauses(shape, prefix, levels):
+    return [_en(prefix + level, items=_join_clauses(group["items"]))
+            for group in shape["groups"] for level in (group["level"],)
+            if level in levels]
+
+
+def render_light_shape(shape):
+    """The light's shape as one or two English sentences, from templates over
+    the closed set alone: the origin (the sources in view and the openings
+    the light comes through, or 'the light' when neither is in view), the
+    visible anchors grouped bright to dark, and where the observer stands.
+    No number, cell or sector reaches the page -- the shape carries none."""
+    shape = _clean_shape(shape, LIGHT_SHAPE_LEVELS)
+    if not shape:
+        return ""
+    parts = []
+    clauses = _shape_clauses(shape, "light_at_", LIGHT_SHAPE_LEVELS)
+    if clauses:
+        froms = shape["sources"] + shape["openings"]
+        origin = (_en("light_origin", items=_join_clauses(froms)) if froms
+                  else _en("light_origin_none"))
+        parts.append(_cap(_en("light_shape", origin=origin,
+                              clauses=_join_clauses(clauses))))
+    if shape["self"]:
+        parts.append(_en("light_self_" + shape["self"]))
+    return " ".join(parts)
+
+
+def render_sound_shape(shape):
+    """The sound's shape, the same way: the origin (entities heard in this
+    room, and 'beyond <opening>' for one heard through a doorway), the
+    visible anchors grouped loud to quiet, and where the observer stands."""
+    shape = _clean_shape(shape, SOUND_SHAPE_LEVELS)
+    if not shape:
+        return ""
+    parts = []
+    clauses = _shape_clauses(shape, "sound_at_", SOUND_SHAPE_LEVELS)
+    if clauses:
+        froms = shape["sources"] + [_en("sound_beyond_opening", opening=o)
+                                    for o in shape["openings"]]
+        origin = (_en("sound_origin", items=_join_clauses(froms)) if froms
+                  else _en("sound_origin_none"))
+        parts.append(_cap(_en("sound_shape", origin=origin,
+                              clauses=_join_clauses(clauses))))
+    if shape["self"]:
+        parts.append(_en("sound_self_" + shape["self"]))
+    return " ".join(parts)
+
+
+def field_shape_sentence(kind, shape, *, language=None):
+    """One field shape (`light` or `sound`) as the story language's
+    sentence -- the seam the Director's sight digest reads, so the Director
+    is handed exactly the sentence the observer's view carries and nothing
+    the view does not. The pack's adapter renders it when it can; English
+    otherwise, as `render_view` falls back."""
+    if not shape:
+        return ""
+    selected = _safe_renderer(language)
+    if selected is not None and hasattr(selected, "field_shape_sentence"):
+        try:
+            return str(selected.field_shape_sentence(kind, shape) or "")
+        except Exception:
+            logger.exception("language renderer failed; using English wording")
+    return render_light_shape(shape) if kind == "light" else render_sound_shape(shape)
 
 
 # A body seen only as shapes gets a fixed label, because there is nothing
@@ -2710,11 +2856,18 @@ def _render_standing(p):
         ways = _render_openings(p.data.get("openings"))
         if ways:
             parts.append(ways)
-        light = str(p.data.get("light") or "").casefold()
-        if light in ("dim", "low"):
-            parts.append(_en("light_dim"))
-        elif light in ("dark", "none", "pitch_black", "black"):
-            parts.append(_en("light_dark"))
+        # WHERE THE LIGHT FALLS, when the field found the room uneven; else
+        # the flat sentence, exactly as before (the shape is only ever
+        # present when there is more to say than one word for the room).
+        shaped = render_light_shape(p.data.get("light_shape"))
+        if shaped:
+            parts.append(shaped)
+        else:
+            light = str(p.data.get("light") or "").casefold()
+            if light in ("dim", "low"):
+                parts.append(_en("light_dim"))
+            elif light in ("dark", "none", "pitch_black", "black"):
+                parts.append(_en("light_dark"))
         return " ".join(parts)
     if p.kind == "presence":
         return _cap(_presence_clause(p)) + "."
@@ -2772,6 +2925,8 @@ def _render_standing(p):
                     if place.casefold() in PLURAL_PLACES else "exposed_detail")
         return _en(template, subject=subject, detail=detail)
     if p.kind == "ambient":
+        if p.data.get("soundscape"):
+            return render_sound_shape(p.data.get("soundscape"))
         desc = str(p.data.get("desc") or "").strip()
         if desc and desc[-1:] not in ".!?":
             desc += "."

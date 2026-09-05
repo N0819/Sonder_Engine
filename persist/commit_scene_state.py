@@ -605,6 +605,57 @@ def _merge_overlays(sc, incoming) -> None:
         overlays[key] = deduped[-_MAX_OVERLAY_ENTRIES:]
 
 
+def _record_failed_sources(ctx, cid, sc, turn_idx):
+    """Both fields' failed sources, ONE record each (2026-09-04).
+
+    The light field wrote `state.lit: false` and filed a notice for a
+    `failing` source the beat hash put out; the sound field filed its notice
+    from perception and never wrote `state.running: false`, so a stopped
+    generator kept masking every voice in the room on the beats after the
+    Director was told it had stopped. Now the commit reads both fields'
+    lists (`failing_sources_out`, `failing_sound_sources_out` -- the same
+    hash of (turn, id), so a thing that both lights and hums lands in both
+    on the same beat), writes each switch the thing carries, and files one
+    notice per THING naming what went: its light, its sound, or both. A
+    reroll of the beat reads the same hash and records the same failure.
+    """
+    from world.spatial import failing_sound_sources_out, failing_sources_out
+    entities = sc.get("entities") or {}
+    failed = {}
+    for eid, label in failing_sources_out(sc, turn_idx):
+        failed.setdefault(eid, {"label": label, "senses": []})["senses"].append("lit")
+    for eid, label in failing_sound_sources_out(sc, turn_idx):
+        failed.setdefault(eid, {"label": label, "senses": []})["senses"].append("running")
+    if not failed:
+        return []
+    notices = wget(cid, "engine_notices", []) or []
+    filed = []
+    for eid in sorted(failed):
+        rec = failed[eid]
+        ent = entities.get(eid)
+        if isinstance(ent, dict):
+            state = ent.get("state") if isinstance(ent.get("state"), dict) else {}
+            for switch in rec["senses"]:
+                state[switch] = False
+            ent["state"] = state
+        both = len(rec["senses"]) == 2
+        what = ("its light is gone from the scene and its sound has stopped"
+                if both else
+                "its light is gone from the scene" if rec["senses"] == ["lit"]
+                else "its sound has stopped, and the silence is heard where "
+                     "the sound was")
+        verb = "has failed" if both else (
+            "has gone out" if rec["senses"] == ["lit"] else "has stopped")
+        msg = (f"{rec['label']!r} {verb} -- it was declared `steadiness: "
+               f"failing` and this is the beat it failed. Now {what}; "
+               "relight or restart it, replace it, or let it stand.")
+        ctx.warnings.append(msg)
+        notices.append(msg)
+        filed.append(msg)
+    wset(cid, "engine_notices", notices)
+    return filed
+
+
 def prepare_scene_commit(ctx):
     """Build the exact post-turn scene without mutating durable state.
 
@@ -1406,37 +1457,25 @@ def prepare_scene_commit(ctx):
     if not _told:
         wset(cid, "sight_contradictions_told", True)
 
-    # THE LIGHT FIELD'S BEAT (`world/spatial_light_field.py` § 5). Two things,
-    # both deterministic on (turn index, source id) so a REROLL of a beat
-    # sees the light the beat it replaces saw:
+    # THE TWO FIELDS' BEAT (`world/spatial_light_field.py` § 5,
+    # `world/spatial_sound_field.py` § 5). Two things, both deterministic on
+    # (turn index, source id) so a REROLL of a beat sees the light and hears
+    # the sound the beat it replaces did:
     #   * the scene is stamped with the index of the beat about to be played,
     #     so a `flickering` source's flicker beats can be read from the scene
     #     alone at perception time (nothing in `world/spatial_*` holds a
     #     PipelineContext, and the blob is what perception is handed);
-    #   * a `failing` source the hash puts out THIS beat is recorded out
-    #     (`state.lit: false` -- the same switch a doused torch already uses,
-    #     so every reader sees it dark without a second field) and an engine
-    #     notice is filed for the Director to answer next beat: relight it,
-    #     replace it, or leave the corridor dark. The field read the same
-    #     hash for this beat's perception, so the two agree without a write.
+    #   * a `failing` source the hash puts out THIS beat is recorded out --
+    #     `state.lit: false` for its light, `state.running: false` for its
+    #     sound, the switches a doused torch and a stopped machine already
+    #     use, so every reader sees it dark or silent without a second field
+    #     -- and ONE engine notice is filed for the Director to answer next
+    #     beat: relight it, restart it, replace it, or let the dark or the
+    #     silence stand. Both fields read the same hash for this beat's
+    #     perception, so the three agree without a write.
     _turn_idx = int(getattr(getattr(ctx, "turn", None), "idx", 0) or 0)
-    from world.spatial import BEAT_KEY, failing_sources_out
-    _went_out = failing_sources_out(sc, _turn_idx)
-    if _went_out:
-        _notices = wget(cid, "engine_notices", []) or []
-        for _eid, _label in _went_out:
-            _ent = (sc.get("entities") or {}).get(_eid)
-            if isinstance(_ent, dict):
-                _state = _ent.get("state") if isinstance(_ent.get("state"), dict) else {}
-                _state["lit"] = False
-                _ent["state"] = _state
-            _msg = (f"{_label!r} has gone out -- it was declared `steadiness: "
-                    "failing` and this is the beat it failed. Its light is "
-                    "gone from the scene; relight it, replace it, or let the "
-                    "dark stand.")
-            ctx.warnings.append(_msg)
-            _notices.append(_msg)
-        wset(cid, "engine_notices", _notices)
+    from world.spatial import BEAT_KEY
+    _record_failed_sources(ctx, cid, sc, _turn_idx)
     sc[BEAT_KEY] = _turn_idx + 1
     # THE LAYOUT LINT, under the same once-on-appearance rule
     # (`world/spatial_lint.py`, DESIGN_ROOM_FIDELITY §3): a reciprocal bearing

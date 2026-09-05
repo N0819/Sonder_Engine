@@ -255,11 +255,32 @@ def test_a_counter_costs_path_and_blocks_nothing():
     assert l_behind > l_before
     assert levels(behind, "S", "L")["normal"] == "full"
     assert levels(before, "S", "L")["normal"] == "full"
-    # The counter's own cells are never entered by the flood.
+    # The counter's own cells are REACHED -- a body standing at the counter
+    # hears -- and never passed THROUGH: every cell behind the run is
+    # reached by a path longer than the straight line to it, because the
+    # flood went round the end.
     counter_cells = {f_behind.grid.cell_of("hall", c)
                      for c in f_behind.grid.anchors["hall"]["counter"]["cells"]}
-    reached = set(spread(f_behind.grid, f_behind.locate("S")))
-    assert not (counter_cells & reached)
+    origin = f_behind.locate("S")
+    reached = spread(f_behind.grid, origin)
+    assert counter_cells <= set(reached)
+    wall_side = [c for c in f_behind.grid.inside
+                 if c[1] < min(cc[1] for cc in counter_cells)]
+    assert wall_side
+    for cell in wall_side:
+        straight = max(abs(cell[0] - origin[0]), abs(cell[1] - origin[1]))
+        assert reached[cell][0] > straight, cell
+    # And a body whose station lands ON an occluder's cell is not deaf: a
+    # listener standing where another anchor's seeded cell fell hears the
+    # speaker beside them in full (until 2026-09-04 the flood never entered
+    # the cell and stamped a signal of 0 -- a shout beside them was `none`).
+    at_counter = scene(hall(), {"S": "hall", "L": "hall"},
+                       {"S": {"at": "south"}, "L": {"at": "counter"}})
+    f = sound_field(at_counter, "L")
+    f.grid.height[f.locate("L")] = 1.0        # force the case whatever the seed did
+    f._spreads.clear()
+    assert f.gain_between("S", "L") > 0
+    assert f.speech_level("S", "shout", "L") == "full"
 
 
 def _gain_through(barrier, material=None):
@@ -440,6 +461,87 @@ def test_a_failing_source_that_goes_quiet_files_a_notice_and_masks_nothing():
     assert quiet.sources[0]["power"] == 0
     assert quiet.noise_at("L") < loud.noise_at("L")
     assert quiet.notices == [notice] and loud.notices == []
+
+
+def test_failing_sound_sources_out_names_running_failing_sources_on_their_beat():
+    from world.spatial import failing_sound_sources_out, fails_on
+    sc = scene(hall(), {"L": "hall", "gen": "hall"},
+               {"gen": {"at": "east"}, "L": {"at": "south"}},
+               {"gen": {"name": "the generator", "kind": "machine",
+                        "sound_source": "loud", "steadiness": "failing"}})
+    out = next(t for t in range(600) if fails_on(t, "gen"))
+    on = next(t for t in range(600) if not fails_on(t, "gen"))
+    # The SAME hash as the light field's: a thing that lights and hums fails
+    # on one beat in both senses.
+    assert steadiness_this_beat("failing", out, "gen") == "out"
+    assert failing_sound_sources_out(sc, out) == [("gen", "the generator")]
+    assert failing_sound_sources_out(sc, on) == []
+    sc["entities"]["gen"]["state"] = {"running": False}
+    assert failing_sound_sources_out(sc, out) == []
+    sc["entities"]["gen"] = {"name": "the generator", "sound_source": "loud"}
+    assert failing_sound_sources_out(sc, out) == []
+
+
+def test_the_commit_switches_a_failed_source_off_in_every_sense_it_has_and_files_one_notice(temp_db):
+    """SYMMETRY OF THE TWO FIELDS' COMMIT BLOCKS (2026-09-04). The light
+    field wrote `state.lit: false` and filed a notice; the sound field filed
+    a notice from perception and left `state.running` alone, so a stopped
+    generator kept masking every voice on the beats after the Director was
+    told it had stopped. One helper now reads both fields' failing lists,
+    writes each switch the thing carries, and files ONE notice per thing:
+    a generator `has stopped`, a lamp `has gone out`, a thing that both
+    lights and hums `has failed` -- once, with both switches off."""
+    import time as _time
+    from core.pipeline_context import ChatData, PipelineContext, TurnData
+    from persist import commit
+    from world.spatial import BEAT_KEY, fails_on
+
+    def commit_beat(sc, beat):
+        chat_id = temp_db.qi(
+            "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+            ("Shed", "", _time.time()))
+        temp_db.wset(chat_id, "scene", sc)
+        ctx = PipelineContext(
+            chat=ChatData(id=chat_id, name="Shed", persona_id=None,
+                          lorebook_id=None, scenario="", created=_time.time()),
+            turn=TurnData(id=1, chat_id=chat_id, idx=beat, player_input="",
+                          created=_time.time()),
+            cast=[], input="")
+        ctx.director_resolve = {"state_diff": {"time": "a moment later"}}
+        merged = commit.prepare_scene_commit(ctx)["scene"]
+        return merged, temp_db.wget(chat_id, "engine_notices", []), ctx
+
+    out = next(t for t in range(600) if fails_on(t, "gen"))
+    on = next(t for t in range(600) if not fails_on(t, "gen"))
+    # A sound source alone.
+    sc = scene(hall(), {"L": "hall", "gen": "hall"},
+               {"gen": {"at": "east"}, "L": {"at": "south"}},
+               {"gen": {"name": "the generator", "kind": "machine",
+                        "sound_source": "loud", "steadiness": "failing"}})
+    merged, notices, ctx = commit_beat(sc, out)
+    assert merged["entities"]["gen"]["state"]["running"] is False
+    assert "lit" not in merged["entities"]["gen"]["state"]
+    assert merged[BEAT_KEY] == out + 1
+    assert len(notices) == 1 and "has stopped" in notices[0] \
+        and "the generator" in notices[0], notices
+    assert sum("the generator" in w for w in ctx.warnings) == 1
+    # The next beat it does not fail: nothing said, nothing switched.
+    merged, notices, _ctx = commit_beat(sc, on)
+    assert merged["entities"]["gen"].get("state", {}).get("running", True) is True
+    assert notices == []
+    # A thing that both lights and hums: ONE notice, both switches.
+    sc = scene(hall(), {"L": "hall", "gen": "hall"},
+               {"gen": {"at": "east"}, "L": {"at": "south"}},
+               {"gen": {"name": "the humming lamp", "kind": "machine",
+                        "sound_source": "loud", "light_source": "lit",
+                        "steadiness": "failing"}})
+    merged, notices, _ctx = commit_beat(sc, out)
+    state = merged["entities"]["gen"]["state"]
+    assert state["running"] is False and state["lit"] is False
+    assert len(notices) == 1 and "has failed" in notices[0], notices
+    assert "its light is gone" in notices[0] and "its sound has stopped" in notices[0]
+    # And the silence is heard: the field on the NEXT beat has no source.
+    assert sound_field(merged, "L").sources == []
 
 
 def test_a_flickering_source_drops_one_level_on_its_beat():
