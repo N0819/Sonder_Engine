@@ -621,8 +621,36 @@ def line_hear_level(entry, rel, observer_name, proximity=None,
         return "full"
     if rel.get("enclosed_from_source") or rel.get("source_enclosed"):
         return base
+    # ATTENTION DOES NOT BEAT AIR THAT IS WORKING. The shape floor exists
+    # because a Director often omits `medium`, and a by-name line to a party
+    # OUT OF EARSHOT is then still a transmission -- a combadge hail from a
+    # planet surface, which nothing but a device could carry. That case is
+    # earned and stays. What was never evidence for it is a party in the same
+    # BUILDING: two independent runs measured the difference -- a shout three
+    # rooms up a stone tower delivered verbatim on four beats (lighthouse,
+    # PA4), and a line from two closed doors and a room away delivered
+    # complete in a view whose two UNADDRESSED voices were correctly
+    # fragments (the Cold Season Ball, PX6). Sound reached both places; being
+    # named is not a second, better path through the same doors.
+    #
+    # The two are told apart by whether the AIR HAS AN ANSWER for this pair.
+    # `stamp_sound_relation` puts `signal` on a relation whose bodies the
+    # field could place, and `door_gain` where it could at least say what
+    # this room's best opening admits; a pair with no acoustic relationship
+    # at all -- another world, a ship in orbit -- carries neither. Where the
+    # field spoke, its answer is the answer. Where it could not speak, a line
+    # that arrives by name arrives by a device.
+    #
+    # A scene with no geometry stamps nothing and is unchanged, which is the
+    # same fail-open direction this rescue has always had.
+    if rel.get("signal") is not None or rel.get("door_gain") is not None:
+        return base
     if str(entry.get("volume", "normal")).lower() in ("normal", "loud", "shout"):
-        return "full"
+        # ...and it is not the one grade a sense card cannot dull. It ran
+        # after `_sense_graded` and returned a bare "full", so one view could
+        # carry a fragmented sentence into a poor ear at arm's reach beside a
+        # verbatim shout from two rooms below (rush, PR5).
+        return _sense_graded("full", "hearing", senses)
     return base
 
 

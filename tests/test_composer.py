@@ -644,6 +644,52 @@ def test_the_addressed_rescue_is_live_and_says_so():
                                    can_see=False) is None
 
 
+def test_attention_does_not_beat_air_that_is_working():
+    """Being addressed is not a second, better path through the same doors.
+
+    Two independent runs, 2026-09-05: a shout three rooms up a stone tower
+    delivered verbatim on four beats (lighthouse, PA4), and a line from two
+    closed doors and a room away delivered complete in a view whose two
+    UNADDRESSED voices were correctly fragments (the Cold Season Ball, PX6).
+    Sound reached both places -- that is the point. Where the sound field
+    could place the pair it stamps `signal`, and where it could at least say
+    what this room's best opening admits it stamps `door_gain`; either way the
+    air has an answer and the address does not overrule it.
+
+    The case the shape floor was earned for is the complement, and
+    `test_shape_floor_rescues_an_untagged_named_remote_line` pins it: a party
+    with no acoustic relationship at all carries neither key, and a line that
+    arrives by name there arrives by a device.
+    """
+    entry = {"volume": "normal", "text": "Get down here.",
+             "intended_target": "Alice", "speaker": "Bram"}
+    for answered in ({"barrier": "wall", "signal": 0.04, "noise": 18.0},
+                     {"barrier": "closed_door", "door_gain": 0.2,
+                      "noise": 18.0}):
+        assert composer.hear_level(answered, "normal") == "none"
+        assert composer.line_hear_level(entry, answered, "Alice") == "none"
+    # Nothing placed the pair: the device is the only explanation.
+    assert composer.line_hear_level(
+        entry, {"barrier": "separated", "distance": "remote"},
+        "Alice") == "full"
+
+
+def test_the_addressed_rescue_is_not_above_the_senses_gate():
+    """It ran after `_sense_graded` and returned a bare "full", so one view
+    could carry a fragmented sentence into a poor ear at arm's reach beside a
+    verbatim shout from two rooms below (rush, PR5)."""
+    entry = {"volume": "normal", "text": "Get out.",
+             "intended_target": "Alice", "speaker": "Bram"}
+    rel = {"barrier": "wall", "distance": "near"}
+    # The ordinary read drops it, so this "full" is the rescue's own.
+    assert composer.hear_level(rel, "normal") == "none"
+    assert composer.line_hear_level(entry, rel, "Alice") == "full"
+    dulled = composer.line_hear_level(
+        entry, rel, "Alice",
+        senses=[{"channel": "hearing", "acuity": "poor"}])
+    assert dulled != "full", dulled
+
+
 def test_the_open_group_continuity_floor_is_live_and_says_so():
     """The other rescue, from the other direction: a compatibility floor for
     a rerolled checkpoint that predates the near-group position repair. It
