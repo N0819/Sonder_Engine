@@ -105,11 +105,11 @@ def view(sc, name, language="en"):
 
 
 Q_LIGHT = ("The light from the lamp falls on the table, thins to half-light "
-           "at the shelf, and leaves the hearth in the dark. You stand in "
+           "at the shelf, and leaves the hearth in the dark. You are in "
            "half-light.")
-P_LIGHT = "The light from the lamp falls on the table. You stand in the light."
+P_LIGHT = "The light from the lamp falls on the table. You are in the light."
 Q_SOUND = ("The noise from the generator drowns everything at the shelf and "
-           "the hearth and dies away at the table. Where you stand, the noise "
+           "the hearth and dies away at the table. Where you are, the noise "
            "drowns everything.")
 Q_LIGHT_JA = ("光はthe lampから来ている。the tableは明るく照らされている。"
               "the shelfは薄明かりの中にある。the hearthは闇の中にある。"
@@ -250,7 +250,7 @@ def test_light_through_a_doorway_is_named_by_the_opening():
     assert shape["self"] == "dark"
     assert composer.render_light_shape(shape) == (
         "The light from the open doorway leaves the barrels in the dark. "
-        "You stand in the dark.")
+        "You are in the dark.")
     # A stove in the kitchen casting through the same doorway is ALSO the
     # opening's, never named -- P has no channel to a thing in another room.
     sc["entities"]["stove"] = {"name": "the stove", "light_source": "bright"}
@@ -308,7 +308,7 @@ def test_the_observer_is_told_where_they_stand_only_with_a_cell():
     assert "You stand" not in composer.render_light_shape(shape)
     shape = sound_shape(sc, "U")
     assert shape["self"] is None
-    assert "Where you stand" not in composer.render_sound_shape(shape)
+    assert "Where you are" not in composer.render_sound_shape(shape)
 
 
 # ---------------------------------------------------------------------------
@@ -336,7 +336,7 @@ def test_the_percepts_ride_the_standing_state_and_round_trip_to_observations():
     texts = {o["channel"]: o["observed"]["text"] for o in obs}
     assert texts["sight"].endswith(Q_LIGHT)
     assert texts["hearing"] == Q_SOUND
-    assert "".join(o["observed"]["text"] for o in obs).count("You stand") == 1
+    assert "".join(o["observed"]["text"] for o in obs).count("You are in half-light.") == 1
     # The shape is part of the CONTENT: the lamp going out is a room that
     # changed for this observer, not the same fact said again.
     doused = lamp_hall(generator=True)
@@ -351,8 +351,8 @@ def test_an_observer_receives_only_their_own_views_sentence():
     q_text = view(sc, "Q").text
     assert P_LIGHT in p_text and Q_LIGHT not in p_text
     assert Q_LIGHT in q_text and P_LIGHT not in q_text
-    assert "You stand in half-light." not in p_text
-    assert "You stand in the light." not in q_text
+    assert "You are in half-light." not in p_text
+    assert "You are in the light." not in q_text
     # And the Japanese views likewise.
     assert Q_LIGHT_JA in view(sc, "Q", "ja").text
     assert Q_LIGHT_JA not in view(sc, "P", "ja").text

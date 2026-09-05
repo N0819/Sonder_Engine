@@ -721,3 +721,48 @@ def test_a_posed_body_the_scene_will_not_call_a_thing_is_still_a_body():
     text, _ = _render(scene)
     assert "Mara" not in text and "someone" not in text
     assert text == "Kai is leaning."
+
+
+class TestAnEngineIdIsNotAWordOfTheStory:
+    """Run 2026-09-05C `solitude` turn 1 (PS2). The composed view read
+    "poised at the brow with one foot on the top step down toward
+    upper_terrace_rim, survey staff planted in a rut." `_pose_referent`
+    already refuses an id-shaped token where a REFERENT is resolved (step 5);
+    the same string walked onto the page through the free prose beside it.
+    """
+
+    def test_an_id_that_names_a_room_renders_as_the_rooms_name(self):
+        scene = _scene(
+            {"Kai": {"posture": "poised at the brow",
+                     "detail": "one foot on the step down toward "
+                               "upper_terrace_rim"}},
+            rooms={"h": {"name": "Hall", "light": "bright"},
+                   "upper_terrace_rim": {"name": "the upper terrace rim"}})
+        text, _ = _render(scene)
+        assert "upper_terrace_rim" not in text
+        assert "the upper terrace rim" in text
+
+    def test_an_id_that_names_nothing_takes_its_clause_with_it(self):
+        scene = _scene({"Kai": {"posture": "poised at the brow",
+                                "detail": "one foot on the step down toward "
+                                          "scranton_anchor, survey staff "
+                                          "planted in a rut"}})
+        text, _ = _render(scene)
+        assert "_" not in text
+        assert text == ("Kai is poised at the brow — survey staff planted "
+                        "in a rut.")
+
+    def test_a_field_that_is_only_an_unresolvable_id_becomes_nothing(self):
+        scene = _scene({"Kai": {"posture": "poised at the brow",
+                                "detail": "one foot toward scranton_anchor"}})
+        text, _ = _render(scene)
+        assert text == "Kai is poised at the brow."
+
+    def test_an_id_naming_a_scene_entity_renders_as_the_entity(self):
+        scene = _scene(
+            {"Kai": {"posture": "braced",
+                     "constraint": "wrists in iron_cuff"}},
+            entities={"iron_cuff": {"name": "the iron cuffs"}})
+        text, _ = _render(scene)
+        assert "iron_cuff" not in text
+        assert "the iron cuffs" in text
