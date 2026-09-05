@@ -37,7 +37,13 @@ class JapaneseRenderer:
 
     def _speech(self, p, data, label, prefix):
         if p.fidelity == "fragment":
-            return self._text(prefix + "muffled", fragment=data.get("fragment", ""))
+            # A fragment loses the WORDS, never the speaker, when the observer
+            # can see who spoke (PD3). `attributed` is Layer A's answer; this
+            # only spells it.
+            key = (prefix + "muffled_attributed" if data.get("attributed")
+                   else prefix + "muffled")
+            return self._text(key, label=label,
+                              fragment=data.get("fragment", ""))
         body = data.get("body", "")
         if data.get("conducted"):
             key = (prefix + "conducted") if prefix else "dialogue_conducted"
@@ -317,6 +323,8 @@ class JapaneseRenderer:
             return self._text(prefix + "appearance", label=label,
                               description=description) if description else ""
         if p.kind == "act":
+            if p.fidelity == "shapes":
+                return self._text(prefix + "act_shapes", label=label)
             surface = str(data.get("surface") or "").strip()
             return self._text(prefix + "act", label=label,
                               action=surface) if surface else ""

@@ -22,6 +22,7 @@ from story.character_schema import (
     persona_visible_body,
 )
 from core.db import q, wget
+from core.pipeline_context import note_step_decision
 from world.mechanics import clock_elapsed
 from story.scene import (
     NON_AWAKE_GATED,
@@ -78,7 +79,9 @@ from world.spatial import (
     relative_bearing,
     resolve_substance_ops,
     room_of,
+    body_visibility,
     scent_level,
+    sight_level,
     comms_link,
     same_subject,
     spatial_rel,
@@ -1033,7 +1036,11 @@ def _source_channels(sc, perceiver_name, perceiver_room, sources,
             prev_rel = spatial_rel_between(
                 prev_sc, perceiver_name, s["name"],
                 observer_room=room_of(prev_sc, perceiver_name) or perceiver_room,
-                target_room=room_of(prev_sc, s["name"]) or s["room"])
+                target_room=room_of(prev_sc, s["name"]) or s["room"],
+                # One beat, one field (PC3): the rescue used to build its
+                # relation without this beat's field, so a channel it kept
+                # was graded by the edge model alone.
+                sound=sound)
             # Only ever upgrades. `has_visual` is the room-level question and
             # is the one that goes false when an edge is severed mid-beat --
             # which is exactly the transition this exists to preserve.
@@ -1125,6 +1132,144 @@ def _in_plain_view(rel, vis):
     if rel.get("concealed"):
         return False
     return bool(rel.get("same_room")) or bool(vis)
+
+
+def _sight_detail(sc, observer_name, actor_name, rel):
+    """How much CONDUCT sight admits: "full", "shapes" or "none".
+
+    SIGHT IS GRADED AND THE ACT CHANNEL WAS NOT. Every grader here already
+    answers in three words -- `sight_level` and `visual_level_between` both
+    return none/shapes/full -- and `_in_plain_view` spends the answer as a
+    boolean, so a shape-in-a-doorway budget bought a readable description of
+    conduct at the far side of a room.
+
+    Live, "The Long Gallery" turns 11-12 (PC1). Ada and Mrs Penrose were
+    behind a `closed_door`, locked, on both edges; `closed_door` is not a
+    sight barrier, so `sight_level` was `none` -- and the crossing record
+    written when they went through it floors sight at `shapes` for a beat,
+    because a body that has just crossed an opaque boundary is not instantly
+    gone. Lord Edmund, at the hearth, read "Ada Quill perches on the corner
+    of the desk, setting the lamp between herself and Mrs Penrose. Ada Quill
+    opens a black notebook on her knee." No speech crossed: the dialogue gate
+    honoured the same wall in the same beat.
+
+    Only an explicit `shapes` downgrades. This is deliberately not a second
+    admission gate -- `_in_plain_view` still decides whether anything is seen
+    at all -- so nothing this returns can refuse what today delivers; it can
+    only say that what is seen is a body moving rather than a body acting.
+    """
+    level = ""
+    if room_of(sc, observer_name) is not None:
+        level = visual_level_between(sc, observer_name, actor_name) or ""
+    if not level:
+        level = sight_level(rel) or ""
+    if level == "none":
+        # THE SAME QUESTION, ASKED INSIDE THE ROOM TOO (PE9, "Two Rooms and a
+        # Kettle"): `_in_plain_view` short-circuits on `same_room`, so an
+        # occluder never subtracted from an act -- a body behind the sofa was
+        # graded as if nothing stood between. Only the LINE subtracts here.
+        # `_in_plain_view` has already admitted this source and the two
+        # answers disagree for other reasons as well (an unlit room admits a
+        # co-present act today and goes on doing so); what is new is the one
+        # thing a room-level boolean cannot see, which is something standing
+        # in the way. `body_visibility` answers only on two measured stations
+        # and an opaque anchor of a stated height between them, so a scene
+        # without geometry is unchanged.
+        return "none" if _line_of_sight_blocked(
+            sc, observer_name, actor_name) else "full"
+    return "shapes" if level == "shapes" else "full"
+
+
+def _line_of_sight_blocked(sc, observer_name, actor_name):
+    """Does something stand in the way, on the evidence of measured stations."""
+    try:
+        line = body_visibility(sc, observer_name, actor_name) or {}
+    except Exception:                       # pragma: no cover - geometry floor
+        return False
+    return line.get("basis") == "line" and not line.get("visible")
+
+
+def _crossing_legs(sc, from_room, to_room):
+    """The rooms a body was in while it crossed, from the movement contract.
+
+    Imported from the Director's own module through the facade and at call
+    time: the route is the movement contract's knowledge, and perception may
+    not take an import-time dependency on the stage that owns it.
+    """
+    try:
+        from .director import crossing_legs
+    except Exception:                       # pragma: no cover - import floor
+        return ()
+    return crossing_legs(sc, from_room, to_room)
+
+
+def _multi_room_legs(sc, moves):
+    """{mover: legs} for the movers who crossed MORE THAN ONE boundary.
+
+    See `director_movement.crossing_legs` for the rule and the live case
+    (PA1). One boundary is left alone: both its rooms are rooms the body was
+    in with those observers in them, and they are the two ends of one
+    doorway. Past one, the beat's single surface covers rooms in the middle
+    that neither end has a channel to.
+    """
+    legs = {}
+    for mover, from_room, to_room in moves or ():
+        walked = _crossing_legs(sc, from_room, to_room)
+        if len(walked) > 2:
+            legs[str(mover)] = walked
+    return legs
+
+
+def _legs_of_actor(sc, legs_by_mover, actor):
+    """This actor's legs, matched the way every other actor lookup matches."""
+    if not legs_by_mover:
+        return ()
+    key = str(actor or "")
+    if key in legs_by_mover:
+        return legs_by_mover[key]
+    for mover, legs in legs_by_mover.items():
+        if same_subject(sc, mover, key):
+            return legs
+    return ()
+
+
+def _channel_to_every_leg(sc, prev_sc, observer_name, observer_room, legs,
+                          senses=None):
+    """Did this observer's channel stand in EVERY room the body was in.
+
+    An act that crosses rooms carries one surface for the whole walk, so the
+    surface is admitted only where the whole walk was available. An observer
+    whose channel reached some of it is not owed a shortened version of the
+    sentence -- prose matching is the boundary this engine exists to stay on
+    the right side of -- they are owed the legs they did have, which the
+    engine already delivers as arrival and departure crossings.
+
+    The observer's own room always counts: whether they SAW the act there is
+    the act channel's question and is asked separately. An empty leg is a room
+    the outcome scene cannot name (carried, a lift, a door shut behind them)
+    and nobody has a channel to it.
+    """
+    for leg in legs or ():
+        if not leg:
+            return False
+        seen = False
+        for scene in (sc, prev_sc):
+            if not scene:
+                continue
+            here = room_of(scene, observer_name) or observer_room
+            if not here:
+                continue
+            if here == leg:
+                seen = True
+                break
+            rel = spatial_rel(scene, here, leg)
+            if has_visual(rel) and composer._sense_graded(
+                    "full", "sight", senses) != "none":
+                seen = True
+                break
+        if not seen:
+            return False
+    return True
 
 
 def _ambient_location_for(sc, room_id):
@@ -2012,6 +2157,9 @@ def perception_act(ctx, nonce):
     # COPY, persisted by nobody here: commit still writes each channel exactly
     # once, from resolve. It lands before `p_appearance` and before the
     # composer reads `sc`, because those are how a body reaches a view at all.
+    # WHERE THE BEAT FOUND THEM, before the declaration below is previewed
+    # onto the scene: the room half of the walk this beat may contain (PA1).
+    p_room_at_start = room_of(sc, p_name)
     sc = preview_player_state_assertions(
         sc, (interp.get("onset_state_assertions")
              if interp.get("onset_state_assertions") is not None
@@ -2021,6 +2169,9 @@ def perception_act(ctx, nonce):
     # `sc`, and a room resolved before it grades every observer's channel to
     # the player from the room she left. See `_player_room_in`.
     p_room = _player_room_in(sc, pers, interp, ctx, p_name)
+    # The declared walk's legs, on the same rule the outcome pass applies.
+    onset_legs = _multi_room_legs(
+        sc, [(p_name, p_room_at_start, p_room)]).get(p_name) or ()
     # A `failing` sound source that goes quiet this beat is heard as silence
     # where there was noise (DESIGN_SOUND_FIELD.md section 5). The notice the
     # Director answers is filed ONCE, at commit, beside the light field's --
@@ -2172,7 +2323,7 @@ def perception_act(ctx, nonce):
     return _composer_act(
         ctx, sc, interp, perceivers, known, p_name, p_visible,
         p_disguise_known, p_disguise_conceals, p_disguise_terms, co_present,
-        amap, speech_elems, action)
+        amap, speech_elems, action, onset_legs)
 
 def _touch_only_sources(scene, perceiver_name, spatial_to_sources,
                         visual_channel_to_sources):
@@ -4138,7 +4289,7 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
 
 def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
                   p_disguise_known, p_disguise_conceals, p_disguise_terms,
-                  co_present, amap, speech_elems, action):
+                  co_present, amap, speech_elems, action, onset_legs=()):
     onset_sequence = sequence_onset_elements(interp.get("sequence") or [])
     if speech_elems and not any(
             isinstance(e, dict) and e.get("type") == "speech"
@@ -4276,9 +4427,20 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
                             **{key: value for key, value in display_map.items()},
                             name: "you", p_name: display,
                         })
+                    if onset_legs and not _channel_to_every_leg(
+                            sc, None, name, p.get("room"), onset_legs,
+                            p.get("sense_card")):
+                        note_step_decision(
+                            "act_percept", "%s -> %s" % (p_name, name),
+                            "refused",
+                            "the act crossed %d rooms and this observer's "
+                            "channel did not stand in all of them"
+                            % len(onset_legs))
+                        continue
                     percept = composer.act_percept(
                         sc, event, name, p_name, rel, display=display,
                         can_see=can_see,
+                        sight=_sight_detail(sc, name, p_name, rel),
                         self_forms=self_forms,
                         self_pronouns=p.get("pronouns"),
                         other_forms=tuple(
@@ -4670,6 +4832,14 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
             continue
         moves.append((str(mover), prev_room, str(new_room)))
 
+    # A body that crosses rooms performs one act per room it is in, and an
+    # observer is entitled to the legs that happened where their channel
+    # stood (PA1 -- `director_movement.crossing_legs` holds the rule and the
+    # live case). Only a walk past ONE boundary is here: past it there are
+    # rooms in the middle that neither end has a channel to, and the beat's
+    # single observable surface covers all of them.
+    crossed_legs = _multi_room_legs(sc, moves)
+
     # Micro-round deliveries were gated by `_delivery_ok` when the loop ran;
     # they arrive pre-rendered. They are minted as percepts and go into the
     # SAME list as everything else, so the tripwires see them and their
@@ -4769,10 +4939,21 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                         else:
                             sp_room = (d.get("speaker_room")
                                        or room_of(sc, speaker))
+                            # ONE BEAT, ONE FIELD. This fallback used to omit
+                            # `sound`, so a listener the composite grid could
+                            # not place fell through to the edge model while
+                            # every graded source was answered by the field --
+                            # and the two floors disagreed about one line in
+                            # one beat (PC3, F61's shape with the roles
+                            # reversed): the nearest listener across the most
+                            # open edge in the house heard less than one
+                            # behind a shut door.
                             rel = spatial_rel_between(
                                 sc, name, speaker,
                                 observer_room=p.get("room"),
-                                target_room=sp_room)
+                                target_room=sp_room,
+                                sound=_sound_field_for(
+                                    ctx, sc, name, p.get("room")))
                     can_see = _in_plain_view(
                         rel, visual.get(speaker, False))
                     if _recognizes(speaker, recognized):
@@ -4843,6 +5024,16 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                 if not can_see:
                     order += 1
                     continue
+                legs = _legs_of_actor(sc, crossed_legs, actor)
+                if legs and not _channel_to_every_leg(
+                        sc, prev_scene, name, p.get("room"), legs,
+                        p.get("sense_card")):
+                    note_step_decision(
+                        "act_percept", "%s -> %s" % (actor, name), "refused",
+                        "the act crossed %d rooms and this observer's channel "
+                        "did not stand in all of them" % len(legs))
+                    order += 1
+                    continue
                 if _recognizes(actor, recognized):
                     display = actor
                 else:
@@ -4861,6 +5052,7 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                 percept = composer.act_percept(
                     sc, act.get("event") or {}, name, actor, rel,
                     display=display, can_see=True,
+                    sight=_sight_detail(sc, name, actor, rel),
                     self_forms=self_forms,
                     self_pronouns=p.get("pronouns"),
                     other_forms=tuple(
