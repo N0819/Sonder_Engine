@@ -87,6 +87,7 @@ from world.spatial import (
 
 from .common import (
     _appearance_as_prose,
+    name_occurrence_pattern,
     _base_from_third_person_s,
     _compose_residue_view,
     _identity_token_set,
@@ -1375,11 +1376,14 @@ def _pose_owner_second_person(text, pronouns, other_forms=()):
     if not any((subject, obj, possessive)):
         return text
 
+    # A NAME'S OCCURRENCE INCLUDES THE TITLE THAT LEADS IT, here as well: the
+    # cutoff marks where another body's name begins, and "Lord Edmund" begins
+    # at "Lord". Cutting one word later left the title inside the span being
+    # rewritten for somebody else.
     other_patterns = []
     for form in sorted({str(f or "").strip() for f in other_forms if str(f or "").strip()},
                        key=len, reverse=True):
-        other_patterns.append(re.compile(
-            r"(?<!\w)" + re.escape(form) + r"(?:['’]s)?(?!\w)", re.I))
+        other_patterns.append(name_occurrence_pattern(form, flags=re.I))
 
     reflexives = {
         "she": "herself", "he": "himself", "they": "themselves",
@@ -1455,11 +1459,13 @@ def _action_target_second_person(text, target_forms, target_pronouns,
     if not possessive or not forms:
         return text
 
-    target_re = re.compile(
-        r"(?<!\w)(?:" + "|".join(re.escape(form) for form in forms)
-        + r")(?:['’]s)?(?!\w)", re.I)
+    # The explicit form of this observer that licenses the repair is a whole
+    # NAME occurrence, title and article included -- "facing Lord Edmund
+    # Harrowgate" names him once, at "Lord", not at "Edmund" with a stray
+    # honorific in front (manor run 2026-09-05, PC8).
+    target_re = name_occurrence_pattern(forms, flags=re.I)
     other_patterns = [
-        re.compile(r"(?<!\w)" + re.escape(form) + r"(?:['’]s)?(?!\w)", re.I)
+        name_occurrence_pattern(form, flags=re.I)
         for form in sorted({str(form or "").strip()
                             for form in other_forms or ()
                             if str(form or "").strip()}, key=len, reverse=True)

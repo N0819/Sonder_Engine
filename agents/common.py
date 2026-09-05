@@ -5379,6 +5379,59 @@ def _player_name_forms(player_name):
 _SUBJECT_OPENER_CACHE = 512
 
 
+def _name_title_alternation():
+    """The regex alternation of every title that may LEAD a name.
+
+    A closed table the engine owns (`_NAME_LEADERS` narrowed to
+    `_NAME_TITLE_TOKENS`, which `_identity_token_set` already strips when it
+    compares two names), so the two questions built on it stay one answer:
+    where a name's occurrence BEGINS (`name_occurrence_pattern`) and whether a
+    sentence OPENS with one (`_subject_opener`). Articles are excluded here --
+    each caller has its own rule about those.
+
+    Longest first, so "cmdr." wins over "cmdr" at the same position.
+    """
+    titles = sorted((t for t in _ling("_NAME_LEADERS")
+                     if t.strip(".").casefold() in _ling("_NAME_TITLE_TOKENS")
+                     and t.strip(".").casefold() not in ("a", "an", "the")),
+                    key=len, reverse=True)
+    return "|".join(re.escape(t) for t in titles)
+
+
+def name_occurrence_pattern(form, *, flags=0, possessive=True):
+    """One WHOLE occurrence of a body's name, the title and article that lead
+    it included, with an optional possessive `'s`. `form` is one name or an
+    iterable of the forms of one body, which are alternated widest-first.
+
+    A TITLE WITH A NAME IN IT IS ONE NAME, NOT A TITLE BESIDE A PRONOUN. Every
+    rewrite that puts a perceiver into second person was replacing the name
+    fragment it happened to know and leaving whatever stood in front of it, so
+    the manor run of 2026-09-05 (PC8) composed "facing Lord you", "before Lord
+    you" and -- once the episode renderer had taken the second person into
+    first -- "toward Mrs. I". Twice the composer's own tripwire fired on it and
+    reported an engine defect, which it was.
+
+    The article comes in for the same reason and from the same live case: a
+    body registered as "A Dalek" is written "The Dalek" the moment it stops
+    being new (chat 58), and "The Dalek's visual sensors" rewritten on the
+    bare name is "The your visual sensors".
+
+    `flags` is the caller's case rule for the NAME (the identity scrub matches
+    an ordinary-English name case-sensitively); the lead is always caseless,
+    because a title carries no identity and "Dr." and "dr." are one word.
+    """
+    lead = _name_title_alternation()
+    prefix = r"(?<!\w)(?:(?:[Tt]he|[Aa]n?)\s+)?"
+    if lead:
+        prefix += rf"(?:(?i:{lead})\s+)?"
+    tail = r"(['’]s)?(?!\w)" if possessive else r"(?!\w)"
+    names = [str(form)] if isinstance(form, str) else [
+        str(f or "").strip() for f in form if str(f or "").strip()]
+    body = "|".join(re.escape(name) for name in
+                    sorted(set(names), key=len, reverse=True))
+    return re.compile(prefix + "(?:" + body + ")" + tail, flags)
+
+
 @lru_cache(maxsize=_SUBJECT_OPENER_CACHE)
 def _subject_opener(form):
     """Does a sentence OPEN with this name, as subject or possessive?
@@ -5423,13 +5476,9 @@ def _subject_opener(form):
     # the pattern does apply still refuses a Latin name inside a longer
     # word ("Hinamis"), and the leading article stays this function's own
     # rule.
-    titles = sorted((t for t in _ling("_NAME_LEADERS")
-                     if t.strip(".").casefold() in _ling("_NAME_TITLE_TOKENS")
-                     and t.strip(".").casefold() not in ("a", "an", "the")),
-                    key=len, reverse=True)
     # Inline-insensitive: the name itself keeps this function's case rule, and
     # a title never carries identity, so "Dr." and "dr." are the same word.
-    lead = "|".join(re.escape(t) for t in titles)
+    lead = _name_title_alternation()
     return re.compile(
         rf"^(?:(?i:{lead})\s+)?(?:[Tt]he\s+|[Aa]n?\s+)?"
         rf"{name_boundary_pattern(form)}(?:['’]s)?",
@@ -6748,16 +6797,20 @@ def _self_second_person(text, forms):
     if not text:
         return text
     patterns = []
-    for form in forms or []:
-        form = str(form or "").strip()
-        if not form:
-            continue
+    # WIDEST FORM FIRST. The forms of one body overlap by construction -- a
+    # full name and the word tokens of it -- and applied in the order they
+    # arrived, the short one fired inside the long one and the long one then
+    # matched what was left: "toward Dov Aharon" became "toward you Aharon"
+    # became "toward you you" (market run, 2026-09-05, F65), and the manor run
+    # produced "turns away from you you" the same way. Sorted here rather than
+    # at each caller, because every caller wants the same answer.
+    for form in sorted({str(f or "").strip() for f in (forms or [])
+                        if str(f or "").strip()}, key=len, reverse=True):
         # Ordinary-English single-token names ("Rose", "Hope") are matched
         # case-sensitively, exactly as the identity scrub does, so common
         # lowercase prose is never rewritten into second person.
         flags = 0 if form.casefold() in _ling("_COMMON_WORD_NAMES") else re.I
-        patterns.append(re.compile(
-            r"(?<!\w)" + re.escape(form) + r"(['’]s)?(?!\w)", flags))
+        patterns.append(name_occurrence_pattern(form, flags=flags))
     if not patterns:
         return text
     segments = _ling("_QUOTED_SPAN_RE").split(text)
