@@ -892,15 +892,23 @@ def test_a_movers_own_pose_detail_naming_the_room_left_is_retired():
     assert merged["poses"]["Wren"]["detail"] == ""
 
 
-def test_a_pose_detail_that_names_no_place_travels_with_the_body():
-    """The rule subtracts where the prose reached for somewhere, and only
-    there: a posture qualifier is about the body and goes where it goes."""
+def test_a_movers_detail_is_spent_on_the_move_even_when_it_named_no_place():
+    """WIDENED 2026-09-05 (rush, PR1). The rule used to subtract only where
+    the prose reached for somewhere, tested against the engine's own rooms
+    and anchors. A world whose establish minted no anchors has no vocabulary
+    to match against, so the test matched nothing and a body was delivered
+    "prone against the tar paper beside the hatch" from the far roof -- and
+    no vocabulary can catch a place the engine has no record of.
+
+    "arms folded, hood up" would have travelled honestly and goes anyway.
+    That is the price of never describing a body by a place it has left."""
     scene = _two_room_stack()
     scene["poses"] = {"Tamsin": {"posture": "standing",
                                  "detail": "arms folded, hood up"}}
     merged = merge_scene_with_diff(
         scene, {"positions": {"Tamsin": "upper_gallery"}})
-    assert merged["poses"]["Tamsin"]["detail"] == "arms folded, hood up"
+    assert merged["poses"]["Tamsin"]["detail"] == ""
+    assert merged["poses"]["Tamsin"]["posture"] == "standing"
 
 
 def test_a_pose_detail_this_beat_wrote_for_the_room_entered_stands():

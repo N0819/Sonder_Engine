@@ -1438,20 +1438,29 @@ def invalidate_moved_body_place_details(scene: dict, previous_positions,
     move that names the room the body now stands in was written from OUTSIDE
     it, which is exactly the reading that produced that sentence.
 
-    THE PLACE VOCABULARY IS THE ENGINE'S OWN, not a guess at English: every
-    room's id and name, and the id/desc of every anchor of the room LEFT.
-    Anchors are scoped to that room because it is the room the pose was
-    struck in, and an anchor the room ENTERED holds under the same id or the
-    same description is subtracted -- a body that stood at a hearth and walks
-    into a room with a hearth is still standing at one.
+    THERE IS NO PLACE VOCABULARY ANY MORE, and that is the repair. The test
+    used to be whether the detail NAMED a place, drawn from the engine's own
+    rooms and the anchors of the room left -- correct in principle and empty
+    in practice, because a world whose establish minted no anchors has no
+    vocabulary to match against. Measured (rush, 2026-09-05, PR1): the
+    retirement ran, matched nothing, and the outcome view delivered "prone
+    against the tar paper beside the hatch" for a body the same commit had
+    put on the far roof. A guard that depends on the establish having done
+    its job is a guard that fails exactly where the establish failed.
+
+    So the rule is stated without a vocabulary: A MOVER'S OWN POSE DETAIL IS
+    SPENT ON A ROOM CHANGE. It costs a flourish that would have travelled
+    ("arms folded, hood up" goes too, and the Director writes it again on
+    the next pose it declares); it buys never describing a body by a place
+    it has left, in a world that minted no anchors as readily as one that
+    did. Strictly more subtraction, and every miss here subtracts.
 
     Left alone:
-      * a detail with no place in it. "arms folded, hood up" is about the
-        body and travels with it; this subtracts, and subtracts only where
-        the prose reached for somewhere.
       * a pose whose `detail` THIS BEAT's diff wrote (`stated`). The hand
         that moved the body and wrote the prose in one breath was writing
-        about the destination; the merge does not get to know better.
+        about the destination; the merge does not get to know better. This
+        is now the ONLY exemption, and it is the one that carries the case
+        the vocabulary was protecting.
       * posture, support and the relation fields, exactly as both twins
         leave them: the body is still standing, it is simply not standing
         there.
@@ -1498,10 +1507,6 @@ def invalidate_moved_body_place_details(scene: dict, previous_positions,
                 continue
             if str(holder).strip().casefold() in spoken \
                     or str(subject).strip().casefold() in spoken:
-                continue
-            phrases = room_phrases | (
-                _anchor_phrases(was) - _anchor_phrases(room))
-            if not _detail_names_a_place(pose["detail"], phrases):
                 continue
             pose["detail"] = ""
             dropped.append((holder, was))

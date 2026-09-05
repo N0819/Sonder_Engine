@@ -77,17 +77,42 @@ class TestWhatItLeavesAlone:
                       {"positions": {"Hinami": "throat"}})
         assert pose["detail"] == "one hand flat on the silk, shoulders loose"
 
-    def test_the_movers_own_posture_is_their_own_business(self):
-        """This twin still touches only OTHER bodies' prose about the mover.
-        Their own prose is answerable to a different rule, one room over --
-        `invalidate_moved_body_place_details`, which retires a detail that
-        names a PLACE and leaves one that names only the body."""
+    def test_a_movers_own_detail_is_spent_on_the_move_posture_and_all(self):
+        """WIDENED 2026-09-05 (rush, PR1), and this is the cost being paid.
+
+        The rule was "retire a detail that names a PLACE and leave one that
+        names only the body", and the place test was drawn from the engine's
+        own rooms and anchors -- correct in principle and empty in practice.
+        A world whose establish minted no anchors has no vocabulary to match
+        against: the retirement ran, matched nothing, and the outcome view
+        delivered "prone against the tar paper beside the hatch" for a body
+        the same commit had put on the far roof. No vocabulary can catch a
+        place the engine has no record of.
+
+        So a mover's own detail is spent on a room change, flourish and all.
+        "curled tight, eyes shut" would have travelled honestly and goes
+        anyway; the Director writes it again on the next pose it declares.
+        That is the trade, stated where it is paid: a lost qualifier against
+        never describing a body by a place it has left.
+
+        POSTURE STILL TRAVELS -- the body is still prone, it is simply no
+        longer prone anywhere in particular.
+        """
         scene = _scene("still")
         scene["poses"]["Hinami"] = {"posture": "prone",
                                     "detail": "curled tight, eyes shut"}
         out = merge_scene_with_diff(scene, {"positions": {"Hinami": "throat"}})
-        assert out["poses"]["Hinami"]["detail"] == "curled tight, eyes shut"
+        assert out["poses"]["Hinami"]["detail"] == ""
         assert out["poses"]["Hinami"]["posture"] == "prone"
+
+    def test_a_body_that_did_not_move_keeps_every_word_of_its_detail(self):
+        """The subtraction is a room CHANGE, not a beat. A body standing
+        still keeps its prose for as long as it stands there."""
+        scene = _scene("still")
+        scene["poses"]["Hinami"] = {"posture": "prone",
+                                    "detail": "curled tight, eyes shut"}
+        out = merge_scene_with_diff(scene, {"poses": {"Reya": {"posture": "standing"}}})
+        assert out["poses"]["Hinami"]["detail"] == "curled tight, eyes shut"
 
     def test_the_movers_own_pose_no_longer_holds_the_room_it_left(self):
         """NARROWED 2026-09-05 (F49, PB7). "Their prose is about themselves"

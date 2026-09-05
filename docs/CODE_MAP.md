@@ -189,7 +189,7 @@
 | `world/spatial_containment.py` | 3026 |  | `world.spatial_barriers`, `world.spatial_identity`, `world.spatial_transit` |
 | `world/spatial_fov.py` | 1520 |  | `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_frames.py` | 1091 |  | `core.db`, `core.frames`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial` |
-| `world/spatial_geometry.py` | 2009 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
+| `world/spatial_geometry.py` | 2014 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_identity.py` | 498 |  | — |
 | `world/spatial_light.py` | 471 |  | `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity` |
 | `world/spatial_light_field.py` | 1121 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation` |
@@ -2310,14 +2310,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `invalidate_transferred_pose_details()` | 1559 | 113 lines |
-| `derive_scene_stations()` | 1906 | 104 lines |
-| `invalidate_moved_body_place_details()` | 1413 | 97 lines |
+| `invalidate_transferred_pose_details()` | 1564 | 113 lines |
+| `derive_scene_stations()` | 1911 | 104 lines |
+| `invalidate_moved_body_place_details()` | 1413 | 102 lines |
 | `spatial_digest()` | 144 | 89 lines |
 | `egocentric_frame()` | 56 | 86 lines |
 | `invalidate_moved_body_pose_details()` | 1303 | 79 lines |
 | `effective_anchors()` | 300 | 78 lines |
-| `invalidate_contact_bound_poses()` | 1674 | 72 lines |
+| `invalidate_contact_bound_poses()` | 1679 | 72 lines |
 
 ### `world/spatial_identity.py`
 
