@@ -18,8 +18,9 @@ from __future__ import annotations
 
 import pytest
 
-from world.weather import (advance_weather, normalize_weather, room_exposure,
-                     weather_depth, weather_for_room, weather_words)
+from world.weather import (DECLARED_STEP, advance_weather, normalize_weather,
+                           room_exposure, weather_depth, weather_for_room,
+                           weather_words)
 
 
 def _scene(weather=None, rooms=None):
@@ -50,8 +51,11 @@ def test_unknown_terms_never_reach_the_scene():
     # it: a term this vocabulary cannot read is not evidence of fair weather.
     storm = {"sky": "storm", "precipitation": "rain", "intensity": "heavy",
              "wind": "gale", "temperature": "cold"}
+    # `drift_step` rides along on every write-over: a beat writing a sky over
+    # one the scene already had is a declaration, and a declaration starts its
+    # own drift window (PD7, below).
     assert normalize_weather({"sky": "apocalyptic"}, storm) == \
-        dict(storm, thundersnow=False)
+        dict(storm, thundersnow=False, drift_step=DECLARED_STEP)
 
 
 def test_a_bare_string_is_accepted():
@@ -738,7 +742,7 @@ class TestTheDirectorWritesTheVividWord:
     def test_and_survives_being_written_over_itself(self):
         from world.weather import normalize_weather
         assert normalize_weather(self.DECLARED, self.BLOWING) == \
-            dict(self.BLOWING, thundersnow=False)
+            dict(self.BLOWING, thundersnow=False, drift_step=DECLARED_STEP)
 
     def test_a_declaration_is_a_report_not_a_restatement(self):
         """A beat that noticed the wind rise says so and says nothing else.
@@ -746,7 +750,8 @@ class TestTheDirectorWritesTheVividWord:
         from world.weather import normalize_weather
         risen = normalize_weather({"wind": "gale"},
                                   dict(self.BLOWING, wind="breeze"))
-        assert risen == dict(self.BLOWING, thundersnow=False)
+        assert risen == dict(self.BLOWING, thundersnow=False,
+                             drift_step=DECLARED_STEP)
 
     def test_the_storm_can_still_actually_end(self):
         """The point is not that weather never clears -- it is that clearing
@@ -925,3 +930,80 @@ def test_a_snowing_storm_still_says_nothing_at_any_depth():
     assert not any("thunder" in w
                    for w in weather_words(weather_for_room(scene, "yard"),
                                           channel="sound"))
+
+
+# ---------------------------------------------------------------------------
+# PD7: one drift per window, and a declared sky outranks the roll
+#
+# "The Long Road to Ambry", turns 10-13. `step = elapsed // DRIFT_SECONDS` is
+# CUMULATIVE and was used only as a roll salt, while the transition walked
+# `_SKY_NEXT` from whatever sky the scene currently had -- so past the first
+# in-story hour the sky took a fresh hop on EVERY commit. Four consecutive
+# beats inside one window: fair -> overcast/drizzle -> storm/rain/gale, then
+# the Director DECLARED overcast/drizzle/breeze, and the next beat put the
+# gale back. Fifteen seconds of story time, and the invented storm went on to
+# raise the clearing's noise floor to 2.8 and silence a conversation.
+# ---------------------------------------------------------------------------
+
+_WINDOW = 8 * 3600 + 60          # somewhere inside drift window 8
+_NEXT_WINDOW = 9 * 3600 + 60
+
+
+def _committed(weather, elapsed, seed="chat:115"):
+    """One commit's weather step, as `commit_scene_state` runs it."""
+    from world.weather import advance_weather
+
+    return advance_weather(weather, elapsed, seed=seed)
+
+
+def test_five_commits_inside_one_window_return_one_weather():
+    from world.weather import normalize_weather
+
+    weather = normalize_weather({"sky": "fair", "temperature": "mild"})
+    settled = _committed(weather, _WINDOW)
+    for _ in range(5):
+        assert _committed(settled, _WINDOW + 5) == settled
+
+
+def test_a_declared_sky_survives_the_next_commits_roll():
+    from world.weather import normalize_weather
+
+    weather = _committed(
+        normalize_weather({"sky": "fair", "temperature": "mild"}), _WINDOW)
+    declared = normalize_weather(
+        {"sky": "overcast", "precipitation": "drizzle", "intensity": "light",
+         "wind": "breeze"}, weather)
+    assert declared["sky"] == "overcast" and declared["wind"] == "breeze"
+
+    # The two beats after it, inside the same window, leave it alone.
+    after = _committed(declared, _WINDOW + 5)
+    assert {k: after[k] for k in ("sky", "precipitation", "wind")} == \
+        {"sky": "overcast", "precipitation": "drizzle", "wind": "breeze"}
+    assert _committed(after, _WINDOW + 10) == after
+
+
+def test_the_next_window_drifts_from_the_declaration():
+    from world.weather import DRIFT_STEP_KEY, normalize_weather
+
+    declared = normalize_weather(
+        {"sky": "fog", "temperature": "cold"},
+        normalize_weather({"sky": "fair", "temperature": "cold"}))
+    standing = _committed(declared, _WINDOW)
+    assert standing["sky"] == "fog"
+    moved = _committed(standing, _NEXT_WINDOW)
+    # `fog` can only become fog or overcast -- the drift walked from the sky
+    # the beat declared, not from the one it replaced.
+    assert moved["sky"] in ("fog", "overcast")
+    assert moved[DRIFT_STEP_KEY] == 9
+
+
+def test_a_sky_that_has_never_been_placed_still_drifts_once():
+    """The stamp is not a way to stop the world's own cycle: a record with no
+    drift history is placed by the first commit that reads it, and the window
+    after that moves it."""
+    from world.weather import DRIFT_STEP_KEY
+
+    start = {"sky": "fair", "temperature": "mild"}
+    first = _committed(start, _WINDOW)
+    assert first[DRIFT_STEP_KEY] == 8
+    assert _committed(first, _WINDOW) == first

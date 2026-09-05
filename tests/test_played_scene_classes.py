@@ -172,16 +172,17 @@ def test_a_bare_direction_is_refused_as_a_frontier(word):
 
 
 def test_a_frontier_that_names_a_place_is_kept():
-    shaped = _shape_plan_rooms(_plan(["the service road down to the valley",
+    shaped = _shape_plan_rooms(_plan(["the fish wharves lane",
                                       "west ridge path"]))
     assert shaped["rooms"]["platform"]["frontier"] == [
-        "the service road down to the valley", "west ridge path"]
+        "the fish wharves lane", "west ridge path"]
 
 
 def test_the_field_text_no_longer_asks_for_a_direction():
     text = OPERATION_FIELDS["plan_rooms"]["rooms"]
     assert "<direction>" not in text
-    assert "never a bare direction" in text
+    assert "never a direction" in text
+    assert "NAME" in text
 
 
 # ---------------------------------------------------------------------------
@@ -458,3 +459,209 @@ def test_an_entity_named_with_its_article_is_not_given_another():
              "positions": {"Hinami": "beach", "tardis": "beach", "console": "beach"}}
     assert _pose_referent(scene, "Hinami", {}, [], "tardis") == "The TARDIS"
     assert _pose_referent(scene, "Hinami", {}, [], "console") == "the hexagonal console"
+
+
+# ---------------------------------------------------------------------------
+# The 2026-09-05 play runs: the road to Ambry (PD4/PD5/PD7/PD12, F63) and
+# Flat 4B (PE8). Each rule is pinned; each live case is named in the
+# docstring and nowhere in the assertion.
+# ---------------------------------------------------------------------------
+
+def test_a_planned_edge_that_says_nothing_about_its_barrier_is_walkable():
+    """PD5, "The Long Road to Ambry": `plan_rooms` marks `barrier?`
+    optional, the Writers' Room omitted it on every edge of its five-room
+    road, and normalization sealed the road the plan had just drawn. Four
+    edges had to be opened by hand before the story could be walked."""
+    from world.spatial import (edge_passable, normalize_barrier,
+                               normalize_scene_barriers)
+
+    assert normalize_barrier(None) == "open"
+    assert normalize_barrier("") == "open"
+    assert edge_passable({"to": "ford"}, "wood_road")
+
+    scene = {"rooms": {
+        "wood_road": {"name": "Wood Road", "adjacent": [{"to": "ford"}]},
+        "ford": {"name": "Ford", "adjacent": [{"to": "wood_road"}]}}}
+    normalize_scene_barriers(scene)
+    assert [e["barrier"] for e in scene["rooms"]["wood_road"]["adjacent"]] \
+        == ["open"]
+    assert [e["barrier"] for e in scene["rooms"]["ford"]["adjacent"]] == ["open"]
+
+
+def test_an_unreadable_barrier_word_still_seals_and_still_says_so():
+    """The complement, and the reason silence and an unread word are not the
+    same input: a word the vocabulary cannot read is evidence somebody meant
+    a surface, and it is reported rather than quietly obeyed."""
+    from world.spatial import normalize_barrier
+
+    seen = set()
+    assert normalize_barrier("grommet spandrel", unresolved=seen) == "wall"
+    assert "grommet spandrel" in seen
+    # Punctuation with no word in it is the unread case, not the silent one.
+    seen = set()
+    assert normalize_barrier("???", unresolved=seen) == "wall"
+    assert "???" in seen
+
+
+# ---------------------------------------------------------------------------
+# PD4 / F63: a frontier names a place
+# ---------------------------------------------------------------------------
+
+#: The Writers' Room's own published frontiers, verbatim from the road run's
+#: plan. Six of these became live registry rooms whose uid was the sentence,
+#: 6 of the story's 15 rooms.
+ROAD_FRONTIERS = [
+    "the river flowing west upstream",
+    "dense birch and hazel woods to the west",
+    "the dense ring of trees enclosing the camp",
+    "bare grassy slopes falling away to the east and west",
+    "the village street of Ambry beyond the gate",
+    "pasture enclosures flanking the palisade",
+    # The market run's, F63's own case.
+    "The open sky and rooftop views above the square",
+]
+
+
+@pytest.mark.parametrize("phrase", ROAD_FRONTIERS)
+def test_a_frontier_that_is_a_description_is_refused_not_minted(phrase):
+    with pytest.raises(ValueError) as caught:
+        _shape_plan_rooms(_plan([phrase]))
+    assert "describes what lies that way instead of naming it" \
+        in str(caught.value)
+
+
+def test_a_stored_description_mints_nothing_and_is_reported(temp_db):
+    """A plan published before the refusal existed still carries them. The
+    fringe leaves the axis alone and `structure_warnings` says why, instead
+    of minting `the_village_street_of_ambry_beyond_the_gate`."""
+    from world.structure import (prepare_frontier_expansion,
+                                 structure_warnings)
+
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Road", "", time.time()))
+    structure = {"key": "ambry", "name": "Ambry"}
+    rooms = {"gate": {"name": "Gate", "adjacent": [], "frontier": [
+        "the village street of Ambry beyond the gate", "far road"]}}
+    plant_structure(cid, structure, rooms)
+    scene = {"rooms": {"gate": {"name": "Gate", "adjacent": []}},
+             "positions": {"Corin": "gate"}}
+    scene, _mutations = prepare_frontier_expansion(cid, scene)
+
+    minted = set(scene["rooms"]) - {"gate"}
+    assert minted == {"far_road"}     # the name minted; the sentence did not
+    assert not any("beyond" in uid for uid in scene["rooms"])
+
+    warnings = structure_warnings(structure, rooms)
+    assert any("describes what lies that way" in w for w in warnings)
+    assert not any("far road" in w for w in warnings)
+
+
+# ---------------------------------------------------------------------------
+# PE8: a plan may name a room that already exists
+# ---------------------------------------------------------------------------
+
+def test_a_plan_that_names_a_live_room_is_not_a_contradiction(temp_db):
+    """Flat 4B: `stairwell_fourth_to_third` and `flat_4a_hallway` each
+    declared `adjacent: [{to: landing}]`, both landed, the landing carried
+    both reciprocals -- and the Room's own contradiction tool reported three
+    errors it had not made."""
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Flat", "", time.time()))
+    plant_structure(cid, {"key": "block", "name": "Block"}, {
+        "stairwell_fourth_to_third": {
+            "name": "Stairwell", "adjacent": [{"to": "landing"}]},
+        "flat_4a_hallway": {
+            "name": "4A Hallway", "adjacent": [{"to": "landing"}]}})
+    temp_db.wset(cid, "scene", {"location": "Block", "rooms": {
+        "landing": {"name": "Landing", "desc": "Worn lino.", "adjacent": [
+            {"to": "stairwell_fourth_to_third"}, {"to": "flat_4a_hallway"}]},
+        "stairwell_fourth_to_third": {
+            "name": "Stairwell", "planned": True,
+            "adjacent": [{"to": "landing"}]},
+        "flat_4a_hallway": {"name": "4A Hallway", "planned": True,
+                            "adjacent": [{"to": "landing"}]}},
+        "positions": {"P": "landing"}, "entities": {}})
+    assert run_tool(cid, "inspect_contradictions")["structure"] == []
+
+
+def test_a_plan_that_names_nothing_at_all_is_still_a_contradiction(temp_db):
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Flat", "", time.time()))
+    plant_structure(cid, {"key": "block", "name": "Block"}, {
+        "flat_4a_hallway": {"name": "4A Hallway",
+                            "adjacent": [{"to": "roof_garden"}]}})
+    temp_db.wset(cid, "scene", {"location": "Block", "rooms": {
+        "flat_4a_hallway": {"name": "4A Hallway", "planned": True,
+                            "adjacent": [{"to": "roof_garden"}]}},
+        "positions": {"P": "flat_4a_hallway"}, "entities": {}})
+    found = run_tool(cid, "inspect_contradictions")["structure"]
+    assert any("targets unknown room roof_garden" in w for w in found)
+
+
+# ---------------------------------------------------------------------------
+# The two dead Writers' Room calls: a reply that is all reasoning and no
+# content is a failed attempt, not an answer
+# ---------------------------------------------------------------------------
+
+def _reply(message):
+    return {"choices": [{"message": message}]}
+
+
+@pytest.mark.parametrize("message", [
+    # F1's own shape: a reasoning STRING.
+    {"content": None, "reasoning": "thinking about it" * 40},
+    # The road run's: `reasoning_details`, a list of blocks, and no
+    # `reasoning` string anywhere. Both Writers' Room calls died here.
+    {"content": None, "reasoning_details": [
+        {"type": "reasoning.text", "text": "step one" * 40}]},
+    # The same class one API generation over.
+    {"content": "", "reasoning_content": "step one" * 40},
+])
+def test_a_reply_that_is_only_reasoning_is_typed_as_one_failure(message):
+    from llm.providers import ReasoningBudgetExhausted, _message_content
+
+    with pytest.raises(ReasoningBudgetExhausted):
+        _message_content(_reply(message), "prov", "model")
+
+
+def test_a_message_with_no_trace_either_stays_the_untyped_no_content_error():
+    """Only a reply that says nothing about why the answer is missing falls
+    to the untyped error; everything else is F1's class and takes F1's path."""
+    from llm.providers import (LLMError, ReasoningBudgetExhausted,
+                               _message_content)
+
+    with pytest.raises(LLMError) as caught:
+        _message_content(_reply({"role": "assistant"}), "prov", "model")
+    assert not isinstance(caught.value, ReasoningBudgetExhausted)
+    assert "carried no content" in str(caught.value)
+
+
+def test_reasoning_only_replies_retry_then_fall_to_the_next_candidate(monkeypatch):
+    """F1: four attempts, the last three with reasoning disabled, the same
+    empty answer each time -- a retry loop that varies one setting cannot
+    recover from a failure that setting does not cause. The role's backup
+    candidate is what the loop never reached."""
+    from llm import providers
+
+    tried = []
+
+    def _candidates(role):
+        return [{"model": "first"}, {"model": "second"}]
+
+    def _once(role, system, user, temperature, json_mode, max_tokens, sampler,
+              *, resolved, json_schema=None, reasoning_effort_override=None):
+        tried.append((resolved["model"], reasoning_effort_override))
+        if resolved["model"] == "first":
+            raise providers.ReasoningBudgetExhausted("no answer")
+        return "the answer"
+
+    monkeypatch.setattr(providers, "resolve_role_candidates", _candidates)
+    monkeypatch.setattr(providers, "_chat_complete_once", _once)
+    monkeypatch.setattr(providers, "apply_common_prompt_policy", lambda s: s)
+
+    out = providers.chat_complete("planner", "sys", "usr")
+    assert out == "the answer"
+    # The one lever first, on the model that failed; then the model changes.
+    assert [m for m, _ in tried] == ["first", "first", "second"]
+    assert tried[1][1] == "off"
+    assert tried[2][1] is None

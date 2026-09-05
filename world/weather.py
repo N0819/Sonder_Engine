@@ -290,6 +290,21 @@ def normalize_weather(value, base=None):
     if not (out["sky"] == "storm"
             and out["precipitation"] in _UNLIT_PRECIPITATION):
         out["thundersnow"] = False
+    # WHICH DRIFT WINDOW THIS SKY BELONGS TO. Carried from the RECORD and
+    # never from the base, because a record written over is a new record: a
+    # re-normalization of a stored sky keeps its window, and a beat DECLARING
+    # a sky over one the scene already had is an authored fact that starts its
+    # own (`DECLARED_STEP`). Absent when neither applies, so a scene whose sky
+    # has never been drifted or declared serializes exactly as it did before
+    # the field existed.
+    stamp = value.get(DRIFT_STEP_KEY)
+    if isinstance(stamp, bool) or not isinstance(stamp, (int, str)) \
+            or (isinstance(stamp, str) and stamp != DECLARED_STEP):
+        stamp = None
+    if stamp is None and base:
+        stamp = DECLARED_STEP
+    if stamp is not None:
+        out[DRIFT_STEP_KEY] = stamp
     return out
 
 
@@ -640,6 +655,29 @@ def weather_words(scoped, channel="sight"):
 # sky move, slow enough that it is not weather-as-strobe.
 DRIFT_SECONDS = 3600
 
+#: The drift window a weather record belongs to, stamped on the record itself
+#: (`advance_weather`). Present only once a record has been placed in a
+#: window, so a scene whose sky has never been drifted or declared hashes and
+#: archives exactly as it did before this field existed.
+DRIFT_STEP_KEY = "drift_step"
+
+#: A sky a BEAT declared, waiting to be placed. The drift is the world's own
+#: cycle and a declaration is an authored fact, so a declaration outranks the
+#: roll for as long as it stands: the next drift check stamps it with the
+#: window it is observed in and returns it unchanged, and only the window
+#: AFTER that rolls on from it.
+#:
+#: Measured 2026-09-05 ("The Long Road to Ambry", turns 10-13): `step =
+#: elapsed // DRIFT_SECONDS` is CUMULATIVE and was used only as a roll salt,
+#: while the transition walked `_SKY_NEXT` from whatever sky the scene
+#: currently had -- so past the first in-story hour the sky took a fresh hop
+#: on EVERY commit. Four consecutive beats inside one window went fair ->
+#: overcast/drizzle -> storm/rain/gale, then the Director declared
+#: overcast/drizzle/breeze, and the next beat put the gale back. Fifteen
+#: seconds of story time, and the invented storm went on to raise the
+#: clearing's noise floor to 2.8 and silence a conversation.
+DECLARED_STEP = "declared"
+
 # What each sky can become. Deliberately gradual: clear does not become storm
 # without passing through the states in between, which is what makes an
 # unattended sky read as weather rather than as noise.
@@ -692,6 +730,16 @@ def advance_weather(weather, elapsed_seconds, seed, cold=False, severity=None):
     A caller that does not know it passes nothing and gets an uncapped drift,
     because the calm ceiling is a choice a story made and not a default to
     fall back to.
+
+    ONE DRIFT PER WINDOW, AND A DECLARED SKY OUTRANKS THE ROLL. `elapsed` is
+    cumulative, so `step` names the window rather than counting hops; the
+    window is stamped on the record (`DRIFT_STEP_KEY`) and the sky moves only
+    when it ADVANCES. A sky a beat declared carries `DECLARED_STEP` instead:
+    it is placed in whatever window first observes it and returned unchanged,
+    so it stands for the rest of that window and the NEXT one drifts from it.
+    Without the stamp every commit past the first in-story hour took a fresh
+    hop from the current sky and reverted the Director's declaration the beat
+    after it landed -- see `DECLARED_STEP` for the measurement.
     """
     weather = normalize_weather(weather) or dict(_DEFAULT)
     try:
@@ -699,6 +747,11 @@ def advance_weather(weather, elapsed_seconds, seed, cold=False, severity=None):
     except (TypeError, ValueError):
         return weather
     if step <= 0:
+        return weather
+    stamped = weather.get(DRIFT_STEP_KEY)
+    if stamped == DECLARED_STEP:
+        return dict(weather, **{DRIFT_STEP_KEY: step})
+    if stamped == step:
         return weather
 
     skies = _SKY_NEXT.get(weather["sky"], _SKY_NEXT["fair"])
@@ -728,6 +781,7 @@ def advance_weather(weather, elapsed_seconds, seed, cold=False, severity=None):
         # turns bitter is the Director's to write, and guessing it here would
         # fight that.
         "temperature": weather["temperature"],
+        DRIFT_STEP_KEY: step,
     })
 
 

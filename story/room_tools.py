@@ -562,8 +562,14 @@ def _t_inspect_contradictions(cid, frame_id):
         # the structure's planned rooms in the live scene.
         stubs = {rid: room for rid, room in (scene.get("rooms") or {}).items()
                  if isinstance(room, dict) and room.get("planned")}
+        # And every OTHER live room is `known`: a plan may name a room that
+        # already exists, and a live room is the least unknown thing in the
+        # scene (PE8, 2026-09-05 -- two planned rooms opening onto the
+        # landing were reported as three contradictions the Room had not
+        # made).
         for key, structure in stored["items"].items():
-            for w in structure_warnings(structure, stubs):
+            for w in structure_warnings(structure, stubs,
+                                        known=(scene.get("rooms") or {})):
                 if w.endswith("structure has no planned rooms"):
                     continue
                 out["structure"].append("%s: %s" % (key, w))
