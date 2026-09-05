@@ -261,6 +261,14 @@ def _reconcile_near_group_positions(ctx, scene, state_diff, player_name):
                 if isinstance(room, dict)
                 and anchor in (room.get("anchors") or {})
             }
+            # Anchor ids are ROOM-scoped: one door has an anchor on each of
+            # its sides under the same id (chat 116, 2026-09-04:
+            # `station_door` on the platform and on the gallery). A body's
+            # anchor is the one in the room it stands in; only when that
+            # fails is the id looked up scene-wide.
+            own_room = all_positions.get(body)
+            if own_room in owners:
+                owners = {own_room}
             if len(owners) != 1:
                 ambiguous_anchor = True
                 break
@@ -1018,6 +1026,22 @@ def _guard_approach_is_not_arrival(ctx, interp, sd, sc, p_name):
     # to refuse.
     if (sc.get("contained") or {}).get(subject):
         return
+    # A heading that crosses an intermediate room is an ARRIVAL in that room.
+    # `arrives=false` says the body did not reach `to_room`, not that it did
+    # not move: a walker who leaves the radio room for the shed is in the
+    # gallery between, and refusing the leg left the body in the room its own
+    # beat had walked it out of, narrated from the next one (chat 116, beat
+    # 3, 2026-09-04). The leg is accepted when the placed room is a passable
+    # step from where the body was and is not the destination; reaching the
+    # destination itself is still refused -- reaching a building is not
+    # entering it.
+    if now != str(mv.get("to_room") or ""):
+        from world.spatial import passable_neighbors
+        if now in (passable_neighbors(sc).get(was) or ()):
+            ctx.warnings.append(
+                f"Approach leg: {subject} walked {was!r} -> {now!r} on the way "
+                f"to '{mv.get('to_room')}' and is not there yet.")
+            return
     sd["positions"].pop(subject, None)
     ctx.warnings.append(
         f"Approach is not arrival: {subject}'s declared movement to "

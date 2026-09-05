@@ -851,6 +851,77 @@ def _shield_standing_passage(prior_rooms, incoming_rooms, add_warning=None):
     return out
 
 
+def _mirror_symmetric_barriers(prior_rooms, incoming_rooms):
+    """A barrier written on ONE side of a doorway is written on the other.
+
+    A barrier is a property of the doorway, not of the side you stand on
+    (`_shield_minted_edges` says so for a seal). The same holds for an open
+    and a close: a door held open from the platform is open from the gallery.
+    Measured 2026-09-04 (chat 116, a fresh scenario): the resolve set
+    `platform -> gallery: open_door` and nothing on the gallery, whose edge
+    kept `closed_door`; `spatial_rel` reads the observer's own edge first, so
+    the platform saw in, the gallery saw a shut door, and the body behind it
+    heard the greeting as a muffled fragment.
+
+    Mirrors every barrier but two: `one_way_window` is asymmetric by design
+    (it carries `sight_from`), and `wall` is a seal, which the shield above
+    already refuses from one side. An edge the diff wrote on BOTH sides is
+    left as written -- the diff spoke. Only a room the scene already holds
+    (or the diff declares) receives a mirrored edge; nothing is minted."""
+    if not isinstance(incoming_rooms, dict) or not isinstance(prior_rooms, dict):
+        return incoming_rooms
+    out = {rid: room for rid, room in incoming_rooms.items()}
+
+    def _incoming_edge(room_id, to_id):
+        room = out.get(room_id)
+        if not isinstance(room, dict):
+            return None
+        for e in room.get("adjacent") or []:
+            if isinstance(e, dict) and str(e.get("to")) == str(to_id):
+                return e
+        return None
+
+    def _prior_barrier(room_id, to_id):
+        room = prior_rooms.get(room_id)
+        if not isinstance(room, dict):
+            return None
+        for e in room.get("adjacent") or []:
+            if isinstance(e, dict) and str(e.get("to")) == str(to_id):
+                return normalize_barrier(e.get("barrier"))
+        return None
+
+    for room_id, room in list(incoming_rooms.items()):
+        if not isinstance(room, dict):
+            continue
+        for edge in room.get("adjacent") or []:
+            if not isinstance(edge, dict) or not edge.get("to") \
+                    or "barrier" not in edge:
+                continue
+            to_id = str(edge["to"])
+            barrier = normalize_barrier(edge.get("barrier"))
+            if barrier in ("one_way_window", "wall") or to_id == str(room_id):
+                continue
+            if to_id not in prior_rooms and to_id not in out:
+                continue
+            if _prior_barrier(to_id, room_id) == "one_way_window":
+                continue
+            recip = _incoming_edge(to_id, room_id)
+            if recip is not None and "barrier" in recip:
+                continue                    # the diff wrote both sides
+            if recip is None and _prior_barrier(to_id, room_id) is None:
+                continue                    # no reciprocal edge to mirror onto
+            if recip is not None:
+                recip["barrier"] = edge.get("barrier")
+                continue
+            target = out.get(to_id)
+            target = dict(target) if isinstance(target, dict) else {}
+            edges = list(target.get("adjacent") or [])
+            edges.append({"to": str(room_id), "barrier": edge.get("barrier")})
+            target["adjacent"] = edges
+            out[to_id] = target
+    return out
+
+
 def _shield_minted_edges(prior_rooms, incoming_rooms, add_warning=None):
     """Care at the MINTING of an edge, to match the care taken merging one.
 
@@ -1163,6 +1234,8 @@ def merge_scene_with_diff(
     incoming_rooms = _shield_standing_passage(
         _prior_rooms, incoming_rooms)
     incoming_rooms = _shield_minted_edges(
+        _prior_rooms, incoming_rooms)
+    incoming_rooms = _mirror_symmetric_barriers(
         _prior_rooms, incoming_rooms)
     incoming_entities = diff.get("entities") or {}
     incoming_positions = diff.get("positions") or {}

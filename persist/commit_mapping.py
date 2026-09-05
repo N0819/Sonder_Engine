@@ -57,6 +57,16 @@ GENERATED_SOURCE_PREFIX = "engine-generated"
 SETTING_FACT_SUBJECT_CHARS = 120
 
 
+def _describe_need(need):
+    """A planning need as the commit warning names it: its kind and subject,
+    except a setting fact, which is named as one -- "thing 'The cable car
+    runs once a day...'" sent a reader hunting for a missing object (chat
+    116, 2026-09-04) when the need was a fact no lore covered."""
+    kind = "setting fact" if need.get("reason") == "setting_fact" else need.get("kind")
+    return "%s %r" % (kind, need.get("subject"))
+
+
+
 def _file_engine_provenance(op):
     """Move the engine's bookkeeping out of a lore entry's prose and into
     `source_notes`.
@@ -445,8 +455,7 @@ def commit_mapping(ctx, nonce, *, prepared=None):
             ctx.add_warning(
                 "%d planning need(s) recorded: the beat reached for %s no "
                 "plan holds" % (recorded, ", ".join(
-                    "%s %r" % (n.get("kind"), n.get("subject"))
-                    for n in needs[:4])))
+                    _describe_need(n) for n in needs[:4])))
     known = wget(cid, "known", {})
     introductions = prepared.get("introductions") or []
     # Nothing to resolve, so nothing is built. The Charter projection below is

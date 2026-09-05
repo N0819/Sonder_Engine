@@ -494,7 +494,13 @@ def protect_planned_edges(cid, scene):
             if not isinstance(edge, dict) or not edge.get("to"):
                 continue
             to = str(edge["to"])
-            if to in present or (to not in rooms and to not in specs):
+            # Only into a room the SCENE holds. An edge to a planned room the
+            # fringe has not minted yet is the plan's, not the scene's: put
+            # back here, the dangling-exit guard drops it as undefined in the
+            # same commit, and the pair fired four warnings a beat on chat
+            # 114's terrace (lounge, dining, garden, 2026-09-04) while
+            # changing nothing. The edge returns the beat the stub is minted.
+            if to in present or to not in rooms:
                 continue
             room.setdefault("adjacent", []).append(dict(edge))
             restored.append((rid, to))

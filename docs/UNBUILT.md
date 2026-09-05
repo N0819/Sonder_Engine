@@ -6812,6 +6812,44 @@ vocabulary; flicker and failure are seeded on (turn, source) so a reroll
 sees the same light. Nothing is built, nothing is measured; the note's § 9
 lists what to measure first and its § 6 the constants the owner sets.
 
+### 2.35 What the 2026-09-04 debug runs left open
+
+Evidence: [`experiments/DEBUG_RUN_2026_09_04.md`](experiments/DEBUG_RUN_2026_09_04.md)
+(two runs on copies, thirty-five findings; eight classes fixed the same day,
+pinned in `tests/test_played_scene_classes.py`). Open, each an owner decision:
+
+- **A thought-only reply loses the Room's grant (F1).** The Planner's main
+  call raised `ReasoningBudgetExhausted` four attempts running -- the last
+  three with reasoning disabled on the request -- on a 6k-char trace that
+  never exhausted a 20k budget; a tiny probe on the same role answered, and
+  the same grant succeeded on rerun. The retry varies one setting the failure
+  does not depend on. Proposal: after N reasoning-only replies fall to the
+  role's next candidate model for the remaining attempts.
+- **"Full authority" is a snapshot (F15).** A mandate granted as everything
+  the room could do enumerates the kinds that existed on its turn;
+  `director_note`, added later, was refused under chat 114's turn-5 grant
+  until the reply's own words happened to grant it. A total grant should
+  cover kinds added after it; widening a standing grant is the owner's call.
+- **A pose `detail` is a side channel for perception (F18).** "watching the
+  arrival" on a body behind a closed door reached that mind as its own
+  interoception and was cited as present evidence of an event in another
+  room. Clause first (a detail describes the BODY, never what it perceives)
+  or the composer delivers only posture it can verify.
+- **Two minds fought over one door and the world kept neither answer (F22).**
+  One held it open, one latched it, the narrator rendered both, the scene
+  kept it open. A barrier is one object; the resolve owes it one answer a
+  beat, and the reconciliation should catch "latched" prose against an
+  `open_door` edge as it catches the reverse.
+- **The planner calls `inspect_clock` every step (F10)** though the payload
+  carries `clock` and the echo answers with the key. Drop payload-key tools
+  from the manifest the model sees, or say so in the prompt.
+- **The reachability warning's unit is the package (F30):** a road at two
+  hops carries a depot at three without a word. Defensible; the owner should
+  know the unit.
+- **Two model tics measured, not fixed:** Gemini doubled quotation marks on
+  two beats and eight quote-matching guards fired falsely (F29); the
+  characters cited no delivered observation on most beats (F14).
+
 ### 2.28 The day cycle's residuals
 
 Landed 2026-09-03 (`world/day_cycle.py`, `Design.md` "The day moves with the

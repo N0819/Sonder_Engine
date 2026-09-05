@@ -588,8 +588,22 @@ def _shape_plan_rooms(op):
     if len(rooms) > PLAN_ROOMS_CAP:
         raise ValueError("plan_rooms plants at most %d rooms" % PLAN_ROOMS_CAP)
     clean = {}
+    from world.spatial import normalize_bearing
     for uid, raw in rooms.items():
         raw = raw if isinstance(raw, dict) else {}
+        for axis in raw.get("frontier") or ():
+            word = str(axis or "").strip().casefold()
+            # A closed set the engine owns (the eight bearings and the two
+            # vertical words), not a vocabulary of what a frontier may say.
+            # Measured 2026-09-04 (chat 116): `frontier: ["west"]` on a
+            # platform minted a stub room called "West" at the opening commit
+            # -- the axis names what lies that way, and finding no such room
+            # the fringe made one.
+            if normalize_bearing(word) or word in ("up", "down"):
+                raise ValueError(
+                    "room %r: frontier %r is a direction; a frontier names "
+                    "WHAT lies that way (a lane, a yard, the town beyond), and "
+                    "a direction belongs on adjacent.bearing" % (uid, axis))
         clean[str(uid)] = {
             "name": _text(raw.get("name"), 120) or str(uid),
             "purpose": _text(raw.get("purpose"), 400),
@@ -1624,7 +1638,7 @@ CLOCK_ONLY_KINDS = ("scheduled_consequence",)
 OPERATION_FIELDS = {
     "plan_rooms": {
         "structure": "{key, name} -- the structure the rooms belong to",
-        "rooms": "{<room_id>: {name, purpose, access, adjacent: [{to: <room_id>, barrier?, bearing?}], frontier: [<direction>]}}",
+        "rooms": "{<room_id>: {name, purpose, access, adjacent: [{to: <room_id>, barrier?, bearing?}], frontier: [<what lies beyond -- a place, never a bare direction>]}}",
         "owning_book_id?": "lorebook id"},
     "plan_entity": {
         "name": "the entity's name", "kind": "person | thing | creature",
