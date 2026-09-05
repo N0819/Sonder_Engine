@@ -76,6 +76,51 @@ how important they are; a bubble prices them by whether their thread is being
 told. The villain who matters is the one the story is about to touch, and
 that is what a frame and a channel already know.
 
+## 3a. Charter is a TOOL OF THE PLANNER
+
+The owner, closing the argument: "i think charter should be a tool to the
+planner ultimately." That is the statement the other two notes were circling,
+and it settles what "authorship" and "simulation" mean to each other.
+
+**Charter is the physics of off-screen life. The Planner is the hand that
+reaches into it.** Not a rival author, not a second world: an instrument, with
+a read side and a write side, in the shape every other Room tool already has
+(`story/room_tools.TOOLS` reads the world and packages write it).
+
+**The read side must show the institution.** Measured, the caravanserai run:
+`inspect_charters` returned no post, no watch, no station and 24 of 40 bodies,
+so the Room asked to describe the house named the gate warden as its innkeeper
+and invented three staff. A tool that hides the field the question is about is
+worse than no tool, because it answers confidently. Posts, the watch, places,
+stations and the whole roster belong in the read, paged rather than truncated.
+
+**The write side is `charter_ops`** (registered, not built): an errand
+dispatched, an event staged against an institution -- an upkeep failing, a
+post vacated, a supply cut, somebody arriving, leaving or dying -- each routed
+through the functions Charter already owns (`charter_surgery.send_errand`,
+`charter_runtime.transfer_person`, the upkeep ledger) and refused the way a
+`positions` write is refused, by the same deterministic floor.
+
+Three things this does NOT change, and each is what makes the tool worth
+having:
+
+  * **The Planner directs; Charter computes.** The Planner says the granary
+    burned. Charter says who therefore has nothing to tend, who notices, who
+    is blamed, and who never hears about it. Section 2's rule stands: the
+    Planner never says who reacts.
+  * **The institution keeps its own beliefs.** A roster improves by
+    OBSERVATION and decays otherwise (`world/charter_roster.py`), and no
+    authored event may correct it by decree. A town that learns of a death
+    when somebody sees the body is the whole material.
+  * **The Director still reads Charter for the beat** -- carriers, figures,
+    crowds -- and does not steer it. One subsystem, two readers, one author.
+
+**Why this is the right shape.** Charter already refuses to hold a registered
+mind, already believes rather than knows, and already advances for free every
+beat. What it lacked was somebody with a reason to reach in. The Planner is
+the agent that thinks in weeks and in consequences, and it has been reasoning
+about a world it could not touch.
+
 ## 4. What has to exist before anything is deleted
 
   1. **Bubbles wired**: split, couple, uncouple, and a frame that can be
