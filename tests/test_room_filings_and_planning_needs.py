@@ -226,3 +226,42 @@ def test_a_need_refuses_an_unknown_reason_and_an_empty_subject():
         planning_need("room", "generation_request", subject="  ")
     need = planning_need("gizmo", "generation_request", subject="a gizmo")
     assert need["kind"] == "thing" and need["surface"]["declared_kind"] == "gizmo"
+
+
+def test_the_room_is_told_why_a_need_is_open_and_not_only_its_kind(temp_db):
+    """`NEED_KINDS` is three values against five reasons, so everything that
+    is neither a room nor a person is filed as a `thing` -- and the two
+    surfaces the Room reads FIRST showed the kind and dropped the reason.
+
+    Measured on the owner's live stories, 2026-09-06: 8 of the 9 open needs
+    are `setting_fact`, whose subject is a SENTENCE by nature ("A
+    Euclid-class containment breach has occurred at Site-17"), and the
+    ninth is a `generation_request` carrying a verbatim clause of the
+    player's own prose ("comes back off the vaulting a half-second later")
+    -- the player-authority backstop forwards the declaration word for word
+    on purpose. So the frontier report said `{thing: 9}` and the Room read
+    nine props to author. `inspect_needs` and the fill job always passed the
+    whole record; only the summaries did not.
+    """
+    from story.room_frontier import frontier_report
+    from story.room_slice import _plan_here
+
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Reasons", "", time.time()))
+    wset(cid, "scene", {"rooms": {"hall": {"name": "Hall", "adjacent": []}},
+                        "positions": {"Player": "hall"}})
+    record_planning_needs(cid, [
+        planning_need("thing", "setting_fact",
+                      subject="A Euclid-class containment breach has occurred.",
+                      surface={"room": "hall"}),
+        planning_need("thing", "generation_request",
+                      subject="comes back off the vaulting a half-second later",
+                      surface={"room": "hall"}),
+    ])
+    report = frontier_report(cid, None)
+    assert report["open_needs"] == {"thing": 2}
+    assert report["open_needs_by_reason"] == {
+        "setting_fact": 1, "generation_request": 1}
+    rows = [n for room in _plan_here(cid, None, ["hall"]).values()
+            for n in room.get("needs") or ()]
+    assert {n["reason"] for n in rows} == {"setting_fact", "generation_request"}

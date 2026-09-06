@@ -110,10 +110,10 @@
 | `story/room_calls.py` | 130 |  | — |
 | `story/room_citations.py` | 221 |  | — |
 | `story/room_conversation.py` | 544 |  | `core.db` |
-| `story/room_frontier.py` | 233 |  | `core.db` |
+| `story/room_frontier.py` | 243 |  | `core.db` |
 | `story/room_proposals.py` | 264 |  | `core.db` |
 | `story/room_research.py` | 371 |  | `core.db` |
-| `story/room_slice.py` | 497 |  | — |
+| `story/room_slice.py` | 509 |  | — |
 | `story/room_tools.py` | 1619 |  | `story.plot_packages`, `story.room_research`, `story.room_slice` |
 | `story/scene.py` | 2746 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.day_cycle`, `world.spatial` |
 | `web/__init__.py` | 6 |  | — |
@@ -1366,14 +1366,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `frontier_report()` | 103 | 47 lines |
+| `frontier_report()` | 103 | 57 lines |
 | `rooms_ahead()` | 74 | 27 lines |
 | `_player_room()` | 53 | 19 lines |
-| `record_spend()` | 189 | 14 lines |
-| `fills_this_hour()` | 220 | 14 lines |
-| `spend_this_hour()` | 205 | 13 lines |
-| `record_fill()` | 171 | 11 lines |
-| `record_measure()` | 152 | 8 lines |
+| `record_spend()` | 199 | 14 lines |
+| `fills_this_hour()` | 230 | 14 lines |
+| `spend_this_hour()` | 215 | 13 lines |
+| `record_fill()` | 181 | 11 lines |
+| `record_measure()` | 162 | 8 lines |
 
 ### `story/room_proposals.py`
 
@@ -1405,9 +1405,9 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `room_slices()` | 409 | 68 lines |
+| `room_slices()` | 421 | 68 lines |
+| `_plan_here()` | 374 | 45 lines |
 | `room_graph()` | 215 | 41 lines |
-| `_plan_here()` | 374 | 33 lines |
 | `_things_by_room()` | 328 | 26 lines |
 | `room_index()` | 299 | 23 lines |
 | `_registry()` | 149 | 21 lines |

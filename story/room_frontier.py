@@ -130,8 +130,10 @@ def frontier_report(cid, frame_id=None, scene=None):
               for p in plans if p["kind"] != "person"]
     needs = open_planning_needs(cid, frame_id)
     by_kind = {}
+    by_reason = {}
     for need in needs:
         by_kind[need["kind"]] = by_kind.get(need["kind"], 0) + 1
+        by_reason[need["reason"]] = by_reason.get(need["reason"], 0) + 1
     return {
         "player_room": start,
         # The body the player's room is the inside of, when it is one: the
@@ -145,6 +147,14 @@ def frontier_report(cid, frame_id=None, scene=None):
         "identities_short": max(0, FRONTIER_IDENTITIES_MIN - len(identities)),
         "things_ahead": things,
         "open_needs": by_kind,
+        # AND WHY EACH ONE IS OPEN. `kind` is three values against five
+        # reasons, so a count by kind alone reads as a pile of props: 8 of
+        # the 9 needs open on the owner's live stories (2026-09-06) are
+        # `setting_fact`, filed as `thing` because that is the fallback and
+        # carrying a whole sentence as their subject. `inspect_needs` and
+        # the fill job always saw the reason; the report the Room reads
+        # first did not.
+        "open_needs_by_reason": by_reason,
         "open_need_uids": [n["uid"] for n in needs],
     }
 
