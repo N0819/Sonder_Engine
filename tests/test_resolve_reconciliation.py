@@ -1664,3 +1664,46 @@ def test_a_doorway_encoded_as_an_anchor_is_not_an_omission():
     # never mentions is still an omission.
     assert not _omission_subject_encoded(encoded, "security_grate")
     assert not _omission_subject_encoded({"rooms": {"r": {}}}, "anything")
+
+
+def test_a_doors_identity_is_an_anchor_key_in_every_evidence_class():
+    """The category-AWARE reader had the blindness the agnostic one was
+    fixed for, and it is the one the manifest path uses.
+
+    A doorway is never a room, so a reader that stops at a room's id and
+    name cannot see the subject of an adjacency claim. Measured twice in
+    chat 117 and the same shape both times: turn 21 (a bulkhead hauled
+    open) was fixed in `_omission_subject_encoded` alone, and turn 44 came
+    straight back through `_evidence_present`. The objects hand declined
+    the door as spatial's, spatial encoded the edge barrier with the door
+    under `anchors.fire_egress_door`, and the beat still warned that
+    objective state might be stale. The three ways a manifest spells this
+    beat -- `door`, `barrier`, `portal` -- all fold onto `adjacency` and
+    `transit`, and all three reported a perfectly encoded door unencoded."""
+    from agents.director import _evidence_present
+
+    encoded = {"rooms": {"landing": {
+        "name": "The Landing",
+        "adjacent": [{"to": "riser", "barrier": "open_door", "dir": "s"}],
+        "anchors": {"fire_egress_door": {"desc": "a heavy steel door",
+                                         "dir": "s"}}}}}
+    for category in ("adjacency", "transit", "rooms", "portal", "barrier",
+                     "door"):
+        assert _evidence_present(
+            encoded, {"subject": "fire_egress_door", "category": category,
+                      "change": "eased ajar"}), category
+
+    # Still evidence, not mere mention: a room merely redescribed does not
+    # acquit an edge claim, which is what the `adjacent` conjunct holds.
+    redescribed = {"rooms": {"landing": {
+        "name": "The Landing",
+        "anchors": {"fire_egress_door": {"desc": "a heavy steel door"}}}}}
+    assert not _evidence_present(
+        redescribed, {"subject": "fire_egress_door", "category": "adjacency",
+                      "change": "eased ajar"})
+    # And a door nobody encoded is still unencoded.
+    assert not _evidence_present(
+        {"rooms": {"landing": {"name": "The Landing",
+                               "adjacent": [{"to": "riser"}]}}},
+        {"subject": "fire_egress_door", "category": "adjacency",
+         "change": "eased ajar"})

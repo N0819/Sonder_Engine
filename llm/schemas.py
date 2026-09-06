@@ -1348,6 +1348,22 @@ class RoomDef(LenientModel):
     # as "enclosed" gets no weather at all. Absent falls back to
     # weather.room_exposure's keyword derivation, never to "it rains here".
     exposure: Optional[str] = None
+    # HOW QUIET THE PLACE IS OF ITSELF: hushed | dead
+    # (`world.spatial.QUIET_SCALE`). Declared for the same reason `light`
+    # and `exposure` are -- the validation round-trip drops what it does not
+    # declare, so a room the story has called silent would arrive at the
+    # commit having said nothing.
+    #
+    # It only ever goes DOWN, and the asymmetry is the field's whole point.
+    # Loudness has two channels already (`sound_source` on an entity, and
+    # the standing `sound` a plan writes on a room), both of which TRAVEL
+    # and both of which mask a listener beside them, so a third word for
+    # "loud" would restate a fact the scene already holds and be free to
+    # disagree with it. Silence has none, because an absence has no source
+    # to hang on: forty years of condemned concrete makes nothing, and
+    # before this the engine priced it as a furnished parlour and swallowed
+    # a crowbar 18 paces off (`docs/UNBUILT.md` § 1.140).
+    quiet: Optional[str] = None
     # The named features within the room that prose already refers to -- the
     # bar, the hearth, the bed -- as {anchor_id: {desc, dir?}}. Entity
     # `stations` hang off these, and `dir` gives each one a wall so left/right
@@ -4181,6 +4197,31 @@ def _drop_ink_in_dialogue(text):
     return "".join(out)
 
 
+#: A canonical inline pair with nothing but whitespace between its tags.
+#: MARKUP WITH NOTHING INSIDE IT IS NOT MARKUP -- it emphasises no word,
+#: colours no word, and reaches the reader as a bare `<mark></mark>` in the
+#: middle of a paragraph (chat 117, turn 47, in the narrator's own output).
+#: The same judgement the unclosed-tag rule already makes one line up: a tag
+#: that cannot do its job costs a few characters, not the prose.
+_EMPTY_PROSE_PAIR_RE = re.compile(
+    r"<(i|b|u|s|mark|sup|sub|code)>(\s*)</\1>"
+    r"|<font color=\"[a-z]+\">(\s*)</font>", re.I)
+
+
+def _drop_empty_prose_pairs(text):
+    """Collapse empty inline pairs, innermost first, keeping their
+    whitespace. Looped because emptying an inner pair empties its parent
+    (`<i><b></b></i>`), and idempotent for the same reason: a second run
+    over its own output finds nothing left to collapse."""
+    previous = None
+    while previous != text:
+        previous = text
+        text = _EMPTY_PROSE_PAIR_RE.sub(
+            lambda m: m.group(2) if m.group(2) is not None else (m.group(3)
+                                                                 or ""), text)
+    return text
+
+
 def canonicalize_prose_markup(raw):
     """Reduce narrator prose to plain text plus a closed set of inline tags.
 
@@ -4278,7 +4319,7 @@ def canonicalize_prose_markup(raw):
     # angle brackets stay encoded through storage and the frontend decodes
     # them inside text nodes only, after it has finished finding tags: the
     # same rule as this function, applied at the other end.
-    joined = _drop_ink_in_dialogue("".join(out))
+    joined = _drop_empty_prose_pairs(_drop_ink_in_dialogue("".join(out)))
     joined = joined.replace("\x00", "").replace("\x01", "")
     joined = joined.replace("&lt;", "\x00").replace("&gt;", "\x01")
     return (html.unescape(joined)

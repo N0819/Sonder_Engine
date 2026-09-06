@@ -169,6 +169,21 @@ def db_ratio(factor) -> float:
     return 10.0 * math.log10(factor)
 
 
+def ratio_of_db(db) -> float:
+    """The inverse of `db_ratio`, and the missing half of that pair.
+
+    A GAIN IS A RATIO AND MUST NOT GO THROUGH `power_of_db`, which carries
+    `DB_REF`: the two look interchangeable, differ by a factor of ten
+    thousand, and the wrong one is silent. Caught before it shipped only by
+    checking a one-hop answer against the composite field's own reading for
+    the same pair -- 6.2e-07 where the field said 0.0191, which is a room
+    that hears nothing ever and reports nothing."""
+    db = float(db)
+    if db == float("-inf"):
+        return 0.0
+    return 10.0 ** (db / 10.0)
+
+
 #: The slack on every dB comparison, in dB. A LINEAR `>=` is inclusive and a
 #: logarithm of both sides is not bit-exact, so an exactly-at-threshold pair
 #: -- `signal == FULL_SNR * noise`, which synthetic fixtures do construct --
@@ -377,6 +392,72 @@ OCCLUDER_LOSS_DB = -db_ratio(OCCLUDER_PASS)
 #: heard each other. The floor is set so a quiet enclosed room asks 0.1 for
 #: `full`, which a normal voice clears to ten paces and a whisper to two.
 AMBIENT = {"enclosed": 0.05, "sheltered": 0.1, "open": 0.1}
+
+#: HOW MUCH QUIETER THAN ORDINARY A PLACE IS, when the room says so. The
+#: declared word `quiet` on a room scales `AMBIENT[exposure]`, and it only
+#: ever goes DOWN.
+#:
+#: One constant answered for a furnished parlour, a working plant room and
+#: forty years of condemned concrete alike, and § 1.140 measured what that
+#: cost: at the containment annex, through a shut door, 18 cells down the
+#: spine, a `loud` pry bar on a bulkhead seam arrived at 24.9 dB against a
+#: 27.0 dB floor -- SNR -2.1 where a `fragment` asks -0.97. A silent room
+#: ought to be a place where a small sound carries; it was the thing that
+#: swallowed a large one.
+#:
+#:   hushed  x1/4   -6 dB   an enclosed room reads 21.0
+#:   dead    x1/16  -12 dB  an enclosed room reads 15.0
+#:
+#: SIX DECIBELS A RUNG, the same step the rest of this module is built on.
+#:
+#: DOWN ONLY, AND THE COMPLEMENT IS THE WHOLE ARGUMENT: what a place MAKES
+#: that carries is a SOURCE, and the engine already has two ways to say it
+#: -- `sound_source` on an entity standing in the room (the objects hand's
+#: channel, the sibling of `light_source`) and `rooms[rid]["sound"]`, the
+#: standing noise a PLACE makes, which a plan writes so an unfurnished room
+#: can announce itself before it is seen. Both travel, both are heard from
+#: the next room, and both already mask a listener standing beside them,
+#: because `noise_at` counts every other source as noise. So a third word
+#: meaning "loud" would be a second representation of a fact the scene
+#: already holds, free to disagree with it. What no channel could say is
+#: that a place makes NOTHING -- an absence has no source to hang on -- and
+#: that is exactly and only what this word is for.
+#:
+#: A room that declares nothing is byte for byte what it was: an absent
+#: word is not a claim, the same fail-open `normalize_light` takes.
+QUIET_SCALE = {"hushed": 0.25, "dead": 0.0625}
+
+#: The word's aliases -- what a model reaches for when it means the two
+#: rungs above. Anything else is not a quiet word and the room keeps its
+#: ordinary floor, because a word outside the set is a word the engine
+#: cannot price and a guess here is a room that hears wrong forever.
+_QUIET_ALIASES = {
+    "silent": "dead", "deathly_quiet": "dead", "airless": "dead",
+    "soundless": "dead", "tomb": "dead", "tomblike": "dead",
+    "dead_quiet": "dead", "still": "hushed", "muffled": "hushed",
+    "quiet": "hushed", "hush": "hushed", "subdued": "hushed",
+}
+
+
+def normalize_quiet(value) -> str:
+    """The declared quiet word, or `""` for a room that declares none.
+
+    Fail-CLOSED, against `normalize_light`'s fail-open, and the difference
+    is which way the miss points: an unreadable light word means the room
+    is ordinarily lit, which is a scene unchanged, while an unreadable
+    quiet word would mean a room the engine has silently made deaf or
+    sharp-eared for the rest of the story."""
+    word = str(value or "").strip().casefold().replace(" ", "_")
+    word = _QUIET_ALIASES.get(word, word)
+    return word if word in QUIET_SCALE else ""
+
+
+def room_quiet(scene, room_id) -> str:
+    """The quiet a room declares of its own, or `""`."""
+    room = ((scene or {}).get("rooms") or {}).get(room_id)
+    if not isinstance(room, dict):
+        return ""
+    return normalize_quiet(room.get("quiet"))
 
 #: What makes a room a DUCT: it is long, narrow and roofed, so the walls stop
 #: a sound going anywhere except along it, and it carries far further than
@@ -696,14 +777,14 @@ def open_edge_floor(volume, rel: dict) -> Optional[str]:
 
 
 def quantise_hearing(signal: float, noise: float) -> str:
-    """Quantise, LAST, from two LINEAR powers. The reference path: kept
-    exactly as it shipped, so the dB path below has something to be proved
-    identical to (`tests/test_sound_field.py`'s conversion property)."""
+    """Quantise, LAST, from two LINEAR powers. The reference path, kept in
+    step with the dB path below so the conversion property has something to
+    prove (`tests/test_sound_field.py`)."""
     if noise <= 0:
         return "full" if signal >= HEAR_FLOOR else "none"
     if signal >= FULL_SNR * noise:
         return "full"
-    if signal >= FRAGMENT_SNR * noise and signal >= HEAR_FLOOR:
+    if signal >= FRAGMENT_SNR * noise and signal >= min(HEAR_FLOOR, noise):
         return "fragment"
     return "none"
 
@@ -723,13 +804,28 @@ def quantise_hearing_db(signal_db: float, noise_db: float) -> str:
     function answers it the same way as the one it replaces is this
     function's, and the order below is the answer. A silent room
     (`noise_db` -inf) keeps its own arm for the same reason.
+
+    YOU CANNOT HEAR BELOW THE ROOM YOU ARE STANDING IN, which is why the
+    absolute floor is taken against the room's noise rather than alone.
+    `HEAR_FLOOR` was "set with AMBIENT" (its own comment) and landed on
+    0.05, exactly `AMBIENT["enclosed"]` -- so in every ordinary indoor room
+    the two gates sit within a decibel of each other and the absolute one is
+    the higher, which is fine while nothing can be quieter than an ordinary
+    room. `quiet` made something quieter, and left alone this line would
+    have held a `dead` room to a floor 12 dB above its own noise: the room
+    would declare itself a tomb and hear exactly what a furnished parlour
+    hears, and the declared word would be inert with no error anywhere.
+    Taking the lower of the two says the calibration was of an ORDINARY
+    quiet room, and where a room is quieter than that, the room is the
+    limit. A room that declares no quiet has a floor at or above
+    `HEAR_FLOOR` and takes `HEAR_FLOOR`, byte for byte as before.
     """
     if noise_db == float("-inf"):
         return "full" if _at_least(signal_db, HEAR_FLOOR_DB) else "none"
     if _at_least(signal_db, noise_db + FULL_SNR_DB):
         return "full"
     if _at_least(signal_db, noise_db + FRAGMENT_SNR_DB) \
-            and _at_least(signal_db, HEAR_FLOOR_DB):
+            and _at_least(signal_db, min(HEAR_FLOOR_DB, noise_db)):
         return "fragment"
     return "none"
 
@@ -1194,6 +1290,13 @@ def _ambient_floor(scene, room_id) -> float:
     from world import weather as _weather
     floor = AMBIENT.get(_weather.room_exposure(scene, room_id),
                         AMBIENT["enclosed"])
+    # THE DECLARED QUIET SCALES THE PLACE'S OWN FLOOR AND NOTHING ELSE.
+    # The weather below is added AFTER, because rain on a dead room is
+    # still rain -- what the word says is that the room contributes no
+    # noise of its own, not that the world has stopped reaching it.
+    quiet = room_quiet(scene, room_id)
+    if quiet:
+        floor *= QUIET_SCALE[quiet]
     try:
         scoped = _weather.weather_for_room(scene, room_id)
     except Exception:
@@ -1524,6 +1627,66 @@ _CONDUCTED = ("inside_source", "enclosed_from_source", "source_enclosed",
               "concealed")
 
 
+def far_path_gain(scene, listener_room, source_room):
+    """The path gain from one ROOM to another over the room graph, or None
+    where the question does not apply (same room, a room the scene does not
+    hold). `0.0` is an ANSWER -- the rooms exist and no speech-scale sound
+    gets from one to the other -- and is the answer `door_gain` could not
+    give.
+
+    THE ROOM GRAPH ANSWERS WHERE THE COMPOSITE FIELD CANNOT. A near field is
+    a cell grid over the listener's room and the neighbours it can place; a
+    pair further apart than that used to fall through to the edge model,
+    whose word for it is `separated`, and from there to `door_gain` -- the
+    best opening this room has, which is a CEILING and knows nothing about
+    distance. Measured on synthetic chains of medium rooms joined by open
+    doorways, `door_gain` returns 0.1131 at two hops, three hops, four and
+    five, so `hear_level` answered `fragment` for a shout at every distance
+    beyond adjacent, and the same for one four rooms further. The flood's
+    loss over the same chain grows 22.1, 26.0, 29.0, 31.4, 33.4 dB.
+
+    Live, chat 117 turn 49: Aurel shouted Sarah's name three rooms down a
+    straight run of open doorways and her view carried no trace of it, while
+    the flood put the same shout in her room at 31.6 dB over a 27.0 floor.
+    She had stopped following instructions for four beats because the engine
+    never delivered one, and she explained it in character -- "I filtered
+    out vocalizations below alarm threshold" -- which is how a defect like
+    this stays invisible.
+
+    LOSS IS INDEPENDENT OF THE SOURCE LEVEL (spreading plus barriers, both
+    subtractive in dB), so the probe level cancels and the gain this returns
+    grades any volume. The probe is a shout because the flood terminates on
+    AUDIBILITY: past where a shout dies, nothing anyone says is audible
+    anyway, and the walk should stop rather than keep paying for rooms.
+
+    Cost, measured 2026-09-06: 0.16 ms on the descent scene (22 rooms), 3.8
+    ms on a 570-room chain -- the worst case the author's corpus could
+    offer. Uncached deliberately; a memo keyed on the room graph is the
+    answer if a big map ever measures badly.
+    """
+    rooms = (scene or {}).get("rooms") or {}
+    listener_room, source_room = str(listener_room or ""), str(source_room or "")
+    if not listener_room or not source_room or listener_room == source_room:
+        return None
+    if listener_room not in rooms or source_room not in rooms:
+        return None
+    # ADJACENT IS THE EDGE MODEL'S, AND STAYS ITS. This answers the case
+    # that had no distance in it at all -- `separated`, one word for every
+    # room beyond the next. Two rooms sharing an edge already have a barrier
+    # to be graded by, tuned per barrier, and a wall between neighbours is a
+    # thing the edge rules say something deliberate about; the flood would
+    # overrule that with a coarser reading of the same single hop for no
+    # gain, since there is no distance to be wrong about across one edge.
+    from world.spatial_senses import rooms_adjacent
+    if rooms_adjacent(scene, listener_room, source_room):
+        return None
+    probe = SPEECH_DB["shout"]
+    rec = room_sound_flood(scene, source_room, probe).get(listener_room)
+    if rec is None:
+        return 0.0
+    return ratio_of_db(float(rec["db"]) - probe)
+
+
 def stamp_sound_relation(scene: dict, rel: dict, observer: str, target: str,
                          *, sound=None, observer_room=None,
                          target_room=None) -> dict:
@@ -1573,6 +1736,25 @@ def stamp_sound_relation(scene: dict, rel: dict, observer: str, target: str,
     # whole, because the edge model had no idea there was a bell
     # (`PLAY_2026_09_05_lighthouse.md` § PA5).
     door = sound.door_gain(observer, room=observer_room)
+    # THE ROOM GRAPH, BEFORE THE CEILING. `door_gain` is what this room's
+    # best opening could deliver and says nothing about how far away the
+    # speaker is; the flood says exactly that (`far_path_gain`). Stamped as
+    # the signal so the FIELD branch of `hear_level` grades the pair -- the
+    # masking rule, the door ceiling below and `_weaker_hearing` all keep
+    # working unchanged, and the edge model's distance-blind `separated`
+    # word stops being reached for a pair whose rooms the scene holds.
+    #
+    # It only ever SUBTRACTS at the boundary: at one hop, where both
+    # readings exist, the composite field measured 0.0191 and the flood
+    # 0.0062, because the flood charges whole room spans where the field
+    # walks cells. The conservative one is the one that arrives late.
+    far = far_path_gain(scene, o_room, t_room)
+    if far is not None:
+        rel["signal"] = far
+        rel["noise"] = noise
+        if door is not None and door > 0.0:
+            rel["door_gain"] = door
+        return rel
     if door is None or door <= 0.0:
         return rel
     rel["door_gain"] = door
@@ -1893,13 +2075,40 @@ def room_span(scene: dict, room_id) -> float:
 
 
 #: Below this level nothing anywhere can hear a sound, whatever room it
-#: reaches: the quietest floor the model has (`AMBIENT["enclosed"]`, since
-#: weather and sources only ever ADD to a floor) taken at the `fragment`
+#: reaches: the quietest floor THIS SCENE has, taken at the `fragment`
 #: margin, or the absolute floor, whichever is higher. It is what makes the
 #: flood terminate on AUDIBILITY and need no hop cap: loss only accumulates,
 #: so once a room is under this, no room beyond it can be over it.
-def _inaudible_everywhere_db() -> float:
-    return max(AMBIENT_DB["enclosed"] + FRAGMENT_SNR_DB, HEAR_FLOOR_DB)
+#:
+#: It reads the scene because `quiet` broke the invariant it used to rest
+#: on. The old cutoff was `AMBIENT["enclosed"]` and the comment said why --
+#: "weather and sources only ever ADD to a floor" -- which stopped being
+#: true the moment a room could declare itself quieter than the constant.
+#: Left alone it would have cut the flood at 27 dB while a `dead` room four
+#: hops out was listening at 15, and that room would have been deaf to
+#: everything for the rest of the story with no warning anywhere. A scene
+#: that declares no quiet takes exactly the old number, so nothing that
+#: does not use the word can move.
+def _gate_db(floor: float) -> float:
+    """The lowest level a room with this noise floor can hear at all: the
+    `fragment` margin over its own noise, or the absolute floor -- which is
+    itself taken against the room, `quantise_hearing_db`'s rule -- whichever
+    is higher. Written out because the flood's cutoff and the grader have to
+    agree about it, and they used to agree only by both spelling
+    `HEAR_FLOOR_DB`."""
+    return max(db_of_power(floor) + FRAGMENT_SNR_DB,
+               min(HEAR_FLOOR_DB, db_of_power(floor)))
+
+
+def _inaudible_everywhere_db(scene=None) -> float:
+    cut = _gate_db(AMBIENT["enclosed"])
+    for room in ((scene or {}).get("rooms") or {}).values():
+        if not isinstance(room, dict):
+            continue
+        word = normalize_quiet(room.get("quiet"))
+        if word:
+            cut = min(cut, _gate_db(AMBIENT["enclosed"] * QUIET_SCALE[word]))
+    return cut
 
 
 def room_sound_flood(scene: dict, source_room, source_db: float) -> dict:
@@ -1913,7 +2122,7 @@ def room_sound_flood(scene: dict, source_room, source_db: float) -> dict:
     the sum of the spans of every room on the path, source's own included,
     and `barrier_db` the sum of the edges' losses. Both terms only ever
     grow, so the priority is monotone and the flood may stop expanding a
-    room the moment it falls under `_inaudible_everywhere_db()`.
+    room the moment it falls under `_inaudible_everywhere_db(scene)`.
 
     NO HOP CAP, and none is wanted: the termination is AUDIBILITY, which is
     the physically meaningful bound and the one that makes the reach of a
@@ -1934,7 +2143,7 @@ def room_sound_flood(scene: dict, source_room, source_db: float) -> dict:
     if not source_room or source_room not in rooms:
         return {}
     graph = far_field_graph(scene)
-    cut = _inaudible_everywhere_db()
+    cut = _inaudible_everywhere_db(scene)
     #: A room's span is derived from its shape, and deriving it lays the
     #: room's cells out. Measured on a 600-room grid: 543 ms without this
     #: memo and 41 ms with it, because a dense graph asks each room's span
@@ -1977,7 +2186,9 @@ def distant_level_word(level_db: float, floor_db: float) -> Optional[str]:
     whose noise floor is `floor_db`, or None where it does not arrive at
     all. The same two margins the hearing ladder is quantised by, plus one
     more for the sound there is no doing anything through."""
-    if not _at_least(level_db, HEAR_FLOOR_DB):
+    # The same "you cannot hear below the room you are in" as
+    # `quantise_hearing_db`; `floor_db` is that room's noise.
+    if not _at_least(level_db, min(HEAR_FLOOR_DB, floor_db)):
         return None
     if _at_least(level_db, floor_db + OVERWHELMING_MARGIN_DB):
         return "overwhelming"
