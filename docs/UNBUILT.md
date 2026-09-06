@@ -6861,6 +6861,44 @@ CHANGED PLACE this beat, which `act_percept` cannot see. Over-granting a sound
 is the safe direction against three of five bodies missing the beat entirely,
 and it is the direction taken.
 
+### 1.137 A planned room is deaf until somebody puts a counter in it
+
+**Measured 2026-09-05, descent run.** `sound_field` gates on
+`room_has_geometry`, which is the FOV layer's opt-in for the per-observer
+furniture sentence and asks whether an ANCHOR carries an authored height. A
+room with a measured extent and no anchors -- the ordinary state of every
+planned room the Director has not yet furnished -- therefore has no sound
+field, and nothing standing in it can hear anything at all.
+
+Live case: the Writers' Room planned a containment annex at 14x12 paces and
+filed a creature into it. The player put a pry bar into a door two rooms away
+and the beat wrote three `sensory_events`, one of them a `loud` metallic
+clatter. The creature heard nothing -- not because of distance or a door, but
+because its own room had no counter in it. The service spine, which the
+Director HAD furnished, has three anchors and a field.
+
+**The light field already made this exact distinction and recorded the
+measurement**: `light_geometry_exists` accepts a size tier or an extent,
+"deliberately WIDER than `room_has_geometry` ... light needs a grid and a
+place for the source, not a counter to shadow with -- 321/589 live rooms
+against 2/589." Sound needs a grid and somewhere to put the source for the
+same reason and kept the narrow gate.
+
+**Why it is not simply changed.** Widening it was tried and reverted the same
+hour: it turns the near field on for every room carrying a size tier, which
+changes hearing in every existing story. Three tests caught it immediately,
+and one of them --
+`test_a_scene_without_geometry_stamps_nothing_and_composes_byte_identically`
+-- exists precisely to hold that promise; another measured a whisper becoming
+audible where the model had called it inaudible. That is a behaviour change to
+every story, of the same size as the wall-loss recalibration in § 1.125, and
+it is the owner's.
+
+**The narrower reading, if the wide one is unwanted:** the gate could accept
+an EXTENT (a measured shape) without accepting a bare size tier, which is what
+a planned room actually carries and what the creature case needs, and would
+leave every room the engine merely guessed a size for exactly as it is.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit

@@ -2393,36 +2393,36 @@ def hearing_for_creatures(registry, scene, events):
     window like `heard` beside it: what was audible in this window is never a
     standing fact.
     """
-    from world.spatial import (AMBIENT_DB, SOUND_DB, distant_level_word,
-                               room_sound_flood)
+    from world.spatial import DISTANT_LEVELS, heard_events
 
-    rooms = (scene or {}).get("rooms") if isinstance(scene, dict) else None
     items = (registry or {}).get("items") if isinstance(registry, dict) else {}
-    sources = []
-    for event in (events or ()):
-        if not isinstance(event, dict):
-            continue
-        room = str(event.get("source_room") or event.get("room") or "")
-        level = SOUND_DB.get(str(event.get("level") or "audible"))
-        if room and level is not None:
-            sources.append((room, float(level)))
+    rooms = (scene or {}).get("rooms") if isinstance(scene, dict) else None
+    rank = {word: n + 1 for n, word in enumerate(DISTANT_LEVELS)}
     for item in (items or {}).values():
         state = item.get("state") if isinstance(item, dict) else None
         if not isinstance(state, dict) or not state.get("creature"):
             continue
         overheard = {}
-        if rooms and sources:
+        if rooms and events:
             places = {str(b.get("place") or "")
                       for b in (state.get("bodies") or {}).values()
                       if isinstance(b, dict) and b.get("place")}
-            floor = AMBIENT_DB["enclosed"]
-            for room, level in sources:
-                heard = room_sound_flood(scene, room, level)
-                for place in places:
-                    reached = (heard.get(place) or {}).get("db")
-                    if reached is None or not distant_level_word(reached, floor):
+            for place in sorted(places):
+                # THE BODY'S OWN READER, so "the same field a body hears
+                # through" is literally true rather than a second model that
+                # can drift from it. `heard_events` is what tells a person
+                # standing here which of this beat's noises reached them and
+                # how loudly; a creature is asked exactly that question and
+                # gets exactly that answer, including when the answer is that
+                # it heard nothing.
+                for event, word in heard_events(scene, "", events,
+                                                room=place) or ():
+                    room = str(event.get("source_room") or event.get("room")
+                               or "")
+                    if not room:
                         continue
-                    overheard[room] = max(overheard.get(room, 0.0), reached)
+                    overheard[room] = max(overheard.get(room, 0),
+                                          rank.get(str(word), 1))
         state["overheard"] = overheard
     return registry
 
