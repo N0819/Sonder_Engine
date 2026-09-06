@@ -13,7 +13,7 @@
 | `agents/composer.py` | 4246 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 5040 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 457 |  | `story.character_schema`, `world.spatial` |
-| `agents/director_evidence.py` | 1195 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
+| `agents/director_evidence.py` | 1222 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
 | `agents/director_fanout.py` | 941 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 1882 |  | `agents.common`, `agents.director_lingua`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
@@ -293,14 +293,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_evidence_present()` | 786 | 301 lines |
+| `_evidence_present()` | 813 | 301 lines |
+| `_omission_subject_encoded()` | 688 | 64 lines |
 | `_merge_repair_into_diff()` | 515 | 59 lines |
-| `_fold_derived_manifest_events()` | 1140 | 56 lines |
+| `_fold_derived_manifest_events()` | 1167 | 56 lines |
 | `_interpret_coverage_corpus()` | 91 | 53 lines |
-| `_subject_is_somewhere()` | 737 | 47 lines |
+| `_subject_is_somewhere()` | 764 | 47 lines |
 | `_strip_blank_diff_placeholders()` | 256 | 42 lines |
-| `_omission_subject_encoded()` | 688 | 37 lines |
-| `_manifest_items()` | 1094 | 37 lines |
+| `_manifest_items()` | 1121 | 37 lines |
 
 ### `agents/director_fanout.py`
 
