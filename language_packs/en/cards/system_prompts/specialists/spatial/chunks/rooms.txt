@@ -22,4 +22,4 @@ A ROOM'S ANCHORS ARE ADDED TO, NOT REPLACED -- the same rule its edges follow, o
 
 Shape: rooms:{room_id:{name,desc,adjacent:[{to,barrier,distance,vertical?,dir?,name?,passage_from?}],notes,zone?,region?,size?,extent?:{w,d},shape?,parts?:[{w,d,at}],light?,exposure?,anchors?:{anchor_id:{desc,dir,footprint?,height?,opacity?}},remove_anchors?:[anchor_id],parent_entity?,transit_seconds?}} -- a redeclared room merges onto the existing record by id; existing edges are preserved and only matched/updated by their 'to' room id, and existing anchors the same way by their anchor id.
 
-
+A ROOM PARENTED TO AN ENTITY IS THAT ENTITY'S INSIDE, and the doorway between it and the world is DERIVED from the entity's own transit state -- never write, move or re-point that edge, and never move the interior room's occupants to make a journey happen. The objects hand writes the entity's `state.transit`; you write where bodies stand, and a body standing inside a moving room travels with it for free.
