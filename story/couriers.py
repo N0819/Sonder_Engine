@@ -110,6 +110,58 @@ ROUTE_LIMIT = 32
 #: courier. The rider is the reach money buys; the runner is what a village
 #: sends.
 PACES = {"riding": 240.0, "walking": 600.0}
+
+#: HOW MUCH SLOWER THAN THE ROOM ITSELF (the owner's ruling, 2026-09-06).
+#:
+#: `PACES` above is a FLAT per-edge cost, and the flatness is the problem the
+#: ruling names: a courier paid the same ten minutes to cross a broom
+#: cupboard as a boulevard, because the constant assumes an edge is a street.
+#: `world.charter_move.edge_seconds` now prices an edge from the room it
+#: crosses wherever the world has measured one, and a courier crosses the
+#: same rooms as everybody else.
+#:
+#: So the handicap becomes a MULTIPLIER on the real crossing rather than a
+#: number that ignores it, and the design promise the flat rate was
+#: defending survives intact and stated: BOTH are slower than a walking
+#: player, who crosses a room in one beat, because outrunning a route is a
+#: verb this design promises the player. A courier on a long road is still
+#: slow -- because the road is long, which is the honest reason.
+#:
+#: `COURIER_EDGE_FLOOR` is what keeps the promise where the multiplier alone
+#: would not: a story's beats run 6 to 45 seconds (measured, chat 117), so a
+#: courier crossing a 6-second room even at 3x would be inside one beat.
+#: Forty-five seconds is a beat at its longest, so the player always has the
+#: legs of him.
+#:
+#: An UNMEASURED world keeps `PACES` exactly, like every other reader of
+#: `edge_seconds`: 62% of the owner's 744 live edges, unchanged byte for
+#: byte.
+COURIER_SLOWNESS = {"riding": 1.5, "walking": 3.0}
+COURIER_EDGE_FLOOR = 45.0
+
+
+def courier_edge_seconds(scene, here, nxt, flat):
+    """What one edge costs THIS courier: the room's own crossing, made
+    slower by `COURIER_SLOWNESS` and floored so a player outpaces him.
+
+    `flat` is the courier's stored `pace_seconds`, which is both the
+    fallback and how a rider is told from a runner -- the same reading
+    `new_courier` already makes to label one. No new field on the record.
+    """
+    from world.charter_move import edge_seconds
+
+    try:
+        flat = float(flat)
+    except (TypeError, ValueError):
+        flat = PACES[DEFAULT_PACE]
+    if scene is None:
+        return flat
+    real = edge_seconds(scene, here, nxt)
+    if real >= 3600.0 / 6.0:            # unmeasured: the town rate stands
+        return flat
+    slower = real * (COURIER_SLOWNESS["riding"] if flat <= PACES["riding"]
+                     else COURIER_SLOWNESS["walking"])
+    return min(flat, max(COURIER_EDGE_FLOOR, slower))
 DEFAULT_PACE = "riding"
 
 #: The two kinds of body on the road. One object, one list, one sweep --
@@ -280,7 +332,7 @@ def carried_bundle(courier):
     return [(held, bool(courier.get("sealed")))] if held.get("claim") else []
 
 
-def advance_couriers(couriers, neighbors, clock_seconds):
+def advance_couriers(couriers, neighbors, clock_seconds, scene=None):
     """Move every en-route courier as far as the clock has paid for. Pure;
     returns ``(couriers, moves)``.
 
@@ -331,6 +383,11 @@ def advance_couriers(couriers, neighbors, clock_seconds):
         stop_legs = {int(x) for x in courier.get("stop_legs") or []}
         stops_due = [int(x) for x in courier.get("stops_due") or []]
         passed = []
+        # WHAT THIS LEG COSTS, from the room it crosses where the world
+        # measured one (`courier_edge_seconds`); the stored flat pace
+        # otherwise, which is every unmeasured world unchanged.
+        pace = courier_edge_seconds(scene, route[leg], route[leg + 1], pace) \
+            if leg + 1 < len(route) else pace
         while leg + 1 < len(route) and now - moved_at >= pace:
             nxt = route[leg + 1]
             here = route[leg]
@@ -1075,7 +1132,7 @@ def run_couriers(ctx, scene, ops, *, names=(), places=()):
             continue
 
     couriers, moves = advance_couriers(
-        couriers, passable_neighbors(scene), now)
+        couriers, passable_neighbors(scene), now, scene)
     metrics["courier_moves"] = len(moves)
 
     crowds_standing = [dict(c) for c in

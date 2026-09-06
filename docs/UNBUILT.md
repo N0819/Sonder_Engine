@@ -7225,6 +7225,74 @@ gives up, so a fresh trail laid in the same room is followed normally.
 `casting` is declared in `normalize_charter` -- the fifth key this year that
 would otherwise have been written by a round and normalized away unread.
 
+### 1.142 An edge cost ten minutes because the courier said so
+
+**Found and fixed 2026-09-06, playing the descent run.** The carbonic
+stalker smelled the players at the top rung, named the right room, and
+`hunt_moves` returned a walk into it -- and it never arrived, for four
+beats and counting. Nothing in the creature path was wrong.
+
+`charter_move.WALK_ROOMS_PER_HOUR` is 6: **600 seconds, ten minutes, to
+cross one edge**, and its own note says why -- it is pinned equal to
+`story.couriers.PACES["walking"]`, because "a townsperson on an errand walks
+the same streets at the same speed". That is right for the courier it was
+pinned to, whose edge is a road between two places. A SCENE's edge is a
+doorway, and a 24-pace service spine is about eighteen seconds' walk.
+
+**Measured, and my first number was wrong.** I reported 750,000 beats per
+room; that came from one beat's rounding residual (405.9992 against 406.0)
+and was nonsense. The scene clock is HEALTHY: the descent's beats declare 6
+to 45 seconds each, 406 seconds across 20 turns. The true figure was about
+30 beats to cross one room, in a story four minutes long. The owner named
+the real fault in one line -- "ten minutes is still quite too long to cross
+a single room" -- and it was never the clock.
+
+**An edge now costs what the room IS** (`charter_move.edge_seconds`): the
+room's own measured `extent` at a walking pace, plus what the edge's own
+`distance` word is worth. Live: the descent's corridors are 10.8 and 12.3
+seconds, a `far` road is 191.
+
+**THE FIRST SCOPING WAS WRONG AND THE OWNER SAID SO TWICE.** It kept the ten
+minutes wherever a room carried no `extent`, on the reasoning that a size
+TIER is a guess rather than a measurement -- which protected a test fixture
+rather than a truth. No room takes ten minutes to walk through, measured or
+not, and the light and sound fields have read tiers as geometry all along, so
+refusing to here was inconsistent as well as wrong. The span always decides
+now: 2.3 s across a `tiny` room, 4.6 across a `medium`, 9.2 across a `vast`.
+The old flat rate survives as a CEILING and as the answer for a scene holding
+no rooms at all.
+
+**What broke was fixtures, not physics, and that is the finding.** Fifteen
+tests failed across traversal, couriers and caravans, and every one models a
+ROAD as a bare edge -- a town's square-to-tavern, a keep-gate-road-square
+courier run, a farm-lane-market-road-town caravan route. A bare edge is a
+doorway once a crossing is priced from the room it crosses, so those streets
+became six-second rooms and everybody teleported. They now declare
+`distance: "far"`, which is the plan schema's own word for a way through
+that takes more than one beat: a town street costs 189 s, about three
+minutes between places, and the courier's road behaves as it always did.
+
+The traversal tests were rewritten to express their INTENT rather than a
+magic hour -- `_window_for(6)` derives a window that buys six legs from the
+pace itself -- so "a body is caught in the last street before the door"
+survives any later move of the constants, and being visible mid-journey
+stays the thing being defended.
+
+**The courier keeps its promise as a multiplier** (`couriers.COURIER_SLOWNESS`,
+`COURIER_EDGE_FLOOR`), on the owner's ruling. Its flat rate was defending a
+real verb -- "BOTH are slower than a walking player, who crosses a room in
+one beat: outrunning a route is a verb the design promises the player" --
+and a multiplier over the real crossing defends it better than a number that
+ignores the room: 1.5x riding, 3x walking, floored at 45 seconds, which is a
+beat at its longest. A measured corridor costs a courier 45s, a long road
+554s, an unmeasured edge the old 600s. Never faster than a player.
+
+**Still open, and it is the same class one tier up:** `predation_round`'s
+`hours` and every upkeep drift are denominated per HOUR, so a creature's
+hunger moves by 0.0002 across a four-minute scene. Nothing in this story
+depended on it, and re-pricing appetite is not the same question as
+re-pricing a doorway.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit

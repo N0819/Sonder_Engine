@@ -76,6 +76,86 @@ ERRAND_RATE = 0.06
 #: which is when it should.
 WALK_ROOMS_PER_HOUR = 6.0
 
+#: WHAT AN EDGE IS DECIDES WHAT IT COSTS, and the constant above assumes it
+#: is a street.
+#:
+#: 6 rooms an hour is 600 seconds -- TEN MINUTES -- to cross one edge, which
+#: is right for the courier it was pinned to: a town's edge is a road between
+#: two places and a body walks it for ten minutes. A SCENE's edge is a
+#: doorway, and a body crosses one in the time it takes to walk the room it
+#: is standing in. Measured on the descent story (chat 117): a 24-pace
+#: service spine is about eighteen seconds at a walking pace, and the beats
+#: of that story declare 6 to 45 seconds each -- so at the town rate a
+#: creature that decided to hunt bought about a thirtieth of a doorway per
+#: beat and would have arrived in roughly thirty turns, having decided in
+#: one. The story it was in is four minutes long.
+#:
+#: So the cost of a leg is derived from the ROOM being crossed rather than
+#: assumed: its own measured span at a walking pace, and the edge's own
+#: `distance` word where the plan gave it one. Nothing about a town changes
+#: -- a settlement's rooms are its streets and its spans are street-sized --
+#: and a corridor stops costing what a road costs.
+#:
+#: Paces a walking body covers in a second. A pace is about the metre this
+#: engine's extents are drawn in, and 1.3 m/s is an ordinary walk.
+WALK_PACES_PER_SECOND = 1.3
+
+#: What the edge's own `distance` word is worth in paces, where the room's
+#: measurement does not already say. `adjacent` is a doorway you step
+#: through; the two long words are the ones the plan schema says "take more
+#: than one beat to cross", and they keep costing what a road costs.
+WALK_EDGE_PACES = {"adjacent": 2.0, "near": 8.0, "far": 240.0,
+                   "remote": 780.0}
+
+
+def edge_seconds(scene, here, nxt) -> float:
+    """How long a body takes to cross from `here` into `nxt`, in seconds.
+
+    The room's own span plus what the edge itself costs. A scene that has
+    measured nothing falls back to the town rate, so an unmeasured world is
+    exactly what it was.
+    """
+    from world.spatial import room_span
+
+    town = 3600.0 / WALK_ROOMS_PER_HOUR
+    rooms = (scene or {}).get("rooms") if isinstance(scene, dict) else None
+    if not isinstance(rooms, dict) or str(here) not in rooms:
+        return town
+    room = rooms.get(str(here)) or {}
+    edge_paces = None
+    for edge in room.get("adjacent") or ():
+        if isinstance(edge, dict) and str(edge.get("to")) == str(nxt):
+            edge_paces = WALK_EDGE_PACES.get(
+                str(edge.get("distance") or "").strip().casefold())
+            break
+    # A ROOM IS A ROOM EVEN WHEN NOBODY MEASURED IT (the owner, twice:
+    # "ten minutes is still quite too long to cross a single room").
+    #
+    # The first cut of this kept the old flat rate wherever a room carried no
+    # `extent`, to protect a town fixture whose one-hour window buys six
+    # streets. That was protecting a TEST rather than a truth: no room takes
+    # ten minutes to walk through, measured or not, and a size tier is a
+    # perfectly good statement of how big a room is -- the light and sound
+    # fields have read tiers as geometry all along.
+    #
+    # So the span always decides, and what a LONG link costs is said by the
+    # edge, which is what `distance` is for and what the plan schema already
+    # asks for: `far` and `remote` are "more than one beat to cross". A town
+    # whose places are a walk apart says so on the edge; a corridor does not
+    # have to say anything to stop costing what a road costs.
+    try:
+        paces = float(room_span(scene, str(here)))
+    except Exception:
+        paces = 0.0
+    paces += WALK_EDGE_PACES["adjacent"] if edge_paces is None else edge_paces
+    return max(1.0, min(town, paces / WALK_PACES_PER_SECOND))
+
+
+def edge_cost(scene, here, nxt) -> float:
+    """The same crossing as a fraction of the credit `WALK_ROOMS_PER_HOUR`
+    buys, so the walk's arithmetic is untouched and only the PRICE moves."""
+    return edge_seconds(scene, here, nxt) / (3600.0 / WALK_ROOMS_PER_HOUR)
+
 
 def _roll(key, seed):
     """Deterministic 0..1 from ``(key, seed)``, safe for THRESHOLD selection.
@@ -140,7 +220,7 @@ def _dispatch(body, target, scene, cache, hours):
     return body
 
 
-def _advance(body_key, body, neighbors, travelled, walked):
+def _advance(body_key, body, neighbors, travelled, walked, scene=None):
     """Spend the walk's credit one edge at a time. Mutates ``travelled`` and
     ``walked``; returns the body, with the walk record dropped on arrival.
 
@@ -158,13 +238,19 @@ def _advance(body_key, body, neighbors, travelled, walked):
     credit = float(rec.get("credit") or 0.0)
     held = False
     own = None
-    while leg + 1 < len(route) and credit >= 1.0:
+    while leg + 1 < len(route):
         here, nxt = route[leg], route[leg + 1]
+        # WHAT THIS LEG COSTS, from the room it crosses (`edge_cost`), rather
+        # than one flat room-per-street. Checked before the credit so a body
+        # that cannot yet afford the leg simply keeps its credit.
+        price = edge_cost(scene, here, nxt) if scene is not None else 1.0
+        if credit < price:
+            break
         if neighbors is not None and nxt not in (neighbors.get(here) or ()):
             held = True
             break
         leg += 1
-        credit -= 1.0
+        credit -= price
         travelled[body_key] = travelled.get(body_key, 0) + 1
         if own is None:
             # Copy-on-write, per body that actually moves: the caller's
@@ -377,7 +463,7 @@ def walk(bodies, moves, scene, travelled=None, cache=None, hours=4.0,
         if dispatched is None:
             continue
         bodies[body_key] = _advance(body_key, dispatched, neighbors,
-                                    travelled, walked)
+                                    travelled, walked, scene)
     return bodies, travelled, walked
 
 

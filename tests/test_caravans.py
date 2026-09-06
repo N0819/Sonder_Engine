@@ -22,7 +22,12 @@ THE_NEWS = "three riders took the grain at the square"
 
 
 def _edges(*targets):
-    return [{"to": t, "barrier": "open"} for t in targets]
+    # A FARM, A LANE, A MARKET, A ROAD AND A TOWN ARE A WALK APART, and the
+    # edge is where that is said (2026-09-06). A bare edge is a doorway now
+    # that `charter_move.edge_seconds` prices a crossing from the room it
+    # crosses; `far` is the plan schema's word for a way through that takes
+    # more than one beat, which is what a road between two settlements is.
+    return [{"to": t, "barrier": "open", "distance": "far"} for t in targets]
 
 
 def _scene():
