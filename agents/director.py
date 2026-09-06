@@ -1764,7 +1764,19 @@ def _specialist_repairs(ctx, sc, sd, routed, view, extras, recon):
             if value:
                 patch[channel] = value
         if not patch:
+            # A HAND THAT ANSWERED IS NOT A HAND THAT ENCODED. `ok` says the
+            # call returned; on its own it reads as a repair that worked,
+            # and a repairer may answer perfectly well and encode nothing --
+            # by declaring a structural blocker, or by judging the change
+            # not its own. Measured, descent chat 117 turn 13: a pry bar
+            # rerouted from the contact hand to the objects hand came back
+            # `{"scope": [...], "ok": true}` with the omission still sitting
+            # in `unresolved`, and the record read as a success beside a
+            # `repaired: false` two lines below it. The reconciliation's own
+            # verdict was always right; this is the row that says why.
+            report["encoded"] = False
             continue
+        report["encoded"] = True
         # Same hygiene as the core repair: canonical shapes, no reintroduced
         # placeholder noise, canonicalized position keys, additive merge.
         patch = _normalize_diff_shape(patch)
