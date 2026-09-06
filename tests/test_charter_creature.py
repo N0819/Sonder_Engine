@@ -563,9 +563,9 @@ class TestWhatItSoundsLikeDoingIt:
         introduces when the two meet."""
         from world.charter_runtime import charter_noises
 
-        rows = charter_noises({"charters": {"carbonic_stalker": {"heard": [
+        rows = charter_noises({"items": {"carbonic_stalker": {"state": {"heard": [
             {"place": "annex", "level": "faint", "activity": "moving",
-             "sound": "a slow rhythmic venting"}]}}})
+             "sound": "a slow rhythmic venting"}]}}}})
         assert rows == [{"source_room": "annex", "level": "faint",
                          "description": "a slow rhythmic venting",
                          "kind": "sound"}]

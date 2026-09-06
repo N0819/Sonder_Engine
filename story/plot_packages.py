@@ -984,6 +984,155 @@ def _preview_plan_entity(cid, frame_id, op, world):
     return {"changes": [change], "errors": errors, "warnings": warnings}
 
 
+def _shape_plan_creature(op):
+    """One creature institution from a small brief.
+
+    A CREATURE IS AN INSTITUTION, and the schema behind it
+    (`world/charter_creature.py`) is closed and complete: prey order, senses
+    in rooms, footprint, contest weights, a fed upkeep, spoor, a voice. What
+    it did not have was a door -- the Writers' Room could READ charters
+    (`inspect_charters`) and never file one, so a thing that was supposed to
+    roam could only be authored as a `plan_entity`: correctly placed, rules
+    as prose, and no simulation behind it.
+
+    The brief is small on purpose and the charter is DERIVED. An author says
+    what the thing is, where it lairs, what it hunts and what it sounds like;
+    the upkeep that drives its hunger, the post it hunts from, and its bodies
+    are built here, well-formed, because those are mechanism rather than
+    fiction and getting them wrong is how a creature starves in a corner.
+    """
+    if not _text(op.get("name"), 120):
+        raise ValueError("plan_creature names the creature")
+    if not _text(op.get("lair"), 120):
+        raise ValueError("plan_creature needs a `lair` room id: a creature "
+                         "with nowhere to be is a creature nowhere")
+    voice = {}
+    for activity, entry in (op.get("voice") or {}).items():
+        if isinstance(entry, dict):
+            level = _text(entry.get("level"), 20)
+            sound = _text(entry.get("sound"), 120)
+        else:
+            level, sound = _text(entry, 20), ""
+        if level:
+            voice[_text(activity, 20)] = {"level": level, "sound": sound}
+    spoor = op.get("spoor") if isinstance(op.get("spoor"), dict) else {}
+    return {
+        "name": _text(op.get("name"), 120),
+        "lair": _text(op.get("lair"), 120),
+        "hunts": [_text(r, 120) for r in op.get("hunts") or () if _text(r, 120)],
+        "count": max(1, min(12, int(op.get("count") or 1))),
+        "prey": [_text(x, 20) for x in op.get("prey") or () if _text(x, 20)],
+        "senses_rooms": max(0, min(6, int(op.get("senses_rooms") or 2))),
+        "footprint": _text(op.get("footprint"), 20) or "small",
+        "can_open_doors": bool(op.get("can_open_doors", False)),
+        "boldness": op.get("boldness"),
+        "kill_ceiling": max(0, min(6, int(op.get("kill_ceiling") or 1))),
+        "rule": _text(op.get("rule"), 600),
+        "voice": voice,
+        "spoor": {"body": _text(spoor.get("body"), 80),
+                  "stock": _text(spoor.get("stock"), 80),
+                  "tracks": _text(spoor.get("tracks"), 80)},
+    }
+
+
+def _creature_charter(cid, op):
+    """The well-formed charter a brief becomes. Pure, so the preview and the
+    apply are looking at the same thing."""
+    from world.charter_creature import CREATURE_ACTIVITIES, CREATURE_VOICE_RUNGS
+    from world.spatial import normalize_room_id
+
+    key = normalize_room_id(op["name"]) or "creature"
+    lair = op["lair"]
+    ground = op["hunts"][0] if op["hunts"] else lair
+    bodies = {"%s_%d" % (key, i): {"place": lair, "berth": lair,
+                                   "available": True,
+                                   "competence": {"hunt": 1}}
+              for i in range(op["count"])}
+    creature = {
+        "prey": op["prey"] or ["unposted", "figure"],
+        "senses": {"range_rooms": op["senses_rooms"]},
+        "footprint": op["footprint"],
+        "can_open_doors": op["can_open_doors"],
+        "kill_ceiling": op["kill_ceiling"],
+        "fed": {"upkeep": "hunger", "per_body": 0.6},
+        "spoor": dict(op["spoor"]),
+        "voice": {k: v for k, v in op["voice"].items()
+                  if k in CREATURE_ACTIVITIES
+                  and v.get("level") in CREATURE_VOICE_RUNGS},
+    }
+    if op.get("boldness") is not None:
+        creature["boldness"] = op["boldness"]
+    return {
+        "key": key,
+        "name": op["name"],
+        # The hunger that drives everything else. A creature with no upkeep
+        # never wants anything and never moves, which is the one way to
+        # author a creature that does nothing at all.
+        "upkeeps": {"hunger": {"place": lair, "level": 0.7, "floor": 0.3,
+                               "drift_per_hour": 0.015,
+                               "service_per_hour": 0.0}},
+        "posts": {"hunt": {"place": ground, "serves": ["hunger"],
+                           "requires": {"hunt": 1}}},
+        "bodies": bodies,
+        "priority": ["hunger"],
+        "creature": creature,
+        "law": {"purpose": op["rule"]} if op["rule"] else {},
+    }
+
+
+def _preview_plan_creature(cid, frame_id, op, world):
+    from world.charter_creature import CREATURE_ACTIVITIES, CREATURE_VOICE_RUNGS
+
+    errors, warnings = [], []
+    for room in [op["lair"]] + list(op["hunts"]):
+        if room and not _room_known(world, room):
+            errors.append("plan_creature puts %r at %r, which exists nowhere"
+                          % (op["name"], room))
+    if op["name"].casefold() in world["reserved_names"]:
+        errors.append("%r is a reserved identity (a registered character, a "
+                      "charter body or another plan)" % op["name"])
+    for activity, entry in op["voice"].items():
+        if activity not in CREATURE_ACTIVITIES:
+            errors.append("%r is not something a creature does; it is one of "
+                          "%s" % (activity, ", ".join(CREATURE_ACTIVITIES)))
+        elif entry["level"] not in CREATURE_VOICE_RUNGS:
+            errors.append("%r is not a loudness; it is one of %s"
+                          % (entry["level"], ", ".join(CREATURE_VOICE_RUNGS)))
+    if not op["voice"]:
+        # Not an error: silence is how a stealthy thing is written, and the
+        # author may mean it. But it is the difference between a thing that
+        # can be heard coming and one that cannot, so it is said out loud.
+        warnings.append(
+            "%r has no `voice`, so nothing it does can be heard from another "
+            "room: it will only ever be met by walking into it. Give it a "
+            "rung per activity if it should be heard coming." % op["name"])
+    charter = _creature_charter(cid, op)
+    change = {"kind": "creature_filed", "key": charter["key"],
+              "name": op["name"], "lair": op["lair"],
+              "hunts": op["hunts"] or [op["lair"]],
+              "bodies": len(charter["bodies"]),
+              "voice": {k: v["level"] for k, v in op["voice"].items()}}
+    return {"changes": [change], "errors": errors, "warnings": warnings}
+
+
+def _apply_plan_creature(cid, frame_id, op, turn_idx):
+    from world.charter_runtime import registry_for_update, save_registry
+
+    registry = registry_for_update(cid, frame_id)
+    charter = _creature_charter(cid, op)
+    # THE REGISTRY'S OWN SHAPE, not a convenience one: an institution is an
+    # `items[key]` whose `state` is the charter. `normalize_registry` accepts
+    # a bare `{key: charter}` map as an authoring shortcut, but a registry
+    # that already holds items is not that shape, and a `charters` key it has
+    # never had is silently dropped at the write chokepoint.
+    items = dict(registry.get("items") or {})
+    held = items.get(charter["key"])
+    items[charter["key"]] = dict(held or {}, state=charter)
+    registry["items"] = items
+    save_registry(cid, registry, frame_id)
+    return {"charter": charter["key"], "bodies": len(charter["bodies"])}
+
+
 def _apply_plan_entity(cid, frame_id, op, turn_idx):
     from world.planned_entities import add_planned_entity
     from world.planning_needs import fill_planning_need
@@ -1956,6 +2105,10 @@ OPERATIONS = {
     "plan_entity": {"shape": _shape_plan_entity, "preview": _preview_plan_entity,
                     "apply": _apply_plan_entity, "long": False,
                     "seam": "world.planned_entities.add_planned_entity"},
+    "plan_creature": {"shape": _shape_plan_creature,
+                      "preview": _preview_plan_creature,
+                      "apply": _apply_plan_creature, "long": False,
+                      "seam": "world.charter_runtime.save_registry"},
     "post_artifact": {"shape": _shape_post_artifact,
                       "preview": _preview_post_artifact,
                       "apply": _apply_post_artifact, "long": False,
@@ -2051,6 +2204,35 @@ from world.spatial import (  # noqa: E402  (module table, needs the values)
 )
 
 OPERATION_FIELDS = {
+    "plan_creature": {
+        "name": "what it is called",
+        "lair": "the room id it lives in and returns to",
+        "hunts?": "[room ids it ranges over; defaults to the lair alone]",
+        "count?": "how many of it there are (1-12, default 1)",
+        "prey?": "[stock | unposted | posted | figure] in preference order -- "
+                 "`figure` is the player and the major characters, and a "
+                 "creature only ever NOTICES them off screen: what happens "
+                 "when they meet is the Director's",
+        "senses_rooms?": "how many rooms out it notices prey (0-6, default 2)",
+        "footprint?": "point | small | large | run -- a room too small holds "
+                      "it at the door, exactly as a shut door holds a body "
+                      "that cannot open one",
+        "can_open_doors?": "true if a shut door does not stop it",
+        "kill_ceiling?": "how many it may take in one window (default 1)",
+        "boldness?": "0 timid, 1 brazen (default 0.5)",
+        "rule?": "the one sentence that governs it, for the Director",
+        "voice?": "{moving|attacking|feeding|idle: {level, sound}} -- HOW IT "
+                  "IS HEARD DOING EACH THING. `level` is the loudness rung "
+                  "(faint | audible | loud | deafening | thunderous | "
+                  "catastrophic) and decides how far it carries through the "
+                  "rooms; `sound` is what it sounds like, in the words the "
+                  "page will use. An activity you leave out is SILENT at "
+                  "that activity, which is how a stealthy thing is written -- "
+                  "and a creature with no voice at all can only ever be met "
+                  "by walking into it.",
+        "spoor?": "{body, stock, tracks} -- what it leaves behind to be read "
+                  "after it has gone",
+    },
     "plan_rooms": {
         "structure": "{key, name} -- the structure the rooms belong to",
         "rooms": "{<room_id>: {name, purpose, access, extent? {w, d} (how many paces across and how many deep -- the measurement belongs in this field, not in the prose of purpose), shape? (rectangle | round | l | composite), exposure? (open | sheltered | enclosed -- how much sky and weather reach it), adjacent: [{to: <room_id>, barrier? (omit for an open way through), bearing?, vertical? (up | down -- how a body reaches another storey; a bearing names a compass point and cannot say this), distance? (adjacent | near | far | remote, or a measurement with its unit -- how much ground the crossing itself is; far and remote take more than one beat to cross, so a way through that is not stepped over in a breath must say so here and not only in prose)}], frontier: [<the NAME of a place that lies beyond, as the way out would be labelled -- never a direction and never a description of what is that way>], claims? {room, axis} (this room FILLS a space an earlier plan held open -- give the room the frontier hangs off and its axis, exactly as inspect_structures lists them under `frontiers`; the space becomes this room instead of a second one beside it, and a room the story has already been in keeps the name it is known by)}}",
