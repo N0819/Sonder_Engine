@@ -7349,6 +7349,100 @@ picks the one case where the disagreement was measured and loud. The general
 form -- a body's heading following what it is DOING while its attention goes
 where it likes -- is a bigger change and is not made.
 
+### 1.148 The median room has nowhere to stand
+
+**Measured while answering the owner's "player perception culling might be
+too aggressive", 2026-09-06. Culling is not the constraint. The FIRST
+version of this entry got the consequence wrong and the owner caught it;
+the correction is the useful part and is kept below.**
+
+Across the author's `engine.db`, 760 bodies and 2909 feature rows:
+
+  * **11.7% of feature rows are culled.** 340 by the cone, ONE by light.
+    The observer receives 88.3% of what the room holds.
+  * § 1.147's fix, correct and found in play, moved **2 rows of 2909**.
+
+And the rooms, across 570 of them:
+
+  * **292 (51.2%) carry NO anchors at all. The median room has zero.**
+  * Mean 1.5; p90 is 5; max 10.
+  * **Anchor count does not scale with room size.** `small` averages 2.7,
+    `large` 2.5, `medium` 2.9. A 4x24-pace corridor and a wardrobe get the
+    same budget. 243 rooms are `unsized` and average 0.0.
+
+**WHAT IT DOES NOT COST: THE PROSE.** This entry first claimed the narrator
+fills the gap by inventing fixtures, citing chat 117 turn 55 -- "rough
+courses of cinder block, expansion seams, and the black iron brackets
+anchoring conduit overhead". Checked against the room record, that is
+wrong. `cable_trays` IS an anchor of that room ("Overhead cable trays
+suspended beneath the concrete ceiling"), so the brackets are that anchor
+rendered finely, which is the narrator's rule 3 working exactly as written.
+The cinder block and masonry are the room's FABRIC, which no room should
+mint and no anchor should be spent on. The absent signage was what the
+player's own turn asked him to look for. Nothing was invented.
+
+**The narrator's licence is correct and load-bearing, and the near-miss is
+worth recording: a clause forbidding it to "add a noun" was drafted and not
+shipped.** It would have suppressed the texture, sensation and
+gesture-flesh that are the narrator's actual job -- the layer rooms do not
+mint and should not. The owner's framing of the tension is the right one:
+the narrator is an INVENTIVE role that may not make OBJECTS, which is a
+genuinely awkward seat. The line that resolves it is not invent-versus-not
+but WHAT SURVIVES THE PARAGRAPH: it may say what a thing is LIKE, and not
+what a room HAS. Texture expires and costs nothing; an object either
+persists, and the world model contradicts it, or vanishes, and the reader
+was told something untrue.
+
+**WHAT IT ACTUALLY COSTS: EVERYONE IS NOWHERE IN PARTICULAR.** An anchor is
+what a body STANDS AT, and the engine spends them on:
+
+  * **10.4% of bodies (81 of 780) stand at a real anchor of their room.**
+  * **15.0% of multi-occupant rooms (23 of 153) have two anchored bodies**
+    -- the condition `proximity_rel` needs before it can say whether two
+    people are near each other or across the room from each other.
+
+So `near`/`across` is unanswerable for the overwhelming majority of pairs,
+a gesture has nothing to be made against, a contact has nothing to be
+anchored to, and the sight model's `line` basis -- which needs a measured
+station -- almost never runs. These are the same numbers CLAUDE.md already
+quotes as the blocker on tightening the whisper rule ("`across` needs both
+bodies anchored, and measured over the live corpus only 6.7% of bodies
+carry an anchored station"). It is one shortfall, and it is a SIMULATION
+poverty that the narrator's compensation keeps invisible: the page reads
+full either way, which is exactly why it went unmeasured.
+
+**Addressed 2026-09-06** with a clause in both packs: anchors are places a
+body can BE, scale them to the place, and what is not a PLACE -- a smell, a
+draught, a quality of light, the room's own silence -- is the room's own
+(`desc`, `light`, `quiet`) rather than an anchor nobody can stand at.
+
+**THE CLAUSE WAS WRONG ONCE ON THE WAY, and the owner caught that too.** It
+first told the spatial hand that texture was not its job and was supplied
+downstream. That would have caused drift, for a mechanism worth writing
+down: the narrator's own sensory memory is `past_narration`, capped at
+`_PAST_NARRATION_TURNS = 12`, while a `desc` never expires. A place
+revisited after that window is rendered from its descs and nothing else, so
+a thin desc is exactly how the same room comes back a different room. The
+durable sensory record IS the spatial hand's, and the ephemeral rendering
+is the narrator's; telling the owner of the durable layer to stop writing
+it would have left the consistent layer empty and the inconsistent one
+carrying everything. The clause now says the opposite: write the texture
+into the descs, because that is the part that lasts.
+
+**PROPOSED, NOT BUILT: an engine notice, on the `unsourced_light_rooms`
+pattern.** The clause fires when a room is WRITTEN; the shortfall shows up
+when a room is USED, and a room minted small and then occupied for fifteen
+beats is never revisited. The channel already exists and is the only one
+the ownership boundary allows: a deterministic read of COMMITTED state at
+merge, composed into `engine_notices`, reaching the Director next beat --
+no prose anywhere in it, and the narrator never in the loop. Candidate
+trigger measured before proposing, which is the discipline the 2026-08-30
+triggers died for want of: *furnished, large-or-at-least-60-paces-squared,
+fewer than 3 anchors* fires on **31 of 238 occupied rooms (13.0%)** and 89
+of 544 furnished rooms (16.4%). Frequent enough to matter, rare enough not
+to be wallpaper, and arithmetic over the room record rather than a guard
+reading prose.
+
 ### 1.147 The cone hid the way on, because a guess was allowed to subtract — FIXED 2026-09-06
 
 **The owner's read, 2026-09-06: "player perception culling might be too
