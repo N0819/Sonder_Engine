@@ -70,6 +70,26 @@ from .charter_move import en_route, walk
 #: reach in one.
 SENSE_RANGE_CAP = 8
 
+#: HOW LONG A CREATURE KEEPS LOOKING AFTER THE TRAIL RUNS OUT.
+#:
+#: A scent hunter that loses the trail and simply stops is defeated for ever
+#: by one shut door, which is the opposite of what the sense is for -- a
+#: nose should be slower to notice and HARDER to shake than an ear.
+#: Measured before this existed (`docs/UNBUILT.md` s1.141), a body walking a
+#: five-room corridor and pulling the door shut behind them left the hunter
+#: standing at a local maximum with no uphill step and nothing to do.
+#:
+#: The behaviour is the one the plume-tracking literature finds and that
+#: trained agents rediscover on their own (`docs/guides/RESEARCH.md` s1.8):
+#: SURGE while the odour is there, CAST across the neighbourhood when it is
+#: not. This is the cast half, and this constant is its bound.
+#:
+#: Bounded because a creature that searches for ever is a creature that
+#: never lets a story move on. Six beats: long enough that shutting one door
+#: buys distance rather than safety, short enough that a body who has
+#: actually broken the trail gets to leave.
+CAST_BEATS = 6
+
 #: The smallest holding that counts as stock to be taken: one whole lot.
 STOCK_WHOLE_LOT = 1.0
 
@@ -238,11 +258,29 @@ def hunt_moves(states, own, bodies_at, stock_at, neighbors, seed, at_hours,
     A heard room outranks a sensed one at the same distance, because a noise
     is evidence of something happening NOW and a sense range is only evidence
     of geography.
+
+    AND A THIRD, FOR A NOSE ONLY: CASTING. A trail ends somewhere, and where
+    it ends is not where the prey is -- it is where the prey stopped leaving
+    one, by shutting a door or by simply being gone long enough. A creature
+    that reads its own room as the strongest and then stops is defeated for
+    ever by one door. So a scent hunter that loses the trail SEARCHES: it
+    steps to the nearest room it has not already tried, and keeps widening
+    for `CAST_BEATS` before giving up. Surge while you have it, cast when you
+    do not -- the behaviour the plume literature finds in every animal that
+    does this for a living (`docs/guides/RESEARCH.md` s1.8).
+
+    A hearing creature does not cast, and the asymmetry is deliberate: a
+    noise is over the moment it happens, so there is nothing to have lost.
     """
+    from world.charter_creature import normalize_creature
+
     state = states[own]
     creature = state.get("creature") or {}
-    limit = min(SENSE_RANGE_CAP, int(
-        (creature.get("senses") or {}).get("range_rooms") or 0))
+    senses = normalize_creature(creature).get("senses") or {}
+    tracks_scent = bool(senses.get("scent"))
+    limit = min(SENSE_RANGE_CAP, int(senses.get("range_rooms") or 0))
+    casting = {str(k): dict(v) for k, v in (state.get("casting") or {}).items()
+               if isinstance(v, dict)}
     moves = {}
     if limit <= 0:
         return moves
@@ -274,8 +312,16 @@ def hunt_moves(states, own, bodies_at, stock_at, neighbors, seed, at_hours,
         # carries further than a sense range, and a whisper behind a shut
         # door carries less. Ranked ahead of a sensed room, and only for a
         # room this body could actually walk to.
+        # A ROOM IT HAS ALREADY PUT ITS HEAD INTO IS NOT NEWS. While a body
+        # is casting, the rooms on its `tried` list are refused as surge
+        # targets -- otherwise the room the trail DIED in is a local maximum
+        # that pulls it straight back the beat after it leaves, and the
+        # creature paces between two doorways for ever instead of searching.
+        # The list is cleared the moment it surges to something new or gives
+        # up, so a fresh trail laid in the same room is followed normally.
+        _tried = set((casting.get(body_key) or {}).get("tried") or ())
         for room, rank in sorted((noises or {}).items()):
-            if room == here or room not in reach:
+            if room == here or room not in reach or room in _tried:
                 continue
             candidate = (-1, -float(rank), reach[room],
                          _draw(seed, at_hours, own, body_key, room), room)
@@ -283,6 +329,43 @@ def hunt_moves(states, own, bodies_at, stock_at, neighbors, seed, at_hours,
                 best = candidate
         if best is not None:
             moves[body_key] = best[-1]
+            casting.pop(body_key, None)   # surging: the trail is live again
+            continue
+        # NOTHING TO WALK AT. Either the pull names this body's own room --
+        # the trail ends where it stands -- or it has run out entirely. A
+        # hearing creature has nothing to do about that, because a noise is
+        # over; a NOSE has, because a trail that ends here was left by
+        # something that went on somewhere.
+        if not tracks_scent:
+            continue
+        cast = casting.get(body_key)
+        if cast is None:
+            if str(here) not in (noises or {}):
+                continue                  # never had it; nothing to lose
+            # SEEDED WITH WHERE IT IS STANDING. The trail died here and
+            # this body has already searched it by being in it.
+            cast = {"beats": 0, "tried": [str(here)]}
+        if int(cast.get("beats") or 0) >= CAST_BEATS:
+            casting.pop(body_key, None)   # given up; back to its own business
+            continue
+        tried = [str(r) for r in cast.get("tried") or ()]
+        # WIDENING, which is what casting IS: the rooms it has already put
+        # its head into are refused, so the search opens outward from where
+        # the trail died rather than pacing between two doorways.
+        options = sorted(
+            room for room in reach
+            if room != here and room not in tried)
+        if not options:
+            casting.pop(body_key, None)
+            continue
+        step = min(options,
+                   key=lambda room: (reach[room],
+                                     _draw(seed, at_hours, own, body_key,
+                                           room), room))
+        moves[body_key] = step
+        casting[body_key] = {"beats": int(cast.get("beats") or 0) + 1,
+                             "tried": tried + [step]}
+    state["casting"] = casting
     return moves
 
 

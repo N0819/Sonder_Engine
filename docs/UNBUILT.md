@@ -7166,7 +7166,7 @@ events are sources, and the co-located ones no longer silence each other. The
 model is now answering the question it was asked; this entry is about whether
 the answer is right.
 
-### 1.141 A scent hunter that loses the trail stops instead of casting
+### 1.141 A scent hunter that loses the trail stops instead of casting — BUILT 2026-09-06
 
 **Built and measured 2026-09-06, and the missing half is named here.**
 `world/spatial_scent_field.py` gives a body's trail memory: it accumulates
@@ -7201,10 +7201,29 @@ before giving up and returning to its own business. Bounded, because a
 creature that searches for ever is a creature that never lets a story move
 on, and the bound is the thing to name.
 
-**Why it is not in the same commit.** The ledger, the two senses' gates and
-the credits are one coherent piece; a search behaviour is an AI change with
-its own measurements to take, and shipping it unmeasured beside a mechanic
-that works would make it impossible to tell which one moved the story.
+**BUILT, the commit after.** `charter_predation.CAST_BEATS` (six) bounds it,
+and `hunt_moves` gained the third way a creature notices: surge while the
+trail is live, and when the pull names its OWN room -- the trail ends where
+it stands -- step to the nearest room it has not already tried, widening,
+until the bound runs out. Six beats because shutting one door should buy
+distance rather than safety, and because a creature that searches for ever
+is a creature that never lets a story move on.
+
+**A NOSE CASTS AND AN EAR DOES NOT**, and the asymmetry is the point: a
+noise is over the moment it happens, so a hearing creature has nothing to
+have lost. That is what makes the scent sense the slow one to notice and the
+hard one to shake, which is the shape the owner asked for.
+
+**One flaw the tests found rather than the design.** The room a trail dies in
+is a local maximum, so a creature that cast away from it was pulled straight
+back the next beat and paced between two doorways for ever. A body's `tried`
+list is now seeded with the room it was standing in and refused as a SURGE
+target for as long as the cast lasts, so the search opens outward instead of
+oscillating. The list is cleared the moment it surges to something new or
+gives up, so a fresh trail laid in the same room is followed normally.
+
+`casting` is declared in `normalize_charter` -- the fifth key this year that
+would otherwise have been written by a round and normalized away unread.
 
 ## 2. Roadmap
 
