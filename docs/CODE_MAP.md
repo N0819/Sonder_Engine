@@ -186,7 +186,7 @@
 | `world/spatial_barriers.py` | 824 |  | `world.spatial_orientation` |
 | `world/spatial_contact_migration.py` | 331 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_contacts.py` | 1951 |  | `world.spatial_containment`, `world.spatial_identity`, `world.spatial_transit` |
-| `world/spatial_containment.py` | 3026 |  | `world.spatial_barriers`, `world.spatial_identity`, `world.spatial_transit` |
+| `world/spatial_containment.py` | 3049 |  | `world.spatial_barriers`, `world.spatial_identity`, `world.spatial_transit` |
 | `world/spatial_fov.py` | 1520 |  | `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_frames.py` | 1091 |  | `core.db`, `core.frames`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial` |
 | `world/spatial_geometry.py` | 2014 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
@@ -2271,13 +2271,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `derive_inventory_placements()` | 1236 | 143 lines |
-| `materialize_named_stations()` | 2437 | 135 lines |
-| `advance_room_transits()` | 2574 | 130 lines |
-| `replace_engine_minted_interiors()` | 1937 | 123 lines |
-| `mint_transferred_objects()` | 1130 | 104 lines |
-| `release_declared_departures()` | 2718 | 97 lines |
-| `place_enclosed_bodies()` | 2062 | 95 lines |
+| `derive_inventory_placements()` | 1259 | 143 lines |
+| `materialize_named_stations()` | 2460 | 135 lines |
+| `advance_room_transits()` | 2597 | 130 lines |
+| `replace_engine_minted_interiors()` | 1960 | 123 lines |
+| `mint_transferred_objects()` | 1153 | 104 lines |
+| `release_declared_departures()` | 2741 | 97 lines |
+| `place_enclosed_bodies()` | 2085 | 95 lines |
 | `derive_containment_from_contacts()` | 358 | 90 lines |
 
 ### `world/spatial_fov.py`

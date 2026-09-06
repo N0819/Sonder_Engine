@@ -651,11 +651,34 @@ def _shares_enclosure(scene: dict, holder, target: str) -> bool:
 
     Two bodies in one enclosure are simply in the same place -- nothing is
     between them and the wall around them is around them both.
+
+    ASKED THE WAY THE FLAG IT EXEMPTS WAS ASKED. A scene says "this body is
+    inside that thing" two ways -- the `contained` ledger, and a room whose
+    `parent_entity` names the holder -- and `_body_interior_holder` reads
+    BOTH, which is what sets `enclosed_from_source` in the first place. This
+    read only the ledger, so for an enclosure expressed as a ROOM the two
+    could never agree and the exemption never fired: two people standing in a
+    lift, a cabin or a vehicle interior were each recorded as sealed away
+    from the other, and `hear_level` answered `none` to an ordinary sentence
+    spoken at arm's length.
+
+    Measured on the descent run's first beat, 2026-09-05: a lift car with
+    `parent_entity` on its interior room, both bodies in it, five lines of
+    dialogue in the resolve's own log, and a narrator handed no hearing at
+    all -- which then wrote "She did not answer". It rules out every scene
+    set inside a vehicle, a lift or a container.
+
+    An EXEMPTION fails safe when it is broad: a miss here invents a barrier
+    that is not there, and both callers use it to withhold a wall rather than
+    to grant a channel.
     """
     if not holder:
         return False
-    return same_subject(scene, _innermost_hiding_holder(scene, target) or "",
-                        holder)
+    for reading in (_innermost_hiding_holder(scene, target),
+                    _body_interior_holder(scene, target)):
+        if reading and same_subject(scene, reading, holder):
+            return True
+    return False
 
 
 def containment_conceals(scene: dict, observer: str, target: str) -> bool:

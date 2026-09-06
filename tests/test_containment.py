@@ -303,3 +303,48 @@ class TestSchema:
         from agents.director import _normalize_diff_shape
 
         assert _normalize_diff_shape({"containment": "junk"})["containment"] == {}
+
+
+def test_two_bodies_in_one_lift_are_not_sealed_away_from_each_other():
+    """A scene says "this body is inside that thing" two ways -- the
+    `contained` ledger, and a room whose `parent_entity` names the holder.
+    `_body_interior_holder` reads BOTH, which is what sets
+    `enclosed_from_source`; `_shares_enclosure`, the exemption that is
+    supposed to spare two people sharing one enclosure, read only the ledger.
+    So for an enclosure expressed as a ROOM the two could never agree and the
+    exemption never fired.
+
+    Measured on the descent run's first beat, 2026-09-05: a lift car with
+    `parent_entity` on its interior room, both bodies standing in it, five
+    lines of dialogue in the resolve's own log -- and `hear_level` answering
+    `none` to an ordinary sentence spoken at arm's length, so the narrator
+    was handed no hearing at all and wrote "She did not answer". It ruled out
+    every scene set inside a vehicle, a lift or a container.
+    """
+    from world.spatial import hear_level, spatial_rel_between
+
+    scene = {
+        "rooms": {
+            "yard": {"name": "The Yard", "adjacent": []},
+            "lift_interior": {"name": "Lift Car", "size": "tiny",
+                              "parent_entity": "lift_car", "adjacent": []},
+        },
+        "positions": {"A": "lift_interior", "B": "lift_interior",
+                      "lift_car": "yard"},
+        "entities": {"lift_car": {"name": "Lift Car", "kind": "fixture"}},
+        "attire": {}, "overlays": {},
+    }
+    rel = spatial_rel_between(scene, "A", "B",
+                              observer_room="lift_interior",
+                              target_room="lift_interior")
+    assert not rel.get("enclosed_from_source")
+    assert not rel.get("source_enclosed")
+    assert hear_level(rel, "normal") == "full"
+
+    # The complement, which is what the flag is FOR: somebody outside the
+    # lift is still sealed away from the body inside it.
+    scene["positions"]["C"] = "yard"
+    out = spatial_rel_between(scene, "A", "C",
+                              observer_room="lift_interior",
+                              target_room="yard")
+    assert out.get("enclosed_from_source")
