@@ -7331,10 +7331,28 @@ The third word-list guess this day to turn out to be the defective half of a
 pair, and the first where the bound alternative was already sitting beside
 it.
 
-**Not fixed, and not this entry's:** the beat still did not encode the
-opening on the edge, because the spatial hand did not write it. The clause
-above removes the place the fact was going instead; whether it now lands in
-`rooms` is the next run's evidence, not this commit's claim.
+**THE NEXT BEAT WAS THE EVIDENCE, and the whole chain worked.** Descent turn
+21: the player hauled the bulkhead fully open, the objects hand DECLINED it
+and named the right owner -- "Event 2: opening a door between rooms is an
+edge barrier change belonging to spatial, not entity state" -- the engine
+rerouted `objects -> spatial`, and spatial wrote
+`rooms.sub5a_service_spine.adjacent[].barrier = open_door`. Both sides read
+`open_door`, and sight between the two bodies went from `none` to `full`.
+The clause removed the wrong destination and the reroute found the right
+one.
+
+**And the leftover warning was a real defect, not noise.** The beat still
+reported the change unencoded. `director_evidence._omission_subject_encoded`
+walks every diff channel for the subject, and for `rooms` it reads room ids
+and a room's `name`. A DOORWAY's identity in that channel is an ANCHOR KEY
+-- `effective_anchors` mints `door:<to>` for every edge, and an authored
+doorway is keyed by its own id -- so the door sat in the diff under
+`anchors.plant_room_bulkhead_door` and the check could not see it. Its own
+docstring had named the failure in advance: "a channel this does not walk is
+a channel in which a CORRECT encoding reads as an omission, and the answer
+here is what decides whether the Director is asked to repair a beat that was
+already right." It now walks anchor keys and their descriptions, and stays a
+containment check -- a subject the diff never mentions is still an omission.
 
 ## 2. Roadmap
 

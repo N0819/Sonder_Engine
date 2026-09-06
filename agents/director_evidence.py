@@ -710,6 +710,33 @@ def _omission_subject_encoded(sd, subject, forms=None):
             if value_keys and any(_hits_identity(record, value_keys, hits)
                                   for record in _channel_records(value)):
                 return True
+    # A DOORWAY'S IDENTITY IN THE `rooms` CHANNEL IS AN ANCHOR KEY, and the
+    # walk above reads room ids and a room's `name` and stops. So a door
+    # opened correctly -- the barrier moved on the edge and the doorway
+    # redescribed as an anchor of the room -- read as an omission, and the
+    # reconciliation asked for a repair of a beat that was already right.
+    #
+    # Measured (chat 117, turn 21): the player hauled a bulkhead fully open;
+    # the objects hand declined it as the spatial hand's ("opening a door
+    # between rooms is an edge barrier change belonging to spatial"), the
+    # engine rerouted it, and spatial encoded
+    # `rooms.sub5a_service_spine.adjacent[].barrier = open_door` with the
+    # doorway under `anchors.plant_room_bulkhead_door`. The world was right
+    # -- both sides open, sight `full` -- and the beat still reported the
+    # change unencoded. This is the docstring's own named failure: "a
+    # channel this does not walk is a channel in which a CORRECT encoding
+    # reads as an omission".
+    rooms = sd.get("rooms")
+    if isinstance(rooms, dict):
+        for record in rooms.values():
+            anchors = record.get("anchors") if isinstance(record, dict) else None
+            if not isinstance(anchors, dict):
+                continue
+            for anchor_id, anchor in anchors.items():
+                if hits(anchor_id):
+                    return True
+                if isinstance(anchor, dict) and hits(anchor.get("desc")):
+                    return True
     for field in _SUBJECT_VALUE_CHANNELS:
         value = sd.get(field)
         for item in ([value] if isinstance(value, str) else (value or [])):

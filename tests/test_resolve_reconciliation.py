@@ -1627,3 +1627,40 @@ def test_the_refusal_verdict_is_wired_into_the_seam():
     source = inspect.getsource(director._reconcile_resolution)
     assert "_verify_no_referent(" in source
     assert "_NO_REFERENT" in source
+
+
+def test_a_doorway_encoded_as_an_anchor_is_not_an_omission():
+    """A CHANNEL THIS DOES NOT WALK IS A CHANNEL IN WHICH A CORRECT ENCODING
+    READS AS AN OMISSION -- `_omission_subject_encoded`'s own docstring, and
+    the `rooms` channel found the case.
+
+    The walk reads room ids and a room's `name`. A DOORWAY's identity in
+    that channel is an ANCHOR KEY: `effective_anchors` mints `door:<to>` for
+    every edge, and an authored doorway is keyed by its own id.
+
+    Measured (chat 117, turn 21): the player hauled a bulkhead fully open.
+    The objects hand declined it as the spatial hand's -- "opening a door
+    between rooms is an edge barrier change belonging to spatial" -- the
+    engine rerouted it, and spatial encoded the barrier on the edge with the
+    doorway redescribed under `anchors`. The world was right: open on both
+    sides, and sight between the two bodies went to `full`. The beat still
+    reported the change unencoded, which is the noise that makes a good turn
+    look broken.
+    """
+    from agents.director import _omission_subject_encoded
+
+    encoded = {"rooms": {"sub5a_service_spine": {
+        "adjacent": [{"to": "sub5a_plant_room", "barrier": "open_door"}],
+        "anchors": {"plant_room_bulkhead_door": {
+            "desc": "A reinforced steel bulkhead door, locked fully open "
+                    "against the wall stop."}}}}}
+    assert _omission_subject_encoded(encoded, "plant_room_bulkhead_door")
+    # The doorway's own description answers for it too, which is how a
+    # subject named in prose rather than by id is found.
+    assert _omission_subject_encoded(
+        {"rooms": {"r": {"anchors": {"a1": {"desc": "the iron wicket"}}}}},
+        "the iron wicket")
+    # And it stays a containment check, not a wildcard: a subject the diff
+    # never mentions is still an omission.
+    assert not _omission_subject_encoded(encoded, "security_grate")
+    assert not _omission_subject_encoded({"rooms": {"r": {}}}, "anything")
