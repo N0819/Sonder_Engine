@@ -1954,7 +1954,7 @@ def prepare_scene_commit(ctx):
         ctx.warnings.append(
             f"planned-room fringe could not be materialized: {_planned_exc}")
 
-    for _msg in prune_dangling_exits(sc):
+    for _msg in prune_dangling_exits(sc, cid):
         ctx.warnings.append(_msg)
 
     # WHICH PART OF THE MAP EACH ROOM IS IN (world/regions.py). Derived here,

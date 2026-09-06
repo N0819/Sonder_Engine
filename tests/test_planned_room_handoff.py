@@ -383,3 +383,50 @@ def test_the_index_is_absent_for_a_story_with_no_plan(temp_db):
     # A chat id no registry row names: the plan is empty and so is the index.
     cid, _scene = _chat(temp_db)
     assert planned_room_index(cid + 9999, {"rooms": {}}) == {}
+
+
+def test_an_exit_to_a_planned_room_is_not_dangling(temp_db):
+    """A ROOM THE STORY HAS ALREADY PLANNED EXISTS.
+
+    `prune_dangling_exits` asked only the SCENE, so the plan's own topology
+    was erased room by room as the story walked into it: the Director
+    furnishes a corridor from its brief, writes the exits the brief gives it,
+    and every one points at a room no beat has drawn yet -- so every one is
+    "undefined" and dropped.
+
+    Measured on the descent run, turn 7 (2026-09-05): a service spine
+    furnished with five branches lost all five in the beat that created it,
+    leaving a corridor to nowhere in a sub-level the Writers' Room had laid
+    out completely. Same class as § 1.127 one layer down -- the registry is
+    the world's record that a place exists, and a reader that consults only
+    the scene keeps re-deciding that it does not.
+    """
+    from persist.commit import prune_dangling_exits
+
+    cid, scene = _chat(temp_db)
+    del scene["rooms"]["kitchen"]
+    scene["rooms"]["inn"]["adjacent"] = [
+        {"to": "kitchen", "barrier": "closed_door"},
+        {"to": "nowhere_at_all", "barrier": "open"},
+    ]
+    warnings = prune_dangling_exits(scene, cid)
+    kept = {e["to"] for e in scene["rooms"]["inn"]["adjacent"]}
+    # The plan holds the kitchen, so the way through to it stands...
+    assert "kitchen" in kept
+    # ...and a room neither the scene nor the plan holds is still dropped,
+    # which is the case this function was written for.
+    assert "nowhere_at_all" not in kept
+    assert any("nowhere_at_all" in w for w in warnings)
+    assert not any("kitchen" in w for w in warnings)
+
+
+def test_without_a_chat_id_the_pruning_is_exactly_what_it_was(temp_db):
+    """Fail-open: the registry read is the addition, not the rule."""
+    from persist.commit import prune_dangling_exits
+
+    _cid, scene = _chat(temp_db)
+    del scene["rooms"]["kitchen"]
+    scene["rooms"]["inn"]["adjacent"] = [{"to": "kitchen", "barrier": "open"}]
+    warnings = prune_dangling_exits(scene)
+    assert scene["rooms"]["inn"]["adjacent"] == []
+    assert any("kitchen" in w for w in warnings)
