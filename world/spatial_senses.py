@@ -558,6 +558,47 @@ def crossing_visible_from(scene: dict, observer_room, name: str) -> bool:
     return _body_interior_holder(scene, name) is None
 
 
+def _mass_holder(scene, name):
+    """The holder whose MASS is between `name` and the world, or None.
+
+    `_body_interior_holder` answers a different question for a different
+    caller: "am I inside something", which concealment wants and for which
+    ANY enclosure counts -- a lift with its doors shut hides you exactly as a
+    crate does. The three flags below claim something stronger: that a MASS
+    sits between the two parties, conducting sound and flooding scent, which
+    is why the block already says "a BODY's mass specifically, not any
+    enclosure". It never asked.
+
+    Measured on the descent run, turn 7: a woman in a stalled lift with its
+    doors forced fully open, one pace from the player on the landing, was
+    heard as "...impassable... collapsed... security..." -- a fragment,
+    through an open door the engine had itself derived, because the car
+    around her was read as a mass. Every ship, cart and lift interior the
+    Director has ever minted had the same reading.
+
+    THE TEST IS AFFIRMATIVE EVIDENCE OF A CONVEYANCE, not of a body, and the
+    direction matters. Asking "is this a body" and exempting everything else
+    would exempt a creature the Director minted with no wardrobe and no
+    scale -- which is most of what a horror scene contains, and exactly the
+    thing whose mass SHOULD swallow a voice. Asking "is this a vehicle"
+    exempts only what the scene positively says is one.
+
+    `state.transit` is that evidence, and it is the right one twice over: it
+    is what makes a room a MOVING room, and it is what the engine derives the
+    interior's doorway from -- so the enclosures this exempts are precisely
+    the ones that have a real doorway for the barrier rules to answer with.
+    Silence leaves the mass reading exactly as it was.
+    """
+    holder = _body_interior_holder(scene, name)
+    if not holder:
+        return None
+    entity = ((scene or {}).get("entities") or {}).get(holder)
+    state = entity.get("state") if isinstance(entity, dict) else None
+    if isinstance(state, dict) and isinstance(state.get("transit"), dict):
+        return None
+    return holder
+
+
 def spatial_rel_between(
     scene: dict,
     observer: str,
@@ -605,7 +646,7 @@ def spatial_rel_between(
     from world.spatial_light_field import glare_between
     if glare_between(scene, observer, target):
         rel["glare"] = True
-    holder = _body_interior_holder(scene, observer)
+    holder = _mass_holder(scene, observer)
     if holder and same_subject(scene, holder, target):
         rel["inside_source"] = True
     elif holder and not same_subject(scene, observer, target) \
@@ -642,9 +683,9 @@ def spatial_rel_between(
             and not same_subject(scene, observer, target):
         # A BODY's mass specifically, not any enclosure: opaque is not
         # soundproof, and a crate must stay a thing you can be heard through.
-        target_holder = _body_interior_holder(scene, target)
+        target_holder = _mass_holder(scene, target)
         if target_holder and not _shares_enclosure(
-                scene, _body_interior_holder(scene, observer), target):
+                scene, _mass_holder(scene, observer), target):
             rel["source_enclosed"] = True
     # Deferred import: the sound field reads this module's material ladder
     # at import time, and this module reads the field only per call.
