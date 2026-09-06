@@ -7349,18 +7349,111 @@ picks the one case where the disagreement was measured and loud. The general
 form -- a body's heading following what it is DOING while its attention goes
 where it likes -- is a bigger change and is not made.
 
-### 1.145 A frontier room's edges carry an `axis` and no bearing
+### 1.147 The cone hid the way on, because a guess was allowed to subtract — FIXED 2026-09-06
 
-**Noticed 2026-09-06, chat 117 turn 46.** The service-core chain mints
-rooms with edges like `{"to": "upper_service_core_riser_10", "barrier":
-"open_door", "axis": "Upper service-core riser"}` -- an axis label and no
-`dir`. An edge with no bearing gives no travel bearing and no left/right, so
-`infer_facing`'s moved branch returns None (it will not guess a heading) and
-every egocentric reader downstream asserts no direction. Sibling of § 1.138
-(undirected anchors, 3.6%); unmeasured across the corpus, and the frontier
-minter is the place to look first. Related and cosmetic: the chain inherits
-the stub's NAME, so the fire stairwell is `upper_service_core_riser_7` and
-the air-handling plant is `upper_service_core_riser_6`.
+**The owner's read, 2026-09-06: "player perception culling might be too
+aggressive". Measured, and it was — but not by being too narrow.**
+
+Chat 117 turn 56. Aurel walks north up a 4x24 concrete corridor with a lamp.
+The room holds five features and his view receives TWO:
+
+  | feature | declared `dir` | placed cell | verdict |
+  |---|---|---|---|
+  | `concrete_deck` | n | (2, 0) | visible |
+  | `cable_trays` | n | (1, 1) | visible |
+  | `door:..._11` | **none** | (1, 16) | **culled, basis `cone`** |
+  | `southern_threshold` | s | (2, 23) | culled, basis `cone` |
+  | `door:..._9` | s | (1, 23) | culled, basis `cone` |
+
+He stands at (2, 1) facing north. The two culled doorways with a declared
+`s` are genuinely behind him and correctly hidden. The third is
+**`..._11` -- the room he is walking toward** -- and it was placed fifteen
+cells behind him.
+
+**Why it was placed there.** Sight is denied derived bearings on purpose
+(`derive=False`, so no view asserts a wall nobody declared, § 1.145's
+boundary). That leaves an unbeared doorway's pseudo-anchor placed by the
+hash that seeds any anchor along a wall -- fine as somewhere to lay a thing
+out, worthless as evidence about where a body is looking. The cone was
+reading it as evidence. `derived_edge_bearings` had the right answer the
+whole time (`(_10, _11) -> n`) and sight is not allowed to ask for it.
+
+**So the culling was not too aggressive; it was aggressive on INVENTED
+GROUNDS.** That is the complement of CLAUDE.md's rule about the exposed
+body -- "no guard was missing, a fact was" -- read from the other end: a
+guard must not fire on a fact the engine made up. The subtraction was
+right-shaped and its input was fiction.
+
+**Fixed narrowly.** The cone may not hide a doorway whose bearing nobody
+declared, on either side of the edge (`_unbeared_doorways`). The precedent
+is in the same function: the light gate already carves doorways out, "a
+DOORWAY, which is a gap in the wall rather than a thing in the room". Such
+a row is NAMED and claims no `side`, no `sector` and no `peripheral`,
+because "on your left" computed from a hash is exactly the false assertion
+being avoided -- the same shape `_render_openings` already takes for the far
+side of a threshold, where "the things are named and the distance is simply
+not claimed".
+
+**What it does NOT change:** a doorway anyone placed is ordinary geometry
+and is hidden behind a body like anything else. Both declared doorways in
+the beat above stay culled.
+
+**Story consequence, which is how it was found at all:** the view had been
+reporting the deck running on "into unbroken black" for several beats while
+a door stood at the end of it, so the reader and the player were both being
+told there was nothing ahead. See [[fiction-breaking-is-the-signal]]: the
+prose was the only place this was visible.
+
+### 1.145 Sixty-two percent of bodies have never faced a direction
+
+**Noticed as a frontier-stub cosmetic, measured, and it is neither.** The
+service-core chain mints edges like `{"to": "..._11", "barrier": "open_door",
+"axis": "Upper service-core riser"}` -- an axis label and no `dir`. That
+looked like a stub property furnishing would fix. It is not: measured
+read-only against the author's `engine.db` on 2026-09-06, across 103 scenes,
+570 rooms and 756 edges --
+
+  * **465 edges (61.5%) carry no `dir`.**
+  * **426 of them (56.3% of ALL edges) are on a FURNISHED room** -- a room
+    with a description, written by a hand that stood in it.
+  * **211 of 559 bodies (37.7%) carry a facing. The other 62.3% have none.**
+  * **In 48 scenes of 103, not one body in the story has ever faced a
+    direction.**
+  * Anchors are FINE by comparison: 31 of 844 (3.7%) lack a `dir`, which is
+    § 1.138's figure unchanged. The gap is entirely in EDGES.
+
+**What it costs.** `infer_facing`'s moved branch is `travel_bearing(old_room,
+new_room)`, and where the edge carries no bearing it returns None -- "we will
+not guess a heading", which is the right refusal. So a body that walks
+through an undirected doorway arrives with no heading and keeps none until
+something turns it, and everything egocentric is downstream: left and right
+vanish from the prose, `egocentric_frame` cannot say what is ahead, a cone
+lamp has no axis to point (§ 1.144 is this same value read one layer down),
+and a sound that grades audible cannot be placed at a doorway. In half the
+author's stories that is the permanent state.
+
+**Why it happens: `dir` is taught as OPTIONAL.** The rooms chunk's shape line
+publishes `adjacent:[{to,barrier,distance,vertical?,dir?,...}]` and nothing
+said what omitting it costs, so it is omitted. Addressed 2026-09-06 with a
+clause in both packs naming the class -- `dir` is the only thing the engine
+has to derive left and right from, an edge without one leaves a body with no
+heading at all, and the engine will not guess because a guessed heading is a
+body told it walked north when nobody said so.
+
+**A clause is not a fix until the next few beats prove it** (CLAUDE.md), and
+this one changes what a model writes rather than what the engine does, so the
+figures above are the thing to re-measure.
+
+**NOT DONE, and it is the owner's call because someone drew the line
+deliberately:** `spatial_orientation.derived_edge_bearings` already invents a
+bearing for exactly these edges -- every doorway both sides left silent -- so
+the sense composites have somewhere to lay a neighbour out. Its docstring
+scopes itself out of this on purpose: "It decides which wall a doorway is in,
+and nothing else -- not that a room lies north in the world, **not what a
+body would learn by walking it.**" Feeding it to `travel_bearing` would give
+62% of bodies a heading tomorrow, and would also have the engine tell a body
+it walked north on the strength of a hash. The boundary is real; moving it is
+a decision, not a repair.
 
 ### 1.141 A scent hunter that loses the trail stops instead of casting — BUILT 2026-09-06
 

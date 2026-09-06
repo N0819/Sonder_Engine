@@ -333,3 +333,59 @@ def test_aperture_cells_are_the_gap_on_the_wall_line():
     assert cell[wall["axis"]] == wall["coord"]
     assert wall["aperture"][0] <= cell[1 - wall["axis"]] <= wall["aperture"][1]
     assert cell not in field.inside
+
+
+def test_a_doorway_nobody_gave_a_bearing_to_is_not_hidden_by_the_cone():
+    """A GUESS MAY NOT SUBTRACT.
+
+    Sight is denied derived bearings on purpose (`derive=False`, so no view
+    asserts a wall nobody declared), which leaves a doorway whose edge
+    carries no `dir` placed by the hash that seeds any anchor along a wall.
+    That is fine as somewhere to lay a thing out and worthless as evidence
+    about where a body is looking -- and the cone was reading it as
+    evidence.
+
+    Measured, chat 117 turn 56: Aurel walked north up a 4x24 corridor at
+    cell (2,1) facing north, with the doorway to the room he was walking
+    TOWARD placed at (1,16) -- fifteen cells behind him -- because that edge
+    carries an `axis` label and no `dir`. Three of the room's five features
+    were culled and the way on was one of them, so the view reported the
+    deck running into unbroken black while a door stood at the end of it.
+
+    A doorway someone DID place stays ordinary geometry and is hidden
+    behind a body like anything else; that is the other half of this test.
+    """
+    from world.spatial import feature_visibility
+
+    rooms = {
+        "run": {
+            "name": "the long run", "size": "large", "exposure": "enclosed",
+            "extent": {"w": 4, "d": 24}, "light": "lit",
+            "adjacent": [
+                # The way ON: no bearing anywhere, either side.
+                {"to": "far", "barrier": "open_door"},
+                # The way BACK: declared, and behind him.
+                {"to": "back", "barrier": "open_door", "dir": "s"},
+            ],
+            "anchors": {"deck": {"desc": "the deck", "dir": "n",
+                                 "height": "floor"}},
+        },
+        "far": {"name": "the far room", "adjacent": [{"to": "run"}]},
+        "back": {"name": "the room behind",
+                 "adjacent": [{"to": "run", "barrier": "open_door",
+                               "dir": "n"}]},
+    }
+    scene = {"rooms": rooms, "positions": {"P": "run"}, "entities": {},
+             "stations": {"P": {"at": "deck"}}, "poses": {},
+             "orientation": {"P": {"facing": "n"}}}
+
+    rows = {r["anchor"]: r for r in feature_visibility(scene, "P")}
+    unbeared = rows["door:far"]
+    assert unbeared["visible"] is True
+    # ...and it claims no side, because "on your left" off a hash is the
+    # false assertion this is avoiding.
+    assert unbeared["side"] is None and unbeared["sector"] is None
+    assert unbeared["peripheral"] is False
+    # The declared doorway behind the body is still correctly hidden.
+    assert rows["door:back"]["visible"] is False
+    assert rows["door:back"]["basis"] == "cone"
