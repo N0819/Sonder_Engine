@@ -363,6 +363,7 @@
     "presence_at": ", at {at}",
     "presence_at_bare": "at {at}",
     "presence_unchanged": "{label} is still {where}",
+    "presence_fresh": "{label} is now {where}",
     "presence_behind": ", behind {behind}",
     "presence_shows": ", from the {shows} up",
     "features": "You can see {items}.",
@@ -426,6 +427,9 @@
   "surface_figure": "figure",
   "surface_adjective_join": " ",
   "surface_list_join": ", ",
-  "speech_quote_pair": ["\"", "\""],
+  "speech_quote_pair": [
+    "\"",
+    "\""
+  ],
   "self_label": "you"
 }

@@ -108,10 +108,33 @@ def default_looks():
 def looks_profile(charter):
     """``(profile, source)`` for a charter: its authored law where one
     exists, else the engine default. ``source`` is recorded on every
-    surface dealt so an audit can tell a town with a law from one without."""
+    surface dealt so an audit can tell a town with a law from one without.
+
+    A CREATURE FALLS BACK TO NOTHING, NOT TO A PERSON. `DEFAULT_LOOKS` is a
+    pool of PEOPLE -- "a grey braid", "greying", "thinning hair", "a missing
+    tooth" -- and it is the right default for a charter that populates a
+    town. Dealt to a body whose charter carries a `creature` block it
+    produces a monster with human hair, and it does so silently, because an
+    empty `looks` reads as "nothing authored" rather than as a mistake.
+
+    Measured live (chat 117 turn 58): the carbonic stalker -- a thing that
+    hunts exhaled CO2 and has no eyes to speak of -- stood at arm's reach
+    from the cast and reached one view as "the greying wiry person with a
+    grey braid". Its `creature` block was richly authored (four voices,
+    declared senses, a prey rule) and every one of its seven `looks` axes
+    was `[]`.
+
+    An empty profile is the honest answer for a thing nobody described: the
+    composer's own fallback noun is "figure", which is exactly what an
+    unrecognised shape in a dark corridor is. Authoring the creature's looks
+    remains the way to make it vivid; borrowing a villager's is not.
+    """
     authored = normalize_looks_profile((charter or {}).get("looks"))
     if looks_material_exists(authored):
         return authored, _LAW_AUTHORED
+    if isinstance((charter or {}).get("creature"), dict) \
+            and (charter or {}).get("creature"):
+        return normalize_looks_profile({}), _LAW_DEFAULT
     return default_looks(), _LAW_DEFAULT
 
 

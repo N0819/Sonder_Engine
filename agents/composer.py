@@ -1154,6 +1154,13 @@ def presence_percepts(scene, observer_name, co_present, display_map,
             fidelity="full" if level == "full" else "degraded",
             data={"tier": tier, "side": side, "arc": arc, "sight": level,
                   "body": body_key(name),
+                  # WHETHER THIS OBSERVER CAN NAME THEM. `display_map`
+                  # answers recognition by construction -- a recognised body
+                  # maps to its own name, a stranger to a descriptor -- and
+                  # perception's `company` block already reports the same
+                  # comparison. Carried here so the view can decide whether
+                  # a presence is background without re-deriving it.
+                  "known": bool(display) and display == name,
                   **({"size": size} if size else {}),
                   **({"at": station} if station else {}),
                   **({"room": room} if room else {}),
@@ -2982,7 +2989,7 @@ _COUNT_WORDS = {
 }
 
 
-def _presence_clause(p, *, brief=False):
+def _presence_clause(p, *, brief=False, fresh=False):
     """One body's presence as a bare clause -- no capital, no full stop, so
     it can stand alone or be joined with others.
 
@@ -2990,6 +2997,30 @@ def _presence_clause(p, *, brief=False):
     not changed since this observer's last view: who they are and where, and
     none of the qualifying clauses that were already delivered. See
     `_render_presence_group` for why an unchanged body is still named.
+
+    `fresh` is its complement and the reason it exists: a body this observer
+    did NOT hold last view and holds now. A CHANGE IN WHAT IS PRESENT MUST
+    NOT READ AS FURNITURE. The engine already knew this was the beat's news
+    -- `leads_the_beat` puts a first-sight presence in the beat half, so it
+    reaches the narrator as a numbered `current_events` entry under the one
+    rule in that sheet that is absolute -- and the SENTENCE still said "the
+    compact wiry figure is close by on your right", which is the same
+    grammar as "Sarah Moon is within arm's reach". Sitting between two
+    standing-description entries, an arrival phrased as a location was
+    indistinguishable from scenery, and the narrator dropped it.
+
+    Measured live (chat 117 turn 58): a carbonic stalker that had been
+    hunting the cast for thirty beats walked into the room they were
+    standing in, reached both views, was entry 4 of the player's
+    `current_events`, and did not reach the page at all. The player was not
+    told a thing was beside them.
+
+    "is now" against `presence_unchanged`'s "is still": the pair is the
+    whole distinction, and it claims only what the observer has. It does not
+    say the body came IN -- an observer may be meeting it because it moved,
+    because they turned, or because a light reached it -- only that it is
+    there and was not. You may not know what has arrived; you know that
+    something has.
     """
     room = str(p.data.get("room") or "")
     tier = (_en("presence_in_room", room=room) if room
@@ -3021,8 +3052,10 @@ def _presence_clause(p, *, brief=False):
         shows = str(p.data.get("shows") or "").strip()
         if shows:
             cover_clause += _en("presence_shows", shows=shows)
-    return (f"{p.source_label} is {tier}{at_clause}{side_clause}"
-            f"{size_clause}{cover_clause}")
+    where = f"{tier}{at_clause}{side_clause}{size_clause}{cover_clause}"
+    if fresh:
+        return _en("presence_fresh", label=p.source_label, where=where)
+    return f"{p.source_label} is {where}"
 
 
 def _join_clauses(clauses):
@@ -3078,19 +3111,20 @@ def _render_presence_group(percepts):
 
     Returns [(representative percept, sentence)], at most one per fidelity.
     """
-    pairs = [(p, False) if isinstance(p, Percept) else (p[0], bool(p[1]))
+    pairs = [(p, False, False) if isinstance(p, Percept)
+             else (p[0], bool(p[1]), bool(p[2]) if len(p) > 2 else False)
              for p in percepts or ()]
     out = []
     for fidelity in ("full", "degraded"):
         # What CHANGED is spelled in full and comes first; what merely
         # persists closes the sentence. Stable within each half.
-        group = [(p, brief) for p, brief in pairs if p.fidelity == fidelity]
+        group = [row for row in pairs if row[0].fidelity == fidelity]
         group = [x for x in group if not x[1]] + [x for x in group if x[1]]
         if not group:
             continue
         clauses, counts = [], {}
-        for p, brief in group:
-            clause = _presence_clause(p, brief=brief)
+        for p, brief, fresh in group:
+            clause = _presence_clause(p, brief=brief, fresh=fresh)
             if clause in counts:
                 counts[clause] += 1
             else:
@@ -3581,9 +3615,32 @@ def _render_view_english(percepts, *, mode="character",
     # one side of the partition, decided before the loop reaches the first
     # of them: if any body in it is new or has moved tier, who is here is
     # this beat's news.
-    presence_leads = player and any(
+    # A BODY YOU CANNOT NAME IS NEVER BACKGROUND. `leads_the_beat` asks
+    # what CHANGED, which is the right question for a room, a smell or a
+    # pose, and the wrong one for a stranger standing still: nothing about
+    # them changes, so who is here stops being the beat's news and the
+    # sentence naming them becomes standing description -- which the
+    # narrator sheet says in as many words "carries no obligation".
+    #
+    # Measured live, chat 117 turns 58 and 59. A carbonic stalker walked
+    # into the room the cast were standing in and did not reach the page.
+    # On the arrival beat the sentence read as furniture; on the NEXT beat
+    # it was furniture, because the thing had the decency to hold still. Two
+    # beats with a hunter at arm's reach and a player who was never told.
+    #
+    # A person does not stop noticing a stranger they cannot name in a dark
+    # corridor, and the engine already knows which bodies those are. Bounded
+    # by measurement rather than by hope: across the author's 3771 composed
+    # beats an unrecognised body is co-present on 235 (6.2%), never more
+    # than two at once -- crowds are the crowd system's and never arrive
+    # here as company rows. So this is rare, and every instance of it is the
+    # case worth spending a sentence on.
+    _stranger_present = any(
+        p.kind == "presence" and not (p.data or {}).get("known", True)
+        for p in standing)
+    presence_leads = player and (_stranger_present or any(
         leads_the_beat(p, verdicts.get(p.dedupe_key, "first"), prev_standing)
-        for p in standing if p.kind == "presence")
+        for p in standing if p.kind == "presence"))
 
     standing_spans = []         # the background half in player mode
     beat_spans = []             # player mode only
@@ -3605,8 +3662,25 @@ def _render_view_english(percepts, *, mode="character",
             # re-inserting the presence group at the first presence position
             # keeps the discourse order of whichever half it belongs to
             # intact.
+            # (percept, brief, fresh). `brief` is a presence this observer
+            # already held unchanged; `fresh` its complement -- a BODY they
+            # did not hold at all and hold now, which only a ledger can tell
+            # from an opening view where everyone is new and nobody arrived.
+            #
+            # Compared on `_subject_prefix`, never on the whole key: a
+            # dedupe key carries the presence's STATE as well as its
+            # subject, so a body that merely crossed the room has a key the
+            # ledger has not seen and is not new. Caught by
+            # `test_a_body_that_stood_still_is_still_in_the_room`, which
+            # read "Maren Vaunt is now within arm's reach" for a woman who
+            # had been in the room the whole time.
+            _subject = _subject_prefix(p.dedupe_key)
+            _held = {_subject_prefix(k) for k in (prev_standing or ())}
+            _held.discard(None)
             presence_group.append(
-                (p, delta and p.dedupe_key in prev_standing))
+                (p, delta and p.dedupe_key in prev_standing,
+                 bool(delta and prev_standing and _subject
+                      and _subject not in _held)))
             if len(presence_group) == 1:
                 (beat_spans if presence_leads else standing_spans).append(
                     _PRESENCE_SLOT)
@@ -3671,7 +3745,14 @@ def _render_view_english(percepts, *, mode="character",
         # mind nothing, and the empty view is exactly what
         # `perception._composer_render_observer`'s floor reads before asking
         # for the background instead (chat 98 turns 13, 15, 16, 20, 21, 36).
-        if (delta and spans and all(brief for _p, brief in presence_group)
+        # ...unless one of the people in the room cannot be NAMED. "Nobody
+        # moved" is nothing to report about company this observer knows, and
+        # is the whole of the report when a stranger is standing there: the
+        # beat where a hunter holds still at arm's reach is exactly the beat
+        # the player most needs, and it is the one this rule was emptying
+        # (chat 117 turn 59, the beat after it walked in).
+        if (delta and spans and not _stranger_present
+                and all(row[1] for row in presence_group)
                 and all(p.kind == "presence" for p, _s in spans)):
             spans = []
     else:
