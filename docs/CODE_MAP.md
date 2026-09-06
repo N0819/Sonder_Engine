@@ -21,14 +21,14 @@
 | `agents/director_reconcile.py` | 592 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story`, `world.spatial` |
 | `agents/director_scopes.py` | 857 |  | `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 627 |  | `agents.common`, `story.character_schema`, `story.scene`, `world.background_claims` |
-| `agents/dramaturge.py` | 311 |  | `core.logging_utils` |
+| `agents/dramaturge.py` | 316 |  | `core.logging_utils` |
 | `agents/loops.py` | 1388 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/mapping.py` | 520 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `mind.memory`, `story.scene`, `world.spatial` |
 | `agents/narration.py` | 2266 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
 | `agents/perception.py` | 5418 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/runtime.py` | 1471 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `core.db` |
-| `agents/story_planner.py` | 1203 |  | `core.logging_utils` |
+| `agents/story_planner.py` | 1208 |  | `core.logging_utils`, `story.room_calls` |
 | `core/__init__.py` | 6 |  | — |
 | `core/db.py` | 2614 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
 | `core/frames.py` | 220 |  | `core.db` |
@@ -107,7 +107,7 @@
 | `story/plot_packages.py` | 2863 |  | `world.spatial` |
 | `story/provenance_text.py` | 132 |  | — |
 | `story/room_bible.py` | 424 |  | `core.db` |
-| `story/room_calls.py` | 96 |  | — |
+| `story/room_calls.py` | 130 |  | — |
 | `story/room_citations.py` | 221 |  | — |
 | `story/room_conversation.py` | 544 |  | `core.db` |
 | `story/room_frontier.py` | 233 |  | `core.db` |
@@ -389,13 +389,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `propose()` | 192 | 82 lines |
-| `_payload()` | 134 | 36 lines |
-| `revise()` | 276 | 36 lines |
-| `player_visible_stream()` | 95 | 31 lines |
-| `_file()` | 176 | 14 lines |
-| `_call()` | 78 | 11 lines |
-| `system_block()` | 128 | 4 lines |
+| `propose()` | 197 | 82 lines |
+| `_payload()` | 139 | 36 lines |
+| `revise()` | 281 | 36 lines |
+| `player_visible_stream()` | 100 | 31 lines |
+| `_call()` | 78 | 16 lines |
+| `_file()` | 181 | 14 lines |
+| `system_block()` | 133 | 4 lines |
 
 ### `agents/loops.py`
 
@@ -479,14 +479,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run_planner()` | 601 | 256 lines |
-| `deliberate()` | 959 | 91 lines |
-| `schedule_room_work()` | 1141 | 63 lines |
-| `_payload()` | 368 | 55 lines |
-| `_shown_transcript()` | 316 | 50 lines |
-| `planner_reply()` | 896 | 40 lines |
-| `run_dramaturge_pass()` | 1052 | 40 lines |
-| `_run_task()` | 859 | 35 lines |
+| `run_planner()` | 606 | 256 lines |
+| `deliberate()` | 964 | 91 lines |
+| `schedule_room_work()` | 1146 | 63 lines |
+| `_payload()` | 373 | 55 lines |
+| `_shown_transcript()` | 321 | 50 lines |
+| `planner_reply()` | 901 | 40 lines |
+| `run_dramaturge_pass()` | 1057 | 40 lines |
+| `_run_task()` | 864 | 35 lines |
 
 ### `core/db.py`
 
@@ -1331,9 +1331,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `room_call()` | 35 | 39 lines |
-| `_reasoning()` | 85 | 12 lines |
-| `_requested()` | 76 | 7 lines |
+| `room_call()` | 69 | 39 lines |
+| `room_max_tokens()` | 35 | 32 lines |
+| `_reasoning()` | 119 | 12 lines |
+| `_requested()` | 110 | 7 lines |
 
 ### `story/room_citations.py`
 
