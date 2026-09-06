@@ -24,7 +24,7 @@
 | `agents/dramaturge.py` | 316 |  | `core.logging_utils` |
 | `agents/loops.py` | 1388 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/mapping.py` | 520 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `mind.memory`, `story.scene`, `world.spatial` |
-| `agents/narration.py` | 2266 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
+| `agents/narration.py` | 2294 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
 | `agents/perception.py` | 5418 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/runtime.py` | 1471 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `core.db` |
@@ -428,14 +428,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `narrator()` | 1640 | 389 lines |
+| `narrator()` | 1668 | 389 lines |
 | `_ordered_beat_events()` | 646 | 230 lines |
-| `narrator_extra()` | 2090 | 177 lines |
+| `narrator_extra()` | 2118 | 177 lines |
 | `_sensory_channels_manifest()` | 452 | 165 lines |
-| `_visible_portal_states()` | 968 | 88 lines |
-| `_generate_narration()` | 1482 | 83 lines |
+| `_visible_portal_states()` | 968 | 116 lines |
+| `_generate_narration()` | 1510 | 83 lines |
 | `_resolve_narration_person()` | 161 | 71 lines |
-| `_render_observed_events()` | 1175 | 69 lines |
+| `_render_observed_events()` | 1203 | 69 lines |
 
 ### `agents/perception.py`
 

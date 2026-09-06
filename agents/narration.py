@@ -989,6 +989,7 @@ def _visible_portal_states(scene, room_id, visible_rooms):
         return {}
     visible_rooms = set(visible_rooms or ()) | {room_id}
     out = {}
+    _guessed = set()
     entities = scene.get("entities") or {}
     positions = scene.get("positions") or {}
     rooms = scene.get("rooms") or {}
@@ -1024,6 +1025,12 @@ def _visible_portal_states(scene, room_id, visible_rooms):
         if ent_room in visible_rooms and any(
                 w in blob for w in ("door", "gate", "hatch", "portal",
                                     "shutter")):
+            # UNBOUND, and that is the whole difference from the `link`
+            # branch above. A portal-link NAMES the two rooms it joins, so
+            # it IS that doorway and speaks for it. This branch is a guess
+            # from a word in the entity's name, and a guess must not
+            # contradict the edge (see below).
+            _guessed.add(name)
             val = state.get("open")
             if isinstance(val, bool):
                 out[name] = "open" if val else "shut"
@@ -1034,6 +1041,27 @@ def _visible_portal_states(scene, room_id, visible_rooms):
                     out[name] = "open"
                 elif sval in ("closed", "shut", "sealed", "locked"):
                     out[name] = "shut"
+    # A WAY THROUGH IS THE EDGE'S, AND THE EDGE WINS (2026-09-06). The block
+    # above reads a door-like ENTITY's open/shut state; the block below reads
+    # the room's own edges. Both reach the narrator, and they are free to
+    # disagree -- measured (chat 117, turn 20): a bulkhead entity recorded
+    # `ajar` while its edge still read `closed_door`, so the page was handed
+    # "open" and "shut" about one door in the same payload.
+    #
+    # Nothing that decides passage reads the entity (the objects card now
+    # says so outright), so where this room has any door EDGE at all, a
+    # GUESSED door-claim is dropped. Only the guesses: an entity carrying a
+    # portal `link` names the two rooms it joins and therefore IS that
+    # doorway, and it keeps speaking. A door with no room behind it -- a
+    # cupboard, a cabinet, a stove -- has no door edge to be contradicted
+    # by and keeps its own state, which is what the guessing branch is
+    # actually useful for.
+    _door_edges = [e for e in ((rooms.get(room_id) or {}).get("adjacent") or [])
+                   if isinstance(e, dict)
+                   and str(e.get("barrier") or "") in ("closed_door",
+                                                       "open_door")]
+    if _door_edges and _guessed:
+        out = {k: v for k, v in out.items() if k not in _guessed}
     edge_states = set()
     for edge in (rooms.get(room_id) or {}).get("adjacent") or []:
         if not isinstance(edge, dict):
