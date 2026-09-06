@@ -763,16 +763,18 @@ def test_a_dump_trims_the_largest_read_result_before_evicting_the_neighbours(
     # Every neighbour is still there, in order, with its call intact.
     assert [e["tool"] for e in shown] == small + ["inspect_rooms"]
     # The dump the model has not read yet is whole; what it trimmed is the
-    # largest of what the model already read, cut to a head that says how
-    # much is gone.
+    # largest of what the model already read, reduced to a RECEIPT -- what
+    # it called and the shape of what came back, with the note that it can
+    # be called again. A tool result is scratch, not memory (2026-09-05).
     assert shown[-1]["result"]["tag"] == "rooms"
-    trimmed = [e for e in shown if "trimmed" in e["result"]]
+    trimmed = [e for e in shown if "recall" in e["result"]]
     assert trimmed and all(e["tool"] in small for e in trimmed)
     for e in trimmed:
-        assert len(e["result"]["head"]) == sp.PLANNER_TRIM_HEAD_CHARS
-        assert e["result"]["trimmed"] > 0
-    # Not every neighbour had to go: the trim stops when the transcript fits.
-    assert any("trimmed" not in e["result"] for e in shown[:-1])
+        assert e["result"]["read"]
+        assert e["tool"] in e["result"]["recall"]
+        assert len(json.dumps(e["result"])) < sp.PLANNER_TRIM_HEAD_CHARS
+    # Not every neighbour had to go: the trim stops when it fits.
+    assert any("recall" not in e["result"] for e in shown[:-1])
 
 
 def test_the_trim_reaches_the_newest_step_only_when_nothing_older_is_left():
@@ -783,10 +785,10 @@ def test_the_trim_reaches_the_newest_step_only_when_nothing_older_is_left():
                   {"tool": "c", "args": {}, "result": _big(9000, "c"), "step": 1}]
     shown, whole = sp._shown_transcript(transcript, cap=20_000)
     assert [e["tool"] for e in shown] == ["a", "b", "c"]
-    assert sum("trimmed" in e["result"] for e in shown) == 1
-    assert whole == {i for i, e in enumerate(shown) if "trimmed" not in e["result"]}
-    # A cap no head fits under evicts, oldest first.
-    shown, whole = sp._shown_transcript(transcript, cap=sp.PLANNER_TRIM_HEAD_CHARS * 2)
+    assert sum("recall" in e["result"] for e in shown) == 1
+    assert whole == {i for i, e in enumerate(shown) if "recall" not in e["result"]}
+    # A cap no receipt fits under evicts, oldest first.
+    shown, whole = sp._shown_transcript(transcript, cap=sp.PLANNER_RECEIPT_CHARS)
     assert [e["tool"] for e in shown] == ["c"]
 
 
@@ -854,7 +856,7 @@ def test_a_repeat_of_a_call_that_fell_out_of_view_is_shown_again(temp_db, monkey
     monkeypatch.setattr(providers, "chat_complete", script)
     cid, _ = _story(temp_db)
     sp.run_planner(cid, None, text="hi")
-    assert "trimmed" in seen[2]["transcript"][0]["result"]
+    assert "recall" in seen[2]["transcript"][0]["result"]
     last = seen[3]["transcript"][-1]
     assert last["tool"] == "inspect_rooms" and "see_step" not in last["result"]
 

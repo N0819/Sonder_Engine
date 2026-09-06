@@ -2833,7 +2833,8 @@ def _chat_complete_once(
         )
     _capture_reasoning(parsed["choices"][0].get("message"))
     _capture_choice_finish(parsed)
-    content = _message_content(parsed, prov["name"], model)
+    content = _message_content(parsed, prov["name"], model,
+                               max_tokens=body.get("max_tokens"))
     # Some models (nemotron:thinking observed) honour response_format=json_object
     # by returning a syntactically-valid SKELETON with every string value set to
     # the literal "..." -- which parses and validates fine, so "..." reaches the
@@ -2847,7 +2848,8 @@ def _chat_complete_once(
             parsed = alt.json()
             _capture_reasoning(parsed["choices"][0].get("message"))
             _capture_choice_finish(parsed)
-            content = _message_content(parsed, prov["name"], model)
+            content = _message_content(parsed, prov["name"], model,
+                               max_tokens=body.get("max_tokens"))
     _log_usage(role, model, _t0, parsed.get("usage"),
                    served=parsed.get("model"))
     return guard_response(content)
@@ -2893,7 +2895,14 @@ def _reasoning_text(message):
     return "\n".join(c for c in chunks if c).strip()
 
 
-def _message_content(parsed, prov_name, model):
+def _approx_tokens(text):
+    """A rough token count for a diagnostic sentence. Four characters per
+    token is the usual English approximation and is plenty to tell "a sixth
+    of the budget" from "all of it" -- the only question the caller asks."""
+    return max(1, len(str(text or "")) // 4)
+
+
+def _message_content(parsed, prov_name, model, max_tokens=None):
     """The answer, or a retryable failure that says what actually happened.
 
     A reasoning model can return a message carrying its trace and NO
@@ -2916,10 +2925,33 @@ def _message_content(parsed, prov_name, model):
         return content
     reasoning = _reasoning_text(message)
     if reasoning:
+        # SAY WHAT WAS MEASURED, NOT A CAUSE NOBODY CHECKED. This asserted
+        # "the thinking budget consumed the reply" on every reasoning-only
+        # answer, and the retry ladder then spends its first rung turning
+        # reasoning OFF on that reading. Measured on the descent run
+        # (2026-09-05): a Room call with a 40,000-token budget returned
+        # 25,052 characters of trace -- roughly 6k tokens, a sixth of what it
+        # had -- after 71 seconds, where the five successful calls of the same
+        # reply took 3.6 to 6.2 seconds. The budget was not consumed and
+        # disabling reasoning changed nothing, which is the same class as
+        # PM20: a fixed message naming a cause the evidence does not support,
+        # and a host or a ladder acting on it.
+        #
+        # The reported reasoning is compared against the budget when the
+        # caller knows it; the class stays one typed failure either way,
+        # because what is certain is only that no answer arrived.
+        spent = _approx_tokens(reasoning)
+        room = ""
+        if max_tokens:
+            room = (" -- it used about %d of its %d-token budget, so the "
+                    "budget was not the constraint" % (spent, int(max_tokens))
+                    if spent * 2 < int(max_tokens) else
+                    " -- about %d tokens against a %d-token budget, so the "
+                    "budget may be the constraint"
+                    % (spent, int(max_tokens)))
         raise ReasoningBudgetExhausted(
-            f"{prov_name}: {model} returned reasoning but no answer "
-            f"({len(reasoning)} chars of trace, content empty) -- the "
-            f"thinking budget consumed the reply")
+            f"{prov_name}: {model} returned reasoning and no answer "
+            f"({len(reasoning)} chars of trace, content empty){room}")
     if content == "":
         raise LLMError(f"{prov_name}: {model} returned empty content",
                        None, True)
