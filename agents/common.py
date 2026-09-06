@@ -8731,13 +8731,31 @@ def _check_action_direction(prose, event_order):
                 f"(\"{act[:60]}\") but the prose renders the opposite. "
                 "Render the act in the direction the record gives."
             )
-        elif not p_low and not p_high:
-            warnings.append(
-                "Physical act from event_order may be missing in narrator "
-                f"prose: {ev.get('actor')} moving {said} "
-                f"(\"{act[:60]}\")."
-            )
     return warnings
+
+
+# THE MISSING ARM IS GONE (2026-09-06, the owner's ruling: a check that fires
+# on otherwise valid output has to die).
+#
+# It warned when the ACT named a direction and the prose named neither, and
+# the docstring above already conceded the hole -- "legitimate prose can
+# carry a descent with no directional verb at all". Worse, the direction is
+# read off a verb, so an act that is not a MOVEMENT is classed as one: in
+# the descent run it fired five times and at least three were not travel at
+# all -- "raises a hand in a halt gesture" and "turns the wheel mechanism"
+# both read as the body moving UPWARD, and "leans her torso inward toward
+# the concrete wall, looking upward" as a climb.
+#
+# It could not be measured historically the way the proper-noun arm was:
+# `event_order` is assembled for the narrator call and is not in the stored
+# resolve rows, so the corpus has nothing to replay it against. The evidence
+# is the run's own five firings, and it is enough under the standing rule.
+#
+# THE REVERSED ARM STAYS, and it is the one worth having: the act says down
+# and the page says up, which is a CONTRADICTION rather than an omission --
+# the Director resolved one character carrying another downward and the page
+# rendered a lift. That is a fact about the world disagreeing with itself,
+# not a judgement about how prose ought to read.
 
 
 # THE DECLARED-CONDUCT CHECK IS GONE (2026-09-06, the owner's ruling: a
