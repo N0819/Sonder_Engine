@@ -455,8 +455,26 @@ def _refresh_relocated_location(sc, prev_scene, diff, ctx):
         sc["description"] = new_desc
 
 
-def prune_dangling_exits(sc):
+def prune_dangling_exits(sc, cid=None):
     """Drop room exits whose target room does not exist. Returns warnings.
+
+    A ROOM THE STORY HAS ALREADY PLANNED EXISTS. `cid` lets the plan vouch
+    for a target the SCENE has not drawn yet, and without it the plan's own
+    topology was erased room by room as the story walked into it: the
+    Director furnishes a corridor from its brief, writes the exits the plan
+    gives it, and every one of them points at a room no beat has reached, so
+    every one is "undefined" and dropped. Measured on the descent run, turn
+    7 -- a service spine furnished with five branches lost all five in the
+    beat that created it, leaving a corridor to nowhere in a sub-level the
+    Writers' Room had laid out completely.
+
+    Same class as `docs/UNBUILT.md` § 1.127 one layer down: the registry is
+    the world's record that a place exists, and a reader that consults only
+    the scene will keep re-deciding that it does not.
+
+    Fail-open on the registry read, and the pruning still runs: a target
+    neither the scene nor the plan holds is the case this function was
+    written for and is still dropped.
 
     The merge already drops edges pointing at rooms it just REMOVED, but never
     checked that an edge's target exists in the first place, so a model naming
@@ -476,6 +494,13 @@ def prune_dangling_exits(sc):
     rooms = sc.get("rooms")
     if not isinstance(rooms, dict):
         return warnings
+    planned = set()
+    if cid is not None:
+        try:
+            from world.structure import planned_room_ids
+            planned = set(planned_room_ids(cid))
+        except Exception:
+            planned = set()
     for rid, room in rooms.items():
         if not isinstance(room, dict) or not isinstance(room.get("adjacent"), list):
             continue
@@ -484,7 +509,7 @@ def prune_dangling_exits(sc):
             if not isinstance(edge, dict):
                 continue
             target = edge.get("to")
-            if target in rooms:
+            if target in rooms or target in planned:
                 kept.append(edge)
             else:
                 dropped.append(str(target))
