@@ -3430,3 +3430,65 @@ def test_a_distant_sound_gives_a_direction_and_never_a_place_or_a_line():
     # can see, and the character of the sound, which they can hear.
     assert bearing["scope"] == "beyond" and bearing["barrier"] == "open_door"
     assert sound_bearing_via(sc, "Ada", "hall", room="hall") is None
+
+
+def test_a_way_through_is_the_edges_and_never_a_things_state():
+    """A DOOR EXISTS TWICE AND ONLY ONE OF THEM DECIDES PASSAGE.
+
+    A door between two rooms is an EDGE, and whether a body, a sound, a
+    smell or a light gets past it is that edge's `barrier`. An entity for
+    the same door is scenery. Nothing that decides passage reads an
+    entity's open/shut state, so a beat that records the opening THERE
+    leaves the way exactly as shut as it was -- and `narration`'s
+    `portal_states` hands the page BOTH answers, so the prose is told the
+    door is ajar and shut in the same breath.
+
+    Measured (chat 117, turn 20): the player pried a bulkhead open a hand's
+    width; the objects hand recorded `{closed: false, ajar: true, gap:
+    "hand's width"}` on the entity and the edge stayed `closed_door`, so he
+    put a lamp through the gap and perception showed him unbroken steel.
+    """
+    from world.spatial import visual_level_between
+
+    scene = {
+        "rooms": {
+            "plant": {"name": "Plant Room", "size": "medium", "anchors": {},
+                      "adjacent": [{"to": "spine", "barrier": "closed_door",
+                                    "dir": "s"}]},
+            "spine": {"name": "Spine", "size": "large", "anchors": {},
+                      "adjacent": [{"to": "plant", "barrier": "closed_door",
+                                    "dir": "n"}]},
+        },
+        "positions": {"Aurel": "plant", "Sarah": "spine",
+                      "bulkhead": "plant"},
+        "entities": {"bulkhead": {
+            "name": "Plant Room Bulkhead Door", "kind": "object",
+            # Exactly what the live beat wrote, and it changes nothing.
+            "state": {"closed": False, "ajar": True, "gap": "hand's width"}}},
+        "attire": {}, "overlays": {}, "stations": {},
+    }
+    assert visual_level_between(scene, "Aurel", "Sarah") == "none", (
+        "an entity's `ajar` opened a way that the edge still calls shut")
+
+    # The edge is what a way through IS: change it and the way opens.
+    for room, to in (("plant", "spine"), ("spine", "plant")):
+        for edge in scene["rooms"][room]["adjacent"]:
+            if edge["to"] == to:
+                edge["barrier"] = "open_door"
+    assert visual_level_between(scene, "Aurel", "Sarah") != "none"
+
+
+def test_both_packs_say_a_way_through_is_not_a_things_state():
+    """The rule lives in the objects card, where the hand that would write
+    it reads -- and in both packs, like every other rule the engine leans
+    on."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1] / "language_packs"
+    for lang, needle in (
+            ("en", "AND WHETHER A WAY THROUGH IS OPEN IS NEVER ONE OF THEM"),
+            ("ja", "通り道が開いているかどうかも、それらのキーには決して含まれません")):
+        card = (root / lang / "cards" / "system_prompts" / "specialists"
+                / "objects" / "chunks" / "entities.txt").read_text(
+                    encoding="utf-8")
+        assert needle in card, lang

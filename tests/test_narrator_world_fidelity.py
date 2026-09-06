@@ -1311,3 +1311,49 @@ class TestEmptyFieldsAreAbsentRatherThanEmpty:
                     "past_narration", "current_narration", "present_scene",
                     "current_events", "variant_seed"):
             assert key in payload, key
+
+
+def test_a_guessed_door_yields_to_the_edge_and_a_linked_one_does_not():
+    """A WAY THROUGH IS THE EDGE'S (2026-09-06).
+
+    `_visible_portal_states` reads doors two ways, and only one of them is
+    bound to anything. A portal `link` NAMES the two rooms it joins, so it
+    IS that doorway and speaks for it. The other branch guesses from a word
+    in the entity's name -- "door", "gate", "hatch" -- and a guess must not
+    contradict the edge, because nothing that decides passage reads it.
+
+    Measured (chat 117, turn 20): a bulkhead entity recorded `{closed:
+    false, ajar: true}` while its edge still read `closed_door`, so the page
+    was handed "open" and "shut" about one door in the same payload, and the
+    body who had just opened it was shown unbroken steel.
+    """
+    scene = {
+        "rooms": {
+            "plant": {"name": "Plant Room", "adjacent": [
+                {"to": "spine", "barrier": "closed_door"}]},
+            "spine": {"name": "Spine", "adjacent": []},
+            "pantry": {"name": "Pantry", "adjacent": []},
+        },
+        "positions": {"bulkhead": "plant", "cupboard": "pantry"},
+        "entities": {
+            "bulkhead": {"name": "plant room bulkhead door", "kind": "door",
+                         "state": {"open": True}},
+            "cupboard": {"name": "corner cupboard door", "kind": "door",
+                         "state": {"open": True}},
+        },
+    }
+    portals = _visible_portal_states(scene, "plant", {"plant", "spine"})
+    assert portals["door to Spine"] == "shut"
+    assert "plant room bulkhead door" not in portals, (
+        "a guessed door-claim contradicted the edge in the same payload")
+
+    # A door with no room behind it has no edge to contradict, and keeps its
+    # own state -- which is what the guessing branch is actually for.
+    assert _visible_portal_states(
+        scene, "pantry", {"pantry"})["corner cupboard door"] == "open"
+
+    # And a BOUND portal still speaks, because it names the rooms it joins.
+    scene["entities"]["bulkhead"]["state"] = {
+        "link": {"rooms": ["plant", "spine"], "phase": "open"}}
+    linked = _visible_portal_states(scene, "plant", {"plant", "spine"})
+    assert linked["plant room bulkhead door"] == "open"

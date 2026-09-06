@@ -7293,6 +7293,49 @@ hunger moves by 0.0002 across a four-minute scene. Nothing in this story
 depended on it, and re-pricing appetite is not the same question as
 re-pricing a doorway.
 
+### 1.143 A door exists twice and only one of them decides passage
+
+**Found and fixed 2026-09-06, descent turn 20.** The player pried a bulkhead
+open a hand's width, knelt, and put a lamp through the gap. Perception showed
+him unbroken steel, and the narrator wrote it beautifully -- "nothing showed
+in the beam" -- with his companion standing on the other side of it.
+
+The beat encoded the opening perfectly, in the wrong place. The objects hand
+wrote `entities.plant_room_bulkhead_door.state = {closed: false, ajar: true,
+gap: "hand's width", dogged: false}`; `rooms.sub5a_plant_room.adjacent` came
+back EMPTY, so the edge still read `closed_door`. Sight, sound, scent and
+passage all read the EDGE, and the edge had not moved.
+
+**Both representations reached the page.** `narration._visible_portal_states`
+builds its answer from door-like ENTITIES and from edge barriers, so the
+narrator was handed "open" and "shut" about one door in the same payload.
+
+**Fixed at the cause, in the objects card, both packs.** The entities chunk
+already carried the shape of this rule -- "WHERE A THING IS IS NEVER ONE OF
+THOSE KEYS ... a state word saying a thing is hidden is read by NOTHING" --
+and it now extends to ways: a door between two rooms is an edge, its barrier
+is what decides passage, and an entity for the same door is scenery that may
+say what it is made of and not whether it is open. A lid, a drawer, a
+cupboard, a case -- anything with no room on the other side -- stays the
+entity's, which is the line that keeps the rule from eating the useful case.
+
+**And at the symptom, in the payload.** The first cut dropped every entity
+door-claim where the room had a door edge, and a test caught it: there are
+TWO branches and only one of them is a guess. An entity carrying a portal
+`link` NAMES the two rooms it joins, so it IS that doorway and keeps
+speaking; the other branch infers a door from a word in the entity's name
+(`door|gate|hatch|portal|shutter`) and that guess now yields to the edge. A
+cupboard door has no door edge to contradict and keeps its own state.
+
+The third word-list guess this day to turn out to be the defective half of a
+pair, and the first where the bound alternative was already sitting beside
+it.
+
+**Not fixed, and not this entry's:** the beat still did not encode the
+opening on the edge, because the spatial hand did not write it. The clause
+above removes the place the fact was going instead; whether it now lands in
+`rooms` is the next run's evidence, not this commit's claim.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
