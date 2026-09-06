@@ -86,6 +86,7 @@ from world.spatial import (
     room_of,
     same_subject,
     sense_acuity_offset,
+    sound_bearing,
     size_relation,
     visual_level_between,
 )
@@ -1425,6 +1426,22 @@ def _noun_phrase(text):
     return _en("pose_entity", name=" ".join(words))
 
 
+def _sound_bearing_phrase(scene, observer, source) -> str:
+    """Where a heard movement came from, in the observer's own frame, or "".
+
+    `spatial.sound_bearing` answers with the egocentric sector and never
+    guesses; its own contract is that the record carries no room id and no
+    room name, so a bearing discloses nothing a body's ears did not.
+    """
+    try:
+        rec = sound_bearing(scene, observer, source)
+    except Exception:
+        return ""
+    if not isinstance(rec, dict):
+        return ""
+    return str(rec.get("phrase") or rec.get("sector") or "").strip()
+
+
 def _pose_referent(scene, observer_name, display_map, co_present, other,
                    *, is_self=False):
     """What a pose is arranged against, rendered as the KIND OF THING it is.
@@ -2483,7 +2500,27 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
         # mind fills it, the narrator sited it at a gatehouse, and the
         # invention was filed as memory. Anonymity is for a speaker the
         # observer cannot place.
-        data["attributed"] = bool(can_see and str(display or "").strip())
+        # A VOICE YOU KNOW IDENTIFIES ITS OWNER, SEEN OR NOT. This gated
+        # attribution on SIGHT, so a line from a body standing behind you --
+        # or across a dark room, or through a door -- arrived anonymous
+        # however well you know them, which is not how ears work. Recognition
+        # is the question, and `display` already answers it: this label comes
+        # from `observer_display_map`, which returns a recognised body's OWN
+        # NAME and a stranger a descriptor, and which applies
+        # `disguise_breaks_recognition` on the way -- so a disguise that means
+        # to conceal who someone is takes their voice with it, and one that
+        # only hides features does not.
+        #
+        # RESIDUAL, registered rather than invented: a voice-only disguise --
+        # ordinary appearance, deliberately altered voice -- has no field to
+        # be authored in. It is a real thing a body does and the engine
+        # cannot yet say it.
+        _speaker = str(entry.get("speaker") or "").strip()
+        _label = str(display or "").strip()
+        _knows_the_voice = bool(
+            _speaker and _label.casefold() == _speaker.casefold())
+        data["attributed"] = bool(_label) and (bool(can_see)
+                                               or _knows_the_voice)
         fidelity = "fragment"
     else:
         data["body"] = body
@@ -2579,9 +2616,34 @@ def act_percept(scene, event, observer_name, actor_name, rel, *,
                            "no observable surface -- a mental beat")
         return None                       # a mental beat is imperceptible
     if entity_arc(scene, observer_name, actor_name) == "rear":
-        note_step_decision("act_percept", _who, "refused",
-                           "actor is in the observer's rear arc")
-        return None
+        # WHAT IS BEHIND YOU IS NOT SEEN, AND IT IS STILL HEARD. `entity_arc`
+        # has always promised exactly this -- "no new visual detail from
+        # them ... though sound still carries" -- and nothing carried it,
+        # because an act reached an observer on the SIGHT channel alone. So
+        # five bodies at one anchor split into the two facing the actor, who
+        # got the beat, and three facing away, who acted as if it had not
+        # happened (multitude, 2026-09-05, PM5).
+        #
+        # What crosses is that SOMETHING MOVED, and where -- never who, and
+        # never what they were doing. A footstep does not carry an identity
+        # and a hand's shape does not carry at all, so the surface is
+        # dropped whole and the label with it; `sound_bearing` supplies the
+        # observer's own egocentric sector where the geometry supports one
+        # and nothing when it does not, and it is firewall-clean by
+        # construction (it names no room and no body).
+        note_step_decision("act_percept", _who, "delivered",
+                           "actor is in the observer's rear arc -- heard, "
+                           "not seen, and not identified")
+        return Percept(
+            kind="act", channel="hearing", source_label="",
+            fidelity="shapes",
+            data={"motion": True, "unseen": True,
+                  **({"bearing": _bearing}
+                     if (_bearing := _sound_bearing_phrase(
+                         scene, observer_name, actor_name)) else {})},
+            salience=0.4, suddenness=0.3, order_key=order_key,
+            dedupe_key="act-heard:" + _short_hash(
+                event.get("event_id") or "", actor_name))
     if not can_see or sight == "none":
         note_step_decision("act_percept", _who, "refused",
                            "observer cannot see (sight gate)")
@@ -3433,6 +3495,10 @@ def _render_event(p):
         return (_en("speech_via", sentence=line.rstrip("."), via=via)
                 if via and line else line)
     if p.kind == "act":
+        if p.data.get("unseen"):
+            bearing = str(p.data.get("bearing") or "").strip()
+            return (_en("act_heard_placed", where=bearing) if bearing
+                    else _en("act_heard"))
         if p.fidelity == "shapes":
             return _en("act_shapes", label=_cap(p.source_label))
         return _observable_predicate(

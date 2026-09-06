@@ -163,6 +163,8 @@
   "templates": {
     "act": "{label}は{action}",
     "act_shapes": "{label}が動いているが、それ以上は見て取れない。",
+    "act_heard": "背後で何かが動く気配がする。",
+    "act_heard_placed": "{where}で何かが動く気配がする。",
     "activity": "あなたは{value}。",
     "appearance": "{description}が見える。",
     "appearance_change": "{label}は{change}。",

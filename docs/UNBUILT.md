@@ -6779,7 +6779,7 @@ itself makes).
   its own beyond the view. Two was chosen because one shared word is a
   coincidence; nobody has replayed it against the stored corpus.
 
-### 1.136 The rear arc promises sound and delivers silence — an owner decision, sharpened by the horror run
+### 1.136 The rear arc promises sound and delivers silence — ANSWERED and BUILT 2026-09-05
 
 **Isolated 2026-09-05** (multitude § PM5, lane B's trace). `spatial.entity_arc`
 documents the blind spot as *"the observer gets NO NEW VISUAL detail from them
@@ -6818,9 +6818,48 @@ first twenty beats. So the fork is stated and left:
   deliverable by hearing at all, which is § 1.117 from the other side and is
   a representation change rather than a gate change.
 
-They are not exclusive; (b) is owed either way. What must not happen is (a)
-landing quietly as a side effect of some other repair, which is why it is
-written down before the run rather than after it.
+**The owner took (b), and sharpened it into three rules.** *"Receive only the
+sounds someone behind you makes"*; *"it doesn't make sense to identify someone
+purely by sound"*; and, on a voice specifically, *"Their voice? Yeah
+absolutely if you already know them ... But maybe someone purposefully adjusts
+their voice."*
+
+**Built.** A rear-arc act is now a HEARING percept: that something moved, and
+where, never who and never what they were doing -- the surface is dropped
+whole and the label with it, because a footstep carries no identity.
+`spatial.sound_bearing` supplies the observer's own egocentric sector where
+the geometry supports one and nothing when it does not, and it is
+firewall-clean by construction (its record names no room and no body).
+`act_heard` / `act_heard_placed` in both packs.
+
+And the voice half, which turned out to be a defect of its own:
+`speech_percept` gated attribution on SIGHT, so a line from a body behind you
+-- or across a dark room, or through a door -- arrived anonymous however well
+you knew them. Recognition is the question, and `observer_display_map` already
+answers it, returning a recognised body's own NAME and a stranger a
+descriptor. It applies `disguise_breaks_recognition` on the way, so a disguise
+that MEANS to conceal who somebody is takes their voice with it and one that
+only hides features does not -- which is the owner's third sentence, already
+built, reached by asking the existing question instead of a new one.
+
+**(a) was NOT taken and the blind spot is untouched**: a body behind you is
+still absent from presence, still gives no appearance and no conduct. The
+descent run will exercise it.
+
+**Residual, registered rather than invented: a VOICE-ONLY disguise.** Ordinary
+appearance, deliberately altered voice, is a real thing a body does and the
+engine has no field for it -- `conceals_identity` lives on the disguise, which
+is about what is seen. A per-line or per-body voice-concealment flag is the
+shape, and it wants authoring surfaces (card, Director channel, both packs)
+rather than a guess.
+
+**Also still owed: a genuinely SILENT act behind you.** What is delivered now
+is "something moved", and a gesture makes no sound. The engine cannot tell a
+footstep from a raised hand without reading the prose, which is the guard
+class this repo has been burned by; the structural answer is whether the body
+CHANGED PLACE this beat, which `act_percept` cannot see. Over-granting a sound
+is the safe direction against three of five bodies missing the beat entirely,
+and it is the direction taken.
 
 ## 2. Roadmap
 
