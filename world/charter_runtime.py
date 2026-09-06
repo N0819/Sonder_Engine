@@ -32,6 +32,7 @@ from world.charter_surface import (appearance_text, surface_has_content,
 
 
 CHARTERS_KEY = "charters"
+from world.spatial import SENSORY_EVENTS_KEY
 REGISTRY_VERSION = 1
 DEFAULT_WINDOW_HOURS = 4.0
 #: How much simulated time one IN-PLAY catch-up may burn. A story returning to
@@ -2681,6 +2682,18 @@ def schedule_charter_ticks(ctx, epoch=None):
     def _produce(job):
         registry = registry_for_update(cid, frame_id)
         source_revision = registry_revision(registry)
+        # WHAT THE WORLD WAS HEARD DOING, BEFORE ANYTHING WALKS. A creature
+        # is drawn by what it hears (`hunt_moves`' `noises`), and the beat's
+        # own noises are on the scene where the objects hand and the
+        # creatures both leave them. Stamped here, immediately before the
+        # advance that reads it, so a body that made a sound this beat is
+        # the reason something moves next.
+        try:
+            hearing_for_creatures(
+                registry, scene,
+                (scene.get(SENSORY_EVENTS_KEY) or {}).get("events") or ())
+        except Exception:
+            pass                  # a creature that hears nothing simply hunts
         advanced, rows, produced = advance_snapshot(
             registry, elapsed_seconds=elapsed, epoch_id=beat_id,
             base_turn=base_turn, cid=cid, frame_id=frame_id, scene=scene,
