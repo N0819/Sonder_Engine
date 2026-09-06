@@ -56,13 +56,13 @@ from world.spatial_containment import container_of
 from world.spatial_fov import (
     _Field,
     _HEIGHT_RANK,
-    _centre,
     _door_cells,
     _observer_cell,
     _wall_verdict,
     body_cell,
     feature_visibility,
     grid_side,
+    room_centre,
     room_field,
     room_has_geometry,
 )
@@ -686,7 +686,7 @@ def acoustic_grid(scene, room_id) -> Optional[_Field]:
     `sound_passes`, every wall record carrying its aperture's `pass`."""
     if not room_id:
         return None
-    return room_field(scene, room_id, through=sound_passes)
+    return room_field(scene, room_id, through=sound_passes, derive=True)
 
 
 def _crossing_pass(field, a, b) -> float:
@@ -948,7 +948,7 @@ def sound_sources(scene: dict, *, turn_idx=None, crowds=None, events=None,
             if cell is None:
                 cell = body_cell(scene, eid) or body_cell(scene, label)
             if cell is None:
-                cell = _centre(grid_side(scene, room))
+                cell = room_centre(scene, room)
             out.append({"id": str(eid), "kind": "entity", "room": str(room),
                         "cell": cell, "power": power, "level": level,
                         "holder": holder, "beat": beat, "label": label})
@@ -962,7 +962,7 @@ def sound_sources(scene: dict, *, turn_idx=None, crowds=None, events=None,
         level = CROWD_SOUND.get(normalize_band(crowd.get("band")), "audible")
         out.append({"id": "crowd:%s" % (crowd.get("uid") or room),
                     "kind": "crowd", "room": room,
-                    "cell": _centre(grid_side(scene, room)),
+                    "cell": room_centre(scene, room),
                     "power": SOUND_POWER[level], "level": level,
                     "holder": None, "beat": "steady"})
     for idx, event in enumerate(events or []):
@@ -973,14 +973,14 @@ def sound_sources(scene: dict, *, turn_idx=None, crowds=None, events=None,
         if not room or room not in rooms:
             continue
         out.append({"id": "event:%d" % idx, "kind": "event", "room": room,
-                    "cell": _centre(grid_side(scene, room)),
+                    "cell": room_centre(scene, room),
                     "power": _event_power(event), "level": None,
                     "holder": None, "beat": "steady"})
     for name, volume in sorted((speakers or {}).items()):
         room = room_of(scene, name)
         if not room or room not in rooms:
             continue
-        cell = body_cell(scene, name) or _centre(grid_side(scene, room))
+        cell = body_cell(scene, name) or room_centre(scene, room)
         vol = str(volume or "normal").strip().casefold()
         out.append({"id": "speech:%s" % name, "kind": "speech",
                     "room": str(room), "cell": cell,
@@ -1090,8 +1090,7 @@ class SoundField:
         room = room or room_of(self.scene, name)
         if not room or room not in self.grid.offsets:
             return None
-        cell = body_cell(self.scene, name) or _centre(
-            grid_side(self.scene, room))
+        cell = body_cell(self.scene, name) or room_centre(self.scene, room)
         at = self.grid.cell_of(room, cell)
         return at if at in self.grid.inside else None
 
@@ -1163,15 +1162,42 @@ class SoundField:
     def noise_at(self, listener, *, exclude=(), room=None) -> Optional[float]:
         """The listener's NOISE (§ 4.4): every placed source's intensity at
         the listener's cell except those in `exclude` (ids, or the name of a
-        body whose speech is the signal), plus the room's ambient floor."""
+        body whose speech is the signal) AND except any source standing
+        where an excluded one stands, plus the room's ambient floor.
+
+        A SOUND IS NOT MASKED BY A SOUND ARRIVING FROM ITS OWN PLACE. Two
+        noises made at one spot reach an ear as one louder noise from that
+        spot; what an ear cannot do with them is tell them apart, and the
+        model's word for that is `fragment` against `full`, not silence.
+        Counting each as the other's noise says the opposite, and says it
+        with force: a ratio test gives every source `1 / (N - 1)` of the
+        din, so two equal sounds in one place are marginal and THREE ARE
+        INAUDIBLE AT ANY VOLUME -- measured, three sources of power 100
+        against an ambient of 0.05, all three `none`.
+
+        It is not a corner. A beat's sound events are all placed at their
+        room's centre (`sound_sources`), because a one-off noise says which
+        room it was in and nothing finer, so every pair of events in one
+        room lands on one cell by construction. Measured in the descent run
+        (chat 117, turn 13): a pry bar on a door frame and a detonation
+        overhead, both `loud`, both in the service spine, and the containment
+        annex through the open door beside it heard neither -- while either
+        one alone was `full` there.
+        """
         cell = self.locate(listener, room)
         if cell is None:
             return None
         skip = {str(x).strip().casefold() for x in exclude if x}
+        at_hand = {(source["room"], tuple(source["cell"]))
+                   for source in self.sources
+                   if source["id"].casefold() in skip
+                   or source["id"].casefold().removeprefix("speech:") in skip}
         total = self.ambient.get(self.grid.inside[cell], AMBIENT["enclosed"])
         for source in self.sources:
             sid = source["id"].casefold()
             if sid in skip or sid.removeprefix("speech:") in skip:
+                continue
+            if (source["room"], tuple(source["cell"])) in at_hand:
                 continue
             total += self.intensity_at(source, cell)
         return total

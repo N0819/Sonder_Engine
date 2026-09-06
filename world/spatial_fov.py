@@ -74,6 +74,7 @@ from world.spatial_orientation import (
     _BEARINGS,
     _LEFT_SECTORS,
     _RIGHT_SECTORS,
+    derived_edge_bearings,
     normalize_bearing,
     normalize_vertical,
     opposite_bearing,
@@ -452,7 +453,7 @@ def _inward(bearing: str) -> tuple:
     return dx, dy
 
 
-def anchor_cells(scene: dict, room_id) -> dict:
+def anchor_cells(scene: dict, room_id, *, derive=False) -> dict:
     """{anchor_id: {cells: [(x,y)...], height, opacity, footprint, dir,
     desc, implicit}} for every effective anchor of the room.
 
@@ -467,7 +468,7 @@ def anchor_cells(scene: dict, room_id) -> dict:
     everything it reads cannot go stale.
     """
     grid = room_grid(scene, room_id)
-    anchors = effective_anchors(scene, room_id)
+    anchors = effective_anchors(scene, room_id, derive=derive)
     import json as _json
     key = _json.dumps([str(room_id), grid.key(), anchors], sort_keys=True,
                       default=str)
@@ -599,6 +600,29 @@ def _centre(side: int) -> tuple:
     """The centre of a square grid -- kept for the one caller with no room
     to ask (`_observer_cell` on a body in no room)."""
     return (side // 2, side // 2)
+
+
+def room_centre(scene: dict, room_id) -> tuple:
+    """The middle of THIS room, which is not the middle of a square unless
+    the room is one.
+
+    `_centre(grid_side(...))` takes the room's CHARACTERISTIC length -- the
+    longer side -- and squares it, so a room longer than it is wide puts its
+    own centre outside itself: a 6 by 24 service spine answered (12, 12)
+    with six cells of width, and a corridor is the commonest room there is.
+    Every caller of that pair drops a source whose cell is off the grid, so
+    a noise made in a corridor reached NOBODY, including the people standing
+    in it. Measured in the descent run (chat 117, turn 13): three sound
+    events, two of them in the spine the players were standing in, and the
+    field placed none of the three.
+
+    `nearest` finishes the answer for a shape that has no cell there at all
+    -- an L bends around its own middle, a round room clips its corners --
+    so this is a cell the room actually holds in every case. For a square
+    room it is the cell `_centre` always returned.
+    """
+    grid = room_grid(scene, room_id)
+    return grid.nearest((grid.w // 2, grid.d // 2))
 
 
 def _takes_cover(station: dict, anchor_id) -> bool:
@@ -921,14 +945,14 @@ class _Field:
         # See `_wall_verdict`.
         self.walls = []
 
-    def add_room(self, scene, room_id, offset):
+    def add_room(self, scene, room_id, offset, *, derive=False):
         ox, oy = offset
         self.offsets[room_id] = offset
         # The SHAPE's cells, not the box: a round room's corners and an L's
         # notch are outside `inside`, so a line through them meets a wall.
         for x, y in room_grid(scene, room_id).cells:
             self.inside[(x + ox, y + oy)] = room_id
-        placed = anchor_cells(scene, room_id)
+        placed = anchor_cells(scene, room_id, derive=derive)
         self.anchors[room_id] = placed
         for aid, rec in placed.items():
             if rec["opacity"] != "opaque" or rec["implicit"]:
@@ -945,7 +969,7 @@ class _Field:
         return (cell[0] + ox, cell[1] + oy)
 
 
-def _door_cells(scene, room_id, neighbour_id):
+def _door_cells(scene, room_id, neighbour_id, *, derive=False):
     """(cells, bearing) of the room's doorway onto `neighbour_id`, or
     (None, None) when the door has no bearing to place it by. The cells are
     the door anchor's whole extent along its wall: the aperture is as wide
@@ -955,7 +979,8 @@ def _door_cells(scene, room_id, neighbour_id):
     `_place_anchors` reads it); without one the doorway sits at the seeded
     cell it always did."""
     from world.spatial_geometry import door_anchor_id
-    placed = anchor_cells(scene, room_id).get(door_anchor_id(neighbour_id))
+    placed = anchor_cells(scene, room_id, derive=derive).get(
+        door_anchor_id(neighbour_id))
     if not placed or not placed["cells"] or not placed.get("dir"):
         return None, None
     return list(placed["cells"]), placed["dir"]
@@ -1000,7 +1025,7 @@ def _sight_neighbours(scene, room_id):
             in _placed_neighbours(scene, room_id, sight_passes)]
 
 
-def _placed_neighbours(scene, room_id, through):
+def _placed_neighbours(scene, room_id, through, *, derive=False):
     """`[(neighbour id, bearing, pass)]` for every edge `through` admits.
 
     ONE PLACEMENT FOR EVERY SENSE. `through(scene, room_id, edge)` answers
@@ -1017,6 +1042,7 @@ def _placed_neighbours(scene, room_id, through):
     """
     from world.spatial_barriers import effective_adjacent
     rooms = (scene or {}).get("rooms") or {}
+    derived = derived_edge_bearings(scene) if derive else {}
     out = []
     for edge in effective_adjacent(scene, room_id):
         if not isinstance(edge, dict) or not edge.get("to"):
@@ -1027,7 +1053,24 @@ def _placed_neighbours(scene, room_id, through):
         factor = through(scene, room_id, edge)
         if not factor or factor <= 0:
             continue
-        bearing = normalize_bearing(edge.get("dir"))
+        # A doorway both sides left silent about is laid out at the wall
+        # `derived_edge_bearings` gives it, which is the same guess
+        # `effective_anchors` puts on its implicit anchor -- one derivation,
+        # so the neighbour and its door cells agree about which wall they
+        # are in. A bearing anyone DECLARED is used unchanged.
+        #
+        # ONLY WHERE THE ANSWER IS AN AMOUNT (`derive`). Sound and light ask
+        # how much of a thing reaches you, and a guessed wall moves that
+        # number a little in a model that is an estimate throughout. Sight
+        # asks WHAT you can make out, and its answer is a list of things: a
+        # guessed wall there does not shade an answer, it mints an object
+        # the observer could not have seen, and whose fault that is would be
+        # the engine's. So sight keeps its refusal -- a neighbour it cannot
+        # place is named at the threshold and its contents are not claimed
+        # (`test_openings_in_view.py`) -- and the derivation is asked for by
+        # the two senses whose failure is a level rather than a fact.
+        bearing = normalize_bearing(edge.get("dir")) \
+            or derived.get((str(room_id), other))
         if bearing:
             out.append((other, bearing, float(factor)))
     return out
@@ -1043,7 +1086,8 @@ def observer_field(scene: dict, observer: str) -> Optional[_Field]:
     return room_field(scene, room_id)
 
 
-def room_field(scene: dict, room_id, *, through=None) -> Optional[_Field]:
+def room_field(scene: dict, room_id, *, through=None,
+               derive=False) -> Optional[_Field]:
     """`observer_field` by ROOM: the composite every observer standing in
     `room_id` sees over, which depends on the room alone. Split out so the
     light field (`world/spatial_light_field.py`) can be computed once per
@@ -1060,12 +1104,12 @@ def room_field(scene: dict, room_id, *, through=None) -> Optional[_Field]:
     if not room_id or room_id not in ((scene or {}).get("rooms") or {}):
         return None
     field = _Field()
-    field.add_room(scene, room_id, (0, 0))
+    field.add_room(scene, room_id, (0, 0), derive=derive)
     grid = room_grid(scene, room_id)
     for other, _bearing, factor in _placed_neighbours(
-            scene, room_id, through or sight_passes):
-        d1s, b1 = _door_cells(scene, room_id, other)
-        d2s, _b2 = _door_cells(scene, other, room_id)
+            scene, room_id, through or sight_passes, derive=derive):
+        d1s, b1 = _door_cells(scene, room_id, other, derive=derive)
+        d2s, _b2 = _door_cells(scene, other, room_id, derive=derive)
         if not d1s or not d2s:
             continue
         d1, d2 = d1s[0], d2s[0]
@@ -1079,7 +1123,7 @@ def room_field(scene: dict, room_id, *, through=None) -> Optional[_Field]:
         if any((x + offset[0], y + offset[1]) in field.inside
                for x, y in far.cells):
             continue                        # two doorways on one wall overlap
-        field.add_room(scene, other, offset)
+        field.add_room(scene, other, offset, derive=derive)
         # THE WALL IS A LINE AND THE DOORWAY IS A GAP IN IT. The band of
         # cells between the two grids is where the wall stands; its midline
         # is the wall, of no thickness, and the doorway's cells give the gap

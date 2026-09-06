@@ -809,7 +809,7 @@ def compute_light_field(scene: dict, room_id, *, beat=None,
     when the room has no geometry to compute over (§ 7: fail-open)."""
     if not light_geometry_exists(scene, room_id):
         return None
-    field = room_field(scene, room_id, through=light_passes)
+    field = room_field(scene, room_id, through=light_passes, derive=True)
     if field is None:
         return None
     if beat is None:

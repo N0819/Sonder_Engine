@@ -8,6 +8,7 @@ from typing import Optional
 from world.spatial_orientation import (
     _LEFT_SECTORS,
     _RIGHT_SECTORS,
+    derived_edge_bearings,
     normalize_bearing,
     normalize_vertical,
     opposite_bearing,
@@ -297,7 +298,7 @@ _BARRIER_ANCHOR_DESC = {
 }
 
 
-def effective_anchors(scene: dict, room_id) -> dict:
+def effective_anchors(scene: dict, room_id, *, derive=False) -> dict:
     """S1a: the room's authored anchors plus one implicit `door:<to>`
     pseudo-anchor per adjacency edge (declared from either side), each
     carrying the edge's bearing when it has one.
@@ -350,6 +351,16 @@ def effective_anchors(scene: dict, room_id) -> dict:
             anchor["width"] = width
         out[aid] = anchor
 
+    # A DOORWAY NOBODY GAVE A WALL STILL HAS ONE, WHERE THE CALLER ASKED
+    # (`derived_edge_bearings`, and `spatial_fov._placed_neighbours` for why
+    # sound and light ask while sight does not).
+    # An implicit anchor with no bearing places nothing: `_place_anchors`
+    # seeds it free of the rim and `_door_cells` refuses it outright, so the
+    # composite laid out no neighbour across it and every sense stopped at
+    # the room's own walls. A planned room's edges carry no bearing at all
+    # -- the plan schema does not ask for one -- which was 38 of the 54
+    # edges live on 2026-09-06. The guess decides which wall, and only that.
+    derived = derived_edge_bearings(scene) if derive else {}
     # Each edge as its readers see it: through the passage it names, when it
     # names one (`resolve_edge`, the passage record of DESIGN_ROOM_FIDELITY
     # §5), so the door anchor's barrier and width are the doorway's from
@@ -358,7 +369,8 @@ def effective_anchors(scene: dict, room_id) -> dict:
         if isinstance(edge, dict) and edge.get("to"):
             edge = resolve_edge(scene, edge)
             add(edge["to"], edge.get("barrier"),
-                normalize_bearing(edge.get("dir")),
+                normalize_bearing(edge.get("dir"))
+                or derived.get((str(room_id), str(edge["to"]))),
                 normalize_vertical(edge.get("vertical")),
                 normalize_offset(edge.get("offset")), edge.get("width"))
     # An edge declared only from the neighbour's side is still a doorway in
@@ -371,7 +383,8 @@ def effective_anchors(scene: dict, room_id) -> dict:
             if isinstance(edge, dict) and edge.get("to") == room_id:
                 edge = resolve_edge(scene, edge)
                 add(other_id, edge.get("barrier"),
-                    opposite_bearing(normalize_bearing(edge.get("dir"))),
+                    opposite_bearing(normalize_bearing(edge.get("dir")))
+                    or derived.get((str(room_id), str(other_id))),
                     opposite_vertical(normalize_vertical(edge.get("vertical"))),
                     normalize_offset(edge.get("offset")), edge.get("width"))
     return out

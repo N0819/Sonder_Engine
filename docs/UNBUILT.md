@@ -6861,7 +6861,7 @@ CHANGED PLACE this beat, which `act_percept` cannot see. Over-granting a sound
 is the safe direction against three of five bodies missing the beat entirely,
 and it is the direction taken.
 
-### 1.137 A planned room is deaf until somebody puts a counter in it
+### 1.137 A planned room is deaf until somebody puts a counter in it — BUILT 2026-09-06
 
 **Measured 2026-09-05, descent run.** `sound_field` gates on
 `room_has_geometry`, which is the FOV layer's opt-in for the per-observer
@@ -6915,8 +6915,77 @@ the world for the first time.
 
 **The owner chose the wide option on 2026-09-06** ("the option that gives the
 most realistic sound travel ... we have to estimate planned rooms to some
-extent, which is fine"). It is NOT yet taken, because implementing it found
-what it is blocked behind, below.
+extent, which is fine"), and it is TAKEN: `sound_field` gates on
+`_room_grid_exists` (the light field's `light_geometry_exists`, which gained
+an extent check the same commit -- it predated extents, and `size_from_extent`
+derives the tier FROM an extent, so a measured room with no size word had no
+grid for either sense). Descent story: fields on 2 of 10 rooms before, 9 of 10
+after.
+
+**IT WAS NOT THE LAST GATE. Switching the field on found three more, each of
+which had been invisible while the field ran for four rooms** (all fixed
+2026-09-06, all in the same commit, with the run parked on the beat that
+exposed them):
+
+  * **A doorway with no bearing places no neighbour, so every composite was an
+    ISLAND.** `room_field` lays a neighbour out from the edge's bearing, and a
+    bearing is written by a hand that stood in the room. A room the Writers'
+    Room planned has never been stood in: the plan schema asks for `{to,
+    barrier, distance}` and no bearing at all. Measured across the stories
+    live that day (chats 115, 116, and the descent copy): **4 of 54 edges
+    carried a bearing, and 0 of the 38 belonging to a planned room.** So the
+    near field existed and reached only the listener's own walls.
+    `spatial_orientation.derived_edge_bearings` gives a doorway both sides
+    left silent a wall -- pairwise, reciprocal, never over a declared bearing,
+    eight points to a room and the ninth unplaced. **Sound and light ask for
+    it and SIGHT DOES NOT** (`room_field(derive=...)`): a guessed wall shades
+    an amount, which is what those two answer, but it MINTS AN OBJECT in a
+    list of what an observer can make out, and that would be an engine-made
+    fact. `tests/test_openings_in_view.py` already held that line and is why
+    the scoping exists.
+  * **A room longer than it is wide put its own centre outside itself.**
+    `_centre(grid_side(...))` squares the room's LONGER side: a 6 by 24
+    service spine answered (12, 12) with six cells of width. Every source
+    placed there -- every crowd, every one-beat sound event, every unmeasured
+    body -- was off the grid and silently dropped, so **a noise made in a
+    corridor reached nobody, the people standing in it included.**
+    `spatial_fov.room_centre` asks the room's own grid and finishes through
+    `nearest`, so an L or a round room gets a cell it actually holds; a square
+    room keeps the cell it always had.
+  * **Sounds made in one place masked each other into silence.** A ratio test
+    gives each of N equal sources `1 / (N - 1)` of the din, so two in one
+    place were marginal and **three were inaudible at any volume** (measured:
+    three sources of power 100 against an ambient of 0.05, all three `none`).
+    Not a corner: a beat's events are all placed at their room's centre,
+    because a one-off noise says which room it was in and nothing finer, so
+    every pair of them in one room shares a cell by construction. `noise_at`
+    now skips a source standing where the excluded one stands -- two noises at
+    one spot reach an ear as one louder noise, and what an ear cannot do with
+    them is tell them apart, which is `fragment` against `full` and not
+    silence. Two voices from two DIFFERENT places mask each other exactly as
+    before.
+
+**And one that was not the sound field's at all** -- found in the same beat
+and fixed with it, because it decided what the sound crossed:
+
+  * **A stub's doorway is the plan's guess, and the story never overruled
+    it.** A planned room takes its exits from the plan, where the barrier is
+    whatever the Room wrote before anybody had been there; when a hand later
+    describes that doorway from the room it can actually see, the two sides
+    disagree and every sense reads whichever it stands on.
+    `spatial_merge._mirror_symmetric_barriers` states the rule for a diff and
+    the plan-supply path never met it. Measured, descent turn 13: **six of the
+    seven doorways off one service spine disagreed with themselves**, and the
+    containment annex -- which the spine records behind a shut `closed_door`
+    named "the containment door" -- heard through an `open_door`, because that
+    is what its own side still said. `structure._settle_stub_barriers`: the
+    plan yields and the story stands, only for a room still carrying
+    `planned`, and only to a barrier the other side actually declares.
+    Closing it also closed a content leak on its own: with the barrier
+    corrected, ordinary speech in the spine no longer reaches the annex at
+    all (`normal` -> `none` through a shut door), where before the creature
+    standing there was receiving `witnessed_speech` claims carrying both
+    characters' exact quotes. The class that leak belongs to is § 1.139.
 
 ### 1.138 An anchor with no bearing is placed in the middle of the room
 
@@ -6964,10 +7033,58 @@ deterministic and stable across reads. Implemented by seeding a bearing and
 falling through to the existing wall path, so there is one placement model
 rather than two.
 
-**Order: this, then § 1.137.** Not because this is large -- it is 3.6% of
-anchors -- but because widening the sound gate first would ship the whisper
-regression in exactly the case the estimate is worst at, and this removes the
-case.
+**Order, as it actually went (superseded 2026-09-06).** This entry asked for
+this first and § 1.137 second, on the reasoning that widening the sound gate
+would ship the whisper regression in the case the estimate is worst at.
+§ 1.137 landed first anyway, and the regression did not appear: the whisper
+fixture the argument rests on carries two undirected anchors, which is 3.6% of
+anchors twice over and not what a room looks like. The fixture was given
+bearings (96.4% of live anchors have one) and the suite stayed green. So this
+is still worth doing and is no longer blocking anything.
+
+### 1.139 A creature holds the words it merely heard
+
+**Found 2026-09-06, descent run turn 13, and NOT fixed.** `charter_observe`
+delivers a beat's public conduct to every Charter body that sensed it, and
+speech admitted at `full` lands as an ordinary `kind='news'` claim carrying
+`exact_quote`, the speech acts, and a `figure` claim for the speaker. That is
+right for a person: gossip, reporting lines, carrier projection and promotion
+all know how to move a news claim, and a body that heard the words has the
+words.
+
+A CREATURE IS ON THE SAME RAIL. `charter_creature`'s carbonic stalker, one
+room away through what its own side of the doorway called an open door, held
+both characters' lines verbatim -- `claim_text`, `exact_quote`, `speech_acts`,
+`provenance: witnessed_speech` -- and a figure claim for each speaker. The
+owner's design statement for creature hearing is the opposite of that:
+"doesn't need to parse what it hears at words. just needs to parse that it
+heard something", which is what `hearing_for_creatures` builds (`overheard`,
+`{room: rank}`, no words, no speaker, no content).
+
+Two things are true at once, which is why this is a decision and not a bug:
+the creature DID have a channel (a body with ears in the next room), so
+nothing crossed a firewall; and a thing with no language holding a transcript
+is wrong the moment the pipeline renders it "with full fidelity" at the
+Director bubble, because it arrives carrying conversations it can only have
+heard as noise.
+
+**Not decidable from the engine's vocabulary as it stands.** "Creature" is one
+flag (`state.creature`) covering everything from a stalker to a horror that
+talks, and the distinction the rule needs is whether a mind has LANGUAGE, which
+nothing on the charter says. The narrow reading -- a creature receives the
+noise channel and not the speech channel -- would be wrong for the talking
+horror; the wide reading -- every mind holds what it heard -- is what is built
+and is wrong for the stalker.
+
+**No longer live in the descent story**, because § 1.137's barrier repair drops
+ordinary speech from the spine to the annex to `none`. The class stands.
+
+**A second, smaller thing in the same rows:** a landed claim's `place` is the
+WITNESS's room ("what this Charter person believes they saw at this place"),
+so the stalker's figure claim puts both characters in the annex while they
+stand in the spine. Nothing hunts by it -- `hunt_moves` reads `overheard` and
+the sensed rooms, not `minds` -- so it costs nothing today, and it would cost
+a great deal the first time something does read it.
 
 ## 2. Roadmap
 

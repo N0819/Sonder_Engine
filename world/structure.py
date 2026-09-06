@@ -535,7 +535,53 @@ def materialize_planned_fringe(cid, scene):
             if to and to in rooms:
                 edges.setdefault(to, dict(edge))
         room["adjacent"] = list(edges.values())
+    _settle_stub_barriers(rooms)
     return scene, added
+
+
+def _settle_stub_barriers(rooms):
+    """A STUB'S DOORWAY IS THE PLAN'S GUESS UNTIL SOMEONE STANDS AT IT.
+
+    An edge is one doorway however many sides declare it, and a barrier is a
+    property of the doorway rather than of the side you stand on --
+    `spatial_merge._mirror_symmetric_barriers` states that for a diff, which
+    is where both sides are written by the same hand in the same breath. The
+    plan-supply path above never met that rule: a stub takes its exits from
+    the plan, where the barrier is whatever the Room wrote (or the schema's
+    open way through) before anybody had been there, and it keeps that
+    barrier for ever while the story goes on describing the same doorway
+    from the room it can actually see.
+
+    Every sense then reads whichever side it happens to stand on. Measured
+    in the descent run (chat 117, turn 13): six of the seven doorways off
+    one service spine disagreed with themselves, and the containment annex
+    -- which the spine records behind a shut `closed_door` named "the
+    containment door" -- heard through an `open_door`, because that is what
+    its own side still said.
+
+    The plan yields and the story stands: a stub's barrier is replaced by
+    the one the room on the other side declares, and only ever by a barrier
+    that room actually carries. A stub with prose is not a stub any more
+    (`settle_developed_stubs` takes the flag off) and is not touched, and a
+    declaration made from the stub's OWN side has already been mirrored onto
+    the live room by the merge, so what is left here is exactly the
+    plan-against-story disagreement."""
+    for uid, room in (rooms or {}).items():
+        if not isinstance(room, dict) or not room.get("planned"):
+            continue
+        for edge in room.get("adjacent") or ():
+            if not isinstance(edge, dict) or not edge.get("to"):
+                continue
+            other = rooms.get(str(edge["to"]))
+            if not isinstance(other, dict):
+                continue
+            for back in other.get("adjacent") or ():
+                if not isinstance(back, dict) \
+                        or str(back.get("to") or "") != str(uid):
+                    continue
+                if "barrier" in back and back["barrier"] != edge.get("barrier"):
+                    edge["barrier"] = back["barrier"]
+                break
 
 
 def _planned_specs(cid):

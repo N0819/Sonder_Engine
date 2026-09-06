@@ -269,3 +269,90 @@ def normalize_scene_bearings(scene: dict) -> dict:
                     back.pop("dir", None)
 
     return scene
+
+
+#: The order a doorway with no stated bearing is offered a wall in. Walls
+#: before corners, because a doorway is a gap in a wall and a room set
+#: corner-to-corner with its neighbour is the stranger arrangement of the
+#: two; the four cardinals first, then the four diagonals.
+DERIVED_BEARING_ORDER = ("n", "e", "s", "w", "ne", "se", "sw", "nw")
+
+#: How many doorways one room can be laid out with: the eight points, one
+#: apiece. A room with a ninth way through is not a room this can draw, and
+#: the ninth stays unplaced rather than sharing a wall with the eighth --
+#: sharing is the collision `normalize_scene_bearings` already drops both
+#: sides of. Named because every cap in this engine is named.
+DERIVED_BEARING_LIMIT = len(DERIVED_BEARING_ORDER)
+
+
+def derived_edge_bearings(scene: dict) -> dict:
+    """``{(room_id, to_id): bearing}`` for every doorway NEITHER side gave a
+    bearing to -- a guess at which wall it is in, so the sense composites
+    have somewhere to lay the neighbour out.
+
+    WHY THERE HAS TO BE A GUESS. `spatial_fov.room_field` places a
+    neighbour only where the edge carries a bearing, and a bearing is
+    written by a hand that stood in the room and said which way the door
+    was. A room the Writers' Room planned has never been stood in: the plan
+    writes `{to, barrier, distance}` and the schema asks for no bearing at
+    all. Measured across the two stories in play on 2026-09-06, chats 115,
+    116 and the descent copy: 4 of 54 edges carried a bearing, and 0 of the
+    38 that belong to a planned room. So every composite was an ISLAND --
+    one room, no neighbours -- and the near sound field, switched on for the
+    world the same day, answered `none` to a loud noise through an open door
+    in the next room because the next room was not on the field at all.
+
+    WHAT THE GUESS IS AND IS NOT. It is the same KIND of estimate the field
+    already makes: `_place_anchors` seeds an anchor's place along its wall
+    from a hash, and every reader has always used that. It decides which
+    wall a doorway is in, and nothing else -- not that a room lies north in
+    the world, not what a body would learn by walking it. A bearing anyone
+    DECLARED is never moved, never reassigned, and never contradicted here;
+    only a doorway both sides left silent about is given one.
+
+    Pairwise and reciprocal by construction: the pair is keyed by its two
+    sorted ids and assigned from one place, so the two rooms receive
+    opposite bearings and each lays the other out against the same wall.
+    A point already spoken for at either end is skipped, so a derived
+    doorway never collides with a declared one or with another derived one.
+    """
+    rooms = (scene or {}).get("rooms") or {}
+    if not isinstance(rooms, dict):
+        return {}
+    used: dict = {}
+    spoken = set()
+    pairs = set()
+    for room_id, room in rooms.items():
+        if not isinstance(room, dict):
+            continue
+        for edge in room.get("adjacent") or []:
+            if not isinstance(edge, dict) or not edge.get("to"):
+                continue
+            other = str(edge["to"])
+            if other == str(room_id) or other not in rooms:
+                continue
+            pair = tuple(sorted((str(room_id), other)))
+            pairs.add(pair)
+            bearing = normalize_bearing(edge.get("dir"))
+            if not bearing:
+                continue
+            spoken.add(pair)
+            used.setdefault(str(room_id), set()).add(bearing)
+            opposite = opposite_bearing(bearing)
+            if opposite:
+                used.setdefault(other, set()).add(opposite)
+    silent = pairs - spoken
+    out = {}
+    for near, far in sorted(silent):
+        taken_near = used.setdefault(near, set())
+        taken_far = used.setdefault(far, set())
+        for bearing in DERIVED_BEARING_ORDER:
+            opposite = opposite_bearing(bearing)
+            if bearing in taken_near or not opposite or opposite in taken_far:
+                continue
+            taken_near.add(bearing)
+            taken_far.add(opposite)
+            out[(near, far)] = bearing
+            out[(far, near)] = opposite
+            break
+    return out
