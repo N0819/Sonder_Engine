@@ -8740,83 +8740,29 @@ def _check_action_direction(prose, event_order):
     return warnings
 
 
-#: How many words of a declared act must be the ACT'S OWN -- not already
-#: standing in the view -- before the page is scored for rendering it. Two,
-#: because one shared word is a coincidence and two is a phrase; below it the
-#: act said nothing the room had not already said and there is nothing to
-#: look for. Named rather than buried: it is the whole conservatism of the
-#: check.
-_PLAYER_ACT_MIN_DISTINCT_TOKENS = 2
-
-
-def _act_footprint_tokens(text):
-    """Significant words of one act surface: casefolded, length >= 3,
-    stopwords removed. Pure lexical coverage, no domain vocabulary -- the
-    same construction `agents/director_evidence._decl_tokens` uses on the
-    other side of the turn, over this module's own function-word table
-    (`_OVERLAP_STOPWORDS`) rather than the Director's, because a pack key is
-    read under the namespace of the module reading it."""
-    tokens = set()
-    for tok in re.findall(r"[^\W\d_]+", str(text or "").casefold(), re.UNICODE):
-        if len(tok) >= 3 and tok not in _ling("_OVERLAP_STOPWORDS"):
-            tokens.add(tok)
-    return tokens
-
-
-def _check_player_act_rendered(prose, view, event_order, player_name,
-                               player_aliases=()):
-    """WHAT THE PAGE WAS TOLD IS NOT YET ON IT MUST END UP ON IT.
-
-    The player's own declared conduct reaches the narrator as the numbered
-    head of `current_events`, marked in as many words as not yet on the page
-    and required. Nothing read the page back. Measured (multitude,
-    2026-09-05, PM4): four beats in twenty where the declaration simply did
-    not appear -- turn 7 the player walked the hall, put both palms flat
-    against the shut doors and held them there, and the prose carried none
-    of the three while five other people spoke. `_check_action_direction`
-    fired on three of those four, but only for the movement component and
-    only because those acts named a direction; an act that names none was
-    invisible to every check the stage had.
-
-    WHAT IT LOOKS FOR is the act's own words, which is the only footprint an
-    act HAS: unlike a quote there is no verbatim string to find, and
-    demanding a vocabulary match would force stilted prose. So the act is
-    scored on the words it added to the beat -- its content words minus the
-    ones the composed view was already using, minus the player's own name
-    forms. A beat's room nouns are the view's; the verbs and manner of the
-    act are the declaration's, and if not one of them reached the page the
-    page did not render it.
-
-    A WARNING, deliberately not enforceable. Prose may legitimately carry an
-    act in wholly different words, and buying a rewrite on that judgment is
-    the trade this stage stopped making. It declines outright when the act
-    adds fewer than `_PLAYER_ACT_MIN_DISTINCT_TOKENS` words of its own.
-    """
-    if not player_name or not event_order:
-        return []
-    prose_tokens = _act_footprint_tokens(prose)
-    ambient = _act_footprint_tokens(view)
-    for form in (player_aliases or ()):
-        ambient |= _act_footprint_tokens(form)
-    ambient |= _act_footprint_tokens(player_name)
-    warnings = []
-    for ev in event_order:
-        if not isinstance(ev, dict) or ev.get("kind") != "action":
-            continue
-        if str(ev.get("actor") or "").strip() != str(player_name).strip():
-            continue
-        act = str(ev.get("action") or "").strip()
-        own = _act_footprint_tokens(act) - ambient
-        if len(own) < _PLAYER_ACT_MIN_DISTINCT_TOKENS:
-            continue
-        if own & prose_tokens:
-            continue
-        warnings.append(
-            "Player's declared conduct is missing from narrator prose: "
-            f"\"{act[:80]}\" -- none of "
-            f"{', '.join(sorted(own)[:6])} reached the page."
-        )
-    return warnings
+# THE DECLARED-CONDUCT CHECK IS GONE (2026-09-06, the owner's ruling: a
+# check that fires on otherwise valid output has to die, and the fix belongs
+# in the payload and the prompt).
+#
+# IT ASKED FOR THE OPPOSITE OF WHAT THE NARRATOR PROMPT ASKS FOR. The prompt
+# says, of the player's own body: "If it is about theirs, imply it and move
+# on; if it is about anything else in the room, render it." The check scored
+# the act on its own content words -- the ones the view was not already using
+# -- and warned when none of them reached the page, which is precisely what
+# implying an act produces. Prose that obeyed the instruction was flagged for
+# obeying it.
+#
+# Measured on the descent run (chat 117), where every beat carried it: turns
+# 13, 14 and 15, four firings, and the one I first read as a true positive
+# was not one either -- the page implied the player's stop-and-listen and
+# rendered the echo it was listening to, which is the rule working.
+#
+# The failure it was built for is real and stays the prompt's: multitude
+# 2026-09-05 PM4 turn 7, where the page carried nothing of the player at all
+# while five other people spoke. IMPLYING IS NOT OMITTING, and that sentence
+# is now in the narrator card in both packs, where a rule about how prose
+# reads belongs. A lexical test could not tell the two apart, because the
+# difference is not in the vocabulary.
 
 
 def _actor_reference_patterns(display):
@@ -9591,8 +9537,6 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
         prose, position_facts, room_names))
     warnings.extend(_check_portal_fidelity(prose, portal_states))
     warnings.extend(_check_action_direction(prose, event_order))
-    warnings.extend(_check_player_act_rendered(
-        prose, view_text, event_order, player_name, player_aliases))
 
     # F5-F6: the page against the two records it was written from. Neither is
     # in `_ENFORCEABLE_PREFIXES` -- promotion is a measurement, not an edit.

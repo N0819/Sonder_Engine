@@ -2393,11 +2393,19 @@ def hearing_for_creatures(registry, scene, events):
     window like `heard` beside it: what was audible in this window is never a
     standing fact.
     """
-    from world.spatial import DISTANT_LEVELS, heard_events
+    from world.spatial import (DISTANT_LEVELS, distant_level_word, event_db,
+                               FAR_FIELD_ENTRY_DB, heard_events,
+                               room_sound_flood, _ambient_floor, db_of_power)
 
     items = (registry or {}).get("items") if isinstance(registry, dict) else {}
     rooms = (scene or {}).get("rooms") if isinstance(scene, dict) else None
     rank = {word: n + 1 for n, word in enumerate(DISTANT_LEVELS)}
+    # A NEAR HIT OUTRANKS EVERY FAR ONE. Both channels answer in their own
+    # vocabulary and the creature only needs an ORDER to walk by; what makes
+    # the order right for a hunter is that a sound on its own composite came
+    # from a room it can reach in one step, which is the better thing to
+    # walk at whatever the far field is offering.
+    near_base = len(DISTANT_LEVELS)
     for item in (items or {}).values():
         state = item.get("state") if isinstance(item, dict) else None
         if not isinstance(state, dict) or not state.get("creature"):
@@ -2407,6 +2415,45 @@ def hearing_for_creatures(registry, scene, events):
             places = {str(b.get("place") or "")
                       for b in (state.get("bodies") or {}).values()
                       if isinstance(b, dict) and b.get("place")}
+            # THE FAR FIELD IS THE OTHER HALF OF A BODY'S EARS, and this
+            # function claimed it in its own docstring while calling only
+            # `heard_events`. A body standing in a room receives BOTH -- the
+            # near composite for the rooms its own field places, and
+            # `distant_sounds` for everything beyond -- and a creature was
+            # given one of the two, so it could hear a noise next door and
+            # nothing whatever from two rooms off. Measured on the descent
+            # story (chat 117): a `loud` clang in the plant room reaches the
+            # containment annex at 32.3 dB over a 27.0 floor, and the
+            # creature standing in it heard nothing at all.
+            #
+            # `room_sound_flood` rather than `distant_sounds`, because the
+            # question is different. `distant_sounds` answers a MIND and so
+            # refuses to name the room -- a bearing is a direction and a
+            # direction is not a location, which is that function's floor and
+            # stays its floor. This is the ENGINE deciding where a body
+            # walks, nothing is being told to anybody, and where the noise
+            # came from is exactly what a walk needs.
+            for place in sorted(places):
+                floor_db = db_of_power(_ambient_floor(scene, place))
+                for index, event in enumerate(events or ()):
+                    if not isinstance(event, dict):
+                        continue
+                    source = str(event.get("source_room")
+                                 or event.get("room") or "")
+                    if not source or source == place or source not in rooms:
+                        continue
+                    level_db = event_db(event)
+                    if level_db is None or level_db < FAR_FIELD_ENTRY_DB:
+                        continue        # too quiet to walk the room graph
+                    record = room_sound_flood(scene, source,
+                                              level_db).get(place)
+                    if not record:
+                        continue
+                    word = distant_level_word(float(record["db"]), floor_db)
+                    if not word:
+                        continue
+                    overheard[source] = max(overheard.get(source, 0),
+                                            rank.get(word, 1))
             for place in sorted(places):
                 # THE BODY'S OWN READER, so "the same field a body hears
                 # through" is literally true rather than a second model that
@@ -2421,8 +2468,9 @@ def hearing_for_creatures(registry, scene, events):
                                or "")
                     if not room:
                         continue
-                    overheard[room] = max(overheard.get(room, 0),
-                                          rank.get(str(word), 1))
+                    overheard[room] = max(
+                        overheard.get(room, 0),
+                        near_base + rank.get(str(word), 1))
         state["overheard"] = overheard
     return registry
 

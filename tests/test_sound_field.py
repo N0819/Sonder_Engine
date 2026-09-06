@@ -1137,13 +1137,26 @@ def test_an_event_reads_its_level_word_its_number_and_its_old_intensity():
     """`event_db`, in the one order it reads: an authored `db` first (the
     escape hatch for anything the words do not reach), then `level` off the
     ladder, then the `intensity` `sensory_events` has always carried."""
-    from world.spatial import event_db, SOUND_DB, SPEECH_DB
+    from world.spatial import EVENT_DB, event_db, SOUND_DB, SPEECH_DB
     assert event_db({"db": 137.0}) == 137.0
     assert event_db({"db": 137.0, "level": "faint"}) == 137.0
-    assert event_db({"level": "catastrophic"}) == SOUND_DB["catastrophic"]
+    assert event_db({"level": "catastrophic"}) == EVENT_DB["catastrophic"]
     assert event_db({"intensity": "shout"}) == SPEECH_DB["shout"]
-    assert event_db({"intensity": 1.0}) == SOUND_DB["deafening"]
-    assert event_db({}) == SOUND_DB["audible"]
+    assert event_db({"intensity": 1.0}) == EVENT_DB["deafening"]
+    assert event_db({}) == EVENT_DB["audible"]
+    # THE IMPACT LADDER, NOT THE EMISSION ONE (2026-09-06, the owner's
+    # ruling). The same four words say something different about a one-off
+    # noise than about a thing that stands there making one: a generator is
+    # defined by whether you can talk over it, and a crowbar on a bulkhead
+    # is not. The two far rungs are shared and unmoved, because they are
+    # impacts either way and their reach is measured.
+    assert EVENT_DB["loud"] > SOUND_DB["loud"]
+    assert EVENT_DB["deafening"] > SOUND_DB["deafening"]
+    assert EVENT_DB["thunderous"] == SOUND_DB["thunderous"]
+    assert EVENT_DB["catastrophic"] == SOUND_DB["catastrophic"]
+    # A running thing keeps the ladder it always had, so every masking
+    # answer the engine has given about ambient machinery is unchanged.
+    assert SOUND_DB["loud"] == pytest.approx(56.02, abs=0.01)
 
 
 # ---------------------------------------------------------------------------
