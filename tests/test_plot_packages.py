@@ -647,3 +647,66 @@ def test_a_creature_placed_nowhere_is_refused(temp_db):
     op = _shape_plan_creature({"name": "Thing", "lair": "nowhere_at_all"})
     out = _preview_plan_creature(cid, None, op, _world_snapshot(cid, None))
     assert any("exists nowhere" in e for e in out["errors"]), out["errors"]
+
+
+def test_a_being_moving_tiers_keeps_its_own_name(temp_db):
+    """A BEING MOVING TIERS IS NOT A COLLISION.
+
+    The same name held by a PLANNED ENTITY is this creature at its previous
+    tier: the Room filed it as furniture because filing an institution was
+    not possible, and converting it is the whole point of `plan_creature`.
+    Refusing that was the engine telling an author to invent a second spoken
+    name for one being -- which the Writers' Room declined to do on the
+    descent run, 2026-09-05, in as many words: "I won't invent a second
+    spoken name for a being the world holds as one."
+
+    The previous tier goes when the being moves up from it, so one name is
+    one thing: a plan left standing beside its own charter reads as a second
+    body to everything that walks the plans.
+    """
+    from story.plot_packages import (OPERATIONS, _preview_plan_creature,
+                                     _shape_plan_creature, _world_snapshot)
+    from world.planned_entities import add_planned_entity, planned_entities
+
+    cid = _creature_world(temp_db)
+    add_planned_entity(cid, {"kind": "creature", "name": "Carbonic Stalker",
+                             "brief": {"purpose": "hunts by breath",
+                                       "where": "annex"}}, turn_idx=1)
+    assert planned_entities(cid)
+
+    op = _shape_plan_creature({"name": "Carbonic Stalker", "lair": "annex",
+                               "voice": {"moving": "loud"}})
+    out = _preview_plan_creature(cid, None, op, _world_snapshot(cid, None))
+    assert not out["errors"], out["errors"]
+    assert out["changes"][0]["supersedes"].startswith("plan:creature:")
+    assert any("RETIRES that plan" in w for w in out["warnings"])
+
+    OPERATIONS["plan_creature"]["apply"](cid, None, op, 2)
+    # One name, one thing.
+    assert not [p for p in (planned_entities(cid) or {}).values()
+                if str(p.get("name")).casefold() == "carbonic stalker"]
+
+
+def test_a_name_a_registered_body_holds_is_still_refused(temp_db):
+    """Every OTHER reserved holder still refuses: a registered character or a
+    charter body of that name is somebody else."""
+    from story.plot_packages import (_preview_plan_creature,
+                                     _shape_plan_creature, _world_snapshot)
+
+    cid = _creature_world(temp_db)
+    world = _world_snapshot(cid, None)
+    world["reserved_names"] = set(world["reserved_names"]) | {"sarah moon"}
+    op = _shape_plan_creature({"name": "Sarah Moon", "lair": "annex"})
+    out = _preview_plan_creature(cid, None, op, world)
+    assert any("reserved identity" in e for e in out["errors"]), out["errors"]
+
+
+def test_a_creature_that_can_take_a_body_asks_for_harm_authority(temp_db):
+    """Setting a predator loose is an act that can hurt somebody, and it goes
+    through the same harm model a `die` op does. A creature authored to take
+    nothing is not harm -- a thing that only walks and makes noise is
+    atmosphere."""
+    from story.plot_packages import operation_harms
+
+    assert operation_harms({"op": "plan_creature", "kill_ceiling": 1})
+    assert not operation_harms({"op": "plan_creature", "kill_ceiling": 0})

@@ -102,9 +102,9 @@
 | `story/importers.py` | 3124 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `story/journey_history.py` | 431 |  | — |
 | `story/lore_structure.py` | 248 |  | — |
-| `story/mandates.py` | 586 |  | `core.db` |
+| `story/mandates.py` | 594 |  | `core.db` |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
-| `story/plot_packages.py` | 3068 |  | `world.spatial` |
+| `story/plot_packages.py` | 3116 |  | `world.spatial` |
 | `story/provenance_text.py` | 132 |  | — |
 | `story/room_bible.py` | 424 |  | `core.db` |
 | `story/room_calls.py` | 130 |  | — |
@@ -1271,14 +1271,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `grant_mandate()` | 289 | 82 lines |
-| `_request()` | 186 | 29 lines |
-| `expire_mandates()` | 373 | 28 lines |
-| `request_open()` | 228 | 27 lines |
-| `close_request()` | 403 | 26 lines |
-| `renew_mandate()` | 431 | 22 lines |
-| `coverage()` | 460 | 16 lines |
-| `_most_permissive()` | 504 | 15 lines |
+| `grant_mandate()` | 297 | 82 lines |
+| `_request()` | 194 | 29 lines |
+| `expire_mandates()` | 381 | 28 lines |
+| `request_open()` | 236 | 27 lines |
+| `close_request()` | 411 | 26 lines |
+| `renew_mandate()` | 439 | 22 lines |
+| `coverage()` | 468 | 16 lines |
+| `_most_permissive()` | 512 | 15 lines |
 
 ### `story/naming.py`
 
@@ -1297,11 +1297,11 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_package_checks()` | 2417 | 115 lines |
+| `_package_checks()` | 2465 | 115 lines |
 | `_preview_plan_rooms()` | 758 | 107 lines |
-| `publish_package()` | 2737 | 84 lines |
-| `_reach_warning()` | 2555 | 82 lines |
-| `fire_due_clocks()` | 2862 | 77 lines |
+| `publish_package()` | 2785 | 84 lines |
+| `_reach_warning()` | 2603 | 82 lines |
+| `fire_due_clocks()` | 2910 | 77 lines |
 | `normalize_package()` | 181 | 74 lines |
 | `_world_snapshot()` | 495 | 66 lines |
 | `edit_package()` | 370 | 57 lines |

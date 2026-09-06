@@ -65,7 +65,15 @@ from core.db import wset_for_frame
 #: other operation kind, one capability each (`region_event` is granted as
 #: `region_events`).
 MANDATE_CAPABILITIES = (
-    "plan_rooms", "plan_entity", "post_artifact", "schedule_event",
+    "plan_rooms", "plan_entity",
+    # File a CREATURE as an institution rather than as furniture
+    # (`plot_packages.plan_creature`): a thing that runs off code every beat,
+    # walks the room graph on its own hunger, is heard doing what it does and
+    # is drawn by what it hears. Its own grant, beside `plan_entity`, because
+    # the two are different asks: one places a thing where the author put it,
+    # the other sets something loose in the world.
+    "plan_creature",
+    "post_artifact", "schedule_event",
     "file_lore", "answer_need", "close_need", "request_location",
     "presimulate",
     "create_people", "author_prehistory", "schedule_harm",
