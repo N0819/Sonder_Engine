@@ -198,7 +198,7 @@
 | `world/spatial_orientation.py` | 271 | Bearing math and reciprocal spatial-edge normalization. | — |
 | `world/spatial_prose.py` | 404 |  | `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light` |
 | `world/spatial_routing.py` | 1120 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_light`, `world.spatial_orientation` |
-| `world/spatial_senses.py` | 1544 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation`, `world.spatial_routing` |
+| `world/spatial_senses.py` | 1585 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation`, `world.spatial_routing` |
 | `world/spatial_sound_field.py` | 1963 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light_field`, `world.spatial_senses` |
 | `world/spatial_substance.py` | 1128 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_transit.py` | 522 |  | `world.spatial_barriers`, `world.spatial_identity` |
@@ -2423,10 +2423,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_hear_level()` | 958 | 154 lines |
-| `spatial_rel_between()` | 561 | 94 lines |
-| `visual_level_between()` | 752 | 78 lines |
-| `_opening_view_cap()` | 676 | 74 lines |
+| `_hear_level()` | 999 | 154 lines |
+| `spatial_rel_between()` | 602 | 94 lines |
+| `visual_level_between()` | 793 | 78 lines |
+| `_opening_view_cap()` | 717 | 74 lines |
 | `scent_level()` | 37 | 56 lines |
 | `comms_reachable_rooms()` | 278 | 55 lines |
 | `_clean_comms_channel()` | 158 | 53 lines |

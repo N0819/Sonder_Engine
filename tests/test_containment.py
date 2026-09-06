@@ -331,7 +331,12 @@ def test_two_bodies_in_one_lift_are_not_sealed_away_from_each_other():
         },
         "positions": {"A": "lift_interior", "B": "lift_interior",
                       "lift_car": "yard"},
-        "entities": {"lift_car": {"name": "Lift Car", "kind": "fixture"}},
+        "entities": {"lift_car": {
+            "name": "Lift Car", "kind": "fixture",
+            # What the scene says makes this a CONVEYANCE rather than a mass
+            # (`_mass_holder`): the transit state the engine derives the
+            # interior's doorway from.
+            "state": {"transit": {"phase": "docked", "hatch": "open"}}}},
         "attire": {}, "overlays": {},
     }
     rel = spatial_rel_between(scene, "A", "B",
@@ -341,10 +346,73 @@ def test_two_bodies_in_one_lift_are_not_sealed_away_from_each_other():
     assert not rel.get("source_enclosed")
     assert hear_level(rel, "normal") == "full"
 
-    # The complement, which is what the flag is FOR: somebody outside the
-    # lift is still sealed away from the body inside it.
-    scene["positions"]["C"] = "yard"
-    out = spatial_rel_between(scene, "A", "C",
-                              observer_room="lift_interior",
-                              target_room="yard")
+    # The complement, which is what the flag is FOR -- and it is asked of a
+    # genuine MASS rather than a conveyance, because a lift with a transit
+    # state is exempted for its own reason (see the test below). Two bodies
+    # inside one CREATURE are likewise not sealed from each other; somebody
+    # outside it is.
+    beast = {
+        "rooms": {
+            "yard": {"name": "The Yard", "adjacent": []},
+            "gullet": {"name": "Gullet", "parent_entity": "beast",
+                       "adjacent": [{"to": "yard", "barrier": "membrane"}]},
+        },
+        "positions": {"A": "gullet", "B": "gullet", "C": "yard",
+                      "beast": "yard"},
+        "entities": {"beast": {"name": "The Beast"}},
+        "attire": {}, "overlays": {},
+    }
+    together = spatial_rel_between(beast, "A", "B",
+                                   observer_room="gullet",
+                                   target_room="gullet")
+    assert not together.get("enclosed_from_source")
+    out = spatial_rel_between(beast, "A", "C",
+                              observer_room="gullet", target_room="yard")
     assert out.get("enclosed_from_source")
+
+
+def test_an_open_lift_door_is_a_door_and_not_a_body():
+    """The other half, and the one the descent run measured. A woman standing
+    in a stalled lift with its doors forced fully open, one pace from the
+    player on the landing, was heard as "...impassable... collapsed...
+    security..." -- a FRAGMENT, through an open door the engine had itself
+    derived, because the car around her was read as a body's mass.
+
+    The test is affirmative evidence of a CONVEYANCE, not of a body, and the
+    direction matters: asking "is this a body" and exempting everything else
+    would exempt a creature the Director minted with no wardrobe and no
+    scale, which is exactly the thing whose mass SHOULD swallow a voice.
+    `state.transit` is what makes a room a moving room AND what the engine
+    derives its doorway from, so the enclosures this exempts are precisely
+    the ones with a real doorway for the barrier rules to answer with.
+    """
+    from world.spatial import hear_level, spatial_rel_between
+
+    scene = {
+        "rooms": {
+            "landing": {"name": "Landing", "adjacent": []},
+            "lift_interior": {"name": "Lift Car", "parent_entity": "lift_car",
+                              "adjacent": [{"to": "landing",
+                                            "barrier": "open_door"}]},
+        },
+        "positions": {"Out": "landing", "In": "lift_interior",
+                      "lift_car": "landing"},
+        "entities": {"lift_car": {
+            "name": "Lift Car", "kind": "fixture",
+            "state": {"transit": {"phase": "docked", "hatch": "open"}}}},
+        "attire": {}, "overlays": {},
+    }
+    rel = spatial_rel_between(scene, "Out", "In",
+                              observer_room="landing",
+                              target_room="lift_interior")
+    assert not rel.get("source_enclosed")
+    assert hear_level(rel, "normal") == "full"
+
+    # Shut the doors and the barrier answers, as it should -- the exemption
+    # hands the question back to the door, it does not delete it.
+    scene["rooms"]["lift_interior"]["adjacent"] = [
+        {"to": "landing", "barrier": "closed_door"}]
+    shut = spatial_rel_between(scene, "Out", "In",
+                               observer_room="landing",
+                               target_room="lift_interior")
+    assert hear_level(shut, "normal") == "fragment"
