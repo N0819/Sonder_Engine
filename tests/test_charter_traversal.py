@@ -431,3 +431,45 @@ class TestAnEdgeCostsWhatTheRoomIs:
         # the player still outruns him.
         assert courier_edge_seconds(
             sc, "plain", "far_town", PACES["walking"]) == COURIER_EDGE_FLOOR
+
+
+def test_a_body_routes_on_the_graph_it_decided_on():
+    """A DECISION AND A ROUTE MUST AGREE ABOUT WHAT IS PASSABLE.
+
+    `hunt_moves` decides on `creature_neighbors`, which honours the
+    creature's `can_open_doors`. `_dispatch` planned on `passable_path`,
+    whose passable set is `{open, open_door, membrane}` and which therefore
+    refuses a shut door. So a creature that CAN open doors decided to walk
+    somewhere the planner would not plan to, `_dispatch` returned None, and
+    the body stood still with nothing saying why.
+
+    Measured (chat 117, turns 18-25): a carbonic stalker smelled its prey
+    through a shut containment door and returned
+    `{"carbonic_stalker_0": "sub5a_service_spine"}` for seven straight
+    beats without moving a pace. Worse than silent -- `predation_round`
+    emits its `moving` noise for every move DECIDED rather than achieved,
+    so the thing announced itself, loudly, while standing still.
+    """
+    from world.charter_move import walk
+    from world.charter_space import walk_route
+
+    scene = {"rooms": {
+        "lair": {"name": "lair", "adjacent": [
+            {"to": "hall", "barrier": "closed_door"}]},
+        "hall": {"name": "hall", "adjacent": [
+            {"to": "lair", "barrier": "closed_door"}]}}}
+    # The ordinary graph refuses a shut door, and that stays true.
+    assert walk_route(scene, "lair", "hall") is None
+    # A caller with its own graph gets a route on ITS graph.
+    opens_doors = {"lair": {"hall"}, "hall": {"lair"}}
+    assert walk_route(scene, "lair", "hall",
+                      neighbors=opens_doors) == ["lair", "hall"]
+
+    bodies = {"x": {"place": "lair", "available": True}}
+    stayed, _t, _w = walk(dict(bodies), {"x": "hall"}, scene, hours=1.0)
+    assert stayed["x"]["place"] == "lair", (
+        "the ordinary body walked through a shut door")
+    moved, _t, _w = walk(dict(bodies), {"x": "hall"}, scene, hours=1.0,
+                         neighbors=opens_doors)
+    assert moved["x"]["place"] == "hall", (
+        "a body that can open doors was still refused its own route")

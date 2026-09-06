@@ -43,7 +43,8 @@ def travel_rooms(scene, from_room, to_room, limit=REACH_LIMIT):
     return len(path) if path else None
 
 
-def walk_route(scene, from_room, to_room, limit=REACH_LIMIT, cache=None):
+def walk_route(scene, from_room, to_room, limit=REACH_LIMIT, cache=None,
+               neighbors=None):
     """The rooms a body walks from one place to another, INCLUSIVE of both
     ends -- the courier's `route` shape -- or ``None`` if unreachable.
 
@@ -51,6 +52,21 @@ def walk_route(scene, from_room, to_room, limit=REACH_LIMIT, cache=None):
     disagree about whether a post is reachable: a route exists exactly when
     a distance does. ``cache`` maps ``(origin, target) -> route-or-None`` and
     may outlive the call for a fixed scene, as `reach_map`'s does.
+
+    `neighbors` IS THE GRAPH THE BODY ACTUALLY WALKS, when the caller has
+    one, and it is the difference between a decision and a route agreeing.
+    `passable_path`'s graph is the ordinary one -- open ways, open doors and
+    membranes -- and a body whose own graph is WIDER than that decides to go
+    somewhere the planner will not plan to, so the move is dropped and
+    nothing says why.
+
+    Measured (chat 117, turns 18-24): a carbonic stalker with
+    `can_open_doors` smelled its prey through a shut containment door,
+    `hunt_moves` returned a walk into the corridor beyond it -- deciding on
+    `creature_neighbors`, which honours that flag -- and `_dispatch` asked
+    `passable_path`, which does not, got None, and left the body standing
+    for seven straight beats. The re-check inside `_advance` was already
+    against `neighbors`; only the PLAN was against a different graph.
     """
     a, b = str(from_room or ""), str(to_room or "")
     if not a or not b:
@@ -60,9 +76,39 @@ def walk_route(scene, from_room, to_room, limit=REACH_LIMIT, cache=None):
     cache = {} if cache is None else cache
     pair = (a, b)
     if pair not in cache:
-        path = passable_path(scene, a, b, limit=limit)
-        cache[pair] = [a] + [str(r) for r in path] if path else None
+        if neighbors is not None:
+            cache[pair] = _route_on(neighbors, a, b, limit)
+        else:
+            path = passable_path(scene, a, b, limit=limit)
+            cache[pair] = [a] + [str(r) for r in path] if path else None
     return list(cache[pair]) if cache[pair] else None
+
+
+def _route_on(neighbors, a, b, limit):
+    """Breadth-first route over a caller's own graph, inclusive of both ends,
+    or None. Deterministic: neighbours are taken in sorted order, so one
+    scene always yields one route."""
+    from collections import deque
+
+    if a not in neighbors:
+        return None
+    seen = {a: None}
+    queue = deque([(a, 0)])
+    while queue:
+        here, depth = queue.popleft()
+        if here == b:
+            route = []
+            while here is not None:
+                route.append(here)
+                here = seen[here]
+            return list(reversed(route))
+        if depth >= limit:
+            continue
+        for nxt in sorted(neighbors.get(here) or ()):
+            if nxt not in seen:
+                seen[nxt] = here
+                queue.append((nxt, depth + 1))
+    return None
 
 
 def refresh_reach(reach, scene, places, bodies, moved, limit=REACH_LIMIT,

@@ -146,7 +146,7 @@
 | `world/charter_mark.py` | 302 |  | — |
 | `world/charter_mind.py` | 262 |  | — |
 | `world/charter_model.py` | 849 |  | `world.charter_chatter`, `world.charter_figure`, `world.charter_harm`, `world.charter_mark` |
-| `world/charter_move.py` | 562 |  | `world.charter_space` |
+| `world/charter_move.py` | 567 |  | `world.charter_space` |
 | `world/charter_needs.py` | 297 |  | `world.charter_model` |
 | `world/charter_news.py` | 517 |  | `world.charter_mind`, `world.charter_model`, `world.charter_talk` |
 | `world/charter_observe.py` | 585 |  | `world.charter_figure`, `world.charter_identity`, `world.charter_mind`, `world.spatial` |
@@ -161,7 +161,7 @@
 | `world/charter_run.py` | 1477 |  | `world`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_enrol`, `world.charter_feel`, `world.charter_figure`, `world.charter_harm`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
 | `world/charter_runtime.py` | 4378 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics`, `world.spatial` |
 | `world/charter_social.py` | 743 |  | `world.charter_politics` |
-| `world/charter_space.py` | 167 |  | `world.spatial` |
+| `world/charter_space.py` | 213 |  | `world.spatial` |
 | `world/charter_surface.py` | 341 |  | — |
 | `world/charter_surgery.py` | 370 |  | — |
 | `world/charter_talk.py` | 351 |  | `world.charter_mind`, `world.charter_politics`, `world.charter_roster` |
@@ -1784,14 +1784,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `errands()` | 358 | 78 lines |
-| `_advance()` | 223 | 57 lines |
+| `errands()` | 363 | 78 lines |
+| `_advance()` | 228 | 57 lines |
 | `edge_seconds()` | 111 | 41 lines |
-| `walk()` | 438 | 30 lines |
-| `place_body()` | 493 | 30 lines |
-| `_dispatch()` | 194 | 27 lines |
-| `continue_walks()` | 282 | 27 lines |
-| `_nearest()` | 333 | 23 lines |
+| `_dispatch()` | 194 | 32 lines |
+| `walk()` | 443 | 30 lines |
+| `place_body()` | 498 | 30 lines |
+| `continue_walks()` | 287 | 27 lines |
+| `_nearest()` | 338 | 23 lines |
 
 ### `world/charter_needs.py`
 
@@ -1971,13 +1971,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `commons_places()` | 126 | 32 lines |
-| `reach_map()` | 87 | 29 lines |
-| `walk_route()` | 46 | 20 lines |
-| `refresh_reach()` | 68 | 17 lines |
+| `walk_route()` | 46 | 39 lines |
+| `commons_places()` | 172 | 32 lines |
+| `reach_map()` | 133 | 29 lines |
+| `_route_on()` | 87 | 25 lines |
+| `refresh_reach()` | 114 | 17 lines |
 | `travel_rooms()` | 31 | 13 lines |
-| `frequented_places()` | 160 | 8 lines |
-| `charter_places()` | 118 | 6 lines |
+| `frequented_places()` | 206 | 8 lines |
+| `charter_places()` | 164 | 6 lines |
 
 ### `world/charter_surface.py`
 
