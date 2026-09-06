@@ -1270,6 +1270,14 @@ def _cache_key(scene, room_id, turn_idx, crowds, events, speakers) -> str:
     return hashlib.sha1(blob.encode("utf-8")).hexdigest()
 
 
+def _room_grid_exists(scene, room):
+    """The grid gate, from the module that owns it. Imported per call rather
+    than at module scope because `spatial_light_field` reads this module's
+    ladders at import time."""
+    from world.spatial_light_field import light_geometry_exists
+    return light_geometry_exists(scene, room)
+
+
 def sound_field(scene: dict, listener: str, *, room=None, turn_idx=None,
                 crowds=None, events=None, speakers=None) -> Optional[SoundField]:
     """The sound field one listener hears the scene through, or None when
@@ -1280,7 +1288,23 @@ def sound_field(scene: dict, listener: str, *, room=None, turn_idx=None,
     contacts, containment, weather, the sound entities, the turn index and
     the extra sources -- so one stage pays the spreads once per listener."""
     room = room or room_of(scene, listener)
-    if not room or not room_has_geometry(scene, room):
+    # THE SAME GATE THE LIGHT FIELD USES. `room_has_geometry` is the FOV
+    # layer's opt-in for the furniture sentence and asks whether an ANCHOR
+    # carries an authored height -- a counter to shadow with. Measured across
+    # the owner's 580 live rooms it answers TRUE FOR FOUR, so the near field
+    # -- the spreading loss, the listener's noise floor, the masking rule,
+    # the aperture losses -- was running for 0.7% of the world and everything
+    # else fell back to the barrier-only edge model, which has no distance
+    # within a room and no noise floor at all. That is not a narrower model,
+    # it is a coarser one.
+    #
+    # Sound needs a GRID and somewhere to put the source, which a size tier
+    # or an extent is; 336 of 580 rooms have one. The light field widened for
+    # exactly this and said why ("light needs a grid and a place for the
+    # source, not a counter to shadow with"), and the owner's ruling of
+    # 2026-09-06 is that the most realistic sound travel is the point and a
+    # room estimated from its size tier is an acceptable estimate.
+    if not room or not _room_grid_exists(scene, room):
         return None
     key = _cache_key(scene, room, turn_idx, crowds, events, speakers)
     cached = _SOUND_FIELD_CACHE.get(key)

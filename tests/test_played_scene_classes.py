@@ -2216,8 +2216,16 @@ def test_a_whisper_the_sound_model_calls_inaudible_gets_no_reply(temp_db):
     grades a whisper to none. The volume is the beat's own, so the gate asks
     the question the line actually poses rather than assuming ordinary
     speech."""
+    # THE ANCHORS CARRY BEARINGS, as 96.4% of the owner's 854 live anchors
+    # do. Without them the grid seeds both into the room's INTERIOR, where
+    # two anchors sit closer together than two on opposite walls and the
+    # whisper carries -- a real weakness, measured and registered as
+    # `docs/UNBUILT.md` § 1.138, and a separate question from this one. This
+    # test asks whether the sound model refuses a whisper across a large
+    # room, so it is given the shape the world actually produces.
     rooms = {GALLERY: {"name": "Upper Gallery", "size": "large",
-                       "anchors": {"rail": {}, "stair": {}}}}
+                       "anchors": {"rail": {"dir": "n"},
+                                   "stair": {"dir": "s"}}}}
     ctx, dr = _house(
         temp_db, {"Sef Ul": _presence(GALLERY, NO_APRON, "house boy")},
         opens_in=GALLERY, ends_in=GALLERY, rooms=rooms,
