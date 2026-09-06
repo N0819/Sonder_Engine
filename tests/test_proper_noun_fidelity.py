@@ -69,13 +69,39 @@ def test_a_name_the_view_never_said_is_not_checked():
         "You are alone in the kitchen.")
 
 
-def test_a_multi_word_name_still_works_the_way_it_did():
+def test_a_multi_word_name_is_checked_from_the_roster_not_from_capitals():
+    """The rule that replaced the capitalisation arm (2026-09-06). A name is
+    whoever the ROSTER says is here; each part of it answers for the whole,
+    which is the surname tolerance the old arm had.
+
+    The arm this replaces asked `[A-Z][a-z]+( [A-Z][a-z]+)+` of the view and
+    required the prose to say whatever came back. Measured over the owner's
+    3,770 stored beats: it fired on 1,577 of them (41.8%), 2,141 times, and
+    what it caught by volume was ROOM NAMES the narrator never had to utter
+    -- `Private Session Room` 595, `Reception Room` 465, `Ten Forward` 108 --
+    and phrases that are not names at all: `Mmmm It`, `So Uhm`, `East Asian`.
+    """
+    roster = {"Elyra Voss": {"subject": "she", "object": "her",
+                             "possessive": "her"}}
     assert _warnings(
         "The room is quiet.",
-        "Elyra Voss sets the kettle down.", cast_pronouns={})
+        "Elyra Voss sets the kettle down.", cast_pronouns=roster)
     assert not _warnings(
         "Voss sets the kettle down.",
-        "Elyra Voss sets the kettle down.", cast_pronouns={})
+        "Elyra Voss sets the kettle down.", cast_pronouns=roster)
+    assert not _warnings(
+        "She sets the kettle down.",
+        "Elyra Voss sets the kettle down.", cast_pronouns=roster)
+
+
+def test_a_capitalised_phrase_that_is_not_on_the_roster_is_not_a_name():
+    """A room, a rank, a title and a stray capitalised phrase are not people,
+    and the page owes them nothing. `Reception Room` alone was 465 of the
+    deleted arm's firings."""
+    assert not _warnings(
+        "The room is quiet and nothing moves.",
+        "You are in the Private Session Room, off the Reception Room.",
+        cast_pronouns={})
 
 
 def test_no_roster_is_the_old_behaviour_exactly():

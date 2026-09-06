@@ -7123,10 +7123,42 @@ cells is 25.1 dB, and a `closed_door` aperture is 6.0 dB. 31.1 against 29.
     said it out loud, twice, in two different rerolls of this beat: "the
     vaulted concrete profile operates as an acoustic waveguide."
 
-**Not taken, because it is the same size as § 1.125 and belongs to the
-owner**: either change moves hearing in every existing story, and the second
-one changes the law rather than a number. The measurement above is exact and
-reproducible on the descent copy at turn 13.
+**THE OWNER RULED FOR BOTH, 2026-09-06. The duct half is BUILT; the ambient
+half is not, and this is what happened to it.**
+
+  * **BUILT: `is_duct` / `DUCT_ASPECT` 3.0 / `DUCT_STEP` 0.5.** A room three
+    times longer than it is wide, and roofed, costs a sound half a pace per
+    pace. Charged only on a step WITHIN a room -- a wall crossing is one step
+    from either side and keeps its cost, which is what keeps a path the same
+    length measured from either end. On the beat that asked for it, 18 paces
+    of vaulted spine: 25.1 dB of spreading loss becomes 19.1, and the annex
+    that heard nothing hears a `fragment`. It fires on **0 of the owner's 570
+    live rooms** and 2 of the descent story's 10, because extents are new and
+    mostly come from the Room's plans -- so it is right, it is cheap, and it
+    is so far unproven anywhere but the story it was built for.
+  * **NOT BUILT, and the first attempt was WRONG.** The ambient half wants a
+    room the engine can call DEAD, and the engine has no such word. The proxy
+    tried was "a room with no anchors" -- nothing in it to make a tone -- and
+    it was shipped, measured, and backed out within the hour: **292 of the
+    owner's 570 live rooms (51.2%) carry no anchors.** That is not a dead
+    sub-level, it is half the world, and most of it is rooms nobody has got
+    around to furnishing rather than rooms that are empty in the fiction. It
+    also broke two tests that were right to break -- a shut door stopped
+    grading a line down at all, and the far field's `faint` rung vanished.
+    (The same lesson as § 1.138, one level up: measure the proxy against the
+    corpus before believing it names the class.)
+
+**What the ambient half actually needs is a word, and the light field already
+has the shape of it.** `room_light` is a DECLARED property of a room that the
+sources may overrule and the declaration may floor; sound has no equivalent,
+so one constant answers for a working plant room and forty years of condemned
+concrete. That is a schema field, a clause in both packs, a merge rule and a
+commit path -- a build, not a constant -- and it is the honest form of the
+owner's ruling. Registered rather than guessed at a second time.
+
+The measurement above is exact and reproducible on the descent copy at turn
+13; with the duct rule in, the annex reads 28.4 dB against 27.0 and hears a
+`fragment` where it heard nothing.
 
 **What is NOT in question:** the geometry. Every room that should be on the
 field is on it, the neighbour is placed, the aperture is charged, the three

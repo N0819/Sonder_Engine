@@ -68,10 +68,18 @@ def test_fidelity_accepts_surname_or_first_name_reference():
     assert not any("missing in narrator prose" in w for w in warnings)
 
 def test_fidelity_flags_a_name_entirely_absent():
+    """A name comes from the ROSTER, never from a capital letter
+    (2026-09-06). The capitalisation arm that used to answer this fired on
+    41.8% of the owner's 3,770 stored beats, mostly on room names the
+    narrator never had to utter; the roster arm answers it exactly, and a
+    view with nobody on the roster in it has no name to be missing."""
     view = "Marcus Boyle stands by the door."
     prose = "The corridor is empty and quiet."
+    roster = {"Marcus Boyle": {"subject": "he", "object": "him",
+                               "possessive": "his"}}
 
-    warnings = _check_narrator_fidelity({"prose": prose}, view=view)
+    warnings = _check_narrator_fidelity({"prose": prose}, view=view,
+                                        cast_pronouns=roster)
 
     assert any("Marcus Boyle" in w for w in warnings)
 

@@ -1601,3 +1601,48 @@ def test_sounds_made_in_one_place_do_not_mask_each_other_into_silence():
     field = sound_field(sc, "L", speakers={"A": "normal", "B": "normal"})
     assert field.level_of("L", "speech:A") != "full"
     assert field.level_of("L", "speech:B") != "full"
+
+
+def test_a_corridor_carries_a_sound_further_than_a_hall_of_the_same_length():
+    """A DUCT IS NOT A SPHERE (2026-09-06, the owner's ruling).
+
+    `spreading_loss_db` is `10*log10(1 + L^2)`, free-field inverse square:
+    right for a hall, where a sound goes off in every direction and only a
+    shrinking share reaches you, and wrong for a corridor, where the walls
+    stop it going anywhere but along. Measured on the beat that asked for it
+    (descent chat 117 turn 13): a `loud` pry bar 18 paces down a 6 by 24
+    vaulted service spine reached the room through the door beside it at
+    24.9 dB against a 27.0 floor -- inaudible, by 1.1 dB, in a dead
+    sub-level where a dropped spanner should ring.
+    """
+    from world.spatial import DUCT_STEP, is_duct
+
+    def two(w, d):
+        rooms = {
+            "hall": {"name": "hall", "extent": {"w": w, "d": d},
+                     "exposure": "enclosed", "anchors": {},
+                     "adjacent": [{"to": "cell", "barrier": "open_door",
+                                   "dir": "e"}]},
+            "cell": {"name": "cell", "extent": {"w": 6, "d": 6},
+                     "exposure": "enclosed", "anchors": {},
+                     "adjacent": [{"to": "hall", "barrier": "open_door",
+                                   "dir": "w"}]},
+        }
+        return scene(rooms, {"L": "cell"})
+
+    duct, hall = two(6, 24), two(20, 24)
+    assert is_duct(duct, "hall") and not is_duct(hall, "hall")
+    event = [{"kind": "sound", "description": "a crack", "source_room": "hall",
+              "level": "loud"}]
+    heard = {name: heard_events(sc, "L", event, room="cell")
+             for name, sc in (("duct", duct), ("hall", hall))}
+    assert [lvl for _e, lvl in heard["duct"]] >= [lvl for _e, lvl in heard["hall"]]
+    assert heard["duct"], "a corridor carries what a hall of the same length loses"
+    # The rule is the SHAPE, not the size: a room the story never measured is
+    # not a duct, because the size tiers are squares and a square is not a
+    # passage; and a lane under the sky loses upward what a tunnel keeps.
+    assert not is_duct(scene({"r": room("large", {})}, {"L": "r"}), "r")
+    open_air = two(6, 24)
+    open_air["rooms"]["hall"]["exposure"] = "open"
+    assert not is_duct(open_air, "hall")
+    assert 0 < DUCT_STEP < 1
