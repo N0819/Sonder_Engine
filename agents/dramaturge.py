@@ -50,7 +50,7 @@ DRAMATURGE_STEPS = 3
 #: Lore calls per pass, across its steps.
 DRAMATURGE_LORE_CALLS = 4
 #: Output budget per call. One number across the room (2026-09-04).
-DRAMATURGE_MAX_TOKENS = 20_000
+DRAMATURGE_MAX_TOKENS = 40_000
 #: Wall clock per pass.
 DRAMATURGE_WALL_SECONDS = 120.0
 #: Proposals one pass may file.
@@ -75,15 +75,20 @@ DIAL_SCALE = ("0 holds to the target the player stated and proposes only what "
 # The model call
 # ---------------------------------------------------------------------------
 
-def _call(system, payload, *, max_tokens=DRAMATURGE_MAX_TOKENS):
+def _call(system, payload, *, max_tokens=None):
+    """One Room call on the dramaturge's role. `max_tokens=None` means the
+    Room's one number (`room_calls.room_max_tokens`), which is the host's own
+    output ceiling."""
     # Through `story.room_calls.room_call` rather than `chat_complete`
     # directly, so a pass is as readable as a beat's stages are when the
     # host has capture on (`persist/llm_capture.py`). Same provider, same
     # arguments, same return.
     from agents.common import jparse
-    from story.room_calls import room_call
+    from story.room_calls import room_call, room_max_tokens
     raw = room_call(DRAMATURGE_ROLE, system, payload,
-                    max_tokens=max_tokens, phase="dramaturge")
+                    max_tokens=(max_tokens if max_tokens is not None
+                                else room_max_tokens(DRAMATURGE_MAX_TOKENS)),
+                    phase="dramaturge")
     out = jparse(raw)
     return out if isinstance(out, dict) else {}
 

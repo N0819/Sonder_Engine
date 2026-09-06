@@ -32,6 +32,40 @@ import json
 import time
 
 
+def room_max_tokens(fallback=40_000):
+    """THE ONE NUMBER EVERY ROOM CALL ASKS FOR: the host's own output ceiling.
+
+    The owner's 2026-09-04 ruling is that every response cap the Room owns is
+    the same number, so a step that needs room has it and no single call is
+    the one that truncates. This keeps that and fixes what the number WAS.
+
+    A REASONING MODEL BILLS ITS THINKING AS OUTPUT -- `providers` says so
+    beside its own clamp, from the maze arms: 11-13k tokens of deliberation
+    and then nothing left for the answer. Every Room call is reasoning-heavy
+    (the Planner reads the world through six or more tools before it writes
+    an operation; the bible fold and the dramaturge each read a whole
+    transcript), and all four were asking for 20,000 against a host ceiling
+    of 40,000. So the Room thought its way through the problem and had no
+    budget left to say what it had decided.
+
+    Measured on the descent run, 2026-09-05: three of six Room calls on
+    `gemini-3.8-flash` died as `ReasoningBudgetExhausted` with 15k-32k
+    characters of reasoning trace and an empty answer, and the Room only
+    completed a task when the ask was small enough to think about briefly. A
+    seven-room sub-level took three attempts.
+
+    Read per call, so the host's setting is the answer and a change takes
+    effect on the next call. `providers._clamp_max_tokens` only ever LOWERS,
+    so this is never a way past the ceiling: a host that sets 8,000 gets
+    8,000.
+    """
+    try:
+        from llm.providers import max_output_tokens
+        return max(int(max_output_tokens()), 1)
+    except Exception:
+        return int(fallback)
+
+
 def room_call(role, system, payload, *, max_tokens=None, phase="",
               json_mode=True):
     """One JSON-shaped Room call, recorded. Returns the raw provider text.

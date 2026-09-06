@@ -64,14 +64,47 @@ class TestItIsWiredIntoBothProviderShapes:
 
 
 class TestTheRoomsCapsAreOneNumber:
-    def test_every_room_response_cap_is_twenty_thousand_tokens(self):
+    def test_every_room_response_cap_is_one_number(self):
+        """The owner's 2026-09-04 ruling, kept: every response cap the Room
+        owns is the SAME number, so a step that needs room has it and no
+        single call is the one that truncates.
+
+        What the number IS changed on 2026-09-05. A reasoning model bills its
+        thinking as output -- `providers` says so beside its own clamp -- and
+        all four were asking 20,000 against a host ceiling of 40,000, so the
+        Room thought its way through a problem and had no budget left to say
+        what it had decided. Measured on the descent run: three of six Room
+        calls died as `ReasoningBudgetExhausted` with 15k-32k characters of
+        reasoning trace and an empty answer.
+
+        They now ask the HOST for its whole ceiling
+        (`room_calls.room_max_tokens`), which is one number by construction
+        and tracks the setting; the constants are its fallback.
+        """
         from agents.dramaturge import DRAMATURGE_MAX_TOKENS
         from agents.story_planner import (CHARTER_PLANNER_MAX_TOKENS,
                                           PLANNER_MAX_TOKENS)
         from story.room_bible import BIBLE_FOLD_MAX_TOKENS
 
         assert {PLANNER_MAX_TOKENS, CHARTER_PLANNER_MAX_TOKENS,
-                DRAMATURGE_MAX_TOKENS, BIBLE_FOLD_MAX_TOKENS} == {20_000}
+                DRAMATURGE_MAX_TOKENS, BIBLE_FOLD_MAX_TOKENS} == {40_000}
+
+    def test_the_room_asks_the_host_for_its_whole_ceiling(self, monkeypatch):
+        """And never past it: `_clamp_max_tokens` only ever lowers, so a host
+        that sets a small ceiling gets a small ceiling."""
+        from llm import providers
+        from story.room_calls import room_max_tokens
+
+        monkeypatch.setattr(providers, "max_output_tokens", lambda: 31_000)
+        assert room_max_tokens() == 31_000
+        monkeypatch.setattr(providers, "max_output_tokens", lambda: 8_000)
+        assert room_max_tokens() == 8_000
+
+        def _broken():
+            raise RuntimeError("no settings")
+
+        monkeypatch.setattr(providers, "max_output_tokens", _broken)
+        assert room_max_tokens(40_000) == 40_000
 
     def test_nothing_downstream_truncates_what_the_cap_allows(self):
         """A response cap raised while the store that holds the answer keeps

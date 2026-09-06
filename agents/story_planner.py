@@ -51,6 +51,7 @@ import re
 import time
 
 from core.logging_utils import logger
+from story.room_calls import room_max_tokens
 
 #: The model role (`providers.ROLES`). ONE role for the Planner and its
 #: Charter Planner delegation: the delegation is a scoped call of the same
@@ -78,14 +79,18 @@ PLANNER_WALL_SECONDS = REPLY_WALL_SECONDS
 #: Passes one background task may take before it is left for the next job
 #: -- a safety ceiling under the spend that really bounds it.
 TASK_PASSES_CAP = 12
-#: Output budget per model call. Raised to 20k on the owner's ruling
-#: (2026-09-04): every response cap the room owns is the same number, so a
-#: step that needs room has it and no single call is the one that truncates.
-#: Measured on GLM 5.2 (chat 111, 2026-09-03): one step drafting a whole
-#: package ran past 4000 tokens and its truncated JSON parsed as nothing --
-#: which is what a cap costs when it binds, and why the loop reports a cut-off
-#: rather than reading it as "done" (CUT_OFF_NOTE).
-PLANNER_MAX_TOKENS = 20_000
+#: Output budget per model call -- the FALLBACK, when the host's own ceiling
+#: cannot be read. `story.room_calls.room_max_tokens()` is what callers
+#: use, and it asks the host for its whole ceiling.
+#:
+#: Raised to 20k on the owner's ruling (2026-09-04): every response cap the
+#: room owns is the same number, so a step that needs room has it and no
+#: single call is the one that truncates. Measured on GLM 5.2 (chat 111,
+#: 2026-09-03): one step drafting a whole package ran past 4000 tokens and
+#: its truncated JSON parsed as nothing -- which is what a cap costs when it
+#: binds, and why the loop reports a cut-off rather than reading it as "done"
+#: (CUT_OFF_NOTE).
+PLANNER_MAX_TOKENS = 40_000
 #: Conversation lines the Planner is shown, newest last -- the WINDOW. A
 #: line older than the window stays shown until the bible has folded it
 #: (`story/room_bible.py`), up to the hard cap.
@@ -120,7 +125,7 @@ PLANNER_TRANSCRIPT_CHARS = 24_000
 PLANNER_TRIM_HEAD_CHARS = 1_500
 #: Charter Planner delegations per reply and their output budget.
 CHARTER_PLANNER_CALLS_PER_REPLY = 1
-CHARTER_PLANNER_MAX_TOKENS = 20_000
+CHARTER_PLANNER_MAX_TOKENS = 40_000
 #: The pseudo-tool the model names to delegate; not in the facade table.
 CHARTER_PLANNER_TOOL = "charter_planner"
 #: Open needs one fill job hands the Planner.
@@ -523,7 +528,7 @@ def charter_planner(cid, frame_id, brief):
             payload[tool] = {"error": str(exc)[:200]}
     from llm.prompts import get_prompt
     out = _call(get_prompt("charter_planner"), payload,
-                max_tokens=CHARTER_PLANNER_MAX_TOKENS)
+                max_tokens=room_max_tokens())
     request = out.get("request") if isinstance(out.get("request"), dict) else {}
     request = {k: request[k] for k in REQUEST_KEYS if request.get(k) not in (None, "", [])}
     if request and not request.get("name") and not request.get("brief"):
@@ -673,7 +678,7 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
                 turn_idx=turn_idx, regime=regime,
                 spend={"calls_per_reply": reply_cap,
                        "calls_per_hour_left": hour_left}),
-                max_tokens=PLANNER_MAX_TOKENS)
+                max_tokens=room_max_tokens())
         except Exception as exc:
             # THE WORK IS NOT LOST, ONLY THE REPORT OF IT. A reply that has
             # already run tools has already changed the database -- a package

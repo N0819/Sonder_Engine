@@ -65,7 +65,7 @@ BIBLE_FOLD_BATCH = 12
 #: Lines one fold reads at most (a long-neglected thread folds in passes).
 BIBLE_FOLD_LINES = 40
 #: The fold call's output budget. One number across the room (2026-09-04).
-BIBLE_FOLD_MAX_TOKENS = 20_000
+BIBLE_FOLD_MAX_TOKENS = 40_000
 #: The job key (`core/jobs.py`), deduped per chat.
 BIBLE_JOB_KEY = "room_bible"
 #: The fold runs on the Planner's role.
@@ -350,9 +350,9 @@ def _call(system, payload):
     # host has capture on (`persist/llm_capture.py`). Same provider, same
     # arguments, same return.
     from agents.common import jparse
-    from story.room_calls import room_call
+    from story.room_calls import room_call, room_max_tokens
     raw = room_call(BIBLE_ROLE, system, payload,
-                    max_tokens=BIBLE_FOLD_MAX_TOKENS, phase="bible")
+                    max_tokens=room_max_tokens(BIBLE_FOLD_MAX_TOKENS), phase="bible")
     out = jparse(raw)
     return out if isinstance(out, dict) else {}
 
