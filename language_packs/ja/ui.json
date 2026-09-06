@@ -2670,5 +2670,7 @@
   "🔊 Mute": "🔊 ミュート",
   "🔒 persona secrets": "🔒 ペルソナの秘密",
   "🔗 Generate invite": "🔗 招待を生成",
-  "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}": "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}"
+  "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}": "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}",
+  "plan_creature names the creature": "plan_creature は生き物の名前を指定します",
+  "plan_creature needs a `lair` room id: a creature with nowhere to be is a creature nowhere": "plan_creature には `lair` の部屋 id が必要です：居場所のない生き物は、どこにもいない生き物です"
 }

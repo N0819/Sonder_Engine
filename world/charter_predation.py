@@ -198,9 +198,31 @@ def _prey_here(place, own, bodies_at, stock_at, states, prey_order):
     return "", []
 
 
-def hunt_moves(states, own, bodies_at, stock_at, neighbors, seed, at_hours):
+def hunt_moves(states, own, bodies_at, stock_at, neighbors, seed, at_hours,
+               noises=None):
     """``{body: place}`` for the creature bodies that noticed prey nearby
-    and are not already going somewhere."""
+    and are not already going somewhere.
+
+    TWO WAYS TO NOTICE, and the second is the one a player can provoke.
+
+    The first is the SENSE range: rooms out on the creature's own graph, a
+    standing awareness of what is near, which is what a thing knows about a
+    place it lives in. The second is a NOISE -- something audible happened in
+    a room this window, and the creature goes to look. That is the half a
+    body can do something about, because a body makes noise by acting, and it
+    is the whole of what makes a dark room tense: what you do is what brings
+    it.
+
+    IT NEVER PARSES WHAT IT HEARD. `noises` is `{room: rank}` -- where, and
+    how strongly it pulls -- carried by the caller from the sound field,
+    which is the same field a body hears through. No words, no speaker, no
+    content: a creature learns that something happened over there, which is
+    all a thing without language gets and all this needs.
+
+    A heard room outranks a sensed one at the same distance, because a noise
+    is evidence of something happening NOW and a sense range is only evidence
+    of geography.
+    """
     state = states[own]
     creature = state.get("creature") or {}
     limit = min(SENSE_RANGE_CAP, int(
@@ -220,18 +242,31 @@ def hunt_moves(states, own, bodies_at, stock_at, neighbors, seed, at_hours):
         if category:
             continue
         best = None
-        for room, distance in _reachable(neighbors, here, limit).items():
+        reach = _reachable(neighbors, here, limit)
+        for room, distance in reach.items():
             category, _rows = _prey_here(room, own, bodies_at, stock_at,
                                          states, prey_order)
             if not category:
                 continue
             rank = prey_order.index(category)
-            candidate = (rank, distance,
+            candidate = (0, rank, distance,
+                         _draw(seed, at_hours, own, body_key, room), room)
+            if best is None or candidate < best:
+                best = candidate
+        # A noise reaches as far as the SOUND did, which is the caller's
+        # answer and not this graph's -- a shout through an open stairwell
+        # carries further than a sense range, and a whisper behind a shut
+        # door carries less. Ranked ahead of a sensed room, and only for a
+        # room this body could actually walk to.
+        for room, rank in sorted((noises or {}).items()):
+            if room == here or room not in reach:
+                continue
+            candidate = (-1, -float(rank), reach[room],
                          _draw(seed, at_hours, own, body_key, room), room)
             if best is None or candidate < best:
                 best = candidate
         if best is not None:
-            moves[body_key] = best[3]
+            moves[body_key] = best[-1]
     return moves
 
 
@@ -394,7 +429,7 @@ def predation_round(states, at_hours, *, seed=0, hours=4.0):
         neighbors = creature_neighbors(scene, creature) if scene else {}
         # 1. Senses: walk toward what was noticed, on this creature's graph.
         moves = hunt_moves(states, own, bodies_at, stock_at, neighbors, seed,
-                           at)
+                           at, noises=(state.get("overheard") or {}))
         # WHAT IT IS DOING IS WHAT CAN BE HEARD. Recorded here, where the
         # round already knows it, and emitted at the runtime boundary --
         # this module is pure and owns no scene. The list is REPLACED every
