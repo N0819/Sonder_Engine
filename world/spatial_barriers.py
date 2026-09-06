@@ -265,12 +265,34 @@ _SIGHT_BARRIERS = {"open", "open_door", "window", "bars", "one_way_window"}
 #: `scent_level` is now this table's only reader, and its only statement.
 #: window and wall are deliberately absent: glass stops air, and a wall stops
 #: everything. So is an unrecognized barrier, which normalizes to `wall`.
+#: HOW MUCH AIR CROSSES A BARRIER IN ONE BEAT, which is the fact both scent
+#: readers are really asking about. `world/spatial_scent_field.py` needs the
+#: fraction, `scent_level` needs the two words, and until 2026-09-06 there
+#: were two tables -- the note above records what that costs, so the second
+#: one is not written and the words are DERIVED from the fractions below.
+#:
+#: NOT `APERTURE_PASS`, and the differences are the point rather than a
+#: calibration: a shut door costs sound about 6 dB and stops bulk air almost
+#: entirely; a grille or a barred gate that muffles a voice hardly troubles a
+#: gas; and GLASS, which passes light and some sound, passes no air at all.
+#: `window`, `one_way_window`, `wall`, `separated` and `unknown` are absent
+#: for that last reason -- absent means nothing crosses.
+SCENT_PASS = {
+    "open": 0.5,
+    "open_door": 0.4,
+    "bars": 0.35,
+    "membrane": 0.2,
+    "closed_door": 0.06,
+}
+
+#: Where the two words divide. At or above this a nose gets the thing whole;
+#: below it, muffled. Set to `bars` so the derived table reproduces the one
+#: this replaced, byte for byte, on every barrier it named.
+SCENT_FULL_PASS = SCENT_PASS["bars"]
+
 _SCENT_BARRIER_LEVELS = {
-    "open": "full",
-    "open_door": "full",
-    "bars": "full",
-    "membrane": "muffled",
-    "closed_door": "muffled",
+    barrier: ("full" if passes >= SCENT_FULL_PASS else "muffled")
+    for barrier, passes in SCENT_PASS.items()
 }
 
 

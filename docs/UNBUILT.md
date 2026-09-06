@@ -7166,6 +7166,46 @@ events are sources, and the co-located ones no longer silence each other. The
 model is now answering the question it was asked; this entry is about whether
 the answer is right.
 
+### 1.141 A scent hunter that loses the trail stops instead of casting
+
+**Built and measured 2026-09-06, and the missing half is named here.**
+`world/spatial_scent_field.py` gives a body's trail memory: it accumulates
+while somebody stands somewhere, bleeds one room per beat, decays by the
+room's `exposure`, and is stopped almost dead by a shut door. A creature with
+`senses.scent` reads the gradient over its neighbours and walks uphill.
+
+**Measured on a five-room corridor, a body walking r0 to r4 at two beats a
+room:** the trail reads 0.067 / 0.117 / 0.169 / 0.233 / 0.316 -- a clean
+monotone line to the prey -- and it is gone by about beat 20. Pull the door
+into r3 shut behind you and the hunter arriving at r2 reads `{r2: 0.169,
+r1: 0.117, r3: 0.165}`: its own room is the local maximum, there is no uphill
+step, and it has lost the trail.
+
+**And then it stops, for ever, which inverts what the sense is for.** The
+owner's reading of the mechanic is right -- a scent hunter should be slower
+to notice and much harder to shake than a hearing one -- and without a search
+behaviour it is the opposite: one shut door defeats it permanently, where a
+hearing hunter would still come to the next noise.
+
+**What the literature says to build** (`docs/guides/RESEARCH.md` § 1.8, and
+it is the single most useful claim in it): CAST AND SURGE. Surge while the
+odour is detected; when it is lost, cast across the neighbourhood with
+widening amplitude until it is picked up again. Trained agents rediscover
+this independently, and it is what makes the searching read as intelligent
+rather than as a stall.
+
+**The shape it wants here.** A creature that had a trail and no longer has an
+uphill step remembers where it last had one, and probes outward from there --
+neighbours first, then their neighbours -- for a bounded number of beats
+before giving up and returning to its own business. Bounded, because a
+creature that searches for ever is a creature that never lets a story move
+on, and the bound is the thing to name.
+
+**Why it is not in the same commit.** The ledger, the two senses' gates and
+the credits are one coherent piece; a search behaviour is an AI change with
+its own measurements to take, and shipping it unmeasured beside a mechanic
+that works would make it impossible to tell which one moved the story.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit

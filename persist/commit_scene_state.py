@@ -1971,6 +1971,29 @@ def prepare_scene_commit(ctx):
         # noise and no entity is minted, so nothing is SEEN early.
         from world.planned_entities import project_planned_emissions
         sc, _emitting = project_planned_emissions(cid, sc, ctx.turn.frame_id)
+        # THE TRAIL LEDGER, one beat on. Decay, then bleed one room, then
+        # what stood somewhere and breathed. It is written here rather than
+        # derived at read time because a trail IS memory: the whole point is
+        # that it outlives the body that left it, which nothing recomputed
+        # from the current scene could do (`world/spatial_scent_field.py`).
+        try:
+            from world.spatial import advance_scents, SCENTS_KEY
+            # A BODY IS WHAT BREATHES. The cast and the player, by every
+            # spelling the scene keys them under -- not entities, which are
+            # things, and not every position row, which holds a lift and a
+            # lamp. A room with two people in it smells of two people, which
+            # the ledger gets for free by depositing per body.
+            _living = {str(_n).casefold() for _n in (
+                [character_name_from_text(c["sheet"]) for c in ctx.cast]
+                + [_player_name_or_none(ctx)]) if _n}
+            _breathing = [
+                {"room": str(_room), "kind": "breath", "level": "faint"}
+                for _who, _room in (sc.get("positions") or {}).items()
+                if str(_room) and str(_who).casefold() in _living]
+            sc[SCENTS_KEY] = advance_scents(sc, _breathing)
+        except Exception as _scent_exc:   # never a story blocker
+            ctx.warnings.append(
+                f"scent ledger not advanced this beat: {_scent_exc}")
         for _room, _level in _emitting:
             ctx.warnings.append(
                 f"planned emission audible: {_room} is heard at {_level} "

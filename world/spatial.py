@@ -310,6 +310,13 @@ from world.spatial_sound_field import (
 )
 
 
+from world.spatial_scent_field import (
+    advance_scents, normalize_scent_level, normalize_scents, SCENT_FLOOR,
+    SCENT_KEEP, SCENT_LEVELS, SCENT_MAX, SCENT_PASS, SCENT_STRENGTH,
+    scent_at, scent_edges, scent_gradient, scent_word, SCENTS_KEY,
+)
+
+
 from world.spatial_merge import (
     _dedup_duplicate_entity_keys, _dedup_duplicate_position_keys,
     _dedupe_adjacent, _ENTITY_DEFAULT_FIELDS, _ENTITY_STRUCTURAL_FIELDS,

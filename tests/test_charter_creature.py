@@ -637,16 +637,41 @@ class TestItHearsYouToo:
         from world.charter_runtime import hearing_for_creatures
 
         registry = {"items": {"thing": {"state": {
-            "creature": {"prey": ["unposted"]},
+            "creature": {"prey": ["unposted"], "senses": {"hearing": True}},
             "bodies": {"a": {"place": "annex", "available": True}}}}}}
         out = hearing_for_creatures(
             registry, self._pair(),
             [{"source_room": "spine", "level": "loud",
               "description": "a pry bar going into a seam"}])
         overheard = out["items"]["thing"]["state"]["overheard"]
+        assert overheard, "a creature with ears heard nothing"
         assert all(isinstance(v, int) for v in overheard.values())
         # Nothing of WHAT it was ever crosses, whatever reached.
         assert "pry bar" not in str(overheard)
+
+    def test_a_creature_the_story_wrote_deaf_is_deaf(self):
+        """A SENSE NOBODY WROTE IS A SENSE THE CREATURE DOES NOT HAVE.
+
+        The hearing channel was built on 2026-09-06 and handed to every
+        creature that existed, because nothing on a creature could say it
+        had no ears. The Writers' Room caught it on the first story that
+        used it: its own filed package for the descent's carbonic stalker
+        reads "blind, deaf, indifferent to vibration and light, tracking
+        prey only by warm exhaled carbon dioxide", and the engine was
+        answering `overheard` for it anyway. PR12's class one tier down --
+        a plan that says a thing is deaf has to be able to SAY it in a
+        field, or the rule lives in prose no field reads.
+        """
+        from world.charter_runtime import hearing_for_creatures
+
+        noise = [{"source_room": "spine", "level": "loud",
+                  "description": "a pry bar going into a seam"}]
+        for senses in ({}, {"range_rooms": 3}, {"hearing": False}):
+            registry = {"items": {"thing": {"state": {
+                "creature": {"prey": ["unposted"], "senses": senses},
+                "bodies": {"a": {"place": "annex", "available": True}}}}}}
+            out = hearing_for_creatures(registry, self._pair(), noise)
+            assert out["items"]["thing"]["state"]["overheard"] == {}, senses
 
     def test_a_creature_with_no_noises_this_window_overhears_nothing(self):
         from world.charter_runtime import hearing_for_creatures

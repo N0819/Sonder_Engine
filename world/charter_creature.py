@@ -14,8 +14,12 @@ vocabulary is the engine's own throughout:
     the bill), ``posted`` (a body standing a post) and ``figure`` (a
     scene-owned person, whose fate is the bubble's and never this
     module's);
-  * **senses** are a range in rooms, the hearing analogue: what a creature
-    notices from where it stands;
+  * **senses** are a range in rooms -- what a creature notices from where
+    it stands -- and `hearing`, whether it has ears at all. Hearing is
+    DECLARED and defaults to false: the channel that feeds it
+    (`charter_runtime.hearing_for_creatures`) can otherwise hand a sense to
+    a creature the story wrote as deaf, which is what happened the day it
+    was built;
   * **footprint** is `world/spatial_fov.FOOTPRINTS`, and a room too small
     for it holds the creature at the door exactly as a shut door holds a
     body that cannot open one (`can_open_doors`);
@@ -220,8 +224,30 @@ def normalize_creature(stored):
     out = {
         "prey": prey,
         "voice": voice,
+        # WHETHER IT HEARS AT ALL, and it must be SAID (2026-09-06). The
+        # hearing channel (`charter_runtime.hearing_for_creatures`) was built
+        # this day and handed to every creature that existed, because nothing
+        # on a creature could say it had no ears. The Writers' Room caught it
+        # on the first story that used it: its own filed package for the
+        # descent's carbonic stalker reads "blind, deaf, indifferent to
+        # vibration and light, tracking prey only by warm exhaled carbon
+        # dioxide", and the engine was answering `overheard` for it anyway.
+        #
+        # PR12's class one tier down -- a plan that says a thing is deaf has
+        # to be able to SAY it in a field, or the rule lives in prose no
+        # field reads and the engine grants the sense regardless. DECLARED,
+        # NOT DEFAULTED: a sense nobody wrote is a sense the creature does
+        # not have, which is the direction every other guard here runs.
         "senses": {"range_rooms": max(0, integer(
-            senses.get("range_rooms"), DEFAULT_SENSE_RANGE_ROOMS))},
+            senses.get("range_rooms"), DEFAULT_SENSE_RANGE_ROOMS)),
+                   "hearing": bool(senses.get("hearing", False)),
+                   # AND WHETHER IT HAS A NOSE. Declared for the same reason
+                   # and on the same day: a sense nobody wrote is a sense the
+                   # creature does not have. The descent's stalker is the case
+                   # both fields exist for -- deaf, and tracking prey only by
+                   # warm exhaled breath -- and until these two it could say
+                   # neither in a field.
+                   "scent": bool(senses.get("scent", False))},
         "footprint": normalize_footprint(stored.get("footprint")),
         "can_open_doors": bool(stored.get("can_open_doors", False)),
         "contest": contest,
