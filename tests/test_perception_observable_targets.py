@@ -247,3 +247,40 @@ def test_the_actor_and_the_observer_are_never_cut_from_their_own_act(temp_db):
         forms_by_body={"Verrin": ["Verrin"], "Mattin": ["Mattin"]},
         perceived=set(), who="probe")
     assert (kept, cut) == (surface, [])
+
+
+def test_the_micro_round_asks_the_same_question_as_the_two_view_floors():
+    """PX5's THIRD delivery site. `perception_act` and `perception_outcome`
+    both cut a span naming a body the observer cannot see; the interaction
+    loop's own deterministic delivery asked nothing, so the same sentence
+    that leaked a body's state into a composed view leaked it here too --
+    into an observer's additions, and from there into their next character
+    step and their memory of the beat.
+
+    One helper, in the module both import (`agents.common`), so the three
+    floors cannot drift apart the way `_addresses` once did.
+    """
+    from agents.common import _act_surface_admission
+    from agents import loops
+
+    assert loops._act_surface_admission is _act_surface_admission
+
+    scene = {
+        "rooms": {"gallery": {"name": "Gallery", "adjacent": []},
+                  "terrace": {"name": "Terrace", "light": "dark",
+                              "adjacent": []}},
+        "positions": {"Verrin": "gallery", "Lisenne": "gallery",
+                      "Ivo": "terrace"},
+        "entities": {}, "attire": {}, "overlays": {},
+    }
+    seen = loops._micro_seen_bodies(scene, "Lisenne")
+    assert "Verrin" in seen and "Ivo" not in seen
+
+    surface, cut = _act_surface_admission(
+        "looks leisurely over Ivo's uncovered face, then lifts his wine glass",
+        actor="Verrin", observer="Lisenne",
+        forms_by_body={"Ivo": ["Ivo"], "Verrin": ["Verrin"]},
+        perceived=seen, who="Verrin -> Lisenne")
+    assert cut == ["Ivo"]
+    assert "Ivo" not in surface and "uncovered" not in surface
+    assert "wine glass" in surface

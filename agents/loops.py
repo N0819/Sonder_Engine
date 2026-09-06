@@ -23,11 +23,13 @@ from world.spatial import (hear_level, proximity_rel, room_of, sense_adjusted,
 
 from .character import _unanswered_question_note, character_step
 from .common import (
+    _act_surface_admission,
     _append_micro_view,
     _asks_player,
     cut_short_speech,
     _character_by_id,
     _character_display_name,
+    character_scene_keys,
     _conceal_from_targets_observer,
     _delivery_ok,
     _unknown_actor_label,
@@ -193,6 +195,43 @@ def self_micro_view(actor_result):
     return additions
 
 
+def _micro_body_forms(ctx, scene, observer_name):
+    """`{body: [spellings]}` for every body the scene stands somewhere, for
+    the third-body admission below. The cast's own sheets are the authority
+    on what a body answers to (`character_scene_keys`); a positioned subject
+    with no sheet answers to its own spelling."""
+    forms = {}
+    for row in (ctx.cast or []):
+        try:
+            sheet = json.loads(row["sheet"])
+        except Exception:
+            continue
+        name = character_name(sheet)
+        if name:
+            forms[name] = character_scene_keys(sheet) or [name]
+    for subject in ((scene or {}).get("positions") or {}):
+        subject = str(subject or "").strip()
+        if subject and subject not in forms:
+            forms[subject] = [subject]
+    forms.pop(str(observer_name or "").strip(), None)
+    return forms
+
+
+def _micro_seen_bodies(scene, observer_name, senses=None):
+    """The bodies this observer's own eyes reach -- the same question
+    `seen_out` answers for the composed view, asked here because the micro
+    round builds no percept list to read it off."""
+    seen = set()
+    for subject in ((scene or {}).get("positions") or {}):
+        subject = str(subject or "").strip()
+        if not subject or subject == str(observer_name or "").strip():
+            continue
+        level = visual_level_between(scene, observer_name, subject)
+        if sense_adjusted(level, "sight", senses) != "none":
+            seen.add(subject)
+    return seen
+
+
 def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
     actor_row = _character_by_id(ctx, actor_id)
     actor_sheet = json.loads(actor_row["sheet"])
@@ -330,6 +369,18 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
                 # the shared predicate helper so an actor-led / independent-clause
                 # surface never double-names ('Dr. Moon Dr. Moon tilts...').
                 surface = observable_action_text(event)
+                # A BODY THE OBSERVABLE NAMES IS A PERCEPT OF ITS OWN (PX5).
+                # The two perception floors ask this; the micro-round path is
+                # the third delivery site and asked nothing, so the same
+                # sentence that named an unseen body's state in a composed
+                # view named it here too. Same helper, from the module that
+                # owns it, so the three cannot drift.
+                surface, _cut = _act_surface_admission(
+                    surface, actor=actor_name, observer=observer_name,
+                    forms_by_body=_micro_body_forms(ctx, scene, observer_name),
+                    perceived=_micro_seen_bodies(
+                        scene, observer_name, observer_senses),
+                    who="%s -> %s" % (actor_name, observer_name))
                 sentence = _observable_predicate(display, surface) if surface else None
                 if sentence:
                     additions.append(sentence)

@@ -604,6 +604,7 @@ def _deliver_foreground_body_details(view, body_regions):
 from . import composer
 
 from .common import (
+    _act_surface_admission,
     preview_player_state_assertions,
     _append_once,
     _player_name_forms,
@@ -1192,11 +1193,21 @@ def _in_plain_view(rel, vis):
 def _sight_detail(sc, observer_name, actor_name, rel):
     """How much CONDUCT sight admits: "full", "shapes" or "none".
 
-    SIGHT IS GRADED AND THE ACT CHANNEL WAS NOT. Every grader here already
-    answers in three words -- `sight_level` and `visual_level_between` both
-    return none/shapes/full -- and `_in_plain_view` spends the answer as a
-    boolean, so a shape-in-a-doorway budget bought a readable description of
-    conduct at the far side of a room.
+    SIGHT IS GRADED AND THE ACT CHANNEL WAS NOT. Every grader here answers
+    in the SIGHT ladder's own words -- `sight_level` and
+    `visual_level_between` both return none/shapes/conduct/full since the
+    2026-09-05 light work added the middle rung -- and `_in_plain_view`
+    spends the answer as a boolean, so a shape-in-a-doorway budget bought a
+    readable description of conduct at the far side of a room.
+
+    This function collapses that ladder to what the ACT channel can carry,
+    which is three answers rather than four: `conduct` is the rung that says
+    a body's doing is plain while its face and its detail are not, and an
+    act's observable surface IS its doing -- so `conduct` delivers the
+    surface exactly as `full` does, and only `shapes` reduces it to motion.
+    That collapse is what makes "dim withholds detail, not conduct" reach
+    this channel at all; the detail half is withheld by the appearance and
+    identity readers, which gate on `== "full"` by construction.
 
     Live, "The Long Gallery" turns 11-12 (PC1). Ada and Mrs Penrose were
     behind a `closed_door`, locked, on both edges; `closed_door` is not a
@@ -3359,100 +3370,6 @@ def _strip_self_narration_quote_safe(view, perceiver_name, other_names=()):
 #: failure direction is the safe one -- a join point this misses leaves the
 #: two predicates in ONE span, so a span that names an inadmissible body
 #: takes more with it, never less. Nothing here decides meaning.
-_SURFACE_CLAUSE_SPLIT = re.compile(r"(?<=[,;:])\s+|\s+[—–]\s+|\s+--\s+")
-
-
-def _act_surface_admission(surface, *, actor, observer, forms_by_body,
-                           perceived, who):
-    """WHAT A BODY IS SEEN DOING IS ADMISSIBLE; WHAT IT IS SEEN DOING IT TO
-    IS ADMISSIBLE ONLY WHERE THE TARGET IS.
-
-    An `observable` is free text describing the ACTOR, and the act channel
-    admitted the whole string on the actor's channel alone. Any OTHER body
-    the sentence names is a percept about THAT body -- its presence, its
-    state, its name -- and it reached every observer who could see the actor
-    without passing a single admission gate of its own.
-
-    Live (`PLAY_2026_09_05C_masque.md` § PX5, turn 6). Ivo stood on a
-    completely dark terrace; Verrin, in the gallery, declared
-    ``observable: "looks leisurely over Ivo's uncovered face, then lifts his
-    wine glass and takes a slow, delicate sip without flinching"``. That
-    sentence was delivered verbatim to a body in the reception room two
-    edges away and to a body in the gallery whose own view in the same beat
-    correctly read "Through the glazed terrace door, only darkness". Both
-    received the name Ivo and the fact that his face was uncovered -- the
-    plot's secret, delivered to the two people it was being kept from, in
-    the beat it was created. No tripwire fired, because nothing was looking:
-    the identity scrub answers "may this observer hear this NAME", and the
-    leak here is the STATE beside it.
-
-    `perceived` is this observer's own eyes for the beat -- the set
-    `_composer_standing_percepts` fills through `seen_out`, which is the
-    same "could this observer see them" answer every presence percept is
-    built from. A body in it is admissible; a body absent from it is not,
-    and the span that named it is cut. This SUBTRACTS: what survives is the
-    actor's own conduct, which is what the channel was carrying.
-
-    Returns ``(surface, cut_bodies)``; an empty surface means every span
-    named somebody the observer has no channel to, and the caller refuses.
-    """
-    text = str(surface or "").strip()
-    if not text or not forms_by_body:
-        return text, []
-    exempt = {str(actor or "").strip().casefold(),
-              str(observer or "").strip().casefold()}
-    seen_folded = {str(n or "").strip().casefold() for n in (perceived or ())}
-    # Read from the section that OWNS the table (`agents.common`), never a
-    # second copy under this module's own key: one list of ordinary English
-    # words that are also names, in one place, per pack.
-    common_words = linguistic("agents.common", "_COMMON_WORD_NAMES")
-    third = []
-    for body, forms in forms_by_body.items():
-        canonical = str(body or "").strip()
-        folded = canonical.casefold()
-        if not canonical or folded in exempt or folded in seen_folded:
-            continue
-        patterns = []
-        for form in {canonical, *(forms or ())}:
-            form = str(form or "").strip()
-            if not form:
-                continue
-            # An ordinary English word that is also somebody's name matches
-            # only in its capitalised spelling -- the same guard
-            # `_scrub_unknown_identities` applies, for the same reason: "the
-            # rose garden" is not a percept of Rose.
-            if len(form.split()) == 1 and form.casefold() in common_words:
-                patterns.append(
-                    name_boundary_regex(form[:1].upper() + form[1:]))
-            else:
-                patterns.append(name_boundary_regex(form, re.IGNORECASE))
-        if patterns:
-            third.append((canonical, patterns))
-    named = [(body, patterns) for body, patterns in third
-             if any(pattern.search(text) for pattern in patterns)]
-    if not named:
-        return text, []
-    kept, cut = [], []
-    for span in _SURFACE_CLAUSE_SPLIT.split(text):
-        hits = [body for body, patterns in named
-                if any(pattern.search(span) for pattern in patterns)]
-        if hits:
-            cut.extend(hits)
-            continue
-        span = span.strip().rstrip(",;:").strip()
-        if span:
-            kept.append(span)
-    cut = sorted(set(cut))
-    trimmed = ", ".join(kept)
-    note_step_decision(
-        "act_percept", who, "refused" if not trimmed else "delivered",
-        "the observable named %s, whom this observer has no channel to; "
-        "%s" % (", ".join(cut),
-                "nothing else was said about the actor"
-                if not trimmed else "that clause was cut"))
-    return trimmed, cut
-
-
 def _composer_scrub_surface(text, name, recognized, unknown_sources):
     """Input-side identity floor for an act's observable surface: a Director
     or character-authored surface can embed a canonical name ("steps toward
