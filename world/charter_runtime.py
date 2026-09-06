@@ -2371,6 +2371,42 @@ def advance_snapshot(registry, *, elapsed_seconds, epoch_id, base_turn,
     return registry, rows, produced
 
 
+def charter_noises(registry):
+    """What every creature in the registry was heard DOING, as sensory events.
+
+    THE SOUND IS THE CHANNEL A CREATURE REACHES A ROOM THROUGH BEFORE IT
+    REACHES THE ROOM. `charter_predation` records what each body was doing
+    and where (`state["heard"]`, replaced every round); this turns that into
+    the shape `state_diff.sensory_events` already takes, so the sound rides
+    the room graph the engine already has -- `spatial_sound_field` carries it
+    as far as its rung reaches, `sound_bearing` says which way it came from,
+    and a body two rooms off hears something moving without being told what.
+
+    The DESCRIPTION is the creature's own authored phrase and the LEVEL is
+    its authored rung: what it sounds like is the story's, how far it carries
+    is the engine's. A creature with no voice for what it is doing makes no
+    sound, which is how a stealthy thing is written.
+
+    Never the creature's NAME. A noise in another room is a noise; the thing
+    that made it is what the Director introduces when the two meet.
+    """
+    out = []
+    for state in (registry or {}).get("charters", {}).values() \
+            if isinstance(registry, dict) else ():
+        if not isinstance(state, dict):
+            continue
+        for row in (state.get("heard") or ()):
+            if not isinstance(row, dict) or not row.get("place"):
+                continue
+            out.append({
+                "source_room": str(row["place"]),
+                "level": str(row.get("level") or "audible"),
+                "description": str(row.get("sound") or "").strip(),
+                "kind": "sound",
+            })
+    return out
+
+
 def cross_charter_gossip(registry, cap=CROSS_CHARTER_GOSSIP_CAP):
     """Let co-present bodies from different Charters trade one claim each.
 
