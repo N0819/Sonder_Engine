@@ -1088,7 +1088,23 @@ def _preview_plan_creature(cid, frame_id, op, world):
         if room and not _room_known(world, room):
             errors.append("plan_creature puts %r at %r, which exists nowhere"
                           % (op["name"], room))
-    if op["name"].casefold() in world["reserved_names"]:
+    # A BEING MOVING TIERS IS NOT A COLLISION. The same name held by a
+    # PLANNED ENTITY is this creature at its previous tier: the Room filed it
+    # as furniture because filing an institution was not possible, and
+    # converting it is the whole point of this operation. Refusing that was
+    # the engine telling an author to invent a second spoken name for one
+    # being, which is what the Room refused to do (descent run, 2026-09-05:
+    # "I won't invent a second spoken name for a being the world holds as
+    # one"). An exact match is not ambiguous.
+    #
+    # Every OTHER reserved holder still refuses: a registered character or a
+    # charter body of that name is somebody else.
+    superseded = ""
+    for uid, plan in (world.get("plans") or {}).items():
+        if str(plan.get("name") or "").casefold() == op["name"].casefold():
+            superseded = uid
+            break
+    if op["name"].casefold() in world["reserved_names"] and not superseded:
         errors.append("%r is a reserved identity (a registered character, a "
                       "charter body or another plan)" % op["name"])
     for activity, entry in op["voice"].items():
@@ -1112,11 +1128,32 @@ def _preview_plan_creature(cid, frame_id, op, world):
               "hunts": op["hunts"] or [op["lair"]],
               "bodies": len(charter["bodies"]),
               "voice": {k: v["level"] for k, v in op["voice"].items()}}
+    if superseded:
+        change["supersedes"] = superseded
+        warnings.append(
+            "%r is already planned as a placed entity (%s); filing it as a "
+            "creature RETIRES that plan and the being becomes autonomous. "
+            "Its rules should ride the creature's own fields from here."
+            % (op["name"], superseded))
     return {"changes": [change], "errors": errors, "warnings": warnings}
 
 
 def _apply_plan_creature(cid, frame_id, op, turn_idx):
     from world.charter_runtime import registry_for_update, save_registry
+
+    from world.planned_entities import planned_entities, save_planned_entities
+
+    # The previous tier goes when the being moves up from it, so one name is
+    # one thing: a plan left standing beside its own charter would be read as
+    # a second body by every reader that walks the plans.
+    plans = dict(planned_entities(cid, frame_id) or {})
+    dropped = [uid for uid, plan in plans.items()
+               if str(plan.get("name") or "").casefold()
+               == str(op["name"]).casefold()]
+    if dropped:
+        for uid in dropped:
+            plans.pop(uid, None)
+        save_planned_entities(cid, plans, frame_id)
 
     registry = registry_for_update(cid, frame_id)
     charter = _creature_charter(cid, op)
@@ -1130,7 +1167,10 @@ def _apply_plan_creature(cid, frame_id, op, turn_idx):
     items[charter["key"]] = dict(held or {}, state=charter)
     registry["items"] = items
     save_registry(cid, registry, frame_id)
-    return {"charter": charter["key"], "bodies": len(charter["bodies"])}
+    out = {"charter": charter["key"], "bodies": len(charter["bodies"])}
+    if dropped:
+        out["superseded"] = dropped
+    return out
 
 
 def _apply_plan_entity(cid, frame_id, op, turn_idx):
@@ -2382,6 +2422,14 @@ def operation_harms(op):
         # A `die` op goes through the same harm model a wolf uses, so it is
         # the same act and asks for the same grant.
         return any(str(one.get("op")) == "die" for one in op.get("ops") or ())
+    if op.get("op") == "plan_creature":
+        # SETTING A PREDATOR LOOSE IS AN ACT THAT CAN HURT A BODY, and it is
+        # the same harm model the `die` op above goes through -- a creature's
+        # `kill_ceiling` is how many it may take in a window. So it asks for
+        # the same grant, in words, like everything else that can hurt
+        # somebody. A creature authored to take nothing is not harm: a thing
+        # that only walks and makes noise is atmosphere.
+        return int(op.get("kill_ceiling") or 0) > 0
     return False
 
 
