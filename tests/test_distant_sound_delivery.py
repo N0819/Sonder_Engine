@@ -175,11 +175,17 @@ def test_a_beat_with_no_events_composes_exactly_as_it_did(temp_db):
 
 def test_an_event_too_quiet_to_travel_stays_where_it_happened(temp_db):
     """`FAR_FIELD_ENTRY_DB` is the door, and it is the same door for every
-    story: a sound on the ordinary ladder is heard where it is made and
-    nowhere else."""
-    views = _views(temp_db, events=[_crash(level="loud")])
-    assert DETAIL in views["player"]
-    assert DETAIL not in _listener(views)
+    story. WHICH RUNGS REACH IT MOVED 2026-09-06, on the owner's ruling to
+    untie the impact ladder from the voice ladder: an `audible` noise -- a
+    tool set down, a footfall -- is heard where it is made and nowhere else,
+    and a `loud` one (a crowbar on a bulkhead, 72 dB against the old 56) now
+    walks the room graph, which is the whole point of the ruling."""
+    quiet = _views(temp_db, events=[_crash(level="audible")])
+    assert DETAIL in quiet["player"]
+    assert DETAIL not in _listener(quiet)
+    carried = _views(temp_db, events=[_crash(level="loud")])
+    assert DETAIL in _listener(carried), (
+        "a hammer blow on steel is heard beyond the room that made it")
 
 
 def test_an_event_naming_no_room_the_scene_has_reaches_nobody(temp_db):

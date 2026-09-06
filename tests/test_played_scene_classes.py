@@ -3314,10 +3314,23 @@ def test_a_wall_attenuates_and_does_not_abolish():
     # real-world number standing in a table whose other seven entries are on
     # a scale compressed by 0.358, so a wall is 16 here and BOTH top rungs
     # cross one, which is what the note always said.
+    # WHICH RUNGS CROSS MOVED 2026-09-06, when the impact ladder was untied
+    # from the voice ladder on the owner's ruling: an IMPACT is not measured
+    # against conversation, so `loud` is 72 dB rather than 56 and `deafening`
+    # 80 rather than 61.8. A hammer on steel through one wall of a concrete
+    # building is heard, and now it is. What the rung decides is unchanged
+    # and is still the whole point: the LADDER decides, not the room, not the
+    # story, not a special case.
     for level in SOUND_LEVELS:
         quieter = [{**crash[0], "level": level}]
         crossed = bool(distant_sounds(sc, "Ada", events=quieter))
-        assert crossed == (level in ("thunderous", "catastrophic")), level
+        assert crossed == (
+            level in ("loud", "deafening", "thunderous", "catastrophic")), level
+    # And the quiet end still dies against a wall, which is the other half of
+    # "attenuates and does not abolish".
+    for level in ("faint", "audible"):
+        assert not distant_sounds(
+            sc, "Ada", events=[{**crash[0], "level": level}]), level
     # And no voice, at any volume: the far field has no door for speech.
     sc["positions"]["Bel"] = "hall"
     for volume in SPEECH_DB:

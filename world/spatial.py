@@ -288,6 +288,8 @@ from world.spatial_sound_field import (
     one_opening_away, open_edge_floor, RAISED_VOLUMES,
     quantise_hearing, sound_field, sound_field_hear_level, sound_notices,
     sound_passes, sound_shape, sound_sources, SOUND_LEVELS, SOUND_POWER,
+    # An impact is not a voice and is not a machine (2026-09-06).
+    EVENT_DB, EVENT_POWER,
     # A room a sound has nowhere to go but along (2026-09-06).
     DUCT_ASPECT, DUCT_STEP, duct_step_scale, is_duct,
     SoundField, SPEECH_POWER, SPEECH_VOLUMES, spread, stamp_sound_relation,

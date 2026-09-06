@@ -30,7 +30,6 @@ import time
 
 from agents.common import (
     _check_narrator_fidelity,
-    _check_player_act_rendered,
     _check_quote_attribution,
     _sentence_subjects,
 )
@@ -187,57 +186,40 @@ VIEW_WITH_THE_DOORS = (
 )
 
 
-def test_a_declared_act_absent_from_the_prose_warns():
-    """multitude 2026-09-05, PM4, turn 7. Three numbered items, marked as not
-    yet on the page, and the committed prose carried none of them."""
-    order = [{"n": 1, "actor": "Ottoline Sarr", "kind": "action",
-              "action": "places both palms flat against the heavy oak doors"}]
-    prose = ("Hallam looked up from the factors table. Roon said nothing at "
-             "all, and the lamp guttered.")
-    found = _check_player_act_rendered(
-        prose, VIEW_WITH_THE_DOORS, order, "Ottoline Sarr")
-    assert found and "palms" in found[0]
+def test_the_page_is_not_scored_for_implying_the_players_own_act():
+    """THE CHECK THAT USED TO LIVE HERE IS GONE (2026-09-06, the owner's
+    ruling). It scored the player's declared act on its own content words and
+    warned when none reached the page -- which is exactly what the narrator
+    card asks for: "If it is about theirs, imply it and move on; if it is
+    about anything else in the room, render it." Prose that obeyed the
+    instruction was flagged for obeying it, on every beat of the descent run.
 
-
-def test_a_declared_act_the_prose_renders_does_not_warn():
-    order = [{"n": 1, "actor": "Ottoline Sarr", "kind": "action",
-              "action": "places both palms flat against the heavy oak doors"}]
-    prose = ("She crossed the hall and set both palms flat against the "
-             "doors, and held them there.")
-    assert _check_player_act_rendered(
-        prose, VIEW_WITH_THE_DOORS, order, "Ottoline Sarr") == []
-
-
-def test_an_act_that_adds_nothing_to_the_view_is_not_scored():
-    """The conservative floor: an act whose every content word already stands
-    in the view has no footprint of its own to look for."""
-    order = [{"n": 1, "actor": "Ottoline Sarr", "kind": "action",
-              "action": "the doors"}]
-    assert _check_player_act_rendered(
-        "Nothing at all.", VIEW_WITH_THE_DOORS, order, "Ottoline Sarr") == []
-
-
-def test_only_the_players_own_conduct_is_scored():
-    """A character's act is `_check_action_direction`'s business and the
-    Director's; this check is about the declaration the page was told to
-    render."""
-    order = [{"n": 1, "actor": "Devereux Hallam", "kind": "action",
-              "action": "places both palms flat against the heavy oak doors"}]
-    assert _check_player_act_rendered(
-        "Nothing at all.", VIEW_WITH_THE_DOORS, order, "Ottoline Sarr") == []
-
-
-def test_the_missing_declaration_reaches_the_fidelity_warnings():
-    """The check is wired into `_check_narrator_fidelity`, which is where the
-    step's own `fidelity_warnings` come from."""
+    What the check was built for -- multitude PM4 turn 7, a page carrying
+    nothing of the player at all while five other people spoke -- is now the
+    card's own sentence, IMPLYING IS NOT OMITTING, in both packs. A lexical
+    test could not tell implying from omitting, because the difference is not
+    in the vocabulary.
+    """
     warnings = _check_narrator_fidelity(
-        {"prose": "Hallam looked up from the factors table."},
+        {"prose": "The dogs gave with a shrill shriek and the leaf swung wide."},
         VIEW_WITH_THE_DOORS,
         player_name="Ottoline Sarr",
         event_order=[{"n": 1, "actor": "Ottoline Sarr", "kind": "action",
                       "action": "places both palms flat against the heavy "
                                 "oak doors"}])
-    assert any("declared conduct is missing" in w for w in warnings)
+    assert not any("declared conduct is missing" in w for w in warnings)
+
+
+def test_both_packs_say_that_implying_is_not_omitting():
+    """The rule moved from a checker into the card, so the card has to carry
+    it -- in both packs, like every other rule the engine relies on."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1] / "language_packs"
+    for lang, needle in (("en", "IMPLYING IS NOT OMITTING"),
+                         ("ja", "ほのめかすことは、省くことではありません")):
+        card = (root / lang / "cards" / "system_prompts" / "prompts"
+                / "narrator.txt").read_text(encoding="utf-8")
+        assert needle in card, lang
 
 
 # ---- PS20: one story, one tense -------------------------------------------

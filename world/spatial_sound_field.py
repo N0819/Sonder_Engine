@@ -253,6 +253,52 @@ SOUND_POWER = {"faint": 1.0, "audible": 12.0, "loud": 40.0,
                "thunderous": power_of_db(85.0),
                "catastrophic": power_of_db(100.0)}
 
+#: THE SAME FOUR WORDS MEAN SOMETHING ELSE ABOUT A ONE-OFF NOISE, and the
+#: owner's 2026-09-06 ruling -- untie the noise ladder from the voice ladder
+#: -- lands here rather than on `SOUND_POWER`.
+#:
+#: `SOUND_POWER` above is a STANDING EMISSION: a generator, a fan, a bell
+#: rope pulled and left, a klaxon. What such a thing IS, to a story, is how
+#: it sits against a voice -- whether you can talk over it, whether you have
+#: to raise your voice, whether the room is unusable -- so measuring it
+#: against the speech ladder is not the error, it is the definition, and
+#: every masking answer the engine has given about ambient machinery stands.
+#:
+#: A `sensory_event` is an IMPACT. A crowbar on a bulkhead, a slammed hatch,
+#: a dropped spanner, a detonation overhead: the sound is over before anyone
+#: could talk over it, and what matters about it is HOW FAR IT WENT.
+#: Measured against conversation it was absurd -- a hammer blow on steel at
+#: 56.0 dB against a normal voice's 50.8, where the real gap is nearer forty
+#: -- and 29 dB of range between `loud` and a quiet room's 27.0 floor is
+#: what killed every noise inside the room that made it. Measured on the
+#: descent story (chat 117): a `loud` clang in a 20-pace plant room arrived
+#: at its own doorway at 30.0 dB, under the next room's floor across any
+#: barrier at all, so a creature two rooms off could never hear anything a
+#: player did whatever the geometry said.
+#:
+#:   emission   faint 40.0 | audible 50.8 | loud 56.0 | deafening 61.8
+#:   impact     faint 45.0 | audible 58.0 | loud 72.0 | deafening 80.0
+#:
+#: The two far rungs are shared and unmoved: `thunderous` and `catastrophic`
+#: are impacts by nature, their reach is measured (about thirty and about
+#: fifty medium rooms of open doorways), and nothing in this ruling is a
+#: reason to move a number that was checked.
+#:
+#: `loud` at 72 now clears `FAR_FIELD_ENTRY_DB` (70), which is the point: a
+#: hammer on a bulkhead walks the room graph and is heard across a level,
+#: while `audible` 58 and `faint` 45 stay near-field things. An event whose
+#: level is a bare number, or which carries an authored `db`, is unaffected.
+EVENT_POWER = {"faint": power_of_db(45.0),
+               "audible": power_of_db(58.0),
+               "loud": power_of_db(72.0),
+               "deafening": power_of_db(80.0),
+               "thunderous": SOUND_POWER["thunderous"],
+               "catastrophic": SOUND_POWER["catastrophic"]}
+
+#: The impact ladder in dB -- faint 45.0 | audible 58.0 | loud 72.0 |
+#: deafening 80.0 | thunderous 85.0 | catastrophic 100.0.
+EVENT_DB = {level: db_of_power(power) for level, power in EVENT_POWER.items()}
+
 #: The source ladder in dB at one pace -- faint 40.0 | audible 50.8 |
 #: loud 56.0 | deafening 61.8 | thunderous 85.0 | catastrophic 100.0. The
 #: same correction `SPEECH_DB` records applies to § 5's `faint 30`.
@@ -898,13 +944,17 @@ def event_db(event) -> float:
         raw = event.get(key)
         if isinstance(raw, (int, float)) and not isinstance(raw, bool):
             return db_of_power(
-                SOUND_POWER["deafening"] * max(0.0, min(1.0, float(raw))))
+                EVENT_POWER["deafening"] * max(0.0, min(1.0, float(raw))))
         word = str(raw or "").strip().casefold()
-        if word in SOUND_DB:
-            return SOUND_DB[word]
+        # `EVENT_DB`, the impact ladder: this function is only ever asked
+        # about a one-beat sound. A speech volume written here is still
+        # speech (`SPEECH_DB`) -- a level word a body could have SAID is
+        # that body's loudness, not a hammer's.
+        if word in EVENT_DB:
+            return EVENT_DB[word]
         if word in SPEECH_DB:
             return SPEECH_DB[word]
-    return SOUND_DB["audible"]
+    return EVENT_DB["audible"]
 
 
 def _event_power(event) -> float:
@@ -919,13 +969,16 @@ def _event_power(event) -> float:
     for key in ("level", "intensity"):
         raw = event.get(key)
         if isinstance(raw, (int, float)) and not isinstance(raw, bool):
-            return SOUND_POWER["deafening"] * max(0.0, min(1.0, float(raw)))
+            return EVENT_POWER["deafening"] * max(0.0, min(1.0, float(raw)))
         word = str(raw or "").strip().casefold()
-        if word in SOUND_POWER:
-            return SOUND_POWER[word]
+        # THE IMPACT LADDER, not the emission one (`EVENT_POWER`). A speech
+        # volume written on an event still reads as speech: a level word a
+        # body could have SAID is that body's loudness, not a hammer's.
+        if word in EVENT_POWER:
+            return EVENT_POWER[word]
         if word in SPEECH_POWER:
             return SPEECH_POWER[word]
-    return SOUND_POWER["audible"]
+    return EVENT_POWER["audible"]
 
 
 def _is_sound_event(event) -> bool:
@@ -1782,8 +1835,25 @@ def room_span(scene: dict, room_id) -> float:
     OWN conversion (`spatial_fov.grid_side` -> `room_grid`), not a second
     one -- 0 of 589 live rooms carried an extent when this was measured, so
     the tier is what the far field will actually run on, and the day extents
-    are written the far field gets them for nothing."""
-    return float(grid_side(scene, room_id))
+    are written the far field gets them for nothing.
+
+    A DUCT IS SHORTER TO A SOUND THAN IT IS TO A BODY (`DUCT_STEP`, the same
+    rule the near field's flood charges per pace). This is the room-graph
+    scale of it: a corridor's whole length costs a sound half of what an
+    open room's does, because the walls stop it going anywhere else. One
+    derivation, two scales -- `is_duct` answers both.
+
+    Why it matters more here than in the near field: the far field charges
+    EVERY room on the path its whole span, source's own included, so a
+    corridor between two places was the most expensive thing a sound could
+    cross when it should be the cheapest. Measured on the descent story
+    (chat 117): a `loud` 56 dB clang in a 20-pace plant room arrived at 30.0
+    dB having crossed only its OWN room, which is under the 27 dB floor of
+    the next room across any barrier at all -- so nothing between the
+    adjacent room and a cannon was ever audible anywhere.
+    """
+    span = float(grid_side(scene, room_id))
+    return span * DUCT_STEP if is_duct(scene, room_id) else span
 
 
 #: Below this level nothing anywhere can hear a sound, whatever room it
