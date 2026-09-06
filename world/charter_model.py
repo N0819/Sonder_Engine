@@ -627,6 +627,30 @@ def normalize_charter(stored, reservation=None):
         "carried_events": [
             dict(row) for row in (stored.get("carried_events") or ())
             if isinstance(row, dict) and row.get("kind")][-64:],
+        # WHAT WAS HEARD THIS WINDOW, both directions, and both replaced
+        # every round rather than accumulated: a noise is a thing that
+        # happened in a window and never a standing fact, the same rule
+        # `engine_notices` holds.
+        #
+        # `overheard` is `{room: loudness}` -- what the world was heard
+        # doing, carried in by the caller from the sound field so a creature
+        # can be drawn by what a body did (`charter_predation.hunt_moves`).
+        # `heard` is the other direction: what this institution's own bodies
+        # were heard doing and where, which `charter_runtime.charter_noises`
+        # turns into the beat's sensory events.
+        #
+        # Declared HERE because the shape is closed and a key it does not
+        # name is dropped at the write chokepoint -- which is exactly what
+        # happened to both of these on the descent run: written by the round,
+        # normalized away before anything could read them, and a creature
+        # stayed deaf with the wiring apparently in place.
+        "overheard": {
+            str(room): number(level, 0.0)
+            for room, level in (stored.get("overheard") or {}).items()
+            if str(room or "").strip()},
+        "heard": [
+            dict(row) for row in (stored.get("heard") or ())
+            if isinstance(row, dict) and row.get("place")][-32:],
         # The watch called out, by place (`charter_intervene.watch_shock`),
         # and how this institution decides to call it (`charter_decide`).
         "mobilisations": {
