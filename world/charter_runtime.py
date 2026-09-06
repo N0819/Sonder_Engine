@@ -2410,6 +2410,17 @@ def hearing_for_creatures(registry, scene, events):
         state = item.get("state") if isinstance(item, dict) else None
         if not isinstance(state, dict) or not state.get("creature"):
             continue
+        # A CREATURE HEARS ONLY IF IT WAS GIVEN EARS. `senses.hearing` is
+        # declared and defaults to false, so this channel can never hand a
+        # sense to a thing the story wrote without one -- the descent's
+        # carbonic stalker is "blind, deaf, indifferent to vibration and
+        # light, tracking prey only by warm exhaled carbon dioxide", and on
+        # the day this was built it was being answered `overheard` anyway.
+        from world.charter_creature import normalize_creature
+        if not (normalize_creature(state.get("creature")).get("senses")
+                or {}).get("hearing"):
+            state["overheard"] = {}
+            continue
         overheard = {}
         if rooms and events:
             places = {str(b.get("place") or "")
@@ -2473,6 +2484,65 @@ def hearing_for_creatures(registry, scene, events):
                         near_base + rank.get(str(word), 1))
         state["overheard"] = overheard
     return registry
+
+
+def scent_for_creatures(registry, scene):
+    """Tell every creature that has a nose what it can SMELL, as
+    `{room: rank}` -- the same shape `hearing_for_creatures` stamps, so
+    `hunt_moves` ranks a trail and a noise on one scale.
+
+    THE DIFFERENCE FROM HEARING IS THE WHOLE POINT. A noise says where prey
+    IS, this beat, and is gone with the beat. A trail says where prey WAS,
+    and it stays: `spatial_scent_field` keeps a ledger that decays over
+    beats rather than a field that is recomputed, so a creature following a
+    scent arrives where the body stood some beats ago and has to work
+    forward. That is what makes a scent hunter evaded by breaking your
+    trail -- a shut door, a different route -- where a hearing one is evaded
+    by being quiet.
+
+    A CREATURE SMELLS ONLY IF IT WAS GIVEN A NOSE (`senses.scent`, declared
+    and false by default), for the reason the ears gate exists: on the day
+    hearing was built it was handed to every creature including one the
+    story had written deaf.
+
+    Stamped as `smelled`, replaced every window like `overheard` beside it.
+    """
+    from world.charter_creature import normalize_creature
+    from world.spatial import SCENT_LEVELS, scent_gradient
+
+    items = (registry or {}).get("items") if isinstance(registry, dict) else {}
+    rank = {word: n + 1 for n, word in enumerate(SCENT_LEVELS)}
+    for item in (items or {}).values():
+        state = item.get("state") if isinstance(item, dict) else None
+        if not isinstance(state, dict) or not state.get("creature"):
+            continue
+        creature = normalize_creature(state.get("creature"))
+        if not (creature.get("senses") or {}).get("scent"):
+            state["smelled"] = {}
+            continue
+        smelled = {}
+        places = {str(b.get("place") or "")
+                  for b in (state.get("bodies") or {}).values()
+                  if isinstance(b, dict) and b.get("place")}
+        for place in sorted(places):
+            for kind in BODY_SCENTS:
+                for room, strength in scent_gradient(
+                        scene, place, kind).items():
+                    from world.spatial import scent_word
+                    word = scent_word(strength)
+                    if not word:
+                        continue
+                    smelled[room] = max(smelled.get(room, 0),
+                                        rank.get(word, 1))
+        state["smelled"] = smelled
+    return registry
+
+
+#: What a creature hunting living prey is following. One kind, engine-owned,
+#: because a hunter's nose is not the story's vocabulary -- what a ROOM
+#: smells of can be anything an author writes, and what a predator tracks is
+#: a body. `spatial_scent_field` holds the ledger both write into.
+BODY_SCENTS = ("breath",)
 
 
 def charter_noises(registry):
@@ -2742,6 +2812,13 @@ def schedule_charter_ticks(ctx, epoch=None):
                 (scene.get(SENSORY_EVENTS_KEY) or {}).get("events") or ())
         except Exception:
             pass                  # a creature that hears nothing simply hunts
+        # AND WHAT IT CAN SMELL, from the trail ledger the commit keeps. A
+        # noise is this beat's and a trail is every beat's, so this reads
+        # standing state where the line above reads an event list.
+        try:
+            scent_for_creatures(registry, scene)
+        except Exception:
+            pass                  # a creature with no nose simply hunts
         advanced, rows, produced = advance_snapshot(
             registry, elapsed_seconds=elapsed, epoch_id=beat_id,
             base_turn=base_turn, cid=cid, frame_id=frame_id, scene=scene,

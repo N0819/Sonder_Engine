@@ -570,6 +570,49 @@ Everything in Part 2 is a reconstructed mapping.
 
 ---
 
+### 1.8 Scent as a ledger with memory (`world/spatial_scent_field.py`)
+
+Added 2026-09-06, at the owner's request to research simulated smell before
+building it. **Only work that actually shaped the code appears here**, with
+what was taken and what was refused.
+
+The question the reading settled: whether scent is the sound field with
+different constants. It is not, and the three differences that decide the
+shape each came from a different source.
+
+#### 1.8.1 Turbulent odour plume tracking (read as abstracts and figures)
+
+Singh, S. H., van Breugel, F., Rao, R. P. N., & Brunton, B. W. (2023).
+*Emergent behaviour and neural dynamics in artificial agents tracking odour
+plumes.* Nature Machine Intelligence, 5, 58–70.
+https://www.nature.com/articles/s42256-022-00599-w
+
+Rapp, H., & Nawrot, M. P. (2022) and Singh et al.'s companion result in
+eLife, *Alternation emerges as a multi-modal strategy for turbulent odor
+navigation*. https://elifesciences.org/articles/76989
+
+**What it supplied.** Odour does not arrive as a smooth gradient: it is
+advected by wind, perturbed crosswind and radially diffused, so it arrives in
+intermittent packets. The behaviour that falls out — and that trained agents
+rediscover independently — is CAST AND SURGE: surge upwind while the odour is
+detected, cast crosswind with widening amplitude when it is lost. This is the
+literature's most useful single claim for a story engine, because the searching
+is what reads as intelligent and frightening, and because it is what makes
+breaking a trail a real tactic rather than an instant win.
+
+**What it changed.** The first design drafted here was a smooth gradient a
+hunter walks uphill. Measured on a five-room corridor before the reading
+landed: a body walking r0 to r4 leaves 0.067 / 0.117 / 0.169 / 0.233 / 0.316,
+which is a clean monotone line to the prey and a hunter that never has to
+search. The reading is why casting is a named piece of work rather than an
+omission (`docs/UNBUILT.md`).
+
+**What was refused.** The physics. Advection by a resolved wind field is
+right for a robot and wrong here: this engine's rooms have barriers and
+apertures, not a velocity field, and a per-cell plume simulation would be a
+second geometry model competing with the one the sound and light fields
+share. The behavioural finding is portable; the fluid dynamics is not.
+
 ## 2. Conceptual / implicit research
 
 Established work the architecture instantiates without citing it.

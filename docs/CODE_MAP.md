@@ -86,7 +86,7 @@
 | `persist/commit_memory_write.py` | 325 | The durable memory write and its out-of-band consolidation twin. | `core.db`, `mind.memory`, `persist.commit_memory`, `story.character_schema`, `story.scene` |
 | `persist/commit_place_graph.py` | 321 | Per-mind durable place graph and per-beat spatial experience. | `world.spatial` |
 | `persist/commit_room_registry.py` | 521 | Room identity across frames: registry projection, mint dedup, renames, retirement, exit pruning. | `core.db`, `persist.commit_common`, `story.character_schema`, `world.spatial` |
-| `persist/commit_scene_state.py` | 2250 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `core.pipeline_context`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.weather` |
+| `persist/commit_scene_state.py` | 2273 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `core.pipeline_context`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.weather` |
 | `persist/llm_capture.py` | 383 |  | `core.db` |
 | `persist/pipeline_trace.py` | 596 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `core.db` |
 | `story/__init__.py` | 6 |  | — |
@@ -104,7 +104,7 @@
 | `story/lore_structure.py` | 248 |  | — |
 | `story/mandates.py` | 594 |  | `core.db` |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
-| `story/plot_packages.py` | 3155 |  | `world.spatial` |
+| `story/plot_packages.py` | 3163 |  | `world.spatial` |
 | `story/provenance_text.py` | 132 |  | — |
 | `story/room_bible.py` | 424 |  | `core.db` |
 | `story/room_calls.py` | 130 |  | — |
@@ -129,7 +129,7 @@
 | `world/charter_author.py` | 800 |  | `world.charter_commitment`, `world.charter_economy`, `world.charter_figure`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_politics`, `world.charter_practice` |
 | `world/charter_chatter.py` | 443 |  | `world.crowds` |
 | `world/charter_commitment.py` | 292 |  | `world.charter_model` |
-| `world/charter_creature.py` | 413 |  | `world.charter_harm`, `world.charter_model` |
+| `world/charter_creature.py` | 439 |  | `world.charter_harm`, `world.charter_model` |
 | `world/charter_crowd.py` | 282 |  | `world.crowds` |
 | `world/charter_decide.py` | 279 |  | `world.charter_model`, `world.charter_news` |
 | `world/charter_drift.py` | 106 |  | `world.charter_model` |
@@ -145,7 +145,7 @@
 | `world/charter_log.py` | 510 |  | `world.charter_commitment`, `world.charter_decide`, `world.charter_economy`, `world.charter_feel`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_needs`, `world.charter_news`, `world.charter_politics`, `world.charter_social`, `world.charter_temper` |
 | `world/charter_mark.py` | 302 |  | — |
 | `world/charter_mind.py` | 262 |  | — |
-| `world/charter_model.py` | 829 |  | `world.charter_chatter`, `world.charter_figure`, `world.charter_harm`, `world.charter_mark` |
+| `world/charter_model.py` | 838 |  | `world.charter_chatter`, `world.charter_figure`, `world.charter_harm`, `world.charter_mark` |
 | `world/charter_move.py` | 476 |  | `world.charter_space` |
 | `world/charter_needs.py` | 297 |  | `world.charter_model` |
 | `world/charter_news.py` | 517 |  | `world.charter_mind`, `world.charter_model`, `world.charter_talk` |
@@ -155,11 +155,11 @@
 | `world/charter_plan.py` | 227 |  | `world.charter_drift`, `world.charter_model`, `world.charter_roster` |
 | `world/charter_politics.py` | 161 |  | — |
 | `world/charter_practice.py` | 1200 |  | `world.charter_commitment`, `world.charter_figure`, `world.charter_mind`, `world.charter_politics`, `world.charter_talk` |
-| `world/charter_predation.py` | 786 |  | `world.charter_creature`, `world.charter_harm`, `world.charter_model`, `world.charter_move` |
+| `world/charter_predation.py` | 802 |  | `world.charter_creature`, `world.charter_harm`, `world.charter_model`, `world.charter_move` |
 | `world/charter_promote.py` | 604 |  | `world.charter_commitment`, `world.charter_feel`, `world.charter_politics`, `world.charter_social` |
 | `world/charter_roster.py` | 134 |  | `world.charter_model` |
 | `world/charter_run.py` | 1477 |  | `world`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_enrol`, `world.charter_feel`, `world.charter_figure`, `world.charter_harm`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
-| `world/charter_runtime.py` | 4301 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics`, `world.spatial` |
+| `world/charter_runtime.py` | 4378 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics`, `world.spatial` |
 | `world/charter_social.py` | 743 |  | `world.charter_politics` |
 | `world/charter_space.py` | 167 |  | `world.spatial` |
 | `world/charter_surface.py` | 341 |  | — |
@@ -182,8 +182,8 @@
 | `world/region_events.py` | 420 |  | — |
 | `world/regions.py` | 582 |  | `world.spatial` |
 | `world/routines.py` | 208 |  | — |
-| `world/spatial.py` | 320 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_light_field`, `world.spatial_lint`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_sound_field`, `world.spatial_substance`, `world.spatial_transit` |
-| `world/spatial_barriers.py` | 824 |  | `world.spatial_orientation` |
+| `world/spatial.py` | 327 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_light_field`, `world.spatial_lint`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_scent_field`, `world.spatial_senses`, `world.spatial_sound_field`, `world.spatial_substance`, `world.spatial_transit` |
+| `world/spatial_barriers.py` | 846 |  | `world.spatial_orientation` |
 | `world/spatial_contact_migration.py` | 331 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_contacts.py` | 1951 |  | `world.spatial_containment`, `world.spatial_identity`, `world.spatial_transit` |
 | `world/spatial_containment.py` | 3049 |  | `world.spatial_barriers`, `world.spatial_identity`, `world.spatial_transit` |
@@ -198,6 +198,7 @@
 | `world/spatial_orientation.py` | 358 | Bearing math and reciprocal spatial-edge normalization. | — |
 | `world/spatial_prose.py` | 404 |  | `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light` |
 | `world/spatial_routing.py` | 1120 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_light`, `world.spatial_orientation` |
+| `world/spatial_scent_field.py` | 233 |  | `world.spatial_barriers` |
 | `world/spatial_senses.py` | 1585 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation`, `world.spatial_routing` |
 | `world/spatial_sound_field.py` | 2206 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light_field`, `world.spatial_senses` |
 | `world/spatial_substance.py` | 1128 |  | `world.spatial_contacts`, `world.spatial_identity` |
@@ -1081,7 +1082,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_scene_commit()` | 1205 | 928 lines |
+| `prepare_scene_commit()` | 1205 | 951 lines |
 | `derive_borne_containment()` | 828 | 113 lines |
 | `_advance_day_cycle()` | 68 | 111 lines |
 | `_fold_duplicate_mints()` | 682 | 110 lines |
@@ -1297,11 +1298,11 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_package_checks()` | 2504 | 115 lines |
+| `_package_checks()` | 2512 | 115 lines |
 | `_preview_plan_rooms()` | 797 | 107 lines |
-| `publish_package()` | 2824 | 84 lines |
-| `_reach_warning()` | 2642 | 82 lines |
-| `fire_due_clocks()` | 2949 | 77 lines |
+| `publish_package()` | 2832 | 84 lines |
+| `_reach_warning()` | 2650 | 82 lines |
+| `fire_due_clocks()` | 2957 | 77 lines |
 | `normalize_package()` | 181 | 74 lines |
 | `_world_snapshot()` | 495 | 66 lines |
 | `edit_package()` | 370 | 57 lines |
@@ -1572,14 +1573,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_creature()` | 129 | 116 lines |
-| `creature_neighbors()` | 286 | 32 lines |
-| `normalize_spoor()` | 255 | 18 lines |
-| `prey_capability()` | 376 | 14 lines |
-| `predator_capability()` | 362 | 12 lines |
-| `is_active()` | 330 | 11 lines |
-| `room_fits()` | 275 | 9 lines |
-| `hunger_of()` | 343 | 9 lines |
+| `normalize_creature()` | 133 | 138 lines |
+| `creature_neighbors()` | 312 | 32 lines |
+| `normalize_spoor()` | 281 | 18 lines |
+| `prey_capability()` | 402 | 14 lines |
+| `predator_capability()` | 388 | 12 lines |
+| `is_active()` | 356 | 11 lines |
+| `room_fits()` | 301 | 9 lines |
+| `hunger_of()` | 369 | 9 lines |
 
 ### `world/charter_crowd.py`
 
@@ -1770,7 +1771,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_charter()` | 433 | 375 lines |
+| `normalize_charter()` | 433 | 384 lines |
 | `normalize_body()` | 231 | 131 lines |
 | `normalize_post()` | 144 | 45 lines |
 | `body_of_an_authored_mind()` | 364 | 45 lines |
@@ -1897,14 +1898,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_attack()` | 286 | 118 lines |
-| `_tribute()` | 578 | 95 lines |
-| `predation_round()` | 406 | 89 lines |
-| `hunt_moves()` | 201 | 70 lines |
-| `run_registry()` | 721 | 60 lines |
-| `read_spoor()` | 526 | 48 lines |
-| `_company()` | 97 | 29 lines |
-| `_prey_here()` | 177 | 22 lines |
+| `_attack()` | 302 | 118 lines |
+| `_tribute()` | 594 | 95 lines |
+| `predation_round()` | 422 | 89 lines |
+| `hunt_moves()` | 217 | 70 lines |
+| `run_registry()` | 737 | 60 lines |
+| `read_spoor()` | 542 | 48 lines |
+| `_company()` | 113 | 29 lines |
+| `_prey_here()` | 193 | 22 lines |
 
 ### `world/charter_promote.py`
 
@@ -1949,9 +1950,9 @@
 | `_plan_lived_location()` | 1368 | 181 lines |
 | `_prepare_cast_histories()` | 615 | 172 lines |
 | `_generate_lived_location()` | 1609 | 154 lines |
-| `presence_view()` | 3592 | 114 lines |
-| `presim_registry()` | 931 | 104 lines |
-| `generation_lore()` | 1037 | 101 lines |
+| `presence_view()` | 3669 | 114 lines |
+| `hearing_for_creatures()` | 2375 | 112 lines |
+| `schedule_charter_ticks()` | 2738 | 107 lines |
 
 ### `world/charter_social.py`
 
@@ -2236,14 +2237,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_barrier()` | 288 | 82 lines |
-| `effective_adjacent()` | 620 | 73 lines |
-| `neighbor_map()` | 501 | 62 lines |
-| `normalize_scene_passages()` | 774 | 51 lines |
-| `normalize_scene_barriers()` | 388 | 32 lines |
-| `passage_direction()` | 565 | 28 lines |
-| `_barrier_against_its_own_name()` | 433 | 27 lines |
-| `resolve_edge()` | 748 | 24 lines |
+| `normalize_barrier()` | 310 | 82 lines |
+| `effective_adjacent()` | 642 | 73 lines |
+| `neighbor_map()` | 523 | 62 lines |
+| `normalize_scene_passages()` | 796 | 51 lines |
+| `normalize_scene_barriers()` | 410 | 32 lines |
+| `passage_direction()` | 587 | 28 lines |
+| `_barrier_against_its_own_name()` | 455 | 27 lines |
+| `resolve_edge()` | 770 | 24 lines |
 
 ### `world/spatial_contact_migration.py`
 
@@ -2419,6 +2420,19 @@
 | `passable_route_next_step()` | 370 | 46 lines |
 | `stamp_sight_direction()` | 177 | 45 lines |
 | `mutual_one_way_window()` | 133 | 42 lines |
+
+### `world/spatial_scent_field.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `advance_scents()` | 143 | 53 lines |
+| `normalize_scents()` | 87 | 28 lines |
+| `scent_gradient()` | 215 | 19 lines |
+| `scent_edges()` | 124 | 17 lines |
+| `scent_word()` | 204 | 9 lines |
+| `_keep()` | 117 | 5 lines |
+| `scent_at()` | 198 | 4 lines |
+| `normalize_scent_level()` | 82 | 3 lines |
 
 ### `world/spatial_senses.py`
 

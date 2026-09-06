@@ -1062,6 +1062,11 @@ def _shape_plan_creature(op):
         "count": max(1, min(12, int(op.get("count") or 1))),
         "prey": [_text(x, 20) for x in op.get("prey") or () if _text(x, 20)],
         "senses_rooms": max(0, min(6, int(op.get("senses_rooms") or 2))),
+        # WHETHER IT HAS EARS, and it has to be said. Declared and false by
+        # default (`charter_creature.normalize_creature`): the engine may not
+        # hand a sense to a creature the story wrote without one.
+        "hears": bool(op.get("hears")),
+        "smells": bool(op.get("smells")),
         "footprint": _text(op.get("footprint"), 20) or "small",
         "can_open_doors": bool(op.get("can_open_doors", False)),
         "boldness": op.get("boldness"),
@@ -1089,7 +1094,8 @@ def _creature_charter(cid, op):
               for i in range(op["count"])}
     creature = {
         "prey": op["prey"] or ["unposted", "figure"],
-        "senses": {"range_rooms": op["senses_rooms"]},
+        "senses": {"range_rooms": op["senses_rooms"],
+                   "hearing": op["hears"], "scent": op["smells"]},
         "footprint": op["footprint"],
         "can_open_doors": op["can_open_doors"],
         "kill_ceiling": op["kill_ceiling"],
@@ -2293,6 +2299,8 @@ OPERATION_FIELDS = {
                  "creature only ever NOTICES them off screen: what happens "
                  "when they meet is the Director's",
         "senses_rooms?": "how many rooms out it notices prey (0-6, default 2)",
+        "smells?": "true if it hunts by SCENT -- it follows the trail a living body LEAVES BEHIND, so it arrives where the prey was and works forward, and a shut door between them stops the trail where a noise would have carried. Default false. This is the sense to give a thing that should be evaded by breaking your trail rather than by being quiet",
+        "hears?": "true if it hunts by SOUND -- a noise made anywhere it can reach draws it, and the louder the noise the further it pulls from. Default false: a creature you do not say this of is deaf, and writing that it is deaf in the premise is not saying it here. A thing that tracks by scent, heat, vibration or nothing at all leaves this alone",
         "footprint?": "point | small | large | run -- a room too small holds "
                       "it at the door, exactly as a shut door holds a body "
                       "that cannot open one",

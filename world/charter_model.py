@@ -648,6 +648,15 @@ def normalize_charter(stored, reservation=None):
             str(room): number(level, 0.0)
             for room, level in (stored.get("overheard") or {}).items()
             if str(room or "").strip()},
+        # AND WHAT IT SMELLS. Same shape, same reason, same day: a trail is
+        # `{room: rank}` exactly as a noise is, so the walk reads one scale.
+        # Declared here because the comment above is a record of what happens
+        # when it is not -- the fourth key this year to be written by a round
+        # and normalized away before a reader saw it.
+        "smelled": {
+            str(room): number(level, 0.0)
+            for room, level in (stored.get("smelled") or {}).items()
+            if str(room or "").strip()},
         "heard": [
             dict(row) for row in (stored.get("heard") or ())
             if isinstance(row, dict) and row.get("place")][-32:],

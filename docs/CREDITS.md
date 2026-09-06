@@ -200,9 +200,114 @@ only.
 
 ---
 
+## Dwarf Fortress
+
+| | |
+|---|---|
+| **URL** | https://www.bay12games.com/dwarves/ (wiki: https://dwarffortresswiki.org) |
+| **Author** | Tarn and Zach Adams (Bay 12 Games) |
+| **Licence** | **Proprietary, closed source.** No implementation may be reused. Only the DESIGN, read off the community wiki, is taken — which is what this file exists to record. |
+| **Surveyed** | 2026-09-06, via the wiki's `DF2014:Miasma` and `DF2014:Smell` pages. |
+
+### What was looked at
+
+Two systems, and the instructive part is that they are SEPARATE.
+
+*Miasma* is a gas that propagates on the tile grid: orthogonal steps only,
+never diagonal; through grates, bars and open doors and hatches; stopped by
+shut ones; and it **keeps spreading after its source is removed**, eventually
+dissipating.
+
+*Smell* is not a propagation model at all: each creature carries an `odor
+level` (0–10000) checked against a perceiver's `smell trigger` (default 50,
+humans 90, elves 10). Detection is a threshold comparison, and it is mainly
+implemented in adventurer mode.
+
+### What was taken
+
+| Idea | Where it landed | Note |
+|---|---|---|
+| A gas outlives its source | `spatial_scent_field.advance_scents` | THE reason scent is a ledger and not a field. Miasma is the shipped proof that persistence-after-source is playable, and it is the whole mechanic: a hunter follows where prey WAS. |
+| Barrier rules for air, distinct from sight and sound | `spatial_barriers.SCENT_PASS` | Bars and grates pass air; a shut door nearly stops it; glass stops it entirely. The orders differ from `APERTURE_PASS` and DF is where that was confirmed rather than guessed. |
+| One step per tick along declared ways | `spatial_scent_field.advance_scents` | The bleed is one room per beat. DF's orthogonal-only rule becomes "along declared edges" in a graph that has no diagonals to refuse. |
+| Detection as a threshold on the SENSER | `charter_creature` `senses.scent` | Refused as a number, taken as a rule: the perceiver decides, not the world. Sonder's version is a declared boolean rather than DF's 0–10000, because this engine has no calibrated odour scale to compare against and inventing one would be a table nobody could check. Registered as a possible refinement. |
+
+### What was refused, and why
+
+**The tile grid.** DF diffuses over tiles because it has tiles. This engine's
+unit is the room, and a per-cell scent field would be a second geometry model
+competing with the one the sound and light fields already share.
+
+---
+
+## Brogue
+
+| | |
+|---|---|
+| **URL** | https://sites.google.com/site/broguegame/ |
+| **Author** | Brian Walker |
+| **Licence** | **AGPL-3.0.** Incompatible with this repo's MIT licence, so NO implementation may be copied. The technique below is described in the author's own public write-up and is taken as an idea only. |
+| **Surveyed** | 2026-09-06, via the author's RogueBasin article "The Incredible Power of Dijkstra Maps". |
+
+### What was looked at
+
+A scalar field over the map: goal cells at zero, every other cell relaxed to
+one more than its lowest neighbour. Actors move by reading neighbouring cell
+values. The author's claim for it is the reason it was read: behaviour "eerie
+in its seeming intelligence, without requiring complicated state machines",
+and one map serving any number of actors. Multiple motives combine by
+weighting each map's value per actor — "desire maps".
+
+### What was taken
+
+| Idea | Where it landed | Note |
+|---|---|---|
+| A hunter reads a scalar over its neighbours rather than running a search | `charter_runtime.scent_for_creatures`, `charter_predation._pull` | The gradient read. Confirmed a decision already half-made: `hunt_moves` had taken this shape the day before for `noises`, and this is why it was kept rather than replaced with pathfinding. |
+| Several motives on one scale | `charter_predation._pull` | Hearing and scent are ranked into one `{room: rank}` so the walk never asks which sense told it. Sonder's version is a max rather than Brogue's weighted sum — the weights would be a tuning surface nobody has measured. |
+
+### What was refused, and why
+
+**The per-cell map.** Same reason as DF: the room is this engine's unit.
+
+---
+
+## RogueBasin scent-map technique (community documentation)
+
+| | |
+|---|---|
+| **URL** | https://www.roguebasin.com/index.php/Tracking_by_Scent_and_Sound |
+| **Author** | RogueBasin contributors (community wiki) |
+| **Licence** | Wiki prose, no code adopted. Idea only. |
+| **Surveyed** | 2026-09-06. |
+
+### What was looked at
+
+The canonical roguelike scent map: a scalar per tile, the player depositing on
+the tile they occupy each tick, every tile becoming the average of itself and
+its neighbours minus a decay percentage, monsters walking uphill. A detection
+threshold like 20 means a monster does not notice prey 20 cells away OR prey
+that was there more than 20 turns ago.
+
+### What was taken
+
+| Idea | Where it landed | Note |
+|---|---|---|
+| One number encodes both distance and staleness | `spatial_scent_field.SCENT_KEEP`, `SCENT_FLOOR` | The property that makes the whole thing cheap: a decayed, bled strength already answers "how far and how long ago" without storing a timestamp. Sonder's decay rate is per-room by `exposure`, which is the engine's own word for ventilation. |
+| A floor that ends the trail | `SCENT_FLOOR` | Measured after adopting it: a trail expires at about 20 beats in a sealed room, which is what keeps the ledger small and stops a trail becoming a map. |
+
+### What was refused, and why
+
+**Diffusing every N turns for performance.** The article's advice is to
+recalculate every 5–10 turns because players will not notice. This engine
+advances once per beat and a beat is already seconds of model time, so the
+saving is nothing and the cost is a trail that moves in visible jumps.
+
+---
+
 ## Change log for this file
 
 | Date | Change |
 |---|---|
 | 2026-08-14 | Created. Directive and grb-systems surveyed; nothing adopted from either yet. |
 | 2026-08-14 | Antonio added — the register's first adopted *implementation*, bundled under OFL 1.1 for the `lcars` theme. |
+| 2026-09-06 | Dwarf Fortress, Brogue and the RogueBasin scent-map technique added, surveyed for `world/spatial_scent_field.py`. Ideas only from all three; two are licence-incompatible with this repo and no implementation was copied from any. |

@@ -74,6 +74,22 @@ SENSE_RANGE_CAP = 8
 STOCK_WHOLE_LOT = 1.0
 
 
+def _pull(state):
+    """What is DRAWING this creature, as `{room: rank}` -- every sense it
+    has, on one scale, loudest/strongest wins where two name a room.
+
+    `overheard` says where prey IS and is gone with the beat; `smelled` says
+    where prey WAS and persists for as long as the trail does. A creature
+    with one sense reads one; a creature with both reads both and the walk
+    does not need to know which told it.
+    """
+    pull = dict(state.get("overheard") or {})
+    for room, rank in (state.get("smelled") or {}).items():
+        if rank > pull.get(room, 0):
+            pull[room] = rank
+    return pull
+
+
 def _draw(*parts):
     digest = hashlib.sha256(
         "|".join(str(part) for part in parts).encode("utf-8")).hexdigest()
@@ -429,7 +445,7 @@ def predation_round(states, at_hours, *, seed=0, hours=4.0):
         neighbors = creature_neighbors(scene, creature) if scene else {}
         # 1. Senses: walk toward what was noticed, on this creature's graph.
         moves = hunt_moves(states, own, bodies_at, stock_at, neighbors, seed,
-                           at, noises=(state.get("overheard") or {}))
+                           at, noises=_pull(state))
         # WHAT IT IS DOING IS WHAT CAN BE HEARD. Recorded here, where the
         # round already knows it, and emitted at the runtime boundary --
         # this module is pure and owns no scene. The list is REPLACED every
