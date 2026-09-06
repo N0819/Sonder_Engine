@@ -430,3 +430,54 @@ def test_without_a_chat_id_the_pruning_is_exactly_what_it_was(temp_db):
     warnings = prune_dangling_exits(scene)
     assert scene["rooms"]["inn"]["adjacent"] == []
     assert any("kitchen" in w for w in warnings)
+
+
+def test_a_stubs_doorway_yields_to_the_side_the_story_stood_in(temp_db):
+    """AN EDGE IS ONE DOORWAY, AND THE STORY OUTRANKS THE PLAN ABOUT IT.
+
+    A stub takes its exits from the plan, where the barrier is whatever the
+    Room wrote before anybody had been there. The moment a hand describes
+    that doorway from the room it can actually see, the two sides disagree
+    and every sense reads whichever it happens to stand on. Measured in the
+    descent run (chat 117, turn 13): six of the seven doorways off one
+    service spine disagreed with themselves, and the containment annex --
+    which the spine records behind a shut `closed_door` named "the
+    containment door" -- heard through an `open_door`, because that is what
+    its own side still said.
+    """
+    from world.structure import materialize_planned_fringe
+
+    cid, scene = _chat(temp_db)
+    # The square is played and its hand shuts the door onto the inn; the
+    # inn is still the plan's prose-free stub and still says `open_door`.
+    scene["rooms"]["square"]["desc"] = "Striped awnings."
+    scene["rooms"]["square"].pop("planned", None)
+    for edge in scene["rooms"]["square"]["adjacent"]:
+        if edge["to"] == "inn":
+            edge["barrier"] = "closed_door"
+    scene, _added = materialize_planned_fringe(cid, scene)
+    inn = {e["to"]: e for e in scene["rooms"]["inn"]["adjacent"]}
+    assert inn["square"]["barrier"] == "closed_door"
+    # And the plan still owns a doorway nobody has stood at: the kitchen
+    # edge the inn shares with another stub is untouched.
+    assert inn["kitchen"]["barrier"] == "closed_door"
+
+
+def test_a_room_the_story_has_described_keeps_its_own_barriers(temp_db):
+    """The rule is the plan yielding, not the far side winning: a room with
+    prose is no longer a stub (`settle_developed_stubs` takes the flag off)
+    and nothing here touches what its own hand declared."""
+    from world.structure import materialize_planned_fringe
+
+    cid, scene = _chat(temp_db)
+    scene["rooms"]["inn"]["desc"] = "Low beams, smoke."
+    scene["rooms"]["inn"].pop("planned", None)
+    for edge in scene["rooms"]["inn"]["adjacent"]:
+        if edge["to"] == "square":
+            edge["barrier"] = "open"
+    for edge in scene["rooms"]["square"]["adjacent"]:
+        if edge["to"] == "inn":
+            edge["barrier"] = "closed_door"
+    scene, _added = materialize_planned_fringe(cid, scene)
+    inn = {e["to"]: e for e in scene["rooms"]["inn"]["adjacent"]}
+    assert inn["square"]["barrier"] == "open"

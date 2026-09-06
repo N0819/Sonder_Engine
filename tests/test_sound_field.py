@@ -1544,3 +1544,60 @@ def test_every_barrier_in_the_table_is_on_one_scale():
     assert abs(FLOOR_CEILING_LOSS_DB - 50.0 * k_wide) <= 4.0
     # A floor is heavier than a wall, as concrete is heavier than plaster.
     assert FLOOR_CEILING_LOSS_DB > WALL_LOSS_DB
+
+
+# ---------------------------------------------------------------------------
+# What the field could not lay out, and what it silenced (2026-09-06)
+# ---------------------------------------------------------------------------
+
+def test_a_room_longer_than_it_is_wide_holds_its_own_centre():
+    """`_centre(grid_side(...))` squared the room's LONGER side, so a room
+    with a short side put its middle outside itself -- a 6 by 24 service
+    spine answered (12, 12) with six cells of width. Every source placed
+    there was off the grid and dropped, so a noise made in a corridor
+    reached nobody, the people standing in it included."""
+    from world.spatial import room_centre, room_grid
+
+    sc = scene({"spine": {"name": "the spine", "extent": {"w": 6, "d": 24},
+                          "exposure": "enclosed", "adjacent": [],
+                          "anchors": {}}}, {"L": "spine"})
+    grid = room_grid(sc, "spine")
+    assert (grid.w, grid.d) == (6, 24)
+    assert grid.contains(room_centre(sc, "spine"))
+    events = [{"kind": "sound", "description": "a crash", "room": "spine",
+               "level": "loud"}]
+    sources, _ = sound_sources(sc, events=events)
+    assert [s["cell"] for s in sources] == [room_centre(sc, "spine")]
+    # And a square room keeps the cell it always had.
+    assert room_centre(scene(hall(), {"L": "hall"}), "hall") == (4, 4)
+
+
+def test_sounds_made_in_one_place_do_not_mask_each_other_into_silence():
+    """A ratio test gives each of N equal sources `1 / (N - 1)` of the din,
+    so two in one place were marginal and THREE WERE INAUDIBLE AT ANY
+    VOLUME. A beat's events all stand at their room's centre -- a one-off
+    noise says which room it was in and nothing finer -- so a pair of them
+    in one room shared a cell by construction: chat 117 turn 13, a pry bar
+    on a door frame and a detonation overhead, both `loud`, both in the
+    spine, and the room through the open door beside it heard neither."""
+    def crash(n):
+        return [{"kind": "sound", "description": "crash %d" % i,
+                 "source_room": "a", "level": "loud"} for i in range(n)]
+
+    for count in (1, 2, 3, 5):
+        heard = heard_events(
+            scene(two_rooms("open_door"), {"L": "b"}, {"L": {"at": "w"}}),
+            "L", crash(count))
+        assert [level for _e, level in heard] == ["full"] * count, count
+    # Two voices from two different places still mask each other: the rule
+    # is about a sound arriving from the signal's OWN place, not about
+    # loudness going unpunished.
+    rooms = {"m": room("medium", {
+        "t": {"desc": "a table", "dir": "n", "height": "waist"},
+        "w": {"desc": "west", "dir": "w"}, "e": {"desc": "east", "dir": "e"},
+        "s": {"desc": "south", "dir": "s"}})}
+    sc = scene(rooms, {"A": "m", "B": "m", "L": "m"},
+               {"A": {"at": "w"}, "B": {"at": "e"}, "L": {"at": "s"}})
+    field = sound_field(sc, "L", speakers={"A": "normal", "B": "normal"})
+    assert field.level_of("L", "speech:A") != "full"
+    assert field.level_of("L", "speech:B") != "full"
