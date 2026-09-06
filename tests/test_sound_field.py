@@ -1187,10 +1187,17 @@ def test_a_wall_passes_a_catastrophic_event_and_refuses_a_shout():
     heard = room_sound_flood(sc, "r0", SOUND_DB["catastrophic"])
     assert distant_level_word(heard["r1"]["db"], floor), (
         "a catastrophic event is not heard through one wall")
-    # ... and no further: two walls is 90 dB, which nothing on the ladder
-    # has. Registered in the note, because the note's own sentence asked for
-    # a fragment two rooms away and 45 dB does not give one.
-    assert "r2" not in heard
+    # ... and two rooms away it IS the fragment the note asked for.
+    # RESOLVED 2026-09-05: 45 dB was the real-world transmission loss of a
+    # masonry wall, standing in a table whose other seven entries are on a
+    # scale compressed by 0.358 (whisper->shout spans 20.8 dB here against
+    # 58 in the world, and window/open_door/membrane are all already
+    # compressed). A real 45 dB wall on this scale is 16, and at 16 the
+    # note's own sentence is finally true through a wall as well as through
+    # a doorway.
+    assert distant_level_word(heard["r2"]["db"], floor), (
+        "a catastrophic event is not heard two rooms away")
+    assert "r4" not in heard, "it should not carry forever either"
 
     # A voice never crosses one, at any volume -- which is what makes the
     # wall a wall rather than a slow door.
@@ -1198,7 +1205,7 @@ def test_a_wall_passes_a_catastrophic_event_and_refuses_a_shout():
         reached = room_sound_flood(sc, "r0", level)
         assert not distant_level_word(reached.get("r1", {}).get("db", -999.0),
                                       floor), volume
-    assert WALL_LOSS_DB == 45.0
+    assert WALL_LOSS_DB == 16.0
 
 
 def test_a_floor_is_a_wall_that_goes_up_and_a_stair_is_not():
@@ -1484,3 +1491,43 @@ def test_the_event_record_keeps_the_notes_shape_and_nothing_else():
     # The older `intensity` survives for the opening turn, which writes it.
     assert normalize_sensory_event({"room": "r0", "intensity": 0.4},
                                    rooms={"r0": {}})["intensity"] == 0.4
+
+
+def test_every_barrier_in_the_table_is_on_one_scale():
+    """THE DEFECT WAS A UNIT, AND THIS IS THE GUARD AGAINST IT RETURNING.
+
+    `WALL_LOSS_DB` was 45 -- the real-world transmission loss of a masonry
+    wall -- in a table whose other entries are derived from `APERTURE_PASS`,
+    which was calibrated against the near field's own sentences. The two
+    scales differ by a measurable, constant factor, so a number entered in
+    one of them behaved like a bunker in the other: only `catastrophic`
+    crossed one wall and NOTHING crossed two, which made a collapsing roof
+    two rooms away silent (`docs/UNBUILT.md` § 1.125).
+
+    The compression is derived here rather than asserted, from the speech
+    ladder against the levels a real voice has, and it comes out the same
+    from two independent spans. Every barrier is then checked against its
+    own real-world value scaled by it. A future edit that reaches for a
+    physical number and forgets to compress it fails this.
+    """
+    from world.spatial import (APERTURE_LOSS_DB, FLOOR_CEILING_LOSS_DB,
+                               SPEECH_DB, WALL_LOSS_DB)
+
+    # A whisper is ~30 dBA at a metre, ordinary speech ~60, a shout ~88.
+    k_wide = (SPEECH_DB["shout"] - SPEECH_DB["whisper"]) / (88.0 - 30.0)
+    k_narrow = (SPEECH_DB["shout"] - SPEECH_DB["normal"]) / (88.0 - 60.0)
+    assert abs(k_wide - k_narrow) < 0.01, (k_wide, k_narrow)
+    assert 0.30 < k_wide < 0.42, k_wide
+
+    real = {"open": 0.0, "open_door": 2.0, "bars": 2.0, "membrane": 5.0,
+            "closed_door": 25.0, "window": 28.0, "one_way_window": 28.0}
+    for barrier, engine_db in APERTURE_LOSS_DB.items():
+        if barrier not in real:
+            continue
+        assert abs(engine_db - real[barrier] * k_wide) <= 4.0, (
+            barrier, engine_db, real[barrier] * k_wide)
+    # The two that were raw, and are not any more.
+    assert abs(WALL_LOSS_DB - 45.0 * k_wide) <= 4.0, WALL_LOSS_DB
+    assert abs(FLOOR_CEILING_LOSS_DB - 50.0 * k_wide) <= 4.0
+    # A floor is heavier than a wall, as concrete is heavier than plaster.
+    assert FLOOR_CEILING_LOSS_DB > WALL_LOSS_DB
