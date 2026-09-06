@@ -145,7 +145,7 @@
 | `world/charter_log.py` | 510 |  | `world.charter_commitment`, `world.charter_decide`, `world.charter_economy`, `world.charter_feel`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_needs`, `world.charter_news`, `world.charter_politics`, `world.charter_social`, `world.charter_temper` |
 | `world/charter_mark.py` | 302 |  | — |
 | `world/charter_mind.py` | 262 |  | — |
-| `world/charter_model.py` | 805 |  | `world.charter_chatter`, `world.charter_figure`, `world.charter_harm`, `world.charter_mark` |
+| `world/charter_model.py` | 829 |  | `world.charter_chatter`, `world.charter_figure`, `world.charter_harm`, `world.charter_mark` |
 | `world/charter_move.py` | 476 |  | `world.charter_space` |
 | `world/charter_needs.py` | 297 |  | `world.charter_model` |
 | `world/charter_news.py` | 517 |  | `world.charter_mind`, `world.charter_model`, `world.charter_talk` |
@@ -1770,7 +1770,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_charter()` | 433 | 351 lines |
+| `normalize_charter()` | 433 | 375 lines |
 | `normalize_body()` | 231 | 131 lines |
 | `normalize_post()` | 144 | 45 lines |
 | `body_of_an_authored_mind()` | 364 | 45 lines |

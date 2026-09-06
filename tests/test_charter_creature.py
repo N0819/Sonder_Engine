@@ -650,3 +650,38 @@ class TestItHearsYouToo:
             "bodies": {"a": {"place": "annex", "available": True}}}}}}
         out = hearing_for_creatures(registry, self._pair(), [])
         assert out["items"]["thing"]["state"]["overheard"] == {}
+
+
+def test_the_hearing_keys_survive_the_write_chokepoint():
+    """A KEY THE CLOSED SHAPE DOES NOT NAME IS DROPPED, and both halves of
+    the hearing loop were.
+
+    `charter_predation` wrote `heard`, `charter_runtime` wrote `overheard`,
+    and `normalize_charter` -- which every save goes through -- returned a
+    shape naming neither. So the round recorded what a creature was doing,
+    the caller recorded what it could hear, and both were normalized away
+    before anything could read them: the creature stayed deaf and silent
+    with the wiring apparently in place (descent run, 2026-09-05).
+
+    Both are transient by design, replaced every round rather than
+    accumulated -- a noise is a thing that happened in a window and never a
+    standing fact.
+    """
+    from world.charter_model import normalize_charter
+
+    out = normalize_charter({
+        "key": "thing", "bodies": {}, "upkeeps": {}, "posts": {},
+        "creature": {"prey": ["figure"]},
+        "overheard": {"spine": 48.0, "": 1.0},
+        "heard": [{"place": "annex", "level": "loud", "activity": "moving"},
+                  {"level": "loud"}],
+    })
+    assert out["overheard"] == {"spine": 48.0}
+    assert out["heard"] == [{"place": "annex", "level": "loud",
+                             "activity": "moving"}]
+
+    # And an ordinary institution carries them empty rather than not at all,
+    # so a reader never has to ask whether the key exists.
+    plain = normalize_charter({"key": "inn", "bodies": {}, "upkeeps": {},
+                               "posts": {}})
+    assert plain["overheard"] == {} and plain["heard"] == []
