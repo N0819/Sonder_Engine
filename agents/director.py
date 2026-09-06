@@ -494,6 +494,39 @@ def director_establish(ctx, nonce):
     return out
 
 
+#: How many established world facts one payload carries, most recent first.
+#: The ledger is capped at 60 by `commit_world_facts`; this is the reading
+#: window, and it is smaller because the payload pays for it every beat while
+#: the ledger pays once. Named rather than buried: raise it for a story whose
+#: setting is its subject.
+WORLD_FACTS_IN_PAYLOAD = 20
+
+
+def _world_facts_view(ctx):
+    """What the story has already established is TRUE OF THIS WORLD.
+
+    `commit_world_facts` records the Director's own `state_diff.world_facts`
+    -- and until 2026-09-05 nothing wrote them anywhere, so the opening
+    beat's account of its own world was lost and then re-filed as three
+    unmet planning needs, one of them naming the player (solitude, PS18).
+    Recording them is half of it; a ledger nothing reads is the same defect
+    one layer down.
+
+    Author knowledge, like the plan's brief beside it: it reaches the
+    Director and its hands, never a mind or the narrator, which learn the
+    world by being told things in it.
+    """
+    try:
+        from core.db import wget
+        rows = wget(ctx.chat["id"], "world_facts", []) or []
+    except Exception:
+        return None
+    facts = [str((row or {}).get("fact") or "").strip() for row in rows
+             if isinstance(row, dict)]
+    facts = [f for f in facts if f]
+    return facts[-WORLD_FACTS_IN_PAYLOAD:] or None
+
+
 def _opening_rooms(ctx):
     """The planned rooms the scenario names by uid or name -- the opening's
     rooms before the Director has drawn any. Fail-open: no plan, no rooms."""
@@ -886,6 +919,11 @@ def director_interpret(ctx, nonce):
         **({"planned_elsewhere": _elsewhere} if (
             _elsewhere := _planned_elsewhere_view(
                 sc, ctx, _planned or ())) else {}),
+        # What the story has already said is TRUE OF THIS WORLD
+        # (`_world_facts_view`). Absent when the story has established
+        # nothing.
+        **({"world_facts": _facts} if (
+            _facts := _world_facts_view(ctx)) else {}),
         # The room's notes on what its plan MEANS, in scope where the cast
         # stands or beside it (`_author_notes_view`); absent when none.
         **({"author_notes": _notes} if (
@@ -3464,6 +3502,9 @@ def director_resolve(ctx, nonce, _corrections=None):
         **({"planned_elsewhere": _elsewhere} if (
             _elsewhere := _planned_elsewhere_view(
                 sc, ctx, _planned or ())) else {}),
+        # ...and what the story has already established about this world.
+        **({"world_facts": _facts} if (
+            _facts := _world_facts_view(ctx)) else {}),
         # The room's notes on what its plan MEANS, in scope where the cast
         # stands, moves into or beside (`_author_notes_view`); absent when
         # none.
