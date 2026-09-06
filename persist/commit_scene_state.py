@@ -1965,6 +1965,17 @@ def prepare_scene_commit(ctx):
         settle_developed_stubs(sc)
         sc, _frontier_mutations = prepare_frontier_expansion(cid, sc)
         sc, _planned_added = materialize_planned_fringe(cid, sc)
+        # AND WHAT THE PLAN SAID IS RUNNING IN THEM. A planned thing's
+        # declared emission is heard from the beat it is filed, not from the
+        # beat the Director gets round to writing it -- the room carries the
+        # noise and no entity is minted, so nothing is SEEN early.
+        from world.planned_entities import project_planned_emissions
+        sc, _emitting = project_planned_emissions(cid, sc, ctx.turn.frame_id)
+        for _room, _level in _emitting:
+            ctx.warnings.append(
+                f"planned emission audible: {_room} is heard at {_level} "
+                "from a thing the plan filed and the Director has not "
+                "rendered yet")
     except Exception as _planned_exc:  # diagnostics, never a story blocker
         ctx.warnings.append(
             f"planned-room fringe could not be materialized: {_planned_exc}")

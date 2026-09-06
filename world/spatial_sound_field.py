@@ -1043,6 +1043,42 @@ def sound_sources(scene: dict, *, turn_idx=None, crowds=None, events=None,
             out.append({"id": str(eid), "kind": "entity", "room": str(room),
                         "cell": cell, "power": power, "level": level,
                         "holder": holder, "beat": beat, "label": label})
+    # A ROOM THAT IS HEARD DOING SOMETHING. `rooms[rid]["sound"]` is a
+    # standing noise the PLACE makes -- water in a culvert, a plant still
+    # turning over, wind through a grille -- and it is a room-level property
+    # for the same reason `room_light` is one: it belongs to the space and
+    # not to any thing in it, so a place the story has laid out but nobody
+    # has furnished can still be heard. That is what lets a planned room
+    # announce itself before it is seen (`plot_packages._plan_sound`).
+    #
+    # At the room's centre, like a crowd, because that is as fine as a fact
+    # about a whole room gets.
+    if isinstance(rooms, dict):
+        for rid, room in sorted(rooms.items()):
+            if not isinstance(room, dict):
+                continue
+            record = room.get("sound")
+            if not isinstance(record, dict):
+                continue
+            level = normalize_sound_level(record.get("level"))
+            if not level:
+                continue
+            # THE CARRYING LADDER (`EVENT_POWER`), not the emission one.
+            # The two ladders differ in what they are measured AGAINST:
+            # `SOUND_POWER` asks how a thing sits beside a voice -- whether
+            # you can talk over the generator you share a room with -- and
+            # `EVENT_POWER` asks how far a sound gets in the world. A room's
+            # own voice is the second question by construction: the whole
+            # reason to write one is that it is heard from somewhere else.
+            # So `loud` and above clear `FAR_FIELD_ENTRY_DB` and announce
+            # the place across a level, while `faint` and `audible` stay
+            # near-field things you meet at the door -- which is the
+            # gradient a story wants and neither ladder gave on its own.
+            out.append({"id": "room:%s" % rid, "kind": "room",
+                        "room": str(rid), "cell": room_centre(scene, rid),
+                        "power": EVENT_POWER[level], "level": level,
+                        "holder": None, "beat": "steady",
+                        "detail": str(record.get("detail") or "")})
     for crowd in crowds or []:
         if not isinstance(crowd, dict):
             continue
@@ -1990,6 +2026,12 @@ def _public_character(source, events) -> str:
     seeing through a wall with extra steps. Such a source delivers its
     direction and its level, and the composer says so.
     """
+    # A ROOM'S OWN NOISE CARRIES ITS `detail` for the same reason an event's
+    # does: it is prose written ABOUT THE SOUND, which is what a body beyond
+    # the room is entitled to. The refusal below is about a THING, whose
+    # description is a sight fact arriving on a hearing channel.
+    if source.get("kind") == "room":
+        return " ".join(str(source.get("detail") or "").split())[:200]
     if source.get("kind") != "event":
         return ""
     try:

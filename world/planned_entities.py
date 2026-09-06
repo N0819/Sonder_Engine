@@ -135,6 +135,69 @@ def normalize_plans(stored):
             for uid, entry in stored.items() if str(uid or "")}
 
 
+def project_planned_emissions(cid, scene, frame_id=None):
+    """A PLANNED THING MAKES ITS NOISE BEFORE THE DIRECTOR FLESHES IT OUT.
+
+    The plan has been able to say that a thing emits since PR12 -- `sources`
+    above, in the engine's own closed vocabularies -- and nothing could hear
+    it. `sound_sources` reads the SCENE's entities, a planned thing is not a
+    scene entity until the Director renders it, and the Director renders it
+    when a body walks in. So the Writers' Room could plant a generator in a
+    room, declare it running, and the room stayed silent until somebody was
+    standing next to it, which is the wrong way round: the point of writing
+    a generator into a room nobody has reached is that it is HEARD from
+    somewhere else first.
+
+    This projects the emission onto the room and NOT the thing. The room
+    gains `sound` (`spatial_sound_field.sound_sources`, the same room-level
+    property an authored `plan_rooms` sound uses); no entity is minted,
+    because minting one would put a generator in front of a body's eyes that
+    the Director has not written yet, and what is heard through a wall must
+    not become a thing that is seen through one.
+
+    WHAT A LISTENER BEYOND THE ROOM RECEIVES therefore carries no `detail`:
+    a plan's `look` is what the thing LOOKS like, and handing that to a body
+    who has only heard it is a sight fact arriving on a hearing channel --
+    the refusal `_public_character` already makes for a running entity, for
+    the same reason. A level and a bearing, and the room says nothing about
+    what is in it.
+
+    Loudest wins where a room holds several, because a room is as loud as
+    the loudest thing in it. A `sound` the ROOM itself declares is left
+    alone: that one is authored about the place, it carries a detail, and a
+    thing standing in it does not overrule it.
+    """
+    from world.spatial import SOUND_LEVELS
+
+    rooms = (scene or {}).get("rooms") if isinstance(scene, dict) else None
+    if not isinstance(rooms, dict) or not rooms:
+        return scene, []
+    rank = {word: n for n, word in enumerate(SOUND_LEVELS)}
+    loudest: dict = {}
+    for plan in planned_entities(cid, frame_id).values():
+        if plan.get("rendered"):
+            continue                    # the scene's own entity carries it
+        level = str((plan.get("sources") or {}).get("sound_source") or "")
+        where = str((plan.get("brief") or {}).get("where") or "")
+        if level not in rank or where not in rooms:
+            continue
+        if rank[level] > rank.get(loudest.get(where, ""), -1):
+            loudest[where] = level
+    projected = []
+    for where, level in sorted(loudest.items()):
+        room = rooms.get(where)
+        if not isinstance(room, dict):
+            continue
+        standing = room.get("sound")
+        if isinstance(standing, dict) and standing.get("detail"):
+            continue                    # the room's own voice, authored
+        if isinstance(standing, dict) and standing.get("level") == level:
+            continue
+        room["sound"] = {"level": level}
+        projected.append((where, level))
+    return scene, projected
+
+
 def planned_entities(cid, frame_id=None):
     return normalize_plans(
         wget_for_frame(cid, PLANNED_ENTITIES_KEY, frame_id, {}) or {})
