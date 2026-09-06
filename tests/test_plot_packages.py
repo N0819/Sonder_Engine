@@ -529,3 +529,39 @@ def test_packages_survive_archive_checkpoint_and_frame(temp_db):
     assert "plot_packages" in FRAME_SCOPED_WORLD_KEYS
     # Another era holds no package of this one's.
     assert packages(cid, frame_id=7) == {}
+
+
+def test_a_planned_presence_with_no_room_says_so(temp_db):
+    """A PRESENCE WITH NO ROOM IS A PRESENCE NOWHERE.
+
+    `brief.where` is optional, because a plan may legitimately reserve an
+    identity before the story has anywhere to put it. But the absence is
+    silent, and a plan filed without it can never materialise however
+    completely it is otherwise written.
+
+    Measured on the descent run, 2026-09-05: three creatures published with
+    rules, look, light and sound all set, each naming its room in the PURPOSE
+    PROSE -- "nesting in chemical storage", "rooted permanently in the plant
+    room floor sump", "a wanderer in the containment annex" -- and `where`
+    empty on all three. The room was in the record, in the one field nothing
+    reads, and the dangers the story was built around could never arrive.
+    """
+    from story.plot_packages import (_preview_plan_entity, _shape_plan_entity,
+                                     _world_snapshot)
+
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Presences", "", time.time()))
+    temp_db.wset(cid, "scene", {"rooms": {"chem_store": {"name": "Store"}},
+                                "positions": {}, "entities": {}})
+    world = _world_snapshot(cid, None)
+    raw = {"op": "plan_entity", "kind": "creature", "name": "Dormant Carapace",
+           "brief": {"purpose": "nesting in chemical storage",
+                     "truths": "charges any direct light"}}
+    out = _preview_plan_entity(cid, None, _shape_plan_entity(raw), world)
+    assert not out["errors"], out["errors"]
+    assert any("brief.where" in w for w in out["warnings"]), out["warnings"]
+
+    # And a plan that names its room draws no such warning.
+    placed = dict(raw, brief=dict(raw["brief"], where="chem_store"))
+    out = _preview_plan_entity(cid, None, _shape_plan_entity(placed), world)
+    assert not any("brief.where" in w for w in out["warnings"]), out["warnings"]

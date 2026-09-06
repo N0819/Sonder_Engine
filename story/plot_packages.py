@@ -954,6 +954,23 @@ def _preview_plan_entity(cid, frame_id, op, world):
     if where and not _room_known(world, where):
         errors.append("plan_entity places %r at %r, which exists nowhere"
                       % (op["name"], where))
+    elif not where:
+        # A PRESENCE WITH NO ROOM IS A PRESENCE NOWHERE. `where` is optional
+        # because a plan may legitimately reserve an identity before the
+        # story has anywhere to put it -- but the absence is silent, and a
+        # plan filed without it can never materialise however completely it
+        # is otherwise written.
+        #
+        # Measured on the descent run, 2026-09-05: three creatures published
+        # with rules, look, light and sound all set, each naming its room in
+        # the PURPOSE PROSE -- "nesting in chemical storage", "rooted
+        # permanently in the plant room floor sump", "a wanderer in the
+        # containment annex" -- and `where` empty on all three. The room was
+        # in the record, in the one field nothing reads.
+        warnings.append(
+            "plan_entity files %r with no `brief.where`, so nothing can put "
+            "it anywhere: name the room id it is in, or it stays a reserved "
+            "identity the story cannot reach" % op["name"])
     if op["answers_need"] and op["answers_need"] not in world["needs"]:
         errors.append("plan_entity answers need %r, which is not open"
                       % op["answers_need"])
@@ -2041,7 +2058,13 @@ OPERATION_FIELDS = {
     "plan_entity": {
         "name": "the entity's name", "kind": "person | thing | creature",
         "role?": "what they are for, in a word or two", "aliases?": "[names]",
-        "brief": "{purpose, truths, where: <room_id>}",
+        "brief": "{purpose, truths, where} -- `where` is the ROOM ID this "
+                 "thing is in, and it is the only field that puts it "
+                 "anywhere: a plan with no `where` is a reserved identity "
+                 "the story can never reach, however fully the rest is "
+                 "written, and naming the room in `purpose` prose does not "
+                 "place it. Leave it out only to reserve a name before the "
+                 "world has a room for it.",
         "look?": "how they read at a glance",
         "light_source?": "how much light this thing PUTS OUT (%s) -- a thing "
                          "that gives light says so in this field; prose about "

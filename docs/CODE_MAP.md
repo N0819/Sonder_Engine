@@ -104,7 +104,7 @@
 | `story/lore_structure.py` | 248 |  | — |
 | `story/mandates.py` | 586 |  | `core.db` |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
-| `story/plot_packages.py` | 2863 |  | `world.spatial` |
+| `story/plot_packages.py` | 2886 |  | `world.spatial` |
 | `story/provenance_text.py` | 132 |  | — |
 | `story/room_bible.py` | 424 |  | `core.db` |
 | `story/room_calls.py` | 130 |  | — |
@@ -1297,11 +1297,11 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_package_checks()` | 2212 | 115 lines |
+| `_package_checks()` | 2235 | 115 lines |
 | `_preview_plan_rooms()` | 758 | 107 lines |
-| `publish_package()` | 2532 | 84 lines |
-| `_reach_warning()` | 2350 | 82 lines |
-| `fire_due_clocks()` | 2657 | 77 lines |
+| `publish_package()` | 2555 | 84 lines |
+| `_reach_warning()` | 2373 | 82 lines |
+| `fire_due_clocks()` | 2680 | 77 lines |
 | `normalize_package()` | 181 | 74 lines |
 | `_world_snapshot()` | 495 | 66 lines |
 | `edit_package()` | 370 | 57 lines |
