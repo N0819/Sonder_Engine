@@ -623,10 +623,17 @@ class TestItHearsYouToo:
         assert hunt_moves(states, "thing", {}, {}, neighbors, 0, 1.0,
                           noises={"far_off": 60.0}) == {}
 
-    def test_what_it_overhears_is_a_loudness_and_never_a_word(self):
-        """`hearing_for_creatures` carries the sound field's own answer.
-        A loud noise next door reaches; a room the sound never gets to does
-        not appear at all."""
+    def test_what_it_overhears_is_the_answer_a_body_would_get(self):
+        """`hearing_for_creatures` asks `heard_events` -- the reader that
+        tells a PERSON standing here which of this beat's noises reached
+        them. So "the same field a body hears through" is literally true
+        rather than a second model that can drift from it, INCLUDING when
+        the answer is that nothing reached: a room the sound model has no
+        field for is a room where a creature is as deaf as a person would be
+        (`docs/UNBUILT.md` § 1.137).
+
+        What crosses is a RANK and never a word: how strongly it pulls, not
+        what it was."""
         from world.charter_runtime import hearing_for_creatures
 
         registry = {"items": {"thing": {"state": {
@@ -637,9 +644,8 @@ class TestItHearsYouToo:
             [{"source_room": "spine", "level": "loud",
               "description": "a pry bar going into a seam"}])
         overheard = out["items"]["thing"]["state"]["overheard"]
-        assert set(overheard) == {"spine"}
-        assert isinstance(overheard["spine"], float)
-        # Nothing of what it was carried across.
+        assert all(isinstance(v, int) for v in overheard.values())
+        # Nothing of WHAT it was ever crosses, whatever reached.
         assert "pry bar" not in str(overheard)
 
     def test_a_creature_with_no_noises_this_window_overhears_nothing(self):
