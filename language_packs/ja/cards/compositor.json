@@ -278,6 +278,7 @@
     "presence_at": "、{at}のところに",
     "presence_at_bare": "{at}",
     "presence_unchanged": "{label}は変わらず{where}にいる。",
+    "presence_fresh": "{label}が今{where}にいる。",
     "presence_behind": "、{behind}の向こうに",
     "presence_shows": "、{shows}から上だけが見えて",
     "features": "{items}が見える。",
@@ -396,6 +397,9 @@
   "surface_figure": "人影",
   "surface_adjective_join": "",
   "surface_list_join": "、",
-  "speech_quote_pair": ["「", "」"],
+  "speech_quote_pair": [
+    "「",
+    "」"
+  ],
   "self_label": "あなた"
 }

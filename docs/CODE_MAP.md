@@ -10,12 +10,12 @@
 | `agents/background.py` | 1692 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
 | `agents/character.py` | 4256 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/common.py` | 9866 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
-| `agents/composer.py` | 4246 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
+| `agents/composer.py` | 4327 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 5040 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 457 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 1261 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
 | `agents/director_fanout.py` | 941 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
-| `agents/director_floors.py` | 1882 |  | `agents.common`, `agents.director_lingua`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
+| `agents/director_floors.py` | 1922 |  | `agents.common`, `agents.director_lingua`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 1350 |  | `agents.director_lingua`, `story.character_schema`, `world.spatial` |
 | `agents/director_reconcile.py` | 592 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story`, `world.spatial` |
@@ -162,7 +162,7 @@
 | `world/charter_runtime.py` | 4378 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics`, `world.spatial` |
 | `world/charter_social.py` | 743 |  | `world.charter_politics` |
 | `world/charter_space.py` | 213 |  | `world.spatial` |
-| `world/charter_surface.py` | 341 |  | — |
+| `world/charter_surface.py` | 364 |  | — |
 | `world/charter_surgery.py` | 370 |  | — |
 | `world/charter_talk.py` | 351 |  | `world.charter_mind`, `world.charter_politics`, `world.charter_roster` |
 | `world/charter_temper.py` | 167 |  | — |
@@ -254,13 +254,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `observations_from_render()` | 4038 | 209 lines |
-| `_render_view_english()` | 3516 | 170 lines |
-| `pose_percepts()` | 1750 | 149 lines |
-| `presence_percepts()` | 1037 | 132 lines |
-| `speech_percept()` | 2420 | 124 lines |
+| `_render_view_english()` | 3550 | 217 lines |
+| `observations_from_render()` | 4119 | 209 lines |
+| `pose_percepts()` | 1757 | 149 lines |
+| `presence_percepts()` | 1037 | 139 lines |
+| `speech_percept()` | 2427 | 124 lines |
 | `line_hear_level()` | 573 | 107 lines |
-| `act_percept()` | 2582 | 103 lines |
+| `act_percept()` | 2589 | 103 lines |
 | `environment_percept()` | 776 | 101 lines |
 
 ### `agents/director.py`
@@ -319,12 +319,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_bind_minted_entities_to_present_figures()` | 1453 | 172 lines |
-| `resolve_concealment_refs()` | 1676 | 104 lines |
+| `_bind_minted_entities_to_present_figures()` | 1467 | 198 lines |
+| `resolve_concealment_refs()` | 1716 | 104 lines |
 | `_awareness_exits()` | 715 | 98 lines |
 | `_release_attempts()` | 973 | 93 lines |
 | `_conditions_view()` | 595 | 87 lines |
-| `strip_addressee_concealment()` | 1802 | 81 lines |
+| `strip_addressee_concealment()` | 1842 | 81 lines |
 | `_narrated_destruction_subjects()` | 1233 | 79 lines |
 | `_unsupported_character_awareness()` | 310 | 66 lines |
 
@@ -1984,14 +1984,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `surface_label()` | 209 | 39 lines |
-| `settle_render()` | 310 | 32 lines |
-| `deal_surface()` | 136 | 28 lines |
-| `appearance_text()` | 275 | 25 lines |
-| `surface_words()` | 250 | 23 lines |
-| `surface_of()` | 185 | 13 lines |
+| `surface_label()` | 232 | 39 lines |
+| `settle_render()` | 333 | 32 lines |
+| `looks_profile()` | 108 | 31 lines |
+| `deal_surface()` | 159 | 28 lines |
+| `appearance_text()` | 298 | 25 lines |
+| `surface_words()` | 273 | 23 lines |
+| `surface_of()` | 208 | 13 lines |
 | `_strings()` | 74 | 11 lines |
-| `_home_post()` | 173 | 10 lines |
 
 ### `world/charter_surgery.py`
 

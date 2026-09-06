@@ -806,6 +806,108 @@ class TestPresenceEnumeratesEveryone:
             "Maren Vaunt is within arm's reach and Tobin Slake is still "
             "at the doors.")
 
+    def test_a_body_that_was_not_here_and_is_now_says_so(self):
+        """A CHANGE IN WHAT IS PRESENT MUST NOT READ AS FURNITURE.
+
+        Measured live, chat 117 turn 58. A carbonic stalker that had been
+        hunting the cast for thirty beats walked into the room they stood
+        in. Perception delivered it correctly and anonymously ("the compact
+        wiry figure"), `leads_the_beat` put it in the beat half, and it
+        reached the narrator as entry 4 of `current_events` -- the one rule
+        in that sheet that is absolute. The narrator dropped it, and the
+        player was never told a thing was beside them.
+
+        The sentence was the reason: "the compact wiry figure is close by on
+        your right" is the same grammar as "Sarah Moon is within arm's
+        reach", and it sat between two entries of standing description. An
+        arrival phrased as a location is indistinguishable from scenery.
+
+        "is now" against "is still" is the whole distinction, and it claims
+        only what the observer has: not that the body came IN -- they may be
+        meeting it because it moved, because they turned, or because a light
+        found it -- only that it is there and was not.
+        """
+        held = self._presence("Sarah Moon", "within_reach",
+                              key="presence:sarah:a1")
+        arriving = self._presence("the compact wiry figure", "near",
+                                  key="presence:stalker:b2")
+        rendered = composer.render_view(
+            [held, arriving], mode="player", language="en",
+            prev_standing=frozenset({held.dedupe_key}))
+        assert "is now" in rendered.text, rendered.text
+        assert "the compact wiry figure is now" in rendered.text.casefold()
+
+    def test_crossing_the_room_is_not_arriving_in_it(self):
+        """`fresh` compares the BODY, never the whole dedupe key: a key
+        carries the presence's state as well as its subject, so a body that
+        merely moved tier has a key the ledger has not seen and has not
+        arrived. Without this the rule announced everyone who took a step."""
+        before = self._presence("Maren Vaunt", "across",
+                                key="presence:maren:far")
+        after = self._presence("Maren Vaunt", "within_reach",
+                               key="presence:maren:near")
+        rendered = composer.render_view(
+            [after], mode="player", language="en",
+            prev_standing=frozenset({before.dedupe_key}))
+        assert "is now" not in rendered.text, rendered.text
+
+    def test_an_opening_view_announces_no_arrivals(self):
+        """With no ledger every body is a first sight and none of them
+        arrived -- the same guard `leads_the_beat` states for itself: "a
+        view that led with all of them would be claiming the whole world
+        just happened"."""
+        a = self._presence("Maren Vaunt", "within_reach", key="presence:m:1")
+        b = self._presence("Tobin Slake", "across", key="presence:t:1")
+        rendered = composer.render_view([a, b], mode="player", language="en",
+                                        prev_standing=frozenset())
+        assert "is now" not in rendered.text, rendered.text
+
+    def test_a_body_you_cannot_name_is_never_background(self):
+        """`leads_the_beat` asks what CHANGED, which is the wrong question
+        for a stranger standing still: nothing about them changes, so who is
+        here stops being the beat's news and the sentence naming them
+        becomes standing description -- which the narrator sheet says in as
+        many words "carries no obligation".
+
+        Measured live, chat 117 turns 58 AND 59. A carbonic stalker walked
+        into the room the cast were standing in. On the arrival beat the
+        sentence read as furniture; on the next beat it WAS furniture,
+        because the thing held still. Two beats with a hunter at arm's
+        reach and a player who was never told it was there.
+        """
+        known = composer.Percept(
+            kind="presence", channel="sight", source_label="Sarah Moon",
+            data={"tier": "within_reach", "known": True},
+            dedupe_key="presence:sarah:a1")
+        stranger = composer.Percept(
+            kind="presence", channel="sight",
+            source_label="an indistinct figure",
+            data={"tier": "near", "known": False},
+            dedupe_key="presence:stalker:b2")
+        # BOTH held since last view: nothing changed, nobody arrived.
+        rendered = composer.render_view(
+            [known, stranger], mode="player", language="en",
+            prev_standing=frozenset({known.dedupe_key, stranger.dedupe_key}))
+        assert "indistinct figure" in rendered.text, rendered.text
+
+    def test_a_room_of_people_you_know_still_goes_quiet(self):
+        """The complement, and the reason the rule is scoped to bodies the
+        observer cannot NAME: a beat where nothing happened among people
+        you know is still an empty view, and this must not become a
+        roll-call every turn."""
+        a = composer.Percept(
+            kind="presence", channel="sight", source_label="Sarah Moon",
+            data={"tier": "within_reach", "known": True},
+            dedupe_key="presence:sarah:a1")
+        b = composer.Percept(
+            kind="presence", channel="sight", source_label="Tobin Slake",
+            data={"tier": "across", "known": True},
+            dedupe_key="presence:tobin:a1")
+        rendered = composer.render_view(
+            [a, b], mode="player", language="en",
+            prev_standing=frozenset({a.dedupe_key, b.dedupe_key}))
+        assert rendered.text == "", rendered.text
+
     def test_a_beat_where_nobody_moved_is_still_an_empty_view(self):
         """The brief clause is added to a view, never the whole of one --
         `perception`'s outcome floor reads an empty view and asks for the
