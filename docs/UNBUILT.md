@@ -6920,13 +6920,23 @@ what it is blocked behind, below.
 
 ### 1.138 An anchor with no bearing is placed in the middle of the room
 
-**Found 2026-09-06 while widening § 1.137's gate, and it is why that widening
-is not landed.** `room_layout` places an anchor from its `dir`. An anchor
-with no `dir` -- which is most of them, since `dir` is optional and the
-establish often omits it -- gets no wall to sit against and lands near the
-room's centre. Two bodies at two different undirected anchors are therefore
-STACKED: the room can be `large` and the two of them are a pace apart on the
-grid.
+**Found 2026-09-06 while widening § 1.137's gate.** `spatial_fov._place_anchors`
+places an anchor against the wall its `dir` names. An anchor with NO `dir`
+falls to the last branch and takes a seeded INTERIOR cell instead --
+`1 + seed % (w - 2)` by `1 + (seed // 7) % (d - 2)` -- so it is spread, but
+spread through the middle of the floor rather than around the walls.
+
+Two consequences, and the second is the one that matters. Furniture is mostly
+against a wall -- a rail, a stair, a hearth, a counter -- so an interior cell
+is the wrong prior for the thing being placed. And two anchors drawn from the
+interior are closer to each other on average than two on opposite walls, which
+is what makes the sound path shorter.
+
+**CORRECTED 2026-09-06:** an earlier draft of this entry said undirected
+anchors land "near the room's centre" and are "stacked". They are not; they
+are seeded across the interior. The measured cells for four undirected anchors
+in one `large` room were (1,4), (1,1), (4,4) and (3,1). The effect is real and
+the mechanism is separation, not collision.
 
 Measured, two bodies at `rail` and `stair` in one `large` room:
 
@@ -6941,11 +6951,23 @@ whisper carry across a large room between two people the anchor model calls
 `test_a_whisper_the_sound_model_calls_inaudible_gets_no_reply` catches
 exactly.
 
-**So the order is: this, then § 1.137.** The rule wants stating as a class --
-an anchor with no bearing is SOMEWHERE in the room, not in the middle of it
--- and it is a placement change that reaches every reader of the grid, so it
-wants its own change and its own play. Widening the sound gate first would
-ship a known regression in the one case the estimate is worst at.
+**MEASURED, and it is small.** Across the owner's 854 live anchors in 282
+rooms: **823 (96.4%) already carry a `dir`**, none is pinned to a cell, and
+**31 (3.6%) have no bearing**. So the defect reaches one anchor in twenty-eight,
+and the fixture that caught it -- two anchors, both undirected -- is an
+unrepresentative shape a test author wrote, not what the world looks like.
+
+**The rule, stated as a class:** a thing with no stated bearing is against a
+WALL, like most things in a room; which wall is seeded, from the same
+`_seed(room_id, aid)` the interior placement already uses, so it stays
+deterministic and stable across reads. Implemented by seeding a bearing and
+falling through to the existing wall path, so there is one placement model
+rather than two.
+
+**Order: this, then § 1.137.** Not because this is large -- it is 3.6% of
+anchors -- but because widening the sound gate first would ship the whisper
+regression in exactly the case the estimate is worst at, and this removes the
+case.
 
 ## 2. Roadmap
 
