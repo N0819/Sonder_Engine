@@ -88,18 +88,31 @@ class TestABodyWalksTheRoute:
         from story.couriers import PACES
         assert WALK_ROOMS_PER_HOUR == 3600.0 / PACES["walking"]
 
+    def _window_for(self, edges):
+        """A window that buys exactly `edges` legs of the town's streets.
+
+        Written from the pace rather than as a magic number: the streets cost
+        what the fixture declares them to cost (`distance: far`), and this
+        test is about being CAUGHT mid-route, not about any one constant.
+        Before 2026-09-06 a flat ten-minutes-an-edge made one hour buy six.
+        """
+        from world.charter_move import edge_seconds
+
+        return (edges + 0.5) * edge_seconds(
+            _town()["scene"], "north_1", "north_0") / 3600.0
+
     def test_a_long_walk_is_caught_in_the_street(self):
-        """The tapster lives seven rooms from the tavern. A one-hour window
-        buys six, so the window ends with the body in the last street
-        before the door -- at a position, not an ETA -- and the next window
-        finishes the walk."""
-        after, _ = run(_town(), hours=1.0, window=1.0, seed=3)
+        """The tapster lives seven rooms from the tavern. A window that buys
+        six ends with the body in the last street before the door -- at a
+        position, not an ETA -- and the next window finishes the walk."""
+        _w = self._window_for(6)
+        after, _ = run(_town(), hours=_w, window=_w, seed=3)
         tapster = after["bodies"]["tapster"]
         assert en_route(tapster)
         assert tapster["place"] == "north_1"
         assert tapster["walk"]["route"][-1] == "tavern"
         assert tapster["walk"]["leg"] == 6
-        later, _ = run(after, hours=1.0, window=1.0, seed=4)
+        later, _ = run(after, hours=_w, window=_w, seed=4)
         assert later["bodies"]["tapster"]["place"] == "tavern"
         assert not en_route(later["bodies"]["tapster"])
         assert "walk" not in later["bodies"]["tapster"]
@@ -119,7 +132,8 @@ class TestABodyWalksTheRoute:
         held in the last street, says so, and is NOT re-routed -- there is
         no other way to the tavern on this map, and if there were, finding
         it would be the second pathfinder the crowd proposal forbids."""
-        after, _ = run(_town(), hours=1.0, window=1.0, seed=3)
+        after, _ = run(_town(), hours=self._window_for(6),
+                     window=self._window_for(6), seed=3)
         assert after["bodies"]["tapster"]["place"] == "north_1"
         after["scene"] = _lock(after["scene"], "north_1", "tavern")
         held, _ = run(after, hours=8.0, window=4.0, seed=5)
@@ -135,7 +149,8 @@ class TestABodyWalksTheRoute:
         """The crowd rule, stated in `charter_move`'s header: no in-transit
         limbo. `members_of` reads `place`, and `place` is the current leg."""
         from world.charter_crowd import members_of
-        after, _ = run(_town(), hours=1.0, window=1.0, seed=3)
+        after, _ = run(_town(), hours=self._window_for(6),
+                     window=self._window_for(6), seed=3)
         assert "tapster" in members_of(after, "north_1")
         assert "tapster" not in members_of(after, "tavern")
         assert "tapster" not in members_of(after, "house_b_back")
@@ -145,7 +160,8 @@ class TestABodyWalksTheRoute:
         through `normalize_charter` (a checkpoint, an archive) with its
         route, its leg and its credit, and a record that no longer matches
         the body's place is dropped rather than walked from the wrong room."""
-        after, _ = run(_town(), hours=1.0, window=1.0, seed=3)
+        after, _ = run(_town(), hours=self._window_for(6),
+                     window=self._window_for(6), seed=3)
         again = normalize_charter(json.loads(json.dumps(after)))
         assert again["bodies"]["tapster"]["walk"] == \
             after["bodies"]["tapster"]["walk"]
@@ -339,3 +355,79 @@ def test_the_bound_body_sync_says_when_the_namespaces_disagree(temp_db,
     assert body2["place"] == "house_b_back"
     assert any("does not contain" in rec.getMessage()
                for rec in caplog.records)
+
+
+class TestAnEdgeCostsWhatTheRoomIs:
+    """WHAT AN EDGE IS DECIDES WHAT IT COSTS (the owner's ruling,
+    2026-09-06: "ten minutes is still quite too long to cross a single
+    room").
+
+    `WALK_ROOMS_PER_HOUR` is 6 -- 600 seconds, ten minutes, per edge --
+    pinned to the courier's pace, and right for the courier it was pinned
+    to: a town's edge is a road between two places. A SCENE's edge is a
+    doorway, and the same constant made a hunting creature buy about a
+    thirtieth of one per beat in a story four minutes long.
+    """
+
+    def _scene(self):
+        return {"rooms": {
+            "spine": {"name": "spine", "extent": {"w": 6, "d": 24},
+                      "adjacent": [{"to": "annex", "distance": "adjacent"}]},
+            "annex": {"name": "annex", "extent": {"w": 14, "d": 12},
+                      "adjacent": [{"to": "spine", "distance": "adjacent"}]},
+            "lane": {"name": "lane",
+                     "adjacent": [{"to": "far_town", "distance": "far"}]},
+            "far_town": {"name": "far town", "adjacent": []},
+            "plain": {"name": "plain", "adjacent": [{"to": "far_town"}]}}}
+
+    def test_a_measured_corridor_costs_seconds_not_minutes(self):
+        from world.charter_move import edge_seconds
+
+        assert edge_seconds(self._scene(), "spine", "annex") < 30.0
+        assert edge_seconds(self._scene(), "annex", "spine") < 30.0
+
+    def test_a_long_way_still_costs_what_a_long_way_costs(self):
+        """`far` and `remote` are the words the plan schema says take more
+        than one beat to cross, and they keep costing road time."""
+        from world.charter_move import edge_seconds
+
+        assert edge_seconds(self._scene(), "lane", "far_town") > 120.0
+
+    def test_a_room_nobody_measured_is_still_a_room(self):
+        """The owner's ruling, stated twice: "ten minutes is still quite too
+        long to cross a single room". An unmeasured room takes its size
+        tier's span -- a tier is a perfectly good statement of how big a
+        room is, and the light and sound fields have read tiers as geometry
+        all along -- so it costs SECONDS, not a road's ten minutes."""
+        from world.charter_move import edge_seconds
+
+        town = 3600.0 / WALK_ROOMS_PER_HOUR
+        assert edge_seconds(self._scene(), "plain", "far_town") < 30.0
+        # A scene with no rooms at all is the one case with nothing to read.
+        assert edge_seconds({"rooms": {}}, "a", "b") == town
+        assert edge_seconds(None, "a", "b") == town
+        # And the old flat rate is the CEILING: nothing costs more than a
+        # road, however the numbers move.
+        assert edge_seconds(self._scene(), "lane", "far_town") <= town
+
+    def test_the_courier_stays_slower_than_a_player_beat(self):
+        """The design promise the flat rate was defending, kept as a
+        multiplier over the real crossing rather than a number that ignores
+        it: "BOTH are slower than a walking player, who crosses a room in
+        one beat". A story's beats run 6 to 45 seconds (chat 117), so the
+        floor is a beat at its longest."""
+        from story.couriers import (COURIER_EDGE_FLOOR, PACES,
+                                    courier_edge_seconds)
+
+        sc = self._scene()
+        for flat in (PACES["walking"], PACES["riding"]):
+            crossing = courier_edge_seconds(sc, "spine", "annex", flat)
+            assert crossing >= COURIER_EDGE_FLOOR
+            assert crossing <= flat, "a courier never got FASTER than its pace"
+        # A long road is still slow, and for the honest reason.
+        assert courier_edge_seconds(
+            sc, "lane", "far_town", PACES["walking"]) > 300.0
+        # And an unmeasured room is a room to the courier too -- floored, so
+        # the player still outruns him.
+        assert courier_edge_seconds(
+            sc, "plain", "far_town", PACES["walking"]) == COURIER_EDGE_FLOOR

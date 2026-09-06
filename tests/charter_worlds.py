@@ -311,8 +311,17 @@ def small_town():
     rooms = {}
 
     def room(key, *edges):
+        # A TOWN'S EDGE IS A STREET AND SAYS SO (2026-09-06). These edges
+        # were bare, and a bare edge is a doorway: `charter_move.edge_seconds`
+        # prices one from the room it crosses, so a settlement whose places
+        # are minutes apart has to declare it -- `distance` is the field the
+        # plan schema already asks for, and `far` is its word for "more than
+        # one beat to cross". Before this the fixture leaned on a flat
+        # ten-minutes-per-edge constant that priced a broom cupboard and a
+        # boulevard the same, which is what the owner ruled out.
         rooms[key] = {"name": key.replace("_", " "),
-                      "adjacent": [{"to": to, "barrier": DOOR}
+                      "adjacent": [{"to": to, "barrier": DOOR,
+                                    "distance": "far"}
                                    for to in edges]}
 
     room("square", "north_0", "south_0", "market")

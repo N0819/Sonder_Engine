@@ -95,7 +95,7 @@
 | `story/authored_events.py` | 299 |  | `core.db` |
 | `story/carriers.py` | 788 |  | `core.db`, `story.character_schema`, `story.scene`, `world`, `world.spatial` |
 | `story/character_schema.py` | 2306 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `llm.schemas`, `story` |
-| `story/couriers.py` | 1122 |  | `story.carriers`, `world` |
+| `story/couriers.py` | 1179 |  | `story.carriers`, `world` |
 | `story/dialogue_colors.py` | 268 |  | — |
 | `story/greetings.py` | 1008 |  | `agents.runtime`, `agents.storage`, `core`, `llm.llm_quality`, `llm.prompts`, `mind.memory`, `mind.theory_of_mind`, `story.character_schema`, `story.importers` |
 | `story/history_routing.py` | 215 |  | — |
@@ -146,7 +146,7 @@
 | `world/charter_mark.py` | 302 |  | — |
 | `world/charter_mind.py` | 262 |  | — |
 | `world/charter_model.py` | 849 |  | `world.charter_chatter`, `world.charter_figure`, `world.charter_harm`, `world.charter_mark` |
-| `world/charter_move.py` | 476 |  | `world.charter_space` |
+| `world/charter_move.py` | 562 |  | `world.charter_space` |
 | `world/charter_needs.py` | 297 |  | `world.charter_model` |
 | `world/charter_news.py` | 517 |  | `world.charter_mind`, `world.charter_model`, `world.charter_talk` |
 | `world/charter_observe.py` | 585 |  | `world.charter_figure`, `world.charter_identity`, `world.charter_mind`, `world.spatial` |
@@ -1185,14 +1185,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run_couriers()` | 758 | 365 lines |
-| `_exchange_stops()` | 536 | 220 lines |
-| `advance_couriers()` | 283 | 78 lines |
-| `_deliver()` | 463 | 71 lines |
-| `new_courier()` | 221 | 47 lines |
-| `_copy_of()` | 363 | 39 lines |
-| `_player_name()` | 435 | 26 lines |
-| `courier_uid()` | 157 | 15 lines |
+| `run_couriers()` | 815 | 365 lines |
+| `_exchange_stops()` | 593 | 220 lines |
+| `advance_couriers()` | 335 | 83 lines |
+| `_deliver()` | 520 | 71 lines |
+| `new_courier()` | 273 | 47 lines |
+| `_copy_of()` | 420 | 39 lines |
+| `_player_name()` | 492 | 26 lines |
+| `courier_edge_seconds()` | 143 | 22 lines |
 
 ### `story/dialogue_colors.py`
 
@@ -1784,14 +1784,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `errands()` | 272 | 78 lines |
-| `_advance()` | 143 | 51 lines |
-| `walk()` | 352 | 30 lines |
-| `place_body()` | 407 | 30 lines |
-| `_dispatch()` | 114 | 27 lines |
-| `continue_walks()` | 196 | 27 lines |
-| `_nearest()` | 247 | 23 lines |
-| `station_body()` | 439 | 22 lines |
+| `errands()` | 358 | 78 lines |
+| `_advance()` | 223 | 57 lines |
+| `edge_seconds()` | 111 | 41 lines |
+| `walk()` | 438 | 30 lines |
+| `place_body()` | 493 | 30 lines |
+| `_dispatch()` | 194 | 27 lines |
+| `continue_walks()` | 282 | 27 lines |
+| `_nearest()` | 333 | 23 lines |
 
 ### `world/charter_needs.py`
 

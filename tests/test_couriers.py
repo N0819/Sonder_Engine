@@ -18,7 +18,13 @@ KEEP, GATE, ROAD, SQUARE = "keep", "gate", "road", "square"
 
 
 def _edges(*targets):
-    return [{"to": t, "barrier": "open"} for t in targets]
+    # A KEEP, A GATE, A ROAD AND A SQUARE ARE A WALK APART, and the edge is
+    # where that is said (2026-09-06). These were bare, and a bare edge is a
+    # doorway now that `charter_move.edge_seconds` prices a crossing from the
+    # room it crosses: without `distance` a courier would cross the county in
+    # seconds. `far` is the plan schema's own word for a way through that
+    # takes more than one beat.
+    return [{"to": t, "barrier": "open", "distance": "far"} for t in targets]
 
 
 def _scene():
