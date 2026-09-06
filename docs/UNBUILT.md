@@ -6059,6 +6059,47 @@ route_scene_placements` before the merge, `apply_scene_placements` inside
 
 ### 1.125 The decibel constants: a wall's loss, two new rungs, and three margins
 
+**`WALL_LOSS_DB` RESOLVED 2026-09-05, and it was a UNIT rather than a
+judgement.** The question was posed as 45 (the physical number) against 18
+(the number that makes the note's own sentences true), and both readings
+missed that the table is not denominated in real decibels at all. The
+aperture losses are derived from `APERTURE_PASS`, calibrated against the near
+field's own sentences; `SPEECH_POWER` was widened to give a voice "the ratio a
+real voice has" in ORDER but not in span. Measured, and the two spans agree to
+three decimals: whisper->shout is 20.8 dB here against 58 in the world, and
+normal->shout 10.0 against 28 -- a compression of **0.358** either way. Every
+aperture is already on that scale (window 10.0 against a real 28 scaled to
+10.0, exactly; open_door 0.5 against 0.7; membrane 3.0 against 1.8;
+closed_door 6.0 against 9.0). Only `wall` and `floor/ceiling` were raw.
+
+So 45 and 50 were the same physical numbers as everything else, in the wrong
+denomination, which is why they behaved like a bunker. They are now **16** and
+**18** -- a real 45 dB wall and a real 50 dB floor, compressed. Measured
+through medium rooms against the 27.0 dB floor: before, only `catastrophic`
+crossed one wall and NOTHING crossed two; after, `thunderous` carries through
+two walls and through a floor-and-wall, `catastrophic` through three,
+`deafening` crosses one and dies at two, and a `loud` event still crosses
+nothing. A shout still dies against a wall (60.8 - 16 - 21.6 = 23.2, under the
+floor), which is the sentence the number had to keep.
+`tests/test_sound_field.py::test_every_barrier_in_the_table_is_on_one_scale`
+derives the compression rather than asserting it, so the next edit that
+reaches for a physical number and forgets to scale it fails.
+
+**STILL OPEN, and now the sharper question: `FAR_FIELD_ENTRY_DB` = 70.** It
+sits above `deafening` (61.8) so that only `thunderous`, `catastrophic` and an
+authored `db` flood the room graph -- which was exactly the ask ("incredibly
+loud noises can travel very far"). With the wall fixed, a `deafening` source
+WOULD now be heard through one wall (30.1 dB against the 27.0 floor) if it
+were admitted, and a burning stairwell, a fire alarm and a running engine are
+all `deafening` rather than `thunderous`. The tenement that measured this
+(rush § PR6) wrote its fire as `loud`, which crosses nothing on any setting,
+so the classification is half the question. Deriving the entry as
+`SOUND_DB["deafening"]` rather than a literal 70 would also stop it drifting
+from the rung it is defined against. Not taken: it widens the far field
+beyond what was asked, and the walk cost is the owner's to spend.
+
+
+
 **Built 2026-09-05** (`docs/design/DESIGN_SOUND_DECIBELS.md`). The model is
 denominated in decibels, a wall has a finite transmission loss, and a sound
 over 70 dB floods the room graph until it is inaudible. The conversion was

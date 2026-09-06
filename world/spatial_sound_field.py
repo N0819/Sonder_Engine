@@ -1511,22 +1511,40 @@ def beat_sensory_events(scene: dict, turn_idx) -> list:
 #: explosion, ever, was heard through one by anybody. A wall attenuates; it
 #: does not abolish. 45 dB is the note's proposal and a real masonry wall.
 #:
-#: MEASURED CONSEQUENCE, and it is the owner's to accept or move
-#: (`docs/UNBUILT.md`): at 45 dB a shout dies against a wall as it must
-#: (60.8 - 21.6 - 45, inaudible), a `catastrophic` event is heard through
-#: ONE wall between medium rooms (33.4 dB against a 27.0 floor) and through
-#: TWO it is silent. The note's sentence "a `catastrophic` event is a
-#: fragment two rooms away" is therefore true through doorways and false
-#: through walls. 18 dB would make both halves true; 45 dB is the physical
-#: number. Registered rather than chosen.
-WALL_LOSS_DB = 45.0
+#: RESOLVED 2026-09-05, AND IT WAS A UNIT, NOT A JUDGEMENT. 45 was entered
+#: as the real-world transmission loss of a masonry wall, and every other
+#: number in this table is on a DIFFERENT SCALE: the aperture losses are
+#: derived from `APERTURE_PASS`, which was calibrated against the near
+#: field's own sentences, and `SPEECH_POWER`'s ladder was widened to match
+#: "the ratio a real voice has" only in ORDER, not in span.
+#:
+#: Measured, and the two spans agree to three decimals: whisper->shout is
+#: 20.8 dB here against 58 dB in the world, and normal->shout is 10.0
+#: against 28 -- a compression of 0.358 either way. Every aperture in the
+#: table is already on that compressed scale (window 10.0 against a real 28
+#: scaled to 10.0, exactly; open_door 0.5 against 0.7; membrane 3.0 against
+#: 1.8; closed_door 6.0 against 9.0). Only `wall` and `floor/ceiling` were
+#: raw. So they were not a physical choice standing beside game numbers --
+#: they were the same physical number in the wrong denomination, which is
+#: why they behaved like a bunker: a real 45 dB wall, compressed, is 16.
+#:
+#: WHAT THE FIX BUYS, measured through medium rooms against the 27.0 dB
+#: floor. Before: only `catastrophic` crossed one wall and NOTHING crossed
+#: two, so a collapsing roof two rooms away was silent. After: `thunderous`
+#: carries through two walls and through a floor-and-wall, `catastrophic`
+#: through three, `deafening` crosses one and dies at two, and a `loud`
+#: event still crosses nothing. A shout still dies against a wall (60.8 -
+#: 16 - 21.6 = 23.2, under the floor), which is the sentence this number
+#: had to keep.
+WALL_LOSS_DB = 16.0
 
 #: A floor or a ceiling: an edge that goes up or down and is a wall rather
 #: than a passage. A stairwell, a hatch or an open gallery is an APERTURE
 #: and keeps its own loss -- a vertical passage's barrier already has one --
 #: so this is only ever charged where the two rooms are stacked and nothing
-#: joins them.
-FLOOR_CEILING_LOSS_DB = 50.0
+#: joins them. On the same compressed scale as the wall above: a real 50 dB
+#: concrete floor is 18 here, and it stays the heavier of the two.
+FLOOR_CEILING_LOSS_DB = 18.0
 
 #: What a barrier with nothing usable on it costs. A wall: the far field
 #: fails toward LESS reach, which is the direction every guard here fails.

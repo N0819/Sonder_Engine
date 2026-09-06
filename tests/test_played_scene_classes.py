@@ -3299,13 +3299,17 @@ def test_a_wall_attenuates_and_does_not_abolish():
     assert distant_sounds(sc, "Ada", events=crash), (
         "a catastrophic event did not cross one wall")
     # Every quieter rung dies against it, and the LADDER is what decides --
-    # not the room, not the story, not a special case. At the wall's
-    # proposed 45 dB only the top rung crosses; that the ladder's own top
-    # two do not both cross is the note's open constant, registered.
+    # not the room, not the story, not a special case. RESOLVED 2026-09-05:
+    # at the wall's old 45 dB only the top rung crossed, and the note's own
+    # sentence ("a catastrophic event is a fragment two rooms away") was
+    # true through doorways and false through walls. 45 turned out to be the
+    # real-world number standing in a table whose other seven entries are on
+    # a scale compressed by 0.358, so a wall is 16 here and BOTH top rungs
+    # cross one, which is what the note always said.
     for level in SOUND_LEVELS:
         quieter = [{**crash[0], "level": level}]
         crossed = bool(distant_sounds(sc, "Ada", events=quieter))
-        assert crossed == (level == "catastrophic"), level
+        assert crossed == (level in ("thunderous", "catastrophic")), level
     # And no voice, at any volume: the far field has no door for speech.
     sc["positions"]["Bel"] = "hall"
     for volume in SPEECH_DB:
