@@ -27,7 +27,7 @@ from story.character_schema import (
     persona_name,
 )
 from core.db import get_setting, q, wget
-from core.pipeline_context import note_step_warning
+from core.pipeline_context import note_step_decision, note_step_warning
 from language_runtime import (
     compositor_text, compositor_value, english_linguistic, linguistic,
 )
@@ -4656,6 +4656,100 @@ def _strip_identity_tokens(text, forms):
 # apostrophes -- She's, Hinami's -- never open a span), and an internal '
 # counts as content only when a word char follows it (I'm, don't), so the
 # span still closes at the real terminating quote.
+
+_SURFACE_CLAUSE_SPLIT = re.compile(r"(?<=[,;:])\s+|\s+[—–]\s+|\s+--\s+")
+
+
+def _act_surface_admission(surface, *, actor, observer, forms_by_body,
+                           perceived, who):
+    """WHAT A BODY IS SEEN DOING IS ADMISSIBLE; WHAT IT IS SEEN DOING IT TO
+    IS ADMISSIBLE ONLY WHERE THE TARGET IS.
+
+    An `observable` is free text describing the ACTOR, and the act channel
+    admitted the whole string on the actor's channel alone. Any OTHER body
+    the sentence names is a percept about THAT body -- its presence, its
+    state, its name -- and it reached every observer who could see the actor
+    without passing a single admission gate of its own.
+
+    Live (`PLAY_2026_09_05C_masque.md` § PX5, turn 6). Ivo stood on a
+    completely dark terrace; Verrin, in the gallery, declared
+    ``observable: "looks leisurely over Ivo's uncovered face, then lifts his
+    wine glass and takes a slow, delicate sip without flinching"``. That
+    sentence was delivered verbatim to a body in the reception room two
+    edges away and to a body in the gallery whose own view in the same beat
+    correctly read "Through the glazed terrace door, only darkness". Both
+    received the name Ivo and the fact that his face was uncovered -- the
+    plot's secret, delivered to the two people it was being kept from, in
+    the beat it was created. No tripwire fired, because nothing was looking:
+    the identity scrub answers "may this observer hear this NAME", and the
+    leak here is the STATE beside it.
+
+    `perceived` is this observer's own eyes for the beat -- the set
+    `_composer_standing_percepts` fills through `seen_out`, which is the
+    same "could this observer see them" answer every presence percept is
+    built from. A body in it is admissible; a body absent from it is not,
+    and the span that named it is cut. This SUBTRACTS: what survives is the
+    actor's own conduct, which is what the channel was carrying.
+
+    Returns ``(surface, cut_bodies)``; an empty surface means every span
+    named somebody the observer has no channel to, and the caller refuses.
+    """
+    text = str(surface or "").strip()
+    if not text or not forms_by_body:
+        return text, []
+    exempt = {str(actor or "").strip().casefold(),
+              str(observer or "").strip().casefold()}
+    seen_folded = {str(n or "").strip().casefold() for n in (perceived or ())}
+    # Read from the section that OWNS the table (`agents.common`), never a
+    # second copy under this module's own key: one list of ordinary English
+    # words that are also names, in one place, per pack.
+    common_words = linguistic("agents.common", "_COMMON_WORD_NAMES")
+    third = []
+    for body, forms in forms_by_body.items():
+        canonical = str(body or "").strip()
+        folded = canonical.casefold()
+        if not canonical or folded in exempt or folded in seen_folded:
+            continue
+        patterns = []
+        for form in {canonical, *(forms or ())}:
+            form = str(form or "").strip()
+            if not form:
+                continue
+            # An ordinary English word that is also somebody's name matches
+            # only in its capitalised spelling -- the same guard
+            # `_scrub_unknown_identities` applies, for the same reason: "the
+            # rose garden" is not a percept of Rose.
+            if len(form.split()) == 1 and form.casefold() in common_words:
+                patterns.append(
+                    name_boundary_regex(form[:1].upper() + form[1:]))
+            else:
+                patterns.append(name_boundary_regex(form, re.IGNORECASE))
+        if patterns:
+            third.append((canonical, patterns))
+    named = [(body, patterns) for body, patterns in third
+             if any(pattern.search(text) for pattern in patterns)]
+    if not named:
+        return text, []
+    kept, cut = [], []
+    for span in _SURFACE_CLAUSE_SPLIT.split(text):
+        hits = [body for body, patterns in named
+                if any(pattern.search(span) for pattern in patterns)]
+        if hits:
+            cut.extend(hits)
+            continue
+        span = span.strip().rstrip(",;:").strip()
+        if span:
+            kept.append(span)
+    cut = sorted(set(cut))
+    trimmed = ", ".join(kept)
+    note_step_decision(
+        "act_percept", who, "refused" if not trimmed else "delivered",
+        "the observable named %s, whom this observer has no channel to; "
+        "%s" % (", ".join(cut),
+                "nothing else was said about the actor"
+                if not trimmed else "that clause was cut"))
+    return trimmed, cut
+
 
 def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources):
     """Deterministic identity floor for perception view prose.

@@ -85,6 +85,7 @@ from world.spatial import (
     proximity_rel,
     room_of,
     same_subject,
+    sense_acuity_offset,
     size_relation,
     visual_level_between,
 )
@@ -610,9 +611,32 @@ def line_hear_level(entry, rel, observer_name, proximity=None,
     # and who is on the channel.
     if isinstance(rel.get("comm_channel"), dict):
         return "full"
-    base = _sense_graded(
-        hear_level(rel, entry.get("volume", "normal"), proximity=proximity),
-        "hearing", senses)
+    _unimpaired = hear_level(rel, entry.get("volume", "normal"),
+                             proximity=proximity)
+    base = _sense_graded(_unimpaired, "hearing", senses)
+    # AN IMPAIRED EAR IS NOT AN UNREACHABLE ONE. `full` is the top of the
+    # hearing ladder, so a -1 acuity took every `full` to `fragment`
+    # unconditionally: a hard-of-hearing body never made out a sentence
+    # again, at any volume, at any distance, including one shouted into it
+    # at arm's length -- and no speaker could do anything about it, which is
+    # what makes it a defect rather than a disability. Measured (rush, PR5).
+    #
+    # So the shift yields where the world is already compensating for it, on
+    # the two terms the world has: a MEASURED intimacy, or a raised voice.
+    # Exactly the exception design note 18 makes for dim sight, and for the
+    # same reason -- a grade is a description of the channel, and a channel
+    # at its own ceiling is not describing an impairment any more. Every
+    # other level still shifts, so the card is not being ignored.
+    # ...but ONLY where the card is a shift. An ABSENT channel is a cut, not
+    # a degree (`sense_acuity_offset` answers None for it), and no volume and
+    # no distance compensates for an ear that is not there. Caught by this
+    # function's own test on the first run, which is the whole argument for
+    # writing the complement down.
+    if base != "full" and _unimpaired == "full" \
+            and sense_acuity_offset(senses, "hearing") is not None and (
+            str(proximity or "") == "within_reach"
+            or str(entry.get("volume", "normal")).lower() in ("loud", "shout")):
+        base = "full"
     if base != "none":
         return base
     if not _addresses(entry.get("intended_target"), observer_name):

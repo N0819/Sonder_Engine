@@ -815,3 +815,43 @@ class TestPresenceEnumeratesEveryone:
             [still], mode="player", language="en",
             prev_standing=frozenset({still.dedupe_key}))
         assert rendered.text == ""
+
+
+def test_an_impaired_ear_is_not_an_unreachable_one():
+    """`full` is the top of the hearing ladder, so a -1 acuity took every
+    `full` to `fragment` unconditionally: a hard-of-hearing body never made
+    out a sentence again, at any volume and any distance, including one
+    shouted into it at arm's length -- and no speaker could do anything
+    about it, which is what makes it a defect rather than a disability
+    (rush, 2026-09-05, PR5).
+
+    The shift yields where the world is already compensating for it, on the
+    two terms the world has: a MEASURED intimacy, or a raised voice. Exactly
+    the exception design note 18 makes for dim sight.
+    """
+    poor = [{"channel": "hearing", "acuity": "poor"}]
+    same_room = {"same_room": True, "barrier": "open"}
+    ordinary = {"volume": "normal", "text": "Here.", "speaker": "Bram"}
+
+    # Across the room at ordinary volume, the card still costs the words.
+    assert composer.line_hear_level(
+        ordinary, same_room, "Alice", senses=poor) == "fragment"
+    # Shouted, or at arm's length, it does not.
+    assert composer.line_hear_level(
+        {**ordinary, "volume": "shout"}, same_room, "Alice",
+        senses=poor) == "full"
+    assert composer.line_hear_level(
+        ordinary, same_room, "Alice", proximity="within_reach",
+        senses=poor) == "full"
+    # The exemption is not a repeal: a line the room already muffles stays
+    # muffled, because the channel is not at its ceiling.
+    muffled = {"barrier": "closed_door", "same_room": False}
+    assert composer.hear_level(muffled, "normal") == "fragment"
+    assert composer.line_hear_level(
+        ordinary, muffled, "Alice", proximity="within_reach",
+        senses=poor) != "full"
+    # And a deaf card is still deaf -- an absent channel is a cut, not a shift.
+    deaf = [{"channel": "hearing", "acuity": "deaf"}]
+    assert composer.line_hear_level(
+        {**ordinary, "volume": "shout"}, same_room, "Alice",
+        proximity="within_reach", senses=deaf) == "none"
