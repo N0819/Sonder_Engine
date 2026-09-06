@@ -191,7 +191,7 @@ def en_route(body):
     return len(route) > 1 and int(rec.get("leg") or 0) < len(route) - 1
 
 
-def _dispatch(body, target, scene, cache, hours):
+def _dispatch(body, target, scene, cache, hours, neighbors=None):
     """Put ``body`` on a route to ``target``. Returns the body, or ``None``
     when there is no route (the caller leaves it where it stands: a
     charter's mistake must not be laundered into a movement).
@@ -206,7 +206,12 @@ def _dispatch(body, target, scene, cache, hours):
     current = body.get("walk") if isinstance(body.get("walk"), dict) else None
     if current and str(current.get("target") or "") == target:
         return body
-    route = walk_route(scene, origin, target, cache=cache) if scene else None
+    # PLANNED ON THE GRAPH THE BODY WALKS, which is the same one `_advance`
+    # re-checks each leg against. A creature that can open doors decides on
+    # a wider graph than `passable_path`'s, and planning on the narrower one
+    # dropped the move silently.
+    route = walk_route(scene, origin, target, cache=cache,
+                       neighbors=neighbors) if scene else None
     if scene and route is None:
         return None
     if not scene:
@@ -459,7 +464,7 @@ def walk(bodies, moves, scene, travelled=None, cache=None, hours=4.0,
             continue
         if str(body.get("place") or "") == target and not en_route(body):
             continue
-        dispatched = _dispatch(body, target, scene, cache, hours)
+        dispatched = _dispatch(body, target, scene, cache, hours, neighbors)
         if dispatched is None:
             continue
         bodies[body_key] = _advance(body_key, dispatched, neighbors,
