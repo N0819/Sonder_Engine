@@ -7738,7 +7738,8 @@ def _phrase_ngrams(text, n):
 # middle of") are not. A phrase must carry at least one of these to be flagged.
 
 
-def _overused_phrases(recent_prose, current_prose="", n=3, min_hits=2, cap=12):
+def _overused_phrases(recent_prose, current_prose="", n=3, min_hits=2, cap=12,
+                      forced=""):
     """The narrator's own recurring set-dressing tics (Fable A4): short phrases
     that recur across recent turns' prose -- "the clock ticks", "thumps her tail
     once", "the fire settles". Fed back to the narrator as a ban list so it
@@ -7759,10 +7760,23 @@ def _overused_phrases(recent_prose, current_prose="", n=3, min_hits=2, cap=12):
     they came from before the list is filled.
 
     And a phrase that NAMES somebody is not a tic (`_named_tokens`, PM18).
+
+    `forced` is THIS beat's composed view -- the sentences the engine writes
+    and the narrator is required to render. A phrase the view itself contains
+    is the engine's wording, not the narrator's tic, and banning it asks for
+    a page that contradicts its own ground truth. Measured (quiet, PQ8): the
+    repetition warning fired twice on a beat whose recurring phrase the
+    composer had put in the view every time, and the prose published
+    unchanged both times because there was nothing the narrator could
+    legitimately do about it.
     """
     blocks = [p for p in list(recent_prose or []) + [current_prose] if p]
     if len(blocks) < min_hits:
         return []
+    engine_said = set()
+    for segment_text in ([forced] if isinstance(forced, str) else list(forced or ())):
+        if str(segment_text or "").strip():
+            engine_said |= set(_phrase_ngrams(str(segment_text), n))
     named = _named_tokens(blocks)
     counts = {}
     for block in blocks:
@@ -7771,6 +7785,8 @@ def _overused_phrases(recent_prose, current_prose="", n=3, min_hits=2, cap=12):
             if all(w in _ling("_TIC_STOPWORDS") for w in words):
                 continue
             if any(w in named for w in words):
+                continue
+            if phrase in engine_said:
                 continue
             counts[phrase] = counts.get(phrase, 0) + 1
     hits = {p for p, c in counts.items() if c >= min_hits}

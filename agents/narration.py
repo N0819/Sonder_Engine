@@ -1552,6 +1552,15 @@ def _generate_narration(payload, view, prev, p_lines, correction_notes=None,
         room_names=facts.get("room_names"),
         portal_states=facts.get("portal_states"),
         attire_facts=facts.get("attire_facts"))
+    # THE ALIAS RUNS BOTH WAYS OR IT IS A FOOTGUN. `text` is read above as a
+    # spelling of `prose` and then left exactly as the model wrote it, so the
+    # stored narrator variant carried `{"prose": "...", "text": ""}` and any
+    # reader keying on `text` got nothing -- which four tools do, and which a
+    # play run's own reader did on turn 9 (solitude, PS20).
+    # `NarratorOutput` declares both fields; the repair is that they agree,
+    # not that one of them goes.
+    if str(out.get("prose") or "").strip():
+        out["text"] = out["prose"]
     return out, warnings, fidelity_warnings
 
 
@@ -1867,7 +1876,8 @@ def narrator(ctx, nonce):
     # the risk it exists to stop -- so the field stays and only its empty
     # emission goes.
     _exemplars = json.loads(get_setting("exemplars") or "[]")
-    _overused = _overused_phrases(prev)
+    # `forced`: the narrator is not penalised for the engine's own wording.
+    _overused = _overused_phrases(prev, forced=view)
     _established = _already_established_phrases(view, prev)
     _voice = ((pers.get("narration") or {}).get("voice_setting", "")
               if isinstance(pers, dict) else "")
@@ -2156,7 +2166,7 @@ def narrator_extra(ctx, nonce):
         # a field that always arrives empty teaches the model to skip the
         # key rather than to read it.
         _exemplars2 = json.loads(get_setting("exemplars") or "[]")
-        _overused2 = _overused_phrases(prev)
+        _overused2 = _overused_phrases(prev, forced=view)
         _established2 = _already_established_phrases(view, prev)
         # Same order as narrator() above, and for the same reason -- see the
         # ORDER IS THE MESSAGE comment there. This seat has no

@@ -811,6 +811,30 @@ def _preview_plan_rooms(cid, frame_id, op, world):
                       if room.get(k)}
                 for uid, room in rooms.items()}
     geometry = {uid: g for uid, g in geometry.items() if g}
+    # A MEASUREMENT THE ENGINE CHANGED IS ONE THE AUTHOR HAS TO BE TOLD
+    # ABOUT. Showing the stored extent back is only half of it: a host who
+    # wrote 28 and reads 24 can see the difference, and a host who wrote 28
+    # and then describes the terrace in prose cannot, because the prose is
+    # theirs and the row is ours. Measured (solitude, PS19): the Room told
+    # the player "28 paces wide" and "32 paces wide" for rows holding 24, so
+    # two differently-sized terraces became the same width and nothing said
+    # so. `extent_clamp` answers only where a readable measurement actually
+    # MOVED -- rounding is not a clamp -- so a room that fit says nothing.
+    try:
+        from world.spatial import extent_clamp
+        for uid, raw in (op.get("rooms") or {}).items():
+            moved = extent_clamp((raw or {}).get("extent")) \
+                if isinstance(raw, dict) else None
+            if not moved:
+                continue
+            warnings.append(
+                "room %r was drawn %d by %d, not %d by %d: a room is at most "
+                "%d paces on a side and at least %d"
+                % (uid, moved["stored"]["w"], moved["stored"]["d"],
+                   moved["requested"]["w"], moved["requested"]["d"],
+                   moved["max"], moved["min"]))
+    except Exception:
+        pass
     vertical = sorted({"%s -> %s (%s)" % (uid, edge.get("to"), edge["vertical"])
                        for uid, room in rooms.items()
                        for edge in room["adjacent"] if edge.get("vertical")})
