@@ -2391,8 +2391,9 @@ def charter_noises(registry):
     that made it is what the Director introduces when the two meet.
     """
     out = []
-    for state in (registry or {}).get("charters", {}).values() \
-            if isinstance(registry, dict) else ():
+    items = (registry or {}).get("items") if isinstance(registry, dict) else {}
+    for item in (items or {}).values():
+        state = item.get("state") if isinstance(item, dict) else None
         if not isinstance(state, dict):
             continue
         for row in (state.get("heard") or ()):

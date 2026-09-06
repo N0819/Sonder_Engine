@@ -104,7 +104,7 @@
 | `story/lore_structure.py` | 248 |  | — |
 | `story/mandates.py` | 586 |  | `core.db` |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
-| `story/plot_packages.py` | 2886 |  | `world.spatial` |
+| `story/plot_packages.py` | 3068 |  | `world.spatial` |
 | `story/provenance_text.py` | 132 |  | — |
 | `story/room_bible.py` | 424 |  | `core.db` |
 | `story/room_calls.py` | 130 |  | — |
@@ -159,7 +159,7 @@
 | `world/charter_promote.py` | 604 |  | `world.charter_commitment`, `world.charter_feel`, `world.charter_politics`, `world.charter_social` |
 | `world/charter_roster.py` | 134 |  | `world.charter_model` |
 | `world/charter_run.py` | 1477 |  | `world`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_enrol`, `world.charter_feel`, `world.charter_figure`, `world.charter_harm`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
-| `world/charter_runtime.py` | 4184 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics` |
+| `world/charter_runtime.py` | 4185 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics` |
 | `world/charter_social.py` | 743 |  | `world.charter_politics` |
 | `world/charter_space.py` | 167 |  | `world.spatial` |
 | `world/charter_surface.py` | 341 |  | — |
@@ -1297,11 +1297,11 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_package_checks()` | 2235 | 115 lines |
+| `_package_checks()` | 2417 | 115 lines |
 | `_preview_plan_rooms()` | 758 | 107 lines |
-| `publish_package()` | 2555 | 84 lines |
-| `_reach_warning()` | 2373 | 82 lines |
-| `fire_due_clocks()` | 2680 | 77 lines |
+| `publish_package()` | 2737 | 84 lines |
+| `_reach_warning()` | 2555 | 82 lines |
+| `fire_due_clocks()` | 2862 | 77 lines |
 | `normalize_package()` | 181 | 74 lines |
 | `_world_snapshot()` | 495 | 66 lines |
 | `edit_package()` | 370 | 57 lines |
@@ -1949,7 +1949,7 @@
 | `_plan_lived_location()` | 1367 | 181 lines |
 | `_prepare_cast_histories()` | 614 | 172 lines |
 | `_generate_lived_location()` | 1608 | 154 lines |
-| `presence_view()` | 3475 | 114 lines |
+| `presence_view()` | 3476 | 114 lines |
 | `presim_registry()` | 930 | 104 lines |
 | `generation_lore()` | 1036 | 101 lines |
 

@@ -565,3 +565,85 @@ def test_a_planned_presence_with_no_room_says_so(temp_db):
     placed = dict(raw, brief=dict(raw["brief"], where="chem_store"))
     out = _preview_plan_entity(cid, None, _shape_plan_entity(placed), world)
     assert not any("brief.where" in w for w in out["warnings"]), out["warnings"]
+
+
+def _creature_world(temp_db):
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Creatures", "", time.time()))
+    temp_db.wset(cid, "scene", {
+        "rooms": {"annex": {"name": "Annex"}, "spine": {"name": "Spine"}},
+        "positions": {}, "entities": {}, "attire": {}, "overlays": {}})
+    return cid
+
+
+def test_the_room_can_file_a_creature_that_roams_and_is_heard(temp_db):
+    """THE SCHEMA WAS COMPLETE AND HAD NO DOOR. The Writers' Room could READ
+    charters (`inspect_charters`) and never file one, so a thing meant to
+    roam the planned skeleton could only be authored as a `plan_entity`:
+    correctly placed, rules as prose, and no simulation behind it.
+
+    `plan_creature` files the institution. The brief is small and the
+    charter is DERIVED -- the hunger upkeep that makes it want anything, the
+    post it hunts from and its bodies are mechanism rather than fiction, and
+    getting them wrong is how a creature starves in a corner.
+    """
+    from story.plot_packages import (OPERATIONS, _preview_plan_creature,
+                                     _shape_plan_creature, _world_snapshot)
+    from world.charter_runtime import registry_for
+
+    cid = _creature_world(temp_db)
+    raw = {"op": "plan_creature", "name": "Carbonic Stalker",
+           "lair": "annex", "hunts": ["spine"], "senses_rooms": 2,
+           "footprint": "large", "can_open_doors": False,
+           "prey": ["unposted", "figure"],
+           "rule": "blind and deaf; tracks exhaled carbon dioxide",
+           "voice": {"moving": {"level": "faint",
+                                "sound": "a slow rhythmic venting"},
+                     "attacking": {"level": "loud", "sound": ""}},
+           "spoor": {"tracks": "a smeared trail of condensate"}}
+    op = _shape_plan_creature(raw)
+    out = _preview_plan_creature(cid, None, op, _world_snapshot(cid, None))
+    assert not out["errors"], out["errors"]
+    assert not out["warnings"], out["warnings"]
+    assert out["changes"][0]["voice"] == {"moving": "faint",
+                                          "attacking": "loud"}
+
+    OPERATIONS["plan_creature"]["apply"](cid, None, op, 1)
+    # The registry's own shape: an institution is an `items[key].state`.
+    items = registry_for(cid).get("items") or {}
+    charter = items["carbonic_stalker"]["state"]
+    # It wants something, so it moves; it hunts from somewhere; it exists.
+    assert charter["priority"] == ["hunger"]
+    assert charter["posts"]["hunt"]["place"] == "spine"
+    assert len(charter["bodies"]) == 1
+    creature = charter["creature"]
+    assert creature["senses"]["range_rooms"] == 2
+    assert creature["voice"]["moving"]["sound"] == "a slow rhythmic venting"
+
+
+def test_a_creature_with_no_voice_is_told_it_cannot_be_heard_coming(temp_db):
+    """Silence is how a stealthy thing is written and the author may mean
+    it -- but it is the difference between a thing you can hear coming and
+    one you cannot, so it is said out loud rather than left to be found."""
+    from story.plot_packages import (_preview_plan_creature,
+                                     _shape_plan_creature, _world_snapshot)
+
+    cid = _creature_world(temp_db)
+    op = _shape_plan_creature({"name": "Thing", "lair": "annex"})
+    out = _preview_plan_creature(cid, None, op, _world_snapshot(cid, None))
+    assert not out["errors"]
+    assert any("only ever be met by walking into it" in w
+               for w in out["warnings"]), out["warnings"]
+
+
+def test_a_creature_placed_nowhere_is_refused(temp_db):
+    from story.plot_packages import (_preview_plan_creature,
+                                     _shape_plan_creature, _world_snapshot)
+    import pytest
+
+    cid = _creature_world(temp_db)
+    with pytest.raises(ValueError):
+        _shape_plan_creature({"name": "Thing"})
+    op = _shape_plan_creature({"name": "Thing", "lair": "nowhere_at_all"})
+    out = _preview_plan_creature(cid, None, op, _world_snapshot(cid, None))
+    assert any("exists nowhere" in e for e in out["errors"]), out["errors"]
