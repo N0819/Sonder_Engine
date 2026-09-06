@@ -9371,41 +9371,56 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
     warnings = []
     view_text = str(view or "")
     prose = out.get("prose") or ""
-    view_names = set(re.findall(
-        r"\b[A-Z][a-z]+(?:\s+(?:of\s+)?(?:the\s+)?[A-Z][a-z]+)+\b", view_text))
-    for name in view_names:
-        if name.lower() in prose.lower():
-            continue
-        # Good prose refers to people by surname or first name alone after
-        # the first mention ("Voss", "Tommy") rather than repeating a full
-        # multi-word name every time; that is not a fidelity violation.
-        # Only flag names where NONE of their words appear anywhere.
-        name_words = [w for w in name.split() if len(w) >= 3]
-        if name_words and not any(w.lower() in prose.lower() for w in name_words):
-            warnings.append(f"Proper noun from view missing in narrator prose: '{name}'")
-
-    # A ONE-WORD NAME IS A NAME. The pattern above is `(?:...)+`, so it can
-    # only ever see a proper noun of two or more capitalised words -- and a
-    # single-token name is the commonest cast shape in this engine's own
-    # stories, which made the check structurally unavailable for most of the
-    # cast rather than merely quiet about them.
+    # THE MULTI-WORD ARM IS GONE (2026-09-06, the owner's ruling: a check
+    # that fires on otherwise valid output has to die, and the fix belongs
+    # in the payload and the prompt rather than in a reading of the page).
     #
-    # Two questions, both of which the regex was guessing at. WHAT IS A NAME:
-    # the roster is already in this payload, so the answer comes from the cast
-    # rather than from capitalisation. WHAT COUNTS AS PRESENT: prose refers to
-    # a person by pronoun after the first mention, which is ordinary English
-    # and not a dropped body -- the multi-word arm gets that tolerance free
-    # from its surname rule and a one-word name has no shorter form to fall
-    # back on. Measured over 2,277 stored beats carrying both a view and
-    # prose: without the pronoun tolerance this fires on 29 of 217 view-named
-    # single-token cast members and 26 of those are pronoun prose; with it, 3.
+    # It asked `[A-Z][a-z]+( [A-Z][a-z]+)+` of the view and then required the
+    # prose to say whatever came back -- GUESSING AT WHAT A NAME IS FROM
+    # CAPITAL LETTERS, which is this repo's oldest recurring defect and the
+    # one thing CLAUDE.md's no-word-lists rule is about. Measured over the
+    # owner's 3,770 stored beats carrying both a view and prose: it fires on
+    # 1,577 of them, 41.8%, 2,141 times over 138 distinct phrases. What it
+    # actually caught, by volume: ROOM NAMES the narrator was never obliged
+    # to utter -- `Private Session Room` 595, `Reception Room` 465, `Ten
+    # Forward` 108, `Observation Room`, `Interview Cell`, `Western Array
+    # Chamber` -- and phrases that are not names at all: `Mmmm It`, `So Uhm`,
+    # `Doctor Doctor`, `East Asian`, `Long Odds`. Two beats in five carried a
+    # warning about prose that was fine, which is how a warning channel stops
+    # being read.
+    #
+    # The arm below survives because it is built the other way round: it asks
+    # the CAST ROSTER who the people are -- a closed set the engine owns --
+    # and carries a measured tolerance for the pronoun prose ordinarily uses
+    # after a first mention (29 false positives down to 3, over the same
+    # corpus). A name comes from the roster, never from a capital letter.
+
+    # A NAME IS WHOEVER THE ROSTER SAYS IS HERE, of one word or several.
+    #
+    # Two questions, both of which the deleted regex was guessing at. WHAT IS
+    # A NAME: the roster is already in this payload, so the answer comes from
+    # the cast rather than from capitalisation -- which is also what keeps a
+    # room, a rank and a stray capitalised phrase out of it. WHAT COUNTS AS
+    # PRESENT: prose names a person once and then refers to them by pronoun,
+    # or by one part of their name, and neither is a dropped body. Measured
+    # over 2,277 stored beats carrying both a view and prose: without the
+    # pronoun tolerance this fires on 29 of 217 view-named single-token cast
+    # members and 26 of those are pronoun prose; with it, 3.
+    #
+    # The single-token restriction went with the regex it was paired with:
+    # it existed because the multi-word case was the regex's, and a
+    # multi-word cast name is now nobody's unless it is this arm's. Each
+    # part of a name counts as the name, which is the surname tolerance the
+    # old arm had and the reason "Voss" answers for "Elyra Voss".
     for name, pronouns in (cast_pronouns or {}).items():
         text = str(name or "").strip()
-        if not text or len(text.split()) != 1 or text == player_name:
+        if not text or text == player_name:
             continue
         if not re.search(rf"(?<!\w){re.escape(text)}(?!\w)", view_text):
             continue
-        if text.lower() in prose.lower():
+        parts = [w for w in text.split() if len(w) >= 3] or [text]
+        if any(re.search(rf"(?<!\w){re.escape(w)}(?!\w)", prose, re.I)
+               for w in parts):
             continue
         forms = [str(pronouns.get(k) or "").strip().lower()
                  for k in ("subject", "object", "possessive")

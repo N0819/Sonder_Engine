@@ -288,6 +288,8 @@ from world.spatial_sound_field import (
     one_opening_away, open_edge_floor, RAISED_VOLUMES,
     quantise_hearing, sound_field, sound_field_hear_level, sound_notices,
     sound_passes, sound_shape, sound_sources, SOUND_LEVELS, SOUND_POWER,
+    # A room a sound has nowhere to go but along (2026-09-06).
+    DUCT_ASPECT, DUCT_STEP, duct_step_scale, is_duct,
     SoundField, SPEECH_POWER, SPEECH_VOLUMES, spread, stamp_sound_relation,
     steadiness_this_beat, VOICE_ONE_PACE, WEATHER_NOISE, WIND_NOISE,
     # Decibels: the denomination (DESIGN_SOUND_DECIBELS.md, 2026-09-05).

@@ -332,6 +332,36 @@ OCCLUDER_LOSS_DB = -db_ratio(OCCLUDER_PASS)
 #: `full`, which a normal voice clears to ten paces and a whisper to two.
 AMBIENT = {"enclosed": 0.05, "sheltered": 0.1, "open": 0.1}
 
+#: What makes a room a DUCT: it is long, narrow and roofed, so the walls stop
+#: a sound going anywhere except along it, and it carries far further than
+#: the same sound in the open. Set as the ratio of a room's long side to its
+#: short one, over its own measured `extent`.
+#:
+#:   set here   3.0 -- a room three times longer than it is wide is a passage
+#:
+#: A spine, a corridor, a gallery, a culvert, a tunnel and a nave all clear
+#: it and none of them is named here; a hall, a cell, a parlour and a yard
+#: do not.
+DUCT_ASPECT = 3.0
+
+#: What a pace costs a sound INSIDE a duct, against 1 in an ordinary room.
+#: `spreading_loss_db` is `10*log10(1 + L^2)`, free-field inverse square:
+#: right for a hall, where a sound goes off in every direction and only a
+#: shrinking share of it reaches you, and wrong for a corridor, where there
+#: is nowhere else for it to go. The exact law is cylindrical near the source
+#: and plane further along; this is the first-order constant that stands for
+#: both, and it is the owner's like every other constant here.
+#:
+#:   set here   0.5 -- a duct is half as long to a sound as it is to a body
+#:
+#: On the beat it was set for, 18 paces of vaulted service spine: 25.1 dB of
+#: spreading loss becomes 19.1, and the pry bar the annex could not hear at
+#: all arrives `full`. Charged only on a step WITHIN one room. A step across
+#: a wall band is one step in either direction and keeps its own cost, which
+#: is what makes a path's length the same measured from either end (the
+#: reciprocity `_LENGTH_EPS` and `spread`'s tie-break exist to hold).
+DUCT_STEP = 0.5
+
 #: The same floors in dB -- enclosed 27.0 | sheltered 30.0 | open 33.0.
 #: (`DESIGN_SOUND_DECIBELS.md` § 5 said 14 / 17 / 20: the right 3 dB steps
 #: against a different reference than its own source ladder. The steps are
@@ -726,10 +756,17 @@ _STEPS = ((1, 0, 1.0), (-1, 0, 1.0), (0, 1, 1.0), (0, -1, 1.0),
           (-1, 1, DIAGONAL_COST), (-1, -1, DIAGONAL_COST))
 
 
-def spread(field: _Field, origin) -> dict:
+def spread(field: _Field, origin, *, step_scale=None) -> dict:
     """{cell: (path length, pass)} for every cell the flood reaches from
     `origin`: Dijkstra over the field's cells. A side step costs 1, a
     diagonal DIAGONAL_COST.
+
+    `step_scale` is `{room_id: what a pace inside that room costs}` -- the
+    duct rule (`DUCT_STEP`), and absent it every step costs what it always
+    did, so every caller that does not pass one is byte-identical. It is
+    charged on a step WITHIN one room only; the step across a wall band is
+    one step from either side and keeps its cost, which is what keeps a
+    path the same length measured from either end.
 
     SOUND GOES OVER AND AROUND WHAT IS NOT A PARTITION. A cell holding an
     occluder that reaches the ceiling (`_PARTITION_RANK`) is REACHED but
@@ -783,7 +820,8 @@ def spread(field: _Field, origin) -> dict:
             if nxt in inside:
                 if inside[nxt] != here:
                     continue            # rooms never touch; the band is between
-                nd, nf = dist + cost, factor
+                nd = dist + cost * (step_scale or {}).get(here, 1.0)
+                nf = factor
             else:
                 # Across the band: the cell two steps on, in another room.
                 nxt = (x + 2 * dx, y + 2 * dy)
@@ -1025,6 +1063,43 @@ def failing_sound_sources_out(scene: dict, beat) -> list:
     return out
 
 
+def is_duct(scene, room_id) -> bool:
+    """Is this room a DUCT -- long, narrow and roofed, so a sound in it has
+    nowhere to go but along it? Its own measured `extent` decides, at
+    `DUCT_ASPECT`; a room the story has not measured is not one, because the
+    size tiers are squares and a square is not a passage.
+
+    Only an ENCLOSED room. What makes a corridor carry is its walls and its
+    roof; a lane between two buildings under the open sky loses upward
+    everything a tunnel keeps, and `exposure` is the word the engine already
+    has for the difference."""
+    from world import weather as _weather
+
+    room = ((scene or {}).get("rooms") or {}).get(room_id)
+    if not isinstance(room, dict):
+        return False
+    if _weather.room_exposure(scene, room_id) != "enclosed":
+        return False
+    extent = room.get("extent")
+    if not isinstance(extent, dict):
+        return False
+    try:
+        w, d = float(extent.get("w") or 0), float(extent.get("d") or 0)
+    except (TypeError, ValueError):
+        return False
+    if w <= 0 or d <= 0:
+        return False
+    return max(w, d) / min(w, d) >= DUCT_ASPECT
+
+
+def duct_step_scale(scene, rooms) -> dict:
+    """`{room_id: what a pace inside it costs a sound}` for the rooms a
+    field placed -- `DUCT_STEP` in a duct and 1 everywhere else. Sparse: a
+    field with no duct on it gets `{}` and floods exactly as it always
+    did."""
+    return {rid: DUCT_STEP for rid in (rooms or ()) if is_duct(scene, rid)}
+
+
 def _ambient_floor(scene, room_id) -> float:
     """AMBIENT[exposure] plus the weather the room can hear (§ 4.6)."""
     from world import weather as _weather
@@ -1075,12 +1150,18 @@ class SoundField:
             self.sources.append(placed)
         self.ambient = {room: _ambient_floor(scene, room)
                         for room in grid.offsets}
+        # WHAT A PACE COSTS, ROOM BY ROOM. A duct carries a sound further
+        # than the same length of hall (`DUCT_STEP`), and every other room
+        # is unchanged, so a field with no duct on it floods byte for byte
+        # as it did.
+        self.step_scale = duct_step_scale(scene, grid.offsets)
 
     # -- geometry -----------------------------------------------------------
 
     def spread_from(self, cell) -> dict:
         if cell not in self._spreads:
-            self._spreads[cell] = spread(self.grid, cell)
+            self._spreads[cell] = spread(self.grid, cell,
+                                         step_scale=self.step_scale)
         return self._spreads[cell]
 
     def locate(self, name, room=None):
