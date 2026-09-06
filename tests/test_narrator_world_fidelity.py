@@ -767,17 +767,41 @@ def test_direction_rendered_correctly_passes():
     assert _check_action_direction(prose, order) == []
 
 
-def test_missing_act_warns_but_does_not_buy_a_rewrite():
-    # The observed failure: the motion simply never appeared on the page.
+def test_a_direction_the_page_does_not_name_is_not_a_defect():
+    """THE MISSING ARM IS GONE (2026-09-06, the owner's ruling).
+
+    It warned when the act named a direction and the prose named neither,
+    and the check's own docstring conceded the hole: correct prose can
+    render a descent with no directional verb in it at all -- as this very
+    fixture does, since a rope creaking in a fist IS a lantern going down.
+
+    Worse, direction is read off a VERB, so an act that is not travel gets
+    classed as travel. In the descent run it fired five times and at least
+    three were not movement: "raises a hand in a halt gesture" and "turns
+    the wheel mechanism" both read as the body moving UPWARD, and "leans her
+    torso inward toward the concrete wall, looking upward" as a climb.
+
+    What it was built for -- a beat where the body simply is not on the page
+    -- is the narrator card's, and has been since the same day: IMPLYING IS
+    NOT OMITTING. A lexical test could not tell an implied act from an
+    absent one, because the difference is not in the vocabulary.
+    """
     order = _act("Mara", "slowly lowers the lantern into the well shaft")
     prose = ("Mara's mouth tightens. The rope creaks in her fist and the yard "
              "smells suddenly of wet stone.")
+    assert _check_action_direction(prose, order) == []
+
+
+def test_a_direction_the_page_reverses_is_still_a_defect():
+    """The arm worth keeping, and the reason the pair are not the same
+    check: this is the world disagreeing with itself, not a judgement about
+    how prose ought to read. The Director resolved one character carrying
+    another downward and the page rendered a lift."""
+    order = _act("Mara", "slowly lowers the lantern into the well shaft")
+    prose = "Mara raises the lantern clear of the shaft, hand over hand."
     warnings = _check_action_direction(prose, order)
     assert len(warnings) == 1
-    assert warnings[0].startswith("Physical act from event_order may be missing")
-    # Deliberately NOT enforceable: correct prose can render a descent with no
-    # directional verb in it at all.
-    assert not warnings[0].startswith(_enforceable())
+    assert warnings[0].startswith("Physical direction reversed")
 
 
 def test_direction_check_ignores_ordinary_prose():
