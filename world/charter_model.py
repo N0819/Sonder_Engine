@@ -653,6 +653,17 @@ def normalize_charter(stored, reservation=None):
         # Declared here because the comment above is a record of what happens
         # when it is not -- the fourth key this year to be written by a round
         # and normalized away before a reader saw it.
+        # WHERE IT IS STILL LOOKING. `{body: {beats, tried}}` -- a scent
+        # hunter that lost the trail and has not given up yet
+        # (`charter_predation.CAST_BEATS`). Declared here for the reason the
+        # note above gives, and it is the FIFTH key this year that would
+        # otherwise be written by a round and normalized away unread.
+        "casting": {
+            str(body): {"beats": max(0, int(number(rec.get("beats"), 0))),
+                        "tried": [str(r) for r in (rec.get("tried") or ())
+                                  if str(r or "").strip()]}
+            for body, rec in (stored.get("casting") or {}).items()
+            if isinstance(rec, dict) and str(body or "").strip()},
         "smelled": {
             str(room): number(level, 0.0)
             for room, level in (stored.get("smelled") or {}).items()
