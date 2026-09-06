@@ -507,3 +507,72 @@ def test_a_source_the_plan_authored_reaches_the_entity_the_mint_binds_to():
     _bind_minted_entities_to_present_figures(
         scene, diff2, figures, fallback_room="yard")
     assert diff2["entities"]["brazier"]["light_source"] == "out"
+
+
+class TestAPlanSaysWhereItsThingStands:
+    """A PLACE THE PLAN AUTHORED IS WHERE THE THING STANDS.
+
+    A `reserved` figure is offered for its NAME in any room precisely
+    because the thing it names stands somewhere else, so binding a mint to
+    one and then placing it at `fallback_room` -- where the MINT happened --
+    is wrong by construction.
+
+    Measured, chat 117 turn 57. The Writers' Room published a jammed
+    delivery trolley with `brief.where = upper_service_core_riser_11`, one
+    room ahead of the cast, under a mandate granted so it could act between
+    turns. The Director minted it while they stood in `..._10`, wrote no
+    position, and the thing came to rest in the room they were already in;
+    the beat's own warning reported it unplaced. An obstacle authored to be
+    met was placed behind the meeting.
+    """
+
+    def _floor(self):
+        from agents.director import _bind_minted_entities_to_present_figures
+        return _bind_minted_entities_to_present_figures
+
+    def _rows(self, temp_db):
+        cid = _chat(temp_db)
+        add_planned_entity(cid, _plan(name="Sealed Letter", kind="thing",
+                                      where="quay", role="",
+                                      aliases=["the letter"]))
+        return cid
+
+    def _scene(self):
+        return {"rooms": {"quay": {"name": "the quay"},
+                          "warehouse": {"name": "the warehouse"}}}
+
+    def test_a_reserved_plan_places_its_thing_where_the_plan_put_it(self, temp_db):
+        cid = self._rows(temp_db)
+        figures = reserved_plans(cid, exclude_rooms={"warehouse"})
+        sd = {"entities": {"letter": {"name": "the letter", "kind": "object",
+                                      "portable": True}}}
+        bound = self._floor()(self._scene(), sd, figures,
+                              fallback_room="warehouse")
+        assert bound and bound[0]["bound_to"] == "Sealed Letter"
+        assert sd["positions"]["letter"] == "quay"
+
+    def test_the_beat_outranks_the_plan_when_the_beat_said_something(self, temp_db):
+        """Same rule as the plan's authored sources one line down: copied
+        only where the mint has not already said something, because the
+        beat is closer to the fact than the plan is."""
+        cid = self._rows(temp_db)
+        figures = reserved_plans(cid, exclude_rooms={"warehouse"})
+        sd = {"entities": {"letter": {"name": "the letter", "kind": "object",
+                                      "portable": True}},
+              "positions": {"letter": "warehouse"}}
+        self._floor()(self._scene(), sd, figures, fallback_room="warehouse")
+        assert sd["positions"]["letter"] == "warehouse"
+
+    def test_a_plan_naming_a_room_nobody_built_places_nothing(self, temp_db):
+        """Placing a thing in a room the world does not hold puts it
+        somewhere nothing can reach, which is worse than unplaced -- the
+        unplaced warning at least says so."""
+        cid = _chat(temp_db)
+        add_planned_entity(cid, _plan(name="Sealed Letter", kind="thing",
+                                      where="nowhere_at_all", role="",
+                                      aliases=["the letter"]))
+        figures = reserved_plans(cid, exclude_rooms={"warehouse"})
+        sd = {"entities": {"letter": {"name": "the letter", "kind": "object",
+                                      "portable": True}}}
+        self._floor()(self._scene(), sd, figures, fallback_room="warehouse")
+        assert "letter" not in (sd.get("positions") or {})

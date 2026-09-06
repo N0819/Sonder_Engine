@@ -1310,6 +1310,20 @@ def _narrated_destruction_subjects(resolved_event, dialogue_log, sd, sc,
             flagged[key] = cand["label"]
     return [flagged[key] for key in sorted(flagged)]
 
+def _room_exists(sc, sd, room_id) -> bool:
+    """Is `room_id` a room this beat leaves the world holding -- already in
+    the scene, or minted by this diff? A plan may name a room no story ever
+    built, and placing a thing there would put it somewhere nothing can
+    reach rather than somewhere it is."""
+    room_id = str(room_id or "")
+    if not room_id:
+        return False
+    for source in ((sc or {}).get("rooms"), (sd or {}).get("rooms")):
+        if isinstance(source, dict) and room_id in source:
+            return True
+    return False
+
+
 def _unplaced_minted_entities(sc, sd):
     """Things this beat brought into the world and left nowhere.
 
@@ -1596,6 +1610,32 @@ def _bind_minted_entities_to_present_figures(sc, sd, figures, *,
                                   "body": chosen["body"]}
         if chosen.get("plan"):
             ent["plan_ref"] = {"uid": str(chosen["plan"])}
+            # A PLACE THE PLAN AUTHORED IS WHERE THE THING STANDS. The same
+            # rule as the sources below and for the same reason -- the plan
+            # said something the mint was never told, and only where the
+            # mint has not already said it itself.
+            #
+            # `room` above falls back to `fallback_room`, which is where the
+            # MINT happened, and for a `reserved` plan that is the wrong
+            # room by construction: a reserved figure is offered for its
+            # name in ANY room precisely because the thing it names stands
+            # somewhere else. So a plan authored one room ahead was minted
+            # into the room the cast were standing in, and the beat reported
+            # it unplaced.
+            #
+            # Measured (chat 117 turn 57). The Writers' Room published a
+            # jammed delivery trolley with `brief.where =
+            # upper_service_core_riser_11`, one room ahead of the cast; the
+            # Director minted it while they stood in `..._10`, wrote no
+            # position, and the thing came to rest in the room they were
+            # already in. The obstacle authored to be met was placed behind
+            # the meeting.
+            _planned_room = str(chosen.get("room") or "").strip()
+            _placed = positions.get(str(eid)) or positions.get(minted)
+            if _planned_room and not _placed and _room_exists(
+                    sc, sd, _planned_room):
+                sd.setdefault("positions", {})[str(eid)] = _planned_room
+                positions = sd["positions"]
             # A SOURCE THE PLAN AUTHORED IS A SOURCE THE FIELD MUST READ.
             # `plan_entity` takes `light_source`/`sound_source` and their
             # shape fields through the same closed tables the World Browser
