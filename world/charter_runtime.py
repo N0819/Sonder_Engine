@@ -2371,6 +2371,61 @@ def advance_snapshot(registry, *, elapsed_seconds, epoch_id, base_turn,
     return registry, rows, produced
 
 
+def hearing_for_creatures(registry, scene, events):
+    """Tell every creature what it HEARD this window, as `{room: rank}`.
+
+    THE SAME FIELD A BODY HEARS THROUGH, in the other direction. A creature
+    was deaf: `hunt_moves` knew only its sense range, a hop count on its own
+    graph, so nothing a player or a character DID could ever draw it. What a
+    body does is exactly what should draw it -- that is the whole tension of
+    a dark room, and it is the half the player can act on.
+
+    IT NEVER PARSES WHAT IT HEARD. The rank is the loudness that arrived and
+    nothing else: no words, no speaker, no content. A creature learns that
+    something happened over there, which is all a thing without language gets
+    and all this needs. `room_sound_flood` is the same propagation a body's
+    ears use, so a shout through an open stairwell reaches further than a
+    sense range and a whisper behind a shut door reaches less -- and today's
+    wall loss is what decides which.
+
+    Stamped on each creature's own state as `overheard`, replaced every
+    window like `heard` beside it: what was audible in this window is never a
+    standing fact.
+    """
+    from world.spatial import (AMBIENT_DB, SOUND_DB, distant_level_word,
+                               room_sound_flood)
+
+    rooms = (scene or {}).get("rooms") if isinstance(scene, dict) else None
+    items = (registry or {}).get("items") if isinstance(registry, dict) else {}
+    sources = []
+    for event in (events or ()):
+        if not isinstance(event, dict):
+            continue
+        room = str(event.get("source_room") or event.get("room") or "")
+        level = SOUND_DB.get(str(event.get("level") or "audible"))
+        if room and level is not None:
+            sources.append((room, float(level)))
+    for item in (items or {}).values():
+        state = item.get("state") if isinstance(item, dict) else None
+        if not isinstance(state, dict) or not state.get("creature"):
+            continue
+        overheard = {}
+        if rooms and sources:
+            places = {str(b.get("place") or "")
+                      for b in (state.get("bodies") or {}).values()
+                      if isinstance(b, dict) and b.get("place")}
+            floor = AMBIENT_DB["enclosed"]
+            for room, level in sources:
+                heard = room_sound_flood(scene, room, level)
+                for place in places:
+                    reached = (heard.get(place) or {}).get("db")
+                    if reached is None or not distant_level_word(reached, floor):
+                        continue
+                    overheard[room] = max(overheard.get(room, 0.0), reached)
+        state["overheard"] = overheard
+    return registry
+
+
 def charter_noises(registry):
     """What every creature in the registry was heard DOING, as sensory events.
 

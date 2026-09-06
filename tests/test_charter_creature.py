@@ -571,3 +571,82 @@ class TestWhatItSoundsLikeDoingIt:
                          "kind": "sound"}]
         assert not any("stalker" in str(v).casefold()
                        for row in rows for v in row.values())
+
+
+class TestItHearsYouToo:
+    """THE SAME FIELD, IN THE OTHER DIRECTION. A creature was deaf:
+    `hunt_moves` knew only its sense range, a hop count on its own graph, so
+    nothing a player or a character DID could ever draw it. What a body does
+    is exactly what should draw it -- that is the whole tension of a dark
+    room, and it is the half the player can act on.
+
+    It never parses what it heard. The rank is the loudness that arrived and
+    nothing else: no words, no speaker, no content.
+    """
+
+    def _pair(self):
+        return {
+            "rooms": {"spine": {"name": "Spine", "size": "large",
+                                "adjacent": [{"to": "annex",
+                                              "barrier": "open_door"}]},
+                      "annex": {"name": "Annex", "size": "medium",
+                                "adjacent": [{"to": "spine",
+                                              "barrier": "open_door"}]}},
+            "positions": {}, "entities": {}, "attire": {}, "overlays": {},
+        }
+
+    def test_a_noise_in_a_room_draws_a_creature_that_could_hear_it(self):
+        from world.charter_predation import hunt_moves
+
+        states = {"thing": {"creature": {"prey": ["unposted"],
+                                         "senses": {"range_rooms": 2}},
+                            "bodies": {"a": {"place": "annex",
+                                             "available": True}}}}
+        neighbors = {"annex": ["spine"], "spine": ["annex"]}
+        # Nothing to sense: no prey anywhere, so the sense range finds
+        # nothing and the creature stays put.
+        quiet = hunt_moves(states, "thing", {}, {}, neighbors, 0, 1.0)
+        assert quiet == {}
+        # A noise in the spine is a reason to go and look.
+        drawn = hunt_moves(states, "thing", {}, {}, neighbors, 0, 1.0,
+                           noises={"spine": 48.0})
+        assert drawn == {"a": "spine"}
+
+    def test_it_will_not_walk_to_a_room_it_cannot_reach(self):
+        from world.charter_predation import hunt_moves
+
+        states = {"thing": {"creature": {"prey": ["unposted"],
+                                         "senses": {"range_rooms": 1}},
+                            "bodies": {"a": {"place": "annex",
+                                             "available": True}}}}
+        neighbors = {"annex": ["spine"], "spine": ["annex"]}
+        assert hunt_moves(states, "thing", {}, {}, neighbors, 0, 1.0,
+                          noises={"far_off": 60.0}) == {}
+
+    def test_what_it_overhears_is_a_loudness_and_never_a_word(self):
+        """`hearing_for_creatures` carries the sound field's own answer.
+        A loud noise next door reaches; a room the sound never gets to does
+        not appear at all."""
+        from world.charter_runtime import hearing_for_creatures
+
+        registry = {"items": {"thing": {"state": {
+            "creature": {"prey": ["unposted"]},
+            "bodies": {"a": {"place": "annex", "available": True}}}}}}
+        out = hearing_for_creatures(
+            registry, self._pair(),
+            [{"source_room": "spine", "level": "loud",
+              "description": "a pry bar going into a seam"}])
+        overheard = out["items"]["thing"]["state"]["overheard"]
+        assert set(overheard) == {"spine"}
+        assert isinstance(overheard["spine"], float)
+        # Nothing of what it was carried across.
+        assert "pry bar" not in str(overheard)
+
+    def test_a_creature_with_no_noises_this_window_overhears_nothing(self):
+        from world.charter_runtime import hearing_for_creatures
+
+        registry = {"items": {"thing": {"state": {
+            "creature": {"prey": ["unposted"]},
+            "bodies": {"a": {"place": "annex", "available": True}}}}}}
+        out = hearing_for_creatures(registry, self._pair(), [])
+        assert out["items"]["thing"]["state"]["overheard"] == {}
