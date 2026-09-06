@@ -28,7 +28,7 @@
 | `agents/perception.py` | 5418 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/runtime.py` | 1471 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `core.db` |
-| `agents/story_planner.py` | 1208 |  | `core.logging_utils`, `story.room_calls` |
+| `agents/story_planner.py` | 1265 |  | `core.logging_utils`, `story.room_calls` |
 | `core/__init__.py` | 6 |  | — |
 | `core/db.py` | 2614 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
 | `core/frames.py` | 220 |  | `core.db` |
@@ -45,7 +45,7 @@
 | `llm/llm_quality.py` | 854 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 516 | Default system prompts and prompt preset access. | `core.db` |
-| `llm/providers.py` | 3906 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
+| `llm/providers.py` | 3938 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
 | `llm/schemas.py` | 5645 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
@@ -479,14 +479,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run_planner()` | 606 | 256 lines |
-| `deliberate()` | 964 | 91 lines |
-| `schedule_room_work()` | 1146 | 63 lines |
-| `_payload()` | 373 | 55 lines |
-| `_shown_transcript()` | 321 | 50 lines |
-| `planner_reply()` | 901 | 40 lines |
-| `run_dramaturge_pass()` | 1057 | 40 lines |
-| `_run_task()` | 864 | 35 lines |
+| `run_planner()` | 663 | 256 lines |
+| `deliberate()` | 1021 | 91 lines |
+| `_shown_transcript()` | 359 | 69 lines |
+| `schedule_room_work()` | 1203 | 63 lines |
+| `_payload()` | 430 | 55 lines |
+| `planner_reply()` | 958 | 40 lines |
+| `run_dramaturge_pass()` | 1114 | 40 lines |
+| `_run_task()` | 921 | 35 lines |
 
 ### `core/db.py`
 
@@ -627,14 +627,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_chat_complete_once()` | 2533 | 321 lines |
+| `_chat_complete_once()` | 2533 | 323 lines |
 | `chat_complete()` | 2246 | 139 lines |
-| `async _chat_complete_async_once()` | 3022 | 115 lines |
-| `async chat_complete_async()` | 2931 | 90 lines |
+| `async _chat_complete_async_once()` | 3054 | 115 lines |
+| `async chat_complete_async()` | 2963 | 90 lines |
 | `_sse_openai()` | 2096 | 86 lines |
-| `async _sse_openai_async()` | 3138 | 70 lines |
+| `async _sse_openai_async()` | 3170 | 70 lines |
 | `_sse_anthropic()` | 2183 | 62 lines |
-| `_embed_request()` | 3466 | 59 lines |
+| `_embed_request()` | 3498 | 59 lines |
 
 ### `llm/research_providers.py`
 

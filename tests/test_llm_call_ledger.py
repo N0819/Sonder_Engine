@@ -239,7 +239,7 @@ def test_a_reasoning_only_reply_is_a_retryable_failure_not_a_keyerror():
         providers._message_content(parsed, "nano", "glm-5p2")
     assert caught.value.retryable is True
     text = str(caught.value)
-    assert "reasoning but no answer" in text
+    assert "reasoning and no answer" in text
     assert "glm-5p2" in text
 
 

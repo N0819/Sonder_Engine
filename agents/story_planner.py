@@ -123,6 +123,12 @@ PLANNER_REPLY_CHARS = 80_000
 #: read -- under the old rule of whole entries newest-first.
 PLANNER_TRANSCRIPT_CHARS = 24_000
 PLANNER_TRIM_HEAD_CHARS = 1_500
+#: A read tool result's RECEIPT: what was called and the shape of what came
+#: back. The tools are pure reads of a database that is still there, so a
+#: result the Room has already acted on is re-fetchable and does not need to
+#: ride as a truncated copy of itself -- which is what a 1,500-character head
+#: of a JSON dump was. Small on purpose: a receipt is a note, not an answer.
+PLANNER_RECEIPT_CHARS = 200
 #: Charter Planner delegations per reply and their output budget.
 CHARTER_PLANNER_CALLS_PER_REPLY = 1
 CHARTER_PLANNER_MAX_TOKENS = 40_000
@@ -318,22 +324,75 @@ def _encoded(value):
     return json.dumps(value, ensure_ascii=False, default=str)
 
 
+def _receipt(entry):
+    """What a tool call did, small enough to carry and enough to act on.
+
+    A RESULT THE ROOM HAS READ IS RE-FETCHABLE. The tools are pure reads of
+    a database that is still there, so the honest compaction is not a
+    truncated copy of the answer but a record that the question was asked
+    and can be asked again. This is the lineage the Room is built from --
+    an agent reads a thing, acts, and does not carry the thing.
+
+    The shape is what a reader can act on: a count for a list, the keys for
+    an object, the value itself when it is already short enough to be its
+    own summary."""
+    result = entry.get("result")
+    if isinstance(result, dict):
+        if len(result) == 1 and "error" in result:
+            return result
+        shape = ", ".join(
+            "%s: %d" % (k, len(v)) if isinstance(v, (list, dict, str))
+            else str(k)
+            for k, v in list(result.items())[:6])
+    elif isinstance(result, list):
+        shape = "%d entries" % len(result)
+    else:
+        shape = str(result)[:120]
+    encoded = _encoded(result)
+    if len(encoded) <= PLANNER_RECEIPT_CHARS:
+        return result
+    return {"read": shape[:PLANNER_RECEIPT_CHARS],
+            "recall": "call %s again for the detail"
+                      % (entry.get("tool") or "the tool")}
+
+
 def _shown_transcript(transcript, cap=None):
     """What the model is shown of its own tool results, within ``cap``
     characters. Returns ``(shown, whole)``: the entries in order, and the
     set of indices INTO ``shown`` whose result is untrimmed.
 
     THE ORDER OF SACRIFICE. A result the model has already read is worth
-    less than one it has not, and a head is worth more than an absence, so:
-    (1) the largest result from a step the model has read is cut to a head
-    of `PLANNER_TRIM_HEAD_CHARS` plus a `trimmed` count; (2) then the
-    heads it has already read go, oldest first (measured on chat 114 after
-    the first cut: seven read heads still crowded out the dump the model
-    had just asked for); (3) then the largest of the newest step, which the
-    model has not read yet -- only when that step alone outgrows the cap;
-    (4) only then are whole entries evicted, oldest first. Under the old
-    rule (whole entries, newest first) one dump evicted every neighbour it
-    had just read (chat 114 step 5, 2026-09-04)."""
+    less than one it has not, and a RECEIPT is worth more than an absence,
+    so: (1) the largest result from a step the model has read becomes a
+    receipt -- what it called, and the shape of what came back; (2) then the
+    receipts it has already read go, oldest first (measured on chat 114
+    after the first cut: seven read heads still crowded out the dump the
+    model had just asked for); (3) then the largest of the newest step,
+    which the model has not read yet -- only when that step alone outgrows
+    the cap; (4) only then are whole entries evicted, oldest first. Under
+    the old rule (whole entries, newest first) one dump evicted every
+    neighbour it had just read (chat 114 step 5, 2026-09-04).
+
+    A TOOL RESULT IS SCRATCH, NOT MEMORY, and this used to keep it as
+    memory: an already-read result was cut to the first 1,500 characters of
+    its own JSON, which is not what the result SAID -- it is a dump stopped
+    mid-object, and it rides for the rest of the reply.
+
+    What the Room needs to keep is what the story is and what it has set in
+    motion, and neither of those is here: `story`, `packages`, `status`,
+    `mandates` and `frontier` are their own payload keys, re-derived from
+    the database on every step, so they are always current and they do not
+    grow with the number of tools a reply happens to use. Measured on the
+    descent run's first step, those cost 8,245 characters TOTAL. The
+    transcript is a different thing -- the echo of tool results inside ONE
+    reply -- and a tool the Room has already acted on can simply be CALLED
+    AGAIN, which is what the receipt says.
+
+    Measured, the failing step of that reply: transcript 23,567 characters
+    against a 24,000 cap, 68% of the whole payload and more than every other
+    key combined; the request reached ~69k characters with the system sheet,
+    and the model spent 71 seconds and answered nothing where the five
+    smaller steps of the same reply each took under 7."""
     cap = PLANNER_TRANSCRIPT_CHARS if cap is None else cap
     entries = [dict(e) for e in transcript]
     sizes = [len(_encoded(e)) for e in entries]
@@ -345,9 +404,7 @@ def _shown_transcript(transcript, cap=None):
         return int(entries[i].get("step") or 0) < latest
 
     def _trim(i):
-        encoded = _encoded(entries[i].get("result"))
-        entries[i]["result"] = {"head": encoded[:PLANNER_TRIM_HEAD_CHARS],
-                                "trimmed": len(encoded) - PLANNER_TRIM_HEAD_CHARS}
+        entries[i]["result"] = _receipt(entries[i])
         sizes[i] = len(_encoded(entries[i]))
         trimmed.add(i)
 
