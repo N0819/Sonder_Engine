@@ -259,6 +259,8 @@
   },
   "templates": {
     "act_shapes": "{label} moves, too little of it to make out.",
+    "act_heard": "Something moves behind you.",
+    "act_heard_placed": "Something moves {where}.",
     "activity": "You are {value}.",
     "appearance": "You see {description}.",
     "appearance_change": "{label} is {change}.",
