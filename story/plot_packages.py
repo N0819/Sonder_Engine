@@ -628,6 +628,45 @@ def _plan_geometry(raw):
     exposure = str(raw.get("exposure") or "").strip().casefold()
     if exposure in EXPOSURES:
         out["exposure"] = exposure
+    sound = _plan_sound(raw.get("sound"))
+    if sound:
+        out["sound"] = sound
+    return out
+
+
+def _plan_sound(raw):
+    """WHAT A PLANNED ROOM IS HEARD DOING, before anybody has seen it.
+
+    A room can stand there making a noise -- water moving in a culvert, a
+    plant still turning over, wind through a grille, something breathing --
+    and until now only a THING could: `sound_source` lives on an entity, an
+    entity lives in the scene, and a room the story has not reached has no
+    entities in it. So a level of a building could be laid out in full and
+    was silent until a body walked into it, which is backwards. A place
+    announces itself before it is seen, and that is most of what dread is.
+
+    `{level, detail}` and nothing else. `level` is the engine's own closed
+    ladder (`SOUND_LEVELS`), read exactly as a thing's `sound_source` is;
+    `detail` is what it sounds LIKE, which is the one thing a body beyond
+    the room is entitled to be told about it (`_public_character`). A room's
+    NAME, its purpose and what is in it stay where they are -- the far field
+    delivers a bearing and a character, never a place, and this does not
+    open that door.
+
+    Fail-open like the rest of the record: a level the ladder does not hold
+    is no sound at all, rather than a guess at which rung was meant.
+    """
+    from world.spatial import SOUND_LEVELS
+
+    if not isinstance(raw, dict):
+        return {}
+    level = str(raw.get("level") or "").strip().casefold()
+    if level not in SOUND_LEVELS:
+        return {}
+    out = {"level": level}
+    detail = _text(raw.get("detail") or raw.get("sound"), 200)
+    if detail:
+        out["detail"] = detail
     return out
 
 
@@ -2275,7 +2314,7 @@ OPERATION_FIELDS = {
     },
     "plan_rooms": {
         "structure": "{key, name} -- the structure the rooms belong to",
-        "rooms": "{<room_id>: {name, purpose, access, extent? {w, d} (how many paces across and how many deep -- the measurement belongs in this field, not in the prose of purpose), shape? (rectangle | round | l | composite), exposure? (open | sheltered | enclosed -- how much sky and weather reach it), adjacent: [{to: <room_id>, barrier? (omit for an open way through), bearing?, vertical? (up | down -- how a body reaches another storey; a bearing names a compass point and cannot say this), distance? (adjacent | near | far | remote, or a measurement with its unit -- how much ground the crossing itself is; far and remote take more than one beat to cross, so a way through that is not stepped over in a breath must say so here and not only in prose)}], frontier: [<the NAME of a place that lies beyond, as the way out would be labelled -- never a direction and never a description of what is that way>], claims? {room, axis} (this room FILLS a space an earlier plan held open -- give the room the frontier hangs off and its axis, exactly as inspect_structures lists them under `frontiers`; the space becomes this room instead of a second one beside it, and a room the story has already been in keeps the name it is known by)}}",
+        "rooms": "{<room_id>: {name, purpose, access, extent? {w, d} (how many paces across and how many deep -- the measurement belongs in this field, not in the prose of purpose), shape? (rectangle | round | l | composite), exposure? (open | sheltered | enclosed -- how much sky and weather reach it), sound? {level (faint | audible | loud | deafening | thunderous | catastrophic), detail (what it sounds LIKE, in a phrase)} -- a standing noise THE PLACE makes, heard from other rooms before anybody has seen this one: water moving, a plant still turning over, wind through a grille, something breathing. It is the room's, not a thing's -- a thing that makes a noise is an entity with `sound_source` and belongs to whoever writes the beat. A listener beyond the room is told the level, a direction and your `detail`, and never the room's name or what is in it, so say what it SOUNDS like and nothing about what it is), adjacent: [{to: <room_id>, barrier? (omit for an open way through), bearing?, vertical? (up | down -- how a body reaches another storey; a bearing names a compass point and cannot say this), distance? (adjacent | near | far | remote, or a measurement with its unit -- how much ground the crossing itself is; far and remote take more than one beat to cross, so a way through that is not stepped over in a breath must say so here and not only in prose)}], frontier: [<the NAME of a place that lies beyond, as the way out would be labelled -- never a direction and never a description of what is that way>], claims? {room, axis} (this room FILLS a space an earlier plan held open -- give the room the frontier hangs off and its axis, exactly as inspect_structures lists them under `frontiers`; the space becomes this room instead of a second one beside it, and a room the story has already been in keeps the name it is known by)}}",
         "owning_book_id?": "lorebook id"},
     "plan_entity": {
         "name": "the entity's name", "kind": "person | thing | creature",

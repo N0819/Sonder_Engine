@@ -14,6 +14,7 @@ from.
 from __future__ import annotations
 
 import copy
+import json
 
 import pytest
 
@@ -1659,3 +1660,112 @@ def test_a_corridor_carries_a_sound_further_than_a_hall_of_the_same_length():
     open_air["rooms"]["hall"]["exposure"] = "open"
     assert not is_duct(open_air, "hall")
     assert 0 < DUCT_STEP < 1
+
+
+def test_a_planned_room_is_heard_before_it_is_seen():
+    """A PLACE ANNOUNCES ITSELF BEFORE IT IS SEEN (the owner's ask,
+    2026-09-06), and until now only a THING could.
+
+    `sound_source` lives on an entity, an entity lives in the scene, and a
+    room the story has not reached has no entities in it -- so a level of a
+    building could be laid out in full by the Writers' Room and was silent
+    until a body walked into it. `rooms[rid]["sound"]` is the room's own
+    standing noise, carried onto its live stub from the plan
+    (`plot_packages._plan_sound`, `structure.GEOMETRY_FIELDS`) exactly as
+    its measurements are.
+
+    WHAT A LISTENER BEYOND IT RECEIVES is the far field's floor and this
+    does not open it: a level, a bearing, and what the sound is LIKE. Never
+    the room's name, never its id, never what is in it -- `detail` is prose
+    written about the SOUND, which is the one thing a body who has not been
+    there is entitled to.
+    """
+    from world.spatial import distant_sounds, sound_sources
+
+    def level_of(rooms_sound):
+        rooms = {
+            "hall": {"name": "hall", "size": "medium", "exposure": "enclosed",
+                     "anchors": {}, "adjacent": [
+                         {"to": "vault", "barrier": "open_door", "dir": "e"}]},
+            "vault": {"name": "vault", "size": "medium", "exposure": "enclosed",
+                      "anchors": {}, "sound": rooms_sound, "adjacent": [
+                          {"to": "hall", "barrier": "open_door", "dir": "w"}]},
+        }
+        sc = scene(rooms, {"L": "hall"})
+        return sc, distant_sounds(sc, "L", room="hall")
+
+    sc, heard = level_of({"level": "loud",
+                          "detail": "a heavy, unhurried slosh of water"})
+    assert [s["id"] for s in sound_sources(sc)[0]] == ["room:vault"]
+    assert heard, "a loud room was not heard from the room beside it"
+    assert heard[0]["character"] == "a heavy, unhurried slosh of water"
+    # THE ROOM NEVER LEAVES THE FUNCTION. A bearing is a direction and a
+    # direction is not a location.
+    blob = json.dumps(heard)
+    assert "vault" not in blob and "hall" not in blob
+
+    # The gradient the story wants: a quiet place is met at its door, a loud
+    # one announces itself across a level.
+    for quiet in ("faint", "audible"):
+        _sc, near_only = level_of({"level": quiet, "detail": "a slow drip"})
+        assert near_only == [], quiet
+    # And a rung the ladder does not hold is no sound at all, not a guess.
+    from story.plot_packages import _plan_sound
+    assert _plan_sound({"level": "quite loud", "detail": "x"}) == {}
+    assert _plan_sound({"level": "loud"}) == {"level": "loud"}
+
+
+def test_a_planned_thing_is_heard_before_the_director_writes_it(temp_db):
+    """THE OWNER'S SCENARIO, 2026-09-06: "the planner mints a room with a
+    generator in it and declares it emitting noise... the director hasn't
+    fully fleshed it out yet but it still makes noise."
+
+    The plan has been able to SAY a thing emits since PR12 (`sources`, in
+    the engine's own closed vocabularies) and nothing could hear it:
+    `sound_sources` reads the scene's entities, a planned thing is not one
+    until the Director renders it, and the Director renders it when a body
+    walks in. So the room stayed silent until somebody was standing next to
+    the generator, which is the wrong way round.
+
+    The emission projects onto the ROOM and not onto a thing. No entity is
+    minted, because minting one would put a generator in front of eyes the
+    Director has not written it for -- what is heard through a wall must not
+    become a thing that is seen through one.
+    """
+    import time
+
+    from world.planned_entities import (add_planned_entity,
+                                        project_planned_emissions)
+    from world.spatial import distant_sounds
+
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Emitting", "", time.time()))
+    rooms = {
+        "hall": {"name": "hall", "size": "medium", "exposure": "enclosed",
+                 "anchors": {}, "adjacent": [
+                     {"to": "plant", "barrier": "open_door", "dir": "e"}]},
+        "plant": {"name": "plant", "size": "medium", "exposure": "enclosed",
+                  "anchors": {}, "adjacent": [
+                      {"to": "hall", "barrier": "open_door", "dir": "w"}]},
+    }
+    sc = scene(rooms, {"L": "hall"})
+    assert distant_sounds(sc, "L", room="hall") == []
+
+    add_planned_entity(cid, {
+        "kind": "thing", "name": "standby generator",
+        "look": "a squat green machine on rubber feet",
+        "sources": {"sound_source": "loud"},
+        "brief": {"where": "plant", "purpose": "keeps the sump pumps alive"}})
+    sc, projected = project_planned_emissions(cid, sc)
+    assert projected == [("plant", "loud")]
+    assert sc["rooms"]["plant"]["sound"] == {"level": "loud"}
+    assert "entities" not in sc or "standby generator" not in json.dumps(
+        sc.get("entities") or {}), "no thing is minted; only the room sounds"
+
+    heard = distant_sounds(sc, "L", room="hall")
+    assert heard, "a generator the plan filed was not heard from next door"
+    # A PLAN'S `look` IS A SIGHT FACT and never rides the hearing channel --
+    # the same refusal a running entity's description already gets.
+    blob = json.dumps(heard)
+    assert heard[0]["character"] == ""
+    assert "green" not in blob and "generator" not in blob and "plant" not in blob

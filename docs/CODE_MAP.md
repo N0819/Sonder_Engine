@@ -86,7 +86,7 @@
 | `persist/commit_memory_write.py` | 325 | The durable memory write and its out-of-band consolidation twin. | `core.db`, `mind.memory`, `persist.commit_memory`, `story.character_schema`, `story.scene` |
 | `persist/commit_place_graph.py` | 321 | Per-mind durable place graph and per-beat spatial experience. | `world.spatial` |
 | `persist/commit_room_registry.py` | 521 | Room identity across frames: registry projection, mint dedup, renames, retirement, exit pruning. | `core.db`, `persist.commit_common`, `story.character_schema`, `world.spatial` |
-| `persist/commit_scene_state.py` | 2239 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `core.pipeline_context`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.weather` |
+| `persist/commit_scene_state.py` | 2250 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `core.pipeline_context`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.weather` |
 | `persist/llm_capture.py` | 383 |  | `core.db` |
 | `persist/pipeline_trace.py` | 596 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `core.db` |
 | `story/__init__.py` | 6 |  | — |
@@ -104,7 +104,7 @@
 | `story/lore_structure.py` | 248 |  | — |
 | `story/mandates.py` | 594 |  | `core.db` |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
-| `story/plot_packages.py` | 3116 |  | `world.spatial` |
+| `story/plot_packages.py` | 3155 |  | `world.spatial` |
 | `story/provenance_text.py` | 132 |  | — |
 | `story/room_bible.py` | 424 |  | `core.db` |
 | `story/room_calls.py` | 130 |  | — |
@@ -177,7 +177,7 @@
 | `world/offscreen.py` | 2299 |  | `core`, `core.logging_utils`, `llm.prompts` |
 | `world/paradox.py` | 648 |  | `core.db`, `core.frames`, `story.character_schema`, `world.spatial` |
 | `world/place_purpose.py` | 545 |  | `mind.theory_of_mind`, `world.comfort`, `world.spatial`, `world.survival` |
-| `world/planned_entities.py` | 301 |  | `core.db` |
+| `world/planned_entities.py` | 364 |  | `core.db` |
 | `world/planning_needs.py` | 346 |  | — |
 | `world/region_events.py` | 420 |  | — |
 | `world/regions.py` | 582 |  | `world.spatial` |
@@ -199,11 +199,11 @@
 | `world/spatial_prose.py` | 404 |  | `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light` |
 | `world/spatial_routing.py` | 1120 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_senses.py` | 1585 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation`, `world.spatial_routing` |
-| `world/spatial_sound_field.py` | 2164 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light_field`, `world.spatial_senses` |
+| `world/spatial_sound_field.py` | 2206 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light_field`, `world.spatial_senses` |
 | `world/spatial_substance.py` | 1128 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_transit.py` | 522 |  | `world.spatial_barriers`, `world.spatial_identity` |
 | `world/stimulation.py` | 239 |  | `story`, `world.spatial` |
-| `world/structure.py` | 1460 |  | `world.charter_model`, `world.regions`, `world.spatial` |
+| `world/structure.py` | 1465 |  | `world.charter_model`, `world.regions`, `world.spatial` |
 | `world/subjects.py` | 500 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
 | `world/survival.py` | 463 |  | `core.db` |
 | `world/weather.py` | 916 |  | — |
@@ -1081,7 +1081,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_scene_commit()` | 1205 | 917 lines |
+| `prepare_scene_commit()` | 1205 | 928 lines |
 | `derive_borne_containment()` | 828 | 113 lines |
 | `_advance_day_cycle()` | 68 | 111 lines |
 | `_fold_duplicate_mints()` | 682 | 110 lines |
@@ -1297,11 +1297,11 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_package_checks()` | 2465 | 115 lines |
-| `_preview_plan_rooms()` | 758 | 107 lines |
-| `publish_package()` | 2785 | 84 lines |
-| `_reach_warning()` | 2603 | 82 lines |
-| `fire_due_clocks()` | 2910 | 77 lines |
+| `_package_checks()` | 2504 | 115 lines |
+| `_preview_plan_rooms()` | 797 | 107 lines |
+| `publish_package()` | 2824 | 84 lines |
+| `_reach_warning()` | 2642 | 82 lines |
+| `fire_due_clocks()` | 2949 | 77 lines |
 | `normalize_package()` | 181 | 74 lines |
 | `_world_snapshot()` | 495 | 66 lines |
 | `edit_package()` | 370 | 57 lines |
@@ -2174,14 +2174,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
+| `project_planned_emissions()` | 138 | 61 lines |
 | `normalize_plan()` | 79 | 51 lines |
-| `settle_rendered_plans()` | 239 | 41 lines |
-| `plan_figure()` | 165 | 35 lines |
-| `_contradicted_axis()` | 282 | 20 lines |
-| `plans_in_view()` | 202 | 17 lines |
-| `add_planned_entity()` | 147 | 16 lines |
-| `reserved_plans()` | 221 | 16 lines |
-| `plan_uid()` | 64 | 6 lines |
+| `settle_rendered_plans()` | 302 | 41 lines |
+| `plan_figure()` | 228 | 35 lines |
+| `_contradicted_axis()` | 345 | 20 lines |
+| `plans_in_view()` | 265 | 17 lines |
+| `add_planned_entity()` | 210 | 16 lines |
+| `reserved_plans()` | 284 | 16 lines |
 
 ### `world/planning_needs.py`
 
@@ -2437,14 +2437,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `sound_shape()` | 2070 | 95 lines |
+| `sound_sources()` | 993 | 124 lines |
+| `sound_shape()` | 2112 | 95 lines |
 | `spread()` | 805 | 88 lines |
-| `sound_sources()` | 993 | 88 lines |
-| `room_sound_flood()` | 1869 | 68 lines |
-| `distant_sounds()` | 2005 | 59 lines |
-| `stamp_sound_relation()` | 1491 | 54 lines |
-| `sound_field()` | 1441 | 42 lines |
-| `normalize_sensory_event()` | 1604 | 35 lines |
+| `room_sound_flood()` | 1905 | 68 lines |
+| `distant_sounds()` | 2047 | 59 lines |
+| `stamp_sound_relation()` | 1527 | 54 lines |
+| `sound_field()` | 1477 | 42 lines |
+| `normalize_sensory_event()` | 1640 | 35 lines |
 
 ### `world/spatial_substance.py`
 
@@ -2485,14 +2485,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `claim_frontier_spaces()` | 1168 | 198 lines |
-| `prepare_frontier_expansion()` | 961 | 142 lines |
-| `materialize_planned_fringe()` | 418 | 122 lines |
-| `mint_frontier()` | 217 | 104 lines |
-| `plant_structure()` | 323 | 93 lines |
-| `planned_context()` | 892 | 67 lines |
-| `planned_room_brief()` | 702 | 62 lines |
-| `structure_warnings()` | 1388 | 61 lines |
+| `claim_frontier_spaces()` | 1173 | 198 lines |
+| `prepare_frontier_expansion()` | 966 | 142 lines |
+| `materialize_planned_fringe()` | 423 | 122 lines |
+| `mint_frontier()` | 222 | 104 lines |
+| `plant_structure()` | 328 | 93 lines |
+| `planned_context()` | 897 | 67 lines |
+| `planned_room_brief()` | 707 | 62 lines |
+| `structure_warnings()` | 1393 | 61 lines |
 
 ### `world/subjects.py`
 

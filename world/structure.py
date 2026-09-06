@@ -65,7 +65,12 @@ def normalize_structures(stored):
 #: is. Absent stays absent: a room that measured nothing must read exactly as
 #: it did before a plan could measure anything, and a `None` written into the
 #: field is not the same as no field.
-GEOMETRY_FIELDS = ("extent", "shape", "exposure")
+#: What a planned room carries onto its live stub. `sound` is here rather
+#: than in a table of its own because it travels the same way and for the
+#: same reason: it is a property of the PLACE that the plan knows and the
+#: scene does not, and a stub that arrives without it is a room the story
+#: laid out and then silenced.
+GEOMETRY_FIELDS = ("extent", "shape", "exposure", "sound")
 
 
 def planned_geometry(planned):
