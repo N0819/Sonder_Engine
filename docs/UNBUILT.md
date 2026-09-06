@@ -6894,10 +6894,58 @@ audible where the model had called it inaudible. That is a behaviour change to
 every story, of the same size as the wall-loss recalibration in § 1.125, and
 it is the owner's.
 
-**The narrower reading, if the wide one is unwanted:** the gate could accept
-an EXTENT (a measured shape) without accepting a bare size tier, which is what
-a planned room actually carries and what the creature case needs, and would
-leave every room the engine merely guessed a size for exactly as it is.
+**The narrower reading:** the gate could accept an EXTENT (a measured shape)
+without accepting a bare size tier, which is what a planned room actually
+carries and what the creature case needs, and would leave every room the
+engine merely guessed a size for exactly as it is.
+
+**MEASURED 2026-09-06, on the owner's 580 live rooms**, because the light
+field's 321/589 is a count for a different gate:
+
+  * the current gate (an anchor carrying a height): **4 rooms, 0.7%**
+  * accepts an extent: 9, 1.6%
+  * accepts a size tier too: +327, 56.4%
+
+So the near field -- the spreading loss, the noise floor, the masking rule,
+the aperture losses -- runs for FOUR ROOMS IN FIVE HUNDRED AND EIGHTY, and
+every other room in every story falls back to the barrier-only edge model,
+which has no distance within a room and no noise floor at all. The wide
+option is therefore not a widening: it is switching the sound model on for
+the world for the first time.
+
+**The owner chose the wide option on 2026-09-06** ("the option that gives the
+most realistic sound travel ... we have to estimate planned rooms to some
+extent, which is fine"). It is NOT yet taken, because implementing it found
+what it is blocked behind, below.
+
+### 1.138 An anchor with no bearing is placed in the middle of the room
+
+**Found 2026-09-06 while widening § 1.137's gate, and it is why that widening
+is not landed.** `room_layout` places an anchor from its `dir`. An anchor
+with no `dir` -- which is most of them, since `dir` is optional and the
+establish often omits it -- gets no wall to sit against and lands near the
+room's centre. Two bodies at two different undirected anchors are therefore
+STACKED: the room can be `large` and the two of them are a pace apart on the
+grid.
+
+Measured, two bodies at `rail` and `stair` in one `large` room:
+
+  * anchors with `dir` n and s: path signal **0.0332**
+  * the same anchors with no `dir`: **0.0796**, 2.4x stronger
+
+`measured_proximity_rel` answers `across` either way, so the ANCHOR model
+knows they are apart and the GRID does not. With the near field off this
+never showed, because the grid was not consulted; turning it on makes a
+whisper carry across a large room between two people the anchor model calls
+`across`, which
+`test_a_whisper_the_sound_model_calls_inaudible_gets_no_reply` catches
+exactly.
+
+**So the order is: this, then § 1.137.** The rule wants stating as a class --
+an anchor with no bearing is SOMEWHERE in the room, not in the middle of it
+-- and it is a placement change that reaches every reader of the grid, so it
+wants its own change and its own play. Widening the sound gate first would
+ship a known regression in the one case the estimate is worst at.
 
 ## 2. Roadmap
 
