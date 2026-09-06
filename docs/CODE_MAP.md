@@ -192,14 +192,14 @@
 | `world/spatial_geometry.py` | 2014 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_identity.py` | 498 |  | — |
 | `world/spatial_light.py` | 471 |  | `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity` |
-| `world/spatial_light_field.py` | 1121 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation` |
+| `world/spatial_light_field.py` | 1136 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_lint.py` | 444 |  | `world.spatial_barriers`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_orientation` |
 | `world/spatial_merge.py` | 2180 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
 | `world/spatial_orientation.py` | 271 | Bearing math and reciprocal spatial-edge normalization. | — |
 | `world/spatial_prose.py` | 404 |  | `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light` |
 | `world/spatial_routing.py` | 1120 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_senses.py` | 1585 |  | `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation`, `world.spatial_routing` |
-| `world/spatial_sound_field.py` | 1963 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light_field`, `world.spatial_senses` |
+| `world/spatial_sound_field.py` | 1987 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light_field`, `world.spatial_senses` |
 | `world/spatial_substance.py` | 1128 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_transit.py` | 522 |  | `world.spatial_barriers`, `world.spatial_identity` |
 | `world/stimulation.py` | 239 |  | `story`, `world.spatial` |
@@ -2350,14 +2350,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `light_shape()` | 985 | 110 lines |
-| `light_sources()` | 491 | 77 lines |
-| `_bounce()` | 685 | 57 lines |
-| `glare_between()` | 925 | 49 lines |
-| `_spill()` | 744 | 45 lines |
-| `compute_light_field()` | 791 | 43 lines |
-| `ambient_floor_word()` | 370 | 41 lines |
-| `_cast()` | 582 | 31 lines |
+| `light_shape()` | 1000 | 110 lines |
+| `light_sources()` | 506 | 77 lines |
+| `_bounce()` | 700 | 57 lines |
+| `glare_between()` | 940 | 49 lines |
+| `_spill()` | 759 | 45 lines |
+| `compute_light_field()` | 806 | 43 lines |
+| `ambient_floor_word()` | 385 | 41 lines |
+| `light_geometry_exists()` | 247 | 33 lines |
 
 ### `world/spatial_lint.py`
 
@@ -2437,14 +2437,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `sound_shape()` | 1869 | 95 lines |
+| `sound_shape()` | 1893 | 95 lines |
 | `sound_sources()` | 902 | 88 lines |
 | `spread()` | 729 | 80 lines |
-| `room_sound_flood()` | 1668 | 68 lines |
-| `distant_sounds()` | 1804 | 59 lines |
-| `stamp_sound_relation()` | 1307 | 54 lines |
-| `normalize_sensory_event()` | 1420 | 35 lines |
-| `far_field_graph()` | 1590 | 31 lines |
+| `room_sound_flood()` | 1692 | 68 lines |
+| `distant_sounds()` | 1828 | 59 lines |
+| `stamp_sound_relation()` | 1331 | 54 lines |
+| `sound_field()` | 1281 | 42 lines |
+| `normalize_sensory_event()` | 1444 | 35 lines |
 
 ### `world/spatial_substance.py`
 

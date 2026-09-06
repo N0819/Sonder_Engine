@@ -109,9 +109,21 @@ def test_a_scene_without_geometry_stamps_nothing_and_composes_byte_identically()
     is None, the body-to-body relation carries exactly the keys it carried
     before this module existed (`same_room`, `barrier`, `distance`, `light`
     -- no `signal`, no `noise`), and `hear_level` answers every volume by
-    the edge rules: same room, unmeasured proximity -> `full` for all five."""
-    sc = scene(hall(geometry=False), {"S": "hall", "L": "hall"},
-               {"S": {"at": "west"}, "L": {"at": "east"}})
+    the edge rules: same room, unmeasured proximity -> `full` for all five.
+
+    THE BOUNDARY MOVED 2026-09-06. The gate used to be an authored anchor
+    HEIGHT, which answered true for four of the owner's 580 live rooms -- so
+    the near field ran for 0.7% of the world and this fallback was very
+    nearly the whole engine. It is now the light field's
+    (`light_geometry_exists`: a size tier, an extent, or any anchors is a
+    grid), and the fallback is what it always meant to be: the room nobody
+    has described at all. 244 of those 580 rooms are still exactly this."""
+    rooms = hall(geometry=False)
+    for room in rooms.values():
+        room.pop("size", None)
+        room.pop("extent", None)
+        room["anchors"] = {}
+    sc = scene(rooms, {"S": "hall", "L": "hall"}, {})
     assert sound_field(sc, "L") is None
     rel = spatial_rel_between(sc, "L", "S")
     assert rel == {"same_room": True, "barrier": "open", "distance": "same",
@@ -120,9 +132,10 @@ def test_a_scene_without_geometry_stamps_nothing_and_composes_byte_identically()
     # And across a room boundary without geometry: the edge rules verbatim.
     rooms = two_rooms("closed_door")
     for r in rooms.values():
-        for anchor in r["anchors"].values():
-            anchor.pop("height", None)
-    sc = scene(rooms, {"S": "a", "L": "b"}, {"S": {"at": "c"}, "L": {"at": "w"}})
+        r.pop("size", None)
+        r.pop("extent", None)
+        r["anchors"] = {}
+    sc = scene(rooms, {"S": "a", "L": "b"}, {})
     rel = spatial_rel_between(sc, "L", "S")
     assert "signal" not in rel and "noise" not in rel
     assert levels(sc, "S", "L") == {"mutter": "none", "whisper": "none",

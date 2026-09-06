@@ -247,10 +247,10 @@ BEAT_KEY = "beat_idx"
 def light_geometry_exists(scene: dict, room_id) -> bool:
     """Does this room carry the geometry the field is computed over?
 
-    The note's § 7 states the gate: a room with neither a size tier nor
-    anchors has no grid worth lighting, and every reader for it keeps the
-    room-level answer. A room that has either has asked to be lit from
-    somewhere. (Deliberately WIDER than `room_has_geometry`, the FOV layer's
+    The note's § 7 states the gate: a room with no size tier, no extent and
+    no anchors has no grid worth lighting, and every reader for it keeps the
+    room-level answer. A room that has any of the three has asked to be lit
+    from somewhere. (Deliberately WIDER than `room_has_geometry`, the FOV layer's
     opt-in for the furniture sentence, which needs an authored height:
     light needs a grid and a place for the source, not a counter to shadow
     with -- 321/589 live rooms against 2/589.)
@@ -259,6 +259,21 @@ def light_geometry_exists(scene: dict, room_id) -> bool:
     if not isinstance(room, dict):
         return False
     if str(room.get("size") or "").strip():
+        return True
+    # AN EXTENT IS THE MOST EXPLICIT SHAPE A ROOM CAN HAVE, and this predates
+    # extents: it asked for a size TIER or anchors and never for the
+    # measurement that outranks both. `size_from_extent` derives the tier
+    # from it and the layout lint says "the extent decides" when the two
+    # disagree, so a room measured 14 by 12 and given neither a size word nor
+    # a stick of furniture had no grid at all.
+    #
+    # That is the ordinary state of a room the Writers' Room has PLANNED and
+    # no beat has furnished -- `plan_rooms` asks for an extent and says the
+    # measurement belongs in that field -- so every planned room was unlit
+    # and deaf until somebody put a counter in it. Measured on the descent
+    # run, 2026-09-06: a containment annex at 14x12 with a creature in it and
+    # no field, so nothing standing there could hear a pry bar two rooms off.
+    if isinstance(room.get("extent"), dict) and room["extent"]:
         return True
     anchors = room.get("anchors")
     return bool(anchors) if isinstance(anchors, (dict, list, tuple)) else False
