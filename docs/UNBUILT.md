@@ -7086,7 +7086,7 @@ stand in the spine. Nothing hunts by it -- `hunt_moves` reads `overheard` and
 the sensed rooms, not `minds` -- so it costs nothing today, and it would cost
 a great deal the first time something does read it.
 
-### 1.140 A crowbar on steel does not carry eighteen paces down a dead corridor
+### 1.140 A crowbar on steel does not carry eighteen paces down a dead corridor — BUILT 2026-09-06
 
 **Measured 2026-09-06, descent turn 13, with the geometry finally right.**
 Every gate in § 1.137 is fixed, the field spans the spine and the annex, all
@@ -7136,25 +7136,51 @@ half is not, and this is what happened to it.**
     live rooms** and 2 of the descent story's 10, because extents are new and
     mostly come from the Room's plans -- so it is right, it is cheap, and it
     is so far unproven anywhere but the story it was built for.
-  * **NOT BUILT, and the first attempt was WRONG.** The ambient half wants a
-    room the engine can call DEAD, and the engine has no such word. The proxy
-    tried was "a room with no anchors" -- nothing in it to make a tone -- and
-    it was shipped, measured, and backed out within the hour: **292 of the
-    owner's 570 live rooms (51.2%) carry no anchors.** That is not a dead
-    sub-level, it is half the world, and most of it is rooms nobody has got
-    around to furnishing rather than rooms that are empty in the fiction. It
-    also broke two tests that were right to break -- a shut door stopped
-    grading a line down at all, and the far field's `faint` rung vanished.
-    (The same lesson as § 1.138, one level up: measure the proxy against the
-    corpus before believing it names the class.)
+  * **BUILT 2026-09-06 as a DECLARED WORD, after the first attempt was
+    WRONG.** The proxy tried first was "a room with no anchors" -- nothing in
+    it to make a tone -- and it was shipped, measured, and backed out within
+    the hour: **292 of the owner's 570 live rooms (51.2%) carry no anchors.**
+    That is not a dead sub-level, it is half the world, and most of it is
+    rooms nobody has got around to furnishing rather than rooms that are
+    empty in the fiction. It also broke two tests that were right to break --
+    a shut door stopped grading a line down at all, and the far field's
+    `faint` rung vanished. (The same lesson as § 1.138, one level up: measure
+    the proxy against the corpus before believing it names the class.) What
+    shipped instead is below.
 
-**What the ambient half actually needs is a word, and the light field already
-has the shape of it.** `room_light` is a DECLARED property of a room that the
-sources may overrule and the declaration may floor; sound has no equivalent,
-so one constant answers for a working plant room and forty years of condemned
-concrete. That is a schema field, a clause in both packs, a merge rule and a
-commit path -- a build, not a constant -- and it is the honest form of the
-owner's ruling. Registered rather than guessed at a second time.
+**What the ambient half needed was a word, and the light field already had
+the shape of it.** `room_light` is a DECLARED property of a room; sound had
+no equivalent, so one constant answered for a working plant room and forty
+years of condemned concrete. `rooms[rid].quiet` -- hushed | dead,
+`world.spatial.QUIET_SCALE`, x1/4 and x1/16, six decibels a rung -- is that
+word: a `RoomDef` field, a clause in both packs, an entry in
+`_ROOM_SILENT_WHEN_EMPTY`, and a scale on `_ambient_floor`.
+
+**IT ONLY GOES DOWN, and the asymmetry is the design.** Loudness had two
+channels already -- `sound_source` on an entity standing in the room, and
+`rooms[rid].sound`, the standing noise a plan writes so an unfurnished room
+can announce itself -- both of which TRAVEL and both of which already mask a
+listener beside them, because `noise_at` counts every other source as noise.
+A third word meaning "loud" would have restated a fact the scene already
+holds and been free to disagree with it. Silence had no channel at all,
+because an absence has no source to hang on, and that is exactly and only
+what the word is for.
+
+**Building it surfaced a second constant doing the first one's work.**
+`HEAR_FLOOR` -- "a signal quieter than this is not heard however quiet the
+room" -- was, by its own comment, "set with AMBIENT", and landed on 0.05,
+which is `AMBIENT["enclosed"]` exactly. So in every ordinary indoor room the
+absolute gate and the SNR gate sit within a decibel of each other and the
+absolute one is higher, which is harmless while nothing can be quieter than
+an ordinary room. `quiet` made something quieter, and the field would have
+shipped INERT: a room could declare itself a tomb and hear precisely what a
+furnished parlour hears, with no error anywhere. The floor is now taken
+against the room's own noise (`min(HEAR_FLOOR, noise)`, in the linear grader,
+the dB grader, the far-field word and the flood's cutoff, which is what keeps
+the four agreeing) -- you cannot hear below the room you are standing in, and
+the calibration was of an ORDINARY quiet room. A room that declares no quiet
+has a floor at or above `HEAR_FLOOR` and takes `HEAR_FLOOR`, byte for byte as
+before.
 
 The measurement above is exact and reproducible on the descent copy at turn
 13; with the duct rule in, the annex reads 28.4 dB against 27.0 and hears a
@@ -7165,6 +7191,176 @@ field is on it, the neighbour is placed, the aperture is charged, the three
 events are sources, and the co-located ones no longer silence each other. The
 model is now answering the question it was asked; this entry is about whether
 the answer is right.
+
+### 1.146 Two people three rooms apart cannot call to each other, and three models disagree about it — FIXED 2026-09-06
+
+**Measured, chat 117 turns 47-49, and it read as a character flaw.** Aurel
+told Sarah to follow him up; she did not, and went on not answering while he
+walked two rooms ahead and then shouted her name. Her perception view over
+three beats contains no trace of either line. She was not being stubborn: she
+was never told. A companion who stops obeying is what an engine failure looks
+like from the page.
+
+**Three of the engine's own models answer the same question differently**,
+for a `shout` from `upper_service_core_riser_10` to `_7`, three hops down a
+straight run of open doorways, 26 paces:
+
+  * `hear_level(rel, "shout")`, the relation reader: **fragment**
+  * `sound_walk_level(...)`, the bounded walk: **none**
+  * `room_sound_flood` + `distant_level_word`: **31.6 dB against a 27.0
+    floor -> plain**
+
+and the composer takes `hear_level`, which for the `loud` the Director
+actually graded the line answers **none**. The flood says `loud` arrives at
+26.8 dB, a `faint`. So the beat that reached the reader was the deafest of
+four available answers.
+
+**The cause is that two pre-decibel constructs survived the migration.**
+`hear_level`'s `separated` arm is a WORD where the rest of the module now has
+arithmetic, and `sound_walk_level` carries `max_hops: int = 2` with a
+docstring that says why -- "so 'the castle hears every shout' stays impossible
+by construction". The decibel model makes it impossible by CONSTRUCTION of a
+different kind, and the flood's own docstring already says so: it terminates
+on AUDIBILITY, "the physically meaningful bound and the one that makes the
+reach of a sound a property of how loud it is rather than of a constant".
+
+**The flood is not runaway, measured on synthetic chains of nine rooms**
+(shout / loud, by first room that stops being audible):
+
+  | edge | small | medium | large |
+  |---|---|---|---|
+  | open | 8 / 6 | 7 / 3 | 5 / 2 |
+  | open_door | 7 / 4 | 5 / 3 | 3 / 2 |
+  | closed_door | 2 / 1 | 1 / 1 | 1 / 0 |
+
+One closed door ends a shout in two rooms. The castle does not hear it.
+
+**THE OWNER RULED FOR DECIBELS, 2026-09-06: "decibel is probably the best
+signal". FIXED, and the fix removes a model rather than adding one.**
+
+**It does NOT go in `sound_walk_level`, which the composer never calls.** The
+composer reads `hear_level` off a RELATION and deliberately never touches the
+scene ("this module decides admission on typed data alone, and a rendering
+path that could consult the world could add to it"). So the flood's answer is
+stamped upstream, in `stamp_sound_relation`, and every reader below it --
+masking, the `door_gain` ceiling, `_weaker_hearing` -- goes on working
+unchanged.
+
+`far_path_gain(scene, listener_room, source_room)` is the new reader. Three
+properties make it drop in:
+
+  * **Loss is independent of the source level** -- spreading and barriers are
+    both subtractive in dB -- so ONE probe grades every volume and
+    `hear_level` stays the only thing that knows what a shout is. The probe
+    is a shout because the flood terminates on audibility: past where a shout
+    dies, nothing anyone says is audible anyway.
+  * **It only ever SUBTRACTS at the seam.** At one hop, where both readings
+    exist, the composite field measured 0.0191 and the flood 0.0062: the
+    flood charges whole room spans where the field walks cells, so the model
+    taking over is the more conservative one.
+  * **`0.0` is an answer** -- the rooms exist and no speech-scale sound gets
+    between them -- and it is the sentence `door_gain` had no way to say.
+
+**Scoped to NON-ADJACENT pairs.** Two rooms sharing an edge already have a
+barrier to be graded by, tuned per barrier, and there is no distance to be
+wrong about across one edge; a wall between neighbours is something the edge
+rules say a deliberate thing about, and the flood would overrule it with a
+coarser reading for no gain. `separated` -- one word for every distance
+beyond the next room -- is the only case that changes.
+
+**Two things it turned up, both worth the entry on their own.**
+
+  * **A gain is a RATIO and must not go through `power_of_db`,** which
+    carries `DB_REF = 40.0`. The two look interchangeable and differ by a
+    factor of ten thousand. The first cut returned 6.2e-07 where the field
+    read 0.0191 for the same pair -- a room that hears nothing, ever, and
+    reports nothing -- and it was caught only by checking the one-hop answer
+    against the composite field's own. `ratio_of_db` is now the declared
+    other half of `db_ratio`.
+  * **The vouched exemption held by ACCIDENT.** `_hear_level`'s field branch
+    carried a comment saying "`vouched` is never reached with a field
+    present ... two bodies on one placed field always have one", which was
+    true only while a stamp meant one composite grid. Stamping any pair the
+    room graph joins broke it, and a voice on a comm channel started being
+    graded by the doorways between its two ends -- a deafening bell beside
+    the listener silenced a radio. The guard is explicit now.
+
+**WHAT IS NOT DONE, and it is where `max_hops` lives: THE HEARING-ACUITY
+ENVELOPE.** `sense_range_class` grades a card's `range` as reduced | ordinary
+| extended and the consumer widens `max_hops` for `extended` -- so sharp
+hearing is currently spelled as EXTRA HOPS. Replacing hops with decibels
+means acuity has to be spelled as a dB bonus instead, which is a design
+decision about what a sense card means, not a defect. `sound_bearing`'s
+non-adjacent arm is bound the same way (`sound_path(max_hops=2)`) and would
+have to move with it, or a listener hears a shout from nowhere; the flood
+already returns the `via` room that answers it.
+
+**THE CAPS, NAMED, because they are exactly the kind the owner asks to see.**
+Both survivors are still in the tree and both now answer for less than they
+did: `sound_walk_level`'s `max_hops = 2` and its `fragment` ceiling beyond
+the first hop still bound the ALARM SNAP (`spatial_frames.infer_focus`'s
+`sound_walk_level` call), which is the one production caller and is about
+where a body turns rather than what it hears. `FAR_FIELD_ENTRY_DB = 70` still
+sits above every human voice (`SPEECH_DB["shout"]` is 60.8), so speech never
+enters the far-field EVENT channel -- it now reaches a distant listener
+through the relation instead, which is where speech belonged.
+
+**One consequence to watch, stated rather than hedged:** a shout down a
+straight run of open doorways now grades `full` at three rooms, where the old
+model capped every distant raised voice at `fragment`. That is a real change
+to what characters overhear. It applies to RAISED volumes only -- an ordinary
+voice still does not cross a room -- and the arithmetic that permits it is
+the same arithmetic that has a closed door end a shout in two rooms.
+
+### 1.144 A voice turned a body away from what its hands were on — FIXED 2026-09-06
+
+**Measured, chat 117 turn 45, and the symptom was two subsystems away from
+the cause.** Aurel stood at a fire door with a lit cone lamp aimed through
+the gap; the composer answered "Through the opening, only darkness" and the
+narrator wrote it; the room beyond was four paces of concrete deck.
+
+Everything the engine needed was stored and correct. `stations.at =
+fire_egress_door`, `poses.relative_to = fire_egress_door` ("an eye pressed to
+the narrow seam"), a `contacts` row for his right hand on its handle, and the
+door's anchor bearing `n` in the room he stood in. He ended the beat facing
+`s`.
+
+**The cause: he said one sentence to Sarah, one room below.** `infer_focus`
+ranks addressing above everything but a disorienting jump, and addressing
+someone in ANOTHER room resolves to an EDGE focus -- which `infer_facing`
+reads as the whole body's heading. So a word over the shoulder spun him 180
+degrees, and the lamp's cone, which takes its axis from the holder's facing,
+turned to point at the wall behind him. Sight, glare and every left/right in
+the prose are downstream of the same value.
+
+**Fixed by a precedence change, not new machinery** (`address_focus` in
+`world/spatial_frames.py`): a cross-room address yields to a pose this beat
+declared against a fixture of the speaker's own room. CO-LOCATED addressing
+keeps its rank -- looking at the person you are talking to is right, and is
+what mutual focus is for -- and a body with no fixture claiming it still
+turns toward the doorway it speaks through, which is what stops the fix from
+quietly ending conversation-across-a-threshold for every story. A voice turns
+a head, not a body braced against something.
+
+**Worth the owner's eye: ATTENTION and FACING are one field.** `focus` is
+what a mind is attending; `facing` is where a body is pointed; the engine
+derives the second from the first and they are not the same fact. This fix
+picks the one case where the disagreement was measured and loud. The general
+form -- a body's heading following what it is DOING while its attention goes
+where it likes -- is a bigger change and is not made.
+
+### 1.145 A frontier room's edges carry an `axis` and no bearing
+
+**Noticed 2026-09-06, chat 117 turn 46.** The service-core chain mints
+rooms with edges like `{"to": "upper_service_core_riser_10", "barrier":
+"open_door", "axis": "Upper service-core riser"}` -- an axis label and no
+`dir`. An edge with no bearing gives no travel bearing and no left/right, so
+`infer_facing`'s moved branch returns None (it will not guess a heading) and
+every egocentric reader downstream asserts no direction. Sibling of § 1.138
+(undirected anchors, 3.6%); unmeasured across the corpus, and the frontier
+minter is the place to look first. Related and cosmetic: the chain inherits
+the stub's NAME, so the fire stairwell is `upper_service_core_riser_7` and
+the air-handling plant is `upper_service_core_riser_6`.
 
 ### 1.141 A scent hunter that loses the trail stops instead of casting — BUILT 2026-09-06
 

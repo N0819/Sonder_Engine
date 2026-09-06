@@ -345,7 +345,7 @@ def _merge_anchor_fields(prior: dict, incoming: dict) -> dict:
 # join for the reason `size` is here: a re-echo without them must not square
 # a corridor.
 _ROOM_SILENT_WHEN_EMPTY = frozenset({"anchors", "size", "zone", "region", "light",
-                                     "exposure", "transit_seconds",
+                                     "exposure", "transit_seconds", "quiet",
                                      "extent", "shape", "parts"})
 
 # Every SceneEntityDef field whose schema default is indistinguishable from

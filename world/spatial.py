@@ -292,11 +292,16 @@ from world.spatial_sound_field import (
     EVENT_DB, EVENT_POWER,
     # A room a sound has nowhere to go but along (2026-09-06).
     DUCT_ASPECT, DUCT_STEP, duct_step_scale, is_duct,
+    # The room graph answers where the composite field cannot (2026-09-06).
+    far_path_gain,
+    # A room that makes no sound of its own (2026-09-06, UNBUILT 1.140).
+    normalize_quiet, QUIET_SCALE, room_quiet,
     SoundField, SPEECH_POWER, SPEECH_VOLUMES, spread, stamp_sound_relation,
     steadiness_this_beat, VOICE_ONE_PACE, WEATHER_NOISE, WIND_NOISE,
     # Decibels: the denomination (DESIGN_SOUND_DECIBELS.md, 2026-09-05).
     AMBIENT_DB, APERTURE_LOSS_DB, db_of_power, db_ratio, DB_REF, event_db,
     FRAGMENT_SNR_DB, FULL_SNR_DB, HEAR_FLOOR_DB, loss_db_at, noise_word_db,
+    ratio_of_db,
     OCCLUDER_LOSS_DB, power_of_db, quantise_hearing_db, SOUND_DB, SPEECH_DB,
     spreading_loss_db, VOICE_ONE_PACE_DB, WEATHER_NOISE_DB, WIND_NOISE_DB,
     # The far field: a very loud sound on the room graph.

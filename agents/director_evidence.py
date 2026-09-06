@@ -685,6 +685,29 @@ def _make_subject_hit(subject, forms=None):
 
     return hits if targets else (lambda value: False)
 
+def _room_anchor_hit(room_record, hits):
+    """Does this room record name the subject among its ANCHORS?
+
+    A DOORWAY'S IDENTITY IN THE `rooms` CHANNEL IS AN ANCHOR KEY. A room
+    record is keyed by the room and named for the room; the fixture the
+    beat is about -- the door, the hatch, the grille -- is one of its
+    `anchors`, and a reader that stops at the room's id and name cannot see
+    it. Both evidence readers need this and both were written without it,
+    two months and one measured defect apart, which is why it is a function
+    and not a loop in either of them.
+    """
+    anchors = room_record.get("anchors") \
+        if isinstance(room_record, dict) else None
+    if not isinstance(anchors, dict):
+        return False
+    for anchor_id, anchor in anchors.items():
+        if hits(anchor_id):
+            return True
+        if isinstance(anchor, dict) and hits(anchor.get("desc")):
+            return True
+    return False
+
+
 def _omission_subject_encoded(sd, subject, forms=None):
     """Deterministic containment check: does ANY diff field reference this
     subject (under any identity form)? Intentionally shallow -- it verifies
@@ -727,16 +750,9 @@ def _omission_subject_encoded(sd, subject, forms=None):
     # channel this does not walk is a channel in which a CORRECT encoding
     # reads as an omission".
     rooms = sd.get("rooms")
-    if isinstance(rooms, dict):
-        for record in rooms.values():
-            anchors = record.get("anchors") if isinstance(record, dict) else None
-            if not isinstance(anchors, dict):
-                continue
-            for anchor_id, anchor in anchors.items():
-                if hits(anchor_id):
-                    return True
-                if isinstance(anchor, dict) and hits(anchor.get("desc")):
-                    return True
+    if isinstance(rooms, dict) and any(
+            _room_anchor_hit(record, hits) for record in rooms.values()):
+        return True
     for field in _SUBJECT_VALUE_CHANNELS:
         value = sd.get(field)
         for item in ([value] if isinstance(value, str) else (value or [])):
@@ -827,9 +843,31 @@ def _evidence_present(sd, omission, forms=None, *, scene=None):
     hits = _make_subject_hit(subject, forms)
 
     def room_hit_with_adjacency():
+        # THE SUBJECT OF AN ADJACENCY CHANGE IS USUALLY THE DOORWAY, NOT THE
+        # ROOM, and a doorway's identity in this channel is an anchor key
+        # (`_room_anchor_hit`). Without that arm the three ways a manifest
+        # spells this beat -- `door`, `barrier`, `portal`, which the aliases
+        # fold onto `adjacency` and `transit` -- all reported a perfectly
+        # encoded door as unencoded, because they looked for a ROOM called
+        # "fire_egress_door" and there is never one.
+        #
+        # Measured twice, both in chat 117 and both the same shape. Turn 21
+        # was fixed in `_omission_subject_encoded` alone; turn 44 came back
+        # through the category-aware reader, which is the one the manifest
+        # path actually uses: the objects hand declined the door as
+        # spatial's, spatial encoded
+        # `rooms.upper_service_core_riser_9.adjacent[].barrier = open_door`
+        # with the door under `anchors.fire_egress_door`, and the beat still
+        # warned that objective state might be stale. It was not; the reader
+        # was.
+        #
+        # Still ANDed with `adjacent`, which is what keeps it evidence: the
+        # room's edges changed this beat AND it holds a fixture the subject
+        # names. A room merely redescribed does not acquit an edge claim.
         for key, rd in (sd.get("rooms") or {}).items():
-            if (hits(key) or (isinstance(rd, dict) and hits(rd.get("name")))) \
-                    and isinstance(rd, dict) and rd.get("adjacent"):
+            if not isinstance(rd, dict) or not rd.get("adjacent"):
+                continue
+            if hits(key) or hits(rd.get("name")) or _room_anchor_hit(rd, hits):
                 return True
         return False
 
@@ -895,7 +933,8 @@ def _evidence_present(sd, omission, forms=None, *, scene=None):
         return False
     if category == "rooms":
         for key, rd in (sd.get("rooms") or {}).items():
-            if hits(key) or (isinstance(rd, dict) and hits(rd.get("name"))):
+            if hits(key) or (isinstance(rd, dict) and hits(rd.get("name"))) \
+                    or _room_anchor_hit(rd, hits):
                 return True
         return any(hits(r) for r in (sd.get("remove_rooms") or []))
     if category == "positions":

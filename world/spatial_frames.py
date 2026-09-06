@@ -493,7 +493,8 @@ def infer_focus(chat_id, frame_id, prev_scene, new_scene, dr_output, cast_names)
     Precedence, strongest first (first match wins):
       - addressing/replying to someone -> focus them (a conversation thus auto-
         holds mutual focus with no 'I look at them' tax; cross-room -> the
-        doorway toward them);
+        doorway toward them, UNLESS this beat's pose names a fixture of the
+        speaker's own room, which wins -- see address_focus);
       - moving without addressing anyone -> focus clears (locomotion resets gaze;
         egocentric_frame's pass-through inference still supplies 'ahead');
       - being addressed by someone -> focus the speaker;
@@ -582,9 +583,11 @@ def infer_focus(chat_id, frame_id, prev_scene, new_scene, dr_output, cast_names)
         and the room already records where its fixtures are, so this is derived
         geometry rather than a guess.
 
-        Ranked below addressing and below the salience-snap (a conversation or
-        a shout still claims attention) and ABOVE bare persistence -- which is
-        the whole point. A persisted focus is a fact about an EARLIER beat; a
+        Ranked below CO-LOCATED addressing and below the salience-snap (a
+        conversation or a shout still claims attention) and ABOVE bare
+        persistence -- which is the whole point. It also outranks
+        addressing someone in another room, because that resolves to an
+        edge and an edge is a whole-body turn; see `address_focus`. A persisted focus is a fact about an EARLIER beat; a
         pose declared THIS beat is fresher evidence of where the body turned.
         Letting persistence win is what kept a doorway in a character's face
         for the rest of a scene after he had turned to the wall.
@@ -604,6 +607,37 @@ def infer_focus(chat_id, frame_id, prev_scene, new_scene, dr_output, cast_names)
             return {"kind": "anchor", "ref": ref}
         return None
 
+    def address_focus(name, other):
+        """The focus speaking to `other` claims -- yielding, when `other` is
+        in ANOTHER ROOM, to a pose this beat declared against a fixture.
+
+        A VOICE TURNS A HEAD; IT DOES NOT TURN A BODY THAT IS BRACED
+        AGAINST SOMETHING. Addressing someone across a doorway resolves to
+        an EDGE focus, and `infer_facing` reads an edge focus as the whole
+        body's heading -- so a sentence said over the shoulder spun the
+        speaker a full 180 degrees away from what their hands were on. Only
+        the cross-room case yields: looking at the person you are talking to
+        in your own room is right, is what mutual focus is for, and keeps
+        its rank.
+
+        Measured (chat 117, turn 45). Aurel stood at a fire door with
+        `stations.at = fire_egress_door`, `poses.relative_to =
+        fire_egress_door` ("an eye pressed to the narrow seam"), his right
+        hand gripping its handle in `contacts`, and a lit cone lamp in his
+        left aimed through the gap. He said one line to Sarah, one room
+        below. Focus went to the edge toward her room, facing followed it to
+        `s`, the door's anchor bearing was `n` -- and the lamp's cone,
+        which takes its axis from the holder's facing, pointed at the wall
+        behind him. The composer answered "Through the opening, only
+        darkness" and it was right about the field it was given. Every
+        egocentric reader is downstream of this: sight, the cone, glare,
+        and every left/right in the prose.
+        """
+        focus = focus_on(name, other)
+        if isinstance(focus, dict) and focus.get("kind") == "edge":
+            return anchor_focus_for(name) or focus
+        return focus
+
     names = set(cast_names or [])
     names.update(positions.keys())
 
@@ -617,11 +651,12 @@ def infer_focus(chat_id, frame_id, prev_scene, new_scene, dr_output, cast_names)
         if rec.get("came_from") is None and moved:
             new_focus = None                      # disoriented jump
         elif spoke_to.get(name):
-            new_focus = focus_on(name, spoke_to[name]) or rec.get("focus")
+            new_focus = address_focus(name, spoke_to[name]) or rec.get("focus")
         elif moved:
             new_focus = None                      # locomotion resets gaze
         elif addressed_by.get(name):
-            new_focus = focus_on(name, addressed_by[name]) or rec.get("focus")
+            new_focus = address_focus(
+                name, addressed_by[name]) or rec.get("focus")
         else:
             new_focus = alarm_focus_for(name)     # G2 salience-snap
             if new_focus is None:

@@ -1051,11 +1051,21 @@ def _hear_level(
     # rule below this line is the edge model, and it runs unchanged wherever
     # the field does not exist: no geometry, a body off the field, or the
     # enclosure cases above, which the field defers to because a voice
-    # through a body's mass has no cell. `vouched` is never reached with a
-    # field present -- a vouched channel is one with no spatial relation at
-    # all (barrier unknown, distance remote), and two bodies on one placed
-    # field always have one.
-    if rel.get("signal") is not None and rel.get("noise") is not None:
+    # through a body's mass has no cell.
+    #
+    # A VOUCHED CHANNEL IS NOT THIS ROOM'S AIR, and the guard is explicit
+    # now because it used to hold by accident. This comment read "`vouched`
+    # is never reached with a field present -- a vouched channel is one with
+    # no spatial relation at all (barrier unknown, distance remote), and two
+    # bodies on one placed field always have one", which was true only while
+    # a stamp meant both bodies stood on one composite grid.
+    # `far_path_gain` stamps any pair the room GRAPH can join, which is
+    # nearly any two rooms of a scene, so the accident stopped: a voice on a
+    # comm channel began being graded by the doorways between its two ends,
+    # and a deafening bell beside the listener silenced a radio. The
+    # exemption was always the intent; only its enforcement was borrowed.
+    if not vouched and rel.get("signal") is not None \
+            and rel.get("noise") is not None:
         return _field_hear_level(volume, rel["signal"], rel["noise"])
 
     if rel.get("same_room"):

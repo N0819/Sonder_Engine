@@ -503,3 +503,55 @@ def test_full_pipeline_walk_produces_left_right():
         {"room": "Lobby", "barrier": "open", "bearing": "s"}]
     assert d["right"] == [
         {"room": "Office", "barrier": "open_door", "bearing": "e"}]
+
+
+def test_a_word_over_the_shoulder_does_not_turn_a_body_off_the_door_it_is_working():
+    """Speaking to someone in ANOTHER room must not overrule a pose this beat
+    declared against a fixture of the speaker's own room.
+
+    Measured, chat 117 turn 45. Aurel stood at a fire door -- station `at`
+    the door, pose `relative_to` the door ("an eye pressed to the narrow
+    seam"), his right hand gripping its handle -- with a lit cone lamp in
+    his left aimed through the gap. He said one line to Sarah, one room
+    below. Cross-room address won the precedence, focus went to the edge
+    toward her room, `infer_facing` read that edge as the whole body's
+    heading, and the lamp's cone (which takes its axis from the holder's
+    facing) turned to point at the wall behind him. The door's anchor
+    bearing was `n`; he ended the beat facing `s`. The composer answered
+    "Through the opening, only darkness" and was right about the field it
+    was handed.
+
+    A voice turns a head, not a body braced against something."""
+    rooms = {
+        "landing": {"adjacent": [{"to": "stair", "barrier": "open", "dir": "s"}],
+                    "anchors": {"fire_door": {"desc": "a heavy steel door",
+                                              "dir": "n"}}},
+        "stair": {"adjacent": [{"to": "landing", "barrier": "open", "dir": "n"}]},
+    }
+    prev = _scene({"A": "landing", "B": "stair"}, {}, rooms)
+    new = _scene({"A": "landing", "B": "stair"},
+                 {"A": {"facing": "n"}, "B": {}}, rooms)
+    new["poses"] = {"A": {"posture": "standing", "relative_to": "fire_door",
+                          "relation": "against"}}
+
+    infer_focus(1, None, prev, new, _dlog(("A", "B")), ["A", "B"])
+    assert new["orientation"]["A"]["focus"] == {"kind": "anchor",
+                                                "ref": "fire_door"}
+    infer_facing(1, None, prev, new, ["A", "B"])
+    assert new["orientation"]["A"]["facing"] == "n"
+
+
+def test_cross_room_address_still_turns_a_body_that_is_doing_nothing_else():
+    """The complement, and the reason the yield is scoped to a declared pose:
+    a body with no fixture claiming it still turns toward the doorway it is
+    speaking through. Without this the rule above would have quietly ended
+    conversation-across-a-threshold for every story."""
+    rooms = {
+        "landing": {"adjacent": [{"to": "stair", "barrier": "open", "dir": "s"}],
+                    "anchors": {"fire_door": {"desc": "a door", "dir": "n"}}},
+        "stair": {"adjacent": [{"to": "landing", "barrier": "open", "dir": "n"}]},
+    }
+    prev = _scene({"A": "landing", "B": "stair"}, {}, rooms)
+    new = _scene({"A": "landing", "B": "stair"}, {"A": {}, "B": {}}, rooms)
+    infer_focus(1, None, prev, new, _dlog(("A", "B")), ["A", "B"])
+    assert new["orientation"]["A"]["focus"] == {"kind": "edge", "ref": "stair"}

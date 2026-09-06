@@ -834,8 +834,13 @@ def test_noise_beside_the_listener_masks_a_voice_from_beyond_the_field():
     arrived whole, because the edge model had no idea there was a bell
     (`PLAY_2026_09_05_lighthouse.md` § PA5)."""
     quiet = _three_rooms()
-    assert "signal" not in spatial_rel_between(quiet, "L", "S")
-    assert levels(quiet, "S", "L")["shout"] != "none"   # edge model, unchanged
+    # The ROOM GRAPH answers this pair now (`far_path_gain`, 2026-09-06):
+    # two hops is a distance, and `separated` was one word for every
+    # distance. The masking rule below is what this test is really about
+    # and is unchanged by that -- it is the same `noise`, read at the same
+    # ear, grading whatever signal arrives.
+    assert spatial_rel_between(quiet, "L", "S").get("signal") is not None
+    assert levels(quiet, "S", "L")["shout"] != "none"
     loud = _three_rooms(bell="deafening")
     rel = spatial_rel_between(loud, "L", "S")
     assert rel.get("door_gain") and rel.get("noise")
@@ -849,12 +854,20 @@ def test_noise_beside_the_listener_masks_a_voice_from_beyond_the_field():
 
 
 def test_a_quiet_room_masks_nothing_and_a_vouched_channel_is_exempt():
-    """The ceiling only ever subtracts, and only where there is noise to
-    subtract by: a quiet listener's answers are the edge model's own."""
+    """The ceiling only ever SUBTRACTS: a quiet listener's `door_gain` takes
+    nothing away from what the air delivered.
+
+    Stated against the door ceiling itself rather than against the edge
+    model, which is what it used to compare to and which no longer answers
+    this pair (`far_path_gain`). The invariant is the one that matters and
+    the one the name claims: a cap may lower a grade and may never raise
+    one."""
     rel = spatial_rel_between(_three_rooms(), "L", "S")
-    bare = {k: v for k, v in rel.items() if k not in ("door_gain", "noise")}
+    uncapped = {k: v for k, v in rel.items() if k != "door_gain"}
+    order = {"none": 0, "fragment": 1, "full": 2}
     for volume in VOLUMES:
-        assert hear_level(rel, volume) == hear_level(bare, volume)
+        assert order[hear_level(rel, volume)] <= order[
+            hear_level(uncapped, volume)], volume
     # A vouched channel is not this room's air: the doorway says nothing.
     loud = spatial_rel_between(_three_rooms(bell="deafening"), "L", "S")
     loud["barrier"] = "unknown"
@@ -1769,3 +1782,180 @@ def test_a_planned_thing_is_heard_before_the_director_writes_it(temp_db):
     blob = json.dumps(heard)
     assert heard[0]["character"] == ""
     assert "green" not in blob and "generator" not in blob and "plant" not in blob
+
+
+# ---------------------------------------------------------------------------
+# A room that makes no sound of its own (UNBUILT § 1.140, the ambient half)
+# ---------------------------------------------------------------------------
+
+def test_the_quiet_word_is_a_closed_set_and_an_unreadable_one_declares_nothing():
+    """Fail-CLOSED, against `normalize_light`'s fail-open. An unreadable
+    light word means an ordinarily lit room, which is a scene unchanged; an
+    unreadable quiet word would mean a room silently made sharp-eared for
+    the rest of the story."""
+    from world.spatial import normalize_quiet, room_quiet
+    assert normalize_quiet("dead") == "dead"
+    assert normalize_quiet("Silent") == "dead"
+    assert normalize_quiet("tomblike") == "dead"
+    assert normalize_quiet("hushed") == "hushed"
+    assert normalize_quiet("quiet") == "hushed"
+    assert normalize_quiet("muffled") == "hushed"
+    for word in ("loud", "roaring", "noisy", "", None, 3, "  "):
+        assert normalize_quiet(word) == ""
+    sc = scene({"a": room("medium", {}, ())}, {})
+    assert room_quiet(sc, "a") == ""
+    sc["rooms"]["a"]["quiet"] = "dead"
+    assert room_quiet(sc, "a") == "dead"
+    assert room_quiet(sc, "nowhere") == ""
+
+
+def test_a_dead_room_carries_a_sound_an_ordinary_room_swallows():
+    """The measured case, § 1.140: one constant answered for a furnished
+    parlour and forty years of condemned concrete alike, and the silent room
+    was the thing that swallowed a large sound rather than the place where a
+    small one carries. Six decibels a rung, down only."""
+    from world.spatial import (AMBIENT, db_of_power, quantise_hearing,
+                               quantise_hearing_db, QUIET_SCALE)
+    ordinary = AMBIENT["enclosed"]
+    for word, scale in QUIET_SCALE.items():
+        assert scale < 1.0, word
+    dead = ordinary * QUIET_SCALE["dead"]
+    hushed = ordinary * QUIET_SCALE["hushed"]
+    assert dead < hushed < ordinary
+
+    # A signal under the ordinary floor entirely: none there, heard here.
+    faint = ordinary / 4
+    assert quantise_hearing(faint, ordinary) == "none"
+    assert quantise_hearing(faint, hushed) != "none"
+    assert quantise_hearing(faint, dead) != "none"
+    # The dB path is the production one and must answer identically.
+    for noise in (ordinary, hushed, dead):
+        assert quantise_hearing(faint, noise) == quantise_hearing_db(
+            db_of_power(faint), db_of_power(noise))
+
+
+def test_a_room_that_declares_no_quiet_hears_byte_for_byte_what_it_did():
+    """The fail-open that matters: `HEAR_FLOOR` is taken against the room's
+    own noise, and every undeclared room's floor is at or above it, so the
+    lower of the two IS `HEAR_FLOOR` and nothing moves."""
+    from world.spatial import (AMBIENT, HEAR_FLOOR, quantise_hearing,
+                               _inaudible_everywhere_db)
+    for exposure in ("enclosed", "sheltered", "open"):
+        assert AMBIENT[exposure] >= HEAR_FLOOR
+    for signal in (0.001, 0.01, 0.049, 0.05, 0.06, 0.1, 1.0, 40.0):
+        for exposure in ("enclosed", "sheltered", "open"):
+            noise = AMBIENT[exposure]
+            expected = ("full" if signal >= 2.0 * noise
+                        else "fragment" if signal >= 0.8 * noise
+                        and signal >= HEAR_FLOOR else "none")
+            assert quantise_hearing(signal, noise) == expected, (signal, exposure)
+    # The far field's termination is the same story: unchanged with no word.
+    assert _inaudible_everywhere_db() == _inaudible_everywhere_db(
+        {"rooms": {"a": {"name": "a"}}})
+
+
+def test_the_far_field_cutoff_yields_to_the_quietest_room_on_the_scene():
+    """Left alone the flood would have cut at the ordinary floor while a
+    `dead` room beyond it was listening 12 dB lower -- deaf for the rest of
+    the story, with no warning anywhere."""
+    from world.spatial import _inaudible_everywhere_db
+    bare = _inaudible_everywhere_db({"rooms": {"a": {}}})
+    with_dead = _inaudible_everywhere_db(
+        {"rooms": {"a": {}, "b": {"quiet": "dead"}}})
+    with_hushed = _inaudible_everywhere_db(
+        {"rooms": {"a": {}, "b": {"quiet": "hushed"}}})
+    assert with_dead < with_hushed < bare
+
+
+def test_the_quiet_word_survives_the_validation_round_trip():
+    """The reason every room field is DECLARED on RoomDef: the round trip
+    drops what it does not declare, so a room the story called silent would
+    arrive at the commit having said nothing."""
+    from llm.schemas import StateDiff
+    sd = StateDiff(**{"rooms": {"vault": {"name": "the vault", "quiet": "dead"}}})
+    dumped = json.loads(sd.json(exclude_none=True))
+    assert dumped["rooms"]["vault"]["quiet"] == "dead"
+    quiet_absent = StateDiff(**{"rooms": {"hall": {"name": "the hall"}}})
+    assert "quiet" not in json.loads(
+        quiet_absent.json(exclude_none=True))["rooms"]["hall"]
+
+
+# ---------------------------------------------------------------------------
+# The room graph answers where the composite field cannot (UNBUILT § 1.146)
+# ---------------------------------------------------------------------------
+
+def _run(hops, barrier="open_door", size="medium"):
+    """A straight run of rooms, the speaker at one end and the listener at
+    the other, joined by `barrier`. More hops than any composite covers."""
+    rooms = {}
+    for i in range(hops + 1):
+        adjacent = []
+        if i:
+            adjacent.append({"to": "r%d" % (i - 1), "barrier": barrier,
+                             "dir": "w"})
+        if i < hops:
+            adjacent.append({"to": "r%d" % (i + 1), "barrier": barrier,
+                             "dir": "e"})
+        rooms["r%d" % i] = room(size, {"c": {"desc": "a counter", "dir": "n",
+                                             "height": "waist"}}, adjacent)
+    return scene(rooms, {"L": "r0", "S": "r%d" % hops})
+
+
+def test_a_shout_down_a_long_run_is_heard_and_a_normal_voice_is_not():
+    """§ 1.146. `separated` was ONE WORD FOR EVERY DISTANCE beyond the next
+    room, and `door_gain` -- the ceiling it fell through to -- is what this
+    room's best opening admits and knows nothing about how far away anyone
+    is. Measured before the fix: 0.1131 at two hops, three, four and five,
+    so a shout graded `fragment` at every range and a `loud` call graded
+    `none` at every range, identically.
+
+    Live, chat 117 turn 49: Aurel shouted Sarah's name three rooms down a
+    straight run of open doorways and her view carried no trace of it, while
+    the flood put the same shout in her room at 31.6 dB over a 27.0 floor.
+    She had stopped following instructions for four beats because the engine
+    never delivered one."""
+    for hops in (2, 3, 4):
+        rel = spatial_rel_between(_run(hops), "L", "S")
+        assert rel.get("signal") is not None, hops
+        assert hear_level(rel, "shout") != "none", hops
+        assert hear_level(rel, "normal") == "none", hops
+
+    # ...and the gain FALLS with distance, which is the whole complaint.
+    gains = [spatial_rel_between(_run(h), "L", "S")["signal"]
+             for h in (2, 3, 4, 5)]
+    assert gains == sorted(gains, reverse=True)
+    assert len(set(gains)) == len(gains)
+
+
+def test_a_closed_door_ends_a_shout_where_open_doorways_carry_it():
+    """The bound is the arithmetic, not a hop counter: what stops a sound is
+    what stands in its way. "The castle hears every shout" stays impossible
+    because a castle has doors."""
+    assert hear_level(spatial_rel_between(_run(4), "L", "S"), "shout") != "none"
+    shut = spatial_rel_between(_run(4, "closed_door"), "L", "S")
+    assert hear_level(shut, "shout") == "none"
+
+
+def test_the_room_graph_only_answers_where_the_edge_model_cannot():
+    """ADJACENT IS THE EDGE MODEL'S AND STAYS ITS. There is no distance to
+    be wrong about across a single edge, and a wall between neighbours is
+    something the edge rules say a deliberate thing about."""
+    adjacent = spatial_rel_between(_run(1, "wall"), "L", "S")
+    assert "signal" not in adjacent
+    assert hear_level(adjacent, "shout") == "fragment"   # the wall rule
+
+
+def test_a_vouched_channel_is_not_the_air_between_its_two_ends():
+    """A comm channel does not cross the doorways between the people on it.
+    The exemption was always the intent; before § 1.146 it held only by the
+    accident that a stamped relation meant one composite grid."""
+    far = spatial_rel_between(_run(3), "L", "S")
+    far["barrier"] = "unknown"
+    assert far.get("signal") is not None
+    # Vouched, the stamped field answer is not consulted at all: the grade
+    # is the one the relation would get with no field reading on it.
+    airless = {k: v for k, v in far.items() if k not in ("signal", "noise",
+                                                         "door_gain")}
+    for volume in VOLUMES:
+        assert hear_level(far, volume, vouched=True) == hear_level(
+            airless, volume, vouched=True), volume
