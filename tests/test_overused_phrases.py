@@ -70,3 +70,29 @@ def test_a_capital_a_sentence_explains_is_not_a_name():
               "The clock ticks again.",
               "He waits. The clock ticks on."]
     assert "the clock ticks" in _overused_phrases(blocks)
+
+
+def test_the_narrator_is_not_penalised_for_the_engines_own_wording():
+    """A phrase the composed view contains is the ENGINE's wording, and the
+    narrator is required to render it. Banning it asks for a page that
+    contradicts its own ground truth.
+
+    Measured (quiet, 2026-09-05, PQ8): the repetition warning fired twice on
+    a beat whose recurring phrase the composer had put in the view every
+    time, and the prose published unchanged both times -- because there was
+    nothing the narrator could legitimately have done about it.
+    """
+    from agents.common import _overused_phrases
+
+    prev = ["The lamp gutters on the sill again.",
+            "The lamp gutters on the sill, low."]
+    # Without the view, it is a tic like any other.
+    assert any("lamp gutters" in p for p in _overused_phrases(prev))
+    # With it, the engine said it first and the narrator is echoing.
+    view = "The lamp gutters on the sill. You are standing by the door."
+    assert not any("lamp gutters" in p
+                   for p in _overused_phrases(prev, forced=view))
+    # A genuine tic the view never mentions still counts.
+    prev2 = prev + ["She thumps her tail once.", "He thumps her tail once."]
+    assert any("thumps her tail" in p
+               for p in _overused_phrases(prev2, forced=view))

@@ -234,15 +234,17 @@ def _json_call(system, payload, *, max_tokens=PLAN_MAX_TOKENS,
     try:
         value = json.loads(raw)
     except json.JSONDecodeError as exc:
-        # SAY WHICH FAILURE THIS IS. A plan cut off mid-object and a model
-        # that returned prose are both `JSONDecodeError`, and only one of them
-        # is fixed by asking for less. The tail is what tells them apart.
+        # SAY WHICH FAILURE THIS IS, and let the ONE reader of that question
+        # answer it. This spelled the diagnosis by hand and always named the
+        # budget, so a plan that came back as the model's own reasoning told
+        # the host to ask for fewer rooms -- which could not have helped, and
+        # narrows a story for no reason (multitude, 2026-09-05, PM20).
+        from llm.llm_quality import json_failure_diagnosis
         raise ValueError(
             "the location generator returned %d characters of unparseable "
-            "JSON (%s). If it ends mid-object the plan outran its %d-token "
-            "budget -- ask for fewer required_rooms or featured_residents. "
-            "Tail: ...%s"
-            % (len(raw or ""), exc.msg, max_tokens,
+            "JSON (%s). %s Tail: ...%s"
+            % (len(raw or ""), exc.msg,
+               json_failure_diagnosis(raw, max_tokens=max_tokens),
                (raw or "")[-160:].replace("\n", " "))) from exc
     if not isinstance(value, dict):
         raise ValueError("town generator returned a non-object")
