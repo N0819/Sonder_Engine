@@ -1326,11 +1326,44 @@ def feature_visibility(scene: dict, observer: str, *, sweep=False) -> list:
     placed = field.anchors.get(room_id) or {}
     unlit = _unlit_cells(scene, room_id)
     touching = str(effective_station(scene, observer).get("at") or "").strip()
+    # A DOORWAY NOBODY GAVE A BEARING TO WAS PLACED BY A GUESS, and a guess
+    # must not SUBTRACT. Sight is denied derived bearings on purpose
+    # (`derive=False`, so no view asserts a wall nobody declared), which
+    # leaves an unbeared doorway's pseudo-anchor placed by the hash that
+    # seeds any anchor along a wall. That is fine as a place to lay
+    # something out and worthless as evidence about where a body is looking
+    # -- and the cone below was reading it as evidence.
+    #
+    # Measured (chat 117 turn 56). Aurel walked north up a 4x24 corridor at
+    # cell (2,1) facing north, with the onward doorway to `..._11` -- the
+    # room he was walking toward -- placed at (1,16), fifteen cells BEHIND
+    # him, because the `_10 -> _11` edge carries an `axis` label and no
+    # `dir`. The cone dutifully hid it. Three of the room's five features
+    # were culled and the way ON was one of them, so the view said the deck
+    # "ran on into unbroken black" for several beats while a door stood at
+    # the end of it. `derived_edge_bearings` had the answer the whole time
+    # (`(_10, _11) -> n`) and sight is not allowed to ask.
+    #
+    # The precedent is in this same function: the light gate already carves
+    # doorways out, "a DOORWAY, which is a gap in the wall rather than a
+    # thing in the room". The cone gets the same carve-out, and NARROWLY --
+    # only where the bearing was never declared. A doorway someone DID place
+    # is ordinary geometry and is hidden behind you like anything else,
+    # which is why `southern_threshold` and the door to `..._9`, both
+    # declared `s`, stay correctly culled in the beat above.
+    #
+    # It may be NAMED and it may not claim a SIDE: "on your left" computed
+    # from a hash is the false assertion this is avoiding, and the
+    # openings renderer already works this way for the far side of a
+    # threshold -- "the things are named and the distance is simply not
+    # claimed, which is what the observer actually has".
+    unbeared = _unbeared_doorways(scene, room_id)
     rows = []
     for aid, rec in placed.items():
         cells = rec["cells"]
         if not cells:
             continue
+        guessed = aid in unbeared
         target = min(cells, key=lambda c: (c[0] - origin[0]) ** 2
                      + (c[1] - origin[1]) ** 2)
         dist = math.hypot(target[0] - origin[0], target[1] - origin[1])
@@ -1339,7 +1372,7 @@ def feature_visibility(scene: dict, observer: str, *, sweep=False) -> list:
         visible = True
         basis = "open"
         occluded_by = None
-        if facing and verdict == "rear" and dist > 1.5:
+        if facing and verdict == "rear" and dist > 1.5 and not guessed:
             visible = False
             basis = "cone"
         elif how == "measured" and dist > 1.0:
@@ -1357,9 +1390,9 @@ def feature_visibility(scene: dict, observer: str, *, sweep=False) -> list:
             basis = "light"
         rows.append({
             "anchor": aid, "desc": rec["desc"], "implicit": rec["implicit"],
-            "visible": visible, "sector": sector,
-            "peripheral": bool(facing) and verdict == "side",
-            "side": _side_label(sector),
+            "visible": visible, "sector": None if guessed else sector,
+            "peripheral": bool(facing) and verdict == "side" and not guessed,
+            "side": None if guessed else _side_label(sector),
             "tier": ("within_reach" if dist <= 1.5 else
                      "near" if dist <= max(2.5, grid_side(scene, room_id) / 2.0)
                      else "across"),
@@ -1367,6 +1400,37 @@ def feature_visibility(scene: dict, observer: str, *, sweep=False) -> list:
         })
     rows.sort(key=lambda r: (r["distance"], r["anchor"]))
     return rows
+
+
+def _unbeared_doorways(scene, room_id) -> set:
+    """The door pseudo-anchor ids of `room_id` whose edge NOBODY gave a
+    bearing to -- the ones whose grid cell is a hash rather than a fact.
+
+    Read off the room's own declared edges, in either direction: a doorway
+    is one doorway, and a bearing written from the far side places it just
+    as well as one written from this one."""
+    from world.spatial_geometry import door_anchor_id
+    from world.spatial_orientation import normalize_bearing
+
+    rooms = (scene or {}).get("rooms") or {}
+    room = rooms.get(room_id)
+    if not isinstance(room, dict):
+        return set()
+    out = set()
+    for edge in room.get("adjacent") or []:
+        if not isinstance(edge, dict) or not edge.get("to"):
+            continue
+        other = str(edge["to"])
+        if normalize_bearing(edge.get("dir")):
+            continue
+        back = rooms.get(other)
+        if isinstance(back, dict) and any(
+                isinstance(e, dict) and str(e.get("to") or "") == str(room_id)
+                and normalize_bearing(e.get("dir"))
+                for e in back.get("adjacent") or []):
+            continue
+        out.add(door_anchor_id(other))
+    return out
 
 
 def neighbour_feature_visibility(scene: dict, observer: str, to_room,
