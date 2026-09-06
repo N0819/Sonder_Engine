@@ -393,7 +393,19 @@ def _plan_here(cid, frame_id, room_ids):
             surface_room = str((need.get("surface") or {}).get("room") or "")
             rid = surface_room if surface_room in out else None
         if rid is not None:
+            # THE REASON IS THE FIELD THAT SAYS WHAT THE NEED IS.
+            # `kind` is a closed set of three (`NEED_KINDS`) and the register
+            # carries five reasons, so everything that is neither a room nor
+            # a person is filed as a `thing` -- which is what the Room was
+            # shown, with the subject beside it. Measured on the owner's live
+            # stories 2026-09-06: 8 of 9 open needs are `setting_fact`, whose
+            # subject is a SENTENCE by nature ("A Euclid-class containment
+            # breach has occurred at Site-17"), so the Room read nine props
+            # to author and eight of them were facts about the world. The
+            # record has always carried the reason; only the two summaries
+            # dropped it.
             out[rid]["needs"].append({"uid": need["uid"], "kind": need["kind"],
+                                      "reason": need["reason"],
                                       "subject": need["subject"]})
     for pkg in packages(cid, frame_id).values():
         if pkg["status"] == "retired" or pkg["spoiler_policy"] == "sealed":

@@ -7086,6 +7086,54 @@ stand in the spine. Nothing hunts by it -- `hunt_moves` reads `overheard` and
 the sensed rooms, not `minds` -- so it costs nothing today, and it would cost
 a great deal the first time something does read it.
 
+### 1.140 A crowbar on steel does not carry eighteen paces down a dead corridor
+
+**Measured 2026-09-06, descent turn 13, with the geometry finally right.**
+Every gate in § 1.137 is fixed, the field spans the spine and the annex, all
+three of the beat's sound events are placed, and the answer is still `none`.
+The arithmetic, at the containment annex's cell, through the shut containment
+door, 18 cells down the vaulted service spine:
+
+  * the `loud` crack of a pry bar on a bulkhead seam: **24.9 dB**
+  * the room's own ambient floor (`AMBIENT["enclosed"]` 0.05): **27.0 dB**
+  * so **SNR -2.1 dB**, against the -0.97 dB a `fragment` asks for.
+
+It misses by a decibel. Both other events (`audible`, 19.7 dB) miss by seven.
+
+**Where the two decibels went.** `loud` is 40 power against an enclosed room's
+0.05, which is 29 dB of headroom. Against that: `10*log10(1 + L^2)` over 18
+cells is 25.1 dB, and a `closed_door` aperture is 6.0 dB. 31.1 against 29.
+
+**Two things are worth the owner's eye, and they pull the same way.**
+
+  * **THE AMBIENT OF A DEAD SUB-LEVEL IS NOT THE AMBIENT OF A QUIET ROOM.**
+    One constant, `AMBIENT["enclosed"]`, answers for a furnished parlour, a
+    working plant room and forty years of condemned concrete alike. The
+    engine has the room's own words for this -- `exposure`, and the light
+    field's precedent of a declared word standing where the model can see no
+    source -- and does not use them. A silent room ought to be a place where
+    a small sound carries; here it is the thing that swallows a large one.
+  * **A CORRIDOR IS A DUCT AND THE MODEL SPREADS SOUND AS A SPHERE.**
+    `10*log10(1 + L^2)` is free-field inverse square, which is right for a
+    hall and wrong for a 6 by 24 vaulted spine -- sound down a long narrow
+    enclosed room decays far slower, because the walls stop it going
+    anywhere else. The engine already holds the shape that decides this
+    (`extent`, `shape`, `exposure`), so this is a law it could pick per room
+    rather than a constant it would have to guess. The story's own dialogue
+    said it out loud, twice, in two different rerolls of this beat: "the
+    vaulted concrete profile operates as an acoustic waveguide."
+
+**Not taken, because it is the same size as § 1.125 and belongs to the
+owner**: either change moves hearing in every existing story, and the second
+one changes the law rather than a number. The measurement above is exact and
+reproducible on the descent copy at turn 13.
+
+**What is NOT in question:** the geometry. Every room that should be on the
+field is on it, the neighbour is placed, the aperture is charged, the three
+events are sources, and the co-located ones no longer silence each other. The
+model is now answering the question it was asked; this entry is about whether
+the answer is right.
+
 ## 2. Roadmap
 
 Features the architecture intends and has not built. Ordered by value per unit
