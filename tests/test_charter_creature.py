@@ -491,3 +491,83 @@ class TestTheRegistryStepper:
         assert hunger_of(states["pack"]) > 0.9
         assert attack_odds(states["pack"]["creature"], 1.0) > \
             attack_odds(states["pack"]["creature"], 0.0)
+
+
+class TestWhatItSoundsLikeDoingIt:
+    """A CREATURE IS AN AUTONOMOUS ENTITY RUNNING OFF CODE UNTIL IT MEETS
+    THE DIRECTOR'S BUBBLE -- and until it does, the only way to learn it is
+    out there was to walk into it.
+
+    `charter_predation` already crosses rooms toward prey, attacks and
+    feeds, all deterministically and off screen. What it never did was make
+    a NOISE. A voice keyed to the activity fixes that: the round records
+    what each body was doing and where, and the sound rides the room graph
+    the engine already has, so a body two rooms off hears something moving
+    and is told neither what it is nor where it is going.
+
+    Two authors, one field. The RUNG is the engine's -- it decides how far
+    the sound carries. The PHRASE is the story's -- what it sounds like on
+    the page. The same split `spoor` already makes.
+    """
+
+    def test_an_activity_with_no_voice_is_silent(self):
+        """How a stealthy thing is written, and the default. The same rule
+        `light_source` holds: prose about a snarl is heard by nobody."""
+        from world.charter_creature import normalize_creature
+
+        quiet = normalize_creature({"prey": ["unposted"]})
+        assert quiet["voice"] == {}
+
+    def test_a_voice_carries_a_rung_and_a_phrase(self):
+        from world.charter_creature import normalize_creature
+
+        c = normalize_creature({"voice": {
+            "moving": {"level": "audible",
+                       "sound": "a wet dragging, like a sack over grit"},
+            "attacking": "loud",
+            "idle": "",
+        }})
+        assert c["voice"]["moving"] == {
+            "level": "audible",
+            "sound": "a wet dragging, like a sack over grit"}
+        assert c["voice"]["attacking"] == {"level": "loud", "sound": ""}
+        assert "idle" not in c["voice"]
+
+    def test_a_word_outside_the_closed_sets_is_refused_and_said_so(self):
+        from world.charter_creature import normalize_creature
+
+        c = normalize_creature({"voice": {"lurking": "audible",
+                                          "moving": "thunderously"}})
+        assert c["voice"] == {}
+        # `refused` is the package's own notice string, not a list.
+        assert "lurking" in c["refused"] and "thunderously" in c["refused"]
+
+    def test_the_round_records_what_it_was_heard_doing_and_where(self):
+        """`hunt_moves` already walks it toward prey; this is the same walk,
+        audible."""
+        from world.charter_creature import normalize_creature
+        from world.charter_predation import _noise
+
+        creature = normalize_creature({"voice": {
+            "moving": {"level": "audible", "sound": "something heavy shifting"}}})
+        heard = []
+        _noise(heard, creature, "moving", "sub5a_service_spine", "thing")
+        _noise(heard, creature, "attacking", "sub5a_service_spine", "thing")
+        assert heard == [{"creature": "thing", "activity": "moving",
+                          "place": "sub5a_service_spine", "level": "audible",
+                          "sound": "something heavy shifting"}]
+
+    def test_the_noise_reaches_the_channel_the_room_graph_already_carries(self):
+        """...and never carries the creature's NAME: a noise in another room
+        is a noise, and the thing that made it is what the Director
+        introduces when the two meet."""
+        from world.charter_runtime import charter_noises
+
+        rows = charter_noises({"charters": {"carbonic_stalker": {"heard": [
+            {"place": "annex", "level": "faint", "activity": "moving",
+             "sound": "a slow rhythmic venting"}]}}})
+        assert rows == [{"source_room": "annex", "level": "faint",
+                         "description": "a slow rhythmic venting",
+                         "kind": "sound"}]
+        assert not any("stalker" in str(v).casefold()
+                       for row in rows for v in row.values())

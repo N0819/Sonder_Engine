@@ -395,6 +395,12 @@ def predation_round(states, at_hours, *, seed=0, hours=4.0):
         # 1. Senses: walk toward what was noticed, on this creature's graph.
         moves = hunt_moves(states, own, bodies_at, stock_at, neighbors, seed,
                            at)
+        # WHAT IT IS DOING IS WHAT CAN BE HEARD. Recorded here, where the
+        # round already knows it, and emitted at the runtime boundary --
+        # this module is pure and owns no scene. The list is REPLACED every
+        # round, like `engine_notices`: a noise is a thing that happened in
+        # this window and never a standing fact.
+        heard = []
         if moves:
             bodies, travelled, walked = walk(
                 state["bodies"], moves, scene, state.get("travelled"),
@@ -403,6 +409,8 @@ def predation_round(states, at_hours, *, seed=0, hours=4.0):
             state["bodies"], state["travelled"], state["walked"] = \
                 bodies, travelled, walked
             bodies_at, stock_at = _company(states)
+            for body_key, room in sorted(moves.items()):
+                _noise(heard, creature, "moving", room, own)
         # 2. Encounters, by place.
         hunger = hunger_of(state)
         odds = attack_odds(creature, hunger)
@@ -426,15 +434,46 @@ def predation_round(states, at_hours, *, seed=0, hours=4.0):
                 continue
             if _draw(seed, at, own, place, "attack") >= odds:
                 continue
+            before = landed
             landed += _attack(states, own, body_keys, place, category, rows,
                               at, seed, events, spoor, index)
+            if landed > before:
+                _noise(heard, creature, "attacking", place, own)
+                _noise(heard, creature, "feeding", place, own)
             index += 1
             bodies_at, stock_at = _company(states)
         if spoor:
             state["spoor"] = normalize_spoor(
                 list(state.get("spoor") or ()) + spoor)
+        # Standing where it stands, wanting nothing it can reach. Only a
+        # creature authored with an `idle` voice makes any sound doing it.
+        if (creature.get("voice") or {}).get("idle"):
+            for _body_key, body in sorted((state.get("bodies") or {}).items()):
+                if not body.get("available", True) or is_gone(body):
+                    continue
+                place = str(body.get("place") or "")
+                if place and place not in moves.values():
+                    _noise(heard, creature, "idle", place, own)
+        state["heard"] = heard
     read_spoor(states, at)
     return events
+
+
+def _noise(heard, creature, activity, place, own):
+    """Record one thing a creature was heard doing, if it has a voice for it.
+
+    An activity a creature was never given a rung for is SILENT, which is how
+    a stealthy thing is written -- the same rule `light_source` holds, where
+    prose about a glow lights nothing.
+    """
+    entry = (creature.get("voice") or {}).get(activity) or {}
+    rung = str(entry.get("level") or "")
+    if not rung or not place:
+        return
+    row = {"creature": own, "activity": activity, "place": str(place),
+           "level": rung, "sound": str(entry.get("sound") or "")}
+    if row not in heard:
+        heard.append(row)
 
 
 # --------------------------------------------------------------- spoor

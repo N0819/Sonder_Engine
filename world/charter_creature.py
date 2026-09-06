@@ -96,6 +96,32 @@ FOOTPRINT_MIN_ROOM = {"point": "", "small": "", "large": "medium",
 #: Spoor records one creature institution keeps standing at once.
 SPOOR_CAP = 32
 
+#: WHAT A CREATURE IS DOING, as the round itself produces it. A closed set
+#: the ENGINE owns -- these are the four states `charter_predation` can be in
+#: for a body on any window -- so a card cannot invent a fifth and find it
+#: silently ignored.
+#:
+#:   moving    -- crossing rooms toward prey (`hunt_moves`)
+#:   attacking -- the contest at a shared place (`_attack`)
+#:   feeding   -- what it does with what it caught
+#:   idle      -- standing where it stands, wanting nothing it can reach
+CREATURE_ACTIVITIES = ("moving", "attacking", "feeding", "idle")
+
+#: How loud a creature is at each of those, by the sound ladder's own rungs
+#: (`world.spatial_sound_field.SOUND_DB`). THE SAME RULE `light_source`
+#: HOLDS: a thing that makes a noise says so in this field, and prose about a
+#: snarl is heard by nobody. An activity left out is SILENT at that activity
+#: -- which is how a stealthy thing is written, and why the default is empty
+#: rather than a guess: a creature nobody has given a voice makes no sound,
+#: exactly as it does today.
+#:
+#: This is what lets a body learn what is out there from where it stands
+#: without being told what it is: the room graph carries the sound
+#: (`spatial_sound_field`), `sound_bearing` says which way it came from, and
+#: the verb is the creature's own activity rather than its name.
+CREATURE_VOICE_RUNGS = ("faint", "audible", "loud", "deafening",
+                        "thunderous", "catastrophic")
+
 #: The order of room sizes, for `room_fits`.
 _ROOM_ORDER = ("tiny", "small", "medium", "large", "huge", "vast")
 
@@ -168,8 +194,32 @@ def normalize_creature(stored):
             "last_paid_hours": (None if raw.get("last_paid_hours") is None
                                 else number(raw.get("last_paid_hours"))),
         })
+    voice = {}
+    for activity, entry in (stored.get("voice") or {}).items():
+        word = str(activity or "").strip().casefold()
+        if word not in CREATURE_ACTIVITIES:
+            refused.append(f"{word!r} is not something a creature does")
+            continue
+        # TWO HALVES, AND EACH BELONGS TO A DIFFERENT AUTHOR. The rung is
+        # the ENGINE's -- it decides how far the sound carries through the
+        # room graph and whether a body two rooms off hears anything at all.
+        # The phrase is the STORY's -- what it sounds like, in the words the
+        # page will use. Same split `spoor` already makes between its
+        # authored descriptions and its engine `hours`.
+        if isinstance(entry, dict):
+            rung = str(entry.get("level") or "").strip().casefold()
+            sound = " ".join(str(entry.get("sound") or "").split())[:120]
+        else:
+            rung, sound = str(entry or "").strip().casefold(), ""
+        if not rung:
+            continue                       # silent at this activity
+        if rung not in CREATURE_VOICE_RUNGS:
+            refused.append(f"{rung!r} is not a loudness")
+            continue
+        voice[word] = {"level": rung, "sound": sound}
     out = {
         "prey": prey,
+        "voice": voice,
         "senses": {"range_rooms": max(0, integer(
             senses.get("range_rooms"), DEFAULT_SENSE_RANGE_ROOMS))},
         "footprint": normalize_footprint(stored.get("footprint")),

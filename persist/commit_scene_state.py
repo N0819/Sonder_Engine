@@ -1098,9 +1098,24 @@ def _record_sensory_events(ctx, cid, sc, diff, turn_idx):
     from world.spatial import (MAX_SENSORY_EVENTS, normalize_sensory_event,
                                SENSORY_EVENTS_KEY)
     incoming = (diff or {}).get("sensory_events")
+    incoming = list(incoming) if isinstance(incoming, list) else []
+    # WHAT THE OFF-SCREEN WORLD WAS HEARD DOING, on the same rail. A creature
+    # charter runs autonomously in code -- it crosses rooms toward prey,
+    # attacks, feeds -- and until now none of that reached a body's ears: the
+    # only way to learn of it was to walk into it. `charter_noises` turns the
+    # round's own record of what each body was DOING into the shape this
+    # channel already takes, so it rides the room graph like any other noise,
+    # carries as far as its authored rung reaches, and arrives with a bearing
+    # and no name. The thing that made it is the Director's to introduce when
+    # the two finally meet.
+    try:
+        from world.charter_runtime import charter_noises, registry_for
+        incoming.extend(charter_noises(registry_for(cid)))
+    except Exception as _noise_exc:      # diagnostics, never a story blocker
+        ctx.warnings.append("charter noises not delivered: %s" % _noise_exc)
     rooms = sc.get("rooms") if isinstance(sc.get("rooms"), dict) else {}
     kept, dropped = [], []
-    for event in (incoming if isinstance(incoming, list) else []):
+    for event in incoming:
         record = normalize_sensory_event(event, rooms=rooms)
         if record is None:
             dropped.append(event)

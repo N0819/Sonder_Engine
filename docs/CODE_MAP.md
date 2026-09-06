@@ -86,7 +86,7 @@
 | `persist/commit_memory_write.py` | 325 | The durable memory write and its out-of-band consolidation twin. | `core.db`, `mind.memory`, `persist.commit_memory`, `story.character_schema`, `story.scene` |
 | `persist/commit_place_graph.py` | 321 | Per-mind durable place graph and per-beat spatial experience. | `world.spatial` |
 | `persist/commit_room_registry.py` | 521 | Room identity across frames: registry projection, mint dedup, renames, retirement, exit pruning. | `core.db`, `persist.commit_common`, `story.character_schema`, `world.spatial` |
-| `persist/commit_scene_state.py` | 2224 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `core.pipeline_context`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.weather` |
+| `persist/commit_scene_state.py` | 2239 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `core.pipeline_context`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.weather` |
 | `persist/llm_capture.py` | 383 |  | `core.db` |
 | `persist/pipeline_trace.py` | 596 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `core.db` |
 | `story/__init__.py` | 6 |  | — |
@@ -129,7 +129,7 @@
 | `world/charter_author.py` | 800 |  | `world.charter_commitment`, `world.charter_economy`, `world.charter_figure`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_politics`, `world.charter_practice` |
 | `world/charter_chatter.py` | 443 |  | `world.crowds` |
 | `world/charter_commitment.py` | 292 |  | `world.charter_model` |
-| `world/charter_creature.py` | 363 |  | `world.charter_harm`, `world.charter_model` |
+| `world/charter_creature.py` | 413 |  | `world.charter_harm`, `world.charter_model` |
 | `world/charter_crowd.py` | 282 |  | `world.crowds` |
 | `world/charter_decide.py` | 279 |  | `world.charter_model`, `world.charter_news` |
 | `world/charter_drift.py` | 106 |  | `world.charter_model` |
@@ -155,11 +155,11 @@
 | `world/charter_plan.py` | 227 |  | `world.charter_drift`, `world.charter_model`, `world.charter_roster` |
 | `world/charter_politics.py` | 161 |  | — |
 | `world/charter_practice.py` | 1200 |  | `world.charter_commitment`, `world.charter_figure`, `world.charter_mind`, `world.charter_politics`, `world.charter_talk` |
-| `world/charter_predation.py` | 712 |  | `world.charter_creature`, `world.charter_harm`, `world.charter_model`, `world.charter_move` |
+| `world/charter_predation.py` | 751 |  | `world.charter_creature`, `world.charter_harm`, `world.charter_model`, `world.charter_move` |
 | `world/charter_promote.py` | 604 |  | `world.charter_commitment`, `world.charter_feel`, `world.charter_politics`, `world.charter_social` |
 | `world/charter_roster.py` | 134 |  | `world.charter_model` |
 | `world/charter_run.py` | 1477 |  | `world`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_enrol`, `world.charter_feel`, `world.charter_figure`, `world.charter_harm`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
-| `world/charter_runtime.py` | 4148 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics` |
+| `world/charter_runtime.py` | 4184 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics` |
 | `world/charter_social.py` | 743 |  | `world.charter_politics` |
 | `world/charter_space.py` | 167 |  | `world.spatial` |
 | `world/charter_surface.py` | 341 |  | — |
@@ -1081,7 +1081,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_scene_commit()` | 1190 | 917 lines |
+| `prepare_scene_commit()` | 1205 | 917 lines |
 | `derive_borne_containment()` | 828 | 113 lines |
 | `_advance_day_cycle()` | 68 | 111 lines |
 | `_fold_duplicate_mints()` | 682 | 110 lines |
@@ -1572,14 +1572,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_creature()` | 103 | 92 lines |
-| `creature_neighbors()` | 236 | 32 lines |
-| `normalize_spoor()` | 205 | 18 lines |
-| `prey_capability()` | 326 | 14 lines |
-| `predator_capability()` | 312 | 12 lines |
-| `is_active()` | 280 | 11 lines |
-| `room_fits()` | 225 | 9 lines |
-| `hunger_of()` | 293 | 9 lines |
+| `normalize_creature()` | 129 | 116 lines |
+| `creature_neighbors()` | 286 | 32 lines |
+| `normalize_spoor()` | 255 | 18 lines |
+| `prey_capability()` | 376 | 14 lines |
+| `predator_capability()` | 362 | 12 lines |
+| `is_active()` | 330 | 11 lines |
+| `room_fits()` | 275 | 9 lines |
+| `hunger_of()` | 343 | 9 lines |
 
 ### `world/charter_crowd.py`
 
@@ -1898,10 +1898,10 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `_attack()` | 251 | 118 lines |
-| `_tribute()` | 504 | 95 lines |
-| `predation_round()` | 371 | 67 lines |
-| `run_registry()` | 647 | 60 lines |
-| `read_spoor()` | 452 | 48 lines |
+| `_tribute()` | 543 | 95 lines |
+| `predation_round()` | 371 | 89 lines |
+| `run_registry()` | 686 | 60 lines |
+| `read_spoor()` | 491 | 48 lines |
 | `hunt_moves()` | 201 | 35 lines |
 | `_company()` | 97 | 29 lines |
 | `_prey_here()` | 177 | 22 lines |
@@ -1949,7 +1949,7 @@
 | `_plan_lived_location()` | 1367 | 181 lines |
 | `_prepare_cast_histories()` | 614 | 172 lines |
 | `_generate_lived_location()` | 1608 | 154 lines |
-| `presence_view()` | 3439 | 114 lines |
+| `presence_view()` | 3475 | 114 lines |
 | `presim_registry()` | 930 | 104 lines |
 | `generation_lore()` | 1036 | 101 lines |
 
