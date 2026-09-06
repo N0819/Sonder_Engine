@@ -192,3 +192,34 @@ def test_no_core_illustrates_the_closest_channel_with_one_hands_channels():
             "which the other hands have no block for. State the class the "
             "channels are instances of, or move the sentence into the "
             "channel's own chunk.")
+
+
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_the_referent_rule_separates_naming_from_existence(language):
+    """A THING THAT DOES NOT EXIST YET IS NOT A THING YOU COULD NOT NAME.
+
+    "NEVER INVENT A REFERENT" is right about naming and was read as a rule
+    about existence: a hand asked to record something the world has never
+    held answered `structural blocker` and encoded nothing, which is the one
+    answer that guarantees the record stays missing. Its own stated reason
+    -- an invented record becomes a SECOND COPY of a thing that already
+    exists -- does not reach a thing the indexes have never held.
+
+    Measured, descent chat 117 turn 13: a pry bar the player had carried
+    through four beats of prose was in no index because nothing had ever
+    minted it. The manifest's "wedges the steel pry bar into the seam"
+    reached the contact hand, which correctly declined (a held tool is not a
+    body part), and the engine rerouted it to the objects hand -- the one
+    hand whose `entities` channel can bring a record into being. It answered
+    `structural blocker: referents 'plant_room_door' and 'pry_bar' not in
+    entity index` and encoded nothing, so the beat committed with the
+    player's declared act in the prose and in no channel. The same beat run
+    twice gave both answers, which is what an ambiguous rule looks like.
+    """
+    needle = ("NOT FOR A THING THAT DOES NOT YET EXIST"
+              if language == "en" else "まだ存在しないもののこと")
+    for hand in HANDS:
+        assert needle in _core(language, hand), (
+            f"{language}/{hand}: the referent rule no longer separates "
+            "naming a thing from a thing existing, so the only hand that "
+            "can mint a record is told to block instead")
