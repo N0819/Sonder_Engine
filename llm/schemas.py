@@ -4937,12 +4937,29 @@ OUTPUT_EXAMPLES = {
                      "state": None, "conditions": {},
                      "coverage": {}},
         },
+        # TWO ROWS, because the difference between them is the one this
+        # table gets wrong. The cut does not act over time, so it declares
+        # NO cadence -- a field left out is a condition that never claimed
+        # to act, and that is the honest shape for most wounds. The cold
+        # does act, so it spells a real interval and says what one tick
+        # does. What this example must never show again is the third shape:
+        # `tick_interval_seconds: 0`, which is not "constantly" but a row
+        # the sweep can never fire on. It stood here for a long time, and
+        # 0 is the commonest authored value in the corpus.
         "conditions": {
             "mara_forearm_cut": [
                 {"condition_id": "mara_forearm_cut", "subject_id": "Mara",
                  "kind": "wound", "severity": 0.2,
-                 "started_at_seconds": 0.0, "tick_interval_seconds": 0,
+                 "started_at_seconds": 0.0,
                  "state": {"detail": "a shallow cut across the forearm"}},
+            ],
+            "mara_exposure": [
+                {"condition_id": "mara_exposure", "subject_id": "Mara",
+                 "kind": "cold_exposure", "severity": 0.3,
+                 "started_at_seconds": 0.0, "tick_interval_seconds": 60,
+                 "tick": {"vitals": {"stamina": -0.02},
+                          "percept": "the cold works further in"},
+                 "state": {"detail": "soaked through, no coat"}},
             ],
         },
         "vitals": {},
