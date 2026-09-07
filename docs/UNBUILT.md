@@ -7349,6 +7349,75 @@ picks the one case where the disagreement was measured and loud. The general
 form -- a body's heading following what it is DOING while its attention goes
 where it likes -- is a bigger change and is not made.
 
+### 1.150 A creature has no held hunt — the courier maze problem, one subsystem over
+
+**The owner's read, 2026-09-06, on watching a predator walk home past its
+prey: "This is the courier maze problem all over again."** It is, and the
+parallel is structural rather than poetic.
+
+THE COURIER (`docs/experiments/MAZE_ARMS.md`, and CLAUDE.md's psychology
+section) walked SIXTEEN OPTIMAL ROOMS to his destination and turned away,
+because his motivation lived in `initial_state.goals` -- built to be
+completable and abandonable -- and nothing underneath the spent goals
+wanted it. Perfect navigation, no wanting on arrival.
+
+THE CARBONIC STALKER (chat 117, turns 58-63) followed a CO2 gradient to
+the exact room its prey stood in -- `smelled` reading 4.0 there against
+3.0 either side -- stood in it for four beats emitting its `idle` voice,
+and then turned for its berth while the cast were still in the next room
+leaving a fresh trail. Perfect navigation, no wanting on arrival.
+
+**MEASURED, AND THIS IS THE SHARP END.** Its want is the `hunger` upkeep,
+which drifts per HOUR:
+
+  * 63 turns of story = **0.2375 story hours** (fourteen minutes).
+  * Hunger drift across the ENTIRE RUN: **0.0036**.
+  * Hunger on turn 0: **0.7000**. Hunger at turn 63: **0.6964**.
+
+To within a third of one percent it is exactly as hungry as it was when
+the lift fell. Its motivation cannot move on any timescale a scene
+reaches. (This is § 1.142's registered residual -- "predation_round's
+window and every upkeep drift are per-HOUR" -- met from the other end and
+now with a number attached.)
+
+**THE COURIER'S ANSWER WAS A TIER, AND THE CREATURE IS MISSING THE SAME
+ONE.** `projects` exist because a drive is eternal and PLACELESS (so it
+cannot be walked to) while an intention is completable, abandonable and
+swept when dormant (so it dies on a barren stretch). A project is durable
+but not eternal, names a place, and BIASES appraisal rather than competing
+in the beat auction -- and it is what made NPCs pass the maze with no
+alteration to their drives.
+
+A creature has exactly the two tiers the courier had and nothing between:
+
+  * an UPKEEP that is eternal, placeless and, on a scene's clock,
+    motionless -- the drive;
+  * per-window moves from `hunt_moves`, re-derived from scratch every
+    window and abandoned the moment anything else is in progress -- the
+    intention.
+
+**There is no HELD HUNT**: nothing that says "I am hunting these two,
+still, across windows, and going to my berth does not outrank that." The
+creature cannot be committed to anything. It can only be, at each window
+independently, near something or not.
+
+**WHAT SHIPPED TODAY IS THE INTERRUPT HALF, NOT THE HOLD HALF.**
+`hunt_moves` skipped any body that was `en_route`, so a creature that had
+given up and turned for home could not notice prey again until it arrived
+-- it strolled past its dinner. Prey may now break into a walk (casting
+still may not: re-opening a search every window is the dithering that
+exclusion exists to stop, and `_dispatch` already held the rule -- "the
+watch changed, and the body turns"). That stops the specific absurdity. It
+does not give the thing a memory of what it wants.
+
+**What the hold half would need**, if it is built: a per-body commitment
+that survives a lost trail and a completed errand, names its quarry rather
+than a room, decays on a scene-scale clock rather than an hourly one, and
+outranks routine charter errands without competing with them -- which is
+the project tier's contract almost word for word. Worth reading
+`DESIGN_LONG_TERM_GOALS.md` and `affect.apply_project_ops` before
+inventing a second mechanism for it.
+
 ### 1.149 A lamp cannot be aimed at the thing worth aiming it at
 
 **Found by reading six beats as a READER, 2026-09-06, and that is the

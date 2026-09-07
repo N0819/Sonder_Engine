@@ -330,8 +330,32 @@ def hunt_moves(states, own, bodies_at, stock_at, neighbors, seed, at_hours,
         return moves
     prey_order = list(creature.get("prey") or ())
     for body_key, body in sorted((state.get("bodies") or {}).items()):
-        if not body.get("available", True) or is_gone(body) or en_route(body):
+        if not body.get("available", True) or is_gone(body):
             continue
+        # A HUNTER TURNS FOR PREY. IT DOES NOT TURN FOR GEOGRAPHY.
+        #
+        # A body mid-walk was skipped outright, which is right for every
+        # other errand a charter runs -- re-planning a route every window
+        # is how a body dithers in a doorway -- and wrong for the one
+        # errand that is about something that MOVES. `_dispatch` already
+        # holds the rule for this ("a body walking somewhere ELSE is
+        # re-dispatched from where it stands ... the watch changed, and the
+        # body turns"); prey appearing is that case exactly.
+        #
+        # Measured live, chat 117 turn 63. The carbonic stalker had given
+        # up and turned for its berth while `figure` prey was still
+        # unimplemented and the cast were invisible to it. The category was
+        # implemented the same hour, the cast walked into the next room and
+        # left a fresh trail -- `smelled` read 4.0 there, equal to the room
+        # it stood in -- and it kept walking home, because it was already
+        # going somewhere. A predator that strolls past its dinner because
+        # it decided to go to bed earlier is not a predator.
+        #
+        # Scoped to the PREY half. A body mid-walk is still refused as a
+        # casting candidate below: casting is SEARCHING, and re-opening a
+        # search every window is the dithering the exclusion exists to
+        # stop. What may interrupt a walk is evidence of something to eat.
+        _walking = en_route(body)
         here = str(body.get("place") or "")
         if not here:
             continue
@@ -375,6 +399,8 @@ def hunt_moves(states, own, bodies_at, stock_at, neighbors, seed, at_hours,
             moves[body_key] = best[-1]
             casting.pop(body_key, None)   # surging: the trail is live again
             continue
+        if _walking:
+            continue                      # mid-walk: it casts for nothing
         # NOTHING TO WALK AT. Either the pull names this body's own room --
         # the trail ends where it stands -- or it has run out entirely. A
         # hearing creature has nothing to do about that, because a noise is
