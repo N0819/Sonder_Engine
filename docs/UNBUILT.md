@@ -7737,6 +7737,81 @@ that beat was the whole of what the beat was for.
 state and was lost on the way for a different reason. Fixing this one would
 have covered turn 80 as well, from the other side.
 
+### 1.157 A room in a chat with no lorebook is never registered, and the escape route died of it
+
+`persist/commit_room_registry.py`, building the upserts:
+
+    book_id = anchor_books.get(owner) if owner else default_book
+    if not book_id:
+        continue
+
+**A room whose owner resolves to no book is dropped, silently.** No row, no
+warning, no note. And the module's own header says the registry "is a
+deterministic projection of every scene write".
+
+**THE SCHEMA DISAGREES WITH THE CODE, in writing:**
+
+    owning_book_id INTEGER REFERENCES lorebooks(id) ON DELETE SET NULL
+
+The column is NULLABLE, and `ON DELETE SET NULL` means a bookless row is not
+an error state the table is protecting itself from -- it is a state the table
+is designed to arrive at whenever a book is deleted. The commit path refuses
+to write the row the schema was built to hold.
+
+**MEASURED (engine.db, read-only, 2026-09-06).** Splitting the corpus so the
+legacy population does not flatter or inflate the live one:
+
+  | | chats |
+  |---|---|
+  | registry holds NOTHING (predates it) | 35 |
+  | fully in sync | 58 |
+  | **partially in sync -- the live bug** | **11** |
+
+In those 11, **14 of 43 rooms** have no registry row, and the signature is
+uniform: every one is an interior or a vehicle car --
+`lilaeve_vagina_interior`, `mirelle_sulmirath_interior`, `vaginal_canal`,
+`Mirelle Sulmirath_throat`, `room_site17_elevator`, `room_elevator_interior`,
+`shelter_elevator_car`. Those are exactly the rooms carrying
+`parent_entity`, whose owner has no anchored book. Separately, **12 of 106
+chats hold no lorebook at all**, and in those every Director-minted room
+fails to register for the second half of the same condition (`default_book`
+resolves to nothing).
+
+**AND IT COST THIS STORY ITS WAY OUT.** Chat 117 has no lorebooks. Its 23
+registered rooms are all ones the STRUCTURE path wrote directly --
+`prepare_frontier_expansion`'s mutations carry an `owning_book_id` copied
+from the origin's registry row, so the riser chain registered itself. The
+four the Director minted through `state_diff.rooms` did not:
+`corridor_sublevel`, `lift_interior`, `upper_service_core_plenum_13`,
+`upper_service_core_plenum_14`.
+
+`prepare_frontier_expansion` READS `room_registry`. So `plenum_13`, being
+absent from it, can never expand a frontier -- the plenum chase cannot grow
+the way the riser chase did (s1.153). Turn 86, live:
+
+    Blocked movement: no passable route from 'upper_service_core_plenum_13'
+    to 'upper_service_core_plenum_14' (barrier=separated); position unchanged.
+
+`plenum_14` holds an edge back to `plenum_13`; `plenum_13` holds no edge
+onward. A one-way passage, and the crawl the player is making along it is
+prose over a position that does not move.
+
+**THE FIX IS NOT TWO LINES, and that is why this is registered rather than
+patched mid-run.** Registering under a NULL book is right, but the dedup
+index beside it reads
+
+    WHERE chat_id=? AND owning_book_id=? AND retired_turn_id IS NULL
+
+and `= NULL` matches nothing in SQL, so bookless rows would register and
+then silently stop deduping against each other -- trading a missing row for
+a duplicate one, in the table whose entire job is identity. Any fix has to
+carry `IS NULL` through every owning_book_id comparison. The registry owns
+identity, dedup and retirement, and `docs/guides/DATABASE.md` has a
+checklist for exactly this kind of change.
+
+At minimum the skip should not be silent: it is the one branch here that
+discards a write and says nothing.
+
 ### 1.150 A creature has no held hunt — the courier maze problem, one subsystem over
 
 **The owner's read, 2026-09-06, on watching a predator walk home past its
