@@ -7349,6 +7349,63 @@ picks the one case where the disagreement was measured and loud. The general
 form -- a body's heading following what it is DOING while its attention goes
 where it likes -- is a bigger change and is not made.
 
+### 1.152 A creature can be stopped by the shape of an opening and by nothing else
+
+**Found by a player inventing a defence the engine had no word for**, chat
+117 turn 72. The cast, cornered in a dead-end shaft with a deaf CO2 hunter,
+worked out from the fiction that the spilled drums were the one thing it
+would not walk through, drew a drum with standing solvent in it back
+through the gap, and poured a continuous line across the sill.
+
+**The Director recorded it FAITHFULLY.** `_11`'s anchors afterwards:
+
+    ['lateral_doorway', 'pressure_door', 'wrecked_trolley',
+     'spilled_drums', 'chemical_barrier']
+
+plus a `substances` row. `chemical_barrier` is a durable named place: prose
+can point at it, a body can stand at it, it survives the beat. Nothing
+about the recording is wrong.
+
+**AND NO CREATURE CAN BE STOPPED BY IT.** `charter_creature.creature_neighbors`
+builds the graph a creature walks from `passable_neighbors` (edges), plus
+shut doors where `can_open_doors`, minus rooms its `footprint` does not fit
+-- and its own docstring names exactly the two constraints it models: "a
+door that holds a wolf and a passage too narrow for a large thing". Both are
+facts about the WAY THROUGH. An anchor on the floor is a third kind and
+there is no field for it.
+
+The whole vocabulary a creature charter can be consulted on:
+
+    active_phases, bargains, boldness, can_open_doors, contest,
+    encounter_odds, fed, footprint, hoard_holder, kill_ceiling, look,
+    noun, prey, senses, spoor, stock_lots, take, voice
+
+`can_open_doors` is the only movement constraint in it, and it is a single
+hard-coded affordance rather than a general one. A creature cannot be
+authored to avoid anything.
+
+**WHY THIS IS THE INTERESTING SHAPE.** Every other defect on this path was
+the engine holding a true thing in a form the next stage could not use. This
+one is the opposite: the engine records the player's invention perfectly and
+has no vocabulary to be affected by it. The scent model tracks what a
+creature HUNTS and has no notion of what repels it; `SCENT_PASS` grades what
+a barrier does to a smell passing through, never a smell that IS the
+barrier.
+
+**Where it belongs when built, in this engine's own idiom:** the obstacle is
+a fact about the way through, which is where `barrier` and `material`
+already live and what `creature_neighbors` already reads. A substance laid
+across a threshold wants to reach the EDGE, not to become a second mover --
+`charter_move._advance` re-checks every edge of a planned route against the
+map it is handed and holds the body where the check fails, so an edge that
+says "a nose will not cross this" needs no new machinery to be obeyed. The
+creature side then wants one general field (what this thing will not cross)
+rather than a second `can_open_doors`.
+
+**Unmeasured across the corpus, and cannot be:** there are 0 creature
+charters anywhere but this story (s1.151), so this has never had the chance
+to be wrong before.
+
 ### 1.151 Being TOLD does not ask for ears, and a closed intake leaves the old claims standing
 
 Two residuals of the deafness gate (`charter_observe.body_receives_evidence`,
