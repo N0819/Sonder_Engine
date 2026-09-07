@@ -14,12 +14,12 @@
 | `agents/director.py` | 5082 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 457 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 1278 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
-| `agents/director_fanout.py` | 944 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
+| `agents/director_fanout.py` | 964 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 1939 |  | `agents.common`, `agents.director_lingua`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 1350 |  | `agents.director_lingua`, `story.character_schema`, `world.spatial` |
 | `agents/director_reconcile.py` | 592 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story`, `world.spatial` |
-| `agents/director_scopes.py` | 857 |  | `agents.director_views`, `core.db`, `world.survival` |
+| `agents/director_scopes.py` | 872 |  | `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 627 |  | `agents.common`, `story.character_schema`, `story.scene`, `world.background_claims` |
 | `agents/dramaturge.py` | 316 |  | `core.logging_utils` |
 | `agents/loops.py` | 1388 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
@@ -306,14 +306,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_specialist_payload()` | 362 | 306 lines |
-| `_orchestration_scope_backstop()` | 794 | 151 lines |
-| `_resolve_beat_view()` | 74 | 127 lines |
-| `_interpret_beat_view()` | 203 | 40 lines |
-| `_beat_rooms()` | 286 | 37 lines |
-| `_anchor_names()` | 325 | 35 lines |
-| `_resolved_event_verdicts()` | 704 | 30 lines |
-| `_author_emitted_channels()` | 756 | 25 lines |
+| `_specialist_payload()` | 376 | 312 lines |
+| `_orchestration_scope_backstop()` | 814 | 151 lines |
+| `_resolve_beat_view()` | 74 | 141 lines |
+| `_interpret_beat_view()` | 217 | 40 lines |
+| `_beat_rooms()` | 300 | 37 lines |
+| `_anchor_names()` | 339 | 35 lines |
+| `_resolved_event_verdicts()` | 724 | 30 lines |
+| `_author_emitted_channels()` | 776 | 25 lines |
 
 ### `agents/director_floors.py`
 
@@ -365,11 +365,11 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `_gate_facts()` | 613 | 76 lines |
-| `_dispatch_specialists()` | 796 | 62 lines |
+| `_dispatch_specialists()` | 811 | 62 lines |
+| `_ruling_for()` | 728 | 54 lines |
 | `register_specialist()` | 471 | 49 lines |
-| `_ruling_for()` | 728 | 39 lines |
 | `_rebuild_channel_owners()` | 440 | 25 lines |
-| `_unrouted_rulings()` | 769 | 25 lines |
+| `_unrouted_rulings()` | 784 | 25 lines |
 | `_schema_list_channels()` | 254 | 23 lines |
 | `reads_dialogue()` | 162 | 18 lines |
 

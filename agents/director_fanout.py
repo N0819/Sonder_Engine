@@ -197,6 +197,20 @@ def _resolve_beat_view(out, decls, char_actions, dice, p_name, interp):
         "player": p_name,
         "cast": [str(d.get("name") or "") for d in decls if d.get("name")],
         "public_sources": public_sources[:20],
+        # THE BEAT'S WORLD-PRESSURE TICKS, so dispatch can route them. A tick
+        # is a structured op the author emitted -- not prose -- and the
+        # must-tick floor forces one onto the page every third beat of a
+        # stalled pressure. Measured (chat 117, beats 60-115): 18 tremors in
+        # resolved_event, 9 of which never reached the player's view, because
+        # the author ticked without an `objects` note and the one hand that
+        # owns `sensory_events` was never dispatched. `_ruling_for` reads
+        # this as addressing that hand.
+        "pressure_ticks": [
+            {k: op.get(k) for k in ("id", "subject", "note") if op.get(k)}
+            for op in (out.get("world_pressure") or [])
+            if isinstance(op, dict)
+            and str(op.get("op") or "").strip().lower() == "tick"
+        ],
     }
 
 
@@ -564,6 +578,12 @@ def _specialist_payload(name, ctx, sc, view, extras):
         payload.update({
             "entities": sc.get("entities") or {},
             "rooms": rooms_index,
+            # The pressures the author ticked this beat: a signal the beat
+            # made, if it made one anywhere a body can perceive it. Shown to
+            # this hand because it is the hand that can encode one, and a
+            # tick it is not shown is a tick it cannot make perceptible.
+            **({"pressure_ticks": view["pressure_ticks"]}
+               if view.get("pressure_ticks") else {}),
             "notices": extras.get("notices") or [],
             "worn_garments": worn_index,
         })

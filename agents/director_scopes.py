@@ -740,6 +740,16 @@ def _ruling_for(name, view):
     on gemini-3.6-flash, 8 of 11 notes were keyed by channel and 1 by hand,
     and insisting on the hand's name would have left the hand undispatched
     against a correct ruling about its own ledger.
+
+    A WORLD-PRESSURE TICK ADDRESSES THE HAND THAT CAN MAKE IT PERCEPTIBLE
+    (``"pressure"``, 2026-09-07). The must-tick floor forces a stalled
+    pressure to act on the page, and the author ticks it -- a structured op,
+    not prose -- without necessarily writing a note for the hand that owns
+    `sensory_events`. Measured in chat 117: 9 of 18 forced tremors never
+    reached the player's view. A tick names that channel directly, so the
+    hand runs and is shown the ticks (`_specialist_payload`); a tick with no
+    local manifestation costs one small call that emits nothing, which is
+    the fail-open rule the gate table already follows.
     """
     spec = SPECIALISTS[name]
     forms = _ruling_keys(view)
@@ -762,6 +772,11 @@ def _ruling_for(name, view):
                 named.append(channel)
             if "manifest" not in addressed_by:
                 addressed_by.append("manifest")
+    if (view or {}).get("pressure_ticks") and "sensory_events" in own:
+        if "sensory_events" not in named:
+            named.append("sensory_events")
+        if "pressure" not in addressed_by:
+            addressed_by.append("pressure")
     named.sort(key=spec["channels"].index)
     return addressed_by, named
 
