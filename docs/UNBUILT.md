@@ -7349,6 +7349,69 @@ picks the one case where the disagreement was measured and loud. The general
 form -- a body's heading following what it is DOING while its attention goes
 where it likes -- is a bigger change and is not made.
 
+### 1.149 A lamp cannot be aimed at the thing worth aiming it at
+
+**Found by reading six beats as a READER, 2026-09-06, and that is the
+whole of why it was found.** As an engineer it had already been checked:
+`visual_level_between` answered `none`, which reads as "the beam moved off
+it, correct behaviour, move on" -- and that is what was concluded, out
+loud, twice. As a reader the question could not be waved away: the player
+wrote *"I look at it properly for the first time -- the whole shape of the
+thing, top to bottom, and whatever it has instead of a face"*, and the
+prose described his own boot.
+
+**FOUR FAULTS ON THE PAGE, ONE VALUE UNDERNEATH** (chat 117, turns 59-62):
+
+    "pointed_at": "north along upper_service_core_riser_10"
+
+The player held a light on a creature for three consecutive beats. The
+creature stood at the SOUTH doorway. The beam went north.
+
+  * The declared look was answered with nothing -- unlit, so no sight, so
+    it never entered the player's company, so there was nothing to render.
+  * It stood at the WRONG DOOR for four beats: the composer gave
+    `side: None`, the narrator supplied "on my right", and then read its
+    own guess back out of `past_narration` and repeated it until it was
+    the story's settled account. Sarah squeezed past that doorway in turn
+    61, within arm's reach of a predator, unremarked by anyone.
+  * The beam was "locked unwavering on the corridor behind" in one beat
+    and "locked straight forward" in the next, same target.
+  * Nothing escalated, because an unseen monster cannot menace anybody.
+
+**TWO OF THE THREE FIXES SHIPPED** (both packs, and both independent of
+the third): the objects chunk had been telling the Director *"a carried
+cone points where its holder faces"* -- so it never tried to aim one and
+wrote a direction PHRASE, which resolves to nothing -- while
+`light_sources` has always PREFERRED `pointed_at` over facing. The prompt
+was contradicting the code. And the narrator's direction licence, which
+forbade inventing a side for a ROOM, now forbids it for a BODY, with the
+reason that makes it matter: an invented side does not stay in one
+sentence.
+
+**THE THIRD IS UNBUILT, and an inert fix for it was written and BACKED
+OUT the same hour.** `_resolve_pointed_at` resolves a bearing, a scene
+entity, or an anchor of the source's own room. A charter body is none of
+those: it holds no `positions` row under its own name -- it is laid onto
+the PERCEIVING stage's copy of the scene, and the light field runs on
+another -- so `room_of` and `body_cell` both answer None and the aim falls
+silently through to the holder's facing.
+
+The attempt read the body's cell through `charter_place.charter_placements`,
+which needs a chat id, which it took from `scene["_chat_id"]`. **No scene
+carries that key.** It returned None on every real call and passed its own
+test only because the test injected the id by hand -- the exact class this
+register is full of, written by the person writing the register. What it
+actually needs is a chat id plumbed into the light field, or the charter
+bodies laid into the scene the field runs on, and neither is a five-minute
+change.
+
+**A NOTE ON THE EVIDENCE, because it nearly went in the commit message.**
+The replayed turn 62 DID put the beam on the creature and describe it --
+and not because of any of this. `pointed_at` was still the same
+unresolvable phrase; what changed was that Aurel's facing became `e`, so
+the cone followed his body onto the thing by luck. A beat that improves is
+not a fix that worked.
+
 ### 1.148 The median room has nowhere to stand
 
 **Measured while answering the owner's "player perception culling might be

@@ -595,7 +595,10 @@ def _specialist_payload(name, ctx, sc, view, extras):
                  **({"plan": f["plan"]} if f.get("plan") else {}),
                  **({"kind": f["kind"]}
                     if str(f.get("kind") or "person") != "person" else {}),
-                 **({"brief": f["brief"]} if f.get("brief") else {})}
+                 **({"brief": f["brief"]} if f.get("brief") else {}),
+                 # What it IS, where that is not a person: prey table,
+                 # senses, hunger (`common._creature_stance`).
+                 **({"creature": f["creature"]} if f.get("creature") else {})}
                 for f in extras["present_figures"] if not f.get("reserved")]
     elif name == "spatial":
         # The one specialist entitled to the full graph: it is the graph's

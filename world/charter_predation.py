@@ -210,10 +210,54 @@ def _reachable(neighbors, origin, limit):
     return seen
 
 
+def _scene_figures_at(state, place):
+    """The scene-owned people standing at `place`: the player and the cast,
+    read off the charter's own copy of the scene.
+
+    A FIGURE IS NOT A BODY (`charter_figure`): it is not rostered, holds no
+    post and stands no watch, so it never appears in `_company`'s index --
+    which is built from charter bodies alone. That is why the `figure` prey
+    category, declared in `PREY_CATEGORIES` since it was written and
+    documented as "a scene-owned person is the Director's to endanger", had
+    no branch in the table below and matched nothing: a creature authored to
+    hunt the cast could track them for ever and never register that it had
+    arrived.
+
+    Measured live, chat 117 turns 58-61: the carbonic stalker followed a CO2
+    trail to the exact room the cast stood in (`smelled` read 4.0 there
+    against 3.0 either side), and then stood in it emitting its `idle`
+    voice, because `_prey_here` returned "" for a room holding two people it
+    was written to hunt.
+
+    An entity is not a person: `positions` carries lamps and doors beside
+    bodies, and `entities` is what tells them apart -- the scene's own
+    discriminator, the one every other reader uses.
+    """
+    scene = state.get("scene") if isinstance(state.get("scene"), dict) else {}
+    positions = scene.get("positions") or {}
+    entities = scene.get("entities") or {}
+    if not isinstance(positions, dict) or not place:
+        return []
+    own_bodies = set((state.get("bodies") or {}).keys())
+    out = []
+    for name, room in sorted(positions.items()):
+        if str(room or "") != str(place):
+            continue
+        key = str(name)
+        if key in entities or key in own_bodies:
+            continue
+        out.append(key)
+    return out
+
+
 def _prey_here(place, own, bodies_at, stock_at, states, prey_order):
     """The first category of the prey table this place holds, and what."""
     for category in prey_order:
-        if category == "stock":
+        if category == "figure":
+            found = _scene_figures_at(states[own], place)
+            if found:
+                return category, [(own, key) for key in found]
+        elif category == "stock":
             rows = [row for row in stock_at.get(place, ()) if row[0] != own
                     and not _truce(states[own], row[0])]
             if rows:
@@ -433,6 +477,34 @@ def _attack(states, own, body_keys, place, category, rows, at_hours, seed,
             spoor.append(_spoor_row(
                 own, "stock_taken", place, at_hours, text, good, own,
                 (creature.get("spoor") or {}).get("hours") or 0.0, index))
+        return 0
+
+    if category == "figure":
+        # A SCENE-OWNED PERSON IS THE DIRECTOR'S TO ENDANGER
+        # (`charter_creature`'s own note on this category). The charter
+        # simulates a world offscreen; the moment the thing it simulates is
+        # standing in the room the story is being told in, what happens to
+        # the people there is the pipeline's ruling and not a dice roll in
+        # a background window. So nothing is harmed here and nothing is
+        # taken: the encounter is FILED, and the Director -- which is
+        # already shown this body's prey table, senses and hunger
+        # (`common._creature_stance`) -- decides what a hunter does about
+        # the meal standing in front of it.
+        #
+        # Filed even so, rather than skipped, because the alternative is
+        # the silence this branch was written to end: for three beats a
+        # creature stood in the room with its declared prey and the round
+        # returned "" for the place, so nothing anywhere recorded that the
+        # hunt had arrived (chat 117 turns 58-61).
+        who = sorted(key for _own, key in rows)
+        events.setdefault(own, []).append({
+            "kind": "creature_on_figure",
+            "place": place,
+            "at_hours": at_hours,
+            "by": body_keys[0],
+            "figures": who,
+            "hunger": round(float(hunger_of(state)), 3),
+        })
         return 0
 
     prey_key, target_key = rows[

@@ -224,6 +224,31 @@ def normalize_creature(stored):
     out = {
         "prey": prey,
         "voice": voice,
+        # WHAT IT LOOKS LIKE, AND WHAT TO CALL IT. Same class as `senses`
+        # one field down, and found the same way (2026-09-06): a thing that
+        # is not a person has to be able to SAY so in a field, or the engine
+        # describes it as one.
+        #
+        # `looks_profile` deals a body's surface from its population's law,
+        # and a charter that authors none falls back to `DEFAULT_LOOKS` --
+        # which is a pool of PEOPLE ("a grey braid", "greying", "thinning
+        # hair", "a missing tooth"). Dealt to a creature it produced a
+        # monster with human hair: the descent's carbonic stalker, whose
+        # `creature` block carried four authored voices, declared senses and
+        # a prey table, reached one view as "the greying wiry person with a
+        # grey braid" because all seven of its `looks` axes were `[]`.
+        #
+        # That fallback is now refused for a creature, which leaves it
+        # honestly undescribed -- "the figure", which is what an
+        # unrecognised shape in a dark corridor is. These two are how it
+        # gets described on purpose instead: `look` is the clause a full
+        # sight gives ("a low, chitin-plated bulk with a wet siphon vent"),
+        # `noun` the word a stranger reaches for ("thing", "shape") in place
+        # of the person-noun every other body gets. Neither is defaulted: an
+        # unwritten look is no look, and the engine says less rather than
+        # inventing a face.
+        "look": " ".join(str(stored.get("look") or "").split())[:160],
+        "noun": " ".join(str(stored.get("noun") or "").split())[:32],
         # WHETHER IT HEARS AT ALL, and it must be SAID (2026-09-06). The
         # hearing channel (`charter_runtime.hearing_for_creatures`) was built
         # this day and handed to every creature that existed, because nothing

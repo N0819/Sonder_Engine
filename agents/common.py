@@ -2141,6 +2141,48 @@ def charter_view_for_rooms(cid, sc, rooms, frame_id=None):
     return viewed, [p["key"] for p in placements.values()]
 
 
+def _creature_stance(cid, charter_key, frame_id=None):
+    """What a charter body IS, where its charter says it is a creature:
+    ``{hunts, hunger, senses, prey, opens_doors}`` -- or ``{}`` for the
+    overwhelming majority of bodies, which are people.
+
+    Read off the charter's own `creature` block and its hunger upkeep, so
+    the Director is told the same facts the offscreen simulation acts on
+    and the two cannot disagree about what the thing wants. Fail-open: a
+    story with no charter, or a body whose charter carries no creature
+    block, adds nothing and leaves the payload byte-identical.
+    """
+    charter_key = str(charter_key or "")
+    if not charter_key:
+        return {}
+    try:
+        from world.charter_creature import normalize_creature
+        from world.charter_runtime import registry_for
+        registry = registry_for(cid, frame_id) or {}
+        state = ((registry.get("items") or {}).get(charter_key) or {}
+                 ).get("state") or {}
+        creature = normalize_creature(state.get("creature"))
+        if not creature:
+            return {}
+        hunger = (state.get("upkeeps") or {}).get("hunger") or {}
+        senses = creature.get("senses") or {}
+        out = {
+            "hunts": [str(p) for p in (creature.get("prey") or ())],
+            "senses": {k: senses.get(k) for k in ("hearing", "scent", "sight")
+                       if k in senses},
+            "opens_doors": bool(creature.get("can_open_doors")),
+        }
+        level = hunger.get("level")
+        floor = hunger.get("floor")
+        if level is not None:
+            out["hunger"] = round(float(level), 3)
+        if floor is not None:
+            out["hunger_floor"] = round(float(floor), 3)
+        return out
+    except Exception:
+        return {}
+
+
 def present_charter_figures(cid, sc, rooms, frame_id=None):
     """Every unpromoted charter body standing in `rooms`, with the post it
     holds -- the DIRECTOR's view of who is already here.
@@ -2225,6 +2267,30 @@ def present_charter_figures(cid, sc, rooms, frame_id=None):
             "plan": body_plan_uid(ref.get("charter"), ref.get("body"))
             if ref.get("charter") and ref.get("body") else "",
         })
+        # A PREDATOR IS NOT A PERSON WHO ANSWERS ORDERS. Every row above
+        # describes a body the way a townsperson is described -- a name, a
+        # post, a look -- and `figure_answers` adds what it would grant if
+        # asked. For a thing that hunts, that frame is not merely thin, it
+        # is WRONG in a specific and expensive way: it presents a hunter as
+        # a compliant stranger, and the hand reading it treats one as the
+        # other.
+        #
+        # Measured live, chat 117 turn 61. A carbonic stalker stood in the
+        # room with the cast for three beats. The Director knew: its row
+        # carried the name, the room, the station, the facing, and
+        # `same_room_as_player: true`. What the row ALSO carried was
+        # `role: ""` and `answers: ["order: answered as a request,
+        # granted", "request: granted", "bargain: accepted"]`. Nothing said
+        # predator, hungry, deaf, or that the two people beside it were its
+        # declared prey -- so it was written as a person standing quietly in
+        # a corridor, which is what a person standing quietly in a corridor
+        # would do.
+        #
+        # The charter already holds all of it. Handed over whole, because
+        # the Director owns what exists and this is what exists.
+        stance = _creature_stance(cid, ref.get("charter"), frame_id=frame_id)
+        if stance:
+            rows[-1]["creature"] = stance
         placed = placements.get("charter:%s:%s" % (
             ref.get("charter"), ref.get("body")))
         if placed:
