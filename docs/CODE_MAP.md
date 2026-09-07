@@ -149,13 +149,13 @@
 | `world/charter_move.py` | 567 |  | `world.charter_space` |
 | `world/charter_needs.py` | 297 |  | `world.charter_model` |
 | `world/charter_news.py` | 517 |  | `world.charter_mind`, `world.charter_model`, `world.charter_talk` |
-| `world/charter_observe.py` | 585 |  | `world.charter_figure`, `world.charter_identity`, `world.charter_mind`, `world.spatial` |
+| `world/charter_observe.py` | 624 |  | `world.charter_figure`, `world.charter_identity`, `world.charter_mind`, `world.spatial` |
 | `world/charter_ops.py` | 336 |  | `world.charter_harm` |
 | `world/charter_place.py` | 453 |  | `world.charter_identity`, `world.charter_model`, `world.charter_move`, `world.spatial` |
 | `world/charter_plan.py` | 227 |  | `world.charter_drift`, `world.charter_model`, `world.charter_roster` |
 | `world/charter_politics.py` | 161 |  | — |
 | `world/charter_practice.py` | 1200 |  | `world.charter_commitment`, `world.charter_figure`, `world.charter_mind`, `world.charter_politics`, `world.charter_talk` |
-| `world/charter_predation.py` | 957 |  | `world.charter_creature`, `world.charter_harm`, `world.charter_model`, `world.charter_move` |
+| `world/charter_predation.py` | 983 |  | `world.charter_creature`, `world.charter_harm`, `world.charter_model`, `world.charter_move` |
 | `world/charter_promote.py` | 604 |  | `world.charter_commitment`, `world.charter_feel`, `world.charter_politics`, `world.charter_social` |
 | `world/charter_roster.py` | 134 |  | `world.charter_model` |
 | `world/charter_run.py` | 1477 |  | `world`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_enrol`, `world.charter_feel`, `world.charter_figure`, `world.charter_harm`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
@@ -1823,14 +1823,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `plan_public_evidence()` | 384 | 119 lines |
-| `resolve_target_body()` | 305 | 77 lines |
-| `apply_public_evidence()` | 505 | 74 lines |
-| `body_receives_evidence()` | 90 | 40 lines |
-| `evidence_claim()` | 159 | 40 lines |
-| `_bodies_by_role()` | 270 | 33 lines |
-| `_post_forms()` | 236 | 32 lines |
-| `evidence_phrase()` | 136 | 21 lines |
+| `plan_public_evidence()` | 410 | 132 lines |
+| `resolve_target_body()` | 331 | 77 lines |
+| `apply_public_evidence()` | 544 | 74 lines |
+| `body_receives_evidence()` | 90 | 66 lines |
+| `evidence_claim()` | 185 | 40 lines |
+| `_bodies_by_role()` | 296 | 33 lines |
+| `_post_forms()` | 262 | 32 lines |
+| `evidence_phrase()` | 162 | 21 lines |
 
 ### `world/charter_ops.py`
 
@@ -1898,12 +1898,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_attack()` | 429 | 146 lines |
-| `hunt_moves()` | 281 | 133 lines |
-| `_tribute()` | 749 | 95 lines |
-| `predation_round()` | 577 | 89 lines |
-| `run_registry()` | 892 | 60 lines |
-| `read_spoor()` | 697 | 48 lines |
+| `hunt_moves()` | 281 | 159 lines |
+| `_attack()` | 455 | 146 lines |
+| `_tribute()` | 775 | 95 lines |
+| `predation_round()` | 603 | 89 lines |
+| `run_registry()` | 918 | 60 lines |
+| `read_spoor()` | 723 | 48 lines |
 | `_scene_figures_at()` | 213 | 38 lines |
 | `_company()` | 133 | 29 lines |
 
