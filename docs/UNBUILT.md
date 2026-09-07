@@ -7970,7 +7970,7 @@ player's own declaration already covers receiving; the retry also left no
 warning on the step -- only `llm_capture.correction_notes` records that a
 rewrite happened or what it removed.
 
-**C. The tremor has no percept channel.** `world_pressure.must_tick_this_beat`
+**C. The tremor has no percept channel -- FIXED 2026-09-07** (a tick in the beat view now addresses the `sensory_events` owner; `director_scopes._ruling_for`, `director_fanout._resolve_beat_view`). `world_pressure.must_tick_this_beat`
 forces the sector breach to "visibly act ON-PAGE" every third beat
 (`beats_since_tick: 2`), and it does -- in `resolved_event`, in `overlays`
 (five near-identical dust lines on one body by beat 106, evicting a distinct

@@ -386,6 +386,54 @@ def test_resolve_and_its_hands_see_the_room_interpret_just_authored(
     assert prose["positions"]["Mara"] == "asserted_attic"
 
 
+def test_a_world_pressure_tick_dispatches_the_hand_that_owns_sensory_events(
+        temp_db, monkeypatch):
+    """The must-tick floor forces a stalled pressure to act on the page every
+    third beat, and the author obliges -- in resolved_event, in the tick's
+    note, in a dust overlay -- but a hand runs only if the ruling ADDRESSED
+    it, and the author ticks without writing an `objects` note. Chat 117,
+    beats 60-115: 18 forced tremors, 9 of them never in the player's view,
+    because the one hand that owns `sensory_events` never ran. A tick is a
+    structured op, so it addresses that hand the way a note does, and the
+    hand is shown the ticks it is being asked to encode. No other hand is
+    woken by it."""
+    from world.spatial import contact_id
+    from world.survival import set_survival_enabled
+
+    calls = []
+
+    def fake(role, step_key, system, payload, **kw):
+        calls.append({"step_key": step_key, "payload": payload})
+        if step_key == "director_resolve":
+            return {"ledger_notes": {},
+                    "world_pressure": [{"op": "tick", "id": "wp:0:0",
+                                        "subject": "Euclid breach spread",
+                                        "note": "a concussive tremor rolls "
+                                                "through the slab"}]}
+        return {}
+
+    monkeypatch.setattr(director, "_agent_json", fake)
+    scene = json.loads(json.dumps(RICH_SCENE))
+    cid = contact_id(scene["contacts"][0])
+    scene["contacts"][0]["contact_id"] = cid
+    scene["contact_actions"] = [{"actor": "Mara", "contact_id": cid,
+                                 "action": "zolstroke"}]
+    ctx = _make_ctx(temp_db, scene=scene, interp=_interp())
+    set_survival_enabled(ctx.chat.id, True)
+    director.director_resolve(ctx, nonce=0)
+    payloads = {c["step_key"]: c["payload"] for c in calls}
+
+    assert "director_objects" in payloads, sorted(payloads)
+    ticks = payloads["director_objects"]["pressure_ticks"]
+    assert ticks == [{"id": "wp:0:0", "subject": "Euclid breach spread",
+                      "note": "a concussive tremor rolls through the slab"}]
+    # A ruling that names nobody wakes nobody else: the tick reaches the
+    # hand that can make it perceptible and no other.
+    for other in ("director_body", "director_social", "director_contact",
+                  "director_spatial"):
+        assert other not in payloads, other
+
+
 def test_the_ledger_table_covers_every_channel_a_hand_writes():
     """The half that keeps the guard from rotting.
 
