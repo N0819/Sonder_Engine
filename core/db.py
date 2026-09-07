@@ -152,7 +152,7 @@ def parse_scoped_world_key(key):
 #: runs from the root. `or` rather than a default argument, so an empty
 #: `ENGINE_DB=` falls through to the anchored path instead of naming the cwd.
 DB = os.environ.get("ENGINE_DB") or os.path.join(INSTALL_ROOT, "engine.db")
-SCHEMA_VERSION = 36
+SCHEMA_VERSION = 37
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -593,7 +593,7 @@ CREATE TABLE IF NOT EXISTS llm_blobs(
 );
 
 -- One row per provider call, INCLUDING the sub-calls that have no step of
--- their own -- the Director's six specialists are the reason this table
+-- their own -- the Director's five specialists are the reason this table
 -- exists rather than another column on `variants`. `seq` is the turn-local
 -- order the calls were STARTED in, which is what makes a chronological
 -- reading of a turn possible across a fan-out.
@@ -1820,6 +1820,14 @@ MIGRATIONS = [
         # and never again, so a room minted later without a region is not
         # quietly given one on the next server start.
     ],
+    # v36 -> v37
+    [
+        # Memory vectors filed at mint time (mind/memory_snapshot.
+        # file_memory_vector). No DDL: `memory_vectors` exists in SCHEMA. The
+        # bump gates the one-shot `backfill_memory_vectors` in init(), which
+        # files every existing memory's vector pair once so the per-turn
+        # checkpoint can stop inserting the whole bank on every beat.
+    ],
 ]
 
 # DDL that must run AFTER the migration chain, on every path -- init()
@@ -2511,6 +2519,12 @@ def init():
     if not is_fresh_db and current < 36:
         from world.regions import backfill_regions
         backfill_regions(c)
+    # Memory vectors, once: a file crossing v37 files every existing vector
+    # pair in the content-addressed store (mind/memory_snapshot), after which
+    # the writers file their own and the checkpoint writes nothing.
+    if not is_fresh_db and current < 37:
+        from mind.memory import backfill_memory_vectors
+        backfill_memory_vectors(c)
     c.commit()
     c.close()
 

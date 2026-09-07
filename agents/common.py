@@ -4361,7 +4361,11 @@ def observer_name_scrub(chat, observer_name, cast):
         if not isinstance(text, str) or not text or not subjects:
             return text
         for form, replacement in subjects:
-            text = re.sub(rf"\b{re.escape(form)}\b", replacement, text)
+            # Per-edge boundaries, the repaired siblings' rule
+            # (`name_boundary_pattern`): `\b` is a property of spaced
+            # scripts, so a Japanese name followed by its particle was
+            # never scrubbed and this floor failed open in silence.
+            text = re.sub(name_boundary_pattern(form), replacement, text)
         return text
 
     return scrub
@@ -4528,6 +4532,18 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None, *,
             r"^(?:" + "|".join(map(re.escape, articles)) + r")\s+", "",
             appearance_text.strip(), flags=re.I,
         ).replace(",", "")
+        # STRIP THE NAME FORMS BEFORE TOKENISING. The token filter below
+        # splits on whitespace, which an unspaced script does not have: a
+        # Japanese summary is one "word", the name inside it is never a
+        # token on its own, and the descriptor handed to a stranger carried
+        # the canonical name whole. The boundary-aware strip removes every
+        # form wherever it stands; the token filter then does what it
+        # always did for spaced scripts.
+        cleaned = _strip_identity_tokens(
+            cleaned, [f for f in [actor_name, *(aliases or [])]
+                      if str(f or "").strip()
+                      and not (role and _identity_token_set(str(f))
+                               <= _identity_token_set(role))])
         words = [w for w in cleaned.split()
                  if re.sub(r"[^\w]", "", w).casefold() not in name_tokens]
         # Dropping a leading name can expose the article that followed it
@@ -4700,13 +4716,22 @@ def _strip_identity_tokens(text, forms):
         form = str(form or "").strip()
         if not form:
             continue
+        # Per-edge boundaries (`name_boundary_pattern`), not `(?<!\w)`: an
+        # unspaced-script name never had a non-word neighbour to match at.
+        # What a name carries away with it is the pack's to say: English an
+        # attached possessive, Japanese the case particle that would
+        # otherwise stand stranded where the name was.
         out = re.sub(
-            r"(?<!\w)" + re.escape(form) + r"(?:['’]s)?(?!\w)",
+            name_boundary_pattern(form)
+            + str(linguistic("agents.common", "_NAME_TAIL_PATTERN")),
             "", out, flags=re.I,
         )
     out = re.sub(r"\s{2,}", " ", out)
     out = re.sub(r"\s+([,;.!?])", r"\1", out)
     out = re.sub(r"([,;])(\s*[,;])+", r"\1", out)
+    # A hyphen the removed name was bound to ("Alice-grey" -> "-grey") is
+    # debris of the same kind as the doubled comma above.
+    out = re.sub(r"(?<![\w])[-\u2010\u2011](?=\w)", "", out)
     return out.strip().lstrip(",;: ").strip()
 
 # Mirrors _protected_view_quotes' quoted-span shape: a name inside a quote

@@ -435,9 +435,22 @@
     "_BODY_OWNERSHIP_MODIFIERS": {
       "$type": "frozenset",
       "items": [
-        "left", "right", "upper", "lower", "inner", "outer", "front",
-        "rear", "injured", "wounded", "bare", "exposed", "covered",
-        "clothed", "near", "far"
+        "left",
+        "right",
+        "upper",
+        "lower",
+        "inner",
+        "outer",
+        "front",
+        "rear",
+        "injured",
+        "wounded",
+        "bare",
+        "exposed",
+        "covered",
+        "clothed",
+        "near",
+        "far"
       ]
     },
     "_QUOTE_SPAN_RE": {
@@ -1248,8 +1261,13 @@
       "assertion": "\\b(?:{owner})\\s+(?:\\w+[- ]){0,2}?(?:{state})\\s+{region}\\b",
       "idiom": "\\b(?:with|using)\\s+\\S+\\s+bare\\s+hands?\\b",
       "person_possessive": {
-        "first": ["my", "our"],
-        "second": ["your"],
+        "first": [
+          "my",
+          "our"
+        ],
+        "second": [
+          "your"
+        ],
         "third": []
       }
     },
@@ -1323,7 +1341,8 @@
         "st",
         "vs"
       ]
-    }
+    },
+    "_NAME_TAIL_PATTERN": "(?:['’]s)?"
   },
   "agents.director": {
     "_DECL_STOPWORDS": {
@@ -3171,7 +3190,7 @@
   "persist.commit_memory": {
     "_STATION_POSSESSED_BEFORE": {
       "$type": "regex",
-      "pattern": "(?:\\b(?:her|his|their|your|my|its)\\s+|['\u2019]s\\s+)$",
+      "pattern": "(?:\\b(?:her|his|their|your|my|its)\\s+|['’]s\\s+)$",
       "flags": 34
     },
     "_SALIENCE_CUES": {
@@ -3226,18 +3245,93 @@
   "world.charter_observe": {
     "_DETERMINERS": {
       "$type": "frozenset",
-      "items": ["the", "a", "an"]
+      "items": [
+        "the",
+        "a",
+        "an"
+      ]
     }
   },
   "world.charter_surface": {
     "DEFAULT_LOOKS": {
-      "stature": ["tall", "short", "average-height", "long-limbed", "compact", "rangy"],
-      "build": ["stocky", "slight", "broad-shouldered", "wiry", "heavyset", "lean"],
-      "gait": ["quick-stepping", "slow-moving", "stooped", "straight-backed", "limping", "restless"],
-      "complexion": ["weathered", "pale", "sun-dark", "ruddy", "sallow", "freckled"],
-      "hair": ["cropped hair", "a grey braid", "unruly hair", "a shaved head", "a long plait", "thinning hair"],
-      "age": ["young", "greying", "old", "middle-aged", "barely grown", "elderly"],
-      "marks": ["a burn-scarred hand", "a missing tooth", "a notched ear", "a crooked nose", "ink-stained fingers", "a healed cut across the brow"]
+      "stature": [
+        "tall",
+        "short",
+        "average-height",
+        "long-limbed",
+        "compact",
+        "rangy"
+      ],
+      "build": [
+        "stocky",
+        "slight",
+        "broad-shouldered",
+        "wiry",
+        "heavyset",
+        "lean"
+      ],
+      "gait": [
+        "quick-stepping",
+        "slow-moving",
+        "stooped",
+        "straight-backed",
+        "limping",
+        "restless"
+      ],
+      "complexion": [
+        "weathered",
+        "pale",
+        "sun-dark",
+        "ruddy",
+        "sallow",
+        "freckled"
+      ],
+      "hair": [
+        "cropped hair",
+        "a grey braid",
+        "unruly hair",
+        "a shaved head",
+        "a long plait",
+        "thinning hair"
+      ],
+      "age": [
+        "young",
+        "greying",
+        "old",
+        "middle-aged",
+        "barely grown",
+        "elderly"
+      ],
+      "marks": [
+        "a burn-scarred hand",
+        "a missing tooth",
+        "a notched ear",
+        "a crooked nose",
+        "ink-stained fingers",
+        "a healed cut across the brow"
+      ]
     }
+  },
+  "story.scene": {
+    "_ABSENCE_RE": {
+      "$type": "regex",
+      "flags": 2,
+      "pattern": "\\b(?:no|not|none|nothing|neither|nor|never|without|absent|lacks?|lacking|hidden|concealed|invisible|missing|free\\s+of|devoid)\\b"
+    },
+    "_DANGLING_TAIL_RE": {
+      "$type": "regex",
+      "flags": 2,
+      "pattern": "\\b(?:with|and|or|of|in|on|at|from|by|the|a|an|her|his|their|its)$"
+    },
+    "_UNREMARKABLE_LABEL": "a person whose appearance is unremarkable",
+    "_CLAUSE_RE": {
+      "$type": "regex",
+      "flags": 0,
+      "pattern": "\\s*([^;.!?]+)([;.!?]*)"
+    },
+    "_CLAUSE_JOIN_PERIOD": ". ",
+    "_CLAUSE_JOIN_SEMICOLON": "; ",
+    "_SENTENCE_END": ".",
+    "_SENTENCE_ENDS": ".!?"
   }
 }

@@ -80,6 +80,44 @@ def put_memory_vector(vkey, embedding, cue_embedding, model, dim):
     return True
 
 
+def file_memory_vector(embedding, cue_embedding, model, dim):
+    """File a memory's vector pair in the content-addressed store AT MINT
+    TIME, from whichever writer produced it.
+
+    Until 2026-09-07 the store was populated by the per-turn CHECKPOINT:
+    `dump_chat_memories(inline_vectors=False)` selected every memory row with
+    both 20 KB blobs, hashed each, and `INSERT OR IGNORE`d each inside a
+    transaction -- every turn, twice on a data_version race, from a function
+    two callers document as "does no writes". Filing once, where the vector
+    is written, makes the checkpoint the read it claims to be. Idempotent
+    like `put_memory_vector`; a fallback vector is filed too, because the
+    checkpoint that references it must resolve whatever quality it had.
+    """
+    if embedding is None or cue_embedding is None:
+        return False
+    return put_memory_vector(vector_address(embedding, cue_embedding),
+                             embedding, cue_embedding, model, dim)
+
+
+def backfill_memory_vectors(c):
+    """One-shot, on a file crossing schema v37 (`core.db.init`): file every
+    existing memory vector so the checkpoint can stop doing it per turn. Runs
+    on the raw connection the migration chain holds; idempotent."""
+    rows = c.execute(
+        "SELECT embedding, cue_embedding, embedding_model, embedding_dim "
+        "FROM memories WHERE embedding IS NOT NULL "
+        "AND cue_embedding IS NOT NULL").fetchall()
+    now = time.time()
+    for row in rows:
+        full, cue, model, dim = row[0], row[1], row[2], row[3]
+        c.execute(
+            "INSERT OR IGNORE INTO memory_vectors"
+            "(vkey,embedding,cue_embedding,embedding_model,embedding_dim,created) "
+            "VALUES(?,?,?,?,?,?)",
+            (vector_address(full, cue), full, cue, model or "", dim, now))
+    return len(rows)
+
+
 def get_memory_vectors(vkeys):
     """{vkey: (embedding_blob, cue_blob, model, dim)} for the keys that exist."""
     keys = [str(k) for k in (vkeys or []) if str(k or "").strip()]
@@ -181,16 +219,12 @@ def dump_chat_memories(chat_id, *, inline_vectors=True):
     The restore path accepts either shape, so an old checkpoint written before
     this existed still restores from its inline vectors unchanged.
     """
+    # NO WRITES. Every memory vector is filed in the store when it is
+    # written (`file_memory_vector`, from each embedding writer) and the
+    # rows of a file that predates that were filed once at schema v37, so a
+    # checkpoint references vectors by address and inserts nothing -- the
+    # read the two callers document it as.
     rows = q("SELECT * FROM memories WHERE chat_id=? ORDER BY CASE WHEN turn_idx IS NULL THEN 1 ELSE 0 END, turn_idx, id", (chat_id,))
-    if not inline_vectors:
-        with transaction():
-            for r in rows:
-                if r["embedding"] is None or r["cue_embedding"] is None:
-                    continue
-                put_memory_vector(
-                    vector_address(r["embedding"], r["cue_embedding"]),
-                    r["embedding"], r["cue_embedding"],
-                    r["embedding_model"], r["embedding_dim"])
     return [
         {"char_id": r["char_id"], "turn_id": r["turn_id"], "turn_idx": r["turn_idx"],
          "frame_id": r["frame_id"],

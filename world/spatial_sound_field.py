@@ -1683,8 +1683,37 @@ def far_path_gain(scene, listener_room, source_room):
     probe = SPEECH_DB["shout"]
     rec = room_sound_flood(scene, source_room, probe).get(listener_room)
     if rec is None:
-        return 0.0
+        # The flood terminates on audibility, so "no record" is two
+        # different facts: the rooms are joined and a shout dies before it
+        # arrives (0.0, an answer), or NO chain of edges joins them at all
+        # -- another world, a ship in orbit -- and the question does not
+        # apply (None). Answering 0.0 for the second stamped `signal` on a
+        # pair the air has no relationship to, and the composer's device
+        # rescue, which is gated on the air having no answer, was withdrawn
+        # for exactly the hail it exists for.
+        return 0.0 if _rooms_joined(scene, listener_room, source_room) else None
     return ratio_of_db(float(rec["db"]) - probe)
+
+
+def _rooms_joined(scene, a, b) -> bool:
+    """Is there ANY chain of declared edges between these rooms, whatever the
+    barriers. Connectivity, not passability: a wall is a relationship."""
+    from world.spatial_barriers import neighbor_map
+    graph = neighbor_map(scene, None)
+    seen = {str(a)}
+    frontier = [str(a)]
+    while frontier:
+        nxt = []
+        for room_id in frontier:
+            for other in graph.get(room_id, ()):
+                other = str(other)
+                if other == str(b):
+                    return True
+                if other not in seen:
+                    seen.add(other)
+                    nxt.append(other)
+        frontier = nxt
+    return False
 
 
 def stamp_sound_relation(scene: dict, rel: dict, observer: str, target: str,

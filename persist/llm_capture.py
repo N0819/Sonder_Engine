@@ -8,7 +8,7 @@ counts and durations, never content."
 
 Content is the half a turn cannot be reconstructed without. The step outputs
 are persisted as variants, so what a stage ANSWERED survives; what it was
-ASKED does not, and neither does the reasoning of the six specialist sub-calls
+ASKED does not, and neither does the reasoning of the five specialist sub-calls
 that have no step rows of their own. Both are needed to read a turn in order.
 
 WHY CONTENT-ADDRESSED, and not a log file. A single beat sends ~104KB of sheet
@@ -143,7 +143,7 @@ def record_exchange(*, turn_id: int | None, step_key: str, role: str,
     `seq` is assigned per turn at insert time, so it is only the order calls
     were STARTED in if the caller inserts them in that order --
     `runtime._with_engine_notes` sorts by `started` before flushing, and that
-    is where the guarantee lives. It matters because the six specialists run
+    is where the guarantee lives. It matters because the five specialists run
     concurrently and finish out of order, so completion order is not the order
     anything happened in.
 

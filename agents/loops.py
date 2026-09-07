@@ -29,6 +29,7 @@ from .common import (
     cut_short_speech,
     _character_by_id,
     _character_display_name,
+    _recognizes,
     character_scene_keys,
     _conceal_from_targets_observer,
     _delivery_ok,
@@ -260,10 +261,17 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
             continue
         observer_sheet = json.loads(row["sheet"])
         observer_name = character_name(observer_sheet)
-        if actor_name in (known.get(observer_name) or []):
+        # THE SAME PREDICATE AS EVERY OTHER LABEL SITE (`_recognizes`): bare
+        # membership is string equality, so a rank or title variant of a
+        # body this observer knows was a stranger here and a person in the
+        # composed view a stage later; and the aliases the actor answers to
+        # go into the label's scrub as they do at every other site.
+        if _recognizes(actor_name, set(known.get(observer_name) or [])):
             display = actor_name
         else:
-            display = _unknown_actor_label(actor_name, actor_appearance)
+            display = _unknown_actor_label(
+                actor_name, actor_appearance,
+                character_scene_keys(actor_sheet)[1:])
         observer_room = character_room(scene, observer_sheet)
         # THE body-to-body relation builder: it carries concealment, the
         # crossing grace, and the enclosure directions the bare room-level

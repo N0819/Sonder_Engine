@@ -636,7 +636,7 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
                if key not in external}
     walking, travelled, walked = continue_walks(
         walking, hours, neighbors, charter.get("travelled"),
-        charter.get("walked"))
+        charter.get("walked"), scene=scene)
     bodies = dict(charter["bodies"], **walking)
     bodies, travelled, walked = relocate(
         bodies, movable_watch, charter["posts"], scene, travelled,
@@ -993,7 +993,16 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     trigger_fired = list(trigger_fired) + list(institution_fired)
     if institution_ops:
         scheduled = list(charter.get("interventions") or ())
-        commitments_now = charter.get("commitments")
+        # INTO THE ADVANCED STORE. `advance_commitments` above already
+        # rebound `commitments` for this window; settling into a fresh copy
+        # of the INCOMING `charter["commitments"]` and rebinding only
+        # `charter` left `after_charter["commitments"] = commitments` (the
+        # tail) writing the un-settled store back, so every institution rule
+        # that repudiated or discharged a bargain emitted its witnessed
+        # `commitment_<state>` event and changed nothing: heads learned a
+        # bargain had ended that the ledger still held open, and the rule
+        # refired after its refractory.
+        commitments_now = commitments
         for op in institution_ops:
             if op["op"] == "intervene":
                 scheduled.append(op["intervention"])
@@ -1006,6 +1015,7 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
                     "commitment_" + op["state"], at + hours, "",
                     commitment_id=cid, by=charter["key"], actor=charter["key"],
                     note=op["rule"]))
+        commitments = commitments_now
         charter = dict(charter, interventions=scheduled,
                        commitments=commitments_now)
     regard = dict(politics.get("regard") or {})

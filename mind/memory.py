@@ -117,6 +117,7 @@ from mind.memory_snapshot import (  # noqa: F401
     put_memory_vector, restore_chat_memories, restore_lorebook,
     restore_lore_overlays,
     restore_memory_summaries, restore_memory_vectors, vector_address,
+    backfill_memory_vectors, file_memory_vector,
 )
 from mind.memory_relationships import (  # noqa: F401
     RELATIONSHIP_AXES, Relationship, RelationshipGraph, _TRUST_INFERENCE_STEP,

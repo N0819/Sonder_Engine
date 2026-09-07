@@ -274,7 +274,7 @@ def _t_inspect_rooms(cid, frame_id, *, room_ids=None):
                 who["attire"] = attire_summary(who["attire"])
         return rows
 
-    scene = _scene(cid)
+    scene = _scene(cid, frame_id)
     if room_ids:
         wanted = [str(r) for r in room_ids]
         rows = slices(wanted)
@@ -322,7 +322,7 @@ def _route_graph(cid, scene, contained):
 
 
 def _t_inspect_route(cid, frame_id, *, from_room, to_room):
-    scene = _scene(cid)
+    scene = _scene(cid, frame_id)
     contained = _containment(scene)
     graph = _route_graph(cid, scene, contained)
     origin, goal = str(from_room), str(to_room)
@@ -614,7 +614,7 @@ def _t_inspect_charters(cid, frame_id, *, charter=None, body=None,
     rows_per_page = _cap(limit, CHARTER_PAGE_CAP,
                          CHARTER_PAGE if charter else CHARTER_OVERVIEW_ROWS)
     try:
-        placements = charter_placements(registry, _scene(cid))
+        placements = charter_placements(registry, _scene(cid, frame_id))
     except Exception:
         # A scene that cannot be read costs the station column, never the
         # institution: every other field here is the registry's own.
@@ -699,7 +699,7 @@ def _t_inspect_events(cid, frame_id, *, n=None, full=False):
 def _t_inspect_clock(cid, frame_id):
     from core.db import q, wget_for_frame
     from world.day_cycle import DAY_LENGTH_HOURS_DEFAULT, phase_of_hour
-    scene = _scene(cid)
+    scene = _scene(cid, frame_id)
     clock = wget_for_frame(cid, "simulation_clock", frame_id, {}) or {}
     row = q("SELECT MAX(idx) AS idx FROM turns WHERE chat_id=?", (cid,), one=True)
     hour = clock.get("hour_of_day")
@@ -802,7 +802,7 @@ def _t_inspect_contradictions(cid, frame_id):
     from world.planned_entities import planned_entities
     from world.planning_needs import open_planning_needs
     from world.structure import planned_context, planned_room_ids
-    scene = _scene(cid)
+    scene = _scene(cid, frame_id)
     contained = _containment(scene)
     # A containment room is not a room the world is missing and not one a
     # thing can dangle in: it is a body's inside, transient by nature.

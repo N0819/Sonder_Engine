@@ -293,6 +293,23 @@ def list_shaped_fields(model_cls):
     return out
 
 
+def dict_shaped_fields(model_cls):
+    """Field names whose OUTER annotation is a dict, parametrized or not --
+    the keyed-table channels. The twin of `list_shaped_fields`, for the same
+    reader: a writer that must handle EVERY channel of a diff derives the
+    two shapes from the model instead of restating them by hand, because the
+    hand-kept copies (`_normalize_diff_shape`, `_merge_repair_into_diff`)
+    each drifted to a subset and silently dropped the rest. Optional
+    containers (`destruction: Optional[dict]`) are deliberately NOT here:
+    their absence is a fact (nothing was destroyed), not a missing table."""
+    out = set()
+    for name, field in _fields(model_cls).items():
+        annotation = _outer_annotation(field)
+        if annotation is dict or get_origin(annotation) is dict:
+            out.add(name)
+    return out
+
+
 # ---- Enums ----
 
 class SpeechVolume(str, Enum):
@@ -1181,7 +1198,7 @@ class OtherPlayerInterpret(LenientModel):
 class DirectorInterpret(LenientModel):
     kind: str = "mixed"
     # The ruling channel, mirroring DirectorResolve. `director_interpret` fans
-    # out to the same six specialists (director.py's `_run_specialists`), so a
+    # out to the same five specialists (director.py's `_run_specialists`), so a
     # hand reading only the player's declaration was left to infer what the
     # Director made of it -- the exact gap the channel was built to close,
     # on half the Director's specialist work.
@@ -1860,6 +1877,21 @@ class DialogueLogEntry(LenientModel):
     tone: str = ""
     visibility: ActionVisibility = ActionVisibility.overt
     conceal_from: list[str] = Field(default_factory=list)
+    # WHAT CARRIED THE LINE. The output shape has asked for `medium?:'comm'`
+    # since the comm channel was built and five readers consume it
+    # (composer's device rescue, perception's log copy, the fan-out's
+    # dialogue slice, the Director's roster of lines, the scope gate) -- and
+    # the field was never declared here, so `extra='ignore'` stripped it on
+    # the strict path before any of them ran. A transmitted line then reached
+    # its remote addressee only through the by-name rescue, which the
+    # composer refuses whenever the sound field has an answer, i.e. in every
+    # mapped building. Open string, casefolded: `comm` is the one value the
+    # engine reads today; a story's sign, text or mind-to-mind channel has a
+    # place to be named without a schema change.
+    medium: str = ""
+
+    _norm_medium = validator("medium", pre=True, allow_reuse=True)(
+        lambda cls, v: str(v or "").strip().casefold())
     # How the sound was FORMED -- the sibling of volume, which is how loud it
     # was made. NOT a model-authored field: the reconciliation seam stamps it
     # deterministically from the contact ledger (and clears it), so a value
@@ -4862,7 +4894,7 @@ OUTPUT_EXAMPLES = {
     # This is the PROSE AUTHOR's example -- `director_resolve` is the step
     # key its call runs under. It owns the beat's prose, its dialogue, the
     # manifest and six `state_diff` channels; the other twenty-nine belong to
-    # the six specialists, whose own examples are below. So it shows those six
+    # the five specialists, whose own examples are below. So it shows those five
     # and nothing else: a channel in this example that the author no longer
     # owns is an instruction to spend the beat encoding something a specialist
     # is being asked for in the same fan-out, and whatever it writes there is

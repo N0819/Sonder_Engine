@@ -8,8 +8,10 @@ from world.day_cycle import DAY_LENGTH_HOURS_DEFAULT
 
 _UNSET = object()
 
+from language_runtime import linguistic
 from story.character_schema import (
     EXTRA_PART_ASPECTS,
+    name_boundary_pattern,
     _extra_part_placement,
     cast_entity_id,
     character_abilities,
@@ -858,14 +860,17 @@ def transformed_parts(authored_parts, transformation):
     return transformation.get("parts") or []
 
 
-#: How a sentence says absence. Lifted from `conceal_disguised_parts`'s own
-#: comment, which enumerated them to explain why a negation could not be read
-#: as permission -- the same list, now used to stop the negation reaching an
-#: observer at all.
-_ABSENCE = re.compile(
-    r"\b(?:no|not|none|nothing|neither|nor|never|without|absent|lacks?|"
-    r"lacking|hidden|concealed|invisible|missing|free\s+of|devoid)\b",
-    re.IGNORECASE)
+def _ling(name):
+    """One cue of the disguise-disclosure guard, in the story's own language.
+
+    The guard's vocabulary -- how a sentence says absence, which tail words
+    leave a fragment, the label a concealed body falls back to -- lived here
+    as English literals, so on a Japanese story the guard read every denial
+    as a description and passed the canonical body through with no warning,
+    and the fallback label was an English sentence in a Japanese view.
+    `linguistics.json` carries a `story.scene` section in every pack.
+    """
+    return linguistic("story.scene", name)
 
 
 def _positive_presented_appearance(presented, concealed_terms):
@@ -899,11 +904,16 @@ def _positive_presented_appearance(presented, concealed_terms):
     if not tokens:
         return text
     kept, seps, dropped = [], [], False
-    for match in re.finditer(r"\s*([^;.!?]+)([;.!?]*)", text):
+    # The clause grammar is the pack's: what separates clauses, how kept
+    # ones are rejoined and what ends a sentence. With ASCII punctuation
+    # alone a Japanese sentence was one clause, so a denial anywhere in it
+    # dropped the whole description and the guard fell to the generic label.
+    for match in _ling("_CLAUSE_RE").finditer(text):
         clause = match.group(1).strip()
         if not clause:
             continue
-        if _ABSENCE.search(clause) and (_part_tokens(clause) & tokens):
+        if _ling("_ABSENCE_RE").search(clause) \
+                and (_part_tokens(clause) & tokens):
             dropped = True
             continue
         kept.append(clause)
@@ -921,10 +931,13 @@ def _positive_presented_appearance(presented, concealed_terms):
     # Rejoin with the punctuation the sentence actually used. Splitting on the
     # separators and joining with a space welded two clauses into one
     # ungrammatical run ("...top of her head her appearance is...").
-    joiner = ". " if all(s.startswith(".") for s in seps[:-1] or ["."]) else "; "
-    out = joiner.join(kept).strip(" ;,")
-    if out and not out.endswith((".", "!", "?")):
-        out += "."
+    period = str(_ling("_CLAUSE_JOIN_PERIOD"))
+    period_marks = tuple(str(_ling("_SENTENCE_ENDS")))
+    joiner = (period if all(s[:1] in period_marks for s in seps[:-1] or [period.strip()])
+              else str(_ling("_CLAUSE_JOIN_SEMICOLON")))
+    out = joiner.join(kept).strip(" ;,；、")
+    if out and not out.endswith(period_marks):
+        out += str(_ling("_SENTENCE_END"))
     return out
 
 
@@ -946,7 +959,12 @@ def disguised_visible_appearance(true_appearance, disguise):
         scrubbed = true_appearance
         matched = False
         for t in terms:
-            scrubbed, n = re.subn(rf"\b{re.escape(t)}\b", "", scrubbed, flags=re.IGNORECASE)
+            # Per-edge boundaries (`name_boundary_pattern`): `\b` never
+            # matches between two kana or Han characters, so a concealed
+            # term in an unspaced script was never scrubbed and the true
+            # appearance fell through to the observer.
+            scrubbed, n = re.subn(name_boundary_pattern(t), "", scrubbed,
+                                  flags=re.IGNORECASE)
             matched = matched or bool(n)
         # Collapse the punctuation/space debris a removal leaves behind.
         scrubbed = re.sub(r"\s*[;,]\s*(?=[;,])", "", scrubbed)
@@ -960,11 +978,10 @@ def disguised_visible_appearance(true_appearance, disguise):
         # now reachable, because a presented appearance made entirely of
         # denials falls through to here. Require something that can end a
         # sentence.
-        if matched and scrubbed and not re.search(
-                r"\b(?:with|and|or|of|in|on|at|from|by|the|a|an|her|his|"
-                r"their|its)$", scrubbed, re.IGNORECASE):
+        if matched and scrubbed \
+                and not _ling("_DANGLING_TAIL_RE").search(scrubbed):
             return scrubbed
-    return "a person whose appearance is unremarkable"
+    return str(_ling("_UNREMARKABLE_LABEL"))
 
 
 def _part_tokens(text):
@@ -978,9 +995,26 @@ def _part_tokens(text):
     matter ("glass" -> "glas") as long as both sides are stripped the same
     way, which is the whole trick."""
     out = set()
-    for word in re.findall(r"[a-z]+", str(text or "").casefold()):
+    for word in re.findall(r"[^\W\d_]+", str(text or "").casefold()):
+        if _UNSPACED_RUN.search(word):
+            # A run of an unspaced script is not one word: prose does not
+            # separate 尾 from its particle, so the run itself is a token
+            # and so is each character in it. That is what lets a grant
+            # written 尾と耳 admit a part whose kind is 尾, and refuse one
+            # whose kind is 角 -- the subset test below, unchanged.
+            out.add(word)
+            out.update(ch for ch in word if _UNSPACED_RUN.match(ch))
+            continue
         out.add(word[:-1] if len(word) > 3 and word.endswith("s") else word)
     return out
+
+
+#: Characters of scripts that put no spaces between words (Han, kana, Hangul
+#: and their extensions), for `_part_tokens`. The same class
+#: `character_schema.name_boundary_pattern` judges a name's edges by.
+_UNSPACED_RUN = re.compile(
+    r"[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uac00-\ud7af"
+    r"\U00020000-\U0002ffff]")
 
 
 def conceal_disguised_parts(parts_by_name, disguises):

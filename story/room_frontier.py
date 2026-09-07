@@ -107,9 +107,8 @@ def frontier_report(cid, frame_id=None, scene=None):
     from world.planned_entities import planned_entities
     from world.planning_needs import open_planning_needs
     if scene is None:
-        from core.db import q
-        chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
-        scene = (get_scene(cid, chat) if chat else {}) or {}
+        from story.room_slice import read_scene
+        scene = read_scene(cid, frame_id) or {}
     start = _player_room(cid, scene)
     reachable, stubs = rooms_ahead(cid, scene, start)
     from story.room_slice import containment

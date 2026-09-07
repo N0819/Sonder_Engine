@@ -85,7 +85,8 @@ from world.background_claims import (
 
 from story.scene import persona_of
 
-from .common import (_agent_json, _unknown_actor_label, character_room,
+from .common import (_agent_json, _recognizes, _unknown_actor_label,
+                     character_room, character_scene_keys,
                      communication_surface, observable_action_text,
                      scene_figures)
 
@@ -187,7 +188,8 @@ def _filtered_player_declaration(ctx, sc, name, here):
     return raw if here == p_room else ""
 
 
-def _beat_for_presence(dr, sc, station_room, name, beat_room=None):
+def _beat_for_presence(dr, sc, station_room, name, beat_room=None,
+                       label=None):
     """What the presence objectively perceives of the beat. Prefer the audible
     dialogue at its station room over the raw resolved_event: resolved_event is
     authored from the omniscient objective frame and can narrate content a
@@ -247,9 +249,12 @@ def _beat_for_presence(dr, sc, station_room, name, beat_room=None):
             # requires "full" to count a line as addressed; these two paths
             # reading the same level differently is the bug.
             audible.append(
-                "an indistinct exchange%s" % (f" from {speaker}" if speaker else ""))
+                "an indistinct exchange%s"
+                % (f" from {label(speaker) if label else speaker}"
+                   if speaker else ""))
             continue
-        audible.append("%s: %s" % (speaker, quote) if speaker else quote)
+        audible.append("%s: %s" % (label(speaker) if label else speaker,
+                                   quote) if speaker else quote)
     if audible:
         return " ".join(audible).strip()
     # No audible line: fall back to the beat's prose ONLY for a presence whose
@@ -1020,6 +1025,7 @@ def _manager_events(ctx, dr, sc, managed, level):
     """Admitted events with per-presence audience tags. The hard filter runs
     here, before the model sees anything."""
     events = []
+    label = _presence_label_fn(ctx, *[n for _t, n, _r, _rm in managed])
     for d in (dr.get("dialogue_log") or []):
         quote = str(d.get("exact_quote") or "").strip()
         if not quote:
@@ -1028,10 +1034,10 @@ def _manager_events(ctx, dr, sc, managed, level):
         if aud is None:
             continue
         events.append({
-            "speaker": str(d.get("speaker") or "").strip(),
+            "speaker": label(str(d.get("speaker") or "").strip()),
             "quote": quote,
             "volume": d.get("volume") or "normal",
-            "intended_target": d.get("intended_target") or "",
+            "intended_target": label(str(d.get("intended_target") or "")),
             "tone": d.get("tone") or "",
             "audience": aud,
         })
@@ -1494,7 +1500,7 @@ def _present_others(ctx, sc, here, recognized=None):
     # else's.
     if p_name and _room_of(sc, p_name) == room:
         present_others.append(
-            p_name if p_name in recognized
+            p_name if _recognizes(p_name, recognized)
             else _unknown_actor_label(p_name, persona_appearance(pers)))
     for row in ctx.cast:
         sh = json.loads(row["sheet"])
@@ -1505,9 +1511,53 @@ def _present_others(ctx, sc, here, recognized=None):
         if character_room(sc, sh) != room:
             continue
         present_others.append(
-            cname if cname in recognized
-            else _unknown_actor_label(cname, character_appearance(sh)))
+            cname if _recognizes(cname, recognized)
+            else _unknown_actor_label(cname, character_appearance(sh),
+                                      character_scene_keys(sh)[1:]))
     return present_others
+
+
+def _presence_label_fn(ctx, *presence_names):
+    """`name -> what these presences may call them`: the identity floor
+    `observer_label_fn` is for the cast, built on the presences' own
+    recognition (`_presence_recognizes`, the intersection when several share
+    one payload).
+
+    ONE FLOOR FOR EVERY FIELD. `present_others` passed through this gate and
+    nothing else in a presence's payload did: the beat's audible lines were
+    attributed by canonical speaker, the scene manager's event stream carried
+    `speaker` and `intended_target` raw, and `addressed_by` was gated for
+    the player alone -- so a bystander who had never been introduced to
+    anyone received every name in the room through three fields beside the
+    one that withheld them.
+    """
+    recognized = _presence_recognizes(ctx, *presence_names)
+    own = {str(n or "").strip() for n in presence_names}
+    sheets = {}
+    for row in ctx.cast:
+        try:
+            sh = json.loads(row["sheet"])
+        except Exception:
+            continue
+        cname = character_name(sh)
+        if cname:
+            sheets[cname] = (character_appearance(sh),
+                             character_scene_keys(sh)[1:])
+    pers = persona_of(ctx.chat)
+    p_name = persona_name(pers)
+    if p_name:
+        sheets.setdefault(p_name, (persona_appearance(pers), []))
+
+    def label(name):
+        text = str(name or "").strip()
+        if not text or text in own or _recognizes(text, recognized):
+            return text
+        info = sheets.get(text)
+        if info is None:
+            return text         # not a body: an entity, a room, a prop
+        return _unknown_actor_label(text, info[0], info[1])
+
+    return label
 
 
 def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce,
@@ -1565,19 +1615,15 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce,
             addressed_by = {"speaker": persona_name(persona_of(ctx.chat)),
                             "exact_quote": quote, "tone": "", "beats_ago": 0}
     if addressed_by and addressed_by.get("speaker"):
-        # The player's NAME travels only where recognition earned it; an
-        # unacquainted presence gets the same appearance label every other
-        # seam mints for a stranger (_unknown_actor_label). The quote itself
-        # is already channel-filtered.
-        pers = persona_of(ctx.chat)
-        p_name = persona_name(pers)
-        if (p_name
-                and str(addressed_by.get("speaker") or "").casefold()
-                == p_name.casefold()
-                and p_name not in _presence_recognizes(ctx, name)):
-            addressed_by = dict(addressed_by)
-            addressed_by["speaker"] = _unknown_actor_label(
-                p_name, persona_appearance(pers))
+        # A NAME travels only where recognition earned it -- the player's
+        # and every cast member's alike; an unacquainted presence gets the
+        # same appearance label every other seam mints for a stranger. This
+        # gated the player alone, so a character who addressed the presence
+        # was named to it every time. The quote itself is already
+        # channel-filtered.
+        addressed_by = dict(addressed_by)
+        addressed_by["speaker"] = _presence_label_fn(ctx, name)(
+            str(addressed_by.get("speaker") or "").strip())
 
     institutional_context = []
     if here:
@@ -1635,7 +1681,8 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce,
         "beat": {
             "resolved_event": _beat_for_presence(
                 dr, sc, here, name,
-                beat_room=_player_room(ctx, sc)),
+                beat_room=_player_room(ctx, sc),
+                label=_presence_label_fn(ctx, name)),
             "addressed_by": addressed_by,
             "player_declaration": _filtered_player_declaration(
                 ctx, sc, name, here),

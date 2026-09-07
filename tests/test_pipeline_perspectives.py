@@ -198,16 +198,16 @@ class TestConcurrencyIsVisible:
         assert "parallel_with=" in src
 
     def test_both_pairings_go_through_the_one_helper(self):
-        """Character siblings and narrator beside narrator_extra were copies
-        of the same body — which is why making concurrency visible had to
-        mean editing it in every copy. (The third pairing, mapping beside
-        action-onset perception, went with the mapping model: the world
-        context is compiled deterministically before perception, so there is
-        no provider latency left to overlap.)"""
+        """Character siblings, narrator beside narrator_extra, and the world
+        compiler beside action-onset perception were copies of the same body
+        — which is why making concurrency visible had to mean editing it in
+        every copy. The third pairing left with the mapping model and came
+        back on 2026-09-07: the compiler pays an embedding round trip
+        (`search_lore`) that perception never waits on."""
         from agents import runtime
 
         src = inspect.getsource(runtime._run_pipeline)
-        assert src.count("_run_parallel_group(") == 2
+        assert src.count("_run_parallel_group(") == 3
         assert "_stream_parallel(bus, jobs, holders)" not in src
 
     def test_the_live_log_marks_a_group(self):

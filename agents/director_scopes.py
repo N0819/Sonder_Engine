@@ -24,6 +24,7 @@ from typing import get_origin
 from core.db import q
 from world.survival import survival_enabled
 
+from .director_lingua import _ling
 from .director_views import (
     _artifacts_view,
     _carried_reports_view,
@@ -145,6 +146,16 @@ SPECIALISTS = {
                      "remove_adjacent", "stations", "poses", "comms_ops"),
     },
 }
+
+#: A hand that no longer exists, and the hand that owns its channels now. A
+#: ruling keyed by a retired name is a ruling the Director made and the engine
+#: can say for whom -- routing it is bookkeeping, refusing it un-dispatches a
+#: correct ruling. The `offscreen` hand was retired 2026-09-04 (its traffic
+#: channels are `social`'s), and until 2026-09-07 both stage sheets still
+#: taught its name, so every crowd/courier/telling ruling keyed as instructed
+#: was reported unrouted and no hand ran. Stored presets and model habit
+#: outlive a sheet edit; this map is what makes the retirement safe.
+RETIRED_HANDS = {"offscreen": "social"}
 
 #: Channels an ACT OF SPEECH can write. Saying a thing is not a physical
 #: action, so for most channels a line of dialogue is material a hand cannot
@@ -611,7 +622,8 @@ _PROSE_DUTY_SHIPPED = {
 
 
 def _gate_facts(ctx, sc, *, physical, speech, material_effects=False,
-                resolved_stage=False, crowds_rows=None):
+                resolved_stage=False, crowds_rows=None, notices_rows=None,
+                couriers_rows=None, reports_rows=None, unratified_rows=None):
     """The scene facts every channel gate reads, computed once per stage,
     at that stage's own time. Standing scene state (ledgers, settings) plus
     the two structured beat facts the caller supplies; no prose anywhere.
@@ -637,14 +649,23 @@ def _gate_facts(ctx, sc, *, physical, speech, material_effects=False,
                 "vehicle", "building", "structure", "ship", "boat")
             or e.get("interior_rooms"))
         for e in entities.values())
-    try:
-        notices = bool(_artifacts_view(chat_id, sc))
-    except Exception:
-        notices = True
-    try:
-        reports = bool(_carried_reports_view(ctx))
-    except Exception:
-        reports = True
+    # THE PAYLOAD'S OWN ROWS, when the stage built them (the `crowds_rows`
+    # rule, extended to the other four views this gate recomputed): two
+    # reads for one bool, and the gate and the payload could not disagree.
+    if notices_rows is not None:
+        notices = bool(notices_rows)
+    else:
+        try:
+            notices = bool(_artifacts_view(chat_id, sc))
+        except Exception:
+            notices = True
+    if reports_rows is not None:
+        reports = bool(reports_rows)
+    else:
+        try:
+            reports = bool(_carried_reports_view(ctx))
+        except Exception:
+            reports = True
     if crowds_rows is not None:
         crowds = bool(crowds_rows)
     else:
@@ -652,15 +673,21 @@ def _gate_facts(ctx, sc, *, physical, speech, material_effects=False,
             crowds = bool(_crowds_view(chat_id, sc, ctx.turn["idx"]))
         except Exception:
             crowds = True
-    try:
-        couriers = bool(_couriers_view(chat_id, sc))
-    except Exception:
-        couriers = True
-    try:
-        unratified = bool(_unratified_background_claims(
-            chat_id, ctx.turn["idx"]))
-    except Exception:
-        unratified = True
+    if couriers_rows is not None:
+        couriers = bool(couriers_rows)
+    else:
+        try:
+            couriers = bool(_couriers_view(chat_id, sc))
+        except Exception:
+            couriers = True
+    if unratified_rows is not None:
+        unratified = bool(unratified_rows)
+    else:
+        try:
+            unratified = bool(_unratified_background_claims(
+                chat_id, ctx.turn["idx"]))
+        except Exception:
+            unratified = True
     return {
         "physical_beat": bool(physical),
         "speech_present": bool(speech),
@@ -708,21 +735,54 @@ def _note_key_forms(key):
     """
     k = str(key or "").strip().lower()
     forms = {k}
+    if k.endswith("ies"):
+        forms.add(k[:-3] + "y")
     if k.endswith("s"):
         forms.add(k[:-1])
     else:
         forms.add(k + "s")
+        if k.endswith("y"):
+            forms.add(k[:-1] + "ies")
     return forms
 
 
-def _ruling_keys(view):
-    """Every spelling under which the beat's ledger_notes were keyed, with
-    blank rulings dropped (a key whose line is empty ruled nothing)."""
-    forms = set()
-    for key, value in ((view or {}).get("ledger_notes") or {}).items():
-        if isinstance(value, str) and value.strip():
-            forms |= _note_key_forms(key)
-    return forms
+def note_key_targets(key):
+    """Every hand and channel one `ledger_notes` key addresses.
+
+    Returns ``{("hand", name), ("channel", channel), ...}`` -- empty when the
+    key reaches nothing. ONE RESOLVER, read by dispatch (`_ruling_for`), the
+    unrouted report (`_unrouted_rulings`) and the payload's note lookup
+    (`director_fanout._note_for`), so the three cannot disagree about what a
+    key means. In order:
+
+    * a hand's own name, or a retired hand's (`RETIRED_HANDS`);
+    * a channel's name, under the spellings `_note_key_forms` accepts;
+    * the manifest CATEGORY vocabulary -- `_CATEGORY_CHANNELS` through the
+      pack's own aliases -- which is the vocabulary the same author is asked
+      to file `changes_asserted` under. Measured on the channel's first live
+      week: 8 of 11 notes were keyed by channel and the two that were not
+      (`inventory`, `entity`) were category words the manifest table owns
+      and the note lookup did not consult.
+    """
+    forms = _note_key_forms(key)
+    targets = set()
+    for name in SPECIALISTS:
+        if forms & _note_key_forms(name):
+            targets.add(("hand", name))
+    for retired, owner in RETIRED_HANDS.items():
+        if forms & _note_key_forms(retired) and owner in SPECIALISTS:
+            targets.add(("hand", owner))
+    for name, spec in SPECIALISTS.items():
+        for channel in spec["channels"]:
+            if forms & _note_key_forms(channel):
+                targets.add(("channel", channel))
+    if not targets:
+        cat = str(key or "").strip().casefold()
+        cat = _ling("_OMISSION_CATEGORY_ALIASES").get(cat, cat)
+        channel = _CATEGORY_CHANNELS.get(cat)
+        if channel:
+            targets.add(("channel", channel))
+    return targets
 
 
 def _ruling_for(name, view):
@@ -752,17 +812,21 @@ def _ruling_for(name, view):
     the fail-open rule the gate table already follows.
     """
     spec = SPECIALISTS[name]
-    forms = _ruling_keys(view)
     addressed_by = []
     named = []
-    if forms & _note_key_forms(name):
-        addressed_by.append("note")
-    for channel in spec["channels"]:
-        if forms & _note_key_forms(channel):
-            named.append(channel)
-            if "note" not in addressed_by:
-                addressed_by.append("note")
     own = set(spec["channels"])
+    for key, value in ((view or {}).get("ledger_notes") or {}).items():
+        if not (isinstance(value, str) and value.strip()):
+            continue
+        for kind, target in note_key_targets(key):
+            if kind == "hand" and target == name:
+                if "note" not in addressed_by:
+                    addressed_by.append("note")
+            elif kind == "channel" and target in own:
+                if target not in named:
+                    named.append(target)
+                if "note" not in addressed_by:
+                    addressed_by.append("note")
     for item in (view or {}).get("manifest") or []:
         if not isinstance(item, dict):
             continue
@@ -794,16 +858,11 @@ def _unrouted_rulings(view):
     missing and is caught by the plural tolerance, the second names no
     ledger and is exactly this case.
     """
-    known = set()
-    for name, spec in SPECIALISTS.items():
-        known |= _note_key_forms(name)
-        for channel in spec["channels"]:
-            known |= _note_key_forms(channel)
     unrouted = []
     for key, value in ((view or {}).get("ledger_notes") or {}).items():
         if not (isinstance(value, str) and value.strip()):
             continue
-        if not (_note_key_forms(key) & known):
+        if not note_key_targets(key):
             unrouted.append(str(key))
     return unrouted
 

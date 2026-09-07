@@ -1065,6 +1065,16 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
             if new_frame_id is not None:
                 remapped[f"{base}{_FRAME_KEY_SEP}{new_frame_id}"] = val
         blob["world"] = remapped
+        # The integer frame ids INSIDE world values, which the key remap above
+        # and the string id remap never touch -- the same two rescopes
+        # `turn_branch` and the archive import run on the live world. A
+        # checkpoint is restored whole (`restore_checkpoint` rewrites
+        # `world` and `scheduled_events` from the blob), so without them the
+        # first reroll after a branch or import restored SOURCE-chat frame
+        # ids into this chat.
+        _remap_fixed_points_frames(blob["world"], frame_idmap)
+    if isinstance(blob.get("scheduled_events"), list):
+        _remap_scheduled_event_frames(blob["scheduled_events"], frame_idmap)
 
     lore = blob.get("lore")
     if isinstance(lore, dict):
@@ -2897,6 +2907,25 @@ def char_export(cid: int):
 @app.put("/api/characters/{cid}")
 def char_edit(cid: int, body: dict = Body(...)):
     sheet = normalize_character_data(body.get("sheet") or {})
+    # THE REUSABLE CARD IS A TEMPLATE; A STORY KEEPS THE IDENTITY IT WAS
+    # PLAYED UNDER. `chat_character_sheet` resolves `COALESCE(cc.sheet,
+    # ch.sheet)` and attach snapshots nothing, so most attachments read the
+    # library card live -- and renaming it here rekeyed positions, `known`
+    # and memories in every one of those stories, the exact rekey the
+    # story-card route refuses with a 400. Before an identity change lands,
+    # every attachment without a card of its own is given the card it has
+    # been playing under; an edit that keeps the name and uid touches
+    # nothing in the stories, as before.
+    old = q("SELECT sheet FROM characters WHERE id=?", (cid,), one=True)
+    if old:
+        old_sheet = normalize_character_data(json.loads(old["sheet"] or "{}"))
+        old_uid = str((old_sheet.get("identity") or {}).get("uid") or "")
+        new_uid = str((sheet.get("identity") or {}).get("uid") or "")
+        if character_name(old_sheet) != character_name(sheet) \
+                or (old_uid and old_uid != new_uid):
+            qi("UPDATE chat_chars SET sheet=? WHERE char_id=? "
+               "AND (sheet IS NULL OR TRIM(sheet)='')",
+               (old["sheet"], cid))
     qi(
         "UPDATE characters SET name=?,sheet=? WHERE id=?",
         (character_name(sheet), json.dumps(sheet, ensure_ascii=False), cid),
@@ -3855,6 +3884,10 @@ def chat_add_char(cid: int, body: dict = Body(...)):
     ch = body.get("char_id")
     if ch is None:
         raise HTTPException(400, "char_id required")
+    # A scene writer, like every sibling that holds the guard: attaching
+    # mid-turn seeds attire and positions into a scene the pipeline is about
+    # to overwrite.
+    _require_chat_idle(cid)
     char_row = q("SELECT sheet FROM characters WHERE id=?", (ch,), one=True)
     if not char_row:
         raise HTTPException(404, "Character not found")
@@ -4079,6 +4112,7 @@ def chat_add_persona(cid: int, body: dict = Body(...)):
     pid = body.get("persona_id")
     if pid is None:
         raise HTTPException(400, "persona_id required")
+    _require_chat_idle(cid)
     persona_row = q("SELECT sheet FROM personas WHERE id=?", (pid,), one=True)
     if not persona_row:
         raise HTTPException(404, "Persona not found")
@@ -4301,8 +4335,12 @@ def guest_input(request: Request, body: dict = Body(...)):
 
 @app.delete("/api/chats/{cid}/characters/{ch}")
 def chat_del_char(cid: int, ch: int):
+    _require_chat_idle(cid)
+    row = q("SELECT name FROM characters WHERE id=?", (ch,), one=True)
+    if not row:
+        raise HTTPException(404, "Character not found")
     qi("UPDATE chat_chars SET status='dormant' WHERE chat_id=? AND char_id=?", (cid, ch))
-    name = q("SELECT name FROM characters WHERE id=?", (ch,), one=True)["name"]
+    name = row["name"]
     pend = wget(cid, "pending", [])
     pend.append({"type": "departure", "who": name})
     wset(cid, "pending", pend)
@@ -4623,6 +4661,7 @@ def ph_get(cid: int, ch: int):
 
 @app.put("/api/chats/{cid}/characters/{ch}/private_history")
 def ph_put(cid: int, ch: int, body: dict = Body(...)):
+    _require_chat_idle(cid)
     cc = q("SELECT state FROM chat_chars WHERE chat_id=? AND char_id=?", (cid, ch), one=True)
     if not cc: raise HTTPException(404)
     st = json.loads(cc["state"] or "{}")
@@ -4778,6 +4817,7 @@ def attire_put(cid: int, body: dict = Body(...),
                frame_id: int | None = None):
     chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
     if not chat: raise HTTPException(404, "Chat not found")
+    _require_chat_idle(cid)
     with _era(cid, frame_id):
         scene = get_scene(cid, chat)
         # Re-derived, not stored verbatim. `wearing`, `state` and `regions`
@@ -4787,11 +4827,19 @@ def attire_put(cid: int, body: dict = Body(...),
         # reconciliation read the two spellings as two garments and began
         # putting one on while taking the other off. That is where the
         # measured fork actually started.
-        scene["attire"] = {
-            name: (attire.rederive_entry(entry) if isinstance(entry, dict)
-                   else entry)
-            for name, entry in (body or {}).items()
-        }
+        # A PUT WRITES THE ENTRIES IT NAMES. The whole ledger was replaced
+        # by whatever the client sent, and the attire editor sends every
+        # body as its index last read them -- so a second editor's save, or
+        # a beat committed in between, was overwritten by a stale copy. An
+        # entry sent as null is a deletion; a body not named is untouched.
+        current = dict(scene.get("attire") or {})
+        for name, entry in (body or {}).items():
+            if entry is None:
+                current.pop(name, None)
+            else:
+                current[name] = (attire.rederive_entry(entry)
+                                 if isinstance(entry, dict) else entry)
+        scene["attire"] = current
         wset(cid, "scene", scene)
     return {"ok": True}
 
@@ -5668,13 +5716,52 @@ def turn_branch(tid: int):
         # same reason: a branch inherits how the story was CONFIGURED, and a
         # cast that changed colour the moment you branched would read as a
         # rendering fault rather than a new timeline.
+        #
+        # MEMBERSHIP IS THE BRANCH POINT'S, not the source chat's NOW -- the
+        # rule `restore_checkpoint` applies. Copying every current row then
+        # overlaying state by UPDATE meant a character promoted AFTER the
+        # branch point arrived in the new timeline hollow (a row, no
+        # memories, no recognition) and one detached after it was missing
+        # from a timeline it had been standing in. A row carrying an authored
+        # per-story card is kept either way, as the restore keeps it: the
+        # card is Cast-tab authoring, not a turn fact, and the snapshot does
+        # not hold it.
+        snapshot_chars = blob.get("chars") if "chars" in blob else None
+        snapshot_ids = None
+        if snapshot_chars is not None:
+            snapshot_ids = {int(k) for k in snapshot_chars
+                            if str(k).lstrip("-").isdigit()}
+        copied_chars = set()
         for cc in q("SELECT * FROM chat_chars WHERE chat_id=?", (cid,)):
+            if (snapshot_ids is not None
+                    and int(cc["char_id"]) not in snapshot_ids
+                    and not str(cc["sheet"] or "").strip()):
+                continue
             qtx(
                 "INSERT INTO chat_chars"
                 "(chat_id,char_id,status,state,sheet,dialogue_color) "
                 "VALUES(?,?,?,?,?,?)",
                 (ncid, cc["char_id"], cc["status"], cc["state"], cc["sheet"],
                  cc["dialogue_color"] or "")
+            )
+            copied_chars.add(int(cc["char_id"]))
+        for cidk, st in (snapshot_chars or {}).items():
+            if not str(cidk).lstrip("-").isdigit() \
+                    or int(cidk) in copied_chars:
+                continue
+            if not q("SELECT 1 FROM characters WHERE id=?", (int(cidk),),
+                     one=True):
+                continue
+            status = (st.get("status") if isinstance(st, dict)
+                      and "status" in st else "active")
+            state = (st.get("state") if isinstance(st, dict)
+                     and "state" in st else st)
+            qtx(
+                "INSERT INTO chat_chars"
+                "(chat_id,char_id,status,state,sheet,dialogue_color) "
+                "VALUES(?,?,?,?,?,?)",
+                (ncid, int(cidk), status or "active",
+                 json.dumps(state if state is not None else {}), None, "")
             )
 
         # Copy per-frame character overrides (state/status divergence between

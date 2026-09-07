@@ -165,7 +165,9 @@ class TestTheWiring:
         source = inspect.getsource(director.director_resolve)
 
         assert "_unreachable_position_writes(" in source
-        assert "merge_scene_with_diff(sc, sd)" in source
+        # The same merge, memoised on the turn (`route_scene_for`, 2026-09-07):
+        # six route checks in one resolve no longer deep-copy the scene each.
+        assert "route_scene_for(ctx, sc, sd)" in source
         assert 'sd["positions"].pop(_body, None)' in source
 
     def test_it_runs_after_positions_are_canonicalized(self):

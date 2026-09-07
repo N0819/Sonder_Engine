@@ -655,6 +655,7 @@ def ground_recent_history(value, packet):
 
 def _record_shared_recent_history(cid, binding, episodes, *, frame_id=None):
     """Give every named participant a bounded reciprocal event record."""
+    from world.charter_run import _remember_experience
     from world.charter_runtime import registry_for_update, save_registry
 
     # registry_for_update, not registry_for: this function mutates
@@ -675,9 +676,17 @@ def _record_shared_recent_history(cid, binding, episodes, *, frame_id=None):
             if participant == resident_body or participant not in bodies:
                 continue
             event_id = f"shared:{episode.get('source_id')}:{participant}"
-            rows = [row for row in experiences.get(participant, [])
-                    if str((row or {}).get("id") or "") != event_id]
-            rows.append({
+            # Re-authoring the same episode REPLACES its row rather than
+            # counting a repetition, so the old row goes first; the write
+            # itself is `_remember_experience`'s -- sorted, and capped at
+            # `EXPERIENCE_CAP`. This truncated each participant's whole
+            # store to its last sixteen rows, unsorted, so every coworker
+            # of a featured resident lost a month of presim to one shared
+            # memory.
+            experiences[participant] = [
+                row for row in experiences.get(participant, [])
+                if str((row or {}).get("id") or "") != event_id]
+            _remember_experience(experiences, participant, {
                 "id": event_id, "kind": "shared_prestory",
                 "at_hours": float(episode.get("at_hours") or 0.0),
                 "place": str(episode.get("location") or ""),
@@ -687,8 +696,7 @@ def _record_shared_recent_history(cid, binding, episodes, *, frame_id=None):
                     f"I shared {str(episode.get('title') or 'a recent event').casefold()} "
                     f"with {resident_name}. What remained afterward: "
                     f"{str(episode.get('consequence') or 'the encounter still mattered')}."),
-            })
-            experiences[participant] = rows[-16:]
+            }, fold=False)
             written += 1
     if written:
         save_registry(cid, registry, frame_id)

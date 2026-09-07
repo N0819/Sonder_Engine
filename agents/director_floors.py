@@ -1557,9 +1557,13 @@ def _bind_minted_entities_to_present_figures(sc, sd, figures, *,
                              if str(a or "").strip()]
         room = str(positions.get(str(eid)) or positions.get(minted)
                    or fallback_room or "")
-        pool = by_room.get(room) if room else None
-        if not pool:
-            pool = list(people)
+        # WIDEN ONLY WHEN THE ROOM IS UNKNOWN. A known room with no figures
+        # is an answer -- nobody here to be -- and an empty list is falsy,
+        # so `if not pool` widened it to every figure in the player's
+        # ambient scope: "the innkeeper" minted in the empty square bound to
+        # the inn's own keeper a street away, which the docstring above
+        # promises does not happen.
+        pool = by_room.get(room, []) if room else list(people)
         if thing:
             # A minted thing may be the render of a PLANNED thing, by name
             # alone; it is never a person standing here.

@@ -101,12 +101,27 @@ STATUS_PLANNED = "planned"
 STATUS_RETIRED = "retired"
 
 
-def read_scene(cid):
-    """The frame's scene through the engine's own reader."""
-    from core.db import q
+def read_scene(cid, frame_id=None):
+    """The frame's scene through the engine's own reader.
+
+    `frame_id` PINS THE FRAME. `get_scene` routes by the ambient
+    `active_frame_id`, which the Writers' Room routes never set and the
+    streamed worker thread starts with empty -- so every Room reader that
+    took an explicit frame (plans, packages, needs, the registry) read that
+    frame while the scene beside them was the PRESENT frame's, and the
+    apply functions then wrote frame X from a scene that was not X's. None
+    keeps the ambient frame, which is what a route inside `_era` wants.
+    """
+    from core.db import active_frame_id, q
     from story.scene import get_scene
     chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
-    return get_scene(cid, chat) or {}
+    if frame_id is None:
+        return get_scene(cid, chat) or {}
+    token = active_frame_id.set(frame_id)
+    try:
+        return get_scene(cid, chat) or {}
+    finally:
+        active_frame_id.reset(token)
 
 
 def _text(value, limit):
@@ -300,7 +315,7 @@ def room_index(cid, frame_id, scene=None):
     """One row per room the story knows -- live, planned or retired -- with
     its holder and its distance from the cast. The contract is in the
     module docstring."""
-    scene = read_scene(cid) if scene is None else (scene or {})
+    scene = read_scene(cid, frame_id) if scene is None else (scene or {})
     rooms = _rooms(scene)
     registry = _registry(cid)
     statuses = _statuses(scene, registry)
@@ -425,7 +440,7 @@ def room_slices(cid, frame_id, room_ids, scene=None):
     from world.spatial import effective_adjacent
     from world.structure import planned_room_brief
 
-    scene = read_scene(cid) if scene is None else (scene or {})
+    scene = read_scene(cid, frame_id) if scene is None else (scene or {})
     rooms = _rooms(scene)
     registry = _registry(cid)
     statuses = _statuses(scene, registry)

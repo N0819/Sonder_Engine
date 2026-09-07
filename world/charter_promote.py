@@ -261,8 +261,14 @@ def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP):
             "entities": [e for e in entities if e],
             "confidence": round(strength, 4),
             "event_key": str(claim.get("body") or ""),
-            "at_hours": float(claim.get("last_seen") or
-                              claim.get("at_hours") or 0.0),
+            # The keys the claim writers WRITE (`charter_news`,
+            # `charter_observe`): `happened_at` and `as_of_hours`. This read
+            # `last_seen`/`at_hours`, which no claim carries, so every
+            # inherited memory landed at hour zero.
+            "at_hours": float(claim.get("happened_at")
+                              or claim.get("as_of_hours")
+                              or claim.get("last_seen")
+                              or claim.get("at_hours") or 0.0),
         })
 
     # The accusations said to its face. `heard_blame` is the CHANNEL —
@@ -344,7 +350,9 @@ def remembered(charter, body_key, events=(), cap=REMEMBERED_CAP):
             "entities": [other], "confidence":
                 round(float(claim.get("strength") or 0.0), 4),
             "event_key": f"acquaintance:{key}:{other}",
-            "at_hours": float(claim.get("last_seen") or 0.0),
+            "at_hours": float(claim.get("happened_at")
+                              or claim.get("as_of_hours")
+                              or claim.get("last_seen") or 0.0),
         })
 
     # The shape of the working life: one row per post ever stood, however

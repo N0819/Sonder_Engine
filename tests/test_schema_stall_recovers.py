@@ -391,8 +391,13 @@ class TestBothHalvesOfTheDirectorCarryTheRuling:
         for name, text in (("director_interpret", interpret),
                            ("prose_author_sheet", resolve)):
             assert "ledger_notes:{specialist:line}" in text, name
-            # and the six names, which the model otherwise guesses at
-            assert "body|social|contact|objects|spatial|offscreen" in text, name
+            # and the hands' names, which the model otherwise guesses at --
+            # the ROSTER the engine dispatches (`SPECIALISTS`), not a literal:
+            # the sheet carried a retired hand for three days after its
+            # retirement and every ruling keyed to it reached nobody.
+            from agents.director import SPECIALISTS
+            assert "|".join(SPECIALISTS) in text, name
+            assert "offscreen" not in text.split("specialist is one of")[-1][:80], name
 
     def test_no_enumeration_of_the_authors_output_omits_the_ruling(self):
         """Every list of "what your output contains" has to contain it.

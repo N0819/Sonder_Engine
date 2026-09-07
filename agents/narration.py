@@ -1765,8 +1765,14 @@ def narrator(ctx, nonce):
     player_awareness = awareness_of(
         apply_awareness_diff(awareness_map(chat["id"]), _res_diff), player_name)
     _scene_for_frame = ctx.get("outcome_scene") or get_scene(chat["id"], chat)
+    # Through the same identity floor as every other name in this payload:
+    # `spatial_digest` renders `ahead_entity` from `scene.positions`, which is
+    # keyed by canonical name, and `_view_label` was built twenty lines up
+    # for exactly this and not handed over -- the leak `observer_label_fn`'s
+    # docstring records, on the narrator's side.
     _spatial_fields = ({} if player_awareness in NON_AWAKE_GATED else {
-        "spatial_frame": spatial_digest(_scene_for_frame, player_name),
+        "spatial_frame": spatial_digest(_scene_for_frame, player_name,
+                                        label_for=_view_label),
     })
 
     # F1-F4 world-fidelity payload: the pipeline's own ordered event record,
@@ -2229,7 +2235,8 @@ def narrator_extra(ctx, nonce):
 
             "spatial_frame": spatial_digest(
                 ctx.get("outcome_scene") or get_scene(chat["id"], chat),
-                extra.get("name") or ""),
+                extra.get("name") or "",
+                label_for=_extra_view_label(chat["id"], extra, ctx.cast)),
 
             "past_narration": past_narration,
             "current_narration": (extra.get("input") or "").strip(),

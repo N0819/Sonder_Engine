@@ -330,8 +330,11 @@ def rekey_place_claims(updates, place_names, protected=()):
             out.append(update)
             continue
         haystack = f"{about} {update.get('claim') or ''}"
+        # Deferred: `story` imports `mind`, and a module-level import here
+        # would close a new eager package cycle.
+        from story.character_schema import name_boundary_pattern
         hits = [n for n in names
-                if re.search(rf"\b{re.escape(n)}\b", haystack, re.I)]
+                if re.search(name_boundary_pattern(n), haystack, re.I)]
         # Substring shadowing already handled by longest-first; collapse names
         # that are prefixes of an earlier hit.
         distinct = [n for n in hits

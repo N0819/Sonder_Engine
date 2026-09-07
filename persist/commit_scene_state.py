@@ -341,8 +341,16 @@ def _advance_ground(cid, sc):
     rooms = sc.get("rooms") or {}
     if not rooms:
         return
-    severity = weather_severity(cid)
     previous = sc.get("ground") if isinstance(sc.get("ground"), dict) else {}
+    weather = sc.get("weather") if isinstance(sc.get("weather"), dict) else {}
+    if not previous and str(weather.get("precipitation") or "none") \
+            .strip().casefold() in ("", "none"):
+        # Nothing has fallen and nothing is on any floor: every room's
+        # answer is {} and the per-room exposure walk (a BFS over the graph
+        # per room) would only prove it. The common case on most beats.
+        sc.pop("ground", None)
+        return
+    severity = weather_severity(cid)
     ground = {}
     for room_id in rooms:
         state = ground_after(

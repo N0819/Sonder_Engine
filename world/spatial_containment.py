@@ -563,11 +563,45 @@ def _body_interior_holder(scene: dict, name: str):
     if str((entity or {}).get("kind") or "").strip().casefold() \
             in _NEVER_STATIONED_KINDS:
         return None
-    if not _is_body_entity(scene, holder, entity):
+    if not _encloses_as_a_mass(scene, holder, entity, record.get("mode")):
         return None
     if room_of(scene, holder) is None:
         return None
     return holder
+
+
+def _encloses_as_a_mass(scene: dict, holder: str, entity, mode) -> bool:
+    """Is this holder a MASS around what it holds -- a body -- rather than a
+    bag, a crate or a car.
+
+    `mode: interior` IS AFFIRMATIVE EVIDENCE. The ledger's own taxonomy
+    reserves that word for the inside of a body (`materialize_enclosure_
+    interiors`: "`held`, `pocket`, `carried`, `container` are not it"), and
+    a Director that writes it has said what the holder is. Requiring the
+    holder to also wear something or carry a scale (`_is_body_entity`) made
+    every creature minted with no wardrobe -- most of what a horror scene
+    contains -- a crate: a body it had swallowed was heard at `full` from
+    the room, and the interior the record described was never minted (gate
+    3 of the materializer read the same test). `_mass_holder` already
+    argues the direction: exempt what the scene positively says is a
+    conveyance (`state.transit`), not everything that failed to prove it is
+    a body. Every other hiding mode still needs the positive body evidence,
+    because a box you can be heard through must not become a mass.
+    """
+    if _is_body_entity(scene, holder, entity):
+        return True
+    if str(mode or "").strip().casefold() != "interior":
+        return False
+    # The engine's own closed table of things that are never a body -- a
+    # vehicle, a container, a structure -- outranks the record's word, so a
+    # lift car written up as `interior` stays a car (its interior is a room
+    # with a real doorway, `apply_transit_dock_edges`' business).
+    if str((entity or {}).get("kind") or "").strip().casefold() \
+            in _NEVER_STATIONED_KINDS:
+        return False
+    state = entity.get("state") if isinstance(entity, dict) else None
+    return not (isinstance(state, dict)
+                and isinstance(state.get("transit"), dict))
 
 
 def _hiding_holders(scene: dict, name: str) -> list:
@@ -1897,7 +1931,7 @@ def materialize_enclosure_interiors(scene: dict) -> list:
         eid, entity = _unique_entity_keyed(scene, holder)
         if not eid:
             continue                                            # gate 2
-        if not _is_body_entity(scene, eid, entity):
+        if not _encloses_as_a_mass(scene, eid, entity, record.get("mode")):
             continue                                            # gate 3
         if room_of(scene, holder) is None:
             continue                                            # gate 4

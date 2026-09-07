@@ -342,8 +342,17 @@ _OPS = (OP_SET, OP_MOVE, OP_SPLIT, OP_DISPERSE, OP_EMERGE, OP_ABSORB)
 MAX_CROWDS = 8
 
 
+#: Spellings the engine's own sheets have taught for an op it owns. A closed
+#: set may tolerate its own sheet's vocabulary: `director_establish` asked
+#: for `op:'open'` from 2026-08 to 2026-09-07 and `apply_ops` knew only
+#: `set`, so every opening that followed its sheet opened an empty square.
+#: The sheet now says `set`; stored presets and model habit still say `open`.
+_OP_SPELLINGS = {"open": OP_SET}
+
+
 def _op_word(value):
     word = " ".join(str(value or "").split()).casefold()
+    word = _OP_SPELLINGS.get(word, word)
     return word if word in _OPS else ""
 
 

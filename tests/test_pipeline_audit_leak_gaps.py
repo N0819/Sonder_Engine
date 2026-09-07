@@ -427,8 +427,12 @@ class TestPresentOthersRecognitionGate:
             # A distinctive appearance so the label is checkably that
             # character's. It has to go in embodiment.visible.summary --
             # identity.appearance is not read by character_appearance.
+            # ...and one that is NOT the character's own name: the identity
+            # floor strips every form of the name from a stranger's label,
+            # hyphenated compounds included (2026-09-07), so the marker is a
+            # colour word derived from the name rather than the name itself.
             sheet.setdefault("embodiment", {}).setdefault("visible", {})[
-                "summary"] = f"{n}, a wiry person in {n.lower()}-grey."
+                "summary"] = f"{n}, a wiry person in {n.lower()}ish-grey."
             cid = temp_db.qi(
                 "INSERT INTO characters(name,sheet,source,created,resource_uid) VALUES(?,?,?,?,?)",
                 (n, json.dumps(sheet), "{}", time.time(), f"char_{n}"),
@@ -477,8 +481,8 @@ class TestPresentOthersRecognitionGate:
         # Labels, and distinct ones -- two strangers must not collapse into
         # the same phrase (the reason _unknown_actor_label derives from
         # appearance at all).
-        assert any("alice-grey" in r for r in result)
-        assert any("bob-grey" in r for r in result)
+        assert any("aliceish-grey" in r for r in result)
+        assert any("bobish-grey" in r for r in result)
         assert len(set(result)) == len(result)
 
     def test_presence_uses_its_own_ledger_entry(self, temp_db):
@@ -539,8 +543,8 @@ class TestPresentOthersRecognitionGate:
             ctx, self.scene, "taproom",
             _presence_recognizes(ctx, "The Barkeep"))
 
-        assert not any("alice-grey" in r for r in result)
-        assert any("bob-grey" in r for r in result)
+        assert not any("aliceish-grey" in r for r in result)
+        assert any("bobish-grey" in r for r in result)
 
     def test_a_shared_payload_names_nobody_the_voices_do_not_share(self, temp_db):
         """One context read by every voice in it: annotation cannot stand in
