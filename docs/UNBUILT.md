@@ -7832,6 +7832,58 @@ checklist for exactly this kind of change.
 At minimum the skip should not be silent: it is the one branch here that
 discards a write and says nothing.
 
+### 1.158 A sense can be masked by nothing, so the gas the plan was for was modelled as a noise
+
+**s1.152's sibling, found at the other end of the same story.** That entry
+says a creature can be stopped by the shape of an opening and by nothing
+else. This one says its SENSES can be interfered with by nothing at all.
+
+Chat 117 turns 96-100, the run's climax. Told by Sarah that the thing hunts
+by chemoreception rather than hearing, the player -- a maintenance engineer
+-- reasoned that a shelter of that era keeps charged CO2 flood systems in
+every plant space, found a bottle bank, aligned the manifold selector down
+the riser they had come from, paid the trip cable out to the threshold and
+pulled it. The intent was exact: put a room full of the substance the
+predator tracks BETWEEN it and them.
+
+**The Director recorded it faithfully, in its own channel.**
+`state_diff.entities.co2_suppression_bottle_bank`:
+
+    "state": {"discharging": true, "venting": "down_riser_feed_line",
+              "selector_alignment": "down_riser", "manual_release": "tripped",
+              ...},
+    "sound_source": "deafening"
+
+**And `state_diff.substance_ops` was empty.** No CO2 was placed in any room.
+`scent_at` for the two rooms afterwards returns `{'breath': 0.83}` and
+`{'breath': 0.55}` -- their own trail, and nothing else. The gas does not
+exist in the world; only a loud object does.
+
+So a discharge staged specifically against a chemosensory hunter was modelled
+as SOUND, for a creature whose card says `hearing: false`. The prose calls it
+"a wall of pure pressure"; the simulation has a noisy cylinder.
+
+**The engine owns every piece this needed.** `substance_ops` places a
+substance in a room, `scent_at`/`scent_word`/`SCENT_STRENGTH` grade what is
+smellable there, and `SCENT_PASS` already grades what a barrier does to a
+smell crossing it. What is missing is the idea that a strong enough substance
+DROWNS another rather than sitting beside it -- masking, as against presence.
+Nothing anywhere reduces one scent because another is overwhelming.
+
+**Why the story still worked, and why that is the wrong reason to leave it:**
+the creature did lose them. Its `smelled` map went from `{riser_12: 1.0}` to
+`{}` and it fell back to cast around riser_10 -- correct predator behaviour,
+emerging from the model. But the cause was ordinary decay and distance after
+five beats of deliberately slow, shallow-breathing movement, NOT the gas. Had
+it still held the line, the discharge would have done nothing to it, and the
+plan the whole last act was built on would have failed silently while reading
+as a success.
+
+**Where it belongs:** with the scent field, not the creature. A substance that
+masks is a fact about the air in a room, and every hunter that reads that room
+should be affected by it identically -- exactly as `SCENT_PASS` is a fact
+about a barrier and not about who is sniffing at it.
+
 ### 1.150 A creature has no held hunt — the courier maze problem, one subsystem over
 
 **The owner's read, 2026-09-06, on watching a predator walk home past its
