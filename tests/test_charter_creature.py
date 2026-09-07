@@ -612,6 +612,63 @@ class TestItHearsYouToo:
                            noises={"spine": 48.0})
         assert drawn == {"a": "spine"}
 
+    def test_a_predator_standing_on_its_prey_does_not_report_for_duty(self):
+        """`charter_move.relocate` is unconditional -- "send the posted
+        bodies toward their posts", every posted body every window -- and a
+        creature holds a `hunt` post exactly the way a watchman holds a
+        gate. So the institution marched it back to its station with its
+        quarry in front of it.
+
+        Measured live, chat 117 turn 66. The stalker turned for prey
+        mid-walk, came through the squeeze in a jammed pressure door after
+        the cast, arrived in the room they were kneeling in, and left again
+        because its post was two rooms behind it. Its hunger, its prey
+        table and its arrival counted for nothing against the roster --
+        the courier problem in institutional dress (docs/UNBUILT.md
+        s1.150): a routine with standing beats a want with none.
+
+        The move is the body's OWN room, which is how "stay" is said in
+        this vocabulary: `walk` skips a move to the room a body is in
+        unless it is en route, and re-dispatches it to where it stands when
+        it is, so the stale route is gone and a body with no route pays
+        nothing.
+        """
+        from world.charter_predation import hunt_moves
+
+        scene = {"rooms": {"shaft": {}, "run": {}, "post_room": {}},
+                 "positions": {"Aurel Voss": "shaft"}, "entities": {}}
+        states = {"thing": {
+            "creature": {"prey": ["figure"], "senses": {"range_rooms": 2}},
+            "scene": scene,
+            "bodies": {"a": {"place": "shaft", "available": True,
+                             "walk": {"target": "post_room",
+                                      "route": ["shaft", "run", "post_room"],
+                                      "leg": 0, "credit": 1.0}}}}}
+        neighbors = {"shaft": ["run"], "run": ["shaft", "post_room"],
+                     "post_room": ["run"]}
+        moves = hunt_moves(states, "thing", {}, {}, neighbors, 0, 1.0)
+        # It stays where the prey is, against a route already bound for its post.
+        assert moves == {"a": "shaft"}
+
+    def test_a_creature_with_nothing_here_is_left_to_its_errand(self):
+        """The complement, and the reason the rule is scoped to prey being
+        HERE: a body with nothing in its room emits no move at all, so an
+        errand already in progress is untouched. Without this the rule
+        would pin every creature wherever it happened to stand."""
+        from world.charter_predation import hunt_moves
+
+        scene = {"rooms": {"shaft": {}, "run": {}}, "positions": {},
+                 "entities": {}}
+        states = {"thing": {
+            "creature": {"prey": ["figure"], "senses": {"range_rooms": 2}},
+            "scene": scene,
+            "bodies": {"a": {"place": "shaft", "available": True,
+                             "walk": {"target": "run",
+                                      "route": ["shaft", "run"],
+                                      "leg": 0, "credit": 1.0}}}}}
+        assert hunt_moves(states, "thing", {}, {},
+                          {"shaft": ["run"], "run": ["shaft"]}, 0, 1.0) == {}
+
     def test_it_will_not_walk_to_a_room_it_cannot_reach(self):
         from world.charter_predation import hunt_moves
 

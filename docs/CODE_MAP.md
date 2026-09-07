@@ -155,7 +155,7 @@
 | `world/charter_plan.py` | 227 |  | `world.charter_drift`, `world.charter_model`, `world.charter_roster` |
 | `world/charter_politics.py` | 161 |  | — |
 | `world/charter_practice.py` | 1200 |  | `world.charter_commitment`, `world.charter_figure`, `world.charter_mind`, `world.charter_politics`, `world.charter_talk` |
-| `world/charter_predation.py` | 983 |  | `world.charter_creature`, `world.charter_harm`, `world.charter_model`, `world.charter_move` |
+| `world/charter_predation.py` | 1013 |  | `world.charter_creature`, `world.charter_harm`, `world.charter_model`, `world.charter_move` |
 | `world/charter_promote.py` | 604 |  | `world.charter_commitment`, `world.charter_feel`, `world.charter_politics`, `world.charter_social` |
 | `world/charter_roster.py` | 134 |  | `world.charter_model` |
 | `world/charter_run.py` | 1477 |  | `world`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_enrol`, `world.charter_feel`, `world.charter_figure`, `world.charter_harm`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
@@ -1898,12 +1898,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `hunt_moves()` | 281 | 159 lines |
-| `_attack()` | 455 | 146 lines |
-| `_tribute()` | 775 | 95 lines |
-| `predation_round()` | 603 | 89 lines |
-| `run_registry()` | 918 | 60 lines |
-| `read_spoor()` | 723 | 48 lines |
+| `hunt_moves()` | 281 | 189 lines |
+| `_attack()` | 485 | 146 lines |
+| `_tribute()` | 805 | 95 lines |
+| `predation_round()` | 633 | 89 lines |
+| `run_registry()` | 948 | 60 lines |
+| `read_spoor()` | 753 | 48 lines |
 | `_scene_figures_at()` | 213 | 38 lines |
 | `_company()` | 133 | 29 lines |
 

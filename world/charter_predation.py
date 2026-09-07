@@ -362,6 +362,36 @@ def hunt_moves(states, own, bodies_at, stock_at, neighbors, seed, at_hours,
         category, _rows = _prey_here(here, own, bodies_at, stock_at, states,
                                      prey_order)
         if category:
+            # A PREDATOR STANDING ON ITS PREY DOES NOT REPORT FOR DUTY.
+            # Emitting the body's own room is how "stay" is said in this
+            # vocabulary, and `walk` already has the affordance: a move to
+            # the room a body is in is skipped outright UNLESS it is en
+            # route, in which case `_dispatch` re-dispatches it to where it
+            # stands and the stale route is gone. So this costs nothing on
+            # the beats it does not matter.
+            #
+            # It matters because `charter_move.relocate` is unconditional --
+            # "send the posted bodies toward their posts", every posted body
+            # every window -- and a creature holds a `hunt` post like a
+            # watchman holds a gate. The institution therefore marched it
+            # back to its station with its quarry standing in front of it.
+            # Predation runs AFTER the institution's own step, so this move
+            # is the one that lands.
+            #
+            # Measured live, chat 117 turn 66. The stalker turned for prey
+            # mid-walk (the fix one commit back), came through the squeeze
+            # in the jammed pressure door after the cast, arrived in the
+            # room they were kneeling in -- and left again, because its post
+            # was two rooms behind it. Its own hunger, its own prey table
+            # and its own arrival counted for nothing against the roster.
+            #
+            # This is the same shape as the courier who walked sixteen
+            # optimal rooms and turned away (`docs/UNBUILT.md` s1.150): a
+            # routine with standing beats a want with none. It is the
+            # narrow half of that entry -- a creature ON its prey now stays
+            # -- and not the held hunt, which is what would let it keep
+            # wanting one it has lost.
+            moves[body_key] = here
             continue
         best = None
         reach = _reachable(neighbors, here, limit)
