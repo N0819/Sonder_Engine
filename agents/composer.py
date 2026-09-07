@@ -2075,10 +2075,33 @@ def _ambient_channel(event):
     return "mixed"
 
 
-def ambient_percepts(sensory_events, observer_room):
+def ambient_percepts(sensory_events, observer_room, *, order_key=None):
     """Authored opening sensory events, filtered by room scope. An event
     naming a room is admitted only to observers in that room; a roomless
-    event is scene ambience."""
+    event is scene ambience.
+
+    `order_key` decides which HALF of the view these land in, and the
+    caller decides because the two callers mean different things. The
+    establish stage's authored ambience is scene-setting -- the air of a
+    place, true before the beat and after it -- and belongs in standing
+    state, which is what an absent key gives it (`render_view` splits on
+    `order_key is None`). A BEAT'S OWN SOUND EVENT IS NOT THAT.
+
+    `spatial_sound_field`'s own note on the channel is explicit: "a noise
+    is a thing that happened in this window and never a standing fact",
+    and the record is beat-scoped so hard that "the beat number IS the
+    lifetime". Minted without a key anyway, every such sound landed in
+    `present_scene`, which the narrator sheet says in as many words
+    "carries no obligation" -- so the loudest thing in a beat was as
+    optional as the colour of the floor.
+
+    Measured live, chat 117 turn 65. A carbonic stalker moved in the room
+    the cast were kneeling in; perception delivered its voice correctly --
+    "a slow, rhythmic siphon-vent hiss and the soft drag of leathery
+    footfalls, nearer with every hunted breath" -- as `standing: True`, so
+    it never entered the numbered deliveries, and the prose recorded that
+    nothing was moving.
+    """
     out = []
     for idx, event in enumerate(sensory_events or []):
         if not isinstance(event, dict):
@@ -2119,6 +2142,7 @@ def ambient_percepts(sensory_events, observer_room):
         out.append(Percept(
             kind="ambient", channel=channel, data={"desc": desc},
             salience=0.4,
+            **({"order_key": order_key + idx} if order_key is not None else {}),
             dedupe_key=standing_key("ambient", (desc,), (desc,)),
         ))
     return out
