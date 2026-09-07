@@ -7928,6 +7928,39 @@ masks is a fact about the air in a room, and every hunter that reads that room
 should be affected by it identically -- exactly as `SCENT_PASS` is a fact
 about a barrier and not about who is sniffing at it.
 
+### 1.160 A phantom character id, one past the real one, is written into memory
+
+Chat 117 carries `character:79` in **153 step variants and 111 memory rows**,
+from turn 2 onward. There is no character 79 and no persona 79: the chat's
+one attached character is 78 (Sarah Moon) and the player is persona 20 (Aurel
+Voss). Every id present is 78 or 20; **79 is 78 + 1 and belongs to nobody.**
+
+It is not cosmetic. It is the KEY the beat routes conduct and cognition
+through. The interaction/reaction loops address every one of Sarah's actions
+`targets: ["character:79"]`, and her theory-of-mind about the player is
+stored under it: memory row, verbatim -- *"I suspected this about
+character:79: Pragmatic, steady under emergency conditions... I based that on:
+Correctly deduce[d]..."*. So Sarah's model of Aurel is filed against an id
+that resolves to no body; anything that later reads her belief about the
+player by his real handle finds nothing, and anything that reads 79 finds a
+person the world does not contain.
+
+**Scope: this one chat.** `character:79` appears in no other chat in the
+corpus, which points at something particular to how this story numbered its
+bodies -- a persona-plus-attached-character chat where the count-derived id
+(one past the last real character) was minted as a target and then never
+reconciled to either the persona or the character. The off-by-one is stable
+(always 79, never 77 or 80), so it is a single derivation, not noise.
+
+**Not traced to source here** -- it needs its own pass through how a beat
+assigns `character:<id>` to the player and how `targets` are validated (they
+are not: an id in no table reached `interaction_loop`, `reaction_loop`,
+`director_resolve` and the memory writer unchallenged). Registered now
+because it is a data-integrity leak into durable memory, measurable and
+bounded, and because the fix wants the id space audited rather than the
+symptom patched: the player is a persona, not a character, and giving them a
+`character:<n>` handle at all is where to start.
+
 ### 1.159 One beat, read at every stage: what a stage-by-stage audit of turn 82 found and did not fix
 
 The five prose fixes and two structural ones committed 2026-09-07 came out
