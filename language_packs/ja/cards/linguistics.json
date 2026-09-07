@@ -2082,8 +2082,7 @@
         "Player named in third person",
         "Quote attributed to wrong speaker",
         "Character placed in wrong room",
-        "Portal state contradicts the scene",
-        "Physical direction reversed"
+        "Portal state contradicts the scene"
       ]
     },
     "_CRAFT_TELLS": [

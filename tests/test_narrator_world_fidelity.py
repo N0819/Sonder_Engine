@@ -752,13 +752,32 @@ def _act(actor, action):
     return [{"n": 1, "actor": actor, "kind": "action", "action": action}]
 
 
-def test_reversed_direction_fires_and_is_enforceable():
+def test_reversed_direction_fires_but_no_longer_buys_a_rewrite():
+    """THE REVERSED ARM IS WARNING-ONLY NOW (2026-09-06), the same ruling
+    that cut the MISSING arm below, applied to its sibling.
+
+    This fixture is a REAL reversal and still fires: one subject, one object,
+    opposite directions, no sequence. What changed is the price. It was in
+    `_ENFORCEABLE_PREFIXES`, so it bought a full narrator rewrite -- and
+    measured over the corpus there are 19 stored findings, every one false.
+    Stored means SURVIVED a rewrite, because a finding the retry clears never
+    reaches the variant: those pages were correct, were rewritten, and were
+    flagged again.
+
+    The vocabularies are already deliberately tight, and tightness was not
+    the problem. The comparison binds no subject (`fox ears fold downward`
+    contradicted by "a tail lifts"; `lowers both arms` by "You lift your
+    chin"), reads no negation (`lowering his mug` by "Veronica's pen doesn't
+    lift"), and allows no sequence (`lifts her mouth` by "she descends" three
+    words after the prose said "Higher"). Each needs subject-bound parsing
+    this codebase does not do.
+    """
     order = _act("Mara", "slowly lowers the lantern into the well shaft")
     prose = "Mara lifts the lantern clear of the shaft, rope creaking."
     warnings = _check_action_direction(prose, order)
     assert len(warnings) == 1
     assert warnings[0].startswith("Physical direction reversed")
-    assert warnings[0].startswith(_enforceable())
+    assert not warnings[0].startswith(_enforceable())
 
 
 def test_direction_rendered_correctly_passes():
