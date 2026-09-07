@@ -313,3 +313,76 @@ def test_a_beat_that_lands_still_pays_the_private_parse_once(
         "minds"]["reeve"]
     assert sum(1 for claim in held.values()
                if claim.get("kind") == "news") == 1
+
+
+def _deaf_charter(hearing=False):
+    """A charter whose population is a CREATURE with a declared sense card."""
+    return normalize_charter({
+        "key": "town",
+        "bodies": {"reeve": {"name": "Ysra", "title": "Reeve",
+                             "place": "hall"}},
+        "creature": {"prey": ["figure"],
+                     "senses": {"hearing": hearing, "scent": True}},
+    })
+
+
+def test_a_body_with_no_ears_acquires_no_words():
+    """NO EARS, NO WORDS. Reception was decided by GEOMETRY ALONE:
+    `hear_level` answers how a sound crosses a room and was never asked
+    whether the thing in the room has ears. The foreground path does ask --
+    `composer.line_hear_level` grades every level through
+    `_sense_graded(..., "hearing", senses)` -- and a charter body had no
+    equivalent.
+
+    Measured live, chat 117 turn 63. The carbonic stalker, `hears: false` in
+    its own charter and authored deaf on purpose, stood in the room with the
+    cast and acquired three verbatim quotes of Sarah Moon's, first-hand,
+    which `presence_view` then offered back to it under `can_bring_up` as
+    things it might raise in conversation. A mind acquiring a fact through a
+    channel it does not have is what the firewall is for, and this was the
+    engine handing it over rather than a model inventing it.
+    """
+    from world.charter_observe import plan_public_evidence
+
+    deaf = plan_public_evidence(_deaf_charter(hearing=False), [_speech()],
+                                _scene(), turn_id=1)
+    hears = plan_public_evidence(_deaf_charter(hearing=True), [_speech()],
+                                 _scene(), turn_id=1)
+    # Same room, same speech, same body: only the declared card differs.
+    assert deaf["opportunities"] == hears["opportunities"] == 1
+    assert deaf["acquired"] == 0 and list(deaf["receiving"]) == []
+    assert hears["acquired"] == 1 and list(hears["receiving"]) == ["reeve"]
+
+
+def test_deafness_refuses_a_comm_and_leaves_sight_alone():
+    """The gate sits BEFORE every other rule in the speech branch, the comm
+    endpoint included -- a radio addressed to a deaf body is still a sound
+    arriving at a body that cannot hear one -- and touches nothing else: what
+    it can SEE is a different channel and is unaffected."""
+    from world.charter_observe import body_receives_evidence
+
+    scene = _scene()
+    body = {"key": "reeve", "place": "hall", "name": "Ysra"}
+    deaf = {"hearing": False, "scent": True}
+
+    comm = _speech(kind="communication", medium="comm", target="reeve")
+    assert not body_receives_evidence(scene, "reeve", body, {}, {}, comm,
+                                      senses=deaf)
+    action = {"source_id": "act:0", "kind": "action", "actor": "Rowan",
+              "visibility": "overt", "conceal_from": []}
+    assert body_receives_evidence(scene, "reeve", body, {}, {}, action,
+                                  senses=deaf)
+
+
+def test_a_body_with_no_card_hears_exactly_as_before():
+    """The fail-open that keeps every existing story byte-identical: an
+    absent sense card is not a claim. An ordinary body has none and hears."""
+    from world.charter_observe import body_receives_evidence
+
+    scene = _scene()
+    body = {"key": "reeve", "place": "hall", "name": "Ysra"}
+    assert body_receives_evidence(scene, "reeve", body, {}, {}, _speech())
+    assert body_receives_evidence(scene, "reeve", body, {}, {}, _speech(),
+                                  senses=None)
+    assert body_receives_evidence(scene, "reeve", body, {}, {}, _speech(),
+                                  senses={"scent": True})
