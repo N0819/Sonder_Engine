@@ -309,6 +309,21 @@ def record_spatial_experience(st, sc, here_room, turn_idx):
     for item in visible:
         if isinstance(item, dict) and item.get("onward_exits") == 0:
             dead.add(str(item.get("room_id")))
+    # STANDING IN A ROOM RETRACTS THE GUESS YOU MADE FROM ITS DOORWAY.
+    # The set above only ever GREW, and the frontier mints lazily -- a stub
+    # nobody has walked into yet holds exactly one edge, the one back the way
+    # you came, so it reads `onward_exits: 0` and is written down as blind.
+    # Then it gets extended and the belief is never revisited. Measured live
+    # (chat 117 turn 106): the companion's `known_dead_ends` held risers 16,
+    # 17 and 18 -- three rooms she had walked THROUGH, each with two edges by
+    # then -- and `character._verdict` reads this set as `closed_rids`, so
+    # she can refuse to route through a corridor she is standing in.
+    # `known[here_room]` two blocks up is this room's own route-memory exits,
+    # gathered because standing in a room is how you see its doorways; more
+    # than one of them is proof this is not a dead end, from the strongest
+    # channel a mind has. Adds nothing the observer did not stand in.
+    if len(known.get(here_room) or ()) > 1:
+        dead.discard(str(here_room))
     st["known_dead_ends"] = sorted(dead)
     st["place_graph"] = update_place_graph(
         st.get("place_graph"), sc, here_room, turn_idx,
