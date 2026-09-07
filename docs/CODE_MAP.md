@@ -11,7 +11,7 @@
 | `agents/character.py` | 4256 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/common.py` | 9932 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 4375 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
-| `agents/director.py` | 5050 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
+| `agents/director.py` | 5065 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 457 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 1261 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
 | `agents/director_fanout.py` | 944 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
@@ -47,7 +47,7 @@
 | `llm/prompts.py` | 516 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 3938 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
-| `llm/schemas.py` | 5686 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `llm/schemas.py` | 5703 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2428 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 398 |  | — |
@@ -267,7 +267,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 3072 | 1945 lines |
+| `director_resolve()` | 3072 | 1960 lines |
 | `director_interpret()` | 803 | 665 lines |
 | `_reconcile_resolution()` | 1856 | 522 lines |
 | `_run_specialists()` | 2585 | 263 lines |
@@ -655,8 +655,8 @@
 |---|---:|---:|
 | `preprocess_llm_output()` | 4420 | 327 lines |
 | `_lenient_coerce()` | 769 | 159 lines |
-| `validate_llm_output_strict()` | 5557 | 130 lines |
-| `semantic_output_errors()` | 5354 | 108 lines |
+| `validate_llm_output_strict()` | 5574 | 130 lines |
+| `semantic_output_errors()` | 5371 | 108 lines |
 | `canonicalize_prose_markup()` | 4225 | 102 lines |
 | `_uncross_concealed_speech()` | 4349 | 69 lines |
 | `_coerce_station_table()` | 85 | 65 lines |

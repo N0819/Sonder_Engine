@@ -4530,14 +4530,29 @@ def director_resolve(ctx, nonce, _corrections=None):
     # fiction is holding and the world cannot place. Measured after the
     # placement derivation lands, on the merged diff, so it reports only what
     # is still unplaced once every deterministic pass has had its say.
+    #
+    # SAYS WHAT IT KNOWS, AND NOT WHAT HAPPENS NEXT. This used to end "so
+    # nothing can perceive or act on them", which is a claim about the END of
+    # the beat that this stage cannot make: `commit_scene_state.
+    # _place_orphan_mints` runs afterwards and stands a minted orphan in the
+    # room the beat resolved the player into -- it was BUILT to answer this
+    # very warning (its docstring: "a warning nothing acts on"). Measured
+    # live, chat 117 turn 78: `conduit_joints` was reported here as beyond
+    # perception and committed into riser 13 in the same beat, and the
+    # warning sent a reader hunting a defect that had already been handled.
+    # The diff really is silent about where these go, and the fallback really
+    # can decline (no player room, or two of them), so the report stays --
+    # narrowed to the fact it owns.
     _unplaced = _unplaced_minted_entities(sc, sd)
     if _unplaced:
         ctx.add_warning(
-            "Unplaced entities: %s exist after this beat but are in no room, "
-            "so nothing can perceive or act on them. Put each one in "
-            "state_diff.positions, or move it with a state_diff.inventory_ops "
-            "entry whose to_id names a room or a body the scene already "
-            "knows." % ", ".join(_unplaced[:6]))
+            "Unplaced entities: this diff mints %s and says where none of "
+            "them go. Commit will stand each in the room the beat resolved "
+            "the player into; where the beat names no single such room, they "
+            "are left nowhere and nothing can perceive or act on them. Put "
+            "each one in state_diff.positions, or move it with a "
+            "state_diff.inventory_ops entry whose to_id names a room or a "
+            "body the scene already knows." % ", ".join(_unplaced[:6]))
 
     # A MINTED ROLE A PRESENT BODY ALREADY HOLDS IS THAT BODY. The payload
     # showed the prose author and the objects hand who is standing here
