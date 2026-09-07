@@ -3405,17 +3405,30 @@ def director_resolve(ctx, nonce, _corrections=None):
         **({"style_guide": style_guide(chat["id"])}
            if style_guide(chat["id"]) else {}),
         "scene": {
-            "location": sc.get("location"),
+            # THE WORLD AS THE REACTORS SAW IT, not as it was stored. Until
+            # 2026-09-07 only `contacts` below came from `resolve_sc`; rooms,
+            # positions and stations came from the pre-beat `sc`, so the
+            # resolving Director -- and every hand it fans out to -- was shown
+            # a body still standing where the beat began and a map without
+            # the room interpret's spatial hand had just authored for it.
+            # Measured (chat 117 turn 82): interpret authored the plenum the
+            # player climbed into, with `vertical: "down"` and a see-through
+            # sleeve; resolve never saw it, re-authored the room blind under
+            # another name with neither field, and the merge let the blind
+            # version win. `docs/guides/PIPELINE.md` had said all along that
+            # resolve "receives the same previewed world"; the code now does
+            # what the guide says.
+            "location": resolve_sc.get("location"),
             # Filtered to nearby rooms for the payload only -- the
             # deterministic passable-route check below keeps using the
             # full, unfiltered `sc`.
             "rooms": _contextual_rooms(
-                sc, ctx.cast, ctx.get("_player_room"), _mv_target,
+                resolve_sc, ctx.cast, ctx.get("_player_room"), _mv_target,
             ),
-            "entities": sc.get("entities"),
-            "positions": sc.get("positions"),
-            "stations": sc.get("stations") or {},
-            "following": sc.get("following") or {},
+            "entities": resolve_sc.get("entities"),
+            "positions": resolve_sc.get("positions"),
+            "stations": resolve_sc.get("stations") or {},
+            "following": resolve_sc.get("following") or {},
             # The contact ledger it is asked to MAINTAIN. Withheld until now,
             # which is the cause of the drift the displacement rule repairs
             # downstream: a Director that cannot see it wrote `hand -> waist`
@@ -3432,7 +3445,7 @@ def director_resolve(ctx, nonce, _corrections=None):
             # prose, which is the right judgement made without the record.
             # Short: a handful of lines per body against a scene view already
             # over 10,000 characters.
-            "overlays": sc.get("overlays") or {},
+            "overlays": resolve_sc.get("overlays") or {},
             # One line per body instead of the structured view: 3,789 chars
             # to 1,314 on chat 67, ~618 tokens off every resolve call. The
             # names the Director writes back are all still here, and
@@ -4086,7 +4099,11 @@ def director_resolve(ctx, nonce, _corrections=None):
         "carried_reports": payload.get("carried_reports") or [],
         "unratified_claims": payload.get("unratified_claims") or [],
     }
-    _run_specialists(ctx, out, sc, _orch_dispatch, _orch_view,
+    # The hands see the previewed world too (see the payload's `scene`
+    # comment above): the spatial hand in particular is "the one specialist
+    # entitled to the full graph", and the full graph includes the room the
+    # interpret stage's spatial hand authored a moment ago.
+    _run_specialists(ctx, out, resolve_sc, _orch_dispatch, _orch_view,
                      _orch_extras, "resolve")
     # Kept for the reconciliation seam below: when it detects an
     # omission in a delegated channel, the CHANNEL'S OWNER is re-asked

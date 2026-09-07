@@ -104,6 +104,47 @@ def test_no_player_room_leaves_the_label_untouched(monkeypatch):
     assert sc["location"] == "Somewhere"
 
 
+def test_a_new_room_in_the_same_region_keeps_a_venue_label(monkeypatch):
+    """The DW-1 rule above refreshes on a brand-new destination because the
+    label is presumed stale. It is stale when the new room is a new PLACE;
+    it is not when the new room is the next room of the same building. Chat
+    117 turn 82: a plenum minted inside Site-17 turned "Site-17, Lower Sector
+    Emergency Access Corridor" -- stable for 81 turns -- into the plenum's
+    own name, then into the name of every room after it. `region` is the
+    engine's fact for "same place": same region as the room just left, and
+    a venue-level label stays."""
+    ctx = _ctx(monkeypatch, player="Aurel Voss")
+    prev = {"rooms": {"riser_13": {"name": "Upper Service-Core Riser 13",
+                                   "region": "sub_level_5a"}},
+            "positions": {"Aurel Voss": "riser_13"},
+            "location": "Site-17, Lower Sector Emergency Access Corridor"}
+    sc = {"rooms": {"riser_13": {"name": "Upper Service-Core Riser 13",
+                                 "region": "sub_level_5a"},
+                    "plenum_13": {"name": "Upper Service-Core Plenum Chase 13",
+                                  "region": "sub_level_5a"}},
+          "positions": {"Aurel Voss": "plenum_13"},
+          "location": "Site-17, Lower Sector Emergency Access Corridor"}
+    commit._refresh_relocated_location(sc, prev, {}, ctx)
+    assert sc["location"] == "Site-17, Lower Sector Emergency Access Corridor"
+
+    # A different region is a different place, and the label moves (DW-1).
+    sc2 = {"rooms": {"riser_13": {"name": "Upper Service-Core Riser 13",
+                                  "region": "sub_level_5a"},
+                     "yard": {"name": "The Surface Yard",
+                              "region": "surface"}},
+           "positions": {"Aurel Voss": "yard"},
+           "location": "Site-17, Lower Sector Emergency Access Corridor"}
+    commit._refresh_relocated_location(sc2, prev, {}, ctx)
+    assert sc2["location"] == "The Surface Yard"
+
+    # And a Director that names the location this turn is always honoured.
+    sc3 = {"rooms": sc["rooms"], "positions": {"Aurel Voss": "plenum_13"},
+           "location": "Site-17, Lower Sector Emergency Access Corridor"}
+    commit._refresh_relocated_location(
+        sc3, prev, {"location": "Site-17, Upper Service Core"}, ctx)
+    assert sc3["location"] == "Site-17, Upper Service Core"
+
+
 # ---- TR-3: relocation into a PRE-EXISTING room (beam back aboard) ----
 
 def test_location_refreshes_when_moving_back_to_an_existing_room(monkeypatch):

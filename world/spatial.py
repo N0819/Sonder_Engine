@@ -265,7 +265,7 @@ from world.spatial_lint import (
 from world.spatial_light_field import (
     _FIELD_CACHE, _beat_hash, _cast, BEAT_KEY, beat_index, BOUNCE,
     BOUNCE_PASSES_CAP, BOUNCE_REACH, BRIGHT_T, compute_light_field,
-    cone_factor, CONE_HALF_ANGLE, CONE_PENUMBRA, DARK_THRESHOLD,
+    cone_factor, CONE_GAIN, CONE_HALF_ANGLE, CONE_PENUMBRA, DARK_THRESHOLD,
     ambient_floor_word, DEFAULT_LIGHT_SHAPE, DEFAULT_STEADINESS, DIM_T,
     emitted_level,
     FAIL_RATE, fails_on, failing_sources_out, field_effective_light,

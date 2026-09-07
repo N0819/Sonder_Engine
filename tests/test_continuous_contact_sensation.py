@@ -362,13 +362,16 @@ class TestTheStandingContactReachesTheView:
         empty = {"positions": {}, "entities": {}, "contacts": []}
         assert _percepts("Bram", empty) == []
 
-    def test_a_contact_with_no_parts_is_still_felt(self):
+    def test_a_contact_with_no_parts_is_felt_once_then_held(self):
         """The old floor refused this one on purpose: an unmatched clause could
         not be checked against model prose, so it stayed biased toward silence.
         The composer has no prose to check, so the honest answer is the one the
         ledger gives -- a body IS in continuous contact and the mind is told
-        so. Player-mode compression does not apply to a live bodily input:
-        the same contact remains felt on every beat it remains active."""
+        so, on the beat it begins. It used to be re-told on every beat after
+        ("player-mode compression does not apply to a live bodily input");
+        reversed 2026-09-07 after that rule measured as the page's worst tic
+        (43.3% of corpus "You feel" sentences identical to the prior beat).
+        Told once, then held as context, like every other standing fact."""
         scene = {"positions": {"Reya": "cell", "Bram": "cell"}, "entities": {},
                  "contacts": [{"actor": "Reya", "target": "Bram",
                                "manner": "lean"}]}
@@ -377,12 +380,13 @@ class TestTheStandingContactReachesTheView:
         again = composer.render_view(
             percepts, mode="player", prev_standing=first.standing_keys)
         assert "You feel Reya against you" in first.text
-        assert "You feel Reya against you" in again.text
+        assert "You feel Reya against you" not in again.text
 
     def test_one_contact_is_one_dedupe_key(self):
-        """The stable key still prevents duplicate percepts and prevents an
-        unchanged sensation alone from becoming a new memory; it no longer
-        suppresses active input from the present perspective."""
+        """The stable key prevents duplicate percepts, prevents an unchanged
+        sensation alone from becoming a new memory, and -- since 2026-09-07
+        -- is what lets the player tier hold an unchanged contact as
+        context instead of re-delivering it."""
         keys = {p.dedupe_key for p in _percepts("Bram")}
         assert len(keys) == 2
 

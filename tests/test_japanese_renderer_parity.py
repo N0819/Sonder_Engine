@@ -233,9 +233,13 @@ def test_the_japanese_player_view_leads_with_the_beat(japanese):
                                 prev_standing=prev)
     english = render_view(percepts, language="en", mode="player",
                           prev_standing=prev)
-    # Events in declared order, then what changed, a changed room last, then
-    # the background -- and the pack must not have its own opinion about it.
+    # Events in declared order, then what changed, a changed room last --
+    # and the pack must not have its own opinion about it. The unchanged
+    # sensation is no longer in the background half at all (2026-09-07:
+    # `ACTIVE_STANDING_KINDS` is empty; an unchanged contact is context the
+    # reader already holds, exactly like the unchanged room), and both
+    # renderers drop it because both read the composer's one constant.
     assert shape(japanese_view) == [
         ("act", False), ("speech", False),
-        ("pose", True), ("environment", True), ("sensation", False)]
+        ("pose", True), ("environment", True)]
     assert shape(japanese_view) == shape(english)

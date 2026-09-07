@@ -435,6 +435,30 @@ def _refresh_relocated_location(sc, prev_scene, diff, ctx):
         cur_loc and cur_loc == str((r or {}).get("name") or "").strip()
         and rid != player_room
         for rid, r in rooms.items())
+    # A NEW ROOM IN THE SAME REGION IS NOT A NEW PLACE. DW-1 read "the
+    # destination is brand new" as "the label is stale", which holds when a
+    # frontier stub is a new venue (Cardiff -> East London) and fails when it
+    # is the next room of the same building: chat 117 turn 82 climbed into a
+    # freshly minted plenum inside Site-17 and a venue label that had stood
+    # for 81 turns -- "Site-17, Lower Sector Emergency Access Corridor" --
+    # became "Upper Service-Core Plenum Chase 13", then the name of every
+    # room after it, and `offscreen_epoch` fired on each as a relocation.
+    # `region` is the fact the engine owns for "same place": where the
+    # destination and the room just left share one, a venue-level label
+    # (one naming no room) is left where it is. A room-level label that
+    # names the room being left still follows the player (TR-3), and a
+    # Director that names a location this turn is still honoured below.
+    left_room = _room_of(prev_scene, player_name)
+    dest_region = str((rooms.get(player_room) or {}).get("region") or "").strip()
+    left_region = str(((prev_scene.get("rooms") or {}).get(left_room) or {})
+                      .get("region") or "").strip()
+    same_region = bool(dest_region) and dest_region == left_region
+    label_is_venue = not any(
+        cur_loc and cur_loc == str((r or {}).get("name") or "").strip()
+        for r in rooms.values())
+    named_this_turn = bool(str(diff.get("location") or "").strip())
+    if new_room and same_region and label_is_venue and not named_this_turn:
+        return
     if not (new_room or names_left_room):
         return
     # Prefer a location the Director named this turn, else the destination's name.
