@@ -864,10 +864,27 @@ def _evidence_present(sd, omission, forms=None, *, scene=None):
         # Still ANDed with `adjacent`, which is what keeps it evidence: the
         # room's edges changed this beat AND it holds a fixture the subject
         # names. A room merely redescribed does not acquit an edge claim.
+        #
+        # AND THE FIXTURE IS LOOKED FOR IN THE SCENE, not only in the diff.
+        # A door that is merely OPENED OR SHUT changes the edge and nothing
+        # about the doorway itself, so a correct beat restates no anchors --
+        # and this arm, reading anchors out of the diff alone, could never
+        # find the fixture that names the subject. Third time in this chat
+        # (turn 21, turn 44, turn 110): spatial encoded
+        # `rooms.upper_service_core_riser_20.adjacent[].barrier =
+        # closed_door` on both sides, the door stood in the scene's
+        # `anchors.fire_door`, and the beat still warned that objective state
+        # might be stale after buying a self-repair retry. The edges are
+        # still what makes it evidence; the scene only answers WHICH DOORWAY
+        # this room has, which is not a fact this beat had any reason to
+        # rewrite.
+        scene_rooms = (scene or {}).get("rooms") or {}
         for key, rd in (sd.get("rooms") or {}).items():
             if not isinstance(rd, dict) or not rd.get("adjacent"):
                 continue
             if hits(key) or hits(rd.get("name")) or _room_anchor_hit(rd, hits):
+                return True
+            if _room_anchor_hit(scene_rooms.get(key), hits):
                 return True
         return False
 

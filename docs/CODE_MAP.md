@@ -13,7 +13,7 @@
 | `agents/composer.py` | 4375 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 5065 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 457 |  | `story.character_schema`, `world.spatial` |
-| `agents/director_evidence.py` | 1261 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
+| `agents/director_evidence.py` | 1278 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
 | `agents/director_fanout.py` | 944 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 1939 |  | `agents.common`, `agents.director_lingua`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
@@ -293,14 +293,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_evidence_present()` | 829 | 324 lines |
+| `_evidence_present()` | 829 | 341 lines |
 | `_merge_repair_into_diff()` | 515 | 59 lines |
 | `_omission_subject_encoded()` | 711 | 57 lines |
-| `_fold_derived_manifest_events()` | 1206 | 56 lines |
+| `_fold_derived_manifest_events()` | 1223 | 56 lines |
 | `_interpret_coverage_corpus()` | 91 | 53 lines |
 | `_subject_is_somewhere()` | 780 | 47 lines |
 | `_strip_blank_diff_placeholders()` | 256 | 42 lines |
-| `_manifest_items()` | 1160 | 37 lines |
+| `_manifest_items()` | 1177 | 37 lines |
 
 ### `agents/director_fanout.py`
 
