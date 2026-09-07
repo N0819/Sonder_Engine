@@ -88,7 +88,7 @@ def observer_view(charter, scene):
 
 
 def body_receives_evidence(scene, body_key, body, roles, naming, evidence,
-                           *, observer=None):
+                           *, observer=None, senses=None):
     """Whether this body receives the exact public source.
 
     ``observer`` is the key the body stands under in ``scene`` when the
@@ -96,6 +96,25 @@ def body_receives_evidence(scene, body_key, body, roles, naming, evidence,
     no within-room position and is stood in its ``place`` by room alone
     (`_observer_scene`), which is every caller before the placement view
     existed and the fallback for a place the scene does not hold.
+
+    ``senses`` is the population's declared sense card
+    (`charter_creature.normalize_creature`'s ``senses``) where its charter
+    declares one, and None for every ordinary body -- a person hears, and
+    nothing has to say so. It exists because reception here was decided by
+    GEOMETRY ALONE: `hear_level` answers how a sound crosses a room and is
+    never asked whether the thing in the room has ears. The foreground path
+    does ask (`composer.line_hear_level` grades every level through
+    `_sense_graded(..., "hearing", senses)`); a charter body had no
+    equivalent.
+
+    Measured live, chat 117 turn 63. The carbonic stalker -- `hears: false`
+    in its own charter, a thing that hunts by exhaled CO2 and was authored
+    deaf on purpose -- stood in the room with the cast and acquired THREE
+    verbatim quotes of Sarah Moon's, first-hand, which `presence_view` then
+    offered back to it under `can_bring_up` as things it might raise in
+    conversation. A mind acquiring a fact through a channel it does not have
+    is the one thing the firewall is for, and this is that: not a model
+    saying too much, an engine handing it something nothing carried.
     """
     place = str((body or {}).get("place") or "")
     actor = str((evidence or {}).get("actor") or "")
@@ -108,6 +127,13 @@ def body_receives_evidence(scene, body_key, body, roles, naming, evidence,
     placed = bool(observer) and room_of(scene or {}, str(observer)) == place
 
     if evidence.get("kind") in ("speech", "communication"):
+        # NO EARS, NO WORDS -- before every other rule in this branch, the
+        # comm endpoint included: a radio addressed to a deaf body is still
+        # a sound arriving at a body that cannot hear one. Absent `senses`
+        # is not a claim (an ordinary body has no card and hears), so every
+        # story without a declared sense card is byte for byte unchanged.
+        if isinstance(senses, dict) and not senses.get("hearing", True):
+            return False
         # A private comm reaches only its named endpoint.  Otherwise sound
         # obeys the same enclosure, barrier, material, volume and distance
         # ladder the foreground perception path uses.  Exact words require
@@ -385,6 +411,11 @@ def plan_public_evidence(charter, evidence_rows, scene, turn_id,
                          labels=None):
     """READ-ONLY appraisal: what `apply_public_evidence` WOULD land.
 
+    Reads the population's declared sense card once, here, and hands it to
+    every reception test below: whether a body has ears is a fact about its
+    charter, not about the room, and asking it per row would re-derive one
+    answer per evidence row per body.
+
     ``labels`` maps an actor's canonical name to what a stranger sees of
     them (``agents.common._unknown_actor_label``); it decides how the claim
     READS, never whether it lands. ``unplaced`` in the result names actors
@@ -413,6 +444,14 @@ def plan_public_evidence(charter, evidence_rows, scene, turn_id,
     bindings = charter.get("bindings") or {}
     minds = charter.get("minds") or {}
     naming = charter.get("naming") or {}
+    # The population's declared sense card, once. A charter that declares no
+    # creature has none, and a body with no card hears -- so this is None for
+    # every ordinary story and the reception tests below are unchanged.
+    _declared_senses = None
+    if charter.get("creature"):
+        from world.charter_creature import normalize_creature
+        _declared_senses = (normalize_creature(charter.get("creature"))
+                            or {}).get("senses")
     role_map = {}
     for post, assigned in (charter.get("watch") or {}).items():
         role_map.setdefault(str(assigned), []).append(str(post))
@@ -467,7 +506,7 @@ def plan_public_evidence(charter, evidence_rows, scene, turn_id,
             else:
                 receives = body_receives_evidence(
                     viewed, body_key, body, roles, naming, evidence,
-                    observer=observer)
+                    observer=observer, senses=_declared_senses)
                 if cacheable:
                     sensory_cache[cache_key] = receives
             if not receives:
