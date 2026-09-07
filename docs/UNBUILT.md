@@ -7557,6 +7557,91 @@ to keep it -- filing unparsed prose as a request to build a noun. Keeping
 the text as what it is (a declaration the interpreter could not place) costs
 nothing and asks nobody to author a sentence.
 
+### 1.155 A fixture is two records with two owners and no link, so the player was not told what his own hands had just done
+
+**The clearest instance yet of the question this engine keeps rewarding: is
+this fact stored twice?** Chat 117 turn 80, traced end to end.
+
+The player levered the spalled concrete around a ceiling conduit sleeve to
+find out whether the gap would take shoulders. The Director answered him,
+completely and correctly:
+
+* dice: roll 16 against DC 12, **success**, margin 4
+* `resolved_event`: "broad enough now to pass a pair of human shoulders"
+* `state_diff.entities.conduit_ceiling_penetration.state`:
+  `clearance: "shoulder_width"`, `bypass_accessible: true`, `gap: "widened"`
+
+**And the beat on the page never says whether it worked.** The prose renders
+him sizing the gap against Sarah's shoulders and stops.
+
+**THE SAME FIXTURE IS TWO RECORDS.** Room `_13` holds an ANCHOR
+`ceiling_sleeve` (the `spatial` hand's, `state_diff.rooms`) and the scene
+holds an ENTITY `conduit_ceiling_penetration` (the `objects` hand's,
+`state_diff.entities`). After the beat:
+
+  | record | owner | says |
+  |---|---|---|
+  | entity `conduit_ceiling_penetration` | `objects` | "spalled concrete lip pried away to leave an opening **wide enough to pass a pair of human shoulders**" |
+  | anchor `ceiling_sleeve` | `spatial` | "expansion bolts sheared away to leave **an accessible gap** carrying a steady updraft" |
+
+The objects hand recorded the outcome. The spatial hand left its anchor in
+the turn-79 wording. Neither is wrong within its own channel, and each hand
+did its own job.
+
+**AND PERCEPTION RENDERS THE ROOM FROM THE ANCHORS.** So the chain runs:
+
+1. `environment_percept`'s dedupe key mixes a `feature_sig` built from each
+   feature row's `desc` -- and those rows are the anchors. Stale anchor,
+   unchanged signature.
+2. Measured, the player's env key across three beats:
+   t78 `env:699c3aa40d:dc9baf35f6`, t79 `...:dc346aab50`,
+   t80 `...:dc346aab50` -- **byte-identical to the beat before**.
+3. `standing_verdicts` therefore answers `unchanged`.
+4. `_render_view_english`, for the player tier without an explicit look
+   (`delta = player and not full_render`), drops an unchanged standing
+   percept outright: `elif (delta and p.dedupe_key in prev_standing and
+   p.kind not in ACTIVE_STANDING_KINDS): continue`. The whole room goes,
+   features included.
+5. The player's view collapses from **2928 characters on t79 to 758 on
+   t80**, losing the room line, his own pose, and every mention of the
+   sleeve (`penetration` 0, `gap` 0, `shoulder` 0; the single "sleeve" hit
+   is inside Sarah's quoted dialogue).
+6. The narrator is told in its own prompt that it has "NO access to the
+   objective event record, other minds, dice, or the director". It rendered
+   what reached it and correctly refused to invent a result.
+
+**NOBODY MISBEHAVED.** Every stage is individually right, which is why this
+is worth a register entry rather than a patch to whichever one looks
+guilty. Step 4 is a good rule -- not repeating wallpaper is most of what
+makes the player view readable. Step 6 is the firewall doing its job. The
+defect lives in the JOIN that does not exist.
+
+**THERE IS NO ANCHOR-TO-ENTITY LINK ANYWHERE.** `anchor_entity_id` in
+`commit_mapping`/`commit_room_registry` binds a LOREBOOK to an entity and is
+a different thing. Nothing relates the anchor `ceiling_sleeve` to the entity
+`conduit_ceiling_penetration`, and their ids do not even resemble each
+other, so no reconciliation is currently possible -- not by the orchestrator
+on the merged diff, where every other cross-channel judgment already lives.
+
+**Three candidate answers, and choosing between them is the owner's:**
+
+* **One record.** A fixture that is a place a body can stand AND a thing the
+  fiction acts on stops being two rows. Correct, and the largest change.
+* **A link, then a floor.** Give an anchor an optional entity id and let the
+  orchestrator reconcile the pair on the merged diff -- the seam where the
+  architecture already says cross-channel judgments belong. Needs the hands
+  to state the link when they mint, which is a prompt change on both.
+* **Widen what "the room changed" means.** Fold the co-located entities'
+  state into `feature_sig`, so an entity the beat changed makes the room
+  read as changed even while the anchor prose is stale. Cheapest, and it
+  only fixes the SUPPRESSION -- the player would then be shown the room in
+  its stale words, which is better than silence and still not the truth.
+
+**Why this matters beyond one beat:** the failure is specifically invisible.
+It costs the player the result of their OWN action, on exactly the beats
+where they did something that worked, and it leaves no warning anywhere --
+the run was clean, two warnings, neither about this.
+
 ### 1.150 A creature has no held hunt — the courier maze problem, one subsystem over
 
 **The owner's read, 2026-09-06, on watching a predator walk home past its
