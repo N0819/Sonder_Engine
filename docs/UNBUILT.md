@@ -7656,6 +7656,72 @@ It costs the player the result of their OWN action, on exactly the beats
 where they did something that worked, and it leaves no warning anywhere --
 the run was clean, two warnings, neither about this.
 
+### 1.156 The player is never told what their own attempt DID
+
+**The general case that s1.155 is one instance of, and the more serious of
+the two.** A player declares an ATTEMPT. The engine decides the OUTCOME.
+There is no channel that carries the outcome back to the player.
+
+`agents/perception.py`, the act-percept loop:
+
+    act = beat_event
+    actor = act.get("actor")
+    if _is_the_observer(sc, actor, name, cast_aliases.get(name)) \
+            or actor in behind:
+        order += 1
+        continue
+
+An act by the observer themselves is skipped before any percept is built.
+The reason is obvious and half right -- you do not need to be told what you
+did. It conflates WHAT YOU DID, which the player wrote, with WHAT CAME OF
+IT, which only the engine knows.
+
+**Three consecutive beats of chat 117, and the pattern is exact.**
+
+| beat | the engine decided | did it reach the player? | why |
+|---|---|---|---|
+| 78 | the bracket tears free | **yes** | it changed a room anchor, so the env percept changed and was delivered as standing state |
+| 80 | dice **success** margin 4, gap now "wide enough to pass a pair of human shoulders" | **no** | the outcome lived in an entity while the room reads from anchors; env key byte-identical, room suppressed as wallpaper (s1.155) |
+| 84 | dice **failure** margin -6, "the rigid brackets refuse to yield... the opening still clear" | **no** | a pure event: it altered no standing state anybody perceives, so there was nothing for it to ride |
+
+The player's view on turn 84 runs 1417 characters and is otherwise rich --
+room, companion, contact, the way out -- and contains `bar` 0, `slip` 0,
+`refuse` 0, `fail` 0, `brackets` 0. `_engine_notes.decisions` for that beat
+lists `act_percept  Aurel Voss -> Sarah Moon  delivered` and nothing
+addressed to Aurel.
+
+**So an outcome reaches the player only by the accident of whether it
+happened to change standing state they can perceive.** Turn 78 got through
+because a fixture's description changed. Turn 84 did not, because "you tried
+and it did not work" alters nothing describable.
+
+**TURN 84 IS THE ONE THAT SHOWS WHY IT MATTERS.** The player levered a
+conduit run across the hole to slow what was climbing after them. It FAILED,
+and the failure was rolled, written and committed -- and he was not told. He
+is lying on the plenum deck believing he may have covered the opening. The
+opening is clear. The creature is one room below and moving. Every decision
+he makes from here rests on a fact the engine determined and withheld.
+
+The narrator cannot rescue this and should not: its own prompt says it has
+"NO access to the objective event record, other minds, dice, or the
+director", and it is given the player's DECLARATION but not the RESOLUTION.
+On turn 84 it did the correct thing with what it had -- it declined to say
+the attempt worked, and so said nothing about it at all.
+
+**Shape of the answer.** The player needs a percept for the outcome of their
+own declared attempt -- the one act-percept case `_is_the_observer` should
+not skip. It is firewall-cheap in a way almost nothing else here is: a body
+is entitled to the results of its own conduct, so the guard does not have to
+decide what may cross, only that this one already has. What needs care is
+the opposite of the usual worry -- not leaking more than the player should
+have, but not RESTATING what they already wrote. The percept wants to carry
+what the attempt DID and not what it WAS: the brackets held, the bar
+slipped, the opening is still clear.
+
+**s1.155 folds into this** as the case where the outcome did alter standing
+state and was lost on the way for a different reason. Fixing this one would
+have covered turn 80 as well, from the other side.
+
 ### 1.150 A creature has no held hunt — the courier maze problem, one subsystem over
 
 **The owner's read, 2026-09-06, on watching a predator walk home past its
