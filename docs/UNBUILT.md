@@ -7349,6 +7349,57 @@ picks the one case where the disagreement was measured and loud. The general
 form -- a body's heading following what it is DOING while its attention goes
 where it likes -- is a bigger change and is not made.
 
+### 1.151 Being TOLD does not ask for ears, and a closed intake leaves the old claims standing
+
+Two residuals of the deafness gate (`charter_observe.body_receives_evidence`,
+2026-09-06), both measured, neither built.
+
+**THE ONLY UPTAKE DOOR DOES NOT ASK.** `charter_mind.hear_claim` says of
+itself: "THE ONLY UPTAKE DOOR. `hear` routes through it for body-to-body
+talk; an authored telling -- a voiced presence, the player, a major
+character speaking to a background body -- lands through the same door with
+the same rules." It is thinned by retention, scaled by regard, refused
+below the floor -- and it never asks whether the listener can HEAR. So a
+body authored deaf can be TOLD what someone said, by ordinary conversation
+(`charter_talk.converse`) or across institutions
+(`charter_runtime.cross_charter_gossip`), and the intake gate does not
+cover it: that gate refuses direct observation, and this is hearsay.
+
+Being told is speech. A body with no ears receives none of it.
+
+**MEASURED BEFORE PROPOSING, and it is why this is registered rather than
+fixed:** across the author's whole corpus there are **0 creature charters**
+-- the descent story (chat 117) is the first to exercise the creature path
+at all -- and **0 creatures with any body positioned to tell them
+anything**. A creature charter here holds one body, so `converse` has
+nobody to pair it with, and cross-charter gossip needs two institutions
+standing in one room. The hole is structurally real and currently
+unreachable, which is exactly the state that earns a line here instead of
+code.
+
+When it is built, the door is the place: one gate in `hear_claim` covers
+every telling path by that function's own contract, and a second uptake
+path with its own arithmetic "is how the two authors would drift apart".
+
+**AND A CLOSED INTAKE DOES NOT CLEAN THE PAST.** The gate stops new speech
+claims; the ones already written stay. Live, chat 117 after the fix, the
+carbonic stalker's own mind holds:
+
+  | kind | count |
+  |---|---|
+  | `figure` (sightings) | 2 |
+  | `news/figure_action` (things it SAW) | 11 |
+  | `news/figure_speech` | **15** |
+
+The first two are legitimate -- it is deaf, not blind. The fifteen are
+words it should never have had, and `presence_view` will go on offering
+them under `can_bring_up` as things it might raise in conversation. A
+read-side refusal would cover both this and the hearsay hole above, at the
+cost of leaving wrong data in the ledger rather than removing it; a
+migration would fix the data and not the doors. Whichever is chosen, the
+existing rows are not fixed by the intake gate and should not be assumed
+to be.
+
 ### 1.150 A creature has no held hunt — the courier maze problem, one subsystem over
 
 **The owner's read, 2026-09-06, on watching a predator walk home past its
