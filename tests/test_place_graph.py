@@ -458,6 +458,43 @@ class TestRecordSpatialExperience:
         assert "door you have never taken" not in verdict
         assert out.get("ground_fully_known") is True
 
+    def test_a_stub_that_grew_stops_being_a_dead_end_once_walked(self):
+        """The frontier mints lazily, so an unwalked stub holds exactly one
+        edge -- the way back -- reads `onward_exits: 0` from the doorway, and
+        is written into `known_dead_ends`. It was never retracted, not even by
+        walking through it and out the far side.
+
+        Live, chat 117 turn 106: the companion's `known_dead_ends` held risers
+        16, 17 and 18 -- three rooms she had walked THROUGH, each carrying two
+        edges by then. `character._verdict` reads that set as `closed_rids`,
+        so a mind can refuse to route through a corridor it is standing in.
+
+        Standing in the room is the retraction, and it costs no new channel:
+        `known_exits[here]` is gathered in the same function because standing
+        in a room is how you see its doorways.
+        """
+        sc = self._chain(3)
+        st = {}
+        # Glimpsed from r00 while r01 was still a one-edge stub.
+        st["known_dead_ends"] = ["r01"]
+        record_spatial_experience(st, sc, "r00", 1)
+        assert "r01" in st["known_dead_ends"], "not yet walked, belief stands"
+
+        # Now stand in it. It has two ways out, so it is not a dead end.
+        record_spatial_experience(st, sc, "r01", 2)
+        assert "r01" not in st["known_dead_ends"]
+        assert len(st["known_exits"]["r01"]) > 1
+
+    def test_a_real_dead_end_survives_being_stood_in(self):
+        """The retraction is evidence, not amnesia: one way out is still one
+        way out, and standing there confirms it rather than clearing it."""
+        sc = self._chain(2)
+        # r01 is the end of the chain: its only edge goes back to r00.
+        st = {"known_dead_ends": ["r01"]}
+        record_spatial_experience(st, sc, "r01", 1)
+        assert st["known_exits"]["r01"] == ["r00"]
+        assert "r01" in st["known_dead_ends"]
+
     def test_an_idle_beat_neither_walks_nor_revisits(self):
         sc = self._chain(3)
         st = {}
