@@ -7753,6 +7753,21 @@ declares is an intention to move; what the engine decides includes who ends
 up where, and being alone is a consequence of one's own movement exactly as
 a failed pry is a consequence of one's own attempt.
 
+**ONE CHANNEL ALREADY DOES THIS CORRECTLY, which is the argument that the
+fix is natural rather than novel.** Turn 101, the run's last beat: the player
+made the same mistake as turn 90 -- walked on into the next riser while Sarah
+stayed flat behind the jamb -- and this time he WAS told, immediately and
+well:
+
+    My hand reached into empty air. My fingers closed on nothing. She had
+    not followed me onto the dark deck.
+
+The difference is that he REACHED for her. Contact is delivered to the
+player as interoception, so a contact that fails to land is an outcome of
+his own conduct that reaches him by an existing channel. The act channel
+skips him; the contact channel does not, and nobody had to invent anything
+for it to read properly on the page.
+
 **s1.155 folds into this** as the case where the outcome did alter standing
 state and was lost on the way for a different reason. Fixing this one would
 have covered turn 80 as well, from the other side.
