@@ -9,12 +9,12 @@
 | `agents/__init__.py` | 97 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
 | `agents/background.py` | 1692 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
 | `agents/character.py` | 4256 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
-| `agents/common.py` | 9866 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
+| `agents/common.py` | 9932 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 4327 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
-| `agents/director.py` | 5040 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
+| `agents/director.py` | 5050 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 457 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 1261 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
-| `agents/director_fanout.py` | 941 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
+| `agents/director_fanout.py` | 944 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 1922 |  | `agents.common`, `agents.director_lingua`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 1350 |  | `agents.director_lingua`, `story.character_schema`, `world.spatial` |
@@ -129,7 +129,7 @@
 | `world/charter_author.py` | 800 |  | `world.charter_commitment`, `world.charter_economy`, `world.charter_figure`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_politics`, `world.charter_practice` |
 | `world/charter_chatter.py` | 443 |  | `world.crowds` |
 | `world/charter_commitment.py` | 292 |  | `world.charter_model` |
-| `world/charter_creature.py` | 439 |  | `world.charter_harm`, `world.charter_model` |
+| `world/charter_creature.py` | 464 |  | `world.charter_harm`, `world.charter_model` |
 | `world/charter_crowd.py` | 282 |  | `world.crowds` |
 | `world/charter_decide.py` | 279 |  | `world.charter_model`, `world.charter_news` |
 | `world/charter_drift.py` | 106 |  | `world.charter_model` |
@@ -155,11 +155,11 @@
 | `world/charter_plan.py` | 227 |  | `world.charter_drift`, `world.charter_model`, `world.charter_roster` |
 | `world/charter_politics.py` | 161 |  | — |
 | `world/charter_practice.py` | 1200 |  | `world.charter_commitment`, `world.charter_figure`, `world.charter_mind`, `world.charter_politics`, `world.charter_talk` |
-| `world/charter_predation.py` | 885 |  | `world.charter_creature`, `world.charter_harm`, `world.charter_model`, `world.charter_move` |
+| `world/charter_predation.py` | 957 |  | `world.charter_creature`, `world.charter_harm`, `world.charter_model`, `world.charter_move` |
 | `world/charter_promote.py` | 604 |  | `world.charter_commitment`, `world.charter_feel`, `world.charter_politics`, `world.charter_social` |
 | `world/charter_roster.py` | 134 |  | `world.charter_model` |
 | `world/charter_run.py` | 1477 |  | `world`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_enrol`, `world.charter_feel`, `world.charter_figure`, `world.charter_harm`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
-| `world/charter_runtime.py` | 4378 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics`, `world.spatial` |
+| `world/charter_runtime.py` | 4390 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics`, `world.spatial` |
 | `world/charter_social.py` | 743 |  | `world.charter_politics` |
 | `world/charter_space.py` | 213 |  | `world.spatial` |
 | `world/charter_surface.py` | 364 |  | — |
@@ -241,14 +241,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `norm_sequence()` | 3648 | 284 lines |
-| `_check_narrator_fidelity()` | 9329 | 236 lines |
+| `norm_sequence()` | 3714 | 284 lines |
+| `_check_narrator_fidelity()` | 9395 | 236 lines |
 | `presence_figures_for_room()` | 1901 | 211 lines |
-| `_unknown_actor_label()` | 4408 | 152 lines |
-| `_scrub_invented_dialogue()` | 7897 | 151 lines |
-| `_check_quote_attribution()` | 8892 | 139 lines |
+| `_unknown_actor_label()` | 4474 | 152 lines |
+| `_scrub_invented_dialogue()` | 7963 | 151 lines |
+| `_check_quote_attribution()` | 8958 | 139 lines |
 | `observer_body_regions()` | 1465 | 137 lines |
-| `_scrub_unknown_identities()` | 4754 | 124 lines |
+| `_scrub_unknown_identities()` | 4820 | 124 lines |
 
 ### `agents/composer.py`
 
@@ -267,14 +267,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 3062 | 1945 lines |
-| `director_interpret()` | 793 | 665 lines |
-| `_reconcile_resolution()` | 1846 | 522 lines |
-| `_run_specialists()` | 2575 | 263 lines |
+| `director_resolve()` | 3072 | 1945 lines |
+| `director_interpret()` | 803 | 665 lines |
+| `_reconcile_resolution()` | 1856 | 522 lines |
+| `_run_specialists()` | 2585 | 263 lines |
 | `director_establish()` | 324 | 171 lines |
-| `_reconcile_interpretation()` | 1460 | 139 lines |
-| `_specialist_repairs()` | 1661 | 131 lines |
-| `_ground_public_evidence()` | 2880 | 112 lines |
+| `_reconcile_interpretation()` | 1470 | 139 lines |
+| `_specialist_repairs()` | 1671 | 131 lines |
+| `_ground_public_evidence()` | 2890 | 112 lines |
 
 ### `agents/director_contact.py`
 
@@ -306,14 +306,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_specialist_payload()` | 362 | 303 lines |
-| `_orchestration_scope_backstop()` | 791 | 151 lines |
+| `_specialist_payload()` | 362 | 306 lines |
+| `_orchestration_scope_backstop()` | 794 | 151 lines |
 | `_resolve_beat_view()` | 74 | 127 lines |
 | `_interpret_beat_view()` | 203 | 40 lines |
 | `_beat_rooms()` | 286 | 37 lines |
 | `_anchor_names()` | 325 | 35 lines |
-| `_resolved_event_verdicts()` | 701 | 30 lines |
-| `_author_emitted_channels()` | 753 | 25 lines |
+| `_resolved_event_verdicts()` | 704 | 30 lines |
+| `_author_emitted_channels()` | 756 | 25 lines |
 
 ### `agents/director_floors.py`
 
@@ -1573,14 +1573,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_creature()` | 133 | 138 lines |
-| `creature_neighbors()` | 312 | 32 lines |
-| `normalize_spoor()` | 281 | 18 lines |
-| `prey_capability()` | 402 | 14 lines |
-| `predator_capability()` | 388 | 12 lines |
-| `is_active()` | 356 | 11 lines |
-| `room_fits()` | 301 | 9 lines |
-| `hunger_of()` | 369 | 9 lines |
+| `normalize_creature()` | 133 | 163 lines |
+| `creature_neighbors()` | 337 | 32 lines |
+| `normalize_spoor()` | 306 | 18 lines |
+| `prey_capability()` | 427 | 14 lines |
+| `predator_capability()` | 413 | 12 lines |
+| `is_active()` | 381 | 11 lines |
+| `room_fits()` | 326 | 9 lines |
+| `hunger_of()` | 394 | 9 lines |
 
 ### `world/charter_crowd.py`
 
@@ -1898,14 +1898,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `hunt_moves()` | 237 | 133 lines |
-| `_attack()` | 385 | 118 lines |
-| `_tribute()` | 677 | 95 lines |
-| `predation_round()` | 505 | 89 lines |
-| `run_registry()` | 820 | 60 lines |
-| `read_spoor()` | 625 | 48 lines |
+| `_attack()` | 429 | 146 lines |
+| `hunt_moves()` | 281 | 133 lines |
+| `_tribute()` | 749 | 95 lines |
+| `predation_round()` | 577 | 89 lines |
+| `run_registry()` | 892 | 60 lines |
+| `read_spoor()` | 697 | 48 lines |
+| `_scene_figures_at()` | 213 | 38 lines |
 | `_company()` | 133 | 29 lines |
-| `_prey_here()` | 213 | 22 lines |
 
 ### `world/charter_promote.py`
 

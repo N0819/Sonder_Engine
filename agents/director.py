@@ -668,13 +668,23 @@ def _present_figure_rows(figures, answers=None, cap=24):
             row["kind"] = f["kind"]
         if f.get("brief"):
             row["brief"] = f["brief"]
+        # WHAT IT IS, where what it is is not a person: a hunter's prey
+        # table, senses and hunger (`common._creature_stance`). Absent for
+        # every body that is somebody, so an ordinary payload is unchanged.
+        if f.get("creature"):
+            row["creature"] = f["creature"]
         # Where in the room the body stands (`world.charter_place`): at a
         # fixture, or at a cell of the room's grid -- so the hands can say
         # who is beside what, and so a `stations` entry for the body lands
         # on the same vocabulary (`stations`' own `at`).
         if f.get("station"):
             row["station"] = f["station"]
-        if answers and f.get("name") in answers:
+        # A THING THAT HUNTS DOES NOT TAKE REQUESTS. `figure_answers` says
+        # what a body would grant if asked, which is a fact about a person
+        # in a society; offered for a predator it read "order: answered as
+        # a request, granted / request: granted / bargain: accepted" beside
+        # a creature that was hunting the person doing the asking.
+        if answers and f.get("name") in answers and not f.get("creature"):
             row["answers"] = answers[f["name"]]
         rows.append(row)
         if len(rows) >= cap:

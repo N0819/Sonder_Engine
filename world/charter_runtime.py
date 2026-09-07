@@ -3905,6 +3905,18 @@ def background_presence_records(cid, *, places=None, names=None,
             sketch["surface"] = surface
             sketch["appearance"] = appearance_text(
                 surface, noun=member_noun(state, body_key))
+        else:
+            # A CREATURE DESCRIBES ITSELF OR IS NOT DESCRIBED. A charter
+            # that authors no `looks` deals no surface, and for a creature
+            # that is deliberate -- the person-pools are refused
+            # (`charter_surface.looks_profile`) rather than dealt to a thing
+            # with no face. Its own authored `look` is the way it gets
+            # described anyway, and it is the only way: nothing here
+            # invents one.
+            from world.charter_creature import normalize_creature
+            _creature = normalize_creature(state.get("creature"))
+            if _creature and _creature.get("look"):
+                sketch["appearance"] = _creature["look"]
         berth = str(body.get("berth") or "")
         if berth:
             # Where this body SLEEPS -- the fact that makes a room private
