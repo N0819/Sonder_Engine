@@ -3523,7 +3523,13 @@ def _authored_prose_gate(ctx, stage, name, known, identity_space):
     return gate
 
 
-def _gated_ambient_percepts(gate, sensory_events, room):
+#: Where a beat's own sound events sit among the beat's deliveries: after
+#: the acts and speech the loops produced, which are numbered from zero, so
+#: a noise reads as part of the beat without displacing what people did.
+_AMBIENT_BEAT_BAND = 500_000
+
+
+def _gated_ambient_percepts(gate, sensory_events, room, *, order_key=None):
     """Authored ambient events, run through the observer's admission gate.
 
     Ambient prose is written for the scene, not for a mind: the establish
@@ -3533,18 +3539,20 @@ def _gated_ambient_percepts(gate, sensory_events, room):
     dedupe key honest -- two observers who receive different gated text
     have genuinely received different things."""
     if gate is None:
-        return composer.ambient_percepts(sensory_events, room)
+        return composer.ambient_percepts(sensory_events, room,
+                                         order_key=order_key)
     gated = []
     for event in sensory_events or []:
         if not isinstance(event, dict):
             continue
-        desc = gate(str(event.get("desc") or event.get("description")
-                        or event.get("text") or ""))
+        desc = gate(str(event.get("detail") or event.get("desc")
+                        or event.get("description") or event.get("text")
+                        or ""))
         if not desc:
             continue
         gated.append({**event, "desc": desc,
                       "description": desc, "text": desc})
-    return composer.ambient_percepts(gated, room)
+    return composer.ambient_percepts(gated, room, order_key=order_key)
 
 
 #: Substance placements whose matter has open air around it. `interior` is
@@ -4370,8 +4378,13 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
                 self_forms=self_forms,
                 self_pronouns=p.get("pronouns"),
                 sound=_sound_field_for(ctx, sc, name, p.get("room")))
+            # THIS BEAT'S sounds, so they reach the numbered deliveries
+            # rather than the wallpaper. The establish stage's own call is
+            # left keyless: its ambience is the air of a place and belongs
+            # in standing state.
             percepts.extend(
-                _gated_ambient_percepts(gate, sensory_events, p.get("room")))
+                _gated_ambient_percepts(gate, sensory_events, p.get("room"),
+                                        order_key=_AMBIENT_BEAT_BAND))
             # A SOUND EVENT IN ANOTHER ROOM IS A ONE-BEAT SOURCE on that
             # room's centre (DESIGN_SOUND_FIELD.md section 4b), spread through
             # the doorway it came by and admitted only where the field grades
@@ -4884,9 +4897,44 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
     # and what the commit stores are the same records; `desc` is the key
     # `ambient_percepts` reads a signal's own room by, and `detail` is the
     # one the objects hand writes it in.
+    _incoming = list(diff.get("sensory_events") or ())
+    # WHAT THE OFF-SCREEN WORLD WAS HEARD DOING REACHES EARS HERE OR
+    # NOWHERE. `charter_noises` turns each creature's own `state["heard"]`
+    # -- what every body was doing and where, replaced every round -- into
+    # this channel's shape, and `commit_scene_state` adds it to the record
+    # it STORES. That store is unreachable by construction, and the comment
+    # directly above says why for the Director's half: the commit runs after
+    # the narrator, so a stored record is written for a beat whose
+    # perception has already happened, and `beat_sensory_events` refuses it
+    # on every later beat because the beat number is its whole lifetime.
+    # The Director's own events escape that by riding the DIFF, which is
+    # what this stage reads; the charter's had no diff to ride.
+    #
+    # So a creature's voice reached no reader at all -- not once, in any
+    # story. Measured live, chat 117 turns 64-65: a carbonic stalker
+    # followed the cast through a jammed pressure door, the round recorded
+    # `moving` at `loud` in the room they were kneeling in, the commit wrote
+    # it faithfully into the scene, and no observation of any kind was
+    # composed from it. The whole authored apparatus -- four voices per
+    # creature, rungs, bearings, "the sound is the channel a creature
+    # reaches a room through before it reaches the room" -- was inert.
+    #
+    # A ONE-BEAT LAG IS THE HONEST ANSWER and not a defect of this fix: the
+    # charter window advances inside the commit, so what it records is the
+    # elapsed beat, and the first perception that can carry it is the next
+    # one. Hearing it a beat late is what a listener gets when the thing
+    # happened while the beat was resolving; hearing it never is what the
+    # engine did before.
+    try:
+        from world.charter_runtime import charter_noises, registry_for
+        _incoming.extend(charter_noises(
+            registry_for(ctx.chat.id,
+                         getattr(getattr(ctx, "turn", None), "frame_id", None))))
+    except Exception:
+        pass                       # a story with no charter adds nothing
     _sensory = [record for record in (
         normalize_sensory_event(event, rooms=sc.get("rooms") or {})
-        for event in (diff.get("sensory_events") or ())
+        for event in _incoming
         if isinstance(event, dict)) if record]
     beat_sounds = [dict(record, desc=record["detail"])
                    for record in _sensory if record.get("detail")]

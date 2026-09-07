@@ -957,3 +957,48 @@ def test_an_impaired_ear_is_not_an_unreachable_one():
     assert composer.line_hear_level(
         {**ordinary, "volume": "shout"}, same_room, "Alice",
         proximity="within_reach", senses=deaf) == "none"
+
+
+def test_a_beats_own_sound_is_a_delivery_and_authored_ambience_is_not():
+    """`render_view` splits standing state from beat content on `order_key
+    is None`, and `ambient_percepts` minted every sound without one -- so a
+    one-off noise landed in `present_scene`, which the narrator sheet says
+    in as many words "carries no obligation", while `spatial_sound_field`'s
+    own note on the channel reads "a noise is a thing that happened in this
+    window and never a standing fact". The writer said one-off; the
+    classifier said wallpaper.
+
+    Measured live, chat 117 turn 65: a carbonic stalker moved in the room
+    the cast were kneeling in, its voice was composed correctly as
+    `standing: True`, never entered the numbered deliveries, and the prose
+    recorded that nothing was moving.
+
+    Scoped by CALLER, and both halves are asserted here: the establish
+    stage's authored ambience is the air of a place, true before the beat
+    and after it, and must stay standing.
+    """
+    event = [{"room": "hall", "kind": "sound", "level": "loud",
+              "detail": "a slow, rhythmic siphon-vent hiss"}]
+
+    # A beat's own sound: keyed, so it is this beat's content.
+    beat = composer.ambient_percepts(event, "hall", order_key=500_000)
+    assert len(beat) == 1
+    assert beat[0].order_key is not None
+    assert beat[0].kind == "ambient" and beat[0].channel == "hearing"
+
+    # Authored opening ambience: keyless, so it stays standing state.
+    standing = composer.ambient_percepts(event, "hall")
+    assert len(standing) == 1 and standing[0].order_key is None
+
+    # The two agree about everything except which half they belong to.
+    assert beat[0].data == standing[0].data
+    assert beat[0].dedupe_key == standing[0].dedupe_key
+
+
+def test_several_sounds_in_one_beat_keep_their_order():
+    """Keyed from a band plus the event's own index, so two noises in one
+    beat do not collide on a single key and lose their sequence."""
+    events = [{"room": "hall", "detail": "a hiss"},
+              {"room": "hall", "detail": "a drag of footfalls"}]
+    out = composer.ambient_percepts(events, "hall", order_key=500_000)
+    assert [p.order_key for p in out] == [500_000, 500_001]
