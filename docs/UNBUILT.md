@@ -7406,6 +7406,20 @@ rather than a second `can_open_doors`.
 charters anywhere but this story (s1.151), so this has never had the chance
 to be wrong before.
 
+**CONFIRMED IN PLAY, turn 82.** The creature is now standing in `_11` --
+the room whose anchors are `['lateral_doorway', 'pressure_door',
+'wrecked_trolley', 'spilled_drums', 'chemical_barrier', ...]`. It walked
+over the line. The barrier held for exactly as long as the Director was
+resolving the confrontation beat by beat ("It did not cross.", turn 73) and
+stopped meaning anything the moment the creature moved on its own schedule
+through `hunt_moves`, which reads `creature_neighbors` and has no word for
+what is on the floor.
+
+So the two paths disagree about the same barrier: the one that runs when
+the player is watching honours it, and the one that runs when they are not
+does not. That is worse than a barrier nothing implements, because the
+first path teaches the player a rule the second does not keep.
+
 ### 1.151 Being TOLD does not ask for ears, and a closed intake leaves the old claims standing
 
 Two residuals of the deafness gate (`charter_observe.body_receives_evidence`,
