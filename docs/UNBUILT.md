@@ -7587,6 +7587,19 @@ to keep it -- filing unparsed prose as a request to build a noun. Keeping
 the text as what it is (a declaration the interpreter could not place) costs
 nothing and asks nobody to author a sentence.
 
+**The clearest example arrived at turn 112**, and it settles what the word
+count could not: the beat filed a `thing` need whose subject is
+
+    "And while I run I let myself think about the thing I've been refusing
+     to think about since the li[ft]"
+
+alongside a perfectly good one in the same breath (`stairwell to Sub-Level
+Three`). The junk subject is not a description of an object, a room, or
+anything the world could hold -- it is INTERIOR MONOLOGUE, the player
+narrating their own attention. No length rule distinguishes the two here;
+what distinguishes them is that one names a thing and the other names a
+thought, and the channel cannot tell because it was never asked to.
+
 ### 1.155 A fixture is two records with two owners and no link, so the player was not told what his own hands had just done
 
 **The clearest instance yet of the question this engine keeps rewarding: is
