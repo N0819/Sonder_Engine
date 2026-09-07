@@ -23,7 +23,8 @@ from story.scene import (
     awareness_of,
     condition_exit_owner,
 )
-from world.mechanics import read_time_diff
+from world.mechanics import (condition_cadence_is_inert,
+                            read_time_diff)
 from world.spatial import merge_scene_with_diff, room_of
 
 from .common import _mask_quoted_spans
@@ -625,6 +626,14 @@ def _conditions_view(chat_id, clock, turn_idx, sd_time=None):
     Each entry states the two facts an ending needs: the id to re-emit with
     `active: 0`, and whether anything else will ever close this row
     (`expires_in_seconds: None` means nothing will).
+
+    And one fact a REPAIR needs. A row that spelled `tick_interval_seconds`
+    with something the sweep cannot fire on carries `cadence_never_fires`,
+    from the same predicate the commit domain warns with. Without it this
+    view reported the authored `0` through a plain float cast and the
+    Director read a live cadence off a row the engine had already refused --
+    the identical failure this block was written for, one field over: it
+    cannot repair a row it has never been told is dead.
     """
     rows = active_condition_rows(chat_id)
     if not rows:
@@ -671,6 +680,14 @@ def _conditions_view(chat_id, clock, turn_idx, sd_time=None):
             "expires_in_seconds": (None if expires is None
                                    else round(expires - now, 1)),
             "tick_interval_seconds": interval,
+            # Present, and true, ONLY on a row that spelled a cadence the
+            # sweep can never fire on -- the same predicate the commit
+            # domain reports with, so the ledger and the warning cannot
+            # disagree about which rows are dead. The authored number stays
+            # beside it: the Director has to re-emit this id with a real
+            # interval, and it re-emits what it was shown.
+            **({"cadence_never_fires": True}
+               if condition_cadence_is_inert(payload) else {}),
             # None where the row predates the assertion stamp (every row
             # written before this landed) -- "unknown", never "zero".
             "last_asserted_turns_ago": (

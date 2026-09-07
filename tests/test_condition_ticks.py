@@ -621,6 +621,61 @@ def test_the_conditions_view_shows_every_live_row_and_who_owns_its_exit(
     assert by_id["flare"]["age_seconds"] == 780
 
 
+def test_a_cadence_the_sweep_refuses_is_named_dead_in_the_ledger(temp_db):
+    """The commit domain warns that a row "declares a tick cadence and gives
+    no usable interval"; the view the Director repairs it from showed the
+    authored `0` through a plain float cast and said nothing else, so the
+    ledger read live for a row the engine had already refused.
+
+    Live case, chat 117 turn 73: `carbonic_stalker_chemical_irritation`,
+    `tick_interval_seconds: 0`, a `state.reaction` of "siphon vents flaring
+    and contracting rapidly" -- warned about at every commit, never repaired,
+    and the creature it belonged to was never once touched by it.
+    """
+    from agents.director import _conditions_view
+    from world.mechanics import inert_condition_ids
+
+    cid = _make_chat(temp_db)
+    rows = [("irritation", "chemical_exposure",
+             {"tick_interval_seconds": 0,
+              "state": {"reaction": "siphon vents flaring"}}),
+            ("nested", "burning",
+             {"state": {"tick_interval_seconds": -4}}),
+            ("flood", "flooding", {"tick_interval_seconds": 15}),
+            ("scar", "injury", {})]
+    for condition_id, kind, payload in rows:
+        temp_db.qi(
+            "INSERT INTO world_conditions(condition_id,chat_id,subject_id,"
+            "kind,started_at,expires_at,next_tick,payload,active) "
+            "VALUES(?,?,?,?,?,?,?,?,?)",
+            (condition_id, cid, "Aurel", kind, 0.0, None, None,
+             json.dumps(payload), 1),
+        )
+
+    by_id = {row["condition_id"]: row
+             for row in _conditions_view(cid, {"elapsed_seconds": 100.0},
+                                         turn_idx=3)}
+
+    # Spelled and unusable, at either depth: named dead, and the authored
+    # number stays -- the Director re-emits the id it was shown.
+    assert by_id["irritation"]["cadence_never_fires"] is True
+    assert by_id["irritation"]["tick_interval_seconds"] == 0
+    assert by_id["nested"]["cadence_never_fires"] is True
+
+    # A usable cadence, and a row that never claimed one, are both silent:
+    # absent is not inert.
+    assert "cadence_never_fires" not in by_id["flood"]
+    assert "cadence_never_fires" not in by_id["scar"]
+
+    # ONE predicate. The ledger and the commit warning name the same rows,
+    # or the Director is asked to repair a set nobody reported.
+    flagged = sorted(k for k, row in by_id.items()
+                     if row.get("cadence_never_fires"))
+    assert flagged == inert_condition_ids(
+        [{"condition_id": cond_id, "payload": payload}
+         for cond_id, _kind, payload in rows])
+
+
 def test_the_body_specialist_is_the_hand_that_sees_the_conditions_ledger(
         temp_db):
     """`director_scopes` gives the `conditions` channel to `body`, so it is
