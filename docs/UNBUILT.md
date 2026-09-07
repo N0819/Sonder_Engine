@@ -7733,6 +7733,26 @@ to ask for it, on a beat they had to spend to ask -- with a deaf predator
 climbing the shaft below and a barrier evaporating behind them, the cost of
 that beat was the whole of what the beat was for.
 
+**AND IT IS NOT ONLY ACTS. Turn 90: he left his companion behind and was
+not told.** The player ran for the next doorway while Sarah was still
+lowering herself through a ceiling sleeve two rooms back. The engine tracked
+it exactly -- her view says "You are in Upper Service Core Plenum 14", his
+position is Riser 15 -- and his prose says nothing about her not being
+there. He is now separated from her by a drop, with the creature between
+them, and nothing on the page says so.
+
+`composer.crossing_percept` is documented as "a body entering or leaving THE
+OBSERVER'S ROOM this beat". So the engine models someone walking out on you
+and has no percept for you walking out on someone: the mover was the player,
+and a mover's own movement is skipped for the mover by the same
+`_is_the_observer` branch. Departure is built; it only fires for the one who
+stayed.
+
+This widens the entry from acts to conduct generally. What the player
+declares is an intention to move; what the engine decides includes who ends
+up where, and being alone is a consequence of one's own movement exactly as
+a failed pry is a consequence of one's own attempt.
+
 **s1.155 folds into this** as the case where the outcome did alter standing
 state and was lost on the way for a different reason. Fixing this one would
 have covered turn 80 as well, from the other side.
