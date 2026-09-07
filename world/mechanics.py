@@ -810,15 +810,32 @@ def inert_condition_ids(conditions):
     """
     out = []
     for cond in conditions or []:
-        payload = _payload_of(cond)
-        if _condition_field(payload, "tick_interval_seconds") is None:
-            continue
-        if _tick_interval(payload) is not None:
+        if not condition_cadence_is_inert(_payload_of(cond)):
             continue
         cid = str(cond.get("condition_id") or "").strip()
         if cid and cid not in out:
             out.append(cid)
     return sorted(out)
+
+
+def condition_cadence_is_inert(payload):
+    """Does this payload SPELL a cadence that the sweep can never fire on?
+
+    The predicate behind `inert_condition_ids`, public because the answer is
+    needed in two places and a second derivation of it drifted. The Director's
+    `active_conditions` view (`agents/director_floors._conditions_view`) read
+    the same field through a plain float cast, which answers `0.0` where
+    `_tick_interval` answers None -- so the ledger showed the Director a
+    cadence the engine had already refused, and the row that "declares a tick
+    cadence" was reported inert at commit while reading as live in the payload
+    that was supposed to let the Director repair it.
+
+    Absent is not inert: a row that never claimed a cadence is a condition
+    that never claimed to act.
+    """
+    if _condition_field(payload, "tick_interval_seconds") is None:
+        return False
+    return _tick_interval(payload) is None
 
 
 def _tick_conditions(scene, conditions, elapsed):

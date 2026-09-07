@@ -15,7 +15,7 @@
 | `agents/director_contact.py` | 457 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 1261 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
 | `agents/director_fanout.py` | 944 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
-| `agents/director_floors.py` | 1922 |  | `agents.common`, `agents.director_lingua`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
+| `agents/director_floors.py` | 1939 |  | `agents.common`, `agents.director_lingua`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 1350 |  | `agents.director_lingua`, `story.character_schema`, `world.spatial` |
 | `agents/director_reconcile.py` | 592 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story`, `world.spatial` |
@@ -173,7 +173,7 @@
 | `world/degradation.py` | 171 |  | — |
 | `world/gaps.py` | 454 |  | `core.db`, `mind.canon_provenance`, `world.spatial`, `world.subjects` |
 | `world/living_world.py` | 596 |  | `core.logging_utils`, `world.mechanics` |
-| `world/mechanics.py` | 1156 |  | `core`, `world.spatial`, `world.spatial_frames` |
+| `world/mechanics.py` | 1173 |  | `core`, `world.spatial`, `world.spatial_frames` |
 | `world/offscreen.py` | 2299 |  | `core`, `core.logging_utils`, `llm.prompts` |
 | `world/paradox.py` | 648 |  | `core.db`, `core.frames`, `story.character_schema`, `world.spatial` |
 | `world/place_purpose.py` | 545 |  | `mind.theory_of_mind`, `world.comfort`, `world.spatial`, `world.survival` |
@@ -319,14 +319,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_bind_minted_entities_to_present_figures()` | 1467 | 198 lines |
-| `resolve_concealment_refs()` | 1716 | 104 lines |
-| `_awareness_exits()` | 715 | 98 lines |
-| `_release_attempts()` | 973 | 93 lines |
-| `_conditions_view()` | 595 | 87 lines |
-| `strip_addressee_concealment()` | 1842 | 81 lines |
-| `_narrated_destruction_subjects()` | 1233 | 79 lines |
-| `_unsupported_character_awareness()` | 310 | 66 lines |
+| `_bind_minted_entities_to_present_figures()` | 1484 | 198 lines |
+| `resolve_concealment_refs()` | 1733 | 104 lines |
+| `_conditions_view()` | 596 | 103 lines |
+| `_awareness_exits()` | 732 | 98 lines |
+| `_release_attempts()` | 990 | 93 lines |
+| `strip_addressee_concealment()` | 1859 | 81 lines |
+| `_narrated_destruction_subjects()` | 1250 | 79 lines |
+| `_unsupported_character_awareness()` | 311 | 66 lines |
 
 ### `agents/director_lingua.py`
 
@@ -2124,12 +2124,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_tick_conditions()` | 824 | 128 lines |
+| `_tick_conditions()` | 841 | 128 lines |
 | `read_time_diff()` | 172 | 110 lines |
 | `_fire_due_events()` | 468 | 96 lines |
-| `mechanics_sweep()` | 1098 | 59 lines |
+| `mechanics_sweep()` | 1115 | 59 lines |
 | `_schedule_new_arrivals()` | 566 | 44 lines |
-| `unanswered_hazard_subjects()` | 1042 | 42 lines |
+| `unanswered_hazard_subjects()` | 1059 | 42 lines |
 | `time_diff_claims()` | 310 | 31 lines |
 | `beat_end_elapsed()` | 343 | 31 lines |
 
