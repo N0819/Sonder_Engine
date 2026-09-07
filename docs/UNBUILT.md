@@ -7457,6 +7457,54 @@ migration would fix the data and not the doors. Whichever is chosen, the
 existing rows are not fixed by the intake gate and should not be assumed
 to be.
 
+### 1.153 The corridor grows as fast as the player walks it, so a search can recede forever
+
+**Found by playing, not by reading**, chat 117 turns 75-77. Under a stated
+ten-minute in-fiction deadline (the solvent barrier evaporating behind them)
+the player declared a specific search three beats running -- "a ladder, a
+stair, a shaft with rungs, a hatch in the ceiling, anything vertical" -- and
+each beat the world answered by extending north and promising it further on.
+The last answer was Sarah's: "a junction box or vertical access rung set
+should appear within twenty meters."
+
+**Nothing here is misbehaving.** The rooms are honestly furnished --
+`_13` arrived with four anchors and a real description, so this is NOT
+s1.148's underfurnished frontier. Each room genuinely has no way up, and
+saying so is the correct answer. The Director is not stalling; it is
+answering truthfully about a place that keeps being extended underneath it.
+
+**THE MECHANISM.** `structure.prepare_frontier_expansion` mints "approached
+frontier nodes" -- so stepping into the last room of the chain mints the
+next one, and the stub inherits the axis it was minted from precisely so
+"the frontier keeps moving" (its own comment). Walking the corridor is what
+creates more corridor. Measured live at turn 77: `_14` existed, blank, before
+anyone had seen it.
+
+**THE CAP IS REAL AND IS NOT A NARRATIVE BOUND.** `max_planned` stops the
+chain; for this story it is **200**, and the structure held **23** planned
+rooms. So the goal can recede another 177 times. That number is defensible
+for exploration and useless as a limit on a chase -- the bound exists in the
+wrong currency. It is measured here rather than changed because lowering it
+would cost every exploring story something real, and because a cap is the
+owner's to set.
+
+**WHAT IS ACTUALLY MISSING** is not a smaller number. It is that nothing
+connects a DECLARED SEARCH under narrative pressure to whether the world is
+allowed to defer again. A search that can always be answered with "further
+on" is a search with no failure state, and a deadline the fiction has
+already announced is exactly the pressure that should force the world to
+commit: the rungs are in this room, or this axis does not have them and the
+player has spent the time finding that out. Both are answers. "Twenty meters
+further" is the one shape that costs the player their clock and tells them
+nothing.
+
+This is the same question the owner raised about giving the story planner
+authority to act between turns -- a receding goal under a countdown is
+precisely what a planner tier would close, and it cannot be closed by any
+single stage: `director_resolve` answers honestly about the room it was
+given, and the room it was given was minted a beat earlier by deterministic
+code that has never heard of the deadline.
+
 ### 1.150 A creature has no held hunt — the courier maze problem, one subsystem over
 
 **The owner's read, 2026-09-06, on watching a predator walk home past its
