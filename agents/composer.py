@@ -2087,8 +2087,32 @@ def ambient_percepts(sensory_events, observer_room):
                    or event.get("source_room") or "")
         if room and observer_room and room != str(observer_room):
             continue
-        desc = str(event.get("desc") or event.get("description")
-                   or event.get("text") or "").strip()
+        # `detail` FIRST, because it is the canonical key and the other
+        # three are not. `spatial_sound_field.normalize_sensory_event` holds
+        # the shape -- "{kind, room, level | db, source, detail} -- the
+        # note's shape, and a closed set of keys" -- and it FOLDS `desc` and
+        # `description` INTO `detail` on the way in. So every stored event
+        # carries its text under `detail` and this reader checked three
+        # spellings that normalisation had already removed.
+        #
+        # Its own warning, one module over, is what happened here read from
+        # the other end: "a hand that writes prose into a key nobody reads
+        # writes it into nothing." The writer was canonical; the READER
+        # drifted.
+        #
+        # Measured live, chat 117 turn 65. A carbonic stalker followed the
+        # cast through a jammed pressure door and stood in the room with
+        # them, and the beat's own scene carried its voice --
+        # {"kind": "sound", "room": <their room>, "level": "loud",
+        # "detail": "a slow, rhythmic siphon-vent hiss and the soft drag of
+        # leathery footfalls, nearer with every hunted breath"}. The player
+        # received no hearing percept at all. Sight was legitimately dark;
+        # this was the channel that should have carried it, and it dropped
+        # the event for having its text in the one field the format
+        # guarantees.
+        desc = str(event.get("detail") or event.get("desc")
+                   or event.get("description") or event.get("text")
+                   or "").strip()
         if not desc:
             continue
         channel = _ambient_channel(event)
