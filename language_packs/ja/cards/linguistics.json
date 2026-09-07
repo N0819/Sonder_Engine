@@ -495,9 +495,22 @@
     "_BODY_OWNERSHIP_MODIFIERS": {
       "$type": "frozenset",
       "items": [
-        "left", "right", "upper", "lower", "inner", "outer", "front",
-        "rear", "injured", "wounded", "bare", "exposed", "covered",
-        "clothed", "near", "far"
+        "left",
+        "right",
+        "upper",
+        "lower",
+        "inner",
+        "outer",
+        "front",
+        "rear",
+        "injured",
+        "wounded",
+        "bare",
+        "exposed",
+        "covered",
+        "clothed",
+        "near",
+        "far"
       ]
     },
     "_QUOTE_SPAN_RE": {
@@ -1492,12 +1505,22 @@
       "flags": 34
     },
     "_EXPOSURE_STATE": {
-      "state": "(?:bare|naked|nude|unclothed|uncovered|exposed|stripped|\u88f8|\u7d20\u808c|\u3080\u304d\u51fa\u3057|\u525d\u304d\u51fa\u3057|\u9732\u308f|\u3042\u3089\u308f)",
-      "assertion": "(?:\\b(?:{owner})\\s+(?:\\w+[- ]){0,2}?(?:{state})\\s+{region}\\b|(?:{owner})\\s*\u306e?\\s*{state}\\s*(?:\u306e|\u306a)?\\s*{region}|(?:{owner})\\s*\u306e?\\s*{region}\\s*(?:\u304c|\u306f)\\s*{state})",
-      "idiom": "(?:\\b(?:with|using)\\s+\\S+\\s+bare\\s+hands?\\b|\u7d20\u624b\u3067)",
+      "state": "(?:bare|naked|nude|unclothed|uncovered|exposed|stripped|裸|素肌|むき出し|剝き出し|露わ|あらわ)",
+      "assertion": "(?:\\b(?:{owner})\\s+(?:\\w+[- ]){0,2}?(?:{state})\\s+{region}\\b|(?:{owner})\\s*の?\\s*{state}\\s*(?:の|な)?\\s*{region}|(?:{owner})\\s*の?\\s*{region}\\s*(?:が|は)\\s*{state})",
+      "idiom": "(?:\\b(?:with|using)\\s+\\S+\\s+bare\\s+hands?\\b|素手で)",
       "person_possessive": {
-        "first": ["my", "our", "\u79c1\u306e", "\u4ffa\u306e", "\u50d5\u306e"],
-        "second": ["your", "\u3042\u306a\u305f\u306e", "\u541b\u306e"],
+        "first": [
+          "my",
+          "our",
+          "私の",
+          "俺の",
+          "僕の"
+        ],
+        "second": [
+          "your",
+          "あなたの",
+          "君の"
+        ],
         "third": []
       }
     },
@@ -1589,7 +1612,8 @@
         "st",
         "vs"
       ]
-    }
+    },
+    "_NAME_TAIL_PATTERN": "(?:['’]s|は|が|を|に|と|も|へ|で|の|から)?"
   },
   "agents.director": {
     "_DECL_STOPWORDS": {
@@ -2202,17 +2226,17 @@
     "_VOICE_PERSON_RES": {
       "first": {
         "$type": "regex",
-        "pattern": "\u4e00\u4eba\u79f0|\\bfirst[-\\s]?person\\b",
+        "pattern": "一人称|\\bfirst[-\\s]?person\\b",
         "flags": 34
       },
       "second": {
         "$type": "regex",
-        "pattern": "\u4e8c\u4eba\u79f0|\\bsecond[-\\s]?person\\b",
+        "pattern": "二人称|\\bsecond[-\\s]?person\\b",
         "flags": 34
       },
       "third": {
         "$type": "regex",
-        "pattern": "\u4e09\u4eba\u79f0|\\bthird[-\\s]?person\\b",
+        "pattern": "三人称|\\bthird[-\\s]?person\\b",
         "flags": 34
       }
     },
@@ -4153,7 +4177,7 @@
   "persist.commit_memory": {
     "_STATION_POSSESSED_BEFORE": {
       "$type": "regex",
-      "pattern": "(?:\u306e)$",
+      "pattern": "(?:の)$",
       "flags": 32
     },
     "_SALIENCE_CUES": {
@@ -4241,18 +4265,93 @@
   "world.charter_observe": {
     "_DETERMINERS": {
       "$type": "frozenset",
-      "items": ["the", "a", "an"]
+      "items": [
+        "the",
+        "a",
+        "an"
+      ]
     }
   },
   "world.charter_surface": {
     "DEFAULT_LOOKS": {
-      "stature": ["背の高い", "背の低い", "中背の", "手足の長い", "小柄な", "ひょろりとした"],
-      "build": ["がっしりした", "きゃしゃな", "肩幅の広い", "筋張った", "太った", "痩せた"],
-      "gait": ["足早な", "のろのろした", "腰の曲がった", "背筋の伸びた", "足を引きずる", "落ち着きのない"],
-      "complexion": ["日に焼けた", "青白い", "浅黒い", "赤ら顔の", "土気色の", "そばかすの"],
-      "hair": ["短く刈った髪", "灰色の三つ編み", "ぼさぼさの髪", "剃り上げた頭", "長いお下げ", "薄くなった髪"],
-      "age": ["若い", "白髪まじりの", "年老いた", "中年の", "まだ幼さの残る", "老齢の"],
-      "marks": ["火傷の跡のある手", "欠けた歯", "切れ込みのある耳", "曲がった鼻", "インクで汚れた指", "額の古傷"]
+      "stature": [
+        "背の高い",
+        "背の低い",
+        "中背の",
+        "手足の長い",
+        "小柄な",
+        "ひょろりとした"
+      ],
+      "build": [
+        "がっしりした",
+        "きゃしゃな",
+        "肩幅の広い",
+        "筋張った",
+        "太った",
+        "痩せた"
+      ],
+      "gait": [
+        "足早な",
+        "のろのろした",
+        "腰の曲がった",
+        "背筋の伸びた",
+        "足を引きずる",
+        "落ち着きのない"
+      ],
+      "complexion": [
+        "日に焼けた",
+        "青白い",
+        "浅黒い",
+        "赤ら顔の",
+        "土気色の",
+        "そばかすの"
+      ],
+      "hair": [
+        "短く刈った髪",
+        "灰色の三つ編み",
+        "ぼさぼさの髪",
+        "剃り上げた頭",
+        "長いお下げ",
+        "薄くなった髪"
+      ],
+      "age": [
+        "若い",
+        "白髪まじりの",
+        "年老いた",
+        "中年の",
+        "まだ幼さの残る",
+        "老齢の"
+      ],
+      "marks": [
+        "火傷の跡のある手",
+        "欠けた歯",
+        "切れ込みのある耳",
+        "曲がった鼻",
+        "インクで汚れた指",
+        "額の古傷"
+      ]
     }
+  },
+  "story.scene": {
+    "_ABSENCE_RE": {
+      "$type": "regex",
+      "flags": 0,
+      "pattern": "(?:ない|無い|なし|見えない|見えず|見当たらない|隠れ|隠し|隠さ|欠け|欠い|存在しない|ありません|ません|不在|皆無)"
+    },
+    "_DANGLING_TAIL_RE": {
+      "$type": "regex",
+      "flags": 0,
+      "pattern": "(?:の|と|に|で|を|が|は|や|へ|から|まで|より)$"
+    },
+    "_UNREMARKABLE_LABEL": "特徴のない外見の人物",
+    "_CLAUSE_RE": {
+      "$type": "regex",
+      "flags": 0,
+      "pattern": "\\s*([^;.!?。！？；]+)([;.!?。！？；]*)"
+    },
+    "_CLAUSE_JOIN_PERIOD": "。",
+    "_CLAUSE_JOIN_SEMICOLON": "；",
+    "_SENTENCE_END": "。",
+    "_SENTENCE_ENDS": ".!?。！？"
   }
 }

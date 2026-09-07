@@ -11,6 +11,7 @@ from world.spatial_barriers import (_PASSABLE_BARRIERS, _SIGHT_BARRIERS,
                               edge_passable, effective_adjacent, neighbor_map,
                               normalize_barrier, resolve_edge)
 from world.spatial_containment import container_of
+from world.spatial_geometry import effective_room_size
 from world.spatial_light import _LIGHT_SIGHT, effective_light, light_blocks_sight
 
 
@@ -393,26 +394,17 @@ def passable_route_next_step(
     rooms = scene.get("rooms") or {}
     if to_room not in rooms:
         return None
-    neighbors = passable_neighbors(scene)
-
-    # BFS from the destination BACKWARDS: the graph is undirected, so the
-    # first neighbour of `from_room` this reaches is a first hop on some
-    # shortest route. Searching from the destination means one pass answers
-    # the question rather than one pass per candidate hop.
-    seen = {to_room}
-    frontier = [to_room]
-    while frontier:
-        nxt = []
-        for room_id in frontier:
-            for neighbor in sorted(neighbors.get(room_id, ())):
-                if neighbor in seen:
-                    continue
-                if neighbor == from_room:
-                    return room_id
-                seen.add(neighbor)
-                nxt.append(neighbor)
-        frontier = sorted(nxt)
-    return None
+    # THE FIRST HOP OF THE ONE FORWARD SEARCH (`passable_path`). This used to
+    # run its own breadth-first search from the destination BACKWARDS on the
+    # reasoning that the graph is undirected -- and `passable_neighbors` is
+    # DIRECTED where an edge says so: a chute's `passage_from` names the one
+    # room it may be crossed from. Searched backwards, every such edge was
+    # reversed, so the walk refused the chute from its top and would have
+    # sent a body UP it from the bottom. `passable_route_exists` and
+    # `passable_path` search forward and were right; three private searches
+    # of one graph is how one of them came to disagree.
+    path = passable_path(scene, from_room, to_room, limit=None)
+    return path[0] if path else None
 
 
 def passable_route_exists(
@@ -694,7 +686,9 @@ def passable_path(scene, from_room, to_room, limit=12):
 
     `limit` bounds the search: past a dozen rooms a single-beat "walk" is a
     teleport wearing a route, and reconstructing a path for it would dress the
-    teleport up as ground covered.
+    teleport up as ground covered. `None` lifts the bound -- for a walk that
+    CONTINUES a leg at a time (`passable_route_next_step`), where the route's
+    length is the number of beats it will take, not a claim about one.
     """
     if not from_room or not to_room or from_room == to_room:
         return []
@@ -716,7 +710,7 @@ def passable_path(scene, from_room, to_room, limit=12):
                 path.append(cur)
                 cur = prev[cur]
             return list(reversed(path))
-        if depth >= limit:
+        if limit is not None and depth >= limit:
             continue
         for nxt in sorted(neighbors.get(cur, ())):
             if nxt not in prev:
@@ -853,8 +847,12 @@ def sprint_reach(scene, room_id, known_rooms=None):
             if _LIGHT_SIGHT.get(effective_light(scene, cur), "full") != "full":
                 stops = "darkness"
                 break
-            cost = _ROOM_COST.get(
-                str(room.get("size") or "").strip().lower(), 1)
+            # The DERIVED size (`effective_room_size`): the authored word,
+            # else the measured extent, else a hint from the name. Reading
+            # the raw word priced every planned 20x20 hall and every unsized
+            # corridor at one unit, so a sprint crossed a warehouse as
+            # cheaply as a closet.
+            cost = _ROOM_COST.get(effective_room_size(scene, cur), 1)
             if spent + cost > SPRINT_BUDGET:
                 stops = "full_reach"
                 break

@@ -409,7 +409,7 @@ rerolled.
 
 ## Room regions ride the blobs, not a column
 
-`region` (`world/regions.py`, schema v36) is a worked example of the checklist
+`memory_vectors` filed at mint time (`mind/memory_snapshot.file_memory_vector`, schema v37) is the second worked example: no DDL, every embedding writer files its vector, and a one-shot `backfill_memory_vectors` runs when a file crosses 37 so the per-turn checkpoint stops inserting the bank. `region` (`world/regions.py`, schema v36) is a worked example of the checklist
 where every step was answered by an existing carrier. The field lives on the
 room inside the frame-scoped `scene` blob and in `room_registry.payload.region`
 (beside `planned`, whose `structure` is the same fact for a planned room), and

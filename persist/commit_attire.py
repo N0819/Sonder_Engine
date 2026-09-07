@@ -239,13 +239,13 @@ def _garment_named_in(text, name):
     name that is long enough to be the garment itself counts, so a two-word
     name matches on either.
     """
-    body = str(text or "").casefold()
-    if not body:
+    # THE ONE MATCHER (`attire.garments_named_in`): its per-edge boundaries
+    # and unsegmented-script exemption are what this local `[a-z]+` walk
+    # lacked, so a garment named in kana never licensed its own note, and
+    # a three-letter garment ("cap", "obi") never could in any script.
+    if not str(text or "").strip() or not str(name or "").strip():
         return False
-    for word in re.findall(r"[a-z]+", str(name or "").casefold()):
-        if len(word) >= 4 and re.search(rf"\b{re.escape(word)}s?\b", body):
-            return True
-    return False
+    return bool(attire_model.garments_named_in([text], [name]))
 
 
 def interpret_attire_notes(diff, worn, entry=None, prose=None):

@@ -1031,6 +1031,21 @@ def _rehydrate_side_channels(ctx, key, content):
 _PRESENTATIONAL_TAIL = ("narrator", "narrator_extra")
 
 
+def _hydrate_steps_before(ctx, turn_id, ordn):
+    """Put the active content of every step with `ord < ordn` on `ctx`, in
+    ord order, and return the `(key, content)` pairs so the caller can
+    rehydrate side channels AFTER any checkpoint restore. Steps at or after
+    `ordn` are never loaded: no stage may read a later stage's output."""
+    hydrated = []
+    for prior in q("SELECT * FROM steps WHERE turn_id=? AND ord<? ORDER BY ord",
+                   (turn_id, ordn)):
+        c = active_content(turn_id, prior["key"])
+        if c is not None:
+            ctx[prior["key"]] = c
+            hydrated.append((prior["key"], c))
+    return hydrated
+
+
 def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
     bus = Bus()
     chat_row = dict(q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True))
@@ -1108,15 +1123,19 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
     has_existing_steps = bool(q("SELECT 1 FROM steps WHERE turn_id=? LIMIT 1", (turn_id,), one=True))
 
     if only_key:
-        hydrated = []
-        for s in q("SELECT * FROM steps WHERE turn_id=? ORDER BY ord", (turn_id,)):
-            c = active_content(turn_id, s["key"])
-            if c is not None:
-                ctx[s["key"]] = c
-                hydrated.append((s["key"], c))
         s = q("SELECT * FROM steps WHERE turn_id=? AND key=?", (turn_id, only_key), one=True)
         if not s:
             raise RuntimeError(f"step '{only_key}' not found on this turn")
+        # ONLY THE STEPS BEFORE THE REROLLED ONE. No stage may read a later
+        # stage's output, and hydrating the whole turn broke that rule
+        # twice over: the content of every downstream step sat on `ctx` for
+        # the rerolled stage to read, and `_rehydrate_side_channels` RAN the
+        # old `perception_outcome` against the old `director_resolve`,
+        # writing `_player_room` and `outcome_scene` from the ruling being
+        # discarded -- so a rerolled resolve graded the player from the
+        # room the discarded ruling had moved her to. The `from_key` path
+        # below always stopped at `start_i`; this is the same cut.
+        hydrated = _hydrate_steps_before(ctx, turn_id, s["ord"])
         # Same stale-upstream refusal the from_key paths make: a reroll of
         # this single step would otherwise silently consume hydrated content
         # from an earlier step that is still flagged stale (left over from an
@@ -1336,6 +1355,22 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
                 j += 1
             yield from _run_parallel_group(bus, turn_id, group, keys, ctx)
             i = j
+            continue
+        if (
+            key == "compile_world_context"
+            and i + 1 < len(plan)
+            and plan[i + 1][0] == "perception_act"
+        ):
+            # The compiler pays an embedding round trip (`search_lore`) and
+            # action-onset perception is deterministic; neither reads the
+            # other's output (perception never reads `compile_world_context`,
+            # the compiler never reads `perception_act`), so the pairing the
+            # runtime's comments still cited -- lost when the mapping stage
+            # was replaced by the compiler -- is restored: one provider call
+            # off the turn's critical path.
+            yield from _run_parallel_group(
+                bus, turn_id, [(key, label), plan[i + 1]], keys, ctx)
+            i += 2
             continue
         if (
             key == "narrator"

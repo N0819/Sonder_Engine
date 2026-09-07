@@ -12,6 +12,7 @@ the opt-in.
 
 from __future__ import annotations
 
+import contextvars
 import copy
 import hashlib
 import json
@@ -19,6 +20,7 @@ import re
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 
 from core import jobs
 from core.logging_utils import logger
@@ -509,6 +511,85 @@ _REGISTRY_CACHE_CAP = 2
 _REGISTRY_CACHE_LOCK = threading.Lock()
 
 
+#: ONE PRIVATE REGISTRY PER COMMIT (`registry_session`). Six writers run in a
+#: locked commit -- `sight_figures_in_scene`, `ingest_public_evidence`,
+#: `apply_scene_placements`, `settle_rendered_surfaces`,
+#: `apply_presence_conduct`, `save_carrier_state` -- and each parsed and
+#: normalized the whole registry (`registry_for_update`), mutated it, and
+#: normalized, reserved, reshaped and JSON-dumped the whole of it again
+#: (`save_registry`), invalidating the read cache for the next one. Measured
+#: on the 307-body town: 0.95 s to parse, 2.3 s to split, 2.5 s to deepcopy,
+#: several times over, under the write lock, every beat. Inside a session the
+#: writers share one parsed copy, readers see the same copy, and the row is
+#: written once when the commit flushes it -- inside the transaction, so a
+#: rollback discards the session with everything else. Outside a session
+#: every function behaves exactly as before.
+_REGISTRY_SESSION = contextvars.ContextVar("charter_registry_session",
+                                           default=None)
+
+
+@contextmanager
+def registry_session():
+    """Scope within which registry writers share one private copy per
+    storage row and `save_registry` defers to `flush_registry_session`.
+    Nested use joins the outer session. Exiting WITHOUT a flush discards
+    every unsaved mutation, which is what a rolled-back commit wants."""
+    outer = _REGISTRY_SESSION.get()
+    if outer is not None:
+        yield outer
+        return
+    session = {}
+    token = _REGISTRY_SESSION.set(session)
+    try:
+        yield session
+    finally:
+        _REGISTRY_SESSION.reset(token)
+
+
+def flush_registry_session():
+    """Write every registry the active session dirtied, once each, through
+    the one write chokepoint. Returns how many rows were written."""
+    session = _REGISTRY_SESSION.get()
+    if not session:
+        return 0
+    written = 0
+    for (cid, _storage_key), entry in list(session.items()):
+        if not entry.get("dirty"):
+            continue
+        entry["registry"] = _write_registry(cid, entry["registry"],
+                                            entry["frame_id"])
+        entry["dirty"] = False
+        written += 1
+    return written
+
+
+def _session_key(cid, frame_id):
+    """The exact storage row this (cid, frame) names -- the same identity the
+    read cache keys on, so two spellings of one frame share one copy."""
+    from core.db import active_frame_id, world_read_token
+    token = active_frame_id.set(frame_id)
+    try:
+        storage_key, _ = world_read_token(cid, CHARTERS_KEY)
+    finally:
+        active_frame_id.reset(token)
+    return (int(cid), storage_key)
+
+
+def _session_entry(cid, frame_id, create):
+    session = _REGISTRY_SESSION.get()
+    if session is None:
+        return None
+    key = _session_key(cid, frame_id)
+    entry = session.get(key)
+    if entry is None and create:
+        from core.db import wget_for_frame
+        entry = session[key] = {
+            "registry": normalize_registry(
+                wget_for_frame(cid, CHARTERS_KEY, frame_id, {}) or {}),
+            "frame_id": frame_id, "dirty": False}
+    return entry
+
+
 def cached_registry(cid):
     """The AMBIENT frame's normalized registry: shared, read-only.
 
@@ -521,6 +602,12 @@ def cached_registry(cid):
 
     storage_key, token = world_read_token(cid, CHARTERS_KEY)
     cache_key = (int(cid), storage_key)
+    session = _REGISTRY_SESSION.get()
+    if session is not None and cache_key in session:
+        # Inside a commit the session copy IS the registry: a reader that
+        # went to the row would see the world as it stood before this
+        # beat's writers touched it.
+        return session[cache_key]["registry"]
     with _REGISTRY_CACHE_LOCK:
         entry = _REGISTRY_CACHE.get(cache_key)
         if entry is not None and entry[0] == token:
@@ -563,6 +650,9 @@ def registry_for_update(cid, frame_id=None):
     writers (carrier ingest, caravan trade, public evidence) rely on.
     """
     from core.db import wget_for_frame
+    entry = _session_entry(cid, frame_id, create=True)
+    if entry is not None:
+        return entry["registry"]
     return normalize_registry(
         wget_for_frame(cid, CHARTERS_KEY, frame_id, {}) or {})
 
@@ -575,7 +665,34 @@ def save_registry(cid, stored, frame_id=None):
     naming law before it lands. `story/naming.py` reads a stored Charter law
     as one of its lanes, so a law persisted holding a registered mind's
     address would keep offering it to readers that never saw this generation.
+
+    Inside a `registry_session` the write is DEFERRED: the session copy is
+    marked dirty and lands once at `flush_registry_session`. A registry that
+    is not the session's own copy (a freshly generated one) replaces it.
     """
+    entry = _session_entry(cid, frame_id, create=False)
+    if entry is not None and stored is entry["registry"]:
+        entry["dirty"] = True
+        return stored
+    session = _REGISTRY_SESSION.get()
+    if session is not None:
+        from story.naming import story_identity_reservation
+        normalized = normalize_registry(
+            stored,
+            story_identity_reservation(cid, _stored_naming_laws(stored)))
+        session[_session_key(cid, frame_id)] = {
+            "registry": normalized, "frame_id": frame_id, "dirty": True}
+        return normalized
+    return _write_registry(cid, stored, frame_id)
+
+
+def _write_registry(cid, stored, frame_id=None):
+    """The write itself: normalize under the story's identity reservation,
+    reduce to the split stored shape, land the row. Every registry write
+    passes here -- `save_registry`, the session flush, and the two landing
+    paths (`land_presim`, `land_snapshot`) that used to `wset_for_frame` a
+    joined shape of their own, so the stored shape alternated with whoever
+    wrote last."""
     from core.db import wset_for_frame
     from story.naming import story_identity_reservation
     normalized = normalize_registry(
@@ -588,9 +705,6 @@ def save_registry(cid, stored, frame_id=None):
     # the joined item state is what the session has been mutating.
     stored_shape = _stored_shape(normalized)
     wset_for_frame(cid, CHARTERS_KEY, stored_shape, frame_id)
-    # The caller gets the JOINED shape it handed in, not the stored one, so a
-    # save round-trips against `registry_for` and no caller has to know which
-    # side of the chokepoint it is on.
     return normalized
 
 
@@ -1840,7 +1954,7 @@ def land_presim(cid, frame_id, registry, produced, *, base_turn=0,
                 != expected_revision:
             return {"advanced": 0, "events": 0,
                     "reason": "registry_changed"}
-        wset_for_frame(cid, CHARTERS_KEY, normalize_registry(registry), frame_id)
+        _write_registry(cid, registry, frame_id)
         for row in rows:
             qtx(
                 "INSERT OR IGNORE INTO scheduled_events"
@@ -2716,7 +2830,7 @@ def land_snapshot(cid, frame_id, base_turn, epoch_id, registry, rows,
                 return {"advanced": 0, "events": 0,
                         "discarded": len(produced),
                         "reason": "registry_changed"}
-        wset_for_frame(cid, CHARTERS_KEY, registry, frame_id)
+        _write_registry(cid, registry, frame_id)
         # WHAT THE CREATURES LEFT STANDING becomes a thing in a room
         # (`story/artifacts.post_spoor`): the carcass is nailed to no wall,
         # but it is read the same way, by whoever comes upon it.

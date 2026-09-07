@@ -285,7 +285,7 @@ def _advance(body_key, body, neighbors, travelled, walked, scene=None):
 
 
 def continue_walks(bodies, hours, neighbors=None, travelled=None,
-                   walked=None):
+                   walked=None, scene=None):
     """Every body still en route buys this window's rooms and walks on.
     Returns ``(bodies, travelled, walked)``.
 
@@ -294,6 +294,15 @@ def continue_walks(bodies, hours, neighbors=None, travelled=None,
     finishes its walk before it can be sent anywhere new -- and so a body
     re-posted to the place it was already walking to is not paid twice
     (`_dispatch` sees it already bound for the target).
+
+    ONE PRICING REGIME. `relocate` prices every edge at `edge_cost` (the
+    doorway's seconds); this took no `scene`, so `_advance` fell back to
+    the flat 1.0-room price -- ten minutes a doorway -- for every leg a
+    walk carried across a window boundary. Beat windows run 6-45 s, so
+    nearly every walk IS a continuation, and a body that would cross a
+    corridor in twelve seconds on dispatch took ten minutes over it the
+    next beat. The carried-credit cap is in the same units: at most the
+    price of the edge the body is standing before, not one flat room.
     """
     bodies = {k: dict(v) for k, v in (bodies or {}).items()}
     travelled = dict(travelled or {})
@@ -307,9 +316,14 @@ def continue_walks(bodies, hours, neighbors=None, travelled=None,
         # A held body does not bank rooms: the remainder of an edge carries
         # (as the courier's `moved_at` carries), a window spent at a shut
         # door does not, or the body would sprint the day it opened.
-        rec["credit"] = min(float(rec.get("credit") or 0.0), 1.0) + allowance
+        route = [str(r) for r in rec.get("route") or []]
+        leg = max(0, int(rec.get("leg") or 0))
+        cap = 1.0
+        if scene is not None and leg + 1 < len(route):
+            cap = edge_cost(scene, route[leg], route[leg + 1])
+        rec["credit"] = min(float(rec.get("credit") or 0.0), cap) + allowance
         body = dict(body, walk=rec)
-        bodies[key] = _advance(key, body, neighbors, travelled, walked)
+        bodies[key] = _advance(key, body, neighbors, travelled, walked, scene)
     return bodies, travelled, walked
 
 

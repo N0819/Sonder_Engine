@@ -262,13 +262,15 @@ def rebuild_embeddings(chat_id=None, char_id=None, *, batch=_REBUILD_BATCH,
                 docs.append(_memory_document(mem))
                 docs.append(_memory_cues(mem) or _memory_document(mem))
             got = _embed(docs)
+            from mind.memory_snapshot import file_memory_vector
             with transaction():
                 for index, mem in enumerate(mems):
+                    full, cue = (_blob(got.vectors[index * 2]),
+                                 _blob(got.vectors[index * 2 + 1]))
                     qi("UPDATE memories SET embedding=?,cue_embedding=?,"
                        "embedding_model=?,embedding_dim=? WHERE id=?",
-                       (_blob(got.vectors[index * 2]),
-                        _blob(got.vectors[index * 2 + 1]),
-                        got.model_key, got.dimensions, mem["id"]))
+                       (full, cue, got.model_key, got.dimensions, mem["id"]))
+                    file_memory_vector(full, cue, got.model_key, got.dimensions)
             done += len(rows)
             report["memories"] += len(rows)
             report["batches"] += 1
@@ -664,16 +666,18 @@ def repair_memory_cues(chat_id=None, char_id=None, *, dry_run=True,
                 docs.append(_memory_document(mem))
                 docs.append(_memory_cues(mem) or _memory_document(mem))
             got = _embed(docs)
+            from mind.memory_snapshot import file_memory_vector
             with transaction():
                 for index, mem in enumerate(chunk):
+                    full, cue = (_blob(got.vectors[index * 2]),
+                                 _blob(got.vectors[index * 2 + 1]))
                     qi("UPDATE memories SET key_phrases=?,entities=?,"
                        "embedding=?,cue_embedding=?,embedding_model=?,"
                        "embedding_dim=? WHERE id=?",
                        (json.dumps(mem["key_phrases"], ensure_ascii=False),
                         json.dumps(mem["entities"], ensure_ascii=False),
-                        _blob(got.vectors[index * 2]),
-                        _blob(got.vectors[index * 2 + 1]),
-                        got.model_key, got.dimensions, mem["id"]))
+                        full, cue, got.model_key, got.dimensions, mem["id"]))
+                    file_memory_vector(full, cue, got.model_key, got.dimensions)
                     _replace_memory_fts(mem["id"], mem)
             report["batches"] += 1
             if progress:

@@ -11,6 +11,8 @@ Import direction: nothing outside `agents/director*.py` may import an
 `agents.director` (that is the cycle the facade exists to prevent).
 """
 
+import hashlib
+import json
 import re
 
 from story.character_schema import character_name_from_text
@@ -29,6 +31,39 @@ from world.spatial import (
 )
 
 from .director_lingua import _ling
+
+def route_scene_for(ctx, scene, state_diff):
+    """The scene as this beat's diff leaves it, for a ROUTE question --
+    memoised on the turn.
+
+    Six route checks inside one resolve each deep-copied the whole scene and
+    re-ran every derivation pass (`merge_scene_with_diff`) to ask the same
+    question of the same inputs; between them only the diff's positions
+    moved, if that. The memo is keyed by the scene object and the diff's
+    CONTENT, so a diff that changed between two checks is merged again and
+    one that did not is not. Callers READ the result (`known_rooms`, a
+    route, a relation); none writes to it, which is what makes one shared
+    copy safe.
+    """
+    if ctx is None:
+        return merge_scene_with_diff(scene, state_diff)
+    try:
+        fingerprint = hashlib.sha1(json.dumps(
+            state_diff, sort_keys=True, default=str,
+            ensure_ascii=False).encode("utf-8")).hexdigest()
+    except Exception:
+        return merge_scene_with_diff(scene, state_diff)
+    key = (id(scene), fingerprint)
+    memo = ctx.get("_route_scene_memo")
+    if isinstance(memo, tuple) and memo[0] == key:
+        return memo[1]
+    merged = merge_scene_with_diff(scene, state_diff)
+    try:
+        ctx["_route_scene_memo"] = (key, merged)
+    except (TypeError, AttributeError):
+        pass                      # a context that keeps no side channels
+    return merged
+
 
 def _egocentric_exits(sc, observer):
     """Which exits lie AHEAD of this mover, and which are the way they came.
@@ -269,7 +304,7 @@ def _reconcile_near_group_positions(ctx, scene, state_diff, player_name):
     if not graph:
         return False
 
-    route_scene = merge_scene_with_diff(scene, state_diff)
+    route_scene = route_scene_for(ctx, scene, state_diff)
     rooms = route_scene.get("rooms") or {}
     # Is the player going anywhere this beat -- by their own declaration, or
     # by a walk already under way that nothing has interrupted? Read once.
@@ -615,7 +650,7 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name):
             rapid.add(character_name_from_text(row["sheet"]).casefold())
 
     positions = state_diff.get("positions") or {}
-    route_scene = merge_scene_with_diff(scene, state_diff)
+    route_scene = route_scene_for(ctx, scene, state_diff)
 
     # Player agency floor: if the Director omitted follow_op:stop but resolved
     # the player's declared movement somewhere other than the followed target,
@@ -1137,7 +1172,7 @@ def _travel_continues(ctx, out, sc, sd, interp, p_name):
         if isinstance(entry, dict) and str(entry.get("subject") or "").strip()
     }
 
-    route_scene = merge_scene_with_diff(sc, sd)
+    route_scene = route_scene_for(ctx, sc, sd)
     rooms = route_scene.get("rooms") or {}
     record = {"advanced": [], "arrived": [], "interrupted": [], "held": []}
 

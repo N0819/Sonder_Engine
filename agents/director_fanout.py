@@ -26,11 +26,11 @@ from .director_scopes import (
     SPECIALISTS,
     reads_dialogue,
     _CATEGORY_CHANNELS,
+    note_key_targets,
     _DELEGATED_CHANNELS,
     _LIST_DELEGATED,
     _PROSE_DUTY_SHIPPED,
     _STRUCTURAL_CHANNEL_FACTS,
-    _note_key_forms,
 )
 
 def fanout_is_parallel():
@@ -285,16 +285,22 @@ def _note_for(notes, name):
     """
     if not notes:
         return None
-    lowered = {}
+    own = set(SPECIALISTS[name].get("channels") or ())
+    lines = []
     for key, value in notes.items():
         if not isinstance(value, str) or not value.strip():
             continue
-        for form in _note_key_forms(key):
-            lowered.setdefault(form, value.strip())
-    for candidate in (name,) + tuple(SPECIALISTS[name].get("channels") or ()):
-        for form in _note_key_forms(candidate):
-            if form in lowered:
-                return lowered[form]
+        targets = note_key_targets(key)
+        if ("hand", name) in targets or any(
+                kind == "channel" and target in own
+                for kind, target in targets):
+            lines.append(value.strip())
+    if lines:
+        # Every line that reaches this hand, not the first: a note keyed by
+        # the hand and another keyed by one of its channels are two rulings
+        # about the same ledgers, and the resolver that decided both reach
+        # it (`note_key_targets`) is the one dispatch runs on.
+        return "\n".join(dict.fromkeys(lines))
     return None
 
 def _beat_rooms(sc, ctx, whos, view=None):
@@ -392,22 +398,31 @@ def _specialist_payload(name, ctx, sc, view, extras):
         "dice_results_final": view["dice"],
         "variant_seed": extras.get("nonce"),
     }
+    # The Director's ruling for THIS hand's channels, when it made one, AT
+    # BOTH STAGES. Scoped like every other slice: a specialist sees its own
+    # note and no one else's, so this carries authority without carrying
+    # another hand's ledger. Absent when the beat settled nothing here.
+    # Keyed by SPECIALIST or by any CHANNEL that specialist owns. Measured
+    # 2026-09-01: gemini-3.6-flash returned {"contact": ..., "vitals": ...}
+    # -- `contact` is a hand and `vitals` is one of `body`'s channels, and
+    # the Director was right both times. Insisting on the hand's name
+    # would have silently dropped a correct ruling, which is the failure
+    # this whole channel exists to prevent.
+    #
+    # Above the source branch since 2026-09-07: the interpret view carries
+    # `ledger_notes` and dispatches hands BY them, and the payload attached
+    # the note only on the resolve side -- so an interpret-side hand was run
+    # because of a ruling and then shown no ruling. Its sheet ends with the
+    # note card ("no note and no manifest entry: encode nothing"), and the
+    # interpret manifest is always empty, so a player's asserted coat-off or
+    # sit-down reached the onset preview only when a model disobeyed its
+    # sheet.
+    notes = view.get("ledger_notes") or {}
+    note = _note_for(notes, name)
+    if isinstance(note, str) and note.strip():
+        payload["director_note"] = note.strip()
     if view["source"] == "resolved_beat":
         payload["resolved_event"] = view["prose"]
-        # The Director's ruling for THIS hand's channels, when it made one.
-        # Scoped like every other slice: a specialist sees its own note and
-        # no one else's, so this carries authority without carrying another
-        # hand's ledger. Absent when the beat settled nothing here.
-        # Keyed by SPECIALIST or by any CHANNEL that specialist owns. Measured
-        # 2026-09-01: gemini-3.6-flash returned {"contact": ..., "vitals": ...}
-        # -- `contact` is a hand and `vitals` is one of `body`'s channels, and
-        # the Director was right both times. Insisting on the hand's name
-        # would have silently dropped a correct ruling, which is the failure
-        # this whole channel exists to prevent.
-        notes = view.get("ledger_notes") or {}
-        note = _note_for(notes, name)
-        if isinstance(note, str) and note.strip():
-            payload["director_note"] = note.strip()
         # Dialogue only to the hands that own a channel a speech act can
         # write (`director_scopes.reads_dialogue`). Saying a thing is not a
         # physical action, so for `body`, `contact` and `objects` the
@@ -703,6 +718,18 @@ def _stage_container(out, stage, channel):
         container = {}
         out[key] = container
     return container, channel
+
+
+def _stage_state(out, stage):
+    """The stage's state container -- `state_diff` at resolve,
+    `state_assertions` at interpret -- created if absent. Where
+    `phase_sources` lives, whichever channel a path maps."""
+    key = "state_diff" if stage == "resolve" else "state_assertions"
+    container = out.get(key)
+    if not isinstance(container, dict):
+        container = {}
+        out[key] = container
+    return container
 
 
 def _normalized_channel_value(channel, value):

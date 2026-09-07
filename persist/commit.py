@@ -467,7 +467,11 @@ def _commit_all_locked(ctx, nonce):
     results = {}
 
     try:
-        with transaction():
+        # `registry_session`: every charter-registry writer below shares one
+        # private parsed copy, flushed once before the extension domains.
+        from world.charter_runtime import (flush_registry_session,
+                                           registry_session)
+        with transaction(), registry_session():
             # Transit sweep first: it mutates the prepared scene (timed
             # arrivals, engine notices) that the scene domain then persists.
             _commit_domain(
@@ -581,6 +585,13 @@ def _commit_all_locked(ctx, nonce):
                 ctx, results, "pending",
                 lambda: wset(ctx.chat.id, "pending", []),
             )
+            # The charter registry lands ONCE, here, inside the transaction:
+            # every domain above mutated one shared private copy
+            # (`charter_runtime.registry_session`) instead of parsing,
+            # normalizing and re-saving the whole registry six times under
+            # the write lock. A domain failure above rolls the transaction
+            # back and the session is discarded with it.
+            results["charter_registry_writes"] = flush_registry_session()
             # Extension commit domains run LAST inside the transaction, after
             # every engine domain has landed: an extension computing from the
             # turn's own durable writes must be able to read them. Their

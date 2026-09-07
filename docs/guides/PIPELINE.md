@@ -497,9 +497,9 @@ than a repair pass. `speech -> turn -> speech` cannot become
 `turn -> speech -> speech` because nothing between the declaration and the
 rendered view is free to rewrite it, and delivery metacommentary ("the words
 reach you clearly") cannot be produced because no stage writes prose about the
-filter. The strip-and-reinject machinery that enforced this over model prose
-(`_strip_onset_rendering`, `_inject_onset_sequence`, `_inject_visible_actor`,
-`_inject_action`) is dead code kept pending removal — `docs/UNBUILT.md` §1.45.
+filter. The strip-and-reinject machinery that enforced this over model prose is gone
+(`docs/UNBUILT.md` §1.45): only `_inject_visible_actor` and `_inject_action`
+survive in `agents/common.py`, as deterministic inputs rather than repairs.
 
 Interpret reconciliation counts `tone` and `observable` as declaration-bearing
 channels. A gesture/delivery already represented there is not appended later
@@ -819,11 +819,14 @@ An authored beneath-surface becomes eligible when its region is first
 uncovered. That eligibility is durable across unrelated later wardrobe changes;
 ordinary coverage still hides the surface. Bare-surface phrases are state and
 must never be stored as garments.
-Active sensations are never presentation-compressed in either view: sustained
-touch, pressure, motion, temperature and contact actions remain current bodily
-input on every beat they remain true. Their stable keys still prevent duplicate
-percepts and an unchanged sensation alone still does not mint an episodic
-memory.
+Active sensations are presentation-compressed on the PLAYER tier like every
+other standing percept since 2026-09-07 (`composer.ACTIVE_STANDING_KINDS` is
+empty): an unchanged touch, pressure, motion or temperature is not re-rendered
+on a beat where nothing about it changed, because 43.3% of the corpus's "You
+feel" sentences were byte-identical to the prior beat's. Character views keep
+every standing sensation, and every mind still receives the percept's data; the
+stable keys prevent duplicate percepts and an unchanged sensation alone still
+does not mint an episodic memory.
 This matters at the memory boundary because witnessed episodic memory is formed
 from this output, not repaired after it.
 

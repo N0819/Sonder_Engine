@@ -523,7 +523,13 @@ def restore_room_messages(cid, rows, *, frame_idmap=None, up_to_turn=None):
     for r in rows or []:
         if not isinstance(r, dict) or r.get("role") not in ROLES:
             continue
-        text = _clean(r.get("text"))
+        # THE WRITER'S OWN CEILING PER ROLE. The default limit is the player's
+        # line; a Planner or Dramaturge reply is stored up to
+        # `ROLE_MESSAGE_CHARS`, and a restore that clipped every row to the
+        # default cut each of those to 4,000 characters on import and on
+        # branch, silently, one timeline over.
+        text = _clean(r.get("text"),
+                      ROLE_MESSAGE_CHARS.get(r.get("role"), ROOM_MESSAGE_CHARS))
         if not text:
             continue
         old_frame = r.get("frame_id")

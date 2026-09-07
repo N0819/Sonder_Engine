@@ -18,7 +18,7 @@ from world.charter_surface import (deal_surface, default_looks,
                                    normalize_looks_profile, post_dress)
 from world.charter_model import (
     integer as _integer, normalize_charter, number as _number)
-from world.charter_needs import seed_needs
+from world.charter_needs import needs_template, seed_needs
 from world.charter_roster import seed_roster
 
 
@@ -61,7 +61,10 @@ adjacent:[{to,barrier:"open_door"}],frontier:[]}}, charters:[{key,name,naming,
 priority,commons,upkeeps:{id:{place,floor,level,fails_untended,one_body_restores_in,
 requires,depends_on}},posts:{id:{place,serves,requires,reports_to,authority}},
 populations:[{post,count,competence,berth,rank}],economy:{goods,stocks,targets,
-flows,markets},decisions:{policies}}]}. Use qualitative timescales only; never
+flows,markets},needs OPTIONAL:{rest|sustenance|health:{fed_by:upkeep id}} (the
+upkeep each bodily need draws on; sustenance is derived from the economy's
+consumed goods when omitted, health has no derivation and needs naming),
+decisions:{policies}}]}. Use qualitative timescales only; never
 write drift_per_hour or service_per_hour. Planned rooms contain no prose.
 Match the naming STYLE of the setting; never copy a name the lore gives to an
 individual. Keep authority/actions genre neutral. IDs are stable machine keys; names retain canonical spelling.
@@ -997,6 +1000,10 @@ def close_plan(plan, *, history=None, featured_residents=None,
             # `post.place` is: a place id the plan never minted is not a place.
             "commons": commons,
             "economy": economy,
+            # The author's per-need overrides, if the plan gave any; folded
+            # into the template at seeding (`needs_template`).
+            "needs_authored": raw.get("needs")
+            if isinstance(raw.get("needs"), dict) else None,
             "decisions": raw.get("decisions") or {},
             "interventions": local_interventions,
             "history": {"architecture": history_record},
@@ -1018,7 +1025,9 @@ def close_plan(plan, *, history=None, featured_residents=None,
                 f"({', '.join(record['rooms'])})")
     heads = {}
     for ckey, state, _places in pending:
-        state["needs"] = seed_needs(state["bodies"])
+        state["needs"] = seed_needs(state["bodies"], needs_template(
+            state.pop("needs_authored", None), state.get("upkeeps"),
+            state.get("economy")))
         charter = normalize_charter(state, reservation)
         charter["roster"] = seed_roster(charter["bodies"])
         charters[ckey] = charter

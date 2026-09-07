@@ -338,9 +338,11 @@ def rulebook_rows(cid, scene, frame_id=None):
 def compile_world_context(ctx, nonce):
     """Assemble the beat's world context from the story's own rows.
 
-    Deterministic: same inputs, same output, no provider call. ``nonce`` is
-    accepted for the step-handler signature and unused -- a reroll of this
-    step is the same compilation.
+    Deterministic: same inputs, same output. ONE provider round trip, for the
+    lore query's embedding (`search_lore` -> `embed_texts_meta`), which is
+    why the runtime runs this beside action-onset perception rather than
+    ahead of it. ``nonce`` is accepted for the step-handler signature and
+    unused -- a reroll of this step is the same compilation.
     """
     from world.planning_needs import planning_need
     from world.structure import planned_context

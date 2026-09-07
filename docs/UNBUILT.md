@@ -3258,29 +3258,6 @@ Not urgent: the fallback is a phrase rather than a wrong number, which is the
 posture this whole change insists on. Worth doing when something wants to date
 a window whose memories are gone -- long-bank archival is the likely trigger.
 
-### 1.87 The beat's own passage phrase is recorded and read by nobody
-
-**Found:** 2026-08-26, in the same landing, and stated here rather than
-closed because closing it is a prompt change with its own blast radius.
-
-`state_diff.time.display_advance` ("moments later") is taught by the prose
-author's output shape in both language packs, emitted on most beats, and
-validated into `world.mechanics.TIME_METADATA_KEYS`. It reaches NO reader.
-Its one former consumer wrote it onto `scene.time` and
-`simulation_clock.display`, which is the defect the split removed: a per-beat
-phrase overwriting a standing world property, and erasing it when spelled
-empty. The phrase survives on the persisted resolve variant, which is where a
-record belongs.
-
-That leaves a field the engine solicits and does not use, which this
-repository's own rule calls worse than no field. Two ways out and both need a
-decision rather than a patch. Either stop asking for it -- delete it from the
-two packs' output shapes, leaving it in `TIME_METADATA_KEYS` so a model that
-still writes one is not accused of an unreadable claim -- or give it the one
-reader that would justify it, a player-facing between-beats label the
-narrator or the transcript renders. The second is a product decision; the
-first is free and should be taken if nobody wants the second.
-
 ### 1.88 A restored checkpoint is as old as the beat it snapshot
 
 A checkpoint restore deletes every world row and writes the snapshot back
@@ -6340,12 +6317,12 @@ new visual detail … though sound still carries" and neither half holds.
 (a) `presence_percepts` (composer.py:1021) drops a rear-arc body outright, so
 a woman who has stood in the room for eight beats is not in the room at all
 for whoever happens to be turned away -- a body already present is not new
-detail. (b) `act_percept` refuses on the arc with no substitute, and nothing
-carries the sound: an act reaches an observer on the sight channel alone
-(§ 1.117 is the same gap from the other side). Until an act has a hearing
-channel, a rear-arc observer of an overt act receives nothing at all, and the
-run's most visible nonsense followed -- the chair ordered doors unbolted that
-the player had just heaved open in front of her.
+detail. (b) `act_percept` mints a HEARING percept for the rear arc
+("something moved, and where") -- built 2026-09-05, and dead on the outcome
+pass until 2026-09-07, where a pre-skip on `behind`/`can_see` ran before the
+call; both passes now let the composer decide the arc. The run's most visible
+nonsense -- the chair ordering doors unbolted that the player had just heaved
+open in front of her -- was this half.
 
 **PX6 / PR5's second half, in `composer.line_hear_level`.** Two independent
 runs now answer § 1.121's open question the same way, and the record
@@ -7927,6 +7904,63 @@ as a success.
 masks is a fact about the air in a room, and every hunter that reads that room
 should be affected by it identically -- exactly as `SCENT_PASS` is a fact
 about a barrier and not about who is sniffing at it.
+
+### 1.161 The 2026-09-07 review: what landed and what is still open
+
+**Found:** 2026-09-07, by a 57-agent read-only review of every package, both
+language packs and the docs, each finding re-read by an independent skeptic.
+The full synthesis is `docs/experiments/REVIEW_2026-09-07.md` (319 findings,
+Sections A-F). Its fifteen-item build order landed the same day: the shared
+JSON-mode recovery ladder and typed stream failures (`llm/providers.py`);
+single-step reroll hydrating only the steps before the rerolled one; one label
+per (observer, body) on the outcome pass, the authored-prose gate writing
+`detail`, the rear arc live on both passes; interpret-side hands shown the
+ruling that dispatched them, the note-key resolver (`note_key_targets`,
+`RETIRED_HANDS`), phase provenance by stage; the schema-derived repair merge
+and diff normaliser, no manifest clamp, room-bound mint binding, the previewed
+scene on the repair pass; one identity floor across the debt note, the
+micro-round, background presences and both narrators; script-aware boundaries
+at the firewall sites with the disguise guard's vocabulary in the packs
+(`story.scene`); the spatial truth pack (forward first hop, two-ended
+severance, one-way window heard, corridor lamps at the room's centre, sized
+sprints, an interior record as a mass); `medium` on the dialogue schema, the
+near field's events, `far_path_gain` None for unjoined rooms; the five charter
+fixes and `needs_template`; one registry per commit (`registry_session`);
+vectors filed at mint (schema v37) and the checkpoint remap's two frame
+rescopes, branch membership from the snapshot; the Room reading the frame it
+means and the editors writing the entries they name; the frame merge carrying
+the away party's ledgers; and the wall-clock pack.
+
+**Still open, by section of the synthesis** (each is stated there with file,
+line, evidence and the class rule):
+
+* Section A high items not in the build order: A16 (Room lines clipped on
+  restore -- LANDED with item 13), A18/A19 (LANDED), A22 (LANDED), A25 (LANDED
+  as `needs_template`), A26/B1 the outcome-pass scene mirror vs commit's
+  composition (`compose_beat_scene`, deferred: it moves five structure passes
+  into a stage that runs before resolve and needs the perception_outcome <->
+  commit contract restated first).
+* Section A medium: A29-A34, A36-A38, A41, A43-A44, A49-A89 except those the
+  build order named. The largest reader-visible ones: A36 `source_manifest`
+  computed and read by nobody (D1 is its delivery), A37 a standing disguise
+  re-earning the full description every beat, A55 ruin undone by the registry
+  projection, A56 `positions` read as a body roster, A57 vitals keyed by
+  spelling, A82 declared `consequences` dropped by an off-by-default gate,
+  A83 (LANDED with item 15), A87 sight hard-wired to light, A88 weather as a
+  closed Earth vocabulary, A89 an outfit region outside `REGIONS` dropped.
+* Section B: every two-representations item except B3, B16, B26 (landed).
+* Section C: C2 (LANDED), C3/C4 (LANDED), C5 (LANDED), C6 (partly: the route
+  memo), C11 the scene-blob memo on the PipelineContext (deferred: most
+  `get_scene` callers mutate in place, so it needs the read/for-update split
+  and a measurement first), C7-C10, C12-C22.
+* Section D, the improvements from other arts: none built. D1 (tells reach
+  the page) is next once the outcome pass is clean; D2 (a voice established
+  once), D3, D6, D7, D9, D12 are composer/narrator-payload work; D13-D16 are
+  the Dramaturge's; D17-D22 the charter's and psychology's; D8 is a design
+  ruling for the owner.
+* Section E, the stale-docs table: the counts, the retired hand and the
+  statements the build order made true or false were corrected in the same
+  commit; the rest of the table stands as the list to work through.
 
 ### 1.160 A phantom character id, one past the real one, is written into memory
 

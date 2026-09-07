@@ -199,15 +199,17 @@ def _normalize_diff_shape(sd):
     Safety net for the LLM returning a string/list where an object belongs."""
     if not isinstance(sd, dict):
         sd = {}
-    for k in ("positions", "stations", "poses", "rooms", "entities", "overlays", "attire",
-              "conditions", "scales", "containment", "vitals"):
+    # DERIVED FROM THE SCHEMA, like the two reader tables below. This was a
+    # hand list of 11 dict channels and 15 list channels against a 37-field
+    # StateDiff, so `sensory_events`, `comms_ops`, `courier_ops`,
+    # `artifact_ops`, `charter_ops`, `ratified_claims`, `contradicted_claims`
+    # and `movement_refused` reached every downstream reader in whatever
+    # shape the model sent -- and `_merge_repair_into_diff` below indexed
+    # `sd[field]` for channels this never created.
+    for k in _diff_dict_channels():
         if not isinstance(sd.get(k), dict):
             sd[k] = {}
-    for k in ("cast_changes", "world_facts", "introductions", "following_ops",
-              "remove_entities", "remove_rooms", "remove_adjacent",
-              "inventory_ops", "contact_ops", "contact_action_ops", "substance_ops", "claim_dispositions",
-              "consequences", "crowd_ops",
-              "telling_ops"):
+    for k in _diff_list_channels():
         if not isinstance(sd.get(k), list):
             sd[k] = []
     # A SCHEMA FIELD NAME IS NOT A ROOM. Live, chat 72 turn 44: `rooms` came
@@ -324,6 +326,24 @@ def _strip_blank_diff_placeholders(sd):
 def _state_diff_channels():
     """Every declared StateDiff channel, on either Pydantic major."""
     return frozenset(schemas._fields(schemas.StateDiff) or {})
+
+
+def _diff_dict_channels():
+    """The keyed-table channels, from the schema (`schemas.dict_shaped_fields`)."""
+    return frozenset(schemas.dict_shaped_fields(schemas.StateDiff))
+
+
+def _diff_list_channels():
+    """The list channels, from the schema (`schemas.list_shaped_fields`)."""
+    return frozenset(schemas.list_shaped_fields(schemas.StateDiff))
+
+
+#: Keyed channels a repair may only ADD to, never overwrite: the original
+#: diff's positions carry the deterministically validated player move
+#: (passable-route check) and must stand; poses and stations are partial
+#: per-entity updates that must never be filled out with defaults that
+#: clobber the standing roster (AGENTS.md's stations row).
+_REPAIR_ADD_ONLY = frozenset({"positions", "poses", "stations"})
 
 
 # Channels a diff can carry while having encoded no change of this beat's own.
@@ -539,9 +559,6 @@ def _merge_repair_into_diff(sd, patch):
             if isinstance(existing, dict) and isinstance(incoming, dict)
             else incoming
         )
-    for field in ("attire", "overlays"):
-        for key, incoming in (patch.get(field) or {}).items():
-            sd[field][key] = incoming
     for key, incoming in (patch.get("conditions") or {}).items():
         incoming_list = incoming if isinstance(incoming, list) else [incoming]
         incoming_list = [c for c in incoming_list if isinstance(c, dict)]
@@ -550,26 +567,50 @@ def _merge_repair_into_diff(sd, patch):
             existing.extend(c for c in incoming_list if c not in existing)
         else:
             sd["conditions"][key] = incoming_list
-    for key, room in (patch.get("positions") or {}).items():
-        sd["positions"].setdefault(key, room)
-    for key, pose in (patch.get("poses") or {}).items():
-        sd["poses"].setdefault(key, pose)
-    # Stations add-only for the positions/poses reason: the original diff's
-    # stations stand, and a partial per-entity update must never be filled
-    # out with defaults that clobber the standing roster (see AGENTS.md's
-    # stations row). Before this, a repair delta's stations were silently
-    # dropped on the floor.
-    for key, station in (patch.get("stations") or {}).items():
-        sd.setdefault("stations", {}).setdefault(key, station)
-    for field in ("remove_entities", "remove_rooms", "remove_adjacent",
-                  "inventory_ops", "contact_ops", "contact_action_ops",
-                  "substance_ops", "cast_changes", "world_facts",
-                  "introductions"):
-        for item in (patch.get(field) or []):
-            if item not in sd[field]:
-                sd[field].append(item)
-    if sd.get("time") is None and patch.get("time") is not None:
-        sd["time"] = patch["time"]
+    # EVERY OTHER CHANNEL, FROM THE SCHEMA. This was a hand list: rooms,
+    # entities, attire, overlays, conditions, positions, poses, stations,
+    # ten list fields and time -- so a specialist repair that encoded the
+    # omission in `scales`, `containment`, `vitals`, `destruction`,
+    # `artifact_ops`, `sensory_events`, `comms_ops`, `crowd_ops`,
+    # `courier_ops`, `telling_ops`, `charter_ops`, `public_evidence`,
+    # `ratified_claims` or `contradicted_claims` never reached `sd`: the
+    # record said repaired, the re-check found nothing, and the beat shipped
+    # a staleness warning for a repair that was made and thrown away. Dict
+    # channels upsert per key (add-only where the original must stand);
+    # list channels union with dedup; the scalar leaves fill only a hole.
+    special = {"rooms", "entities", "conditions"}
+    for field in sorted(_diff_dict_channels() - special):
+        incoming = patch.get(field)
+        if not isinstance(incoming, dict):
+            continue
+        target = sd.setdefault(field, {})
+        if not isinstance(target, dict):
+            target = sd[field] = {}
+        for key, value in incoming.items():
+            if field in _REPAIR_ADD_ONLY:
+                target.setdefault(key, value)
+            else:
+                target[key] = value
+    for field in sorted(_diff_list_channels()):
+        incoming = patch.get(field)
+        if not isinstance(incoming, list):
+            continue
+        target = sd.setdefault(field, [])
+        if not isinstance(target, list):
+            target = sd[field] = []
+        for item in incoming:
+            if item not in target:
+                target.append(item)
+    for field in sorted(_state_diff_channels()
+                        - _diff_dict_channels() - _diff_list_channels()):
+        incoming = patch.get(field)
+        if incoming is None:
+            continue
+        if isinstance(incoming, dict) and isinstance(sd.get(field), dict):
+            for key, value in incoming.items():     # destruction: two partials
+                sd[field].setdefault(key, value)
+        elif sd.get(field) is None:
+            sd[field] = incoming
     return sd
 
 def _norm_subject(value):
@@ -1168,9 +1209,11 @@ def _evidence_present(sd, omission, forms=None, *, scene=None):
         return any(hits(k) for k in (sd.get("positions") or {}))
     return _omission_subject_encoded(sd, subject, forms)
 
-# At most one deep audit + one self-repair per director_resolve execution.
-# A rerun of the stage naturally re-runs the seam once -- there is no
-# cross-turn or cross-variant accumulation to double-charge.
+# Kept for its importers. It clamped `_manifest_items` to the first eight
+# entries, which bounded what was DISPATCHED and CHECKED rather than what was
+# repaired; the clamp is gone (see `_manifest_items`). The one deep audit and
+# one self-repair per director_resolve execution are bounded by the seam's
+# own control flow, not by this number.
 _RECONCILE_MAX_MANIFEST_ITEMS = 8
 
 
@@ -1210,7 +1253,13 @@ def _manifest_items(out):
                 normalized[field] = value
         items.append(normalized)
     items = _fold_derived_manifest_events(items)
-    return items[:_RECONCILE_MAX_MANIFEST_ITEMS]
+    # NO CLAMP. Until 2026-09-07 this returned the first eight: items 9+
+    # were dispatched to no hand, sliced into no specialist view and
+    # checked against no evidence, so a busy beat's later changes were the
+    # ones that went unencoded and unnoticed. The constant below justified
+    # bounding REPAIR CALLS, which is a different quantity and is bounded
+    # where the calls are made.
+    return items
 
 
 #: Categories whose entry may be the ENGINE'S OWN consequence of an attire

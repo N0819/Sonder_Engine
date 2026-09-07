@@ -993,19 +993,30 @@ def _sense_card(sheet):
     return []
 
 
-def _sound_field_for(ctx, sc, name, room):
+def _sound_field_for(ctx, sc, name, room, events=None):
     """One perceiver's sound field for this stage
     (`world/spatial_sound_field.py`), or None where their room carries no
     geometry -- in which case every hearing reader runs today's edge rules
     unchanged. The turn index seeds the steadiness hash so a reroll hears
     what the beat it replaces heard; the crowd ledger is read once per stage
-    and every perceiver's field shares it."""
+    and every perceiver's field shares it.
+
+    `events` are the beat's one-off sounds. A field built WITHOUT them knows
+    nothing of a hiss or a crash this beat made, so the noise floor it
+    grades a voice against is the room's standing one and a sound in the
+    next room is on no grid at all. The outcome pass passed none: own-room
+    events went through `ambient_percepts` (which drops other rooms) and
+    far events through `distant_sounds` (which skips the near field's
+    rooms), so a one-beat sound in the NEXT room reached nobody once the
+    listener's room had geometry -- exactly the rooms the field was widened
+    to cover."""
     crowds = ctx.get("_sound_crowds")
     if crowds is None:
         crowds = wget(ctx.chat.id, CROWDS_KEY, []) or []
         ctx["_sound_crowds"] = crowds
     return sound_field(sc, name, room=room,
-                       turn_idx=getattr(ctx.turn, "idx", None), crowds=crowds)
+                       turn_idx=getattr(ctx.turn, "idx", None), crowds=crowds,
+                       events=events or None)
 
 
 def _source_channels(sc, perceiver_name, perceiver_room, sources,
@@ -2763,11 +2774,14 @@ def perception_outcome(ctx, nonce):
     # Only fall back to the cached value when the scene genuinely has no
     # resolvable position for the player (e.g. positions were never
     # tracked for them).
-    p_room = _resolve_player_room(sc, pers, interp, ctx.cast, ctx.input) \
-        or ctx.get("_player_room")
-    ctx["_player_room"] = p_room
-
+    # The ONE ordering every stage reads (`_player_room_in`: the scene,
+    # then the cache, then the resolver that may cost a model call), and
+    # with NO declaration: a declared `movement.to_room` is evidence of
+    # intent before resolve and of nothing after it -- the resolver's second
+    # rung returned it directly, so a positionless player was placed at the
+    # destination resolve had just refused.
     p_name = pers.get("name") or persona_name(pers)
+    p_room = _player_room_in(sc, pers, None, ctx, p_name)
     p_appearance_true = _appearance_as_prose(appearance_of(
         p_name, pers.get("appearance") or persona_appearance(pers), sc))
     # Conceal a disguised subject's real appearance in every observer's outcome
@@ -3096,12 +3110,73 @@ def _composer_bare_details(rows):
     return out
 
 
-def _composer_unknown_sources(name, known, roster):
+def _composer_unknown_sources(name, known, roster, bodies_by_name=None):
+    """(recognized, unknown) for one observer: the bodies whose canonical
+    forms may stand in this observer's view, and the roster entries whose
+    forms must be scrubbed from it.
+
+    A DISGUISE THAT CONCEALS IDENTITY MAKES AN ACQUAINTANCE A STRANGER FOR
+    THIS BEAT. `observer_display_map` has said so since the disguise seam
+    was built; this pair, which every act surface and authored line is
+    scrubbed against, read the bare `known` ledger alone -- so the same view
+    called a masked body a stranger in its presence line and named it in
+    the act it performed. When the caller can supply the beat's body
+    records (`bodies_by_name`, carrying `disguise_known_to` and
+    `disguise_conceals_identity`), a hidden body leaves `recognized` and
+    joins `unknown`; without them the ledger alone decides, as before.
+    """
     recognized = set(known.get(name) or [])
+    records = bodies_by_name or {}
+
+    def _hidden(body):
+        record = records.get(body) or {}
+        return disguise_breaks_recognition(
+            record.get("disguise_known_to"), name,
+            record.get("disguise_conceals_identity"))
+
+    hidden = {s["name"] for s in roster if s["name"] != name and _hidden(s["name"])}
+    if hidden:
+        recognized = {form for form in recognized
+                      if not any(_recognizes(body, {form}) for body in hidden)}
     return recognized, [
         s for s in roster
-        if s["name"] != name and not _recognizes(s["name"], recognized)
+        if s["name"] != name
+        and (s["name"] in hidden or not _recognizes(s["name"], recognized))
     ]
+
+
+def _attributed_label(body, observer, *, recognized, display_map,
+                      bodies_by_name, can_see, unseen, appearances,
+                      cast_aliases):
+    """ONE LABEL PER (OBSERVER, BODY) PER BEAT, whichever branch asks.
+
+    The outcome pass attributed speech, communication and acts by testing
+    the `known` ledger FIRST and consulting the disguise-aware display map
+    only for strangers, so an acquaintance not in `disguise_known_to`
+    received the canonical name for everything the masked body said and
+    did while the same view described it as a stranger. The act stage
+    read the map first. This is the one order for all of them:
+
+    * recognised, and no identity-concealing disguise -- the name, seen or
+      not (a known voice is knowledge the observer already holds);
+    * otherwise seen -- the display map's label (the jointly assigned
+      stranger descriptor or silhouette), or the appearance-derived
+      fallback when the body was outside the map's roster;
+    * otherwise -- `unseen`, the channel's own word for a body it cannot
+      place ("a voice").
+    """
+    record = (bodies_by_name or {}).get(body) or {}
+    hidden = disguise_breaks_recognition(
+        record.get("disguise_known_to"), observer,
+        record.get("disguise_conceals_identity"))
+    if not hidden and _recognizes(body, recognized):
+        return body
+    if not can_see:
+        return unseen
+    return display_map.get(body) or _unknown_actor_label(
+        body, _strip_identity_tokens(
+            appearances.get(body),
+            [body, *(cast_aliases.get(body) or [])]))
 
 
 def _joint_stranger_labels(bodies):
@@ -3550,7 +3625,13 @@ def _gated_ambient_percepts(gate, sensory_events, room, *, order_key=None):
                         or ""))
         if not desc:
             continue
-        gated.append({**event, "desc": desc,
+        # EVERY KEY THE READER READS, `detail` first: `ambient_percepts`
+        # takes `detail` before `desc`, and every beat sound and charter
+        # noise is normalised INTO `detail` -- so a gate that rewrote the
+        # other three handed the reader the ungated text on every one of
+        # them, and the authored-prose floor held only for events that had
+        # no `detail` key to begin with.
+        gated.append({**event, "detail": desc, "desc": desc,
                       "description": desc, "text": desc})
     return composer.ambient_percepts(gated, room, order_key=order_key)
 
@@ -4518,7 +4599,7 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
             can_see = _in_plain_view(rel, vis)
             display = display_map.get(p_name, p_name)
             recognized, unknown = _composer_unknown_sources(
-                name, known, roster)
+                name, known, roster, bodies_by_name)
             continuity = bool(rel.get("open_group_continuity"))
 
             def _spoken_from(room, _p=p, _name=name, _rel=rel, _vis=vis):
@@ -5143,7 +5224,8 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                 bodies_by_name.get(name), joint_labels, display_map)
             gate = _authored_prose_gate(
                 ctx, "perception_outcome", name, known, identity_space)
-            field = _sound_field_for(ctx, sc, name, p.get("room"))
+            field = _sound_field_for(ctx, sc, name, p.get("room"),
+                                     events=beat_sounds)
             percepts = _composer_standing_percepts(
                 sc, p, name, others, display_map, known,
                 entity_state=p.get("entity_state")
@@ -5172,6 +5254,25 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                 # admission gate the establish stage uses...
                 percepts.extend(
                     _gated_ambient_percepts(gate, beat_sounds, p.get("room")))
+                # ...THEN THE NEAR FIELD: a sound in a room the listener's
+                # own composite grid places is a one-beat source on that
+                # room's centre, spread through the doorway it came by and
+                # admitted where the field grades it above `none` -- the
+                # establish stage's step (`heard_events`), which this pass
+                # never took. Rewritten to the observer's room so
+                # `ambient_percepts`' own-room admission takes it; the gate
+                # still scrubs the text.
+                afar = heard_events(
+                    sc, name, beat_sounds, room=p.get("room"),
+                    turn_idx=getattr(ctx.turn, "idx", None),
+                    crowds=ctx.get("_sound_crowds"))
+                if afar:
+                    here = str(p.get("room") or "")
+                    percepts.extend(_gated_ambient_percepts(
+                        gate, [{**event, "room": here, "room_id": here,
+                                "source_room": here}
+                               for event, _level in afar],
+                        p.get("room")))
                 # ...and beyond the near field it is a BEARING AND A
                 # CHARACTER, never a sentence and never a place. The rooms
                 # this listener's own composite already places are the near
@@ -5189,8 +5290,7 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
             spatial = p.get("spatial_to_sources") or {}
             visual = p.get("visual_channel_to_sources") or {}
             recognized, unknown = _composer_unknown_sources(
-                name, known, ident_roster)
-            behind = set(p.get("behind_sources") or [])
+                name, known, ident_roster, bodies_by_name)
             order = 0
             for beat_event in beat_events:
                 if beat_event.get("kind") == "speech":
@@ -5225,20 +5325,16 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                                 observer_room=p.get("room"),
                                 target_room=sp_room,
                                 sound=_sound_field_for(
-                                    ctx, sc, name, p.get("room")))
+                                    ctx, sc, name, p.get("room"),
+                                    events=beat_sounds))
                     can_see = _in_plain_view(
                         rel, visual.get(speaker, False))
-                    if _recognizes(speaker, recognized):
-                        display = speaker
-                    elif can_see:
-                        display = (display_map.get(speaker)
-                                   or _unknown_actor_label(
-                                       speaker, _strip_identity_tokens(
-                                           appearances.get(speaker),
-                                           [speaker, *(cast_aliases.get(
-                                               speaker) or [])])))
-                    else:
-                        display = "a voice"
+                    display = _attributed_label(
+                        speaker, name, recognized=recognized,
+                        display_map=display_map,
+                        bodies_by_name=bodies_by_name, can_see=can_see,
+                        unseen="a voice", appearances=appearances,
+                        cast_aliases=cast_aliases)
                     percept = composer.speech_percept(
                         d, _with_comm_channel(
                             sc, rel, speaker=speaker, observer=name,
@@ -5269,8 +5365,12 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                         order += 1
                         continue
                     can_see = _in_plain_view(rel, visual.get(actor, False))
-                    display = (actor if _recognizes(actor, recognized)
-                               else (display_map.get(actor) or "a voice"))
+                    display = _attributed_label(
+                        actor, name, recognized=recognized,
+                        display_map=display_map,
+                        bodies_by_name=bodies_by_name, can_see=can_see,
+                        unseen="a voice", appearances=appearances,
+                        cast_aliases=cast_aliases)
                     percept = composer.communication_percept(
                         entry, _with_comm_channel(
                             sc, rel, speaker=actor, observer=name,
@@ -5287,18 +5387,21 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                 act = beat_event
                 actor = act.get("actor")
                 if _is_the_observer(
-                        sc, actor, name, cast_aliases.get(name)) \
-                        or actor in behind:
+                        sc, actor, name, cast_aliases.get(name)):
                     order += 1
                     continue
                 rel = spatial.get(actor)
                 if rel is None:
                     order += 1
                     continue
+                # NO PRE-SKIP ON SIGHT. `composer.act_percept` decides the
+                # arc: a body in the observer's rear arc is heard and not
+                # seen (PM5), and everything else is refused at its sight
+                # gate. The onset pass has always handed it `can_see` and
+                # let it rule; this pass skipped unseen and rear-arc actors
+                # before the call, so the hearing percept the composer mints
+                # for the rear arc was dead on every outcome beat.
                 can_see = _in_plain_view(rel, visual.get(actor, False))
-                if not can_see:
-                    order += 1
-                    continue
                 legs = _legs_of_actor(sc, crossed_legs, actor)
                 if legs and not _channel_to_every_leg(
                         sc, prev_scene, name, p.get("room"), legs,
@@ -5309,14 +5412,11 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                         "did not stand in all of them" % len(legs))
                     order += 1
                     continue
-                if _recognizes(actor, recognized):
-                    display = actor
-                else:
-                    display = display_map.get(actor) or _unknown_actor_label(
-                        actor,
-                        _strip_identity_tokens(
-                            appearances.get(actor),
-                            [actor, *(cast_aliases.get(actor) or [])]))
+                display = _attributed_label(
+                    actor, name, recognized=recognized,
+                    display_map=display_map, bodies_by_name=bodies_by_name,
+                    can_see=True, unseen="", appearances=appearances,
+                    cast_aliases=cast_aliases)
                 # A BODY THE SURFACE NAMES IS A PERCEPT OF ITS OWN (PX5),
                 # asked before the identity scrub rewrites the names.
                 surface, _cut = _act_surface_admission(
@@ -5335,7 +5435,7 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                     })
                 percept = composer.act_percept(
                     sc, act.get("event") or {}, name, actor, rel,
-                    display=display, can_see=True,
+                    display=display, can_see=can_see,
                     sight=_sight_detail(sc, name, actor, rel),
                     self_forms=self_forms,
                     self_pronouns=p.get("pronouns"),

@@ -38,7 +38,7 @@ from core.frames import create_frame, get_frame
 from world.paradox import get_paradox
 from story.scene import (CAST_STATUS_PRESENT, active_cast, cast_change_status,
                          persona_of, set_char_state, set_char_status)
-from world.spatial import (THRESHOLD_CROSSING_BEATS, _anchor_dir, _hiding_holders,
+from world.spatial import (THRESHOLD_CROSSING_BEATS, _SUBJECT_KEYED, _anchor_dir, _hiding_holders,
                      anchor_bearing_of, effective_anchors, has_visual,
                      hear_level, is_alarming, room_of, rooms_adjacent,
                      sound_path, sound_walk_level, spatial_rel, travel_bearing)
@@ -849,6 +849,121 @@ def detect_split(chat_id, frame_id, turn_idx):
     return None
 
 
+#: The ledgers a frame split partitions and a merge reunites, by SHAPE.
+#: Subject-keyed tables (`_SUBJECT_KEYED` plus the body ledgers keyed the same
+#: way): a row belongs to the frame its subject stands in. Record lists whose
+#: rows name their parties: a record belongs to the frame the parties stand
+#: in. Room-anchored tables: a record belongs to the frame whose rooms it
+#: touches. Rooms and positions are the partition itself.
+_FRAME_SUBJECT_LEDGERS = tuple(dict.fromkeys(
+    tuple(_SUBJECT_KEYED) + ("attire", "vitals", "overlays")))
+_FRAME_RECORD_LEDGERS = ("contacts", "substances")
+_FRAME_ROOM_TABLES = ("entities", "passages", "comms", "scents")
+
+
+def _cf(value):
+    return str(value or "").strip().casefold()
+
+
+def _record_parties(record):
+    """The subjects a contact or substance record names."""
+    if not isinstance(record, dict):
+        return set()
+    return {_cf(record.get(key)) for key in
+            ("actor", "target", "source", "subject", "body", "holder")
+            if _cf(record.get(key))}
+
+
+def _touches_rooms(key, value, rooms, positions):
+    """Does this room-anchored record belong with `rooms`: keyed by one of
+    them, positioned in one of them, or naming one in its `rooms`."""
+    if str(key) in rooms or _cf(positions.get(str(key))) in {_cf(r) for r in rooms}:
+        return True
+    if isinstance(value, dict):
+        for room in (value.get("rooms") or ()) if isinstance(value.get("rooms"), (list, tuple)) else ():
+            if str(room) in rooms:
+                return True
+        if str(value.get("room") or "") in rooms:
+            return True
+    return False
+
+
+def _partition_scene(scene, subjects, rooms):
+    """The slice of `scene` that belongs to the frame holding `subjects` in
+    `rooms`: subject-keyed rows for those subjects, records naming them,
+    room-anchored tables whole (a merge resolves them by room)."""
+    subjects = {_cf(s) for s in subjects}
+    out = dict(scene)
+    for ledger in _FRAME_SUBJECT_LEDGERS:
+        table = scene.get(ledger)
+        if isinstance(table, dict):
+            out[ledger] = {k: v for k, v in table.items() if _cf(k) in subjects}
+    for ledger in _FRAME_RECORD_LEDGERS:
+        records = scene.get(ledger)
+        if isinstance(records, list):
+            out[ledger] = [r for r in records if _record_parties(r) & subjects]
+    return out
+
+
+def merge_frame_scenes(parent_scene, child_scene):
+    """The parent's scene with the away party's ledgers carried home.
+
+    `{**parent, rooms, positions}` kept the parent's copy of EVERY other
+    ledger from the moment of the split, so a persona who changed clothes,
+    shrank, was bound, or minted a thing while away lost all of it on
+    reunion -- while `perform_split` had handed the child the full ledgers
+    to change. For every subject standing in the child scene the child's
+    rows win (attire, poses, stations, scales, containment, orientation,
+    vitals, overlays, following); a contact or substance record naming a
+    child subject is the child's; an entity, passage, channel or scent in a
+    child room is the child's; everything else is the parent's.
+    """
+    parent_scene = dict(parent_scene or {})
+    child_scene = child_scene or {}
+    child_positions = dict(child_scene.get("positions") or {})
+    child_subjects = {_cf(k) for k in child_positions}
+    child_rooms = {str(r) for r in (child_scene.get("rooms") or {})}
+    merged = dict(parent_scene)
+    merged["rooms"] = {**(parent_scene.get("rooms") or {}),
+                       **(child_scene.get("rooms") or {})}
+    merged["positions"] = {**(parent_scene.get("positions") or {}),
+                           **child_positions}
+    for ledger in _FRAME_SUBJECT_LEDGERS:
+        if ledger == "positions":
+            continue
+        parent_table = parent_scene.get(ledger)
+        child_table = child_scene.get(ledger)
+        if not isinstance(parent_table, dict) and not isinstance(child_table, dict):
+            continue
+        out = {k: v for k, v in (parent_table or {}).items()
+               if _cf(k) not in child_subjects}
+        out.update({k: v for k, v in (child_table or {}).items()
+                    if _cf(k) in child_subjects})
+        merged[ledger] = out
+    for ledger in _FRAME_RECORD_LEDGERS:
+        parent_records = parent_scene.get(ledger)
+        child_records = child_scene.get(ledger)
+        if not isinstance(parent_records, list) and not isinstance(child_records, list):
+            continue
+        out = [r for r in (parent_records or [])
+               if not (_record_parties(r) & child_subjects)]
+        out.extend(r for r in (child_records or [])
+                   if _record_parties(r) & child_subjects)
+        merged[ledger] = out
+    for ledger in _FRAME_ROOM_TABLES:
+        parent_table = parent_scene.get(ledger)
+        child_table = child_scene.get(ledger)
+        if not isinstance(parent_table, dict) and not isinstance(child_table, dict):
+            continue
+        out = dict(parent_table or {})
+        for key, value in (child_table or {}).items():
+            if key not in out or _touches_rooms(key, value, child_rooms,
+                                                 child_positions):
+                out[key] = value
+        merged[ledger] = out
+    return merged
+
+
 def perform_split(chat_id, parent_frame_id, turn_idx, away_zone):
     """Creates a new spatial child frame for `away_zone`, seeds its
     frame-scoped world state from the parent, partitions cast/personas,
@@ -908,10 +1023,14 @@ def perform_split(chat_id, parent_frame_id, turn_idx, away_zone):
             name: room for name, room in (scene.get("positions") or {}).items()
             if _effective_zone(scene, name) == away_zone
         }
+        # SYMMETRIC PARTITION: each frame carries the subject-keyed rows and
+        # the records of the bodies standing in it, and the room-anchored
+        # tables whole (the merge resolves those by room). The child used to
+        # take every ledger and the parent keep every ledger, and the merge
+        # then kept the parent's -- see `merge_frame_scenes`.
         away_scene = {
-            **scene, "rooms": away_rooms, "positions": away_positions,
-            "entities": scene.get("entities") or {}, "overlays": scene.get("overlays") or {},
-            "attire": scene.get("attire") or {},
+            **_partition_scene(scene, away_positions, away_rooms),
+            "rooms": away_rooms, "positions": away_positions,
         }
         wset_for_frame(chat_id, "scene", away_scene, new_frame_id)
 
@@ -920,7 +1039,8 @@ def perform_split(chat_id, parent_frame_id, turn_idx, away_zone):
             name: room for name, room in (scene.get("positions") or {}).items()
             if _effective_zone(scene, name) != away_zone
         }
-        scene["positions"] = parent_positions
+        scene = {**_partition_scene(scene, parent_positions, set(scene.get("rooms") or {})),
+                 "positions": parent_positions}
         wset(chat_id, "scene", scene)
 
         # Cast partition: active_cast folds every base-active character
@@ -1074,9 +1194,7 @@ def perform_merge(chat_id, parent_frame_id, child_frame_id, turn_idx):
 
         parent_scene = wget_for_frame(chat_id, "scene", parent_frame_id, {}) or {}
         child_scene = wget_for_frame(chat_id, "scene", child_frame_id, {}) or {}
-        merged_rooms = {**(parent_scene.get("rooms") or {}), **(child_scene.get("rooms") or {})}
-        merged_positions = {**(parent_scene.get("positions") or {}), **(child_scene.get("positions") or {})}
-        parent_scene = {**parent_scene, "rooms": merged_rooms, "positions": merged_positions}
+        parent_scene = merge_frame_scenes(parent_scene, child_scene)
         wset_for_frame(chat_id, "scene", parent_scene, parent_frame_id)
 
         for row in active_cast(chat_id, child_frame_id):

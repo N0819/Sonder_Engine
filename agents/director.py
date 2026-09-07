@@ -192,6 +192,7 @@ from .director_movement import (
     _travel_continues,
     _guard_approach_is_not_arrival,
     crossing_legs,
+    route_scene_for,
 )
 from .director_floors import (
     resolve_concealment_refs,
@@ -260,6 +261,7 @@ from .director_evidence import (
     _manifest_items,
     _DERIVED_OF_ATTIRE,
     _fold_derived_manifest_events,
+    _state_diff_channels,
 )
 from .director_scopes import (
     CHANNEL_STAGES,
@@ -269,6 +271,8 @@ from .director_scopes import (
     reads_dialogue,
     _DELEGATED_CHANNELS,
     _CATEGORY_CHANNELS,
+    RETIRED_HANDS,
+    note_key_targets,
     _LIST_DELEGATED,
     _CHANNEL_GATES,
     _CHANNEL_SPECIALISTS,
@@ -297,6 +301,7 @@ from .director_fanout import (
     _anchor_names,
     _beat_rooms,
     _stage_container,
+    _stage_state,
     _normalized_channel_value,
     _EVENT_VERDICTS,
     _resolved_event_verdicts,
@@ -1177,17 +1182,32 @@ def director_interpret(ctx, nonce):
     # which is what decides who runs; the facts decide how much sheet an
     # addressed hand is assembled with.
     _iview = _interpret_beat_view(ctx, out, p_name)
+    # The four views the gate and the payload both read, built once.
+    _inotices = _artifacts_view(chat["id"], sc)
+    _icouriers = _couriers_view(chat["id"], sc)
+    _ireports = _carried_reports_view(ctx)
+    _iunratified = _unratified_background_claims(chat["id"], ctx.turn["idx"])
     _idispatch = _dispatch_specialists(ctx, sc, _gate_facts(
         ctx, sc,
         physical=_beat_has_physical_activity(out, {}, []),
         speech=bool(player_speech_lines(out)),
-        crowds_rows=_icrowds,
+        crowds_rows=_icrowds, notices_rows=_inotices,
+        couriers_rows=_icouriers, reports_rows=_ireports,
+        unratified_rows=_iunratified,
     ), _iview)
     _iparts = scene_extra_parts(ctx.cast, pers, p_name)
+    # The remaining extras -- three DB-backed condition views, sightlines,
+    # exits -- exist only for a hand's payload; on a beat that dispatches no
+    # hand (most declarations) they were built and read by nobody.
+    _any_hand = any(bool((d or {}).get("scope"))
+                    for d in (_idispatch or {}).values())
     _run_specialists(
         ctx, out, sc, _idispatch,
         _iview,
         {
+            "nonce": nonce,
+            "clock": clock,
+        } if not _any_hand else {
             "nonce": nonce,
             "clock": clock,
             "active_awareness": _awareness_view(
@@ -1204,17 +1224,16 @@ def director_interpret(ctx, nonce):
                             for name, parts in _iparts.items()}
                            if _iparts else None),
             "contacts": sc.get("contacts") or [],
-            "notices": _artifacts_view(chat["id"], sc),
+            "notices": _inotices,
             "movement": out.get("movement"),
             "movers": {p_name: {"exits": _egocentric_exits(sc, p_name)}},
             "planning_needs": [],
             "author_notes": payload.get("author_notes"),
             "sightlines": _sightlines_view(sc, ctx, p_name),
             "crowds": _icrowds,
-            "couriers": _couriers_view(chat["id"], sc),
-            "carried_reports": _carried_reports_view(ctx),
-            "unratified_claims": _unratified_background_claims(
-                chat["id"], ctx.turn["idx"]),
+            "couriers": _icouriers,
+            "carried_reports": _ireports,
+            "unratified_claims": _iunratified,
         },
         "interpret")
 
@@ -1234,6 +1253,14 @@ def director_interpret(ctx, nonce):
         report=lambda note: ctx.add_warning(f"player state: {note}"),
     )
     _onset_assertions = copy.deepcopy(out["state_assertions"])
+    # The contact channel rides beside the state assertions at this stage
+    # (`_stage_container`), under its own key; the phase floor prunes one
+    # diff, so it is folded in under the channel name its provenance paths
+    # use and taken back out after. What survives is what the ONSET may
+    # apply (`resolve_sc`); the full declaration still reaches the final
+    # merge, where a continuation contact completes.
+    _onset_assertions["contact_ops"] = copy.deepcopy(
+        out.get("contact_assertions") or [])
     _deferred_verdicts = [
         {"event_id": str(event.get("event_id") or ""), "status": "blocked"}
         for event in out.get("sequence") or []
@@ -1243,6 +1270,7 @@ def director_interpret(ctx, nonce):
                 "continuation", "completion"))
     ]
     prune_blocked_phase_changes(_onset_assertions, _deferred_verdicts)
+    out["onset_contact_assertions"] = _onset_assertions.pop("contact_ops", [])
     out["onset_state_assertions"] = _onset_assertions
 
     fl = out.get("flow")
@@ -2215,7 +2243,7 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
             (_orch_record or {}).get('events_addressed'))
         if routed:
             _mended, repair_verdicts = _specialist_repairs(
-                ctx, sc, sd, routed,
+                ctx, orch_repair.get("scene") or sc, sd, routed,
                 orch_repair["view"], orch_repair.get("extras") or {},
                 recon)
             if _mended:
@@ -2792,7 +2820,15 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
         # before merge and persistence.
         _phase_sources = result.get("phase_sources") or {}
         if isinstance(_phase_sources, dict):
-            _target, _ = _stage_container(out, stage, spec["channels"][0])
+            # BY STAGE, never by the hand's first channel: interpret's
+            # contact channel lives on `out["contact_assertions"]`, so
+            # choosing the container from `channels[0]` put the contact
+            # hand's provenance on the top-level output, where the phase
+            # floor never reads it -- and a continuation contact whose
+            # onset was deferred was applied to the onset preview as
+            # standing. `phase_sources` is a StateDiff field and belongs in
+            # the stage's state container, whichever channel it maps.
+            _target = _stage_state(out, stage)
             _merged_sources = _target.setdefault("phase_sources", {})
             for _path, _source in _phase_sources.items():
                 _channel = str(_path or "").split(".", 1)[0]
@@ -3227,7 +3263,14 @@ def director_resolve(ctx, nonce, _corrections=None):
                 char_actions.setdefault(cname, []).extend(acts)
 
     sc = get_scene(chat["id"], chat)
-    onset_contacts = interp.get("contact_assertions") or []
+    # Two readings of the player's declared contacts: what the ONSET may
+    # apply (deferred phases pruned -- interpret's phase floor) previews the
+    # world the hands read, and the full declaration merges at the end of
+    # the beat, where a continuation completes.
+    declared_contacts = interp.get("contact_assertions") or []
+    onset_contacts = interp.get("onset_contact_assertions")
+    if onset_contacts is None:
+        onset_contacts = declared_contacts
     character_contact_endings = _validated_character_contact_endings(
         ctx, sc, report=lambda note: ctx.add_warning(
             f"character contact: {note}"))
@@ -3713,6 +3756,10 @@ def director_resolve(ctx, nonce, _corrections=None):
         material_effects=bool(character_material_effects),
         resolved_stage=True,
         crowds_rows=_rcrowds,
+        notices_rows=payload.get("notices"),
+        couriers_rows=payload.get("couriers"),
+        reports_rows=payload.get("carried_reports"),
+        unratified_rows=payload.get("unratified_claims"),
     )
     # The prose author's OWN scope (same mechanism as the specialists'
     # channel scopes, same facts, same fail-open): which conditional
@@ -4110,7 +4157,12 @@ def director_resolve(ctx, nonce, _corrections=None):
     # with the same beat view and entitlement slice, never the prose
     # author with the full core (see _specialist_repairs). In-memory
     # only -- never persisted with the step.
-    ctx["_orch_repair"] = {"view": _orch_view, "extras": _orch_extras}
+    # The previewed scene rides with it: the dispatch pass above read
+    # `resolve_sc` and the repair pass read the pre-beat `sc`, so a hand
+    # re-asked about an omission was shown a world without the room, the
+    # hold or the position the beat had already established (chat 117 t82).
+    ctx["_orch_repair"] = {"view": _orch_view, "extras": _orch_extras,
+                           "scene": resolve_sc}
     # The prose author's granted scope, persisted beside the
     # specialists' -- what the scope backstop audits shipped prose
     # duties against, and the per-beat measurement the sheet scoping
@@ -4144,7 +4196,7 @@ def director_resolve(ctx, nonce, _corrections=None):
         report=lambda note: ctx.add_warning(f"character contact: {note}"),
     )
     sd["contact_ops"] = _merge_player_contact_assertions(
-        onset_contacts, resolved_contact_ops,
+        declared_contacts, resolved_contact_ops,
         report=lambda note: ctx.add_warning(f"player contact: {note}"),
     )
     sd["substance_ops"] = _merge_character_material_effects(
@@ -4228,7 +4280,7 @@ def director_resolve(ctx, nonce, _corrections=None):
         # occupant can step out on the same beat it arrives -- previously
         # the dock edge only appeared at commit, AFTER this check, so the
         # same-beat deboard was wrongly blocked.
-        route_scene = merge_scene_with_diff(sc, sd)
+        route_scene = route_scene_for(ctx, sc, sd)
         known_rooms = route_scene["rooms"]
         prev_room = subject_prev_room
         blocked = contested = False

@@ -98,6 +98,59 @@ def seed_needs(bodies, template=None):
     }
 
 
+def needs_template(authored=None, upkeeps=None, economy=None):
+    """The per-charter need template: the defaults, an authored `needs`
+    block laid over them, and `fed_by` derived from the charter's own
+    structure where the author named none.
+
+    NOTHING GENERATED EVER SET `fed_by`. `DEFAULT_NEEDS` has none, the
+    generator called `seed_needs(bodies)` with no template, and four
+    readers depend on it: the supply factor (`advance_needs`), the
+    own-stake appraisal (`charter_feel`), the where-the-bread-is errand
+    (`charter_move.errands`) and the post-heals-the-need rule. So every
+    town serviced sustenance at supply 1.0 whatever its stocks, and the
+    economy had no body at the end of it. Only tests set the field.
+
+    The derivation is structural, not lexical: `sustenance` draws on the
+    upkeep a PRODUCE flow requires when the good it produces is one the
+    charter also CONSUMES -- the economy's own statement of what its people
+    live on. Where several qualify, the most-consumed good's upkeep; where
+    the economy names no such chain, the field stays empty as before. An
+    authored template (`charters[].needs`) overrides any of it, which is how
+    a need with no structural signal -- `health` -- names its infirmary.
+    """
+    template = {name: dict(spec) for name, spec in DEFAULT_NEEDS.items()}
+    upkeeps = upkeeps if isinstance(upkeeps, dict) else {}
+    flows = ((economy or {}).get("flows") or {}) if isinstance(economy, dict) else {}
+    consumed = {}
+    produced_by = {}
+    for flow in flows.values():
+        if not isinstance(flow, dict):
+            continue
+        good = str(flow.get("good") or "")
+        rate = float(flow.get("lots_per_hour") or 0.0)
+        if str(flow.get("kind") or "") == "consume":
+            consumed[good] = consumed.get(good, 0.0) + rate
+        elif str(flow.get("kind") or "") == "produce":
+            upkeep = str(flow.get("requires_upkeep") or "")
+            if upkeep and upkeep in upkeeps:
+                produced_by.setdefault(good, []).append(upkeep)
+    ranked = sorted(
+        ((consumed.get(good, 0.0), good, keys)
+         for good, keys in produced_by.items() if good in consumed),
+        key=lambda row: (-row[0], row[1]))
+    if ranked:
+        template.setdefault("sustenance", {})["fed_by"] = sorted(ranked[0][2])[0]
+    for name, spec in (authored.items() if isinstance(authored, dict) else ()):
+        if not isinstance(spec, dict):
+            continue
+        template.setdefault(str(name), {}).update(
+            {k: v for k, v in spec.items()
+             if k in ("fed_by", "floor", "drift_per_hour",
+                      "service_per_hour", "level")})
+    return template
+
+
 def advance_needs(needs, bodies, watch, upkeeps, hours, strain=None,
                   toll=0.0):
     """One window of living. Returns ``(needs, newly_unable, recovered)``.

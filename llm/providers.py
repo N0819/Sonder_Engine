@@ -2023,6 +2023,127 @@ def _note_json_schema_stalled(prov, model):
     _note_json_schema_rejected(prov, model)
 
 
+def _json_mode_recovery_stages(body, prov, model, *, stalled=False):
+    """The bodies to try, in order, once `body`'s JSON mode was refused.
+
+    ONE LADDER FOR EVERY TRANSPORT. The blocking sync path climbed
+    json_schema -> json_object -> nothing and recorded WHICH rung the
+    provider refused. The three paths beside it -- sync stream, async
+    stream, async blocking -- dropped `response_format` whole and recorded
+    the loss as a json_object rejection whatever the field had held. So a
+    provider that refuses grammars kept `_json_schema_supported` True, was
+    sent the schema again on the next call, 400'd again, and paid one dead
+    round trip per schema-bearing call for the life of the process; after
+    two such stalls it lost json_object as well, for a fault it never had.
+    The pipeline runs on the streaming path, so the correct ladder was the
+    one almost nothing used.
+
+    Yields `(candidate_body, on_success)` pairs. `on_success` is the list of
+    notes a success at that rung PROVES: every rung climbed past was
+    refused. The last rung strips every optional field at once and proves
+    nothing about the JSON mode alone, so it records nothing, as before.
+
+    `stalled` is the connection-death case (a schema accepted and never
+    answered, see the streaming caller): the remedy is one retry with no
+    `response_format` at all -- a one-word `json_object` flag is not what
+    hangs a grammar compiler, so that rung is skipped -- and NOTHING is
+    recorded, because a dropped connection can also be an ordinary blip and
+    one bad minute must not permanently cost a capable model its grammar.
+    """
+    rf = body.get("response_format")
+    rf_type = rf.get("type") if isinstance(rf, dict) else None
+    refused = []
+    if stalled:
+        pass
+    elif rf_type == "json_schema":
+        refused.append(lambda: _note_json_schema_rejected(prov, model))
+        if _json_object_supported(prov, model):
+            stage_zero = dict(body)
+            stage_zero["response_format"] = {"type": "json_object"}
+            yield stage_zero, list(refused)
+            refused.append(lambda: _note_json_object_rejected(prov, model))
+    elif rf_type == "json_object":
+        refused.append(lambda: _note_json_object_rejected(prov, model))
+    if "response_format" in body:
+        stage_one = dict(body)
+        stage_one.pop("response_format", None)
+        yield stage_one, list(refused)
+    stage_two = _strip_extended(dict(body))
+    stage_two.pop("response_format", None)
+    yield stage_two, []
+
+
+def _delta_reasoning(delta):
+    """The trace one stream delta carries, whichever key the seam used.
+
+    The stream read two spellings (`reasoning`, `reasoning_content`) while
+    `_reasoning_text` beside it reads by what the key SAYS it is and
+    flattens block lists; `reasoning_details` blocks were dropped on
+    streams and kept on the blocking path. One reader. Deltas are joined
+    without stripping -- a trace arrives in fragments and the whitespace
+    between them is part of it.
+    """
+    if not isinstance(delta, dict):
+        return ""
+    return "".join(_flatten_text(value) for key, value in delta.items()
+                   if "reason" in str(key).casefold()
+                   or "think" in str(key).casefold())
+
+
+def _reasoning_only_error(prov_name, model, reasoning, max_tokens=None):
+    """The typed failure for a reply that carries a trace and no answer.
+
+    Shared by the blocking reader (`_message_content`) and both stream
+    tails: until 2026-09-07 the streams returned "" for this case, so
+    `chat_complete`'s remedy for it -- reasoning off, then the next
+    candidate -- never fired for the roles the pipeline actually streams,
+    and the ladder bought a temperature-0 repair and fallbacks instead of
+    one retry.
+
+    SAY WHAT WAS MEASURED, NOT A CAUSE NOBODY CHECKED. This asserted "the
+    thinking budget consumed the reply" on every reasoning-only answer, and
+    the retry ladder then spends its first rung turning reasoning OFF on
+    that reading. Measured on the descent run (2026-09-05): a Room call
+    with a 40,000-token budget returned 25,052 characters of trace --
+    roughly 6k tokens, a sixth of what it had -- after 71 seconds, where the
+    five successful calls of the same reply took 3.6 to 6.2 seconds. The
+    budget was not consumed and disabling reasoning changed nothing, which
+    is the same class as PM20: a fixed message naming a cause the evidence
+    does not support, and a host or a ladder acting on it. The reported
+    reasoning is compared against the budget when the caller knows it; the
+    class stays one typed failure either way, because what is certain is
+    only that no answer arrived.
+    """
+    spent = _approx_tokens(reasoning)
+    room = ""
+    if max_tokens:
+        room = (" -- it used about %d of its %d-token budget, so the "
+                "budget was not the constraint" % (spent, int(max_tokens))
+                if spent * 2 < int(max_tokens) else
+                " -- about %d tokens against a %d-token budget, so the "
+                "budget may be the constraint"
+                % (spent, int(max_tokens)))
+    return ReasoningBudgetExhausted(
+        f"{prov_name}: {model} returned reasoning and no answer "
+        f"({len(reasoning)} chars of trace, content empty){room}")
+
+
+def _stream_answer(text, reasoning, url, model, body):
+    """What a finished stream hands back: the answer, or the typed failure
+    the blocking reader raises for a reasoning-only reply (see
+    `_message_content`). An EMPTY stream with no trace is returned as "",
+    as before: the caller reads the finish reason the last chunk carried
+    (`_capture_choice_finish`) and says why the provider stopped, which a
+    raise here would pre-empt."""
+    if text:
+        return text
+    if reasoning:
+        host = url.split("//", 1)[-1].split("/", 1)[0] or "stream"
+        raise _reasoning_only_error(host, model, reasoning,
+                                    body.get("max_tokens"))
+    return text
+
+
 def _apply_json_mode(body, prov, model, json_mode, json_schema=None):
     """Attach JSON mode, preferring an ENFORCED schema over an advisory flag.
 
@@ -2162,8 +2283,8 @@ def _sse_openai(url, headers, body, sink, role=None, model=None):
             # and looked, from the outside, exactly like a model that does not
             # expose a trace. It is NOT passed to `sink`: the sink is player-
             # facing prose, and a model's private thinking is not that.
-            _r = _delta.get("reasoning") or _delta.get("reasoning_content")
-            if isinstance(_r, str) and _r:
+            _r = _delta_reasoning(_delta)
+            if _r:
                 reasoning += _r
                 if _think_sink:
                     _think_sink(_r)
@@ -2178,7 +2299,7 @@ def _sse_openai(url, headers, body, sink, role=None, model=None):
         last_reasoning.set(reasoning or None)
     except Exception:
         pass
-    return text
+    return _stream_answer(text, reasoning, url, model, body)
 
 def _sse_anthropic(base, headers, body, sink, role=None, model=None):
     body["stream"] = True
@@ -2694,49 +2815,46 @@ def _chat_complete_once(
             _rf = body.get("response_format")
             schema_bearing = (isinstance(_rf, dict)
                               and _rf.get("type") == "json_schema")
+            stalled = False
             if isinstance(exc, LLMError):
                 if exc.status_code != 400:
                     raise
             elif not schema_bearing:
                 raise
             else:
+                stalled = True
                 _note_json_schema_stalled(prov, model)
 
-            # Stage 1: response_format alone. Dropping only the least portable
-            # field keeps reasoning_effort and the extended samplers, which a
-            # blanket strip discards for a rejection they did not cause.
-            recovered = False
-            if "response_format" in body:
-                stage_one = dict(body)
-                stage_one.pop("response_format", None)
+            # The staged ladder (`_json_mode_recovery_stages`): json_schema
+            # -> json_object -> no response_format -> every optional field.
+            # Dropping only the least portable field first keeps
+            # reasoning_effort and the extended samplers, which a blanket
+            # strip discards for a rejection they did not cause; recording
+            # the rung that was refused keeps the next call from paying for
+            # this one again.
+            out = None
+            last_exc = exc
+            for candidate, notes in _json_mode_recovery_stages(
+                    body, prov, model, stalled=stalled):
                 try:
                     out = _sse_openai(
                         url,
                         headers,
-                        stage_one,
+                        candidate,
                         guarded(),
                         role=role,
                         model=model,
                     )
-                    _note_json_object_rejected(prov, model)
-                    recovered = True
-                except LLMError as exc_one:
-                    if exc_one.status_code != 400:
+                except LLMError as exc_n:
+                    if exc_n.status_code != 400:
                         raise
-
-            # Stage 2: every optional field, as before.
-            if not recovered:
-                fallback_body = _strip_extended(dict(body))
-                fallback_body.pop("response_format", None)
-
-                out = _sse_openai(
-                    url,
-                    headers,
-                    fallback_body,
-                    guarded(),
-                    role=role,
-                    model=model,
-                )
+                    last_exc = exc_n
+                    continue
+                for note in notes:
+                    note()
+                break
+            if out is None:
+                raise last_exc
         # Same placeholder-skeleton guard as the non-streaming path below: a
         # model that "honours" response_format=json_object by streaming an
         # all-"..." skeleton would send that skeleton to the player as prose.
@@ -2764,50 +2882,27 @@ def _chat_complete_once(
     )
 
     if response.status_code == 400:
-        # Stage 0: a json_schema this provider cannot compile. Drop to the
-        # advisory flag rather than to nothing -- a host that rejects grammars
-        # usually still honours json_object, and giving up both at once would
-        # cost every later call on this provider its only shape constraint.
-        _rf = (body.get("response_format") or {})
-        if _rf.get("type") == "json_schema":
-            stage_zero = dict(body)
-            if _json_object_supported(prov, model):
-                stage_zero["response_format"] = {"type": "json_object"}
-            else:
-                stage_zero.pop("response_format", None)
+        # The staged ladder, shared with the three other transports
+        # (`_json_mode_recovery_stages`): a json_schema this provider cannot
+        # compile drops to the advisory flag rather than to nothing -- a host
+        # that rejects grammars usually still honours json_object, and giving
+        # up both at once would cost every later call on this provider its
+        # only shape constraint. Then response_format alone: keeping the
+        # reasoning controls is the whole point, because a 400 they did not
+        # cause must not turn a role configured "off" back into a thinking
+        # model. Then every optional field, as before.
+        for candidate, notes in _json_mode_recovery_stages(body, prov, model):
             response = _post_abortable(
                 url,
                 headers=headers,
-                json=stage_zero,
+                json=candidate,
             )
             if response.status_code < 400:
-                _note_json_schema_rejected(prov, model)
-                body = stage_zero
-
-        # Stage 1: response_format alone -- see _apply_json_mode. Keeping the
-        # reasoning controls here is the whole point: a 400 they did not cause
-        # must not turn a role configured "off" back into a thinking model.
-        if response.status_code == 400 and "response_format" in body:
-            stage_one = dict(body)
-            stage_one.pop("response_format", None)
-            response = _post_abortable(
-                url,
-                headers=headers,
-                json=stage_one,
-            )
-            if response.status_code < 400:
-                _note_json_object_rejected(prov, model)
-
-        # Stage 2: every optional field, as before.
-        if response.status_code == 400:
-            fallback_body = _strip_extended(dict(body))
-            fallback_body.pop("response_format", None)
-
-            response = _post_abortable(
-                url,
-                headers=headers,
-                json=fallback_body,
-            )
+                for note in notes:
+                    note()
+                break
+            if response.status_code != 400:
+                break
 
     if response.status_code >= 400:
         raise LLMError(
@@ -2925,33 +3020,7 @@ def _message_content(parsed, prov_name, model, max_tokens=None):
         return content
     reasoning = _reasoning_text(message)
     if reasoning:
-        # SAY WHAT WAS MEASURED, NOT A CAUSE NOBODY CHECKED. This asserted
-        # "the thinking budget consumed the reply" on every reasoning-only
-        # answer, and the retry ladder then spends its first rung turning
-        # reasoning OFF on that reading. Measured on the descent run
-        # (2026-09-05): a Room call with a 40,000-token budget returned
-        # 25,052 characters of trace -- roughly 6k tokens, a sixth of what it
-        # had -- after 71 seconds, where the five successful calls of the same
-        # reply took 3.6 to 6.2 seconds. The budget was not consumed and
-        # disabling reasoning changed nothing, which is the same class as
-        # PM20: a fixed message naming a cause the evidence does not support,
-        # and a host or a ladder acting on it.
-        #
-        # The reported reasoning is compared against the budget when the
-        # caller knows it; the class stays one typed failure either way,
-        # because what is certain is only that no answer arrived.
-        spent = _approx_tokens(reasoning)
-        room = ""
-        if max_tokens:
-            room = (" -- it used about %d of its %d-token budget, so the "
-                    "budget was not the constraint" % (spent, int(max_tokens))
-                    if spent * 2 < int(max_tokens) else
-                    " -- about %d tokens against a %d-token budget, so the "
-                    "budget may be the constraint"
-                    % (spent, int(max_tokens)))
-        raise ReasoningBudgetExhausted(
-            f"{prov_name}: {model} returned reasoning and no answer "
-            f"({len(reasoning)} chars of trace, content empty){room}")
+        raise _reasoning_only_error(prov_name, model, reasoning, max_tokens)
     if content == "":
         raise LLMError(f"{prov_name}: {model} returned empty content",
                        None, True)
@@ -3115,24 +3184,25 @@ async def _chat_complete_async_once(
                 out = await _sse_openai_async(base + "/chat/completions", _headers(prov), dict(body), guarded(), client, role=role, model=model)
             except LLMError as e:
                 if e.status_code == 400:
-                    # Staged, as on the sync paths: response_format first so a
-                    # rejection it caused cannot strip the reasoning controls.
-                    recovered = False
-                    if "response_format" in body:
-                        b1 = dict(body)
-                        b1.pop("response_format", None)
+                    # The staged ladder shared with the sync paths
+                    # (`_json_mode_recovery_stages`): response_format first,
+                    # so a rejection it caused cannot strip the reasoning
+                    # controls, and the refused rung recorded.
+                    out = None
+                    last_exc = e
+                    for candidate, notes in _json_mode_recovery_stages(body, prov, model):
                         try:
-                            out = await _sse_openai_async(base + "/chat/completions", _headers(prov), b1, guarded(), client, role=role, model=model)
-                            _note_json_object_rejected(prov, model)
-                            recovered = True
-                        except LLMError as e1:
-                            if e1.status_code != 400:
+                            out = await _sse_openai_async(base + "/chat/completions", _headers(prov), candidate, guarded(), client, role=role, model=model)
+                        except LLMError as e_n:
+                            if e_n.status_code != 400:
                                 raise
-                    if not recovered:
-                        b2 = dict(body)
-                        b2.pop("response_format", None)
-                        b2 = _strip_extended(b2)
-                        out = await _sse_openai_async(base + "/chat/completions", _headers(prov), b2, guarded(), client, role=role, model=model)
+                            last_exc = e_n
+                            continue
+                        for note in notes:
+                            note()
+                        break
+                    if out is None:
+                        raise last_exc
                 else:
                     raise
             # Same placeholder-skeleton guard as the sync streaming path:
@@ -3148,16 +3218,14 @@ async def _chat_complete_async_once(
         _t0 = time.time()
         r = await client.post(base + "/chat/completions", headers=_headers(prov), json=body)
         if r.status_code == 400:
-            if "response_format" in body:
-                b1 = dict(body)
-                b1.pop("response_format", None)
-                r = await client.post(base + "/chat/completions", headers=_headers(prov), json=b1)
+            for candidate, notes in _json_mode_recovery_stages(body, prov, model):
+                r = await client.post(base + "/chat/completions", headers=_headers(prov), json=candidate)
                 if r.status_code < 400:
-                    _note_json_object_rejected(prov, model)
-            if r.status_code == 400:
-                b2 = _strip_extended(dict(body))
-                b2.pop("response_format", None)
-                r = await client.post(base + "/chat/completions", headers=_headers(prov), json=b2)
+                    for note in notes:
+                        note()
+                    break
+                if r.status_code != 400:
+                    break
         if r.status_code >= 400:
             raise LLMError(f"{prov['name']}: HTTP {r.status_code}: {r.text[:300]}", r.status_code, r.status_code in DEFAULT_RETRY.retryable_status)
         parsed = r.json()
@@ -3219,8 +3287,8 @@ async def _sse_openai_async(url, headers, body, sink, client, role=None, model=N
             if not served:
                 served = str(j.get("model") or "").strip()
             _delta = (j.get("choices") or [{}])[0].get("delta", {})
-            _r = _delta.get("reasoning") or _delta.get("reasoning_content")
-            if isinstance(_r, str) and _r:
+            _r = _delta_reasoning(_delta)
+            if _r:
                 reasoning += _r
                 if _think_sink:
                     _think_sink(_r)
@@ -3236,7 +3304,7 @@ async def _sse_openai_async(url, headers, body, sink, client, role=None, model=N
         last_reasoning.set(reasoning or None)
     except Exception:
         pass
-    return text
+    return _stream_answer(text, reasoning, url, model, body)
 
 async def _sse_anthropic_async(base, headers, body, sink, client, role=None, model=None):
     body["stream"] = True

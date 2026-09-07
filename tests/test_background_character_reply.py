@@ -230,6 +230,10 @@ def test_story_character_addresses_npc_both_addressees_answer_this_beat(
     chat_id, ctx5 = _setup(temp_db, cast_names=["Sara"], turn_idx=5,
                            player_input="Reya, cover me!",
                            presences={"Reya": _bare("Reya"), "Doran": _bare("Doran")})
+    # Doran knows Sara: a presence is handed a speaker's NAME only where its
+    # own `known` row earns it (one identity floor, 2026-09-07); the test is
+    # about the fresh address, not about whether Doran can name her.
+    temp_db.wset(chat_id, "known", {"Doran": ["Sara"], "Reya": ["Sara"]})
     ctx5.director_resolve = {
         "resolved_event": "Sara wheels toward the bar as the brawl spills over.",
         "dialogue_log": [_line("Sara", "Doran", exact_quote='"Doran, bar that door!"')]}
@@ -267,6 +271,7 @@ def test_an_unanswered_address_still_becomes_a_debt_the_gate_honours(
 
     chat_id, ctx5 = _setup(temp_db, cast_names=["Sara"], turn_idx=5,
                            presences={"Reya": _bare("Reya"), "Doran": _bare("Doran")})
+    temp_db.wset(chat_id, "known", {"Doran": ["Sara"]})
     ctx5.director_resolve = {
         "resolved_event": "Sara wheels toward the bar.",
         "dialogue_log": [_line("Sara", "Doran", exact_quote='"Doran, bar that door!"')]}

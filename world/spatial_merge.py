@@ -1698,14 +1698,36 @@ def merge_scene_with_diff(
     for removal in diff.get("remove_adjacent") or []:
         if not isinstance(removal, dict):
             continue
-        room = merged["rooms"].get(removal.get("room"))
+        room_id = removal.get("room")
         target = removal.get("to")
+        room = merged["rooms"].get(room_id)
         if not isinstance(room, dict) or not target:
             continue
+        # A DOORWAY IS ONE OBJECT WITH TWO ENDS. Only `room`'s edge was
+        # filtered, while every reader resolves a doorway from either end
+        # (`effective_adjacent`, the far-side back-edge walk) and
+        # `sync_scene_passages` below re-mints a missing edge for every
+        # passage record -- so a doorway ever touched by the passage editor
+        # could not be severed at all, and one that was not stayed open from
+        # the far room. Both edges go, and the passage record with them.
         room["adjacent"] = [
             edge for edge in (room.get("adjacent") or [])
             if not (isinstance(edge, dict) and edge.get("to") == target)
         ]
+        far = merged["rooms"].get(target)
+        if isinstance(far, dict):
+            far["adjacent"] = [
+                edge for edge in (far.get("adjacent") or [])
+                if not (isinstance(edge, dict)
+                        and str(edge.get("to")) == str(room_id))
+            ]
+        passages = merged.get("passages")
+        if isinstance(passages, dict):
+            ends = {str(room_id), str(target)}
+            for pid in [pid for pid, rec in passages.items()
+                        if isinstance(rec, dict)
+                        and {str(r) for r in (rec.get("rooms") or ())} == ends]:
+                passages.pop(pid, None)
 
     for entity_id in diff.get("remove_entities") or []:
         entity = merged["entities"].pop(entity_id, None)

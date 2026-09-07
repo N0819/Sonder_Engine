@@ -429,7 +429,7 @@ def export_turn_debug(turn_id: int, *, include_content: bool = True) -> dict:
     happened, in order" -- and needs three sources the trace does not join:
 
       * `llm_capture`, for what was SENT and the reasoning that came back.
-        Nothing else holds either, and for the Director's six specialists
+        Nothing else holds either, and for the Director's five specialists
         nothing else holds anything at all: they are sub-calls inside
         `director_resolve` with no steps and therefore no variants.
       * the steps' own variants, for what each stage ANSWERED.
@@ -437,7 +437,7 @@ def export_turn_debug(turn_id: int, *, include_content: bool = True) -> dict:
         it raised and the decisions it made, including the times it correctly
         DECLINED, which is the half that leaves no other trace.
 
-    Ordered by wall clock, because the Director fans out: the six specialists
+    Ordered by wall clock, because the Director fans out: the five specialists
     run concurrently and finish out of order, so the order they were STARTED
     in is the only one that describes the turn.
 

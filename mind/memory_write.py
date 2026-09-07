@@ -536,13 +536,17 @@ def repair_pending_embeddings(batch=32):
                 got = embed_texts_meta(docs)
                 if got.fallback:
                     return fixed  # still degraded; leave everything queued
+                from mind.memory_snapshot import file_memory_vector
                 with transaction():
                     for index, mem in enumerate(mems):
+                        full, cue = (_blob(got.vectors[index * 2]),
+                                     _blob(got.vectors[index * 2 + 1]))
                         qi("UPDATE memories SET embedding=?,cue_embedding=?,"
                            "embedding_model=?,embedding_dim=? WHERE id=?",
-                           (_blob(got.vectors[index * 2]),
-                            _blob(got.vectors[index * 2 + 1]),
-                            got.model_key, got.dimensions, mem["id"]))
+                           (full, cue, got.model_key, got.dimensions,
+                            mem["id"]))
+                        file_memory_vector(full, cue, got.model_key,
+                                           got.dimensions)
                 fixed["memories"] += len(rows)
             else:
                 texts = [_summary_retrieval_text(
@@ -634,6 +638,11 @@ def _upsert_memory(data: dict, full_vec, cue_vec, embedded):
             VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
            (data["chat_id"], data["char_id"]) + values + (data["event_key"],))
     _replace_memory_fts(mid, data)
+    # Filed at mint (see `memory_snapshot.file_memory_vector`): the
+    # checkpoint no longer writes the store, so the writer must.
+    from mind.memory_snapshot import file_memory_vector
+    file_memory_vector(_blob(full_vec), _blob(cue_vec),
+                       embedded.model_key, embedded.dimensions)
     if getattr(embedded, "fallback", False):
         note_failed_embedding_write("memories", [mid])
     return mid

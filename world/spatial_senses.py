@@ -1140,11 +1140,15 @@ def _hear_level(
 
         return "none"
 
-    if barrier == "window":
+    if barrier in ("window", "one_way_window"):
         # Glass is the opposite of bars: you are seen and not heard. Sealed
         # panes carry only real force, and never speech at conversational
         # volume -- which is why a shout through glass is a fragment, and a
-        # normal sentence is nothing at all.
+        # normal sentence is nothing at all. A one-way window's asymmetry is
+        # a SIGHT fact (`spatial_rel` rewrites the blind side to `wall` and
+        # leaves the watcher's edge as declared); to an ear it is a pane, and
+        # with no branch here the watching side heard nothing at any volume
+        # while the aperture table already graded it as glass.
         return "fragment" if volume == "shout" else "none"
 
     if barrier == "closed_door":

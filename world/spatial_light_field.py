@@ -81,6 +81,7 @@ from world.spatial_fov import (
     eye_rank,
     feature_visibility,
     grid_side,
+    room_centre,
     height_rank,
     normalize_height,
     room_field,
@@ -556,7 +557,12 @@ def light_sources(scene: dict, field, beat) -> list:
         if cell is None and entity.get("name"):
             cell = body_cell(scene, str(entity["name"]))
         if cell is None:
-            cell = _centre(grid_side(scene, room_id))
+            # The room's OWN centre, a cell it holds: `_centre(grid_side())`
+            # squares the longer side and put a corridor lamp six cells
+            # outside a 6x24 spine, where `cell_of` dropped it and it lit
+            # nobody (chat 117 t13 -- the same pair `room_centre` was written
+            # to replace, at the one caller that kept it).
+            cell = room_centre(scene, room_id)
         origin = field.cell_of(room_id, cell)
         declared = str(entity.get("light_height") or "").strip()
         if declared and normalize_height(declared) == declared.casefold():

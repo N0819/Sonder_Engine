@@ -234,6 +234,9 @@ def update_memory(mid, content=None, salience=None, kind=None, provenance=None, 
         int(bool(archived)) if archived is not None else int(current["archived"]),
         mid))
     _replace_memory_fts(mid, data)
+    from mind.memory_snapshot import file_memory_vector
+    file_memory_vector(_blob(full_vec), _blob(cue_vec),
+                       embedded.model_key, embedded.dimensions)
     return True
 
 def record_dispute(chat_id, char_id, gist, reading, turn_idx, *,

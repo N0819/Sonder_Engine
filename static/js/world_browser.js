@@ -1280,13 +1280,12 @@ function wbAttireEditor(body, ctx) {
   }
   const notes = entry && Array.isArray(entry.state) ? entry.state.map(String) : [];
 
-  // Every write is the WHOLE ledger -- every body's entry as the index last
-  // read it, this body's rebuilt -- through the one route that re-derives.
+  // Every write is THIS body's entry alone, through the one route that
+  // re-derives; the route writes the entries it is sent and leaves the rest
+  // of the ledger as the story holds it. Sending every body as the index
+  // last read them overwrote a beat committed in between with a stale copy.
   const save = () => wbWrite(ctx, async () => {
     const ledger = {};
-    for (const b of ctx.index.bodies || []) {
-      if (b.attire && typeof b.attire === "object") ledger[b.name] = b.attire;
-    }
     ledger[body.name] = wbLedgerEntry(entry, garments, beneath, notes);
     await api("PUT", `/api/chats/${ctx.chatId}/attire${frameQuery()}`, ledger);
     await ctx.refresh();
@@ -2775,6 +2774,8 @@ async function openWorldBrowser(opts = {}) {
       // an exit changes it too.
       replaceCard: async fresh => {
         if (!alive() || S.chatId !== chatId) return;
+        // A write happened: the raw tab's copy of the world is stale.
+        delete state.cache.raw;
         if (fresh && fresh.id === state.selected) {
           state.slice = fresh;
           wbRenderCard(card, fresh, ctx);
@@ -2782,6 +2783,7 @@ async function openWorldBrowser(opts = {}) {
         await Promise.all([refreshIndex(), loadGrid(state.selected)]);
       },
       refresh: async () => {
+        delete state.cache.raw;
         await refreshIndex();
         if (!alive() || S.chatId !== chatId) return;
         if (state.tab === "rooms") {

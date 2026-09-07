@@ -63,8 +63,9 @@ from story.scene import (
 )
 from llm.schemas import validate_llm_output
 from world.spatial import (contact_phrase, contacts_of, corridor_sightlines, room_of,
-                     spatial_digest, speech_articulation_impediment,
-                     sprint_reach, visible_adjacent_rooms)
+                     sense_adjusted, spatial_digest,
+                     speech_articulation_impediment, sprint_reach,
+                     visible_adjacent_rooms, visual_level_between)
 from world.survival import vitals_of
 from world.place_purpose import (affords_here, felt_needs, here_affords,
                            place_options)
@@ -542,9 +543,15 @@ def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
         frame_id, str(char_name or "").casefold(), int(n_turns),
     )
     if isinstance(cache, dict) and cache_key in cache:
-        # The caller only reads this projection. Return a shallow copy so a
-        # future consumer cannot mutate the turn snapshot for the next reader.
-        return dict(cache[cache_key])
+        # THE CACHE HOLDS THE RAW RECORD; THE LABEL IS APPLIED AT RETURN. The
+        # key carries no label, and `interaction_loop` pre-warms this cache
+        # with none (it only asks WHO owes an answer), so the labelled call
+        # from `character_step` a moment later received the cached dict with
+        # the asker's canonical name -- on every interaction-loop step, which
+        # is most of them. Caching what was computed and labelling what is
+        # handed out is the only shape under which two callers with two
+        # entitlements can share one lookup.
+        return _labelled_debt(cache[cache_key], label)
     if current_turn_idx is None or not char_name or char_id is None:
         return {}
     try:
@@ -705,19 +712,35 @@ def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
             reached = [line for line in said if _reached(line, row["idx"])]
             if not reached:
                 continue
-            # Same gate as the silence note beside it: being asked a
-            # question by a stranger does not tell you the stranger's name.
-            asked = {"from": label(speaker) if label else speaker,
+            # Raw here; the identity gate runs at return (`_labelled_debt`):
+            # being asked a question by a stranger does not tell you the
+            # stranger's name.
+            asked = {"from": speaker,
                      "asked": str(reached[-1])[:240],
                      "turns_ago": int(current_turn_idx) - int(row["idx"])}
-            # No default is built here, unlike the silence note beside it: this
-            # function takes a chat_id rather than the chat row `observer_label_fn`
-            # needs, and inventing a second lookup to reach it would put the
-            # identity floor in two places. The call site passes the label, and
-            # a test asserts that it does.
+            # No default label is built here, unlike the silence note beside
+            # it: this function takes a chat_id rather than the chat row
+            # `observer_label_fn` needs, and inventing a second lookup to
+            # reach it would put the identity floor in two places. The call
+            # site passes the label, and a test asserts that it does.
     result = {"awaiting_your_answer": asked} if asked else {}
     if isinstance(cache, dict):
         cache[cache_key] = dict(result)
+    return _labelled_debt(result, label)
+
+
+def _labelled_debt(result, label):
+    """The debt note as THIS caller may see it: the asker's name through the
+    caller's identity floor, or raw when the caller asked for no label (the
+    loop's who-owes-an-answer sweep reads only whether a debt exists).
+    Copies, so a future consumer cannot mutate the shared cache entry."""
+    debt = (result or {}).get("awaiting_your_answer")
+    if not isinstance(debt, dict):
+        return {}
+    debt = dict(debt)
+    if label and debt.get("from") not in (None, "", "the player"):
+        debt["from"] = label(debt["from"])
+    return {"awaiting_your_answer": debt}
     return result
 
 
@@ -755,6 +778,19 @@ def _player_quiet_beats(chat_id, current_turn_idx, frame_id, cap=8):
     return beats
 
 
+def _positions_key(sc, forms):
+    """The spelling `positions` keys this body under, from the forms it
+    answers to -- a uid, an alias, another case -- so a grid reader that
+    takes the key verbatim is handed the one the scene uses. Falls back to
+    the first form when the scene holds none of them."""
+    forms = [str(f or "").strip() for f in (forms or ()) if str(f or "").strip()]
+    folded = {f.casefold(): f for f in forms}
+    for key in ((sc or {}).get("positions") or {}):
+        if str(key).strip().casefold() in folded:
+            return str(key)
+    return forms[0] if forms else ""
+
+
 def _player_silence_note(sc, chat, sh, spoke, quiet_beats=0, label=None):
     """`{"player_said_nothing": True}` when the player is here and did not speak.
 
@@ -788,6 +824,17 @@ def _player_silence_note(sc, chat, sh, spoke, quiet_beats=0, label=None):
     # beat with nothing to report looks like.
     here = character_room(sc, sh)
     if not here or room_of(sc, player) != here:
+        return {}
+    # A PRESENCE THIS MIND CAN PLACE, not merely a shared room: the note
+    # asserts the player is here and said nothing, and a character in the
+    # dark, or with a body between them, has no channel by which to know
+    # the first half. Co-location alone handed the fact over. Sight is the
+    # channel that places a silent body (a silent one makes no sound); the
+    # observer's own card grades it, as the composed view's does.
+    if sense_adjusted(
+            visual_level_between(sc, _positions_key(sc, character_scene_keys(sh)),
+                                 _positions_key(sc, [player])),
+            "sight", character_senses(sh)) == "none":
         return {}
     # THE NAME PASSES THE SAME GATE THE VIEW DID. `observer_label_fn` exists
     # so a structured field cannot hand over an identity the prose beside it is

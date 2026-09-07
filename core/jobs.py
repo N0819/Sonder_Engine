@@ -117,7 +117,7 @@ def submit(chat_id, key, fn, base_turn=None):
 #: `key="commit"`, and an abort kills the jobs that commit just scheduled.
 #: `offscreen.py`'s `_produce` argued exactly this before the copy existed.
 def _clear_turn_scoped_context():
-    """Clear the six turn-scoped vars from a job's inherited context.
+    """Clear the turn-scoped vars from a job's inherited context.
 
     This is a DENYLIST, deliberately: the copy carries the story language and
     anything else a job legitimately needs across the thread hop, and

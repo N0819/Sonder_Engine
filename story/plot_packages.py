@@ -500,7 +500,8 @@ def _world_snapshot(cid, frame_id=None):
     from world.structure import planned_room_ids
 
     chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
-    scene = get_scene(cid, chat) or {}
+    from story.room_slice import read_scene
+    scene = read_scene(cid, frame_id) or {}
     rooms = scene.get("rooms") or {}
     specs = planned_room_ids(cid)
     names = set()
@@ -1783,7 +1784,8 @@ def _preview_errand(cid, frame_id, op, world):
 
 def _apply_errand(cid, frame_id, op, turn_idx, *, by):
     from story.scene import get_scene
-    scene = get_scene(cid, _chat_row(cid)) or {}
+    from story.room_slice import read_scene
+    scene = read_scene(cid, frame_id) or {}
     return _apply_surgery(cid, frame_id, {
         "op": "send_errand", "charter": op["charter"], "body": op["body"],
         "to": op["to"], "purpose": op["purpose"], "scene": scene},
@@ -1857,7 +1859,8 @@ def _preview_charter_ops(cid, frame_id, op, world):
 def _apply_charter_ops(cid, frame_id, op, turn_idx, *, by):
     from story.scene import get_scene
     from world.charter_runtime import author_charter_ops
-    scene = get_scene(cid, _chat_row(cid)) or {}
+    from story.room_slice import read_scene
+    scene = read_scene(cid, frame_id) or {}
     out = author_charter_ops(cid, frame_id, op["ops"], by=by,
                              turn_idx=turn_idx, scene=scene)
     if op.get("event"):
@@ -2143,7 +2146,8 @@ def _apply_region_event(cid, frame_id, op, turn_idx, *, by, elapsed, turn_id):
     `fire_due_clocks` sees each due."""
     from story.scene import get_scene
     from world.region_events import apply_wave, plan_waves, resolve_footprint
-    scene = get_scene(cid, _chat_row(cid)) or {}
+    from story.room_slice import read_scene
+    scene = read_scene(cid, frame_id) or {}
     ordered, _unknown = resolve_footprint(cid, scene, op["footprint"])
     waves = plan_waves(op, ordered, elapsed)
     done, pending = [], []

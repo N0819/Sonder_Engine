@@ -88,7 +88,7 @@ def observer_view(charter, scene):
 
 
 def body_receives_evidence(scene, body_key, body, roles, naming, evidence,
-                           *, observer=None, senses=None):
+                           *, observer=None, senses=None, comm_endpoint=None):
     """Whether this body receives the exact public source.
 
     ``observer`` is the key the body stands under in ``scene`` when the
@@ -138,8 +138,16 @@ def body_receives_evidence(scene, body_key, body, roles, naming, evidence,
         # obeys the same enclosure, barrier, material, volume and distance
         # ladder the foreground perception path uses.  Exact words require
         # FULL hearing; a fragment never grants the quote or its speech act.
+        # THE ONE BODY THE ADDRESS RESOLVES TO (`resolve_target_body`, run
+        # once per line by the caller), never a substring of a form:
+        # `_names_body` is bidirectional containment and `forms` carries a
+        # formal alias for every rank and post title, so a comm to
+        # "Lieutenant" or to "Venn" was acquired verbatim by every
+        # lieutenant and every Venn, two towns away, before any spatial test
+        # ran. A label that resolves to nobody, or to two, addresses nobody
+        # -- and then the line is a sound like any other.
         if str(evidence.get("medium") or "").casefold() == "comm" \
-                and _names_body(evidence.get("target"), forms):
+                and comm_endpoint and str(comm_endpoint) == str(body_key):
             return True
         rel = spatial_rel_between(
             scene or {}, str(observer) if placed else str(body_key), actor,
@@ -480,6 +488,11 @@ def plan_public_evidence(charter, evidence_rows, scene, turn_id,
         if not isinstance(evidence, dict):
             continue
         actor = str(evidence.get("actor") or "")
+        comm_endpoint = None
+        if str(evidence.get("medium") or "").casefold() == "comm" \
+                and evidence.get("target"):
+            comm_endpoint = resolve_target_body(
+                charter, evidence.get("target"), scene=scene)
         if actor and not room_of(scene or {}, actor):
             if actor not in unplaced:
                 unplaced.append(actor)
@@ -506,7 +519,8 @@ def plan_public_evidence(charter, evidence_rows, scene, turn_id,
             else:
                 receives = body_receives_evidence(
                     viewed, body_key, body, roles, naming, evidence,
-                    observer=observer, senses=_declared_senses)
+                    observer=observer, senses=_declared_senses,
+                    comm_endpoint=comm_endpoint)
                 if cacheable:
                     sensory_cache[cache_key] = receives
             if not receives:
