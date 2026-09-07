@@ -344,6 +344,48 @@ def test_every_hand_is_shown_the_scene_ledgers_it_is_asked_to_write(
     assert not blind, blind
 
 
+def test_resolve_and_its_hands_see_the_room_interpret_just_authored(
+        temp_db, monkeypatch):
+    """`docs/guides/PIPELINE.md`: director_resolve "receives the same
+    previewed world". It did not -- only `contacts` came from the preview;
+    rooms, positions and stations came from the stored scene. Chat 117 turn
+    82: the interpret spatial hand authored the plenum the player climbed
+    into, with `vertical: "down"` and a see-through sleeve; the resolve hand
+    never saw it, wrote the same room blind under another name with neither
+    field, and the merge let the blind version win. Both the prose author
+    and the spatial hand must be handed the room the beat has already
+    asserted into being."""
+    interp = _interp()
+    interp["onset_state_assertions"] = {
+        "rooms": {"asserted_attic": {
+            "name": "The Attic",
+            "desc": "a low boarded loft over the keeper's room",
+            "adjacent": [{"to": "keeper_room", "barrier": "open",
+                          "vertical": "down", "name": "the loft hatch"}]}},
+        "positions": {"Mara": "asserted_attic"},
+    }
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls))
+    scene = json.loads(json.dumps(RICH_SCENE))
+    from world.spatial import contact_id
+    cid = contact_id(scene["contacts"][0])
+    scene["contacts"][0]["contact_id"] = cid
+    scene["contact_actions"] = [{"actor": "Mara", "contact_id": cid,
+                                 "action": "zolstroke"}]
+    ctx = _make_ctx(temp_db, scene=scene, interp=interp)
+    director.director_resolve(ctx, nonce=0)
+    payloads = {c["step_key"]: c["payload"] for c in calls}
+
+    spatial = payloads["director_spatial"]
+    assert "asserted_attic" in spatial["rooms"], sorted(spatial["rooms"])
+    assert spatial["rooms"]["asserted_attic"]["adjacent"][0]["vertical"] == "down"
+    assert spatial["positions"]["Mara"] == "asserted_attic"
+
+    prose = payloads["director_resolve"]["scene"]
+    assert "asserted_attic" in prose["rooms"], sorted(prose["rooms"])
+    assert prose["positions"]["Mara"] == "asserted_attic"
+
+
 def test_the_ledger_table_covers_every_channel_a_hand_writes():
     """The half that keeps the guard from rotting.
 

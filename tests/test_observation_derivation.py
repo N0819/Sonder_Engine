@@ -180,16 +180,22 @@ def test_the_standing_flag_follows_the_renderers_verdict():
         prev_described=frozenset(first.described))
     [atom] = composer.observations_from_render("7", moved)
     assert atom["standing"] is False
-    # And the background half is still reference, not obligation.
-    unchanged = composer.contact_percepts([
-        ({"actor": "Mara", "actor_part": "hand", "target": "7",
-          "target_part": "arm", "manner": "resting"},
-         "your arm registers a hand")])
-    held = composer.render_view(unchanged, mode="player")
+    # And the background half is still reference, not obligation. The
+    # vehicle is a FIRST-SEEN ambient percept beside an unchanged room: a
+    # smell first noticed is the background arriving, not news
+    # (`_FIRST_SIGHT_LEADS` is presence and sensation only), so it renders
+    # and is filed standing. It used to be an unchanged contact sensation,
+    # which since 2026-09-07 is context the reader already holds and is not
+    # re-delivered at all.
+    room = _room()
+    seen = composer.render_view([room], mode="player")
+    smell = composer.ambient_percepts(
+        [{"desc": "The scent of woodsmoke thickens.", "channel": "smell"}],
+        "hall")[0]
     again = composer.render_view(
-        unchanged, mode="player",
-        prev_standing=frozenset(held.standing_keys),
-        prev_described=frozenset(held.described))
+        [room, smell], mode="player",
+        prev_standing=frozenset(seen.standing_keys),
+        prev_described=frozenset(seen.described))
     [atom] = composer.observations_from_render("7", again)
     assert atom["standing"] is True
 

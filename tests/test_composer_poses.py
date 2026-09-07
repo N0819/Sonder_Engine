@@ -58,6 +58,52 @@ def test_your_own_pose_is_yours_in_the_second_person():
     assert percepts[0].channel == "interoception"
 
 
+def test_your_own_reworded_pose_is_not_news_on_the_player_tier():
+    """Your own arrangement, re-worded, is the same arrangement.
+
+    The body hand rewrites a player's `detail` nearly every beat -- 67 of 89
+    consecutive pairs differed in chat 117 -- and with `detail` in the dedupe
+    key each rewording hashed as a CHANGED pose, led the beat as a numbered
+    obligation, and closed 51% of those beats with the player being told his
+    own posture back ("I kept my boots planted, facing north."). The key now
+    hashes the fields that CONSTITUTE the arrangement (posture, support,
+    relative_to, relation, constraint), the same set
+    `spatial_geometry._POSE_ARRANGEMENT_FIELDS` names, and leaves the
+    qualifier out. A real change still leads; another body's detail is a
+    seen fact and keeps the six-field key.
+    """
+    first = pose_percepts(_scene({"Reya": {
+        "posture": "standing", "detail": "advancing north along the deck"}}),
+        "Reya", [], {})
+    shown = render_view(first, mode="player")
+    assert "You are standing" in shown.text
+
+    reworded = pose_percepts(_scene({"Reya": {
+        "posture": "standing",
+        "detail": "matching her stride north in locked step"}}),
+        "Reya", [], {})
+    again = render_view(reworded, mode="player",
+                        prev_standing=shown.standing_keys)
+    assert again.text == "", again.text
+
+    moved = pose_percepts(_scene({"Reya": {
+        "posture": "crouching", "detail": "low against the jamb"}}),
+        "Reya", [], {})
+    led = render_view(moved, mode="player", prev_standing=shown.standing_keys)
+    assert "crouching" in led.text
+
+    # Another body's re-worded detail is something you SAW change.
+    theirs = pose_percepts(_scene({"Kai": {
+        "posture": "standing", "detail": "hand on the rail"}}),
+        "Reya", [{"name": "Kai"}], {"Kai": "Kai"})
+    seen = render_view(theirs, mode="player")
+    theirs2 = pose_percepts(_scene({"Kai": {
+        "posture": "standing", "detail": "hand hooked into your belt"}}),
+        "Reya", [{"name": "Kai"}], {"Kai": "Kai"})
+    assert "belt" in render_view(theirs2, mode="player",
+                                 prev_standing=seen.standing_keys).text
+
+
 def test_pose_owned_fragments_do_not_mix_third_person_into_own_view():
     """A recorded failure supplied ``You are`` and then pasted an
     owner-keyed detail still saying ``her heels``/``behind her``.  A named

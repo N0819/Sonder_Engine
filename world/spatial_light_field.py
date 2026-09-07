@@ -161,6 +161,17 @@ BRIGHT_T = 8.0
 #: below which a cell is dark.
 DARK_THRESHOLD = DIM_T
 
+#: HOW MUCH A CONE CONCENTRATES. A beam puts the lamp's light into fewer
+#: cells, so each of them is brighter than the same lamp shining all round;
+#: without this a cone only ever MASKED -- `cone_factor` is <= 1 -- and a
+#: `bright` source reached `lit` to 2.4 paces whatever its shape, so a
+#: halogen lamp held on a body three paces off graded it `dim -> conduct`
+#: (chat 117 beats 65/68/70, on-axis, still "an indistinct figure"). An ideal
+#: 30-degree cone concentrates ~15x; this is set well under that so a hand
+#: lamp reads as a hand lamp: `bright` on-axis is `lit` to ~5.3 paces and
+#: `dim` to ~12. THE OWNER'S NUMBER, named here so it can be retuned.
+CONE_GAIN = 4.0
+
 #: A cone is full inside CONE_HALF_ANGLE of its axis and falls linearly to
 #: nothing over CONE_PENUMBRA degrees beyond it. Bearings are the eight
 #: compass points, so a word-given axis is quantised to 45 degrees; the
@@ -560,9 +571,21 @@ def light_sources(scene: dict, field, beat) -> list:
         axis = None
         if shape == "cone":
             state = entity.get("state") if isinstance(entity.get("state"), dict) else {}
-            axis = _resolve_pointed_at(scene, field, room_id, origin,
-                                       state.get("pointed_at"))
-            if axis is None:
+            aim = state.get("pointed_at")
+            axis = _resolve_pointed_at(scene, field, room_id, origin, aim)
+            # AN AIM THAT WAS WRITTEN BUT CANNOT BE READ IS NOT "WHEREVER THE
+            # CHEST POINTS". `_resolve_pointed_at` reads an entity, an anchor
+            # or a bearing word; the objects hand writes phrases ("north along
+            # riser 10") often enough that its own chunk warns against it.
+            # Falling back to the holder's facing turned a lamp the player had
+            # aimed at a creature for four beats (chat 117, 59-62) into a cone
+            # pointed ninety degrees away from it, cone factor 0.0, and the
+            # body it lit stayed "an indistinct figure". Axis None leaves the
+            # cone all-round -- the docstring above already calls that the
+            # wider answer -- so an unreadable aim lights everything the lamp
+            # can reach rather than nothing it was pointed at. Only a lamp
+            # with NO aim written follows its holder's body.
+            if axis is None and not str(aim or "").strip():
                 facing = None
                 if holder:
                     facing = effective_facing(scene, holder)
@@ -819,13 +842,17 @@ def compute_light_field(scene: dict, room_id, *, beat=None,
     lf.sources = light_sources(scene, field, beat)
     # 1-5. Power, reach, decay, shape, sum.
     for src in lf.sources:
-        radius = reach_radius(src["power"])
+        # A cone reaches as far as its concentrated power carries, or the
+        # gain would be clipped at the all-round radius and buy nothing.
+        aimed = src["axis"] is not None
+        radius = reach_radius(src["power"] * (CONE_GAIN if aimed else 1.0))
         contrib = {}
         for cell in _cast(field, src["cell"], radius, src["height"], memo):
             d2 = (cell[0] - src["cell"][0]) ** 2 + (cell[1] - src["cell"][1]) ** 2
             intensity = src["power"] / (1.0 + d2)
-            if src["axis"] is not None:
-                intensity *= cone_factor(_angle_deg(src["cell"], cell), src["axis"])
+            if aimed:
+                intensity *= CONE_GAIN * cone_factor(
+                    _angle_deg(src["cell"], cell), src["axis"])
             if intensity <= 0.0:
                 continue
             contrib[cell] = intensity

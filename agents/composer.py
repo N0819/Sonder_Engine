@@ -1900,13 +1900,28 @@ def pose_percepts(scene, observer_name, co_present, display_map,
             dedupe_key=standing_key(
                 "pose", (body_key(name),),
                 tuple(str(data.get(f) or "")
-                      for f in _POSE_RENDER_FIELDS)),
+                      for f in (_OWN_POSE_KEY_FIELDS if is_self
+                                else _POSE_RENDER_FIELDS))),
         ))
     return out
 
 
 _POSE_RENDER_FIELDS = ("posture", "support", "relative_to", "relation",
                        "constraint", "detail")
+
+#: The fields that CONSTITUTE the observer's own arrangement, for the dedupe
+#: key alone. `detail` is left out for the same reason
+#: `world.spatial_geometry._POSE_ARRANGEMENT_FIELDS` leaves it out: "it
+#: qualifies an arrangement, it does not constitute one." Measured (chat
+#: 117, 2026-09-07): the body hand re-words a player's `detail` nearly every
+#: beat -- 67 of 89 consecutive pairs differed -- and with `detail` in the
+#: key each re-wording hashed as a CHANGED pose, led the beat as a numbered
+#: obligation the narrator sheet says must reach the page, and closed 51% of
+#: those beats with the player being told his own posture back. Other
+#: bodies keep the six-field key: THEIR detail is a seen fact ("fingers
+#: hooked into his belt") and a real change.
+_OWN_POSE_KEY_FIELDS = ("posture", "support", "relative_to", "relation",
+                        "constraint")
 
 #: The pose fields that are authored PROSE rather than a referent. `support`
 #: and `relative_to` are referents and go through `_pose_referent`, which
@@ -2807,13 +2822,27 @@ _STANDING_ORDER = {
 #: off its own card.
 _OWN_BODY_DESCRIPTION_KINDS = frozenset(("body_part", "body_region"))
 
-# A sensation is standing only in the sense that it has no one-time event
-# order.  It is not inert scenery: pressure, movement, heat, pain and an
-# ongoing contact action are present bodily input on every beat they remain
-# true.  Player-mode presentation compression must therefore never dedupe it.
-# Memory keeps a separate rule below: an unchanged sensation by itself is not
-# enough to mint a new autobiographical episode.
-ACTIVE_STANDING_KINDS = frozenset(("sensation",))
+# Standing kinds exempt from the player tier's unchanged-state suppression.
+# EMPTY ON PURPOSE since 2026-09-07. It held `sensation` from 2026-08-24 on
+# the argument that an unchanged contact "is present bodily input on every
+# beat it remains true" and so must never be deduped. Measured over the
+# owner's corpus that argument produced the single worst tic on the page:
+# 649 of 1,500 player-view "You feel ..." sentences (43.3%) byte-identical to
+# the previous beat's, and in one 70-beat stretch of chat 117 a hand that
+# never left a belt was announced on 40 beats -- with a template that ends
+# "continuous while the contact holds", i.e. the engine stating the fact is
+# unchanged in the same breath as re-delivering it. A body adapts: a constant
+# pressure stops being news. The memory rule below already says so (an
+# unchanged sensation mints no episode); the view now agrees with it.
+#
+# What survives, and why nothing is lost: a NEW contact still leads the beat
+# (`_FIRST_SIGHT_LEADS` carries `sensation`), a contact whose parts or manner
+# change gets a new key and renders as changed, character mode is untouched
+# (its `delta` is always False -- a stateless mind is re-told everything),
+# and the "empty delta -> full render" fallback in perception still
+# re-delivers the sensation on a beat where nothing else happened. The name
+# is kept so the seam stays visible at its one read site.
+ACTIVE_STANDING_KINDS = frozenset()
 
 
 def _is_own_body_description(p):
@@ -3613,9 +3642,11 @@ def _render_view_english(percepts, *, mode="character",
     sensations that are still true. What is continuously true is context;
     what is different since this observer last perceived it is the beat.
     ``full_render`` (an explicit look) re-renders the whole standing state,
-    which is how the background is asked for on purpose. Active sensations
-    are the standing exception in both modes: an unchanged contact is still
-    being felt now, so it renders every beat -- in the background half.
+    which is how the background is asked for on purpose. An unchanged
+    sensation is standing state like any other on the player tier: it led
+    the beat when it began, it renders again when its parts or manner
+    change, and between those it is context the reader already holds
+    (`ACTIVE_STANDING_KINDS`, and the measurement beside it).
 
     Events always render, in declared order -- chronology is authoritative.
 

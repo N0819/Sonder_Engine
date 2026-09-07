@@ -29,7 +29,7 @@ from agents import composer
 from world import spatial
 from world.spatial import (
     BEAT_KEY, BOUNCE, BOUNCE_PASSES_CAP, BOUNCE_REACH, BRIGHT_T,
-    CONE_HALF_ANGLE, CONE_PENUMBRA, DARK_THRESHOLD, DIM_T, FAIL_RATE,
+    CONE_GAIN, CONE_HALF_ANGLE, CONE_PENUMBRA, DARK_THRESHOLD, DIM_T, FAIL_RATE,
     FLICKER_RATE, FLOOR_SPILL, GLARE_CELLS, GLARE_POWER, LIGHT_LEVELS, LIGHT_SHAPES,
     LIT_T, POWER, SIGHT_LEVELS, STEADINESS, _LIGHT_SIGHT, _ENTITY_DEFAULT_FIELDS,
     _ENTITY_STRUCTURAL_FIELDS, body_cell, compute_light_field, effective_light,
@@ -129,16 +129,20 @@ def test_a_cone_lights_what_it_points_at_and_not_what_stands_beside_it():
     src = lf.sources[0]
     assert src["shape"] == "cone" and src["axis"] == 0.0
     direct = lf.per_source["lamp"]
-    # Straight up the axis: full power at the same decay as all_round.
-    assert direct[(3, 1)] == pytest.approx(1.2)
+    # Straight up the axis: the all_round decay, concentrated by CONE_GAIN
+    # -- a beam puts the same light into fewer cells (2026-09-07; before
+    # this a cone could only mask, and a hand lamp graded a body three paces
+    # off as dim).
+    assert direct[(3, 1)] == pytest.approx(1.2 * CONE_GAIN)
     # Ninety degrees off the axis, beyond the penumbra: nothing direct.
     assert direct.get((5, 3), 0.0) == 0.0
     assert direct.get((3, 5), 0.0) == 0.0
     # The penumbra is a linear ramp, not a step: 45 degrees off (the cell
     # diagonally ahead) is between full and nothing.
     diag = direct[(4, 2)]
-    assert 0.0 < diag < 6.0 / 3.0
-    assert diag == pytest.approx((6.0 / 3.0) * (1 - (45 - CONE_HALF_ANGLE) / CONE_PENUMBRA))
+    assert 0.0 < diag < (6.0 / 3.0) * CONE_GAIN
+    assert diag == pytest.approx(
+        (6.0 / 3.0) * CONE_GAIN * (1 - (45 - CONE_HALF_ANGLE) / CONE_PENUMBRA))
     assert lf.level((3, 1)) in ("dim", "lit")
     assert lf.intensity[(3, 1)] > lf.intensity[(5, 3)]
 
@@ -165,6 +169,60 @@ def test_a_carried_cone_points_where_its_holder_faces():
     assert src["axis"] == 90.0
     # Carried: the source sits at the holder's eye height.
     assert src["height"] == 2.0
+
+
+def test_an_aim_the_engine_cannot_read_is_all_round_not_the_chest():
+    """`pointed_at` written as a phrase -- "north along riser 10" -- resolves
+    to nothing. The fallback used to take the holder's FACING, so a lamp the
+    player had aimed at a creature for four beats (chat 117, 59-62) lit a
+    cone ninety degrees away from it, cone factor 0.0, and the body it was
+    pointed at stayed "an indistinct figure". An aim that was written but
+    cannot be read is not "wherever the chest points"; it leaves the cone
+    all-round -- the docstring's own wider answer -- so the lamp lights what
+    it can reach rather than nothing it was pointed at. Only a lamp with NO
+    aim written follows its holder's body."""
+    base = dict(
+        rooms={"r": _room("the Hall", anchors={"table": {"desc": "a table"}})},
+        positions={"Q": "r", "torch": "r"},
+        stations={"Q": {"at": "table"}},
+        orientation={"Q": {"facing": "e"}},
+        contained={"torch": {"in": "Q", "mode": "held"}})
+    torch = {"name": "the torch", "light_source": "lit",
+             "portable": True, "light_shape": "cone"}
+
+    unreadable = _scene(entities={"torch": {
+        **torch, "state": {"pointed_at": "north along the riser"}}}, **base)
+    assert light_field(unreadable, "r").sources[0]["axis"] is None
+
+    unaimed = _scene(entities={"torch": {**torch, "state": {}}}, **base)
+    assert light_field(unaimed, "r").sources[0]["axis"] == 90.0
+
+
+def test_a_cone_concentrates_what_an_all_round_lamp_only_spreads():
+    """A beam puts the lamp's light into fewer cells, so each is brighter.
+    `cone_factor` is <= 1, so before `CONE_GAIN` a cone could only MASK: a
+    `bright` source reached `lit` to 2.4 paces whatever its shape, and a
+    halogen held on a body three paces off graded it dim -> conduct (chat
+    117 beats 65/68/70, on-axis). On-axis, an aimed cone now carries `lit`
+    further than the same lamp all round; off-axis it still lights nothing.
+    """
+    assert CONE_GAIN > 1.0
+    scene = lamp_room("bright", light_shape="cone",
+                      state={"pointed_at": "n"})
+    lf = light_field(scene, "r")
+    src = lf.sources[0]
+    assert src["axis"] == 0.0
+    # Three paces up the axis (the descent's distance; the medium grid is
+    # six cells a side, so north is the direction with three paces in it).
+    # Two paces behind the lamp: nothing.
+    on_axis = lf.per_source["lamp"].get((CENTRE[0], CENTRE[1] - 3), 0.0)
+    behind = lf.per_source["lamp"].get((CENTRE[0], CENTRE[1] + 2), 0.0)
+    assert on_axis == pytest.approx(POWER["bright"] * CONE_GAIN / 10.0)
+    assert on_axis >= LIT_T
+    assert behind == 0.0
+    # And the same lamp all round at the same three paces is not lit.
+    spread = light_field(lamp_room("bright"), "r")
+    assert spread.per_source["lamp"][(CENTRE[0], CENTRE[1] - 3)] < LIT_T
 
 
 def test_pointed_at_an_anchor_resolves_through_its_cell():

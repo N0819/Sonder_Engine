@@ -208,12 +208,13 @@ class TestThePlayerViewLeadsWithChange:
             self._pose("head lifting") + self._sensation("resting"),
             mode="player", prev_standing=standing, prev_described=described)
         beat, background = _beat_half(rendered), _background_half(rendered)
-        assert beat and background
+        assert beat
         assert rendered.text.startswith(beat[0])
-        assert rendered.text.endswith(background[-1])
-        # The unchanged contact is still being felt, so it still renders --
-        # behind what happened rather than in front of it.
-        assert "resting" in background[-1]
+        # The unchanged contact is context the reader already holds, so it
+        # no longer renders at all (2026-09-07); what changed is the whole
+        # of the page.
+        assert not any("resting" in b for b in background)
+        assert "resting" not in rendered.text
 
     def test_events_lead_the_beat_half_and_a_changed_room_closes_it(self):
         first = render_view(
@@ -372,18 +373,35 @@ class TestTheSecondRepresentationStillCannotExpand:
         for sentence in _beat_half(moved):
             assert any(sentence in o["observed"]["text"] for o in obligations)
 
-    def test_an_unchanged_sensation_stays_reference(self):
+    def test_an_unchanged_sensation_is_context_not_news(self):
+        """Reversed 2026-09-07. This pinned the opposite -- that an
+        unchanged contact renders on every beat -- and that rule was the
+        single worst tic on the page: 43.3% of the corpus's "You feel ..."
+        sentences were byte-identical to the previous beat's, and a hand
+        that never left a belt was announced on 40 of 70 beats under a
+        template ending "continuous while the contact holds". The first
+        beat still delivers it and leads with it; the second holds it as
+        the context the reader already has, exactly like the room.
+        """
         sensation = composer.contact_percepts([
             ({"actor": "T", "actor_part": "hand", "target": "R",
               "target_part": "arm", "manner": "resting"},
              "your arm registers a hand")])
         first = render_view(sensation, mode="player")
+        assert "your arm registers a hand" in first.text.casefold()
         standing, described = _ledger(first)
         again = render_view(sensation, mode="player", prev_standing=standing,
                             prev_described=described)
-        assert "your arm registers a hand" in again.text.casefold()
-        [observation] = observations_from_render("player", again)
-        assert observation["standing"] is True
+        assert "your arm registers a hand" not in again.text.casefold()
+        assert observations_from_render("player", again) == []
+        # A change in the contact is news again.
+        shifted = composer.contact_percepts([
+            ({"actor": "T", "actor_part": "hand", "target": "R",
+              "target_part": "arm", "manner": "gripping"},
+             "your arm registers a hand gripping")])
+        third = render_view(shifted, mode="player", prev_standing=standing,
+                            prev_described=described)
+        assert "gripping" in third.text.casefold()
 
 
 class TestCharacterModeIsUntouched:
