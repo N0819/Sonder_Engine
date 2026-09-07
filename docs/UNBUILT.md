@@ -7505,6 +7505,58 @@ single stage: `director_resolve` answers honestly about the room it was
 given, and the room it was given was minted a beat earlier by deterministic
 code that has never heard of the deadline.
 
+### 1.154 What the Director could not parse is filed as a thing to be built
+
+When `director_interpret` cannot account for part of the player's
+declaration, the leftover text is forwarded so nothing the player said is
+silently dropped -- the warning says so: "declared 'X' was not captured by
+director_interpret even after self-repair; forwarded verbatim to mapping as
+a generation request". It arrives as a `thing` planning need whose SUBJECT
+is that text.
+
+**The residue of an unparsed sentence is not a noun.** It is whatever the
+matcher could not account for, which is a different thing entirely from
+something the player reached for. Every `generation_request` need chat 117
+holds after 79 turns:
+
+  | subject | words | is it a thing? |
+  |---|---|---|
+  | `tool belt` | 2 | yes |
+  | `moving presence at edge of light` | 6 | no -- a description |
+  | `there's floor to spare behind us` | 6 | no -- a clause of player prose |
+  | `conduit runs somewhere` | 3 | no -- an inference |
+  | `a bundle that thick needs a hole to leave through` | 10 | no -- an argument |
+
+Four of five. They sit `open` against `PLANNING_NEEDS_CAP` (64), where the
+oldest open need is closed as stale, so junk needs displace real ones at
+four-fifths the rate they are filed; and a drain that answers them is being
+asked to author a thing called "there's floor to spare behind us".
+
+**THE ENGINE ALREADY DRAWS THIS DISTINCTION ONE NAMESPACE OVER.**
+`structure.frontier_refusal` refuses to mint a room whose id would be the
+sentence somebody wrote, and states the rule as a class rather than a
+vocabulary: "a name is short because it is a name" (`FRONTIER_NAME_WORDS`
+= 4, measured over every frontier two live plans wrote -- junk phrases ran
+5 to 9 words, real names 1 to 4). On the table above that threshold is right
+three times of four and never wrong: it keeps `tool belt`, refuses the
+6/6/10-word clauses, and misses only `conduit runs somewhere`.
+
+**NOT BUILT, AND THE REASON IS THE COUNT.** Five needs in one story is not a
+population, and the identical-looking guard would have been WRONG on the
+other reason code: `setting_fact` needs are sentences BY CONSTRUCTION -- a
+fact is a sentence -- and all twelve in the corpus (chats 115/116/117, 8 to
+21 words) are correct as filed. A word rule applied to `thing` needs at
+large would refuse every one of them. So any refusal here must be scoped to
+`generation_request` specifically, and that scoping is the part worth
+getting a second opinion on before it ships.
+
+**The better question, and the reason this is registered rather than
+patched:** the forwarder exists so a player's declaration is never silently
+dropped, which is the right guarantee. What is wrong is the CHANNEL it uses
+to keep it -- filing unparsed prose as a request to build a noun. Keeping
+the text as what it is (a declaration the interpreter could not place) costs
+nothing and asks nobody to author a sentence.
+
 ### 1.150 A creature has no held hunt — the courier maze problem, one subsystem over
 
 **The owner's read, 2026-09-06, on watching a predator walk home past its
