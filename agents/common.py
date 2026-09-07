@@ -8761,10 +8761,30 @@ def _check_action_direction(prose, event_order):
     force stilted wording ("the floor rising to meet him" is a correct
     rendering of a descent). Two findings, at different confidence:
 
-    - REVERSED (enforceable): the act names exactly one direction and the
-      prose names only the other. Judged without interpretation. From play:
-      the Director resolved one character carrying another downward and the
-      page rendered a lift.
+    - REVERSED (warning only since 2026-09-06): the act names exactly one
+      direction and the prose names only the other. Judged without
+      interpretation. From play: the Director resolved one character carrying
+      another downward and the page rendered a lift.
+
+      IT WAS ENFORCEABLE AND BOUGHT REWRITES OF CORRECT PAGES. Measured over
+      the corpus: 19 stored findings, and every one false -- and stored means
+      SURVIVED a rewrite, because a finding the retry clears never reaches
+      the variant. The vocabularies are tight (below) and tightness was not
+      the problem; three things this comparison does not do are:
+        * BIND A SUBJECT. `fox ears fold downward` was contradicted by "a
+          tail lifts"; `lowers both arms` by "You lift your chin" -- another
+          body part, and another person.
+        * READ NEGATION. `lowering his mug` was contradicted by "Veronica's
+          pen doesn't lift".
+        * ALLOW A SEQUENCE. A beat may legitimately do both: `lifts her
+          mouth` was contradicted by "she descends" three words after the
+          prose said "Higher", and `lowers face` by "She lifts her face just
+          clear" earlier in the same paragraph.
+      And a direction word need not be motion at all: "cadence already fading
+      downward" is a voice, "toward my raised hands" a posture the falling
+      thing is falling TOWARD (chat 117 turn 91, the twentieth).
+      Fixing any of the three needs subject-bound parsing this codebase does
+      not do, so the finding stays visible and stops buying an edit.
     - MISSING (warning only): the act names a direction and the prose names
       neither. Legitimate prose can carry a descent with no directional verb
       at all, so this stays visible in fidelity_warnings for review rather
