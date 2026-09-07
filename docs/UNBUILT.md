@@ -7519,6 +7519,22 @@ single stage: `director_resolve` answers honestly about the room it was
 given, and the room it was given was minted a beat earlier by deterministic
 code that has never heard of the deadline.
 
+**AND THE SHAPE OF THE ANSWER MAY BE SMALL, measured at turns 106-109 of the
+same story.** The corridor stopped growing the moment a CHARACTER asserted
+where it ends. Asked the right question -- where does a technician go, not
+where does a cable go -- the companion answered from her own expertise that
+a personnel companionway sits "at the terminal bulkhead where the riser
+intersects the primary circulation vestibule... it is at the northern end of
+this run", and the next beat produced `upper_service_core_riser_20`, named
+Terminus Twenty, with a rated fire door closing the line. Three beats
+earlier the identical search had receded twice.
+
+So the frontier is not committed to growing; it grows when nothing in the
+beat says where the ground stops. A terminus asserted by any mind with
+standing to assert it -- a character's expertise, a planner's intent -- may
+be all that is needed, which is a far cheaper fix than a cap and does not
+cost an exploring story anything.
+
 ### 1.154 What the Director could not parse is filed as a thing to be built
 
 When `director_interpret` cannot account for part of the player's

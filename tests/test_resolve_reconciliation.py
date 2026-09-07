@@ -1707,3 +1707,32 @@ def test_a_doors_identity_is_an_anchor_key_in_every_evidence_class():
                                "adjacent": [{"to": "riser"}]}}},
         {"subject": "fire_egress_door", "category": "adjacency",
          "change": "eased ajar"})
+
+    # THIRD TIME, chat 117 turn 110: SHUTTING a door changes the edge and
+    # nothing about the doorway, so a correct beat restates no anchors and
+    # the fixture is only in the SCENE. Reading anchors out of the diff
+    # alone, this could never find the subject -- and the beat warned that
+    # objective state might be stale after buying a self-repair retry, with
+    # `closed_door` sitting symmetric on both sides of the edge.
+    barrier_only = {"rooms": {"terminus": {
+        "adjacent": [{"to": "riser21", "barrier": "closed_door",
+                      "dir": "n"}]}}}
+    onset = {"rooms": {"terminus": {
+        "name": "Terminus 20",
+        "anchors": {"fire_door": {"desc": "a rated steel fire door"}}}}}
+    assert _evidence_present(
+        barrier_only, {"subject": "fire_door", "category": "adjacency",
+                       "change": "pulled shut and dogged down"}, scene=onset)
+
+    # The `adjacent` conjunct still carries the weight: the scene naming the
+    # doorway acquits nothing on its own.
+    assert not _evidence_present(
+        {"rooms": {"terminus": {"name": "Terminus 20"}}},
+        {"subject": "fire_door", "category": "adjacency",
+         "change": "pulled shut and dogged down"}, scene=onset)
+
+    # And with no scene the reader degrades to its old answer, never a
+    # wrong one -- the contract `_evidence_present`'s docstring states.
+    assert not _evidence_present(
+        barrier_only, {"subject": "fire_door", "category": "adjacency",
+                       "change": "pulled shut and dogged down"})
