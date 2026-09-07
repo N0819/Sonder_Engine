@@ -7718,6 +7718,21 @@ have, but not RESTATING what they already wrote. The percept wants to carry
 what the attempt DID and not what it WAS: the brackets held, the bar
 slipped, the opening is still clear.
 
+**AND THE FACT IS ALREADY THERE, ALREADY RENDERABLE.** Turn 85: the player
+spent a whole beat asking the question the engine had answered the beat
+before -- "did the conduit come down across it or not?" -- and the reply was
+immediate and exact: "The clearance remained. The heavy conduit crossed
+above the broken collar, but the sleeve gaped beneath it as an open throat
+into the riser -- wide enough for a torso, completely unblocked."
+
+An explicit look sets `full_render`, which re-renders the whole standing
+state instead of suppressing what has not changed, and the truth arrives
+without anything new being computed. So this is not a missing FACT and not a
+missing renderer. It is a fact that is delivered only when the player thinks
+to ask for it, on a beat they had to spend to ask -- with a deaf predator
+climbing the shaft below and a barrier evaporating behind them, the cost of
+that beat was the whole of what the beat was for.
+
 **s1.155 folds into this** as the case where the outcome did alter standing
 state and was lost on the way for a different reason. Fixing this one would
 have covered turn 80 as well, from the other side.
