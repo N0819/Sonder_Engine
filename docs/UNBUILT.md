@@ -7928,6 +7928,79 @@ masks is a fact about the air in a room, and every hunter that reads that room
 should be affected by it identically -- exactly as `SCENT_PASS` is a fact
 about a barrier and not about who is sniffing at it.
 
+### 1.159 One beat, read at every stage: what a stage-by-stage audit of turn 82 found and did not fix
+
+The five prose fixes and two structural ones committed 2026-09-07 came out
+of a critical read of chat 117 plus a full stage-by-stage audit of beat 82
+(the player hauls himself through a ceiling sleeve into a plenum and reaches
+down for his companion). The audit found more than was fixed. What follows
+is the residue, with the evidence, so none of it has to be rediscovered.
+
+**A. The act channel and the legs doctrine disagree between the two passes.**
+`perception_act` graded both of the player's acts as `refused: observer
+cannot see (sight gate)` for Sarah, who was standing in the room he climbed
+OUT of -- the relation is built with `target_room=p_room`, the previewed
+DESTINATION, so a body leaving through your ceiling is graded as if it were
+already upstairs. `perception_outcome` then DELIVERED the same two acts to
+her ("extend both hands down through the penetration sleeve"), and in the
+same view told her "Through the ceiling conduit sleeve, only darkness", and
+her episode ends "Aurel Voss left." while his arms are in her room. Two
+passes, one act, two verdicts. The principled rule is that an act is
+performed where the body WAS (the origin; `p_room_at_start` is already
+captured before the preview), the crossing percepts carry the departure and
+arrival, and presence is graded where the body IS -- but `_channel_to_every
+_leg` states a competing doctrine ("an act that crosses rooms carries one
+surface for the whole walk, so the surface is admitted only where the whole
+walk was available"), under which pass 1 was right and pass 2 was the leak.
+Not patched because which doctrine wins decides what a mind may know, and
+that is not a decision to make at a gate without a replay against the beats
+it changes.
+
+**B. The lamp was released to nobody.** Resolve call 1 had the player take
+the lamp from her hands; `_check_player_act_authority` rejected it ("an NPC
+may offer, hold out, brace or wait -- the player accepts on their own turn")
+although the player's declaration was "Lamp up to me first, then your
+hands"; the retry kept her fidelity-locked line "Releasing my grip on the
+lamp." and gave it to nobody. After commit and for the whole next beat:
+`contained.emergency_utility_lamp = {in: "Sarah Moon", mode: "held"}`,
+`positions` says riser 13, the contact ledger has no hand on it, and the
+prose has it in the plenum. The agency guard and dialogue fidelity collided
+and the world forked. The rule is right in general and wrong when the
+player's own declaration already covers receiving; the retry also left no
+warning on the step -- only `llm_capture.correction_notes` records that a
+rewrite happened or what it removed.
+
+**C. The tremor has no percept channel.** `world_pressure.must_tick_this_beat`
+forces the sector breach to "visibly act ON-PAGE" every third beat
+(`beats_since_tick: 2`), and it does -- in `resolved_event`, in `overlays`
+(five near-identical dust lines on one body by beat 106, evicting a distinct
+knees-and-palms fact at `_MAX_OVERLAY_ENTRIES = 6`) and in the world-pressure
+tick itself. Census of beats 60-115: a tremor in 18 resolved events, exactly
+every third beat; **9 of the 18 never reached the player's view**, because
+`sensory_events` belongs to the objects hand and the objects hand was not
+dispatched. A pressure the floor forces onto the page has to arrive through
+a channel a mind can perceive, or the floor is buying prose.
+
+**D. A character's guess became committed geometry.** Beat 106: Sarah said
+"Riser Nineteen on the flank is a blind compartment" about a PLANNED room
+nobody had entered. The resolve spatial hand rewrote it -- `"Upper
+Service-Core Pocket 19"`, `size: tiny`, a `blind_bulkhead` anchor -- and
+re-hung riser 18's edge to it as `dir: "e"`, so the northward main run the
+player was following lost its north exit from 18. The Director may author an
+unplanned room; it authored this one from a mind's speculation and altered
+the graph the player was standing in to match. (`known_dead_ends` writing
+her belief from a one-edge stub is s1.156's neighbour and was fixed the same
+day; this is the belief flowing the OTHER way, into the world.)
+
+**E. Smaller, from the same beat.** The interpret body hand (119 bytes) and
+contact hand (156 bytes) returned nothing; the resolve contact hand spent
+5,564 output tokens re-encoding a removal already in
+`character_contact_endings`; the interpret spatial hand spent 11,852 output
+tokens (14.8 KB of reasoning) to emit 1.6 KB. The character model addressed
+every action to `character:79`, an id that exists in no table, and it leaked
+into memory 27815 ("I suspected this about character:79"). Twelve provider
+calls, ~176k input tokens, for one beat.
+
 ### 1.150 A creature has no held hunt — the courier maze problem, one subsystem over
 
 **The owner's read, 2026-09-06, on watching a predator walk home past its
