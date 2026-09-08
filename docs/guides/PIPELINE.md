@@ -786,6 +786,26 @@ Its output is merged into `perception_outcome`'s dialogue processing rather than
 
 Filters the resolved event into separate observer experiences. This output feeds both player narration and character-specific memories.
 
+**The scene it filters is the scene the commit will write.** This stage
+composed its own until 2026-09-08 — a deep merge plus attire plus the three
+orientation inferences, standing beside the commit's composition and drifting
+from it three separate times (review 2026-09-07 A26/B1). There is now ONE
+composition, `persist/commit_scene_state.compose_beat_scene`: the beat's diff
+deduped and guarded, mapping's advisory detail folded in, a charter body's
+placement routed off the scene, an unheld handover refused, the merge itself
+with every input it takes, destroyed rooms vacated, a declared destination
+minted, map curation applied, the attire ledger projected, per-character
+orientation refreshed and the plan's own exits settled. The cut line is that
+**the composed scene is what the beat DID; the commit tick is what the world
+does NEXT** — the clock advancing, the sky drifting, the frontier expanding,
+the planned fringe materializing and the trail ledger ageing all stay in
+`prepare_scene_commit`. This stage composes and stashes the result on the
+context (keyed by the scene row's read token and the active resolve variant);
+the commit reads that back rather than composing again, so the beat is
+composed once per turn and the two sides cannot disagree by construction.
+Warnings and Director notes travel WITH the composition and only the commit
+publishes them — perception discards them, as its mirror did.
+
 Concealed actions are sentence-level redacted per-perceiver by
 `_redact_concealed_from_event` — sentences referencing a concealed actor
 (identified by structured name, not prose matching) are withheld; overt

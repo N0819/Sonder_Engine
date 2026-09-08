@@ -333,9 +333,14 @@ class TestTheRouting:
         import inspect
         from persist import commit as facade
         m = inspect.getmodule(facade.commit_scene)   # the defining sibling
+        # The routing lives with the merge it precedes, which since review
+        # 2026-09-07 A26 is `compose_beat_scene` -- the one composition
+        # perception_outcome and the commit share. `prepare_scene_commit`
+        # carries its answer on into the prepared bundle.
+        compose = inspect.getsource(m.compose_beat_scene)
+        assert compose.index("route_scene_placements(") \
+            < compose.index("sc = merge_scene_with_diff(")
         prepare = inspect.getsource(m.prepare_scene_commit)
-        assert prepare.index("route_scene_placements(") \
-            < prepare.index("sc = merge_scene_with_diff(")
         assert '"charter_placements": _charter_placements' in prepare
         commit = inspect.getsource(m.commit_scene)
         assert "_apply_charter_placements(ctx, prepared.get(\"charter_placements\"))" \

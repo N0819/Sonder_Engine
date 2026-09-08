@@ -8,7 +8,7 @@ See docs/experiments/AUDIT_COMMIT.md for the split record.
 """
 
 import copy
-from core.db import q, qi, transaction, wget, wset
+from core.db import q, qi, transaction, wget, world_read_token, wset
 from core.pipeline_context import note_step_decision
 from mind.memory import add_lorebook_link
 from story.character_schema import character_name_from_text, persona_name
@@ -1210,24 +1210,161 @@ def _report_started_sources(ctx, cid, sc, diff, turn_idx):
     return started
 
 
-def prepare_scene_commit(ctx):
-    """Build the exact post-turn scene before the outer write transaction.
 
-    The scene itself is RETURNED, not stored: `commit_scene` is what persists
-    it, and nothing here rewrites the stored scene, the registry or any other
-    durable story state. It is NOT write-free, though: engine notices for the
-    next beat land in the `world` table from here (`add_engine_notice`,
-    reached through the failed-source, duplicate-mint, orphan-mint and
-    started-source reports, and once for a contradictory sight edge), as do
-    the two once-per-chat "already told" flags, `sight_contradictions_told`
-    and `layout_lint_told`. Those are outside the turn's transaction, so each
-    is its own commit.
+class _ComposeReports:
+    """A composing context that COLLECTS what it says instead of publishing it.
 
-    Keeping the derivation out of the transaction lets the top-level commit
-    prepare memory embeddings and other slow derived work before SQLite's
-    outer write transaction begins.  It also gives every later commit domain
-    one stable post-diff scene instead of independently reconstructing it.
+    The composition runs twice as often as it publishes: `perception_outcome`
+    composes the beat so the narrator and every memory episode read the scene
+    the commit will write, and the commit reads that same composition back.
+    Only the commit speaks -- to `ctx.warnings` and to the Director through
+    `tell_director` -- so a note must be able to travel with the composed beat
+    instead of landing wherever the composition happened to run (review
+    2026-09-07 A26). Everything else is the real context, unchanged: the cast,
+    the turn, the compiled world context and the declared movement all read
+    through.
     """
+
+    def __init__(self, ctx):
+        self._ctx = ctx
+        # A plain list, because the moved code appends to `ctx.warnings`
+        # directly as well as through `add_warning`, and both must be caught.
+        self.warnings = []
+        self.director_notes = []
+
+    def __getattr__(self, name):
+        return getattr(self._ctx, name)
+
+    def get(self, key, default=None):
+        return self._ctx.get(key, default)
+
+    def __getitem__(self, key):
+        return self._ctx[key]
+
+    def __contains__(self, key):
+        return key in self._ctx
+
+    def add_warning(self, msg):
+        self.warnings.append(str(msg))
+
+    def tell_director(self, msg):
+        self.director_notes.append(str(msg))
+
+
+class ComposedBeat:
+    """What the beat DID to the world, and nothing about what the world does
+    next.
+
+    `scene` is the composed scene; the rest is what the commit needs to carry
+    on from it (the post-dedup diff the entity projection is derived from, the
+    world as it stood before the beat, the beat's clock reading, the routed
+    charter placements and orders, the destruction bundle). `warnings` and
+    `director_notes` are what the composition would have said, held for
+    whichever caller is entitled to say it.
+    """
+
+    __slots__ = ("scene", "diff", "prev_scene", "prev_clock", "destruction",
+                 "charter_placements", "charter_orders", "clock_reading",
+                 "time_block", "planned_error", "warnings", "director_notes",
+                 "key")
+
+    def __init__(self, **fields):
+        for name in self.__slots__:
+            setattr(self, name, fields.get(name))
+
+    def publish(self, ctx):
+        """Say, on the real context, everything the composition held back.
+
+        In the order the composition raised it, which is the order the commit
+        raised it before A26 split the two apart -- and through the same two
+        methods, so a warning is still tagged with the step that publishes it
+        and a Director note is still de-duplicated against the beat's others.
+        """
+        for msg in self.warnings or ():
+            ctx.warnings.append(msg)
+        for msg in self.director_notes or ():
+            ctx.tell_director(msg)
+
+
+def compose_beat_key(ctx):
+    """What a composed beat is only valid FOR: the stored world it was
+    composed from, and the answer it was composed out of.
+
+    Two parts, because two things can move between `perception_outcome`
+    composing the beat and the commit reading it back. The first is the scene
+    row's own read token (`core.db.world_read_token`), which changes if any
+    tracked write lands on the frame's scene between the two stages -- the
+    composition merges onto that row, so a new one is a different beat. The
+    second is the id of the ACTIVE resolve (or establish) variant, which
+    changes when the beat is rerolled or its output hand-edited: the same
+    scene plus a different answer is a different composition, and the variant
+    id is the one identifier that moves whenever the stored answer does.
+
+    A turn with no persisted step rows yet answers `None` for the variant
+    half; that is honest rather than dangerous, because a caller with no
+    stash recomposes anyway.
+    """
+    turn = getattr(ctx, "turn", None)
+    turn_id = getattr(turn, "id", None)
+    row = None
+    if turn_id is not None:
+        row = q("SELECT v.id AS id FROM steps s "
+                "JOIN variants v ON v.step_id=s.id AND v.active=1 "
+                "WHERE s.turn_id=? AND s.key IN "
+                "('director_resolve','director_establish') "
+                "ORDER BY s.ord DESC LIMIT 1", (turn_id,), one=True)
+    return (world_read_token(ctx.chat.id, "scene"),
+            int(row["id"]) if row else None)
+
+
+def composed_beat_for(ctx):
+    """The beat's composition, composed once per turn.
+
+    `perception_outcome` composes it and stashes it on the context; the commit
+    takes that one when it was built from the same stored scene and the same
+    stored answer (`compose_beat_key`), and composes afresh when it was not --
+    a rerun from the commit stage alone has no stash and composes. Before
+    A26 the two composed separately and the two answers had drifted three
+    times; the measured cost of the second composition was 48 ms/beat on the
+    123-beat descent and 56 ms/beat on the 307-body charter town.
+    """
+    stashed = ctx.get("_composed_beat")
+    if isinstance(stashed, ComposedBeat) and stashed.key == compose_beat_key(ctx):
+        return stashed
+    return compose_beat_scene(ctx)
+
+
+def compose_beat_scene(ctx):
+    """Compose the scene this beat produced: ONE function, two callers.
+
+    THE COMPOSED SCENE IS WHAT THE BEAT DID; THE COMMIT TICK IS WHAT THE
+    WORLD DOES NEXT. Everything here is the first: the Director's diff
+    deduped and guarded, the mapping compiler's advisory detail folded in, a
+    charter body's placement routed off the scene, an unheld handover
+    refused, the deep merge itself with every input it takes, the destroyed
+    rooms vacated, a declared destination minted, map curation applied, the
+    attire ledger projected, and the per-character orientation and the plan's
+    own exits settled on the result. The clock advancing, the sky drifting,
+    the frontier expanding, the planned fringe materializing and the trail
+    ledger ageing are the second, and stay in `prepare_scene_commit`.
+
+    It writes nothing. Warnings and Director notes are COLLECTED on the
+    returned `ComposedBeat` (see `_ComposeReports`) so that only the caller
+    entitled to speak does.
+
+    WHY IT IS ONE FUNCTION. `perception_outcome` used to mirror this with
+    `merge_scene_with_diff(sc, diff, clock_seconds=)` alone, and the mirror
+    drifted three times -- most recently past `_refuse_unheld_transfers`, the
+    `sleeping`/`carriers` inputs, the report sinks, `protect_planned_edges`
+    and `settle_developed_stubs`, so the narrator and every memory episode
+    saw a refused handover shown as done (review 2026-09-07 A26/B1). The
+    mirror is gone: perception calls this and reads its scene.
+    """
+    _key = compose_beat_key(ctx)
+    # Every `ctx.` below is the collector, so the moved code says what it
+    # always said and nothing publishes it here.
+    ctx = _ComposeReports(ctx)
+
     chat = ctx.chat
     cid = chat.id
     res = ctx.director_resolve or ctx.director_establish or {}
@@ -1743,6 +1880,99 @@ def prepare_scene_commit(ctx):
 
     apply_attire_diff(sc, diff, ctx, res)
 
+    infer_vehicle_zones(cid, ctx.turn.frame_id, prev_scene, sc)
+    _carry_names = [character_name_from_text(c["sheet"]) for c in ctx.cast]
+    infer_companion_carry(
+        cid, ctx.turn.frame_id, prev_scene, sc,
+        _carry_names,
+        diff.get("cast_changes") or [],
+    )
+    # Per-character orientation (came_from + focus + facing), read by
+    # egocentric_frame. Runs AFTER companion-carry so a carried companion's
+    # inferred new position is already in sc when its came_from is computed;
+    # infer_focus runs after infer_came_from (which clears focus on a
+    # disorienting jump); infer_facing runs LAST -- it reads the freshly-set
+    # came_from and focus to derive the compass heading left/right depends on.
+    infer_came_from(cid, ctx.turn.frame_id, prev_scene, sc, _carry_names)
+    # Reads the same before/after positions as came_from, and for the same
+    # reason: a step through an OPAQUE boundary must be watchable from the room
+    # behind for a beat or two instead of the body vanishing the instant its
+    # position field changes.
+    infer_threshold_crossings(cid, ctx.turn.frame_id, prev_scene, sc,
+                              _carry_names)
+    infer_focus(cid, ctx.turn.frame_id, prev_scene, sc,
+                ctx.get("director_resolve") or {}, _carry_names)
+    infer_facing(cid, ctx.turn.frame_id, prev_scene, sc, _carry_names)
+
+    planned_error = None
+    try:
+        # THE PLAN'S EXITS ARE PROTECTED. A developed room may add ways
+        # through; the way the plan gave it comes back if the development
+        # dropped it, because every other planned room counts on it.
+        from world.structure import (protect_planned_edges,
+                                     settle_developed_stubs)
+        for _room, _to in protect_planned_edges(cid, sc):
+            ctx.warnings.append(
+                f"planned exit restored: {_room} -> {_to} (a developed room "
+                "keeps every exit the plan gave it)")
+        # And a stub that now has a description is a room: the flag and the
+        # seed come off the live record, which the registry still keeps.
+        settle_developed_stubs(sc)
+    except Exception as _planned_exc:  # diagnostics, never a story blocker
+        # Carried rather than reported: the commit re-raises it inside the
+        # try the other three planned passes still share, so one failure
+        # costs exactly what it cost before this split.
+        planned_error = _planned_exc
+
+    return ComposedBeat(
+        scene=sc, diff=diff, prev_scene=prev_scene, prev_clock=prev_clock,
+        destruction=destruction, charter_placements=_charter_placements,
+        charter_orders=_charter_orders,
+        clock_reading=(_beat_end, _clock_displaced, _clock_refused,
+                       _clock_floored),
+        time_block=_td_block, planned_error=planned_error,
+        warnings=list(ctx.warnings), director_notes=list(ctx.director_notes),
+        key=_key)
+
+
+def prepare_scene_commit(ctx):
+    """The world's own tick, on top of the beat's composed scene.
+
+    The scene itself is RETURNED, not stored: `commit_scene` is what persists
+    it, and nothing here rewrites the stored scene, the registry or any other
+    durable story state. It is NOT write-free, though: engine notices for the
+    next beat land in the `world` table from here (`add_engine_notice`,
+    reached through the failed-source, duplicate-mint, orphan-mint and
+    started-source reports, and once for a contradictory sight edge), as do
+    the two once-per-chat "already told" flags, `sight_contradictions_told`
+    and `layout_lint_told`. Those are outside the turn's transaction, so each
+    is its own commit.
+
+    Keeping the derivation out of the transaction lets the top-level commit
+    prepare memory embeddings and other slow derived work before SQLite's
+    outer write transaction begins.  It also gives every later commit domain
+    one stable post-diff scene instead of independently reconstructing it.
+
+    The composition it builds on is `compose_beat_scene`, taken from the
+    context when `perception_outcome` already composed this same beat
+    (`composed_beat_for`).
+    """
+    chat = ctx.chat
+    cid = chat.id
+    res = ctx.director_resolve or ctx.director_establish or {}
+    composed = composed_beat_for(ctx)
+    composed.publish(ctx)
+    sc = composed.scene
+    diff = composed.diff
+    prev_scene = composed.prev_scene
+    prev_clock = composed.prev_clock
+    destruction = composed.destruction
+    _charter_placements = composed.charter_placements
+    _charter_orders = composed.charter_orders
+    _td_block = composed.time_block
+    (_beat_end, _clock_displaced, _clock_refused,
+     _clock_floored) = composed.clock_reading
+
     # Present on every committed scene, so that "the story has not said" is a
     # value and not a missing key -- `scene.time` used to be absent on some
     # rows, present-and-empty on others, and present-and-holding-a-duration on
@@ -1940,30 +2170,6 @@ def prepare_scene_commit(ctx):
 
     _advance_ground(cid, sc)
 
-    infer_vehicle_zones(cid, ctx.turn.frame_id, prev_scene, sc)
-    _carry_names = [character_name_from_text(c["sheet"]) for c in ctx.cast]
-    infer_companion_carry(
-        cid, ctx.turn.frame_id, prev_scene, sc,
-        _carry_names,
-        diff.get("cast_changes") or [],
-    )
-    # Per-character orientation (came_from + focus + facing), read by
-    # egocentric_frame. Runs AFTER companion-carry so a carried companion's
-    # inferred new position is already in sc when its came_from is computed;
-    # infer_focus runs after infer_came_from (which clears focus on a
-    # disorienting jump); infer_facing runs LAST -- it reads the freshly-set
-    # came_from and focus to derive the compass heading left/right depends on.
-    infer_came_from(cid, ctx.turn.frame_id, prev_scene, sc, _carry_names)
-    # Reads the same before/after positions as came_from, and for the same
-    # reason: a step through an OPAQUE boundary must be watchable from the room
-    # behind for a beat or two instead of the body vanishing the instant its
-    # position field changes.
-    infer_threshold_crossings(cid, ctx.turn.frame_id, prev_scene, sc,
-                              _carry_names)
-    infer_focus(cid, ctx.turn.frame_id, prev_scene, sc,
-                ctx.get("director_resolve") or {}, _carry_names)
-    infer_facing(cid, ctx.turn.frame_id, prev_scene, sc, _carry_names)
-
     if destruction:
         base_clock = clock or wget(
             cid, "simulation_clock", {"elapsed_seconds": 0.0}) or {}
@@ -1976,19 +2182,16 @@ def prepare_scene_commit(ctx):
     # town; mapping resolves only the room the story actually reaches.
     _frontier_mutations = []
     try:
+        # A26: the two passes that CORRECT what this beat did to a planned
+        # room ran here and nowhere else, so the scene the narrator and every
+        # memory episode read was missing them. They are the composition's
+        # (`compose_beat_scene`); what it could not finish is re-raised here,
+        # so one failure still costs the whole fringe exactly as it did when
+        # all five passes shared this try.
+        if composed.planned_error is not None:
+            raise composed.planned_error
         from world.structure import (
-            materialize_planned_fringe, prepare_frontier_expansion,
-            protect_planned_edges, settle_developed_stubs)
-        # THE PLAN'S EXITS ARE PROTECTED. A developed room may add ways
-        # through; the way the plan gave it comes back if the development
-        # dropped it, because every other planned room counts on it.
-        for _room, _to in protect_planned_edges(cid, sc):
-            ctx.warnings.append(
-                f"planned exit restored: {_room} -> {_to} (a developed room "
-                "keeps every exit the plan gave it)")
-        # And a stub that now has a description is a room: the flag and the
-        # seed come off the live record, which the registry still keeps.
-        settle_developed_stubs(sc)
+            materialize_planned_fringe, prepare_frontier_expansion)
         sc, _frontier_mutations = prepare_frontier_expansion(cid, sc)
         sc, _planned_added = materialize_planned_fringe(cid, sc)
         # AND WHAT THE PLAN SAID IS RUNNING IN THEM. A planned thing's
