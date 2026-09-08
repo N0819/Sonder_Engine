@@ -79,7 +79,7 @@ const Sonder = {
     if (count < 3) return;
     Sonder._unregister(owner);
     if (typeof toast === "function") {
-      toast(`Extension "${owner}" was disabled after repeated errors.`, "err", 8000);
+      toast(`Extension "${owner}" was disabled after repeated errors.`, "err");
     }
   },
 

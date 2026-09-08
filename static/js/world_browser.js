@@ -207,7 +207,7 @@ async function wbWrite(ctx, call, { quiet = false } = {}) {
     if (!quiet) toast("Saved.", "ok");
     return result;
   } catch (error) {
-    toast(error?.message || String(error), "err", 8000);
+    toast(error?.message || String(error), "err");
     await ctx.refresh();
     return null;
   }

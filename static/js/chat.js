@@ -921,7 +921,7 @@ function handleEvt(ev) {
     if (h) h.textContent = "✓ " + ev.label;
     showNarrationEarly(ev);
   } else if (ev.type === "error") {
-    toast(`Pipeline error: ${ev.error}`, "err", 9000);
+    toast(`Pipeline error: ${ev.error}`, "err");
   } else if (ev.type === "aborted") {
     toast("Generation stopped.", "warn");
   }
@@ -1234,7 +1234,7 @@ async function runStream(url, body, context = {}) {
     await streamPost(url, body, handleEvt);
   } catch (e) {
     ok = false;
-    toast(`Pipeline failed: ${e.message}`, "err", 9000);
+    toast(`Pipeline failed: ${e.message}`, "err");
   } finally {
     if (_activeRun === run) _activeRun = null;
     S.busy = false;

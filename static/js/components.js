@@ -514,8 +514,25 @@ function toastHost() {
   return host;
 }
 
-function toast(message, type = "ok", timeout = 4200) {
+function toast(message, type = "ok", timeout = null) {
+  // AN ERROR WAITS TO BE READ. A confirmation may go on its own after a few
+  // seconds; a failure the reader has to act on, quote or report may not, so
+  // an error toast stays until it is dismissed (the ✕ is on every toast) and
+  // everything else keeps the old four seconds. A caller may still name its
+  // own timeout, and 0 means "stay".
+  if (timeout === null) timeout = type === "err" ? 0 : 4200;
   const icon = { ok: "✓", err: "!", warn: "▲", info: "•" }[type] || "•";
+  // A TOAST IS GONE IN SECONDS; THE CONSOLE KEEPS IT. Every failure and every
+  // warning a reader is shown for a moment is written to the console in the
+  // SAME words, so a message that scrolled away can still be read, copied and
+  // reported. Here rather than at the call sites, because the rule is about
+  // being shown something, not about which surface raised it -- and the
+  // 404 on a greeting start (2026-09-08) was a message that said exactly what
+  // went wrong and vanished before it could be read.
+  // No prefix literal: `tools/extract_ui_catalog.py` reads string literals in
+  // this file as user-facing text, and a console tag is not a UI message.
+  if (type === "err") console.error(String(message));
+  else if (type === "warn") console.warn(String(message));
   const node = el("div", { class: "toast " + type },
     el("span", { class: "badge " + type }, icon),
     el("div", { class: "toast-body" }, String(message)),
@@ -577,7 +594,7 @@ function backgroundTask(label, work, opts = {}) {
     })
     .catch(e => {
       console.error(e);
-      toast((opts.errorPrefix ? opts.errorPrefix + ": " : "") + (e?.message || String(e)), "err", 8000);
+      toast((opts.errorPrefix ? opts.errorPrefix + ": " : "") + (e?.message || String(e)), "err");
       if (opts.onError) opts.onError(e);
     })
     .finally(() => {
@@ -600,7 +617,7 @@ async function buttonTask(btn, label, work) {
     // button just quietly reverts, reading to the user as "nothing happened."
     // Mark it handled so the global unhandledrejection net doesn't re-toast.
     if (e && typeof e === "object") e.__handled = true;
-    toast(e?.message || String(e), "err", 8000);
+    toast(e?.message || String(e), "err");
     throw e;
   }
   finally { if (btn && btn.isConnected) { btn.disabled = false; btn.textContent = old } }
