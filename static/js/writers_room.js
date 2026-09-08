@@ -306,32 +306,16 @@ async function roomSend() {
 
 // ---- The stream ----
 //
-// NDJSON, the same shape the turn stream speaks, so there is one decoder here
-// and not two. A line can be split across chunks, so the tail is carried; the
-// last chunk may end without a newline, so it is flushed at the end.
+// NDJSON, the same shape the turn stream speaks -- so it goes through the same
+// reader. This function had its own copy of the decode loop and paid for it
+// twice (B25, review 2026-09-07): no 401 redirect, so a host session that
+// expired between notes surfaced as a toast on a panel that looked signed in
+// and wasn't; and a bare `JSON.parse` per line, so one malformed frame aborted
+// the whole answer instead of being skipped. `streamPost` carries both, plus
+// the structured-`detail` rendering every other error path uses.
 async function roomStream(text) {
-  const response = await fetch(
-    "/api/chats/" + S.chatId + "/room/messages/stream",
-    { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, frame_id: S.currentFrameId }) });
-  if (!response.ok) {
-    let detail = "";
-    try { detail = (await response.json()).detail || ""; } catch (e) {}
-    throw new Error(detail || t("The room could not be reached ({status})",
-                                { status: response.status }));
-  }
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let tail = "";
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    tail += decoder.decode(value, { stream: true });
-    const lines = tail.split("\n");
-    tail = lines.pop();
-    for (const line of lines) if (line.trim()) roomEvent(JSON.parse(line));
-  }
-  if (tail.trim()) roomEvent(JSON.parse(tail));
+  await streamPost("/api/chats/" + S.chatId + "/room/messages/stream",
+                   { text, frame_id: S.currentFrameId }, roomEvent);
 }
 
 // One event. Renders on every one: the panel is small, the thread is short,

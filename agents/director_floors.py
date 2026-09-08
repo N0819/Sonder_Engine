@@ -25,7 +25,7 @@ from story.scene import (
 )
 from world.mechanics import (condition_cadence_is_inert,
                             read_time_diff)
-from world.spatial import merge_scene_with_diff, room_of
+from world.spatial import _is_body_entity, merge_scene_with_diff, room_of
 
 from .common import _mask_quoted_spans
 from .director_lingua import _ling
@@ -1340,7 +1340,7 @@ def _room_exists(sc, sd, room_id) -> bool:
     return False
 
 
-def _unplaced_minted_entities(sc, sd):
+def _unplaced_minted_entities(sc, sd, *, merged=None):
     """Things this beat brought into the world and left nowhere.
 
     MEASURED BY OUTCOME, not by re-deriving where a thing should have gone:
@@ -1364,13 +1364,18 @@ def _unplaced_minted_entities(sc, sd):
     the warning noise. Skips the three classes that have no room by
     construction -- a bodiless voice, a portal spanning two rooms, something
     in transit -- and anything the beat removed outright.
+
+    `merged` is that merge already computed, for a caller that holds it (the
+    placement below, and the commit, which is handed the scene the beat ends
+    with). Passing it buys nothing but the merge; it must be the same answer.
     """
     entities = (sd or {}).get("entities")
     if not isinstance(entities, dict) or not entities:
         return []
     removed = {str(e).strip().casefold()
                for e in ((sd or {}).get("remove_entities") or [])}
-    merged = merge_scene_with_diff(sc or {}, sd or {})
+    if merged is None:
+        merged = merge_scene_with_diff(sc or {}, sd or {})
     missing = []
     for eid, ent in entities.items():
         if not isinstance(ent, dict):
@@ -1392,6 +1397,118 @@ def _unplaced_minted_entities(sc, sd):
             continue
         missing.append(str(eid))
     return sorted(missing)
+
+
+def unplaced_mints_needing_a_room(sc, sd, *, merged=None):
+    """Of the things this beat left nowhere, the ones nothing else places.
+
+    ONE ANSWER TO ONE QUESTION, and the question was being answered twice.
+    `_unplaced_minted_entities` above says what has no room; the commit had
+    its own second list of the same classes (`commit_scene_state.
+    _place_orphan_mints`), written two months later and reading the scene the
+    beat ends with rather than the diff. Both now ask here (review 2026-09-07
+    B15), so a mint cannot be nowhere to one of them and somewhere to the
+    other.
+
+    Subtractive on top of the list above, by the two classes that HAVE a
+    placer. A body is put where it is by the machinery that walks it, and
+    standing one in the beat's room would be a step nothing took. A thing a
+    body is holding is where that body is, EVEN WHEN THE BEAT CANNOT SAY
+    WHERE THE BODY IS: the merge derives a carried thing's room from its
+    carrier only when some carrier in the chain resolves to one
+    (`spatial_containment.derive_contained_positions` skips it silently
+    otherwise), so a held thing whose holder is itself unplaced comes back
+    from the list above -- and standing it on the floor of the beat's room
+    would make `contained` and `positions` two records of one fact, free to
+    disagree, with a thing in someone's hands rendered as lying there for
+    anyone to take. Held is an answer; it is just not a room.
+
+    The aliases are checked as well as the id and the name, in both arms,
+    because a thing answers to all three: a room found under any of them is a
+    room, and a carrier holding any of them is holding it.
+    """
+    entities = (sd or {}).get("entities")
+    entities = entities if isinstance(entities, dict) else {}
+    if merged is None:
+        merged = merge_scene_with_diff(sc or {}, sd or {})
+    contained = merged.get("contained")
+    carried = {str(k).strip().casefold()
+               for k in (contained if isinstance(contained, dict) else {})}
+    carried.discard("")
+    out = []
+    for eid in _unplaced_minted_entities(sc, sd, merged=merged):
+        ent = entities.get(eid)
+        ent = ent if isinstance(ent, dict) else {}
+        # THE RECORD THE WORLD ENDS WITH, not only the record the diff wrote:
+        # a mint's interior rooms are indexed onto the entity BY THE MERGE
+        # (`sync_entity_interior_rooms`), so a vehicle whose interior the beat
+        # declared as rooms says nothing about it in `entities` and everything
+        # about it once merged. The three classes that have no room by
+        # construction are read from both.
+        record = (merged.get("entities") or {}).get(eid)
+        record = record if isinstance(record, dict) else ent
+        if record.get("ubiquitous") or record.get("interior_rooms"):
+            continue
+        state = record.get("state")
+        if isinstance(state, dict) and (state.get("link") or state.get("transit")):
+            continue
+        if _is_body_entity(merged, str(eid), record or ent):
+            continue
+        # HELD IS AN ANSWER. The commit's pass carried this arm from the day
+        # it was written (`_entity_labels(eid, ent) & carried`) and it does
+        # not survive being restated at one site only: measured on
+        # {'contained': {'vial': 'courier'}} with `courier` himself unplaced,
+        # dropping it wrote positions['vial'] = the player's room while
+        # `contained` still said the courier had it (review 2026-09-07 B15).
+        labels = {str(x or "").strip().casefold() for x in
+                  (eid, record.get("name"), ent.get("name"),
+                   *(record.get("aliases") or []), *(ent.get("aliases") or []))}
+        labels.discard("")
+        if labels & carried:
+            continue
+        if any(room_of(merged, str(alias)) is not None
+               for alias in (ent.get("aliases") or []) if str(alias or "").strip()):
+            continue
+        out.append(str(eid))
+    return out
+
+
+def place_unplaced_mints(sc, sd, fallback_room, *, merged=None):
+    """A MINT THIS BEAT LEAVES NOWHERE STANDS WHERE THE BEAT IS -- AND IT
+    STANDS THERE HERE, WHILE THE BEAT CAN STILL SEE IT.
+
+    The placement rule is the commit's (`commit_scene_state.
+    _place_orphan_mints`, and its docstring carries the measured cases it was
+    built from). What was wrong was WHEN: it ran after the beat was over, so
+    the four readers that ask the same question before that -- the omission
+    audit (`director_evidence._subject_is_somewhere`), the unplaced warning,
+    the mid-turn merge every later stage is composed from, and the commit --
+    got two different answers, three of them saying a thing was nowhere while
+    the fourth stood it in a room. Measured live, chat 117 turn 78:
+    `conduit_joints` was reported beyond perception and committed into riser
+    13 in the same beat. Writing the room into the diff is what makes the four
+    agree, and it is the only write that reaches all four.
+
+    Runs AFTER `_bind_minted_entities_to_present_figures`, which is not an
+    ordering preference: a bound mint may take the room its PLAN authored,
+    and that write is guarded on the mint not being placed yet.
+
+    Where the beat cannot say where it is happening -- no player room, or two
+    of them -- nothing is placed and the report stands: inventing a room for a
+    thing is worse than leaving it nowhere. Returns the ids placed.
+    """
+    room = str(fallback_room or "").strip()
+    if not room:
+        return []
+    ids = unplaced_mints_needing_a_room(sc, sd, merged=merged)
+    if not ids:
+        return []
+    positions = sd.get("positions")
+    if not isinstance(positions, dict):
+        positions = sd["positions"] = {}
+    for eid in ids:
+        positions[str(eid)] = room
+    return ids
 
 
 def _scan_for_untracked_restraint(resolved_event, dialogue_log, conditions,

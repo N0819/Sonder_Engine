@@ -184,7 +184,9 @@ def rebuild_embeddings(chat_id=None, char_id=None, *, batch=_REBUILD_BATCH,
     rankings when its `embedding_model`/`embedding_dim` do not match the live
     ones. Without this pass, the upgrade silently splits a memory bank into
     two eras -- everything written before it reachable only by keyword and
-    exact match, forever. See docs/UNBUILT.md §1.15.
+    exact match, forever. See `Design.md` § Changing the embedding model
+    is safe (E35's sibling, 2026-09-07: UNBUILT §1.15 was deleted when this
+    pass and its guards landed).
 
     Rebuilt with the SAME document construction `_embed_memory` uses, because
     a vector built from different text is not comparable with one built from
@@ -312,18 +314,23 @@ def rebuild_embeddings(chat_id=None, char_id=None, *, batch=_REBUILD_BATCH,
         # A repair that lives outside this function is a repair a reroll
         # quietly discards.
         #
-        # `lore_entries` has no `embedding_model`/`embedding_dim` columns, so
-        # staleness is the vector's WIDTH rather than a recorded model key.
-        # That is weaker -- two models sharing a width are indistinguishable --
-        # and it is what the schema supports.
-        # NOT WHEN THE TARGET IS THE FALLBACK. Lore staleness is measured by
-        # the vector's WIDTH, so a degraded provider inverts the test: the
-        # crc32 fallback is 256 wide, every real 2,560-wide entry then reads as
-        # stale, and a background reconciler firing on a reroll during a
-        # provider hiccup would quietly downgrade the entire corpus it was
-        # called to protect. The memory pass survives this because it compares
-        # model KEYS and a caller can legitimately rebuild onto the fallback;
-        # lore has no key to compare, so the only safe answer is to wait.
+        # `lore_entries` carries `embedding_model`/`embedding_dim`, so lore
+        # staleness is the recorded model KEY wherever a row has one, and the
+        # vector's WIDTH only where it does not -- the weaker test, since two
+        # models sharing a width are indistinguishable, and the one every row
+        # the stamp backfill has not reached is still judged by. That is the
+        # predicate the query below writes out. (E36, 2026-09-07: this said
+        # the columns did not exist, long after the SELECT and the UPDATE
+        # under it began reading and writing them.)
+        # NOT WHEN THE TARGET IS THE FALLBACK. A crc32 target inverts BOTH
+        # branches at once: every real model key differs from
+        # `cheap:crc32:256`, and every real vector's width differs from 256 --
+        # so a background reconciler firing on a reroll during a provider
+        # hiccup would select the entire corpus it was called to protect and
+        # overwrite it with hashes. The memory pass above can proceed because
+        # rebuilding onto the fallback is a target a caller may legitimately
+        # choose for a bank; for lore the only safe answer is to wait, for the
+        # stronger reason the next comment gives.
         book_ids = _rebuild_book_ids(chat_id)
         if want_fallback and book_ids:
             # NO REPAIR IS AVAILABLE IN THIS STATE, which is a stronger reason

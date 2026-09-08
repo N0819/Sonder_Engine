@@ -12,6 +12,7 @@ from language_runtime import (LanguagePackError, compositor_text,
 from story.character_schema import (
     character_appearance,
     character_voice,
+    character_identity,
     character_name,
     character_name_from_text,
     character_senses,
@@ -25,6 +26,7 @@ from story.character_schema import (
 from core.db import q, wget
 from core.pipeline_context import note_step_decision
 from world.mechanics import clock_elapsed
+from story import attire as attire_model
 from story.scene import (
     NON_AWAKE_GATED,
     active_disguises,
@@ -615,7 +617,7 @@ from .common import (
     self_reference_forms,
     _sentence_subjects,
     _appearance_as_prose,
-    _resolve_player_room,
+    player_room_in,
     _room_notes_from_lore,
     _room_notes_for_view,
     CROWDS_KEY,
@@ -867,37 +869,6 @@ def _saw_across_beat(sc, prev_sc, perceiver_name, source_name, rel,
             return False
         return composer._sense_graded("full", "sight", senses) != "none"
     return _at(sc) or _at(prev_sc)
-
-
-def _player_room_in(sc, pers, interp, ctx, player_name):
-    """The player's room IN THE SCENE THE VIEWS ARE BUILT FROM.
-
-    The scene wins whenever it places the body, because presence and channel
-    have to be two readings of one world. `perception_act` resolved the room
-    against the scene as stored and then merged the player's own asserted
-    state onto a copy fourteen lines later, so every
-    `spatial_rel_between(..., target_room=p_room)` after that graded the
-    player from the room she had left while the same scene said she was
-    somewhere else -- one observer's view carrying her presence in the new
-    room and her lines delivered as co-present in the old one, which is a
-    channel nobody had.
-
-    The cached `ctx["_player_room"]` is a fallback now rather than the first
-    answer, for the same reason: it was written before this beat's assertions
-    reached the scene. It still stands in where the scene tracks no position
-    for the player at all, and the resolver -- which may cost a model call --
-    is still asked only when neither has an answer. The cache is refreshed
-    here, so the stages after this one read the same room these views were
-    built from.
-    """
-    room = room_of(sc, player_name)
-    if not room:
-        room = ctx.get("_player_room")
-    if not room:
-        room = _resolve_player_room(sc, pers, interp, ctx.cast,
-                                    ctx.get("input"))
-    ctx["_player_room"] = room
-    return room
 
 
 def _declared_arrival_room(sc, interp, p_room):
@@ -2155,8 +2126,7 @@ def perception_establish(ctx, nonce):
     p_appearance = _appearance_as_prose(appearance_of(
         p_name, pers.get("appearance") or persona_appearance(pers), sc))
 
-    p_room = _resolve_player_room(sc, pers, None, ctx.cast, ctx.get("input"))
-    ctx["_player_room"] = p_room
+    p_room = player_room_in(sc, ctx, pers=pers, player_name=p_name)
     p_rdata = (sc.get("rooms") or {}).get(p_room) if p_room else None
 
     sensory_events = est.get("sensory_events") or []
@@ -2204,7 +2174,12 @@ def perception_establish(ctx, nonce):
         c_sources = [s for s in sources if s["name"] != character_name(sh)]
         perceivers.append({
             "id": c["id"], "name": character_name(sh), "room": r,
-            "pronouns": (sh.get("identity") or {}).get("pronouns") or {},
+            # Through the ONE identity reader, never the stored blob: a card
+            # that parked its pronouns at top level is repaired only for
+            # whoever normalizes, so the raw read handed this view -- the one
+            # the narrator falls back on -- nothing at all (review 2026-09-07
+            # B12). Same at the two sibling builders below.
+            "pronouns": character_identity(sh)["pronouns"],
             "room_name": room_display_name(rdata, r) or "an unspecified area",
             "room_notes": _room_notes_for_view(rdata, r, ctx, sc),
             "ambient_location": _ambient_location_for(sc, r),
@@ -2281,8 +2256,9 @@ def perception_act(ctx, nonce):
     # RESOLVED AGAINST THE SCENE THE VIEWS ARE BUILT FROM, which is this one:
     # the preview above is what puts a declared step into the next room into
     # `sc`, and a room resolved before it grades every observer's channel to
-    # the player from the room she left. See `_player_room_in`.
-    p_room = _player_room_in(sc, pers, interp, ctx, p_name)
+    # the player from the room she left. See `common.player_room_in`.
+    p_room = player_room_in(sc, ctx, pers=pers, interp=interp,
+                            player_name=p_name)
     # The declared walk's legs, on the same rule the outcome pass applies.
     onset_legs = _multi_room_legs(
         sc, [(p_name, p_room_at_start, p_room)]).get(p_name) or ()
@@ -2398,7 +2374,7 @@ def perception_act(ctx, nonce):
 
         perceivers.append({
             "id": c["id"], "name": character_name(sh), "room": r,
-            "pronouns": (sh.get("identity") or {}).get("pronouns") or {},
+            "pronouns": character_identity(sh)["pronouns"],
             "room_name": room_display_name(rdata, r) or "an unspecified area",
             "room_notes": _room_notes_for_view(rdata, r, ctx, sc),
             "ambient_location": _ambient_location_for(sc, r),
@@ -2788,14 +2764,14 @@ def perception_outcome(ctx, nonce):
     # Only fall back to the cached value when the scene genuinely has no
     # resolvable position for the player (e.g. positions were never
     # tracked for them).
-    # The ONE ordering every stage reads (`_player_room_in`: the scene,
+    # The ONE ordering every stage reads (`common.player_room_in`: the scene,
     # then the cache, then the resolver that may cost a model call), and
     # with NO declaration: a declared `movement.to_room` is evidence of
     # intent before resolve and of nothing after it -- the resolver's second
     # rung returned it directly, so a positionless player was placed at the
     # destination resolve had just refused.
     p_name = pers.get("name") or persona_name(pers)
-    p_room = _player_room_in(sc, pers, None, ctx, p_name)
+    p_room = player_room_in(sc, ctx, pers=pers, player_name=p_name)
     p_appearance_true = _appearance_as_prose(appearance_of(
         p_name, pers.get("appearance") or persona_appearance(pers), sc))
     # Conceal a disguised subject's real appearance in every observer's outcome
@@ -2951,7 +2927,7 @@ def perception_outcome(ctx, nonce):
         rdata = (sc.get("rooms") or {}).get(r) if r else None
         perceivers.append({
             "id": c["id"], "name": character_name(sh), "room": r,
-            "pronouns": (sh.get("identity") or {}).get("pronouns") or {},
+            "pronouns": character_identity(sh)["pronouns"],
             "room_name": room_display_name(rdata, r) or "an unspecified area",
             "room_notes": _room_notes_for_view(rdata, r, ctx, sc),
             "ambient_location": _ambient_location_for(sc, r),
@@ -4448,6 +4424,15 @@ def _composer_finish_observer(ctx, stage, pid, name, rendered, known, roster,
     ledger[pid] = {
         "standing": sorted(rendered.standing_keys),
         "described": sorted(rendered.described),
+        # WHAT EACH STANDING KEY WAS FOR THIS OBSERVER THIS BEAT (B28).
+        # Absent -- not empty -- wherever the composer computes no verdict
+        # (character mode diffs against no ledger) and on a chat stored
+        # before the field existed, so a reader that finds nothing treats
+        # the fact as news rather than as settled. The narrator's sensory
+        # manifest is that reader: it re-derives the same standing contacts
+        # from the scene, and must not hand one this observer's own ledger
+        # already carried to the page as though it had just happened.
+        **({"verdicts": dict(rendered.verdicts)} if rendered.verdicts else {}),
         # WHO THIS OBSERVER COULD SEE. Absent (rather than empty) when the
         # stage did not compute it, and `_composer_prev_seen` keeps that
         # distinction: an empty list means "saw nobody", a missing key
@@ -4605,7 +4590,8 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
     body_descriptions = _body_descriptions(ctx, sc)
     prev_ledger = _composer_prev_ledger(ctx)
     actor_body = {
-        "name": p_name, "room": ctx.get("_player_room"),
+        "name": p_name, "room": player_room_in(sc, ctx, player_name=p_name,
+                                               resolve=False),
         "appearance": p_visible, "aliases": [],
         "disguise_known_to": p_disguise_known,
         "disguise_conceals_identity": p_disguise_conceals,
@@ -4906,8 +4892,10 @@ def _mover_is_a_body(sc, mover):
 
 def _attire_items(scene, name):
     """One body's worn items, as a normalised set, or None when unknown."""
-    row = ((scene or {}).get("attire") or {}).get(name)
-    if not isinstance(row, dict):
+    # `entry_for`: a case-variant key read as "unknown" on one side of a
+    # before/after pair, so a garment change went unnoticed (2026-09-07 B5).
+    row = attire_model.entry_for((scene or {}).get("attire"), name)
+    if not row:
         return None
     worn = row.get("wearing")
     if not isinstance(worn, list):

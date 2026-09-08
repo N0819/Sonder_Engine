@@ -173,6 +173,10 @@
 
      What neither rule permits is calling any of it at top level from a file
      that loads earlier. -->
+<!-- The localization rules. Before utils.js, which calls them, and the same
+     file the login and guest pages load -- there is one translator, not a
+     copy per page. -->
+<script src="/static/js/i18n-core.js?v=20260904-world"></script>
 <script src="/static/js/utils.js?v=20260904-world"></script>
 <script src="/static/js/components.js?v=20260904-world"></script>
 <script src="/static/js/editors.js?v=20260904-world"></script>

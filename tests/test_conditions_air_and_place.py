@@ -207,13 +207,20 @@ def test_a_room_condition_that_states_no_harm_is_not_a_hazard():
     assert unanswered_hazard_subjects(scene, [festival], None, {}) == []
 
 
-def test_a_room_hazard_block_counts_as_a_stated_hazard():
-    """`world.region_events.apply_wave` writes `room['hazard']`; a hazard is
-    a hazard whichever of the engine's two ledgers records it."""
+def test_the_scene_is_not_a_second_hazard_ledger():
+    """ONE STORE (review 2026-09-07 B8). A standing hazard of a place is a
+    `world_conditions` row and nothing else; this floor used to read a
+    `hazard` block on the scene's room dict as well, and a question with two
+    stores is a question with two answers. `world.region_events.apply_wave`
+    now states its hazard in the table -- covered end to end in
+    tests/test_ruin_and_hazard_one_store.py.
+    """
     scene = _stair_scene()
     scene["rooms"]["second_landing"]["hazard"] = {"state": "burning",
                                                   "cause": "the bakery"}
-    assert unanswered_hazard_subjects(scene, [], None, {}) == ["Mirela"]
+    assert unanswered_hazard_subjects(scene, [], None, {}) == []
+    assert unanswered_hazard_subjects(
+        scene, [_fire_of("second_landing")], None, {}) == ["Mirela"]
 
 
 def test_no_hazard_means_nothing_to_report():

@@ -448,11 +448,13 @@ def _foreign_persona_names(chat_id):
     events involved -- including ITS player. The receiving mind has no channel
     to that person: they were never in this story, were never perceived, were
     never told of. Importing the row as-is puts a stranger's name into a mind
-    as something it remembers, which is the plain shape of a firewall breach
-    (UNBUILT 1.74).
+    as something it remembers, which is the plain shape of a firewall breach.
 
     Every other cross-story read scrubs the previous player through
-    `player_handle_for`. This path is the one that did not.
+    `story/greetings.py`'s `player_handle_for`. This path is the one that did
+    not, and closes the gap by refusing the import instead -- see the caller
+    below. (E-mind-1 sibling, 2026-09-07: this pointed at UNBUILT §1.74, a
+    heading deleted when that refusal landed.)
     """
     from story.character_schema import persona_name
 
@@ -554,7 +556,10 @@ def import_character_memories(chat_id, char_id, memories,
                     "spoken of. Edit the export, or pass "
                     "allow_foreign_personas=True if both stories share a "
                     "player." % ", ".join(repr(h) for h in hits[:5]))
-    # Refuse a hashed bank rather than storing one (UNBUILT 1.75). The shared
+    # Refuse a hashed bank rather than storing one -- the import half of the
+    # answer whose other half is the pre-split in `mind/memory_write.py`
+    # (`_embed_in_request_sized_chunks`). (E-mind-1 sibling, 2026-09-07: this
+    # pointed at UNBUILT §1.75, a heading deleted when both landed.) The shared
     # writer deliberately does NOT do this: a turn whose provider is briefly
     # down should keep its memory and have it rebuilt later, because losing
     # the beat is worse. An import is the opposite case -- it is one host

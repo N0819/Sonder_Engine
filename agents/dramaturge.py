@@ -30,7 +30,6 @@ proposes nothing.
 
 from __future__ import annotations
 
-import json
 import time
 
 from core.logging_utils import logger
@@ -103,6 +102,7 @@ def player_visible_stream(cid, frame_id=None, beats=DRAMATURGE_BEATS):
     Spoiler-safe by construction: nothing here was hidden from the player.
     Oldest first."""
     from core.db import q
+    from persist.steps import active_content
     if frame_id is None:
         turns = q("SELECT id, idx, player_input FROM turns WHERE chat_id=? "
                   "AND frame_id IS NULL ORDER BY idx DESC LIMIT ?",
@@ -114,14 +114,13 @@ def player_visible_stream(cid, frame_id=None, beats=DRAMATURGE_BEATS):
     out = []
     for t in reversed(list(turns)):
         prose = ""
-        row = q("SELECT v.content FROM steps s JOIN variants v ON v.step_id=s.id "
-                "AND v.active=1 WHERE s.turn_id=? AND s.key='narrator' "
-                "ORDER BY s.ord DESC LIMIT 1", (t["id"],), one=True)
-        if row:
-            try:
-                prose = str((json.loads(row["content"]) or {}).get("prose") or "")
-            except (TypeError, ValueError):
-                prose = str(row["content"] or "")
+        # One reader of a step's active content (`persist/steps.py`); the
+        # copy that used to stand here answered `.get("prose")` on whatever
+        # the JSON parsed to, which is an AttributeError the moment a step's
+        # content is not a mapping (review 2026-09-07, B23).
+        content = active_content(t["id"], "narrator")
+        if isinstance(content, dict):
+            prose = str(content.get("prose") or "")
         player = str(t["player_input"] or "")
         budget = DRAMATURGE_BEAT_CHARS
         player = player[:budget // 3]

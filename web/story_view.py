@@ -37,6 +37,7 @@ import json
 import secrets
 
 from core.db import q, wget, wget_for_frame, wset
+from persist.steps import active_content
 from world.charter_runtime import REGISTRY_VERSION
 from world.living_world import OFFSCREEN_CEILING_KEY
 
@@ -219,20 +220,25 @@ def _reading_frame_id(frame_id):
 
 
 def _step_content(turn_id, key):
-    """The active variant of one step, or `None`.
+    """The active variant of one step, narrowed to a dict, or `None`.
 
-    `agents.storage.active_content` is the same read and is not used: it lives
-    behind the pipeline's import graph, and this module is imported by routes
-    that must not pull the agent runtime in to answer a panel refresh.
+    The read itself is `persist.steps.active_content` -- the ONE reader of
+    this table, imported here rather than copied. This module used to write
+    the query out again on the grounds that the same read lived behind the
+    pipeline's import graph, and it did while it lived in `agents/storage.py`;
+    the copy then drifted, keeping the engine's own repair log that the
+    original strips (review 2026-09-07, B23). `persist/steps.py` imports
+    `core.db` and nothing else, so a projection can read a step without
+    pulling the agent runtime in and the justification is gone.
+
+    What stays here is only the narrowing: every caller in this module reads
+    named keys off a mapping, so a step whose content is a list or a string
+    answers nothing and is `None`. The parse guard is the same shape -- a
+    projection reports what it can read; it does not fail a panel refresh
+    over one unreadable row.
     """
-    row = q("SELECT v.content FROM steps s JOIN variants v "
-            "ON v.step_id=s.id AND v.active=1 "
-            "WHERE s.turn_id=? AND s.key=? ORDER BY s.ord DESC LIMIT 1",
-            (turn_id, key), one=True)
-    if not row:
-        return None
     try:
-        content = json.loads(row["content"])
+        content = active_content(turn_id, key)
     except (TypeError, ValueError):
         return None
     return content if isinstance(content, dict) else None

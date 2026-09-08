@@ -3185,6 +3185,18 @@ class RenderedView:
     spans: list                 # [(Percept, sentence)]
     standing_keys: set          # dedupe keys of ALL standing percepts seen
     described: set              # source names whose full appearance rendered
+    # WHAT EACH STANDING KEY WAS FOR THIS OBSERVER THIS BEAT, as
+    # {dedupe_key: verdict} over `STANDING_VERDICTS`. Empty outside the
+    # player tier, which is the only one that diffs against a ledger at all.
+    #
+    # It is carried OUT of the render because the view is not the only thing
+    # downstream re-delivers a standing fact to (B28): the narrator's sensory
+    # manifest re-derives the same standing contacts from the scene, and with
+    # no verdict to read it shipped every one of them as though it had just
+    # happened -- measured chat 117, a hand that never left a belt announced
+    # on 40 of 70 beats, in the same beats the view had correctly gone quiet.
+    # One observer, one ledger, one answer: whoever re-delivers reads it.
+    verdicts: dict = field(default_factory=dict)
 
 
 #: Region and zone names that take a plural verb. An engine constant because
@@ -4006,7 +4018,8 @@ def _render_view_english(percepts, *, mode="character",
             else (standing_spans + event_spans)
     text = " ".join(sentence for _, sentence in spans).strip()
     return RenderedView(text=text, spans=spans,
-                        standing_keys=standing_keys, described=described)
+                        standing_keys=standing_keys, described=described,
+                        verdicts=dict(verdicts))
 
 
 def render_view(percepts, *, mode="character", prev_standing=frozenset(),
@@ -4027,6 +4040,17 @@ def render_view(percepts, *, mode="character", prev_standing=frozenset(),
     background on a player view the delta emptied rather than storing the
     None that `agents/narration.py` reads as a claim about the world.
     """
+    # THE VERDICT IS THE ENGINE'S, NOT THE PACK'S. Computed here rather than
+    # inside a renderer so both language paths carry the same answer: a pack
+    # that never heard of the field cannot leave a downstream re-delivery
+    # (see `RenderedView.verdicts`) with nothing to read.
+    def _stamp(out):
+        if mode == "player" and not out.verdicts:
+            out.verdicts = standing_verdicts(
+                [p for p in percepts or [] if p.order_key is None],
+                prev_standing, prev_described)
+        return out
+
     selected = renderer if renderer is not None else _safe_renderer(language)
     if selected is not None:
         try:
@@ -4043,15 +4067,15 @@ def render_view(percepts, *, mode="character", prev_standing=frozenset(),
                 raise TypeError(
                     f"language renderer returned {type(out).__name__}, "
                     "not RenderedView")
-            return out
+            return _stamp(out)
         except Exception:
             # A view is what an observer perceives at all. A malformed pack
             # must cost wording, never the whole beat, so fall through to the
             # in-module reference renderer rather than killing the turn.
             logger.exception("language renderer failed; using English wording")
-    return _render_view_english(
+    return _stamp(_render_view_english(
         percepts, mode=mode, prev_standing=prev_standing,
-        prev_described=prev_described, full_render=full_render)
+        prev_described=prev_described, full_render=full_render))
 
 
 # --------------------------------------------------------------------------

@@ -69,6 +69,7 @@ from .common import (
     _self_second_person,
     self_reference_forms,
     _resolve_player_room,
+    player_room_in,
 )
 from .director import (director_establish, director_interpret,
                        director_resolve, fanout_is_parallel)

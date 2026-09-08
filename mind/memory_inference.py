@@ -23,13 +23,18 @@ from mind.memory_write import _json_list
 # committed outcome of its own undecided beat.
 #
 # And the scan it would have optimised does not need optimising. Memories
-# accrue at ~3.5 rows per turn per character; measured with `_cos` verbatim,
-# the full scan costs 16ms at a real story's worst case (442 rows), 126ms at
-# ~1,000 turns, 709ms at ~10,000 -- beside an LLM call measured in seconds.
-# Two cheap optimisations sit in front of an index anyway if it ever mattered:
-# `_cos` recomputes both norms although every stored vector is already
-# normalised (~4x), and the loop could be one matmul (~20x). See
-# docs/UNBUILT.md §1.4.
+# accrue at ~3.5 rows per turn per character; measured against the
+# norm-dividing `_cos` of the day, the full scan cost 16ms at a real story's
+# worst case (442 rows), 126ms at ~1,000 turns, 709ms at ~10,000 -- beside an
+# LLM call measured in seconds, and an upper bound on today's cost rather
+# than a reading of it. One of the two cheap optimisations that sat in front
+# of an index has since LANDED: `_cos` is a plain dot product, since both
+# producers already normalise and the two `np.linalg.norm` calls per
+# comparison were each dividing by 1.0 (measured 4.4x, 4.99ms -> 1.13ms over
+# the same 442 rows). Stacking the loop into one matmul (~20x) is still
+# unbuilt. See docs/guides/MEMORY.md §10 and docs/experiments/RETRIEVAL_COST.md.
+# (E35, 2026-09-07: this described the norms as still there and cited
+# UNBUILT §1.4, an entry deleted when the index question was re-decided.)
 
 
 # How far an inference the character no longer holds is pushed down, and the

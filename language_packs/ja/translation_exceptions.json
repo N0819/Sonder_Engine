@@ -75,7 +75,6 @@
   "[data-ext-button]": "CSS or DOM selector used to find elements",
   "[data-ext-composer]": "CSS or DOM selector used to find elements",
   "[data-tab=\"relationships\"]": "CSS or DOM selector used to find elements",
-  "[title],[aria-label],[placeholder],[alt]": "CSS or DOM selector used to find elements",
   "^${parts.join(\"(.+?)\")}$": "JavaScript or regular-expression source fragment",
   "a specialist needs an extension id and a name": "CSS class names",
   "ABCD1234": "example invite code, shown as a format hint",

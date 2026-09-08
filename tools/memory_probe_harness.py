@@ -25,7 +25,8 @@ Discipline the instrument enforces:
   with no semantic capability, and crc32 is exactly that. So the flag scores,
   and in exchange every result it produces is stamped: the report carries
   `allow_fallback_queries` and a per-bank `fallback_queries` count, and the
-  run prints a banner. The distinction UNBUILT §1.75 is about is undeclared
+  run prints a banner. The distinction the request pre-split
+  (`mind/memory_write._embed_in_request_sized_chunks`) is about is undeclared
   substitution versus a chosen mode; this is the second one. The pass rule
   does not move, and without the flag nothing changes.
 - Probes run with no aspects and no location cues — the standalone-query
@@ -137,9 +138,12 @@ def _prewarm_queries(paths, cache, cache_path, allow_fallback=False):
     cold run produce byte-identical verdicts -- which is the property the
     frozen probe sets depend on.
 
-    Batched by estimated tokens rather than count, for the reason UNBUILT 1.75
-    records: a request refused for being too large is not retried into
-    success, it is silently replaced by hash vectors.
+    Batched by estimated tokens rather than count, for the reason
+    `mind/memory_write._embed_in_request_sized_chunks` records: a request
+    refused for being too large is not retried into success, it is silently
+    replaced by hash vectors. (E-mind-1 sibling, 2026-09-07: both of this
+    file's pointers named UNBUILT §1.75, a heading deleted when that split
+    landed.)
     """
     from llm.providers import embed_texts_meta, embedding_model_key
 

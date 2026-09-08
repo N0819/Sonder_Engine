@@ -59,7 +59,13 @@ from persist import commit  # noqa: E402
 # --- invariants -------------------------------------------------------------
 
 def _worn_names(attire_map, owner):
-    entry = attire_map.get(owner) or {}
+    # Through `attire.entry_for`, the ledger's own reader: the caller at
+    # "entity says worn" passes the Director's `worn_by` spelling of the
+    # wearer, which the wardrobe's key need not match, and a bare `.get`
+    # there made the one diagnostic aimed at this class report a false
+    # "entity says worn, wardrobe disagrees" on a case-variant key (review
+    # 2026-09-07 B5).
+    entry = attire.entry_for(attire_map, owner)
     return [str(x) for x in (entry.get("wearing") or []) if str(x).strip()]
 
 

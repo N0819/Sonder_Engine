@@ -446,9 +446,16 @@ class TestRegionEvents:
         out = _publish(cid, uid)
         first = out["applied"][0]["result"]["first"]
         assert sorted(first["damaged"]) == ["lane", "quay", "warehouse"] and first["ruined"] == []
+        # The hazard stands in world_conditions, the one store for a standing
+        # condition of a place (B8) -- the scene keeps no second copy.
         scene = temp_db.wget(cid, "scene")
-        assert scene["rooms"]["warehouse"]["hazard"]["state"] == "burning"
-        assert "hazard" not in scene["rooms"]["hall"]
+        assert "hazard" not in scene["rooms"]["warehouse"]
+        stated = {r["subject_id"]: json.loads(r["payload"])
+                  for r in temp_db.q("SELECT subject_id, payload FROM "
+                                     "world_conditions WHERE chat_id=? AND active=1",
+                                     (cid,))}
+        assert stated["warehouse"]["state"] == "burning"
+        assert "hall" not in stated
         hall = _charter(cid)
         shocks = [r for r in hall["interventions"] if r["op"] == "upkeep_shock"]
         assert [s["upkeep"] for s in shocks] == ["stores"] and shocks[0]["delta"] == -0.25
@@ -471,9 +478,16 @@ class TestRegionEvents:
         }])
         _publish(cid, uid)
         fire_due_clocks(cid, 3, turn_id=turn_ids[-1])
+        # The ruin is kept as a place in the scene and carries no flag of its
+        # own: the registry answers whether it is retired, world_conditions
+        # what stands over it (B8).
         scene = temp_db.wget(cid, "scene")
-        assert scene["rooms"]["warehouse"]["ruined"] is True
-        assert scene["rooms"]["warehouse"]["hazard"]["state"] == "ruined"
+        assert "ruined" not in scene["rooms"]["warehouse"]
+        assert "hazard" not in scene["rooms"]["warehouse"]
+        stated = json.loads(temp_db.q(
+            "SELECT payload FROM world_conditions WHERE chat_id=? AND "
+            "subject_id='warehouse' AND active=1", (cid,), one=True)["payload"])
+        assert stated["state"] == "ruined"
         row = temp_db.q("SELECT retired_turn_id FROM room_registry WHERE chat_id=? "
                         "AND room_uid='warehouse'", (cid,), one=True)
         assert row["retired_turn_id"] == turn_ids[-1]
@@ -495,15 +509,18 @@ class TestRegionEvents:
         out = _publish(cid, uid)
         result = out["applied"][0]["result"]
         assert result["waves_done"] == 1 and result["waves_pending"] == 2
-        scene = temp_db.wget(cid, "scene")
-        assert "hazard" in scene["rooms"]["quay"] and "hazard" not in scene["rooms"]["warehouse"]
+        # Which rooms stand under the flood is asked of world_conditions, the
+        # one store for a standing condition of a place (B8).
+        def _under(room):
+            row = temp_db.q("SELECT payload FROM world_conditions WHERE chat_id=? "
+                            "AND subject_id=? AND active=1", (cid, room), one=True)
+            return json.loads(row["payload"])["state"] if row else None
+        assert _under("quay") == "flooded" and _under("warehouse") is None
         assert fire_due_clocks(cid, 3, elapsed=1800.0)["waves"] == 0
         assert fire_due_clocks(cid, 3, elapsed=3600.0)["waves"] == 1
-        scene = temp_db.wget(cid, "scene")
-        assert scene["rooms"]["warehouse"]["hazard"]["state"] == "flooded"
-        assert "hazard" not in scene["rooms"]["lane"]
+        assert _under("warehouse") == "flooded" and _under("lane") is None
         assert fire_due_clocks(cid, 4, elapsed=7200.0)["waves"] == 1
-        assert "hazard" in temp_db.wget(cid, "scene")["rooms"]["lane"]
+        assert _under("lane") == "flooded"
         assert get_package(cid, uid)["operations"][0]["waves"] == []
 
     def test_harm_is_an_act_the_player_grants(self, temp_db):

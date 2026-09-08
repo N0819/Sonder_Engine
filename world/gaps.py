@@ -356,7 +356,8 @@ def last_seen_update(scene, cast_rows, player_name, turn_idx, elapsed_seconds):
     presence, name-keyed by convention -- is SKIPPED, not minted for: this
     ledger is born in id space and stays there.
     """
-    from story.character_schema import cast_entity_id, character_name_from_text
+    from story.character_schema import (
+        cast_entity_id, character_identity_from_text, character_name_from_text)
 
     positions = (scene or {}).get("positions")
     if not isinstance(positions, dict) or not player_name:
@@ -386,7 +387,11 @@ def last_seen_update(scene, cast_rows, player_name, turn_idx, elapsed_seconds):
         sid = cast_entity_id(sheet, row["id"])
         claim(character_name_from_text(row["sheet"]), sid)
         claim(sid, sid)
-        for alias in ((sheet.get("identity") or {}).get("aliases") or []):
+        # Aliases through the one identity reader, never off the stored blob
+        # (review 2026-09-07 B12): a repaired or legacy card keeps its aliases
+        # somewhere `sheet["identity"]` is not, and a sighting claimed by no
+        # alias is a sighting this index cannot resolve.
+        for alias in character_identity_from_text(row["sheet"])["aliases"]:
             claim(alias, sid)
     for eid, ent in ((scene or {}).get("entities") or {}).items():
         if not isinstance(ent, dict):

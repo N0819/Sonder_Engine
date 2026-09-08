@@ -285,6 +285,7 @@ def _prepare_room_registry(cid, canon_book_id, prev_scene, sc):
         row["room_uid"]: row
         for row in q("SELECT * FROM room_registry WHERE chat_id=?", (cid,))
     }
+    prev_rooms = {str(r) for r in (prev_scene.get("rooms") or {})}
 
     upserts = []
     for rid, rdef in rooms.items():
@@ -334,21 +335,31 @@ def _prepare_room_registry(cid, canon_book_id, prev_scene, sc):
             payload["region"] = str(region)
         else:
             payload.pop("region", None)
+        # THE REGISTRY IS AUTHORITATIVE FOR RETIREMENT (review 2026-09-07 B8).
+        # A projection of the scene revives a retired row only when the
+        # room's live existence BEGINS this beat -- the mirror of the retire
+        # rule below, which fires when it ENDS. A row retired out of band
+        # while its room still stands in the scene therefore stays retired
+        # rather than being un-retired by the next commit that merely sees it
+        # there: `world.region_events.apply_wave` retires a ruined room and
+        # keeps it in the scene on purpose (a ruin is still a place), and
+        # before this the ruin came back live one commit later.
+        row_retired = row is not None and row["retired_turn_id"] is not None
+        revive = not row_retired or rid not in prev_rooms
         if row is not None \
                 and row["owning_book_id"] == book_id \
                 and row["parent_entity"] == owner \
                 and row["name"] == name \
                 and row["aliases"] == json.dumps(aliases) \
                 and payload == original_payload \
-                and row["retired_turn_id"] is None:
-            continue  # already registered, identical, live
+                and not (row_retired and revive):
+            continue  # already registered, identical, and settled either way
         upserts.append({
             "room_uid": rid, "owning_book_id": book_id,
             "parent_entity": owner, "name": name, "aliases": aliases,
-            "payload": payload,
+            "payload": payload, "revive": revive,
         })
 
-    prev_rooms = {str(r) for r in (prev_scene.get("rooms") or {})}
     retire = sorted(
         rid for rid in prev_rooms - {str(r) for r in rooms}
         if rid in existing and existing[rid]["retired_turn_id"] is None
@@ -360,7 +371,10 @@ def _apply_room_registry(cid, turn_id, registry):
     """Write the prepared registry mutations (inside commit_scene's
     transaction). Upsert revives a retired row when the same key is
     genuinely re-minted live -- same key in the same chat is the same
-    identity; the registry records that it exists again."""
+    identity; the registry records that it exists again. `revive` is what
+    _prepare_room_registry decided about that (B8), and a row without the key
+    keeps the old unconditional behaviour, so a caller building mutations by
+    hand is unchanged."""
     for rid in registry.get("retire") or []:
         qi(
             "UPDATE room_registry SET retired_turn_id=? "
@@ -378,8 +392,8 @@ def _apply_room_registry(cid, turn_id, registry):
             "parent_entity=excluded.parent_entity,"
             "name=excluded.name,"
             "aliases=excluded.aliases,"
-            "payload=excluded.payload,"
-            "retired_turn_id=NULL",
+            "payload=excluded.payload"
+            + (",retired_turn_id=NULL" if row.get("revive", True) else ""),
             (cid, row["room_uid"], row["owning_book_id"],
              row["parent_entity"], row["name"], json.dumps(row["aliases"]),
              json.dumps(row.get("payload") or {}), turn_id),

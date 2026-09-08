@@ -710,10 +710,16 @@ the UI reads its state from the predicate rather than re-deriving it.
 the head; the rest load in a fixed order:
 
 ```
-utils.js → components.js → editors.js → lorebooks.js → backdrops.js
-        → ambience.js → weather-fx.js → chime.js → chat.js → writers_room.js
-        → world_browser.js → settings.js → themes.js → extensions.js → app.js
+i18n-core.js → utils.js → components.js → editors.js → lorebooks.js
+        → backdrops.js → ambience.js → weather-fx.js → chime.js → chat.js
+        → writers_room.js → world_browser.js → settings.js → themes.js
+        → extensions.js → app.js
 ```
+
+`i18n-core.js` holds the localization rules and nothing else, because
+`static/login.html` and `static/guest.html` load it too (before `i18n.js`,
+their own catalog fetch) and load no other SPA script. Those pages used to
+carry a second copy of the rules, which drifted twice.
 
 `writers_room.js` and `world_browser.js` sit between `chat.js` and
 `settings.js` on purpose: each binds a control of its own (`#room-tab`;

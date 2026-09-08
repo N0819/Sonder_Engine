@@ -3,6 +3,8 @@
 Where retrieval, summaries and the active state become one context -- the
 assembly seam, and the only place that decides what a mind is handed."""
 
+from itertools import zip_longest
+
 from core.db import q
 from llm.providers import embed_texts_meta
 from llm.prompts import payload_legacy
@@ -155,7 +157,9 @@ def _origin_on_drift(chat_id, char_id, current_turn_idx, active_state, *,
     An origin is not a similarity match: a character's foundational era is
     frequently dissimilar to whatever is happening now, which is exactly when
     it should still be present. Top-k similarity ranking drops it in the beats
-    where it matters most (UNBUILT §1.21).
+    where it matters most; see `docs/guides/MEMORY.md` §8. (E-mind-1 sibling,
+    2026-09-07: this pointed at UNBUILT §1.21, a heading deleted when this
+    function landed.)
 
     Three drift signals, all already tracked in the active state:
 
@@ -277,6 +281,42 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     recent_ids = {m["id"] for m in recent}
     summary = get_memory_summary(
         chat_id, char_id, before_turn_idx=current_turn_idx)
+    # WHAT IS STILL UNSETTLED, COMPUTED ONCE. Two things leave a question
+    # open for a mind -- a concern it declared at the close of an earlier beat
+    # and a thread its own summary left dangling -- and they are one list, not
+    # two. The payload used to answer that question twice: `unresolved_from_past`
+    # (this list, deduped, capped, and labelled `remembered_past`) beside a bare
+    # `unresolved_threads` copy of the summary field alone, which carried no
+    # temporal label and a different set of items. Review 2026-09-07 B32. The
+    # retrieval aspect below asks the same question, so it reads the same list;
+    # anything that reaches the mind under this heading comes from here.
+    #
+    # MERGING TWO SOURCES MUST NOT LET ONE SOURCE'S LENGTH DELETE THE OTHER.
+    # Concatenating and then truncating is a silent precedence rule: whichever
+    # list is written first owns every slot it can fill. `active_concerns` is
+    # free model output (llm/schemas.py, a `list[str]` bounded only by
+    # FREE_STRING_LIST_LIMIT) replaced wholesale each beat and pruned by
+    # nothing, so a mind that emitted six distinct concerns would have erased
+    # its summary's dangling threads outright -- the very threads consolidation
+    # is instructed to preserve rather than resolve. Interleaving instead makes
+    # the cut source-blind: each source reaches the payload whenever it has
+    # anything to contribute, and neither needs a reserved quota to get there.
+    #
+    # `remembered_past` is accurate for both halves, not a convenience. A live
+    # concern is not a present percept: `active_state.active_concerns` is
+    # written when a beat commits (persist/commit_memory.py) and read back on a
+    # later one, so by the time it appears here it is something this mind
+    # declared in a beat that is over. Nothing in this list is evidence that
+    # anything is happening now.
+    live_concerns = [
+        str(item) for item in (active_state.get("active_concerns") or [])
+        if str(item).strip()]
+    remembered_threads = [
+        str(item) for item in (summary.get("unresolved_threads") or [])
+        if str(item).strip()]
+    unresolved_items = list(dict.fromkeys(
+        item for pair in zip_longest(live_concerns, remembered_threads)
+        for item in pair if item is not None))[:6]
     # P8: the other two epistemic classes travel as their own labelled fields
     # rather than being melted into the first-hand paragraph. A character must
     # be able to tell what they saw from what they were told from what they
@@ -311,8 +351,7 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     aspects = [
         ("what you are trying to do", str(active_state.get("goal") or "")),
         ("how you are feeling", str(active_state.get("mood") or "")),
-        ("what is still unsettled",
-         " ".join(summary.get("unresolved_threads") or [])),
+        ("what is still unsettled", " ".join(unresolved_items)),
     ]
     if not query_text:
         # No perception this beat (a character gated out of the scene): fall
@@ -350,13 +389,15 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     # the SAME SHAPE, and a statistic over scores cannot read content
     # (UNBUILT 1.76).
     #
-    # The replacement reads the rows, and lives in `agents/character.py`
-    # (`_attach_recall_review`) rather than here -- it costs a model call, and
-    # the other caller of this function is an author-facing preview route that
-    # must not pay for one. The function survives for the probe harness, which
-    # is the only reader entitled to a number it must not trust. Removing the
-    # call also removes a second full bank scan per character per beat, which
-    # is most of what the review costs back.
+    # The replacement reads the rows, and lives in `mind/memory_judge.py`
+    # (`review_recall`, called by `review_minted_memories` out of band from
+    # `commit_memory_write.schedule_memory_tension_pass`) rather than here --
+    # it costs a model call, and the other caller of this function is an
+    # author-facing preview route that must not pay for one. The function
+    # survives for the probe harness, which is the only reader entitled to a
+    # number it must not trust. Removing the call also removes a second full
+    # bank scan per character per beat, which is most of what the review
+    # costs back.
     recalled = [m for m in recalled if m["id"] not in recent_ids]
     if len(recalled) > recall_limit:
         recalled = sorted(
@@ -450,7 +491,9 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
                                  w.get("end_turn_idx"))}
         for w in sorted(earlier, key=lambda w: (w.get("end_turn_idx") or 0))
     ]} if earlier else {}
-    # Origin-era retrieval on drift (UNBUILT §1.21).
+    # Origin-era retrieval on drift (`_origin_on_drift`; `docs/guides/MEMORY.md`
+    # §8 -- E-mind-1 sibling, 2026-09-07: this pointed at UNBUILT §1.21, a
+    # heading deleted when the mechanism landed).
     #
     # A character's foundational era is frequently DISSIMILAR to whatever is
     # happening now, which is exactly when it should still be present -- a
@@ -596,14 +639,11 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
                               if m.get("id") is not None],
             "scores": score_rows,
         },
+        # The one place this payload says what is still open. See
+        # `unresolved_items` above.
         "unresolved_from_past": {
             "temporal_status": "remembered_past",
-            "items": list(dict.fromkeys([
-                *[str(item) for item in (active_state.get("active_concerns") or [])
-                  if str(item).strip()],
-                *[str(item) for item in (summary.get("unresolved_threads") or [])
-                  if str(item).strip()],
-            ]))[:6],
+            "items": list(unresolved_items),
         },
         "recent_episodes": recent_experienced,
         **({"recent_received_information": recent_received}
@@ -616,7 +656,6 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
         # separately below and must not be folded in here.
         "autobiographical_summary": summary.get("summary") or "",
         "summary_key_phrases": summary.get("key_phrases") or [],
-        "unresolved_threads": summary.get("unresolved_threads") or [],
         **({"summary_citations": summary_citations}
            if summary_citations else {}),
         **earlier_payload,

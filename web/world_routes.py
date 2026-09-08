@@ -246,7 +246,8 @@ from core import db
 from core.db import q, transaction, wset
 from persist.commit import sync_room_registry_with_scene
 from story import room_slice as rooms
-from story.attire import GARMENT_STATES, REGIONS as ATTIRE_REGIONS
+from story.attire import (GARMENT_STATES, REGIONS as ATTIRE_REGIONS,
+                          entry_for as attire_entry_for)
 from story.character_schema import character_name, persona_name
 from story.scene import get_scene, persona_of
 from world.spatial import (
@@ -639,7 +640,10 @@ def body_rows(cid, chat, scene, charter=None):
                           if isinstance(room_def, dict) else room),
             "station": stations.get(name),
             "pose": poses.get(name),
-            "attire": attire.get(name),
+            # `entry_for`: `names` is built from positions as well as from
+            # the wardrobe, so the spelling in hand need not be the ledger's
+            # (review 2026-09-07 B5).
+            "attire": attire_entry_for(attire, name) or None,
         })
     out.sort(key=lambda b: (b["kind"] != "player", b["name"].casefold()))
     for key, rec in sorted((charter or {}).items(), key=lambda kv: kv[0].casefold()):

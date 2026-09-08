@@ -1677,9 +1677,16 @@ def agent_context(cid, entry, *, frame_id=None, clock=None, turn_idx=None):
     """
     from core.db import q
 
+    from story.character_schema import character_identity
+
     sheet = entry.get("sheet") or {}
     state = entry.get("state") if isinstance(entry.get("state"), dict) else {}
-    identity = (sheet.get("identity") or {})
+    # The one identity reader (review 2026-09-07 B12). Read off the stored
+    # blob, this payload could call a mind by a different name than the entry
+    # it was built from: `dormant_entries` sets `display` with
+    # `character_name_from_text`, which normalizes, and a card whose name the
+    # shape repair had to lift out of top level arrived here as "".
+    identity = character_identity(sheet)
     psychology = (sheet.get("psychology") or {})
     char_id = entry.get("char_id")
 
@@ -1740,8 +1747,7 @@ def agent_context(cid, entry, *, frame_id=None, clock=None, turn_idx=None):
         }
 
     context = {
-        "identity": {"name": identity.get("name") or "",
-                     "uid": identity.get("uid") or ""},
+        "identity": {"name": identity["name"], "uid": identity["uid"]},
         "psychology": psychology.get("traits") or {},
         "drive": psychology.get("drive") or {},
         "memories": memories,

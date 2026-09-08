@@ -1,20 +1,23 @@
-"""Two localizers, one set of rules.
+"""One translator, loaded twice -- not two translators kept in step by hand.
 
-`static/js/utils.js` localizes the host SPA; `static/js/i18n.js` localizes the
-login and guest pages, which deliberately do not load the SPA. Running both on
-one page meant a second catalog fetch, a second permanent observer, and a race
-over which localized a node first -- so there are two implementations on
-purpose, and `i18n.js`'s own header asks that their RULES stay identical.
+B25 (review 2026-09-07). `static/js/utils.js` localizes the host SPA;
+`static/js/i18n.js` localizes the login and guest pages, which deliberately do
+not load the SPA. Running both on one page meant a second catalog fetch, a
+second permanent observer, and a race over which localized a node first -- so
+the two LOADERS are separate on purpose. What was not on purpose is that the
+RULES were copied into both files.
 
-They have drifted twice. The first time over whitespace, which ate the space in
-`Hinami 何をすべきか決めている`. The second over the skip set: `utils.js` applies
-its skip tree to attributes as well as text, after a character named "Cast" got
-a translated tooltip on the very element whose text `translate="no"` was
-protecting -- and `i18n.js` applied no skip filter to attributes at all.
+They drifted twice. First over whitespace, which ate the space in
+`Hinami 何をすべきか決めている`. Then over the skip set: `utils.js` applies its
+skip tree to attributes as well as text, after a character named "Cast" got a
+translated tooltip on the very element whose text `translate="no"` was
+protecting -- and `i18n.js` applied no skip filter to attributes at all. The
+test that used to live here pinned the two copies equal, which catches a
+divergence only after it is written.
 
-A shared module would be the real answer, and is not available here: `i18n.js`
-must stand alone on a page that loads nothing else. So the equality is pinned
-instead.
+So the rules moved to `static/js/i18n-core.js`, loaded by the SPA and by the
+standalone pages alike, and what is pinned now is that there is exactly one
+copy and that every page reads it.
 """
 
 from __future__ import annotations
@@ -23,31 +26,89 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-UTILS = (ROOT / "static/js/utils.js").read_text(encoding="utf-8")
-I18N = (ROOT / "static/js/i18n.js").read_text(encoding="utf-8")
+STATIC = ROOT / "static"
+CORE = (STATIC / "js/i18n-core.js").read_text(encoding="utf-8")
+UTILS = (STATIC / "js/utils.js").read_text(encoding="utf-8")
+I18N = (STATIC / "js/i18n.js").read_text(encoding="utf-8")
+
+# Every rule the two localizers once held a copy of apiece.
+SHARED_RULES = (
+    "I18N_SKIP_TREE",
+    "I18N_SKIP_TEXT",
+    "I18N_ATTRS",
+    "i18nCompileTemplates",
+    "i18nTranslate",
+    "i18nLocalize",
+    "i18nObserve",
+)
 
 
-def _selector(source: str, name: str) -> str:
-    match = re.search(r"\b%s = ('[^']*'|\"[^\"]*\")" % re.escape(name), source)
-    assert match, f"{name} not found"
-    return match.group(1).strip("'\"")
+def test_the_rules_are_defined_once_and_in_the_core():
+    for name in SHARED_RULES:
+        definitions = [
+            source for source in (CORE, UTILS, I18N)
+            if re.search(r"^(const|function) %s\b" % re.escape(name),
+                         source, re.MULTILINE)
+        ]
+        assert definitions == [CORE], f"{name} is not defined only in i18n-core.js"
 
 
-def test_both_localizers_skip_the_same_subtrees():
-    assert _selector(UTILS, "I18N_SKIP_TREE") == _selector(I18N, "SKIP_TREE")
+def test_neither_loader_keeps_a_second_walk_of_its_own():
+    """The walk is where both divergences happened: the whitespace re-attach
+    and the attribute skip filter both live in it."""
+    for source in (UTILS, I18N):
+        assert "createTreeWalker" not in source
+        assert "MutationObserver" not in source
 
 
-def test_both_localizers_exclude_the_same_editable_content():
-    """A textarea or input excludes only its CONTENT -- that content is data
-    being edited, while its placeholder and title are still chrome."""
-    assert "I18N_SKIP_TEXT = I18N_SKIP_TREE + ',textarea,input'" in UTILS
-    assert "SKIP_TEXT = SKIP_TREE + ',textarea,input'" in I18N
+def test_every_page_that_localizes_loads_the_core_first():
+    """A page loading a caller without the rules is a ReferenceError on boot,
+    which is louder than a divergence but still worth pinning: script order in
+    these files is hand-maintained and has no module graph behind it."""
+    for page, caller in (("index.html", "utils.js"),
+                         ("login.html", "i18n.js"),
+                         ("guest.html", "i18n.js")):
+        html = (STATIC / page).read_text(encoding="utf-8")
+        core_at = html.index("/static/js/i18n-core.js")
+        assert core_at < html.index("/static/js/" + caller)
 
 
-def test_both_localizers_apply_the_skip_tree_to_attributes_too():
-    """The divergence that was live: a subtree opted out must be opted out for
-    both passes, or a `translate="no"` element keeps a translated tooltip."""
-    for source, skip in ((UTILS, "I18N_SKIP_TREE"), (I18N, "SKIP_TREE")):
-        attr_pass = source[source.index('"[title],[aria-label]'):]
-        assert f".filter(element => !element.closest({skip}))" in attr_pass
-        assert f"!root.closest({skip})" in attr_pass
+def test_every_harness_that_injects_a_localizer_injects_the_rules_too():
+    """The same rule as the page test above, for the other kind of page.
+
+    A page that RUNS a localizer needs the rules on it first, and the served
+    HTML is not the only page that runs one: a browser test builds a synthetic
+    page out of `static/js` sources and is a loader in exactly the same sense.
+    `browser_tests/test_prose_emphasis.py` injects the slice of `utils.js` that
+    ends at `t()`, and `t()` stopped being self-contained the moment the rules
+    moved out of it -- every test in that file died on
+    `ReferenceError: i18nCompileTemplates is not defined` at the first element
+    `el()` built, while this Python tier stayed green through it. So the pin is
+    on the injection, not on the one file that had the hole.
+    """
+    localizers = ("utils.js", "i18n.js")
+    harnesses = sorted(
+        path for directory in ("tests", "browser_tests")
+        for path in (ROOT / directory).glob("*.py")
+        if "add_script_tag" in path.read_text(encoding="utf-8")
+    )
+    for path in harnesses:
+        source = path.read_text(encoding="utf-8")
+        injected = [name for name in localizers if '"%s"' % name in source]
+        if not injected:
+            continue
+        assert '"i18n-core.js"' in source, (
+            "%s injects %s without the rules it calls"
+            % (path.relative_to(ROOT), ", ".join(injected))
+        )
+
+
+def test_the_spa_still_owns_only_what_is_its_own():
+    """Two differences between the pages are real and must stay in the SPA:
+    its catalog comes from the bootstrap, and `t()` interpolates `{var}` on
+    top of the lookup."""
+    body = UTILS[UTILS.index("function t(source, vars = {})"):]
+    body = body[:body.index("function watchUILanguage")]
+
+    assert "S.uiCatalog" in body
+    assert "out.split(`{${key}}`)" in body

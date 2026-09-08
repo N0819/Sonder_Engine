@@ -1026,21 +1026,37 @@ def _place_orphan_mints(ctx, cid, sc, diff):
     2026-09-05 turns 14 and 18, `kitchen_sink_tap` minted unplaced twice in
     twenty turns, once each beat, because nothing ever placed the first.
 
-    So the commit answers it, with the answer the engine already gives a
-    person mint it cannot place (`director._mint_fallback_room`): the room
-    the beat resolved the player into. Subtractive, and the classes that have
-    no room BY CONSTRUCTION are skipped rather than forced into one -- a
-    bodiless voice is nowhere, a portal spans two rooms, a thing in transit is
-    between them, a body is placed by its own machinery, and a carried thing
-    is where its carrier is. Where the beat cannot say where the player is,
+    THE BEAT ANSWERS IT FIRST, AND THIS IS THE BACKSTOP. The placement now
+    runs in the Director's deterministic floor (`director_floors.
+    place_unplaced_mints`), where the omission audit, the warning and the
+    mid-turn merge can all see it -- a placement made only here was a room to
+    the commit and nowhere to the other three (review 2026-09-07 B15). What
+    reaches this pass is a diff that never met that floor, or a beat that
+    could not say where it was happening while this scene can.
+
+    The answer is the one the engine already gives a person mint it cannot
+    place (`director._mint_fallback_room`): the room the beat resolved the
+    player into. Subtractive, and the classes that have no room BY
+    CONSTRUCTION are skipped rather than forced into one -- a bodiless voice
+    is nowhere, a portal spans two rooms, a thing in transit is between them,
+    a body is placed by its own machinery, and a carried thing is where its
+    carrier is; that list is `unplaced_mints_needing_a_room`'s and is asked
+    for, never restated. Where the beat cannot say where the player is,
     nothing is placed and the Director's warning stands: inventing a room for
     a thing is worse than leaving it nowhere.
     """
-    minted = _minted_this_beat({}, diff)
-    minted = [eid for eid in minted if eid in (sc.get("entities") or {})]
+    # WHICH MINTS NEED A ROOM IS ONE QUESTION WITH ONE ANSWER, and this had
+    # its own second copy of it -- the same classes, listed again, reading the
+    # scene the beat ends with rather than the diff (review 2026-09-07 B15).
+    # The Director's floor asks the same function before the beat's own merge,
+    # so a thing cannot be nowhere to the beat and somewhere here; what
+    # survives to this pass is a diff that never met that floor, or a beat
+    # that could not say where it was happening and this scene can.
+    from agents.director import unplaced_mints_needing_a_room
+    minted = [eid for eid in unplaced_mints_needing_a_room(None, diff, merged=sc)
+              if eid in (sc.get("entities") or {})]
     if not minted:
         return []
-    from world.spatial import _is_body_entity, room_of
     player = _player_name_or_none(ctx)
     here = str(_room_of(sc, player) or "") if player else ""
     if not here:
@@ -1051,30 +1067,13 @@ def _place_orphan_mints(ctx, cid, sc, diff):
         moved = {str(r) for r in ((diff or {}).get("positions") or {}).values()
                  if str(r or "").strip()}
         here = str(next(iter(moved))) if len(moved) == 1 else ""
+    if not here:
+        return []
     positions = sc.get("positions")
     if not isinstance(positions, dict):
         positions = sc["positions"] = {}
-    contained = sc.get("contained") if isinstance(sc.get("contained"), dict) else {}
-    carried = {str(k).strip().casefold() for k in contained}
     placed = []
     for eid in minted:
-        ent = (sc.get("entities") or {}).get(eid)
-        if not isinstance(ent, dict):
-            continue
-        if ent.get("ubiquitous") or ent.get("interior_rooms"):
-            continue
-        state = ent.get("state")
-        if isinstance(state, dict) and (state.get("link") or state.get("transit")):
-            continue
-        if _is_body_entity(sc, eid, ent):
-            continue
-        labels = _entity_labels(eid, ent)
-        if labels & carried:
-            continue
-        if any(room_of(sc, label) is not None for label in labels):
-            continue
-        if not here:
-            continue
         positions[eid] = here
         placed.append(eid)
     for eid in placed:

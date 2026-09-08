@@ -178,7 +178,7 @@ class TestStrandedEmbeddingsAreAnnounced:
     exact matching while newer ones keep all four signals: the bank splits into
     two eras at the moment of the upgrade. Retrieval still WORKS, which is
     precisely why it needs announcing rather than raising. See
-    docs/UNBUILT.md §1.15.
+    `Design.md` § Changing the embedding model is safe.
     """
 
     def _capture(self, monkeypatch):

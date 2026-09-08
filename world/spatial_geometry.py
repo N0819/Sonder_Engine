@@ -1549,7 +1549,11 @@ def _moved_subject_is_body(scene, subject) -> bool:
             return False
         if str(entity.get("kind") or "").strip().casefold() == "person":
             return True
-    if subject in ((scene or {}).get("attire") or {}):
+    # "Does the wardrobe know this body" asks the ledger the same way
+    # everything else does -- a case-variant key made a dressed person read
+    # as a thing (review 2026-09-07 B5).
+    from story.attire import key_for as attire_key_for
+    if attire_key_for((scene or {}).get("attire") or {}, subject) is not None:
         return True
     return entity is None
 

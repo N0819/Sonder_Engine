@@ -15,6 +15,7 @@ from core.db import q, wget
 from language_runtime import compositor_text, linguistic
 from story.character_schema import (
     cast_entity_id,
+    character_identity_from_text,
     character_name_from_text,
     character_abilities,
     character_embodiment_capabilities,
@@ -49,6 +50,7 @@ from mind.memory import (
     relationships_for_payload,
 )
 from llm.prompts import character_prompt
+from story import attire as attire_model
 from story.scene import (
     NON_AWAKE_GATED,
     active_transformations,
@@ -1799,10 +1801,16 @@ def _known_pronouns(cast, persona, recognized, exclude=None):
     sheets = []
     for row in (cast or []):
         try:
-            sheets.append((json.loads(row["sheet"]).get("identity") or {}))
+            # The one identity reader, never the stored blob (review
+            # 2026-09-07 B12): a card whose pronouns the shape repair lifted
+            # back into `identity` read as having none here, and a character
+            # handed no pronouns for someone they know guesses from the name --
+            # which is the defect this function exists to close.
+            sheets.append(character_identity_from_text(row["sheet"]))
         except Exception:
             continue
     if isinstance(persona, dict):
+        # `persona_of` already returns normalized persona data.
         sheets.append(persona.get("identity") or {})
     out = {}
     skip = {str(n or "").strip().casefold() for n in (exclude or [])}
@@ -3640,7 +3648,11 @@ def character_step(ctx, cid, nonce):
         # wearing, and knows it in the same terms the beat will be adjudicated
         # in -- two shapes for one fact is how `wearing` and `regions` drifted
         # apart in the first place.
-        "attire": compact_attire(sc.get("attire", {}).get(character_name(sh))),
+        # `entry_for`, not a bare `.get`: a case-variant ledger key told a
+        # dressed body it was wearing nothing, which is a self-knowledge
+        # failure rather than a missing observation (review 2026-09-07 B5).
+        "attire": compact_attire(
+            attire_model.entry_for(sc.get("attire"), character_name(sh))),
         # Its own authored extra body parts (tail, wings...). A mind knows its
         # own body whether or not anyone can see it -- same self-knowledge
         # floor as the interoception and attire lines beside this. Key absent

@@ -33,7 +33,7 @@ from mind.memory import (
 )
 from mind.theory_of_mind import apply_mind_model_updates
 from agents.runtime import _run_pipeline
-from agents.storage import active_content
+from persist.steps import active_mapping
 
 #: What produced an extraction, so a stored one can be refused. Raise this
 #: whenever `extract_greeting`'s prompt, schema or post-processing changes in
@@ -193,7 +193,7 @@ def _override_narrator(tid: int, prose: str) -> None:
     step = db.q("SELECT * FROM steps WHERE turn_id=? AND key='narrator'", (tid,), one=True)
     if not step:
         return
-    content = active_content(tid, "narrator") or {}
+    content = active_mapping(tid, "narrator")
     content["prose"] = prose
     db.qi("UPDATE variants SET active=0 WHERE step_id=?", (step["id"],))
     db.qi("INSERT INTO variants(step_id,content,created,active) VALUES(?,?,?,1)",

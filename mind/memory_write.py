@@ -672,8 +672,10 @@ def add_memory(chat_id, char_id, turn_id, kind, provenance, salience, content, *
 # the three largest banks in the live corpus (657/657/654 rows) each estimate
 # ~127k request tokens against a 120,000 cap. So the one path a host uses to
 # give a character a past is the one that silently produced a keyword-only
-# bank. Split before asking rather than hashing after being refused
-# (UNBUILT 1.75).
+# bank. Split before asking rather than hashing after being refused --
+# `_embed_in_request_sized_chunks` below, with the import path's own refusal in
+# `mind/memory_snapshot.py`. (E-mind-1 sibling, 2026-09-07: this pointed at
+# UNBUILT §1.75, a heading deleted when both landed.)
 #
 # Deliberately conservative, and deliberately here rather than in the provider
 # seam: the general fix belongs at the request layer and has to reckon with the

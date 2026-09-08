@@ -298,17 +298,46 @@ def test_no_assembled_sheet_id_has_a_part_file(language):
                    ) & set(ASSEMBLED_SHEET_IDS)
 
 
-def test_the_duplicated_prose_author_tail_stays_duplicated():
-    """`prose_author_sheet[28][1]` is byte-identical to
-    `prose_author_output_shape`, and they get two files.
+@pytest.mark.parametrize("language", LANGUAGES)
+def test_the_prose_author_tail_is_a_reference_not_a_second_copy(language):
+    """`prose_author_sheet[28][1]` is the output shape by REFERENCE (B27).
 
-    Deduping them behind a shared reference is a behaviour change wearing a
-    refactor's clothes: the two are read by different assemblies and either
-    may legitimately change without the other. This asserts the current fact
-    so that a future divergence is a decision somebody made, not a surprise.
+    It used to be a second copy of the same bytes, held equal by a test --
+    two leaves free to drift, with an assertion standing where a single
+    source belonged. It had already cost a beat: `ledger_notes` was declared
+    in the standalone shape and in the sheet's copy as two separate edits,
+    and the resolve prompt reads the SHEET, so an edit to one alone leaves
+    the model unaware of the field. The reference resolves at card load, so
+    the assembled sheet is unchanged and the drift is gone by construction.
+
+    The reference must be the WHOLE leaf: a sheet segment that wrapped it in
+    words of its own would be a third spelling of the shape. The class this
+    instance belongs to -- no two prose leaves of a card hold the same text --
+    is `tests/test_one_leaf_per_prompt_contract.py`.
     """
-    card = raw_card("en")
-    assert card["prose_author_sheet"][28][1] == card["prose_author_output_shape"]
+    raw = raw_card(language)
+    assert raw["prose_author_sheet"][28][1] == (
+        "{{fragment:prose_author_output_shape}}")
+
+    from language_runtime import installed_language_packs
+
+    card = installed_language_packs()[language].card(CARD)
+    resolved = card["prose_author_sheet"][28][1]
+    assert resolved == card["prose_author_output_shape"]
+    assert "{{fragment" not in resolved
+
+
+def test_the_assembled_prose_author_sheet_still_carries_the_output_shape():
+    """The move was only a move, at the end the model actually reads (B27).
+
+    English only, because `DEFAULT_PROMPTS` is the English card. The assembled
+    sheet ends with the policy suffix rather than the shape, so this is `in`
+    rather than an equality on the tail.
+    """
+    from llm.prompts import DEFAULT_PROMPTS, _PROSE_AUTHOR_OUTPUT_SHAPE
+
+    assert _PROSE_AUTHOR_OUTPUT_SHAPE in DEFAULT_PROMPTS[
+        "director_resolve_lean"]
 
 
 def test_a_missing_part_file_fails_the_load_rather_than_shortening_a_prompt(

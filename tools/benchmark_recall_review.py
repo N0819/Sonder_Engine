@@ -48,7 +48,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 def _rows_for(mem):
-    """The shape `_attach_recall_review` hands over, from a raw search row."""
+    """The shape `review_minted_memories` hands `review_recall`, from a raw
+    search row (`mind/memory_judge.py`)."""
     return {
         "memory_ref": str(mem.get("event_key") or ""),
         "when": "about %s beats ago" % mem.get("turn_idx"),

@@ -36,10 +36,17 @@ def _scene(**over):
 
 
 def _manifest(scene, view="", observations=(), recognized=(), cast_info=None,
-              room="yard"):
+              room="yard", verdicts=None):
     return _sensory_channels_manifest(
         scene, PLAYER, view, list(observations), set(recognized),
-        cast_info or {}, room)
+        cast_info or {}, room, standing_verdicts=verdicts)
+
+
+def _clauses(entry):
+    """The clause text of one channel's standing entries. Entries are
+    `{clause, verdict?}` since B28 -- the verdict is the observer's own
+    composer ledger's and is absent where that ledger has no answer."""
+    return [row["clause"] for row in (entry or {}).get("standing") or []]
 
 
 def test_manifest_absent_without_room_or_scene():
@@ -108,12 +115,12 @@ def test_standing_contact_reaches_touch_with_identity_floor():
         "appearance": "a tall courier in a grey coat", "aliases": []}}
     m = _manifest(sc, cast_info=cast_info)
     assert m["touch"]["status"] == "live"
-    standing = " ".join(m["touch"]["standing"])
+    standing = " ".join(_clauses(m["touch"]))
     assert "wrist" in standing
     assert "Elyra" not in json.dumps(m)
     # Recognized, the same contact names her.
     m2 = _manifest(sc, recognized={"Elyra Voss"}, cast_info=cast_info)
-    assert "Elyra Voss" in " ".join(m2["touch"]["standing"])
+    assert "Elyra Voss" in " ".join(_clauses(m2["touch"]))
 
 
 def test_unplaceable_contact_partner_falls_to_someone():
@@ -127,7 +134,7 @@ def test_unplaceable_contact_partner_falls_to_someone():
                    "manner": "grip"}],
     )
     m = _manifest(sc)
-    standing = " ".join(m["touch"]["standing"])
+    standing = " ".join(_clauses(m["touch"]))
     assert "someone" in standing
     assert "Sable" not in json.dumps(m)
 
@@ -188,10 +195,10 @@ def test_weather_routes_per_channel():
     sc = _scene(weather={"sky": "storm", "precipitation": "rain",
                          "intensity": "heavy", "wind": "wind"})
     m = _manifest(sc)
-    assert any("storm" in w or "rain" in w for w in m["sight"]["standing"])
+    assert any("storm" in w or "rain" in w for w in _clauses(m["sight"]))
     assert any("rain" in w or "thunder" in w
-               for w in m["hearing"]["standing"])
-    assert any("falling on you" in w for w in m["touch"]["standing"])
+               for w in _clauses(m["hearing"]))
+    assert any("falling on you" in w for w in _clauses(m["touch"]))
     assert m["touch"]["status"] == "live"
 
 
@@ -207,9 +214,8 @@ def test_enclosed_room_gets_no_weather_words():
                  "intensity": "light", "wind": "calm"},
     )
     m = _manifest(sc, room="vault")
-    assert m["sight"]["standing"] == ["light: lit"]
-    assert not any("falling on you" in w
-                   for w in m["touch"].get("standing", []))
+    assert _clauses(m["sight"]) == ["light: lit"]
+    assert not any("falling on you" in w for w in _clauses(m["touch"]))
 
 
 def test_sight_status_follows_effective_light():

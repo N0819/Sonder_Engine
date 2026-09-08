@@ -493,8 +493,10 @@ def _fold_worn_garment_entities(sc, diff, ctx=None):
         owner = str(state.get("worn_by") or "").strip()
         if not owner or state.get("shed"):
             continue          # shed records are the floor object; leave them
-        entry = attire.get(owner)
-        if not isinstance(entry, dict):
+        # `worn_by` is the Director's spelling of the wearer, which the
+        # ledger's key need not match (review 2026-09-07 B5).
+        entry = attire_model.entry_for(attire, owner)
+        if not entry:
             continue
         worn = [str(n) for n in (entry.get("wearing") or []) if str(n).strip()]
         name = str(entity.get("name") or "").strip()
@@ -925,7 +927,8 @@ def _reclaim_worn_shed_garments(sc, diff, ctx, gained):
             positions.pop(eid, None)
             names = [n for n in names if n != match]
             if ledger != match:
-                _rename_worn_garment(attire.get(owner), match, ledger)
+                _rename_worn_garment(
+                    attire_model.entry_for(attire, owner), match, ledger)
             reclaimed.append((eid, owner, match, ledger))
     for eid, owner, match, ledger in reclaimed:
         note = (

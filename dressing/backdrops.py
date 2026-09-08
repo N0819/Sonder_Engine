@@ -41,6 +41,7 @@ import re
 from core import outofband
 from core.db import q, wget_for_frame
 from core.logging_utils import logger
+from persist.steps import active_content
 from world.spatial import (
     _PASSABLE_BARRIERS, ROOM_SIZES, body_cell, effective_adjacent,
     effective_facing, effective_light, effective_room_size, light_at,
@@ -153,10 +154,25 @@ def place_desc(room):
 
 
 def _room_of_player(scene, player_name):
-    positions = (scene or {}).get("positions") or {}
-    if player_name and positions.get(player_name):
-        return positions[player_name]
-    return (scene or {}).get("player_room")
+    """Which room to draw and to sound: rung 1 of the pipeline's one ordering.
+
+    `world.spatial.room_of` -- identity-resolving, not spelling-matching --
+    because `positions` is keyed by whatever the writer used, and a player the
+    scene holds under her entity id or an alias is exactly the case a
+    `positions.get(name)` misses. A miss here is not a small wrong answer: the
+    backdrop and the ambience both return None, so the room the player is
+    standing in is neither drawn nor sounded.
+
+    This reader stops at rung 1 deliberately. It takes no `ctx` -- it is called
+    from the image and sound routes and from two tools, off any turn -- so
+    there is no cached answer to fall through to and no stage budget to spend
+    on the resolver; it is `common.player_room_in`'s `resolve=False` one rung
+    further down.
+
+    Review finding B36: this used to be a spelling-only lookup and then
+    `scene["player_room"]`, a key nothing in the engine writes.
+    """
+    return room_of(scene or {}, player_name) if player_name else None
 
 
 # The style-guide fields an image prompt is allowed to see, and therefore the
@@ -954,8 +970,14 @@ def player_view_for_turn(chat_id, turn_idx):
     Reads the committed step exactly as the narrator saw it. Never touches
     scene.rooms[...].desc -- see this module's docstring.
     """
+    # Which step answers is this module's question; what that step's active
+    # variant SAYS is `persist.steps.active_content`, the one reader of the
+    # steps/variants table (review 2026-09-07, B23). The copy that used to
+    # parse the content here is why a rule about that table -- what a
+    # non-mapping content means, what the engine's own repair log does --
+    # had four places to be stated and no place to be stated once.
     row = q(
-        "SELECT v.content FROM turns t "
+        "SELECT t.id AS turn_id, s.key AS step_key FROM turns t "
         "JOIN steps s ON s.turn_id=t.id "
         "JOIN variants v ON v.step_id=s.id AND v.active=1 "
         "WHERE t.chat_id=? AND t.idx=? AND s.key IN "
@@ -965,9 +987,12 @@ def player_view_for_turn(chat_id, turn_idx):
     if not row:
         return ""
     try:
-        views = (json.loads(row["content"]) or {}).get("views") or {}
+        content = active_content(row["turn_id"], row["step_key"])
     except (ValueError, TypeError):
         return ""
+    if not isinstance(content, dict):
+        return ""
+    views = content.get("views") or {}
     view = views.get("player")
     if isinstance(view, dict):
         view = view.get("view") or view.get("text") or ""

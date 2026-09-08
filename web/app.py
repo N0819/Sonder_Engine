@@ -45,6 +45,10 @@ from persist.checkpoints import (ensure_checkpoint, restore_checkpoint, snapshot
                          propagate_memory_summaries_to_checkpoints,
                          PRESERVED_SETTING_KEYS)
 from persist.chat_delete import delete_chat_data
+# Reading NAMED KEYS off a step's content: `active_mapping` narrows first,
+# because a step edited through `/api/steps/{sid}/edit` holds whatever the
+# body held (review 2026-09-07, B23).
+from persist.steps import active_mapping
 from core.frames import create_frame, get_frame, list_frames
 from world import paradox
 from story import greetings
@@ -3726,7 +3730,7 @@ def chat_get(cid: int):
 
     turns = []
     for t in q("SELECT * FROM turns WHERE chat_id=? ORDER BY idx", (cid,)):
-        nar = active_content(t["id"], "narrator") or {}
+        nar = active_mapping(t["id"], "narrator")
         rows = stale_by_turn.get(t["id"]) or []
         # Lowest ord, not rows[0]. First-row indexing is correct only while
         # the ORDER BY above holds; min() survives an arbitrary row order.
@@ -4266,7 +4270,7 @@ def guest_state(request: Request):
 
     turns = []
     for t in q("SELECT * FROM turns WHERE chat_id=? ORDER BY idx", (cid,)):
-        extra = active_content(t["id"], "narrator_extra") or {}
+        extra = active_mapping(t["id"], "narrator_extra")
         entry = extra.get(str(pid)) or {}
         my_input = q(
             "SELECT input FROM turn_player_inputs WHERE chat_id=? AND turn_idx=? "
@@ -6164,7 +6168,7 @@ def edit_prose(tid: int, body: dict = Body(...)):
     if not step:
         raise HTTPException(404, "This turn has no narrator output to edit")
 
-    content = active_content(tid, "narrator") or {}
+    content = active_mapping(tid, "narrator")
     content["prose"] = str(body.get("prose", ""))
 
     # Unlike /api/steps/{sid}/edit, this deliberately does not mark
