@@ -169,7 +169,8 @@ from persist.commit_scene_state import (_anchor_current_room, sync_anchored_book
     _is_overlay_ending, _minted_this_beat, _entity_labels,
     _fold_duplicate_mints, _place_orphan_mints, _report_started_sources,
     BEARING_MANNERS, _bearing_subject_key, derive_borne_containment,
-    _refuse_unheld_transfers)
+    _refuse_unheld_transfers, ComposedBeat, compose_beat_key,
+    compose_beat_scene, composed_beat_for)
 from persist.commit_mechanics import (commit_transit_sweep, commit_world_event_spine,
     commit_information_carriers, commit_cast_changes)
 from persist.commit_memory import (RECENT_TELLS_CAP, _durable_dialogue_category,

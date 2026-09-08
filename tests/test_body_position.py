@@ -1337,7 +1337,10 @@ def test_a_contact_report_does_not_kill_the_turn():
     import inspect
 
     from persist import commit
-    body = inspect.getsource(commit.prepare_scene_commit)
+    # The consumer moved with the merge it reads: since review 2026-09-07
+    # A26 the beat's composition is `compose_beat_scene`, one function
+    # perception_outcome and the commit share.
+    body = inspect.getsource(commit.compose_beat_scene)
     assert "for _was, _now in _contact_report" not in body
     assert "for _note in _contact_report" in body
 

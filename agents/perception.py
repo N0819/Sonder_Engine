@@ -27,7 +27,6 @@ from story.character_schema import (
 )
 from core.db import q, wget
 from core.pipeline_context import note_step_decision
-from world.mechanics import clock_elapsed
 from world.scene_memo import scene_read_pass
 from story import attire as attire_model
 from story.scene import (
@@ -2753,80 +2752,52 @@ def _background_beats(ctx, scene):
 
 def perception_outcome(ctx, nonce):
     chat = ctx.chat
-    sc = get_scene(chat["id"], chat)
     pers = persona_of(chat)
     known = wget(chat["id"], "known", {})
     res = ctx.get("director_resolve", {})
     interp = ctx.get("director_interpret", {})
 
-    # Room dedup runs BEFORE this stage's merge (Phase-2 re-scope of the
-    # Phase-1 one-beat skew): commit will deterministically rekey/redirect
-    # colliding minted room keys, and it is a pure function of the stored
-    # scene + registry + diff -- all unchanged between here and commit --
-    # so running it on a COPY of the diff yields the exact same renames.
-    # Without this, perception_outcome rendered the pre-dedup key for one
-    # beat while the committed world carried the canonical one. Local
-    # import: commit.py must stay ignorant of agent modules (facade rule),
-    # so the dependency points this way only (same precedent as commit's
-    # own _is_player).
-    from persist.commit import apply_attire_diff, dedup_minted_rooms
+    # THE SCENE THE COMMIT WILL WRITE, COMPOSED ONCE, HERE.
+    #
+    # This stage used to compose its own: a deep merge plus attire plus the
+    # three orientation inferences, standing beside the commit's composition
+    # and drifting from it three separate times. The last drift was measured
+    # (review 2026-09-07 A26): the mirror never ran `_refuse_unheld_transfers`,
+    # never passed `sleeping`, `carriers` or the report sinks into the merge,
+    # and never settled the plan's own exits -- so the narrator, and every
+    # memory episode built from this stage's views, could read a handover as
+    # done that the commit was about to refuse.
+    #
+    # `compose_beat_scene` is that one composition (persist/commit_scene_state).
+    # Its result is stashed on the context keyed by the stored scene's read
+    # token and the active resolve variant, and the commit takes it back
+    # rather than composing a second time -- so the beat is composed once per
+    # turn instead of twice, and the two cannot disagree by construction.
+    # Local import: commit.py must stay ignorant of agent modules (facade
+    # rule), so the dependency points this way only (same precedent as
+    # commit's own _is_player).
+    from persist.commit import compose_beat_scene
 
-    diff = copy.deepcopy(res.get("state_diff") or {})
-    dedup_minted_rooms(chat["id"], sc, diff)
-    prev_scene = sc
+    composed = compose_beat_scene(ctx)
+    ctx["_composed_beat"] = composed
+    # The warnings and the Director notes the composition raised are NOT
+    # published here. The commit is the one side that speaks to the Director,
+    # and it publishes them when it reads this composition back -- exactly as
+    # the mirror discarded them before.
+    # THE STAGE THAT RENDERS THE BEAT MAY NOT WRITE THE WORLD. `composed.scene`
+    # is the object the commit will persist, and this stage goes on to lay
+    # unregistered presence bodies onto the scene it holds (`lay_charter_bodies`
+    # below, "the stage's own fresh copy, never the store") -- so it works on
+    # a copy. The first A26 patch shared the object, and the skeptic's replay
+    # of the descent found a charter creature's position, station and facing
+    # committed as durable world state on 7 of 124 beats, with no entity row
+    # to match. 3 ms a beat on the descent's widest scene, against the 50-60
+    # ms the shared composition saves.
+    prev_scene = copy.deepcopy(composed.prev_scene)
+    diff = composed.diff
+    sc = copy.deepcopy(composed.scene)
     substance_events = resolve_substance_ops(
         prev_scene, diff.get("substance_ops"))
-    # THE SAME END-OF-BEAT CLOCK THE COMMIT WILL STORE, computed from the same
-    # stored clock and the same diff through the one helper that owns it. A
-    # passage carries its occupants onward on that clock inside the merge, so
-    # a mirror merged without it would compose the beat from the room a body
-    # has already left -- the same commit-equality this stage's own
-    # `dedup_minted_rooms` comment demands, for the same reason. No crossing
-    # report: the notices belong to the commit alone, which is the only side
-    # that speaks to the Director.
-    from world.mechanics import beat_end_elapsed
-
-    _td = diff.get("time") if isinstance(diff.get("time"), dict) else None
-    _beat_end, _b, _r, _floored = beat_end_elapsed(
-        clock_elapsed(wget(chat["id"], "simulation_clock", {}) or {}),
-        _td, floor=bool(res))
-    # THE CARD'S AUTHORED INSIDE, ON BOTH SCOPES, EXACTLY AS COMMIT DOES IT.
-    # `merge_scene_with_diff` builds a body's interior from the scene alone
-    # and cannot reach a sheet, so the topology has to be standing on the
-    # entity before the merge reads it -- and `stamp_authored_interiors` ran
-    # at commit and nowhere else. This mirror would then compose the beat the
-    # chain lands on from the OLD interior while the commit built the new one
-    # and moved the body into it: the same composed-versus-committed skew
-    # `dedup_minted_rooms` above exists to prevent, made worse by including
-    # where somebody is standing. Deterministic and idempotent (the commit
-    # re-runs it to the same result), and it writes nothing.
-    from agents.common import stamp_authored_interiors
-
-    for _scope in (sc, diff):
-        stamp_authored_interiors(_scope, ctx.cast,
-                                 player_name=persona_name(pers) or None)
-    sc = merge_scene_with_diff(sc, diff, clock_seconds=_beat_end)
-    # Attire is commit-owned and intentionally absent from spatial's generic
-    # merge. Preview the exact same canonicalized/region-derived result commit
-    # will persist, on copies, before any observer-specific body projection.
-    apply_attire_diff(sc, diff, ctx, res, report=False)
-
-    # Refresh per-character orientation (came_from/focus/facing) on the merged
-    # scene. infer_* run at COMMIT, which is AFTER the narrator -- so without
-    # this, the FOV/egocentric derivations below AND the narrator's spatial
-    # frame would use LAST beat's facing/came_from on exactly the movement beats
-    # they exist for (a room just entered, rendered with the prior heading).
-    # Pure and deterministic given (prev_scene, sc) -- commit re-runs them to
-    # the same result. Stashed on ctx so the narrator derives its
-    # spatial_frame from this same oriented scene, not the stale committed KV.
-    try:
-        from world.spatial_frames import infer_came_from, infer_focus, infer_facing
-        _o_names = [character_name_from_text(c["sheet"]) for c in ctx.cast]
-        infer_came_from(chat["id"], ctx.turn.frame_id, prev_scene, sc, _o_names)
-        infer_focus(chat["id"], ctx.turn.frame_id, prev_scene, sc, res, _o_names)
-        infer_facing(chat["id"], ctx.turn.frame_id, prev_scene, sc, _o_names)
-    except Exception as _oe:  # orientation is best-effort here; commit is authoritative
-        ctx.warnings.append(f"perception_outcome: orientation refresh skipped ({_oe})")
     ctx._extra["outcome_scene"] = sc
 
     # Prefer re-resolving against the just-merged (post-resolution) scene
