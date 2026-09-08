@@ -1550,21 +1550,30 @@ class SoundField:
 
 
 def _cache_key(scene, room_id, turn_idx, crowds, events, speakers) -> str:
-    entities = scene.get("entities") or {}
-    sound_entities = {}
-    if isinstance(entities, dict):
-        for eid, entity in entities.items():
-            if isinstance(entity, dict) and entity.get("sound_source"):
-                sound_entities[eid] = {
-                    "name": entity.get("name"),
-                    "sound_source": entity.get("sound_source"),
-                    "steadiness": entity.get("steadiness"),
-                    "state": entity.get("state"),
-                }
+    """The key is the WHOLE READ SET (review B10). Two of these were guesses
+    at what a sound field depends on rather than a record of it, and both
+    were short:
+
+    * `crossings` was read and unnamed. A body with a live threshold
+      crossing and no station stands at the door anchor it came through
+      (`effective_station`), and a source it carries is heard from there;
+      measured, the pump moved from (3,3) to (4,3) when the crossing
+      appeared, and the memo went on answering (3,3).
+    * the entity table was projected down to the entities that SOUND, and
+      the derivation reads every entity's names and aliases -- that is how a
+      body touching a room feature gets seated at it (`_anchor_for_entity`).
+      An entity that makes no noise still moves the noise: dropping the
+      brazier's alias moved the same source from (1,2) to (3,3).
+
+    So the scene goes in as the sub-blobs the derivation reads, entities
+    entire. A field that neither sounds nor shines is not a smaller read
+    set, only a smaller guess at one.
+    """
     parts = [room_id, turn_idx, crowds, events, speakers,
              scene.get("rooms"), scene.get("positions"), scene.get("stations"),
              scene.get("contacts"), scene.get("contained"),
-             scene.get("weather"), scene.get("day_phase"), sound_entities]
+             scene.get("crossings"), scene.get("weather"),
+             scene.get("day_phase"), scene.get("entities")]
     blob = json.dumps(parts, sort_keys=True, default=str)
     return hashlib.sha1(blob.encode("utf-8")).hexdigest()
 
@@ -1584,8 +1593,12 @@ def sound_field(scene: dict, listener: str, *, room=None, turn_idx=None,
     every reader falls back to today's functions unchanged).
 
     Cached on everything it reads -- the rooms, positions, stations,
-    contacts, containment, weather, the sound entities, the turn index and
-    the extra sources -- so one stage pays the spreads once per listener."""
+    contacts, containment, crossings, weather, the entities, the turn index
+    and the extra sources -- so one stage pays the spreads once per
+    listener. THE KEY DECIDES A HIT ALONE (`_cache_key`, review B10): the
+    field is a pure function of it, so a scene that answers it identically
+    gets the field already built, and no scene that answers it differently
+    can be handed one."""
     room = room or room_of(scene, listener)
     # THE SAME GATE THE LIGHT FIELD USES. `room_has_geometry` is the FOV
     # layer's opt-in for the furniture sentence and asks whether an ANCHOR
@@ -1607,7 +1620,7 @@ def sound_field(scene: dict, listener: str, *, room=None, turn_idx=None,
         return None
     key = _cache_key(scene, room, turn_idx, crowds, events, speakers)
     cached = _SOUND_FIELD_CACHE.get(key)
-    if cached is not None and cached.scene is scene:
+    if cached is not None:
         return cached
     grid = acoustic_grid(scene, room)
     if grid is None:

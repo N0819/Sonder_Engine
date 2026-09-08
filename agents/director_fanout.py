@@ -17,7 +17,7 @@ from core.db import get_setting, wget
 from world.survival import survival_enabled, vitals_of
 from world.spatial import (contact_action_ledger_index, contact_id,
                            crossing_of, effective_anchors, room_of,
-                           substance_ledger_index)
+                           scene_room_id, substance_ledger_index)
 
 from .common import (communication_surface, observable_action_text,
                      scene_compact_attire)
@@ -337,8 +337,11 @@ def _beat_rooms(sc, ctx, whos, view=None):
         rooms.append(str(declared["to_room"]))
     out = []
     for room in rooms:
-        if room in ((sc or {}).get("rooms") or {}) and room not in out:
-            out.append(room)
+        # A declared destination arrives in the model's spelling; a room
+        # answers to its id and its name, folded (review 2026-09-07 B2).
+        held = scene_room_id(sc, room)
+        if held and held not in out:
+            out.append(held)
     return out
 
 

@@ -275,6 +275,16 @@ def cast_change_status(value):
     None means UNRECOGNIZED, and every caller must say so rather than pick a
     default: the two answers send a mind into different simulations, and a
     silent guess is how a character stays in the roster after walking out.
+
+    THE READER RULE, and it is one rule for every reader of the entry (B33):
+    an unreadable word MOVES NOBODY. Only `CAST_STATUS_ABSENT` sends a body out
+    of the scene and only `CAST_STATUS_PRESENT` brings one in, so the roster
+    (`commit_cast_changes`), the stranded-occupant guard, destruction's vacate
+    and companion carry (`spatial_frames._cast_changes_leaving`) all leave the
+    body exactly where it stood. The three scene-side readers used to treat
+    anything that was not `active` as a departure, which was the roster's own
+    answer inverted: the same entry left the character present in the roster
+    and gone from the scene at once.
     """
     return _CAST_CHANGE_STATUS.get(str(value or "").strip().casefold())
 

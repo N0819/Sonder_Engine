@@ -17,7 +17,7 @@ from world.weather import advance_weather, normalize_weather
 from world.spatial import (contradictory_sight_edges, derived_room_name,
                            guessed_room_sizes,
                            layout_warning, merge_scene_with_diff,
-                           room_layout_lint)
+                           room_layout_lint, scene_room_id)
 from world.spatial_frames import (_cast_changes_leaving, infer_companion_carry,
                             infer_vehicle_zones,
                             infer_came_from, infer_focus, infer_facing,
@@ -1529,8 +1529,16 @@ def prepare_scene_commit(ctx):
     mv = ctx.declared_movement()
     target_room = mv.get("to_room") if isinstance(mv, dict) else None
     target_room = room_renames.get(target_room, target_room)
+    # ...and as the world SPELLS it: a room answers to its id and to its
+    # name, folded (`spatial.scene_room_id`). Minting on an exact key miss
+    # would put a second room beside one the scene already holds under
+    # another spelling -- the same disagreement review 2026-09-07 B2 found
+    # between this file's mint dedup and the compiler's `known` test.
+    _held = scene_room_id(sc, target_room) if target_room else ""
+    if _held:
+        target_room = _held
 
-    if target_room and target_room not in sc.get("rooms", {}):
+    if target_room and not _held:
         # A DECLARED DESTINATION ALWAYS EXISTS. Going somewhere is the
         # strongest possible assertion that it is there -- stronger than
         # naming it, which is why this is keyed on movement rather than on

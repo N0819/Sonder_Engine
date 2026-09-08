@@ -520,3 +520,55 @@ def is_derived_room_name(room_id, name) -> bool:
 
 def normalize_room_id(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", (name or "").lower()).strip("_")
+
+
+def room_spellings(room_id, room_def=None) -> tuple:
+    """EVERY SPELLING ONE ROOM ANSWERS TO, folded, display name first.
+
+    A room has two spellings: the id the engine keys it by and the name the
+    story calls it. `normalize_room_id` folds both, and two spellings that
+    fold the same are one room. ONE PRODUCER of that set, because four sites
+    answered "does the world already hold this room?" three different ways
+    (review 2026-09-07 B2): `classify_movement` and the Director's
+    `needs_mapping` trigger compared the model's spelling to the scene keys
+    EXACTLY, `_location_query_status` folded, and commit's mint dedup folded
+    through its own private `_room_display_slug`. A Director that spells a
+    held room its own way therefore drew a planning need and a second mint
+    for a room already on the map.
+
+    Name first: `spellings[0]` is the room's display slug, which is what a
+    registry alias index and the plan's spelling table are keyed by.
+    """
+    out = []
+    if isinstance(room_def, dict):
+        name = normalize_room_id(str(room_def.get("name") or ""))
+        if name:
+            out.append(name)
+    folded = normalize_room_id(str(room_id or ""))
+    if folded and folded not in out:
+        out.append(folded)
+    return tuple(out)
+
+
+def scene_room_id(scene, target) -> str:
+    """The id of the scene room `target` names, or "" when the world holds
+    none under that spelling.
+
+    The one answer to "is this destination a room the scene already has?".
+    An exact key wins outright; otherwise the fold decides
+    (`room_spellings`). A spelling two rooms answer to names neither and
+    resolves to "" -- the same refusal commit's mint dedup makes for a name
+    two plans share.
+    """
+    target = str(target or "")
+    rooms = scene.get("rooms") if isinstance(scene, dict) else None
+    if not isinstance(rooms, dict) or not rooms:
+        return ""
+    if target in rooms:
+        return target
+    folded = normalize_room_id(target)
+    if not folded:
+        return ""
+    hits = [str(rid) for rid, rdef in rooms.items()
+            if folded in room_spellings(rid, rdef)]
+    return hits[0] if len(hits) == 1 else ""

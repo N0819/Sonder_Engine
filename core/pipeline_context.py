@@ -100,14 +100,17 @@ def note_step_decision(kind: str, subject: str, verdict: str,
 
 def canonical_movement(declared, compiled):
     """`declared` (the Director's movement row) with its `to_room` replaced
-    by `compiled["to_room"]` when the compiler classified the destination
-    `planned` under another spelling; the spelling survives as
+    by `compiled["to_room"]` when the compiler RESOLVED the destination to a
+    room the world holds under another spelling -- the plan's (`planned`) or
+    the scene's own (`known`, review 2026-09-07 B2: a room already on the
+    map resolves the same way a planned one does). The spelling survives as
     `declared_as`. Returns `declared` itself when nothing changes. Pure, so
     the Director's readers and commit's share one answer (bench, chat 114,
     2026-09-03: the two disagreed and a second room was minted)."""
     if not isinstance(declared, dict) or not declared.get("to_room"):
         return declared
-    if not isinstance(compiled, dict) or compiled.get("status") != "planned":
+    if not isinstance(compiled, dict) \
+            or compiled.get("status") not in ("planned", "known"):
         return declared
     canonical = str(compiled.get("to_room") or "")
     if not canonical or canonical == str(declared.get("to_room")):

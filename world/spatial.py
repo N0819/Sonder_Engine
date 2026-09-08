@@ -58,7 +58,8 @@ from world.spatial_identity import (
     _unique_entity_keyed,
     _SUBJECT_KEYED, canonical_subject, canonical_subject_map,
     derived_room_name, is_derived_room_name, normalize_room_id,
-    normalize_scene_subjects, room_display_name, room_of, same_subject,
+    normalize_scene_subjects, room_display_name, room_of, room_spellings,
+    same_subject, scene_room_id,
 )
 
 
