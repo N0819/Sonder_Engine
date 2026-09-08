@@ -51,6 +51,7 @@ import json
 import math
 from typing import Optional
 
+from world.scene_memo import scene_memo
 from world.spatial_barriers import normalize_barrier
 from world.spatial_containment import container_of
 from world.spatial_fov import (
@@ -1599,7 +1600,14 @@ def sound_field(scene: dict, listener: str, *, room=None, turn_idx=None,
     listener. THE KEY DECIDES A HIT ALONE (`_cache_key`, review B10): the
     field is a pure function of it, so a scene that answers it identically
     gets the field already built, and no scene that answers it differently
-    can be handed one."""
+    can be handed one.
+
+    TWO LEVELS since review C12, for the reason `light_field` gives: the key
+    `json.dumps`ed the scene on every lookup, hit or miss. The outer level
+    is the read-pass memo (`world/scene_memo.py`) -- only the per-call
+    extras (the turn index, crowds, events, speakers) are serialised into
+    its key, and they are a handful of rows rather than the whole scene.
+    The inner content cache below still catches a re-read scene."""
     room = room or room_of(scene, listener)
     # THE SAME GATE THE LIGHT FIELD USES. `room_has_geometry` is the FOV
     # layer's opt-in for the furniture sentence and asks whether an ANCHOR
@@ -1619,6 +1627,15 @@ def sound_field(scene: dict, listener: str, *, room=None, turn_idx=None,
     # room estimated from its size tier is an acceptable estimate.
     if not room or not _room_grid_exists(scene, room):
         return None
+    extras = json.dumps([turn_idx, crowds, events, speakers],
+                        sort_keys=True, default=str)
+    return scene_memo(
+        scene, ("sound_field", str(room), extras),
+        lambda: _sound_field(scene, room, turn_idx, crowds, events, speakers))
+
+
+def _sound_field(scene, room, turn_idx, crowds, events, speakers):
+    """The field itself, content-cached across scene objects."""
     key = _cache_key(scene, room, turn_idx, crowds, events, speakers)
     cached = _SOUND_FIELD_CACHE.get(key)
     if cached is not None:

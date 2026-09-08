@@ -3810,10 +3810,15 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None,
     mid-chat.
 
     `sheet`/`memory_seeds` are the reviewed draft when called from the
-    confirm-promotion route (app.py); when omitted (the autonomous path,
-    see auto_promote_background_characters) a sheet is minted from the
-    chat's own events record via importers.draft_promoted_character -- an
-    LLM call, so this must never run inside the turn's commit transaction.
+    confirm-promotion route (app.py) and the drafted one when called from
+    the commit tail's landing (`_land_drafted_promotion`); when omitted, a
+    sheet is minted here from the chat's own events record via
+    importers.draft_promoted_character -- an LLM call, so that form must
+    never run inside the turn's commit transaction, and since review
+    2026-09-07's C10 the live tail no longer uses it (see
+    `schedule_auto_promotion`: the mint is out of band, the WRITES below
+    stay in the turn thread because the turn rewrites `scene`,
+    `background_presences` and `known` wholesale).
     Returns the new character id.
     """
     from story.importers import draft_promoted_character
@@ -3868,7 +3873,15 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None,
             "stress", {}).update(handoff.get("stress") or {})
         sheet.setdefault("initial_state", {}).setdefault(
             "hedonic", {}).update(handoff.get("hedonic") or {})
-    sheet = normalize_character_data(sheet)
+    # `dict(sheet)`, NOT `sheet` -- the one place the engine mutates a
+    # normalized card and then asks for it to be normalized again (C14
+    # rework). `normalize_character_data` recognises its own product and hands
+    # it straight back, so a sheet the charter handoff has just written into
+    # would go to storage with whatever those four `.update()` calls put there:
+    # a non-numeric `hedonic.pleasure` stays a string in a float field, and the
+    # row is permanent. Dropping the mark is how a caller says "I changed this,
+    # check it again", and this is that caller.
+    sheet = normalize_character_data(dict(sheet))
     memory_seeds = [str(m) for m in (memory_seeds or []) if str(m).strip()]
     _refuse_name_collision(cid, character_name(sheet))
 
@@ -4190,30 +4203,32 @@ def _auto_promote_enabled():
     return value in ("1", "on", "true", "yes")
 
 
-def auto_promote_background_characters(ctx):
-    """Commit-side sweep: autonomously promote the single most-deserving
-    tracked background presence that has crossed the auto-threshold --
-    promotable (see promotable_background_presences) AND at least
-    `promotion_thresholds(cid)["auto_dialogue"]` dialogue turns AND at least
-    `dialogue_config`'s `promote_after_addressed` addressed turns AND
-    present/addressed THIS beat. Promotion used to be UI-only (app.py's draft/confirm
-    routes were promotable_background_presences' sole callers), so a
-    deserving presence could stay shallow forever in hands-off play.
+def select_auto_promotion(ctx):
+    """The deterministic half of the sweep: which tracked presence, if any,
+    has earned a sheet on this beat. Returns ``(key, name)`` or
+    ``(None, "")``.
 
-    At most one promotion per beat: each mints a sheet with an LLM call,
-    and any remaining qualifiers stay tracked and promote on a later beat.
-    Runs AFTER the turn's primary transaction (see _commit_all_locked) --
-    it is additive and forward-only, so a failure is a warning, never a
-    rollback. Gated by setting('auto_promote'), which is OFF unless the host
-    turns it on -- see `_auto_promote_enabled`.
+    Reads only committed rows and the turn's own ctx (the reactor gate's
+    selection and the Director's addressed refs), so it is cheap and must
+    stay inside the turn -- ctx does not survive it. The EXPENSIVE half (the
+    sheet-minting model call) is what moves out of band; see
+    `schedule_auto_promotion`.
+
+    Qualifying means: promotable (see promotable_background_presences) AND at
+    least `promotion_thresholds(cid)["auto_dialogue"]` dialogue turns AND at
+    least `dialogue_config`'s `promote_after_addressed` addressed turns AND
+    present/addressed THIS beat. At most one per beat: each mints a sheet
+    with an LLM call, and any remaining qualifiers stay tracked and promote
+    on a later beat. Gated by setting('auto_promote'), which is OFF unless
+    the host turns it on -- see `_auto_promote_enabled`.
     """
     if not _auto_promote_enabled():
-        return {"promoted": []}
+        return None, ""
     cid = ctx.chat.id
     turn_idx = ctx.turn.idx
     presences = wget(cid, "background_presences", {}) or {}
     if not presences:
-        return {"promoted": []}
+        return None, ""
 
     promotable = {
         r["id"] for r in promotable_background_presences(cid) if r["promotable"]
@@ -4224,7 +4239,7 @@ def auto_promote_background_characters(ctx):
     # them.
     _addressed_min = _promote_after_addressed(cid)
     if _addressed_min <= 0:
-        return {"promoted": []}
+        return None, ""
     # ...and how much VOICE she must have accrued. The other half of the gate,
     # and independently settable, because the two measure different things: a
     # prop can be talked at for six turns and answer twice.
@@ -4275,12 +4290,260 @@ def auto_promote_background_characters(ctx):
             (len(dialogue_turns), record.get("last_turn") or -1, key, name))
 
     if not candidates:
-        return {"promoted": []}
+        return None, ""
     candidates.sort(reverse=True)
-    key, name = candidates[0][-2], candidates[0][-1]
     # Promote by the record's own id: a display name two records share
     # would refuse to resolve, and the id never does.
+    return candidates[0][-2], candidates[0][-1]
+
+
+def auto_promote_background_characters(ctx):
+    """The DIRECT, blocking form of the sweep: select and promote now.
+
+    Kept for the same reason `commit_memory_write._consolidate_committed_memories`
+    is -- tests and any standalone caller want the answer in hand -- but the
+    live commit tail no longer calls it. See `schedule_auto_promotion`, which
+    is what `_commit_all_locked`'s tail runs.
+    """
+    cid = ctx.chat.id
+    key, name = select_auto_promotion(ctx)
+    if key is None:
+        return {"promoted": []}
     char_id = promote_background_character(
         cid, key, frame_id=ctx.turn.frame_id,
         promoted_turn=ctx.turn.idx)
     return {"promoted": [{"id": key, "name": name, "char_id": char_id}]}
+
+
+AUTO_PROMOTION_JOB_KEY = "auto_promotion"
+
+
+def _take_drafted_promotion(cid):
+    """Take the sheet a previous beat's job drafted, if one is waiting.
+
+    Returns ``(draft, error)``, either of which may be empty. The stash is
+    the JOB RECORD itself (`core.jobs` keeps terminal jobs per chat), not a
+    world key: nothing about a draft is worth persisting -- if the process
+    restarts, or enough later jobs roll it out of that chat's capped history
+    (`core.jobs._HISTORY_LIMIT`, which the next tail is normally far inside),
+    the presence is still in `background_presences` and the sweep re-offers
+    her on a later beat. What is lost is the spend, never a fact. No new cap
+    is introduced here; that one is the queue's own.
+
+    `pop` rather than a read, and that is the point: it is what marks the
+    stash consumed, and it is atomic under the GIL, so two turns committing
+    at once cannot both land the same draft.
+    """
+    from core import jobs
+
+    for job in reversed(jobs.history(cid)):
+        if job.key != AUTO_PROMOTION_JOB_KEY:
+            continue
+        if not isinstance(job.result, dict):
+            # A job that dies in its own bootstrap files no result at all
+            # (core.jobs._run). Report the error once, then leave an empty
+            # dict behind so the next beat does not report it again.
+            job.result = {}
+            if job.error:
+                return None, job.error
+            continue
+        draft = job.result.pop("draft", None)
+        error = job.result.pop("error", "")
+        if draft or error:
+            return draft, error
+    return None, ""
+
+
+def _land_drafted_promotion(ctx):
+    """Apply a drafted promotion HERE, in the turn thread, on the same tail
+    the blocking form used to write from. Returns ``(promoted, warnings)``.
+
+    This is the half that must not move (review 2026-09-07, C10 rework).
+    `promote_background_character` writes the live `scene` blob (positions,
+    `seed_initial_attire`, vitals), rewrites `background_presences` and seeds
+    `known` -- and those are exactly the three blobs the turn pipeline reads
+    once and rewrites WHOLESALE (`prepare_scene_commit`'s `wget` ->
+    `commit_scene`'s `wset`; `track_background_presences`' `wget` -> `wset`),
+    with `wset` last-writer-wins and no merge. Written from a background
+    thread, which holds no lock the turn takes (`_commit_lock` is keyed by
+    turn id and cannot serialise against the NEXT turn), the promoted body's
+    `positions` entry is silently dropped and the story acquires a cast
+    member who is nowhere -- measured, in the skeptic's probe on this item.
+    So only the MINT is out of band; the write lands where it always did.
+    """
+    from core import jobs
+
+    cid = ctx.chat.id
+    draft, error = _take_drafted_promotion(cid)
+    warnings = []
+    if error:
+        # Never silence (docs/guides/PIPELINE.md's rule for this tail): the
+        # failure happened in a thread with no turn to warn, so it is carried
+        # on the job record and surfaced by the first turn that looks.
+        warnings.append("auto-promotion draft failed: %s" % error)
+    if not draft:
+        return [], warnings
+    if not _auto_promote_enabled():
+        # The host turned the switch off between the mint and this tail. The
+        # spend is already gone, but the switch is about what a story
+        # ACQUIRES -- so the draft is dropped rather than held, and the
+        # presence goes back to being an extra.
+        return [], warnings
+    key = draft.get("id")
+    name = str(draft.get("name") or "")
+    if jobs.story_rewound_past(draft.get("turn"), ctx.turn.idx):
+        return [], warnings
+    # The ledger is read in THIS turn's frame, which is the frame the body
+    # will be placed in. Gone means someone else already promoted her (the
+    # UI's confirm route), a rename folded the record away, or a restore took
+    # the beat away -- and a frame the story has left takes its ledger with
+    # it, which is the same answer.
+    presences = _fold_duplicate_presences(
+        dict(wget(cid, "background_presences", {}) or {}),
+        wget(cid, "scene", {}) or {})
+    record = presences.get(key)
+    if record is None:
+        return [], warnings
+    # A sheet is authored under the name the scene has been calling this
+    # person (story/importers.draft_promoted_character forces it), and that
+    # name becomes a permanent identity. If the record answers to a different
+    # one now, the draft is for someone the story no longer has; drop it and
+    # let the sweep re-offer her.
+    if (presence_display_name(key, record) or name) != name:
+        return [], warnings
+    try:
+        char_id = promote_background_character(
+            cid, key, sheet=draft.get("sheet"),
+            memory_seeds=draft.get("memory_seeds") or [],
+            frame_id=ctx.turn.frame_id, promoted_turn=ctx.turn.idx)
+    except Exception as exc:
+        # Additive and forward-only: a promotion that will not land is a
+        # warning on this turn, never a rollback of it.
+        warnings.append("auto-promotion failed: %s" % exc)
+        return [], warnings
+    return [{"id": key, "name": name, "char_id": char_id}], warnings
+
+
+def schedule_auto_promotion(ctx):
+    """The tail's autonomous promotion, in two halves: LAND what a previous
+    beat drafted, then queue this beat's draft out of band.
+
+    C10 (review 2026-09-07): minting a sheet is two `utility`-role model
+    calls (`importers.draft_promoted_character` -- the sheet, then the memory
+    seeds), and they ran SYNCHRONOUSLY here, inside the per-turn commit lock,
+    in the player's wait. Measured on a twelve-presence fixture with the
+    draft stubbed at the tree's own measured `utility` latency (27.4s per
+    call, `commit_memory_write.schedule_memory_consolidation`): 54.81s of a
+    player's wait, of which 0.02s was the deterministic gate and the writes.
+    After: 0.002s on the beat that queues the draft and 0.020s on the beat
+    that lands it -- 54.79s out of the wait, and the mint on `core.jobs`.
+
+    WHAT THE CONSOLIDATION PRECEDENT DOES NOT COVER, because the first cut of
+    this patch leaned on it and it does not carry: consolidation is safe out
+    of band because it writes `memories` rows -- its own table, append-only,
+    nothing else rewrites them. This promotion writes `scene`,
+    `background_presences` and `known`, the blobs the turn pipeline reads
+    once and rewrites wholesale. The comparison holds for the SPEND and fails
+    for the WRITE, which is why the two are split: see
+    `_land_drafted_promotion` for the lost update that shape costs.
+
+    THE BEHAVIOUR CHANGE, stated: the promotion lands a beat LATER. A
+    presence who qualifies on beat N is drafted between beats and joins the
+    cast on the tail of the next beat that commits, so she becomes
+    character_step-eligible one beat later than before. Nothing else moves;
+    the gate, the thresholds, the one-promotion-per-beat rule and the opt-in
+    are unchanged, and the switch is still OFF unless the host turns it on --
+    and it gates the LANDING too, so a host who turns it off between the two
+    halves gets no new cast member out of a draft already paid for.
+
+    IDEMPOTENT like consolidation, four ways: `jobs.submit` dedupes on
+    (chat, key) so a second beat's sweep joins the one in flight rather than
+    drafting twice; the job re-reads `background_presences` before spending
+    anything and skips when the record is gone (a restore, a hand promotion
+    through the UI, a rename that folded it away); the landing re-reads the
+    same ledger, in this turn's frame, and drops a draft whose presence or
+    name has moved on; and `promote_background_character`'s own
+    `_refuse_name_collision` is the floor under all of it -- one name is one
+    character, whatever raced.
+
+    Returns the shape every reader already expects: `promoted` names what was
+    promoted DURING this commit (a draft from an earlier beat), and
+    `scheduled` names who is being drafted for a later one.
+    """
+    from core import jobs
+    from language_runtime import story_language
+
+    cid = ctx.chat.id
+    landed, warnings = _land_drafted_promotion(ctx)
+    for text in warnings:
+        ctx.add_warning(text)
+    key, name = select_auto_promotion(ctx)
+    if key is None:
+        return {"promoted": landed, "scheduled": None}
+    frame_id = ctx.turn.frame_id
+    turn_idx = ctx.turn.idx
+    language_id = story_language(cid)
+
+    def _produce(job):
+        # Fresh thread, fresh contextvars: pin the scheduling turn's frame and
+        # the story's language for every read below, the same way and for the
+        # same reasons as the consolidation job beside it -- a sheet and its
+        # seed memories written in English into a Japanese story raise nothing
+        # and are simply wrong.
+        from core.db import active_frame_id
+        from core.logging_utils import logger
+        from language_runtime import current_language_id
+        from story.importers import draft_promoted_character
+        from story.room_conversation import current_turn_idx
+
+        token = active_frame_id.set(frame_id)
+        language_token = current_language_id.set(language_id)
+        try:
+            if job.cancelled.is_set():
+                return {"skipped": "cancelled"}
+            # The story going BACK invalidates this; the story moving on does
+            # not (core.jobs.story_rewound_past). A sheet drafted from a beat
+            # the timeline has left is evidence of a future that did not
+            # happen, which is why this is checked here and why
+            # `restore_checkpoint` cancels the job as well.
+            now = current_turn_idx(cid)
+            if jobs.story_rewound_past(turn_idx, now):
+                return {"skipped": "rewound"}
+            # Idempotence: the ledger is the record of who is still an
+            # unregistered presence. Gone means someone else already promoted
+            # her, or a restore took the beat away -- either way, before any
+            # spend.
+            presences = _fold_duplicate_presences(
+                dict(wget(cid, "background_presences", {}) or {}),
+                wget(cid, "scene", {}) or {})
+            record = presences.get(key)
+            if record is None:
+                return {"skipped": "gone"}
+            # Draft under the display name, because that is what
+            # `promote_background_character` would have passed and what the
+            # evidence scan matches speaker strings against.
+            drafted_name = presence_display_name(key, record) or name
+            draft = draft_promoted_character(cid, drafted_name)
+            # THIS JOB WRITES NOTHING. The sheet waits on the job record for
+            # the next commit tail to apply, in the turn thread, where the
+            # scene is not being rewritten underneath it.
+            return {"draft": {
+                "id": key, "name": drafted_name, "turn": turn_idx,
+                "sheet": draft["sheet"],
+                "memory_seeds": list(draft.get("memory_seeds") or [])}}
+        except Exception as exc:
+            # Silence toward the turn that scheduled it -- that turn is
+            # already over -- but not silence: the error rides the job record
+            # and the next tail turns it into a warning
+            # (`_land_drafted_promotion`).
+            logger.info("auto-promotion draft failed out of band: chat=%s "
+                        "presence=%s error=%s", cid, key, str(exc)[:300])
+            return {"error": "%s: %s" % (type(exc).__name__, str(exc)[:300])}
+        finally:
+            current_language_id.reset(language_token)
+            active_frame_id.reset(token)
+
+    job = jobs.submit(cid, AUTO_PROMOTION_JOB_KEY, _produce,
+                      base_turn=turn_idx)
+    return {"promoted": landed,
+            "scheduled": {"id": key, "name": name, "job": job.as_dict()}}

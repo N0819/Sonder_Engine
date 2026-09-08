@@ -38,13 +38,14 @@ memory.
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 
 from story.character_schema import (
     character_appearance,
     character_name,
+    normalized_character_from_text,
+    normalized_character_of_row,
     persona_appearance,
     persona_name,
 )
@@ -1437,7 +1438,8 @@ def _all_body_labels(ctx):
     pers = persona_of(ctx.chat)
     out = [_unknown_actor_label(persona_name(pers), persona_appearance(pers))]
     for row in ctx.cast:
-        sh = json.loads(row["sheet"])
+        # One memoised normalization for both reads (C14).
+        sh = normalized_character_from_text(row["sheet"])
         out.append(_unknown_actor_label(
             character_name(sh), character_appearance(sh)))
     return out
@@ -1512,7 +1514,8 @@ def _present_others(ctx, sc, here, recognized=None):
             p_name if _recognizes(p_name, recognized)
             else _unknown_actor_label(p_name, persona_appearance(pers)))
     for row in ctx.cast:
-        sh = json.loads(row["sheet"])
+        # One memoised normalization for the name and the room lookup (C14).
+        sh = normalized_character_from_text(row["sheet"])
         cname = character_name(sh)
         # The uid/alias-tolerant resolver, because a position stored under
         # identity.uid otherwise reads as no room at all -- which here would
@@ -1544,9 +1547,9 @@ def _presence_label_fn(ctx, *presence_names):
     own = {str(n or "").strip() for n in presence_names}
     sheets = {}
     for row in ctx.cast:
-        try:
-            sh = json.loads(row["sheet"])
-        except Exception:
+        # Three normalizations of one card became one (C14).
+        sh = normalized_character_of_row(row)
+        if sh is None:
             continue
         cname = character_name(sh)
         if cname:

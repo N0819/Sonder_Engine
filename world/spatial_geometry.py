@@ -7,6 +7,8 @@ from typing import Optional
 
 from story.character_schema import fold_identity_key
 
+from world.scene_memo import scene_memo
+
 from world.spatial_orientation import (
     _LEFT_SECTORS,
     _RIGHT_SECTORS,
@@ -302,6 +304,25 @@ _BARRIER_ANCHOR_DESC = {
 
 def effective_anchors(scene: dict, room_id, *, derive=False) -> dict:
     """S1a: the room's authored anchors plus one implicit `door:<to>`
+    pseudo-anchor per adjacency edge -- derived once per open read pass.
+
+    MEMOISED because the derivation walks EVERY room's edge list to find the
+    ones declared only from the far side, so it is O(rooms) per call and has
+    twenty-one callers (review C12). Only inside a `scene_read_pass`; with
+    none open it derives on every call exactly as it always did, and
+    `world/scene_memo.py` says why that is the default. The top-level dict
+    is copied out, which is the aliasing callers already had: the authored
+    anchor records inside it have always been the scene's own objects.
+
+    The full derivation follows.
+    """
+    return dict(scene_memo(
+        scene, ("effective_anchors", str(room_id), bool(derive)),
+        lambda: _effective_anchors(scene, room_id, derive=derive)))
+
+
+def _effective_anchors(scene: dict, room_id, *, derive=False) -> dict:
+    """S1a: the room's authored anchors plus one implicit `door:<to>`
     pseudo-anchor per adjacency edge (declared from either side), each
     carrying the edge's bearing when it has one.
 
@@ -393,6 +414,24 @@ def effective_anchors(scene: dict, room_id, *, derive=False) -> dict:
 
 
 def effective_station(scene: dict, name: str) -> dict:
+    """S1b: the station `name` EFFECTIVELY holds -- once per read pass.
+
+    Fifteen callers, and `normalize_scene_stations` asks once per station
+    (review C12); the derivation walks the contacts ledger and resolves an
+    anchor per partner. Memoised only inside a `scene_read_pass`
+    (`world/scene_memo.py`). The answer is copied out, `near` list included,
+    because callers have always been handed a fresh dict they may add to.
+
+    The full derivation follows.
+    """
+    memo = scene_memo(scene, ("effective_station", str(name)),
+                      lambda: _effective_station(scene, name))
+    out = dict(memo)
+    out["near"] = list(memo.get("near") or [])
+    return out
+
+
+def _effective_station(scene: dict, name: str) -> dict:
     """S1b: the station `name` EFFECTIVELY holds, derived at read time.
 
     Resolution order, authored first:
@@ -917,6 +956,18 @@ def _anchor_is_a_run(scene: dict, room_id, anchor_id) -> bool:
 
 
 def proximity_rel(scene: dict, observer: str, target: str) -> Optional[str]:
+    """Within-room proximity tier -- once per read pass, per pair.
+
+    Twenty-one callers ask it per (observer, target) per stage (review C12);
+    the answer is a word, so the memo hands back the same immutable value.
+    Memoised only inside a `scene_read_pass` (`world/scene_memo.py`). The
+    full derivation follows.
+    """
+    return scene_memo(scene, ("proximity_rel", str(observer), str(target)),
+                      lambda: _proximity_rel(scene, observer, target))
+
+
+def _proximity_rel(scene: dict, observer: str, target: str) -> Optional[str]:
     """Within-room proximity tier between two entities: 'within_reach' | 'near'
     | 'across', or None when they are not co-located. within_reach: same anchor
     -- unless that anchor is a `run`, which has length and so places nobody

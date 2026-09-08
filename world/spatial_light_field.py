@@ -63,6 +63,7 @@ import json
 import math
 from typing import Optional
 
+from world.scene_memo import scene_memo
 from world.spatial_barriers import _SIGHT_BARRIERS, normalize_barrier
 from world.spatial_containment import container_of
 from world.spatial_fov import (
@@ -911,9 +912,25 @@ def _cache_key(scene: dict, room_id) -> str:
 
 def light_field(scene: dict, room_id) -> Optional[LightField]:
     """The cached light field over `room_id`, or None when the room has no
-    geometry. Every reader below goes through this."""
+    geometry. Every reader below goes through this.
+
+    TWO LEVELS, because `_cache_key` was itself the cost (review C12): it
+    `json.dumps`ed the whole read set of the scene on every lookup, hit or
+    miss, and `light_at` asks once per body per observer pair. Measured
+    2026-09-07 on chat 117's 38-room scene, one stage's worth of sight:
+    0.153 s of a 0.303 s pass was inside the JSON encoder, buying 157 hits.
+    The outer level is the read-pass memo (`world/scene_memo.py`), which
+    skips the key entirely; the inner content cache below is what lets a
+    RE-READ scene reuse a field an earlier object paid for. A miss on the
+    outer level runs exactly the code that ran before."""
     if not light_geometry_exists(scene, room_id):
         return None
+    return scene_memo(scene, ("light_field", str(room_id)),
+                      lambda: _light_field(scene, room_id))
+
+
+def _light_field(scene: dict, room_id) -> Optional[LightField]:
+    """The field itself, content-cached across scene objects."""
     key = _cache_key(scene, room_id)
     cached = _FIELD_CACHE.get(key)
     if cached is not None:

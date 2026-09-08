@@ -25,6 +25,8 @@ from story.character_schema import (
     name_boundary_pattern,
     name_boundary_regex,
     normalize_character_data,
+    normalized_character_from_text,
+    normalized_character_of_row,
     persona_extra_parts,
     persona_name,
 )
@@ -38,7 +40,7 @@ from mind.memory import chat_lorebook_ids, chat_lorebook_weights
 from llm.providers import chat_complete
 from llm.prompts import get_prompt
 from story.provenance_text import strip_engine_provenance
-from story.scene import (get_scene, persona_of, sheet_state, NON_AWAKE_GATED,
+from story.scene import (get_scene, persona_of, NON_AWAKE_GATED,
                    normalize_player_authority, PLAYER_AUTHORITY_GRANTS)
 from llm.schemas import normalize_speech_volume
 from world.spatial import (
@@ -1195,9 +1197,11 @@ def _contextual_rooms(sc, cast, *extra_room_ids, hops=1):
     """
     centers = set()
     for row in cast:
-        try:
-            sheet = json.loads(row["sheet"])
-        except Exception:
+        # The stored sheet TEXT is the key, so normalization is paid once per
+        # distinct card per process rather than once per reader (C14). None
+        # still means "this row is not cast", as the parse failure did.
+        sheet = normalized_character_of_row(row)
+        if sheet is None:
             continue
         r = room_of(sc, character_name(sheet))
         if r:
@@ -1456,9 +1460,15 @@ def scene_extra_parts(cast, persona=None, player_name=None):
     """
     out = {}
     for row in (cast or []):
-        try:
-            sh, _, _ = sheet_state(row)
-        except Exception:
+        # The card only -- this reader never wanted the stored state -- and
+        # memoised on its text, so the two reads below share one
+        # normalization (C14). AN INTENDED WIDENING: `sheet_state` raised
+        # `KeyError` on a row carrying a `sheet` but no `cstate`, and this
+        # reads the parts off it instead. Both cast queries select `cstate`,
+        # so no production row is in that shape; a row that has a card has
+        # extra parts whether or not it has state.
+        sh = normalized_character_of_row(row)
+        if sh is None:
             continue
         parts = character_extra_parts(sh)
         if parts:
@@ -4428,9 +4438,10 @@ def observer_label_fn(chat, observer_name, cast):
     known = set((wget(chat["id"], "known", {}) or {}).get(observer_name) or [])
     sheets = {}
     for row in (cast or []):
-        try:
-            sheet = json.loads(row["sheet"])
-        except Exception:
+        # Normalized once per card text (C14): `label` below reads appearance
+        # and every scene key off this same sheet.
+        sheet = normalized_character_of_row(row)
+        if sheet is None:
             continue
         name = character_name(sheet)
         if name:
@@ -4489,10 +4500,11 @@ def observer_name_scrub(chat, observer_name, cast):
     known = set((wget(chat["id"], "known", {}) or {}).get(observer_name) or [])
     sheets = []
     for row in (cast or []):
-        try:
-            sheets.append(json.loads(row["sheet"]))
-        except Exception:
-            continue
+        # Normalized once per card text (C14): the loop below reads a name and
+        # every scene key off each of these.
+        sheet = normalized_character_of_row(row)
+        if sheet is not None:
+            sheets.append(sheet)
     # The player is a body in the room like any other, and lore written during
     # play names them more often than it names anyone else. Same source as
     # observer_label_fn's, so the two cannot disagree about who is gated.
@@ -4621,9 +4633,10 @@ def scene_figures(chat, cast, scene, recognized=None):
             "place": str(room_of(scene, p_name) or ""),
         })
     for row in cast or ():
-        try:
-            sheet = json.loads(row["sheet"])
-        except (KeyError, TypeError, ValueError):
+        # Three normalizations per row became one (C14): name, appearance and
+        # the scene keys `character_room` resolves through.
+        sheet = normalized_character_of_row(row)
+        if sheet is None:
             continue
         cname = character_name(sheet)
         if not cname:
@@ -5204,11 +5217,8 @@ def normalize_character_refs(values, cast):
     valid_ids = {int(row["id"]) for row in cast}
     names = {}
     for row in cast:
-        try:
-            sheet = json.loads(row["sheet"])
-            name = character_name(sheet)
-        except Exception:
-            name = ""
+        sheet = normalized_character_of_row(row)
+        name = character_name(sheet) if sheet is not None else ""
         if name:
             names[name.casefold()] = int(row["id"])
     result = []
@@ -5299,7 +5309,12 @@ def _present_cast_bodies(scene, cast):
     """
     out = []
     for c in cast or []:
-        sh = json.loads(c["sheet"]) if isinstance(c["sheet"], str) else c["sheet"]
+        # One normalization for the two reads below, keyed on the row's sheet
+        # TEXT so the four readers a beat share it (C14). A row carrying an
+        # already-parsed dict still normalizes here, once.
+        sh = c["sheet"]
+        sh = (normalized_character_from_text(sh) if isinstance(sh, str)
+              else normalize_character_data(sh))
         name = character_name(sh)
         room = character_room(scene, sh)
         if name and room:
@@ -5322,9 +5337,10 @@ def cast_room(sc, name, cast):
     if not target:
         return None
     for row in cast or []:
-        try:
-            sheet = json.loads(row["sheet"])
-        except Exception:
+        # `character_scene_keys` and `character_room` each normalize; one
+        # memoised normalization now serves both (C14).
+        sheet = normalized_character_of_row(row)
+        if sheet is None:
             continue
         if target in {key.lower() for key in character_scene_keys(sheet)}:
             return character_room(sc, sheet)
@@ -5440,9 +5456,11 @@ def cast_spelling_policy(cast, player_name=None, *, aliases=True):
     own_names, claims = set(), {}
     rows = []
     for row in cast or []:
-        try:
-            sheet = json.loads(row["sheet"])
-        except Exception:
+        # Measured at seven-plus calls a turn, each normalizing every cast
+        # sheet twice (identity, then `character_name`); the memo makes it one
+        # per distinct card text for the whole process (C14).
+        sheet = normalized_character_of_row(row)
+        if sheet is None:
             continue
         ident = normalize_character_data(sheet).get("identity", {})
         name = str(ident.get("name") or character_name(sheet) or "").strip()
@@ -5582,9 +5600,9 @@ def stamp_authored_interiors(scene, cast, player_name=None):
         return []
     authored = {}
     for row in cast or []:
-        try:
-            sheet = json.loads(row["sheet"])
-        except Exception:
+        # One normalization for the interior read and the name read (C14).
+        sheet = normalized_character_of_row(row)
+        if sheet is None:
             continue
         interior = character_body_interior(sheet)
         if not interior:

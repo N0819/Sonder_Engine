@@ -63,7 +63,8 @@ from __future__ import annotations
 import json
 import time as _time
 
-from story.character_schema import character_name
+from story.character_schema import (character_name,
+                                    normalized_character_from_text)
 from core.db import active_frame_id, q, qi, transaction, wget, wset
 from core.frames import get_frame
 from world.spatial import merge_scene_with_diff, room_of
@@ -337,8 +338,14 @@ def _apply_toll(chat_id, state, policy):
     travelers = set(frame.get("travelers") or []) if frame else set()
     if not travelers:
         return
+    # The MEMOISED normalization, not `character_name_from_text` (C14 rework):
+    # that one answers "Unnamed" for a card that will not parse, and two
+    # corrupt rows would then collapse to one entry of this map and one of
+    # them would pay the other's toll. A toll charged against an unreadable
+    # card is a bug worth stopping on, so this raises exactly where
+    # `json.loads` used to.
     name_to_id = {
-        character_name(json.loads(r["sheet"])): r["char_id"]
+        character_name(normalized_character_from_text(r["sheet"])): r["char_id"]
         for r in q(
             "SELECT ch.id AS char_id,COALESCE(cc.sheet,ch.sheet) AS sheet "
             "FROM chat_chars cc "

@@ -202,7 +202,8 @@ def run_artifacts(ctx, scene, ops):
     artifacts = [dict(a) for a in wget(cid, ARTIFACTS_WORLD_KEY, []) or []
                  if isinstance(a, dict)]
     before = json.dumps(artifacts, sort_keys=True, ensure_ascii=False)
-    index = _cast_index(cid, frame_id, scene, chat=getattr(ctx, "chat", None))
+    index = _cast_index(cid, frame_id, scene,
+                        chat=getattr(ctx, "chat", None), ctx=ctx)
     by_uid = {str(a.get("uid") or ""): a for a in artifacts}
     rejected = []
     metrics = {"artifact_ops_offered": 0, "artifacts_posted": 0,

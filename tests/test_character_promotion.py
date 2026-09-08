@@ -223,3 +223,69 @@ class TestAPromotedCharacterIsCheckedToo:
         draft = importers.draft_promoted_character(chat_id, "Dr. Crusher")
 
         assert draft["warnings"] == []
+
+
+class TestAPromotedCardIsStillRepairedAfterTheHandoff:
+    """Review 2026-09-07 C14 rework. `draft_promoted_character` hands back a
+    NORMALIZED sheet, `promote_background_character` deep-copies it, merges the
+    charter handoff into four sections with `.update()`, and normalizes again
+    before the row is written. Once normalization could recognise its own
+    product, that second call became a no-op over fields nothing had checked --
+    and a `characters.sheet` row is permanent."""
+
+    def _draft(self, temp_db, monkeypatch, sheet):
+        chat_id = _make_chat(temp_db)
+        _add_event(temp_db, chat_id, 5, "Crusher tends to the patient.")
+        monkeypatch.setattr(
+            importers, "chat_complete",
+            lambda role, system, user, **kw: json.dumps({"sheet": sheet}))
+        return chat_id, importers.draft_promoted_character(chat_id, "Dr. Crusher")
+
+    #: What the promotion prompt actually asks for: no `schema` key, and a
+    #: model realistically omits whole sections it has nothing to say about.
+    MINIMAL = {"identity": {"name": "Dr. Crusher"},
+               "psychology": {"drive": {"essence": "nobody dies on her watch"}},
+               "embodiment": {"visible": {"summary": "a tall doctor"}}}
+
+    def test_the_stored_row_is_what_a_plain_normalization_gives(
+            self, temp_db, monkeypatch):
+        from persist.commit import promote_background_character
+        from story.character_schema import normalize_character_data
+
+        chat_id, draft = self._draft(temp_db, monkeypatch, self.MINIMAL)
+        char_id = promote_background_character(
+            chat_id, "Dr. Crusher", sheet=draft["sheet"], memory_seeds=[])
+
+        stored = temp_db.q("SELECT sheet FROM characters WHERE id=?",
+                           (char_id,), one=True)["sheet"]
+        assert stored == json.dumps(
+            normalize_character_data(json.loads(stored)), ensure_ascii=False)
+
+    def test_a_handoff_value_the_shape_would_refuse_is_still_refused(
+            self, temp_db, monkeypatch):
+        """The guard the short-circuit removed. The handoff is engine-produced
+        and well-formed today; what must not depend on that is whether a float
+        field can be left holding a string."""
+        from persist.commit import promote_background_character
+        from world import charter_runtime
+
+        chat_id, draft = self._draft(temp_db, monkeypatch, self.MINIMAL)
+        monkeypatch.setattr(
+            charter_runtime, "promotion_bundle",
+            lambda *a, **kw: {"charter": "fleet", "body": "ops_7",
+                              "handoff": {"hedonic": {"pain": -3,
+                                                      "pleasure": "lots"}}})
+        # The binding is a charter concern and needs a real charter behind it;
+        # what this test is about is the sheet those four `.update()` calls
+        # just wrote into.
+        monkeypatch.setattr(charter_runtime, "bind_promoted_character",
+                            lambda *a, **kw: True)
+        char_id = promote_background_character(
+            chat_id, "Dr. Crusher", sheet=draft["sheet"], memory_seeds=[])
+
+        stored = json.loads(temp_db.q(
+            "SELECT sheet FROM characters WHERE id=?",
+            (char_id,), one=True)["sheet"])
+        hedonic = stored["initial_state"]["hedonic"]
+        assert isinstance(hedonic["pain"], float)
+        assert isinstance(hedonic["pleasure"], float)

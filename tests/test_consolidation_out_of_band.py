@@ -193,10 +193,14 @@ def test_cancellation_stops_between_characters(temp_db, monkeypatch):
 
 def test_checkpoint_restore_cancels_the_inflight_job(temp_db, monkeypatch):
     """A summary computed from rows a restore is rolling back must not land
-    afterward: restore_checkpoint asks the consolidation job -- and ONLY
-    that job -- to stop. The offscreen ticks beside it are deliberately
-    left running (their landings are provisional; a turn starting must
-    never cancel them)."""
+    afterward: restore_checkpoint asks the consolidation job to stop.
+    Auto-promotion's draft job joined it with review 2026-09-07's C10, which
+    moved the sheet MINT out of band -- that job writes nothing (the
+    promotion is applied on the next beat's tail, in the turn thread), so
+    this cancel is about the spend: a sheet drafted from a beat the restore
+    is discarding would be paid for and then refused at landing. The
+    offscreen ticks beside them are deliberately left running (their
+    landings are provisional; a turn starting must never cancel them)."""
     from persist import checkpoints
 
     ctx = _make_ctx(temp_db)
@@ -208,7 +212,8 @@ def test_checkpoint_restore_cancels_the_inflight_job(temp_db, monkeypatch):
     monkeypatch.setattr(jobs, "cancel",
                         lambda cid, key: cancelled.append((cid, key)))
     checkpoints.restore_checkpoint(ctx.chat.id, 12)
-    assert cancelled == [(ctx.chat.id, commit.MEMORY_CONSOLIDATION_JOB_KEY)]
+    assert cancelled == [(ctx.chat.id, commit.MEMORY_CONSOLIDATION_JOB_KEY),
+                         (ctx.chat.id, commit.AUTO_PROMOTION_JOB_KEY)]
 
 def test_utility_is_configured_not_inherited(monkeypatch):
     """`utility` is the background helper lane (memory consolidation above

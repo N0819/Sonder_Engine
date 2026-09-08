@@ -32,7 +32,9 @@ from __future__ import annotations
 
 import json
 
-from story.character_schema import character_name, normalize_persona_data, persona_name
+from story.character_schema import (character_name, normalize_persona_data,
+                                    normalized_character_from_text,
+                                    persona_name)
 from core.db import q, qi, transaction, wget, wget_for_frame, wset, wset_for_frame
 from core.frames import create_frame, get_frame
 from world.paradox import get_paradox
@@ -813,8 +815,15 @@ def _extra_personas_in_zone(chat_id, frame_id, scene, zone):
 def _cast_char_ids_in_zone(chat_id, frame_id, scene, zone):
     char_ids = []
     for row in active_cast(chat_id, frame_id):
-        sheet = json.loads(row["sheet"])
-        name = character_name(sheet)
+        # THE MEMO THAT STILL RAISES (C14 rework). Every one of the four
+        # frame-surgery reads below used to be `character_name(json.loads(...))`
+        # and aborted the split, merge or toll on a card that would not parse;
+        # `character_name_from_text` answers "Unnamed" instead, which would
+        # zone an unreadable body into a frame under a name it shares with
+        # every other unreadable body. A frame is where a body IS -- getting
+        # that wrong silently is worse than stopping -- so these read the
+        # memoised normalization, which raises what `json.loads` raises.
+        name = character_name(normalized_character_from_text(row["sheet"]))
         if _effective_zone(scene, name) == zone:
             char_ids.append(row["id"])
     return char_ids
@@ -1023,7 +1032,7 @@ def perform_split(chat_id, parent_frame_id, turn_idx, away_zone):
             wset_for_frame(chat_id, key, wget_for_frame(chat_id, key, parent_frame_id, default),
                            new_frame_id)
         for row in active_cast(chat_id, parent_frame_id):
-            name = character_name(json.loads(row["sheet"]))
+            name = character_name(normalized_character_from_text(row["sheet"]))
             rel = wget_for_frame(chat_id, f"relationships:{row['id']}", parent_frame_id, None)
             if rel is not None:
                 wset_for_frame(chat_id, f"relationships:{row['id']}", rel, new_frame_id)
@@ -1205,7 +1214,8 @@ def perform_merge(chat_id, parent_frame_id, child_frame_id, turn_idx):
                 continue
             if parent_rel != child_rel:
                 warnings.append(
-                    f"Relationship record for {character_name(json.loads(row['sheet']))} "
+                    "Relationship record for "
+                    f"{character_name(normalized_character_from_text(row['sheet']))} "
                     "diverged during the separation; the parent frame's version was kept."
                 )
 

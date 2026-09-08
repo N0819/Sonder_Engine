@@ -421,3 +421,232 @@ class TestAStructuredValueInAProseSlot:
         psych = character_psychology(normalize_character_data({"psychology": {
             "self_model": {"beliefs": [{"belief": {"a": {"b": [1, {"c": 2}]}}}]}}}))
         assert psych["self_model"]["beliefs"][0]["belief"] == ""
+
+
+class TestOneNormalizationPerCard:
+    """Review 2026-09-07 C14. Normalization rebuilds the whole default tree and
+    merges the card over it -- 5.3 ms on chat 117's stored 26 KB card -- and
+    thirty-nine accessors were each paying it to read one field.
+    `normalized_character_from_text` memoises the derivation on the stored
+    sheet TEXT, and `normalize_character_data` marks its own product so the
+    second and later reads short-circuit. These test the two ways a memo goes
+    wrong: a stale answer, and a shared answer somebody mutated."""
+
+    CARD = {"identity": {"name": "Vesper", "aliases": ["Ves"]},
+            "psychology": {"drive": {"essence": "keep the light on"}},
+            "embodiment": {"visible": {"summary": "a tall woman"}}}
+
+    def _text(self, card=None):
+        import json
+        return json.dumps(card or self.CARD)
+
+    def test_the_memo_gives_what_a_fresh_normalization_gives(self):
+        import json
+        from story.character_schema import normalized_character_from_text
+        for card in (self.CARD,
+                     {"name": "Legacy", "appearance": "a short man",
+                      "senses": "keen hearing"},
+                     # A shape the repair has to lift back out of `psychology`.
+                     {"psychology": {"identity": {"name": "Parked",
+                                                  "aliases": ["P"]}}}):
+            text = json.dumps(card)
+            memo = dict(normalized_character_from_text(text))
+            fresh = dict(normalize_character_data(json.loads(text)))
+            memo_id, fresh_id = memo.pop("identity"), fresh.pop("identity")
+            assert memo == fresh
+            memo_id.pop("uid")
+            fresh_id.pop("uid")
+            assert memo_id == fresh_id
+
+    def test_an_edited_sheet_is_a_different_key(self):
+        """The whole of the invalidation: the key IS the stored text, so a card
+        somebody edited cannot come back as the card they edited."""
+        import copy
+        import json
+        from story.character_schema import (character_name,
+                                            normalized_character_from_text)
+        edited = copy.deepcopy(self.CARD)
+        edited["identity"]["name"] = "Vesper Holt"
+        assert character_name(normalized_character_from_text(self._text())) == "Vesper"
+        assert character_name(
+            normalized_character_from_text(json.dumps(edited))) == "Vesper Holt"
+
+    def test_a_caller_owns_what_it_receives(self):
+        """A cached value handed out by reference is one mutation away from
+        every later reader seeing somebody else's edit."""
+        from story.character_schema import normalized_character_from_text
+        first = normalized_character_from_text(self._text())
+        first["identity"]["name"] = "MUTATED"
+        first["psychology"]["drive"]["essence"] = "MUTATED"
+        second = normalized_character_from_text(self._text())
+        assert second["identity"]["name"] == "Vesper"
+        assert second["psychology"]["drive"]["essence"] == "keep the light on"
+
+    def test_a_minted_uid_stays_freshly_minted(self):
+        """`cast_entity_id` is built on normalization minting a NEW uid every
+        call for a card that authors none; a memo that froze it would give two
+        cards made from one blank template the same identity."""
+        import json
+        from story.character_schema import normalized_character_from_text
+        text = self._text()
+        first = normalized_character_from_text(text)["identity"]["uid"]
+        second = normalized_character_from_text(text)["identity"]["uid"]
+        assert first.startswith("char_") and second.startswith("char_")
+        assert first != second
+        authored = json.dumps({"identity": {"name": "V", "uid": "char_authored"},
+                               "psychology": {}})
+        assert (normalized_character_from_text(authored)["identity"]["uid"]
+                == "char_authored")
+        assert (normalized_character_from_text(authored)["identity"]["uid"]
+                == "char_authored")
+
+    def test_normalization_recognises_its_own_product(self):
+        import copy
+        from story.character_schema import NormalizedCharacterSheet
+        once = normalize_character_data(self.CARD)
+        assert isinstance(once, NormalizedCharacterSheet)
+        assert normalize_character_data(once) is once
+        assert isinstance(copy.deepcopy(once), NormalizedCharacterSheet)
+        # The escape hatch a caller that MUTATED a normalized sheet must use.
+        assert not isinstance(dict(once), NormalizedCharacterSheet)
+        again = dict(normalize_character_data(dict(once)))
+        once_ = dict(once)
+        once_.pop("identity")
+        again.pop("identity")
+        assert once_ == again
+
+    def test_the_mark_never_reaches_storage(self):
+        """It is a dict subclass precisely so that nothing about it survives
+        `json.dumps` into a `characters.sheet` row."""
+        import json
+        stored = json.dumps(normalize_character_data(self.CARD))
+        assert type(json.loads(stored)) is dict
+
+    def test_a_row_with_no_readable_card_is_not_an_unnamed_body(self):
+        from story.character_schema import normalized_character_of_row
+        assert normalized_character_of_row({"sheet": "{not json"}) is None
+        assert normalized_character_of_row({"id": 3}) is None
+        assert normalized_character_of_row({"sheet": {"already": "parsed"}}) is None
+        assert normalized_character_of_row(
+            {"sheet": self._text()})["identity"]["name"] == "Vesper"
+
+    def test_the_kind_dispatchers_still_read_the_card_as_stored(self):
+        """`scene.senses_of` and its three siblings ask which KIND of card they
+        hold by looking for a section only that kind has, and normalization
+        gives every card a `psychology`. So a caller that normalizes once to
+        share the answer must still hand these the sheet it read off the row --
+        measured while wiring C14, and guarded here because the saving looks
+        free."""
+        from story.scene import scent_of, senses_of
+        raw = {"name": "X", "senses": "keen hearing", "scent": "smoke"}
+        assert senses_of(raw) == "keen hearing"
+        assert scent_of(raw) == "smoke"
+        normalized = normalize_character_data(raw)
+        assert senses_of(normalized) != "keen hearing"
+        assert scent_of(normalized) == ""
+
+    def test_a_mind_is_not_rekeyed_by_the_uid_normalization_mints(self):
+        """The two reads `character_step` takes BEFORE it normalizes, and why.
+        `cast_entity_id` must answer the same string every turn and
+        `identity_key` keys this mind's knowledge circles -- both fall back to
+        a stable form for a card that authors no uid, and both would instead
+        pick up a freshly minted one off a normalized sheet."""
+        import inspect
+        import json
+        import agents.character as character
+        from mind.knowledge_circles import identity_key
+        from story.character_schema import (cast_entity_id,
+                                            normalized_character_from_text)
+        text = self._text()
+        raw = json.loads(text)
+        assert cast_entity_id(raw, 7) == "character:7"
+        assert identity_key(raw) == "vesper"
+        normalized = normalized_character_from_text(text)
+        assert cast_entity_id(normalized, 7).startswith("char_")
+        assert identity_key(normalized).startswith("char_")
+        src = inspect.getsource(character.character_step)
+        assert 'cast_entity_id(sh, row["id"])' in src
+        assert "identity_key(raw_sheet)" in src
+
+
+class TestNormalizationIsAFixedPoint:
+    """Review 2026-09-07 C14 rework. `NormalizedCharacterSheet` lets a second
+    normalization return the card unchanged, which is only sound if a second
+    normalization WOULD have returned it unchanged. It would not have, for
+    half the cards: the legacy conversion returned a hand-written native
+    literal that a native pass then extended, so `normalize(x)` and
+    `normalize(normalize(x))` were two different sheets and which one a reader
+    saw depended on how many times the card had been through."""
+
+    LEGACY = {"name": "Rook", "appearance": "a short man",
+              "senses": "keen hearing", "abilities": ["baking"],
+              "core": {"self_image": "a cook"},
+              "active_state": {"mood": "wary", "goal": "find the key"}}
+
+    def _uidless(self, sheet):
+        import copy
+        out = copy.deepcopy(dict(sheet))
+        out.get("identity", {}).pop("uid", None)
+        return out
+
+    def test_a_legacy_card_is_where_a_second_pass_would_have_put_it(self):
+        """The five slots the conversion literal never learned about. Each was
+        added to `default_character_data` after it was written, and a second
+        pass backfilled every one of them."""
+        import copy
+        once = normalize_character_data(copy.deepcopy(self.LEGACY))
+        assert once["simulation"]["curiosity"] == 0.5
+        assert once["knowledge"]["circles"] == []
+        assert once["embodiment"]["scent"] == ""
+        assert once["embodiment"]["interoception"]["responsive_regions"] == []
+        assert once["psychology"]["capacity"] == ""
+
+    def test_normalizing_twice_changes_nothing_for_either_branch(self):
+        import copy
+        for card in (self.LEGACY,
+                     {"identity": {"name": "Native"},
+                      "psychology": {"traits": ["kind"]}},
+                     {"name": "Bare"},
+                     {}):
+            once = normalize_character_data(copy.deepcopy(card))
+            twice = normalize_character_data(dict(once))
+            assert self._uidless(once) == self._uidless(twice), card
+
+    def test_a_name_read_off_a_normalized_card_is_the_name(self):
+        """What every converted call site now depends on: `character_name` runs
+        normalization itself, so it can only agree with a caller that
+        normalized first if normalization is a fixed point."""
+        from story.character_schema import character_name
+        import copy
+        raw = copy.deepcopy(self.LEGACY)
+        assert character_name(raw) == character_name(
+            normalize_character_data(copy.deepcopy(raw)))
+
+
+class TestAnUnreadableCardIsNotAnUnnamedBody:
+    """C14 rework. `character_name_from_text` answers "Unnamed" for a card that
+    will not parse -- right for a label, wrong for frame surgery, where the
+    four reads that decide which frame a body lands in used to abort on it.
+    Two corrupt rows would otherwise be one "Unnamed" body: zoned together,
+    and in `paradox._apply_toll` collapsed into a single map entry where one
+    pays the other's toll."""
+
+    def test_the_memo_raises_where_the_parse_did(self):
+        import json
+        import pytest
+        from story.character_schema import (character_name_from_text,
+                                            normalized_character_from_text)
+        assert character_name_from_text("{not json") == "Unnamed"
+        with pytest.raises(json.JSONDecodeError):
+            normalized_character_from_text("{not json")
+
+    def test_zoning_stops_on_a_card_it_cannot_read(self, monkeypatch):
+        import json
+        import pytest
+        import world.spatial_frames as spatial_frames
+        monkeypatch.setattr(spatial_frames, "active_cast",
+                            lambda chat_id, frame_id: [
+                                {"id": 1, "sheet": "{not json"},
+                                {"id": 2, "sheet": "{not json"}])
+        with pytest.raises(json.JSONDecodeError):
+            spatial_frames._cast_char_ids_in_zone(1, None, {}, "here")

@@ -21,6 +21,8 @@ from story.character_schema import (
     character_name_from_text,
     character_public_history,
     name_boundary_pattern,
+    normalized_character_from_text,
+    normalized_character_of_row,
     persona_abilities,
     persona_appearance,
     persona_extra_parts,
@@ -1325,7 +1327,7 @@ def director_interpret(ctx, nonce):
 
     if not fl["reactors"]:
         for c in ctx.cast:
-            sh = json.loads(c["sheet"])
+            sh = normalized_character_from_text(c["sheet"])
             c_room = character_room(sc, sh)
             rel = spatial_rel(sc, p_room, c_room)
             if rel.get("same_room") or can_perceive_onset(sc, p_room, c_room):
@@ -1426,9 +1428,7 @@ def director_interpret(ctx, nonce):
     }
 
     actor_names = {
-        character_name(
-            json.loads(row["sheet"])
-        ).casefold()
+        character_name_from_text(row["sheet"]).casefold()
         for row in ctx.cast
     }
 
@@ -3276,7 +3276,7 @@ def director_resolve(ctx, nonce, _corrections=None):
         if int(c["id"]) in covered_ids:
             continue
         dk = ctx.character_results.get(c["id"])
-        sh = json.loads(c["sheet"])
+        sh = normalized_character_from_text(c["sheet"])
         cname = character_name(sh)
         if dk:
             decls.append({
@@ -3439,7 +3439,8 @@ def director_resolve(ctx, nonce, _corrections=None):
     # contestable, not auto-executed.
     social_standing = {
         character_name_from_text(c["sheet"]):
-            (character_public_history(json.loads(c["sheet"])) or "")[:240]
+            (character_public_history(
+                normalized_character_from_text(c["sheet"])) or "")[:240]
         for c in ctx.cast
     }
     social_standing[p_name] = (persona_public_history(pers) or "")[:240]
@@ -3703,7 +3704,8 @@ def director_resolve(ctx, nonce, _corrections=None):
         # them, just as character-owned contact endings survive omission.
         "character_material_effects": character_material_effects,
         "character_abilities": {
-            character_name_from_text(c["sheet"]): character_abilities(json.loads(c["sheet"]))
+            character_name_from_text(c["sheet"]):
+                character_abilities(normalized_character_from_text(c["sheet"]))
             for c in ctx.cast
         },
         "dice_results_final": dice,
@@ -3967,9 +3969,8 @@ def director_resolve(ctx, nonce, _corrections=None):
     # PM22). Read off the cards, which is where the engine owns this.
     _body_pronouns = {}
     for _c in ctx.cast:
-        try:
-            _cs = json.loads(_c["sheet"])
-        except Exception:
+        _cs = normalized_character_of_row(_c)
+        if _cs is None:
             continue
         # Through the ONE identity reader (review 2026-09-07 B12): a card
         # whose pronouns a model parked at top level is repaired only for

@@ -57,6 +57,7 @@ import hashlib
 import math
 from typing import Optional
 
+from world.scene_memo import scene_memo
 from world.spatial_barriers import _SIGHT_BARRIERS, normalize_barrier
 from world.spatial_geometry import (
     _TIER_SIDE,
@@ -466,7 +467,23 @@ def anchor_cells(scene: dict, room_id, *, derive=False) -> dict:
     both sides), because one perception pass asks for the same room once
     per observer per pair; the derivation is pure, so a cache keyed on
     everything it reads cannot go stale.
+
+    TWO LEVELS, because the content key was itself the cost (review C12).
+    The outer level is the read-pass memo (`world/scene_memo.py`), which
+    answers without deriving the room's anchors or serialising them at all;
+    the inner level is the content cache below, which is what lets a
+    RE-READ scene -- a new object with the same rooms -- reuse the placement
+    a previous one paid for. A miss on the outer level runs exactly the code
+    that ran before.
     """
+    placed = scene_memo(scene, ("anchor_cells", str(room_id), bool(derive)),
+                        lambda: _anchor_cells(scene, room_id, derive=derive))
+    return {aid: dict(rec, cells=list(rec["cells"]))
+            for aid, rec in placed.items()}
+
+
+def _anchor_cells(scene: dict, room_id, *, derive=False) -> dict:
+    """The placement itself, content-cached across scene objects."""
     grid = room_grid(scene, room_id)
     anchors = effective_anchors(scene, room_id, derive=derive)
     import json as _json
@@ -474,13 +491,12 @@ def anchor_cells(scene: dict, room_id, *, derive=False) -> dict:
                       default=str)
     cached = _ANCHOR_CACHE.get(key)
     if cached is not None:
-        return {aid: dict(rec, cells=list(rec["cells"]))
-                for aid, rec in cached.items()}
+        return cached
     out = _place_anchors(room_id, grid, anchors)
     if len(_ANCHOR_CACHE) >= _ANCHOR_CACHE_MAX:
         _ANCHOR_CACHE.clear()
     _ANCHOR_CACHE[key] = out
-    return {aid: dict(rec, cells=list(rec["cells"])) for aid, rec in out.items()}
+    return out
 
 
 _ANCHOR_CACHE: dict = {}
