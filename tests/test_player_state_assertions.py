@@ -172,6 +172,45 @@ class TestItValidatesShapeAndNothingElse:
         assert json.dumps(sc, sort_keys=True) == before
 
 
+class TestOneBadChannelCostsThatChannel:
+    """A29 (review 2026-09-07): the whole assertion set used to go with it.
+
+    `director.py`'s interpret tail calls this on `out["state_assertions"]`
+    AFTER `_run_specialists` has merged the specialists' channels into that
+    same object, so the payload validated here is no longer only the prose
+    author's. Under `except Exception: return {}` one malformed
+    specialist-written channel discarded the player's declared position, pose
+    and attire together -- the same one-bad-field-costs-the-beat class the
+    `state_diff` prune in `llm/schemas.py` fixes for a step's own output, one
+    level down.
+    """
+
+    def test_a_good_channel_survives_a_malformed_sibling(self):
+        got, notes = _said({"positions": {"Hinami": "room_a"},
+                            "poses": {"Hinami": {"posture": "kneeling"}},
+                            "conditions": 5})
+        assert got["positions"] == {"Hinami": "room_a"}
+        assert got["poses"]["Hinami"]["posture"] == "kneeling"
+        assert "conditions" not in got
+        assert any("conditions" in note for note in notes)
+
+    def test_every_dropped_channel_is_named(self):
+        """Dropped, never invented, and never silent: a swallowed channel
+        reads as a model that asserted nothing."""
+        got, notes = _said({"positions": {"Hinami": "room_a"},
+                            "conditions": 5, "attire": 7})
+        assert set(got) == {"positions"}
+        dropped = " ".join(notes)
+        assert "conditions" in dropped and "attire" in dropped
+
+    def test_a_failure_no_channel_owns_still_discards_everything(self):
+        """The prune is attributable or it does not happen. A payload that is
+        not an object at all has no channel to blame."""
+        got, notes = _said({"positions": ["not", "a", "mapping"]})
+        assert got == {}
+        assert notes
+
+
 class TestResolveKeepsTheLastWord:
     def test_a_silent_resolve_does_not_lose_the_assertion(self):
         """Previewing fixes what reactors SAW and nothing else. If resolve

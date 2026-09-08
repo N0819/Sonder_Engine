@@ -8,7 +8,8 @@ import re
 from world.spatial_containment import (_WHOLE_BODY_PARTS,
                                  containment_conceals, enclosure_joins_rooms,
                                  hiding_holders_of, scale_changed_names)
-from world.spatial_identity import (_ci_get, _unique_entity_keyed,
+from world.spatial_identity import (_ci_get, scene_names_body,
+                                    _unique_entity_keyed,
                                     canonical_subject, same_subject)
 from world.spatial_transit import _is_body_entity
 
@@ -572,47 +573,23 @@ def _manner_is_placement(manner) -> bool:
 def _endpoint_is_body(scene, name) -> bool:
     """Is this contact endpoint a body, on the scene's own evidence.
 
-    Affirmative only: `_is_body_entity`'s split (a body is the thing that
-    WEARS something or has a scale) asked of the endpoint's own spelling
-    first, because a registered cast member is routinely a subject with no
-    entity record at all -- both endpoints of the measured case were in
-    `attire` and neither was in `entities`. No evidence reads as NOT a body,
-    which is the conservative direction for the one caller: it refuses a
-    record only where the scene positively says two bodies.
+    ONE PREDICATE, asked here and by the comfort derivation, the standing
+    condition sweep and the creature's prey table alike
+    (`spatial_identity.scene_names_body`, review 2026-09-07 A56 rework). This
+    module's own ladder WAS that function -- affirmative tiers, ending in "a
+    subject the scene stands somewhere and does not record as a thing is a
+    body" -- and the copy that grew up in `world/comfort.py` answered the
+    opposite for that last tier, so one scene told the identity floor
+    "someone" and the comfort derivation "a cushion" about the same endpoint.
+
+    The behaviour this caller depends on is unchanged: affirmative only, so
+    silence is not a body and the identity floor never mints a person out of
+    a garment (chat 98 turn 22's combadge is in neither `positions` nor
+    `entities`, and stays a thing). The shared spelling additionally counts a
+    `vitals`, `overlays` or `poses` row as the wardrobe and the scale already
+    counted -- every one of them a ledger only a body has a row in.
     """
-    if not isinstance(scene, dict):
-        return False
-    name = str(name or "").strip()
-    if not name:
-        return False
-    if _is_body_entity(scene, name, None):
-        return True
-    eid, ent = _unique_entity_keyed(scene, name)
-    if bool(eid) and _is_body_entity(scene, eid, ent):
-        return True
-    # A SUBJECT THE SCENE STANDS SOMEWHERE, AND DOES NOT RECORD AS A THING.
-    # The two tiers above ask the wardrobe and the scale, and a registered
-    # mind routinely has neither -- Sable, in the measured test, wears nothing
-    # and has no entity record, and is plainly a person standing in a yard.
-    # `positions` is where the scene puts BODIES; an object that reaches it
-    # arrives with an entity record beside it (the run's own minted garment is
-    # in both), so a positioned subject the entity ledger does not describe is
-    # a body on the scene's own evidence.
-    #
-    # Affirmative in the same direction as everything above: silence is not a
-    # body. That is what keeps the measured object case answered -- chat 98
-    # turn 22 filed `target: "combadge"`, and at that checkpoint the combadge
-    # is in neither `positions` nor `entities`, so it stays a thing and the
-    # player is no longer told a person is pressed against her.
-    positions = scene.get("positions")
-    if isinstance(positions, dict):
-        folded = name.casefold()
-        for subject in positions:
-            if str(subject).strip().casefold() != folded:
-                continue
-            eid, _ent = _unique_entity_keyed(scene, name)
-            return not eid
-    return False
+    return scene_names_body(scene, name)
 
 
 # ---------------------------------------------------------------------------

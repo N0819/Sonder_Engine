@@ -375,7 +375,8 @@ def _nearest(reach, key, places, seed):
 
 
 def errands(bodies, needs, upkeeps, watch, places, reach, seed=0,
-            rate=ERRAND_RATE, hours=4.0, commons=(), phase=None):
+            rate=ERRAND_RATE, hours=4.0, commons=(), phase=None,
+            resting_phases=None, social_phases=None):
     """Who goes where this window, off the watch bill. ``{body: place}``.
 
     THE DAY DECIDES WHETHER ANYONE GOES OUT. ``phase`` is the window's phase
@@ -386,6 +387,16 @@ def errands(bodies, needs, upkeeps, watch, places, reach, seed=0,
     for its own sake -- to a commons, the tavern rather than the granary --
     and a charter with no commons keeps its people home. No phase is the
     day as it was before the cycle: errands at every hour.
+
+    WHICH PHASES THOSE ARE IS THE INSTITUTION'S OWN (D19, review
+    2026-09-07). `day_cycle.RESTING_PHASES`/`SOCIAL_PHASES` name when the
+    DAYLIT majority sleeps and when it goes out, and applying them to every
+    charter says that a nightwatch, a bakery on the pre-dawn shift and a
+    house that only opens after dusk all keep a farmer's hours. ``None``
+    means the shipped sets, an empty set means an institution that has no
+    such phase at all, and neither is guessed from the roster -- an
+    institution's hours are authored, in the same place and the same way its
+    ``errand_rate`` is.
 
     THE CIRCULATION THE RUMOUR CHANNEL WAS MISSING, and the measurement
     that demanded it: a famine month minted 244 witnessable news events and
@@ -422,9 +433,13 @@ def errands(bodies, needs, upkeeps, watch, places, reach, seed=0,
     if chance <= 0.0:
         return out
     from .day_cycle import RESTING_PHASES, SOCIAL_PHASES
-    if phase in RESTING_PHASES:
+    resting = RESTING_PHASES if resting_phases is None else frozenset(
+        str(name) for name in resting_phases)
+    social_set = SOCIAL_PHASES if social_phases is None else frozenset(
+        str(name) for name in social_phases)
+    if phase in resting:
         return out
-    social = phase in SOCIAL_PHASES
+    social = phase in social_set
     for key in sorted(bodies or {}):
         body = bodies[key]
         if key in posted or not body.get("available") or en_route(body):

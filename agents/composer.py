@@ -75,6 +75,7 @@ from world.spatial import (
     _entity_named,
     _anchor_room_of,
     _is_body_entity,
+    body_cell,
     body_visibility,
     contact_thing_label,
     effective_anchors,
@@ -82,6 +83,7 @@ from world.spatial import (
     entity_arc,
     entity_side,
     hear_level,
+    held_beam_falls_on,
     _sense_channel,
     sense_adjusted,
     proximity_rel,
@@ -810,21 +812,47 @@ def _clean_shape(shape, levels):
                if str(s or "").strip()]
     openings = [str(o).strip() for o in (shape.get("openings") or ())
                 if str(o or "").strip()]
+    # What a coned source in view is pointed at (D5). Descriptions of
+    # anchors the field has already graded, in the order the field put them
+    # -- nearest the beam first -- so ordering is data and not a rendering
+    # choice. Empty for a field with no aimed source, and for `sound_shape`,
+    # which has no cone at all.
+    aimed = [str(a).strip() for a in (shape.get("aimed") or ())
+             if str(a or "").strip()]
     self_word = shape.get("self")
     self_word = self_word if self_word in levels else None
     if not groups and self_word is None:
         return None
     return {"groups": groups, "sources": sources, "openings": openings,
-            "self": self_word}
+            "self": self_word,
+            # No beam, no key (D5): every reader takes absence as "nothing aimed".
+            **({"aimed": aimed} if aimed else {})}
 
 
 def _shape_signature(shape):
     if not shape:
         return ""
+    aimed = [a for a in (shape.get("aimed") or ()) if a]
     return "|".join(
         ["%s=%s" % (g["level"], ",".join(g["items"])) for g in shape["groups"]]
         + ["from=" + ",".join(shape["sources"] + shape["openings"]),
-           "self=%s" % (shape["self"] or "")])
+           "self=%s" % (shape["self"] or "")]
+        # SWINGING THE BEAM IS NEWS. The signature is the dedupe key of both
+        # the `environment` percept and the `soundscape` percept: leave the
+        # aim out of it and a lamp moved from one thing to another leaves
+        # the room `unchanged`, so the sentence naming the new thing is
+        # suppressed as furniture (D5).
+        #
+        # APPENDED, AND ONLY WHEN THERE IS A BEAM. An `aimed=` segment
+        # emitted unconditionally rewrites the stored key of every shape
+        # that never had a beam -- measured on a beam-less sound shape,
+        # `din=a generator|from=a generator|self=din` became
+        # `din=a generator|from=a generator|aimed=|self=din` -- so every
+        # room description and every soundscape in every live chat would
+        # re-announce itself as news on the first beat after this landed.
+        # A shape with no beam hashes byte for byte to what it hashed
+        # before.
+        + (["aimed=" + ",".join(aimed)] if aimed else []))
 
 
 def environment_percept(room_id, room_name, room_notes="", light="",
@@ -957,12 +985,47 @@ def _shape_clauses(shape, prefix, levels):
             if level in levels]
 
 
+def aim_worth_naming(shape):
+    """The beam's anchors, when saying them adds something -- else [].
+
+    WHERE THE BEAM LANDS (D5). A sentence separate from the room's grading,
+    because it answers a different question: the grading says how much light
+    is where, and this says what the light is being POINTED at -- the thing
+    a reader looks at first and the page never named (chat 117 beats 59-62,
+    five beats of an aimed hand lamp).
+
+    It speaks only where it names a set THE GRADING DID NOT ALREADY NAME BY
+    ITSELF. Two ways it fails to: a beam covering every anchor in view has
+    singled nothing out, and a beam whose anchors are exactly the brightest
+    group is the sentence before it in other words ("The light from the hand
+    lamp falls on a stack of crates. The beam is on a stack of crates.").
+    Where a second source does the grading -- an overhead strip lighting the
+    room while the hand lamp picks one thing out of it -- the two sets
+    differ and the aim is the news of the beat.
+
+    Here rather than in either renderer because it is a decision about the
+    aim's information content, not about a language: two copies of it would
+    be two answers to "is this worth a sentence", free to drift, and every
+    pack's adapter is a second renderer by construction.
+    """
+    shape = _clean_shape(shape, LIGHT_SHAPE_LEVELS)
+    if not shape:
+        return []
+    aimed = shape.get("aimed") or []
+    graded = {item for group in shape["groups"] for item in group["items"]}
+    brightest = set(shape["groups"][0]["items"]) if shape["groups"] else set()
+    if not aimed or len(set(aimed)) >= len(graded) or set(aimed) == brightest:
+        return []
+    return list(aimed)
+
+
 def render_light_shape(shape):
     """The light's shape as one or two English sentences, from templates over
     the closed set alone: the origin (the sources in view and the openings
     the light comes through, or 'the light' when neither is in view), the
-    visible anchors grouped bright to dark, and where the observer stands.
-    No number, cell or sector reaches the page -- the shape carries none."""
+    visible anchors grouped bright to dark, what a coned source in view is
+    pointed at, and where the observer stands. No number, cell or sector
+    reaches the page -- the shape carries none."""
     shape = _clean_shape(shape, LIGHT_SHAPE_LEVELS)
     if not shape:
         return ""
@@ -978,6 +1041,16 @@ def render_light_shape(shape):
                   else _en("light_origin_none"))
         parts.append(_cap(_en("light_shape", origin=origin,
                               clauses=_join_clauses(clauses))))
+    # WHERE THE BEAM LANDS (D5). A separate sentence from the room's
+    # grading, because it answers a different question: the grading says how
+    # much light is where, and this says what the light is being POINTED at
+    # -- the thing a reader looks at first and the page never named (chat
+    # 117 beats 59-62, five beats of an aimed hand lamp).
+    #
+    aimed = aim_worth_naming(shape)
+    if aimed:
+        parts.append(_cap(_en("light_aimed", items=_join_clauses(
+            [_noun_phrase(a) for a in aimed]))))
     if shape["self"]:
         parts.append(_en("light_self_" + shape["self"]))
     return " ".join(parts)
@@ -1088,6 +1161,48 @@ def _size_label(scene, observer_name, name):
     return None
 
 
+#: WHERE A BODY SORTS IN A ROLL-CALL, near to far. The tier is the coarse
+#: answer and is always available; the cell distance separates two bodies
+#: inside one tier. `beyond` is another room and closes the list.
+#:
+#: D4 (review 2026-09-07): the sentence that enumerates who is present listed
+#: bodies in scene-dict order, so the narrator was handed "A at the far door,
+#: B at your elbow, C across the hall" and invented its own arrangement --
+#: measured, a body at the other door narrated "on my right" (UNBUILT 1.149).
+#: This ORDERS and never withholds: every body the observer can see is still
+#: named, in the same clause, with the same words.
+_PRESENCE_DEPTH_TIERS = {"within_reach": 0, "near": 1, "across": 2,
+                         "beyond": 3}
+
+
+def _presence_depth(scene, observer_name, name):
+    """How far this body is from the observer in CELLS, squared, or None
+    when either body is unmeasured.
+
+    Squared because the only thing it is ever compared to is another one of
+    these -- it decides an order and never reaches a sentence, so a
+    monotonic function of the distance is the distance. None sorts last
+    within its tier (`_presence_sort_key`), which leaves an unmeasured pair
+    exactly where the caller put it: a room with no geometry renders byte
+    for byte what it rendered before.
+    """
+    here = body_cell(scene, observer_name)
+    there = body_cell(scene, name)
+    if here is None or there is None:
+        return None
+    return (there[0] - here[0]) ** 2 + (there[1] - here[1]) ** 2
+
+
+def _presence_sort_key(percept):
+    """(tier rank, cell distance) for one presence percept. Unknown tier and
+    unmeasured distance both sort LAST, so nothing this cannot measure is
+    moved past something it can."""
+    data = percept.data or {}
+    depth = data.get("depth")
+    return (_PRESENCE_DEPTH_TIERS.get(str(data.get("tier") or ""), 9),
+            float("inf") if depth is None else float(depth))
+
+
 def presence_percepts(scene, observer_name, co_present, display_map,
                       senses=None):
     """Presence -- a tier, a side, an arc -- for every co-present body the
@@ -1100,7 +1215,18 @@ def presence_percepts(scene, observer_name, co_present, display_map,
     Adds one thing, and it is the only addition here: RELATIVE MAGNITUDE. It
     is a standing presence fact the observer's own eyes have and no channel
     was delivering, so it rides the presence percept the way tier, side and
-    arc already do."""
+    arc already do.
+
+    The list comes back NEAR TO FAR (D4, review 2026-09-07): tier rank
+    first, measured cell distance inside a tier, stable everywhere it
+    cannot measure. The order is minted here rather than in a renderer
+    because a body's place in a roll-call is an arrangement, not a wording
+    -- the same rule this module already states for `aim_worth_naming` and
+    for where the halves of a description sit -- and because every pack's
+    adapter is a second renderer by construction: the English one sorted
+    its own groups and the ja one orders by list index, so a rule left in
+    English reached one page of two (measured: EN "Aoi is within arm's
+    reach and Ben is across the room.", JA far-first, same percepts)."""
     out = []
     for body in co_present or []:
         name = str(body.get("name") or "")
@@ -1178,6 +1304,13 @@ def presence_percepts(scene, observer_name, co_present, display_map,
         # IR invariant still holds. Absent rather than null when there is no
         # gap, so an unscaled scene's percept record is unchanged.
         size = _size_label(scene, observer_name, name)
+        _depth = None if room else _presence_depth(scene, observer_name, name)
+        # WHAT THE BEAM IS ON, when the beam is the observer's own (D5).
+        # `light_shape` can name only the room's furniture; the case that
+        # motivated the item was a hand lamp held on a body for five beats
+        # (chat 117, 59-62) with nothing on the page but the lamp. Same-room
+        # only, by the predicate's own contract.
+        _beam = (not room) and held_beam_falls_on(scene, observer_name, name)
         # WHERE A BODY STANDS IS AS OBSERVABLE AS THAT IT IS STANDING.
         # The view named the OBSERVER'S own station and never anybody
         # else's: in a two-hander whose whole geometry is one room, Halla's
@@ -1208,6 +1341,13 @@ def presence_percepts(scene, observer_name, co_present, display_map,
             fidelity="full" if level == "full" else "degraded",
             data={"tier": tier, "side": side, "arc": arc, "sight": level,
                   "body": body_key(name),
+                  # ORDERING ONLY, never a sentence: how far off this body
+                  # is in cells, so the roll-call reads near to far (D4).
+                  # Absent when either body is unmeasured. Deliberately NOT
+                  # in the dedupe key below -- a body that shuffled one cell
+                  # has not changed for this observer, and hashing the
+                  # distance would re-announce it every beat.
+                  **({"depth": _depth} if _depth is not None else {}),
                   # WHETHER THIS OBSERVER CAN NAME THEM. `display_map`
                   # answers recognition by construction -- a recognised body
                   # maps to its own name, a stranger to a descriptor -- and
@@ -1218,15 +1358,26 @@ def presence_percepts(scene, observer_name, co_present, display_map,
                   **({"size": size} if size else {}),
                   **({"at": station} if station else {}),
                   **({"room": room} if room else {}),
+                  **({"in_beam": True} if _beam else {}),
                   **({"behind": behind, "shows": shows} if behind else {})},
             salience=0.35,
             dedupe_key=standing_key(
                 "presence", (body_key(name),),
+                # SWINGING THE BEAM OFF A BODY IS NEWS, and onto one is
+                # more so, so the aim is content and the presence reads
+                # `changed` on the beat it moves (D5). APPENDED rather than
+                # placed, like every optional part here: a body nobody is
+                # pointing a lamp at hashes to exactly what it hashed to
+                # before, so no live chat spends an upgrade beat
+                # re-announcing everyone standing in it.
                 (tier, arc, level, size or "")
+                + (("beam",) if _beam else ())
                 + ((station,) if station else ())
                 + ((behind, shows) if behind else ())),
         ))
-    return out
+    # NEAR TO FAR (D4). Stable, so an unmeasured room -- every body sharing
+    # one key -- comes back in exactly the order the caller gave it.
+    return sorted(out, key=_presence_sort_key)
 
 
 _COUNT_NAMES = {
@@ -2748,6 +2899,38 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
     )
 
 
+def silence_percept(display, *, order_key=0):
+    """THE UNANSWERED ADDRESS, as a fact (D6, review 2026-09-07).
+
+    A line spoken to somebody who says nothing back is an event: it is the
+    whole of subtext, and every stage the engine has was silent about it,
+    so the page either invented "no answer came" about a body that had in
+    fact answered elsewhere, or -- more often -- let the beat pass as though
+    the addressee had not been spoken to. It has no percept anywhere because
+    perception is built out of what ARRIVED, and nothing arrives.
+
+    It states the fact and never the reason. "T says nothing" is what the
+    addresser has: they spoke to T, T could hear it, and no voice of T's
+    reached them. Whether T refused, was thinking, did not care or answered
+    somebody else is not in this percept and must not be read out of it --
+    that is exactly the inference the beat is FOR.
+
+    It is a hearing percept because it is a fact about the hearing channel:
+    it belongs to the person who was listening for an answer, and the caller
+    (`perception._outcome_event_stream`) mints one only into the view of the
+    observer who did the addressing.
+    """
+    label = str(display or "").strip()
+    if not label:
+        return None
+    return Percept(
+        kind="speech", channel="hearing", source_label=label,
+        fidelity="silence", data={"silence": True},
+        salience=0.5, order_key=order_key,
+        dedupe_key="speech:silence:" + _short_hash(label, str(order_key)),
+    )
+
+
 def communication_percept(entry, rel, observer_name, *, display, can_see,
                            proximity=None, order_key=0, observer_id=None,
                            senses=None):
@@ -3280,7 +3463,12 @@ def _presence_clause(p, *, brief=False, fresh=False):
         shows = str(p.data.get("shows") or "").strip()
         if shows:
             cover_clause += _en("presence_shows", shows=shows)
-    where = f"{tier}{at_clause}{side_clause}{size_clause}{cover_clause}"
+    # The observer's own beam is on this body (D5). A fact about where the
+    # observer is POINTING, which is theirs by construction, and it rides
+    # the presence sentence the way the tier and the cover clause do.
+    beam_clause = _en("presence_in_beam") if p.data.get("in_beam") else ""
+    where = (f"{tier}{at_clause}{side_clause}{size_clause}"
+             f"{cover_clause}{beam_clause}")
     if fresh:
         return _en("presence_fresh", label=p.source_label, where=where)
     return f"{p.source_label} is {where}"
@@ -3322,6 +3510,17 @@ def _render_presence_group(percepts):
     full and leads the sentence -- rather than as an omission that reads as
     an absence.
 
+    The order is NEAR TO FAR (D4, review 2026-09-07). A list of bodies is
+    blocking, and blocking is what the page was missing: the sentence
+    enumerated in scene-dict order, so the narrator received no arrangement
+    at all and supplied one -- a body standing at the other door was put "on
+    my right" (UNBUILT 1.149). Ordering withholds nothing; every body the
+    observer can see is still in the same sentence with the same words.
+    `presence_percepts` ALREADY SORTED THEM -- the rule lives in the IR so
+    every pack's renderer inherits it -- and the sort below is a no-op for
+    anything that came from there, kept because this function also renders
+    percepts a caller built by hand.
+
     Three more things happen here, and all three are why the corpus replay
     called the composed prose staccato:
 
@@ -3347,6 +3546,13 @@ def _render_presence_group(percepts):
         # What CHANGED is spelled in full and comes first; what merely
         # persists closes the sentence. Stable within each half.
         group = [row for row in pairs if row[0].fidelity == fidelity]
+        # NEAR TO FAR (D4). A no-op on a list from `presence_percepts`,
+        # which minted the order; it re-states it for hand-built percepts.
+        # Stable, and inside each half of the delta split below, so the
+        # emphasis rule keeps its say: what changed is still spelled in
+        # full and still leads. A room the geometry cannot measure gives
+        # every body the same key and the order is untouched.
+        group = sorted(group, key=lambda row: _presence_sort_key(row[0]))
         group = [x for x in group if not x[1]] + [x for x in group if x[1]]
         if not group:
             continue
@@ -3739,6 +3945,11 @@ def carried_voices(prev_standing):
 
 def _render_event(p):
     if p.kind == "speech":
+        # An answer that did not come (D6). Before the fragment branch,
+        # because there is no fragment and no body to render: the percept
+        # carries no words by construction.
+        if p.fidelity == "silence":
+            return _en("speech_silence", label=_cap(p.source_label))
         body = p.data.get("body") or ""
         via = str(p.data.get("via") or "")
         # `_inject_dialogue` into an empty document is the production grammar
@@ -4120,6 +4331,8 @@ _GENERIC_LABELS = frozenset(_ENGLISH_COMPOSITOR["generic_labels"])
 
 def _episode_sentence(p):
     if p.kind == "speech":
+        if p.fidelity == "silence":
+            return _en("episode_speech_silence", label=p.source_label)
         via = str(p.data.get("via") or "")
         if p.fidelity == "fragment":
             attributed = bool(p.data.get("attributed"))

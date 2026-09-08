@@ -36,10 +36,12 @@
 //              its posts and the station the placement rule derives -- no
 //              pose, no attire, since a townsperson has no row in either
 //              ledger; its room is authored here, its station on the map.
-//   Raw JSON -- the two editors that used to be the whole of these buttons,
-//              unchanged: the world table (🌍) or the attire ledger (👕),
-//              whole-body PUTs. The REPAIR path, kept because hand repair of
-//              a drifted scene is how the owner fixes one.
+//   Raw JSON -- the two editors that used to be the whole of these buttons:
+//              the world table (🌍) or the attire ledger (👕), each sent as
+//              one whole payload, read fresh on every entry to the tab and
+//              re-read at the moment of saving (A18). The REPAIR path, kept
+//              because hand repair of a drifted scene is how the owner fixes
+//              one.
 //
 // Reads `web/world_routes.py`: the index (`groups`, `bodies`, `vocab`) and
 // the slice (`record`, `stationable`), both transport over
@@ -54,9 +56,12 @@
 // (`PUT`/`DELETE /charters/{charter}/bodies/{body}/station` -- the charter
 // REGISTRY, never the scene: `world/charter_place.py`), and the two writes
 // the app already had --
-// "Move here" is the cast editor's `PUT /characters/{ch}/position`, and every
-// attire edit sends the WHOLE ledger to `PUT /attire`, which re-derives each
-// entry (`story.attire.rederive_entry`). The ledger stores a garment
+// "Move here" is the cast editor's `PUT /characters/{ch}/position`, and an
+// attire edit sends THIS BODY'S ENTRY ALONE to `PUT /attire`, which re-derives
+// what it is sent (`story.attire.rederive_entry`) and leaves every body the
+// request does not name as the story holds it. (It sent the whole ledger from
+// a stale index once; that is what overwrote a beat committed mid-edit, and
+// this header outlived the fix.) The ledger stores a garment
 // covering several regions ONCE PER REGION; this editor groups the copies
 // by name into one garment (`wbGroupGarments`), edits that, and writes every
 // copy back with the same state (`wbLedgerEntry`) -- so a kimono loosened at
@@ -1528,7 +1533,27 @@ function wbRenderBodies(host, ctx) {
 
 // ---- The Raw JSON tab: the two editors, unchanged --------------------------
 
-function wbRenderRaw(host, chatId, kind, cache) {
+// NO KEPT COPY OF A SERVER ROW, AND NOTHING SAVED OVER A RECORD IT DID NOT
+// JUST READ.
+//
+// This textarea is the whole record: the world PUT is `DELETE FROM world WHERE
+// chat_id=?` and a rewrite from the body, so saving an old copy does not merge
+// with what the story wrote since -- it deletes it. The tab used to render
+// from a copy held for the lifetime of the dialog, and two `delete
+// state.cache.raw` calls elsewhere were what stood between that copy and a
+// silent revert; a cache whose correctness depends on every future writer
+// remembering to invalidate it is a cache that will be stale (A18, review
+// 2026-09-07). It is read fresh instead, on every entry to the tab.
+//
+// That leaves the window the reader themselves is inside -- the dialog is not
+// gated on the story being idle, and a beat can commit, or another window can
+// save, while the editor sits open. `_require_chat_idle` on the route refuses
+// a write DURING a turn and has nothing to say about one that lands after it,
+// so the check is here: re-read at the moment of saving, and if the record
+// moved, say what saving would cost and let the reader decide. A comparison of
+// the two payloads verbatim can in principle be tripped by a re-ordering that
+// changed nothing, and the cost of that is one question nobody had to answer.
+function wbRenderRaw(host, chatId, kind) {
   host.innerHTML = "";
   const isAttire = kind === "attire";
   const path = isAttire
@@ -1536,6 +1561,8 @@ function wbRenderRaw(host, chatId, kind, cache) {
     : `/api/chats/${chatId}/world`;
   const render = data => {
     host.innerHTML = "";
+    // What this edit was made against.
+    const base = JSON.stringify(data);
     const ta = el("textarea",
       { style: isAttire ? "width:100%;height:340px" : "width:100%;height:420px" },
       JSON.stringify(data, null, 2));
@@ -1553,16 +1580,40 @@ function wbRenderRaw(host, chatId, kind, cache) {
         el("button", { class: "primary", onclick: async () => {
           let j;
           try { j = JSON.parse(ta.value); } catch (e) { return toast("Invalid JSON", "err"); }
+          let current = null;
+          try { current = await api("GET", path); } catch (e) { current = null; }
+          if (current !== null && JSON.stringify(current) !== base) {
+            // WHAT SAVING COSTS IS NOT THE SAME ON THE TWO TABS, so the
+            // sentence is not either: `PUT /world` is a DELETE and a rewrite
+            // (app.py `world_put`), while `PUT /attire` writes the bodies it
+            // is NAMED and leaves the rest of the ledger alone (`attire_put`).
+            // One sentence for both told a reader losing one body's entry
+            // that they were about to lose the whole ledger, and told a
+            // reader on the world tab the truth (A18, review 2026-09-07).
+            // Whole sentences, one per tab, rather than a shared opening and
+            // a differing clause: `t()` looks the message up by the string the
+            // browser passes it, so a sentence assembled from pieces at
+            // runtime is a sentence no catalog can hold (see
+            // `tools/extract_ui_catalog.py`).
+            const proceed = await confirmModal(isAttire
+              ? "The story has written to this ledger since it was opened -- "
+                + "a beat committed, or another window saved. Saving "
+                + "overwrites every body this copy names; a body it does not "
+                + "name keeps what the story wrote. Save anyway?"
+              : "The story has written to this record since it was opened -- "
+                + "a beat committed, or another window saved. Saving replaces "
+                + "everything it wrote. Save anyway?",
+              { danger: true, confirmLabel: "Save anyway" });
+            if (!proceed) return;
+          }
           await api("PUT", path, j);
           closeModal();
           toast(isAttire ? "Attire saved." : "World state saved.", "ok");
         } }, "Save")));
   };
-  if (cache.raw) return render(cache.raw);
   host.append(el("div", { class: "small dim" }, "Loading…"));
   api("GET", path).then(data => {
     if (S.chatId !== chatId || !host.isConnected) return;
-    cache.raw = data;
     render(data);
   });
 }
@@ -2779,7 +2830,6 @@ async function openWorldBrowser(opts = {}) {
     positions,
     selected: opts.room || positions?.persona?.room || firstRoom(index),
     tab: tabs.some(([id]) => id === opts.tab) ? opts.tab : "rooms",
-    cache: {},
     // The map's zoom: "room" (the selected room's grid) or "map" (every
     // room placed by bearing); the grid last drawn; the overlay chosen.
     zoom: "room",
@@ -2808,7 +2858,6 @@ async function openWorldBrowser(opts = {}) {
     const replaceReads = wbCoalesced(() =>
       Promise.all([refreshIndex(), loadGrid(state.selected)]));
     const refreshReads = wbCoalesced(async () => {
-      delete state.cache.raw;
       await refreshIndex();
       if (!alive() || S.chatId !== chatId) return;
       if (state.tab === "rooms") {
@@ -2835,8 +2884,6 @@ async function openWorldBrowser(opts = {}) {
       // an exit changes it too.
       replaceCard: async fresh => {
         if (!alive() || S.chatId !== chatId) return;
-        // A write happened: the raw tab's copy of the world is stale.
-        delete state.cache.raw;
         if (fresh && fresh.id === state.selected) {
           state.slice = fresh;
           wbRenderCard(card, fresh, ctx);
@@ -3279,7 +3326,7 @@ async function openWorldBrowser(opts = {}) {
       }
       content.innerHTML = "";
       if (tabId === "raw") {
-        wbRenderRaw(content, chatId, rawKind, state.cache);
+        wbRenderRaw(content, chatId, rawKind);
       } else if (tabId === "bodies") {
         wbRenderBodies(bodies, ctx);
         content.append(bodies);

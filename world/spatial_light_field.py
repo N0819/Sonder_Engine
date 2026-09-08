@@ -1083,9 +1083,17 @@ def light_shape(scene: dict, observer: str, *, sweep=False) -> Optional[dict]:
       e. subtract, never add -- every item is an anchor description the
          eyes already reach or the label of a source they already see.
 
+    And one rule the owner's five did not need because no source had a cone
+    when they were written:
+
+      f. say what the beam is ON -- for a source in view that HAS an axis,
+         the anchors it is pointed at and actually reaching, nearest first
+         (`_aimed_at`, D5). The same anchors rule (b) already grades; a
+         second reading of the same visible set, never a wider one.
+
     Returns {"groups": [{"level": word, "items": [desc, ...]}, ...],
              "sources": [label, ...], "openings": [desc, ...],
-             "self": word | None}.
+             "self": word | None, "aimed": [desc, ...]}.
     """
     room_id = room_of(scene, observer)
     if not room_id:
@@ -1104,6 +1112,7 @@ def light_shape(scene: dict, observer: str, *, sweep=False) -> Optional[dict]:
     placed = field.anchors.get(room_id) or {}
     groups = {}
     visible_doors = set()
+    seen_at = []                    # (desc, nearest cell) for rule (f)
     for row in rows:
         if not row.get("visible"):
             continue
@@ -1117,9 +1126,11 @@ def light_shape(scene: dict, observer: str, *, sweep=False) -> Optional[dict]:
         target = min(anchor_cells, key=lambda c: (c[0] - origin[0]) ** 2
                      + (c[1] - origin[1]) ** 2)
         groups.setdefault(lf.level(target), []).append(row["desc"])
+        seen_at.append((row["desc"], target))
     # Rule (c): sources in view, else the opening their light comes through.
     sources = []
     openings = []
+    beams = []                      # the in-view sources of this room
     seen_cache = {}
 
     def in_view(cell, top):
@@ -1142,6 +1153,7 @@ def light_shape(scene: dict, observer: str, *, sweep=False) -> Optional[dict]:
                 continue
             if src["label"] not in sources:
                 sources.append(src["label"])
+            beams.append(src)
             continue
         # Beyond a doorway: named by the opening, when the opening is seen
         # and the light actually reaches this room.
@@ -1167,8 +1179,104 @@ def light_shape(scene: dict, observer: str, *, sweep=False) -> Optional[dict]:
     self_word = lf.level(origin) if how == "measured" else None
     if not ordered and self_word is None:
         return None
-    return {"groups": ordered, "sources": sources, "openings": openings,
-            "self": self_word}
+    shape = {"groups": ordered, "sources": sources, "openings": openings,
+             "self": self_word}
+    # A shape with no beam carries no `aimed` key at all (D5): the key is
+    # news only when a beam falls somewhere, and every reader takes its
+    # absence as "nothing aimed" (`composer._light_shape`, the ja adapter).
+    aimed = _aimed_at(lf, beams, seen_at)
+    if aimed:
+        shape["aimed"] = aimed
+    return shape
+
+
+def held_beam_falls_on(scene: dict, holder: str, target: str) -> bool:
+    """Is `target` standing in a coned source `holder` is carrying.
+
+    THE OTHER HALF OF RULE (f), and the one the live case was about (D5,
+    review 2026-09-07). `light_shape` can only ever name ANCHORS -- its whole
+    vocabulary is the room's furniture -- and the five beats that motivated
+    the item were a hand lamp held on a CREATURE (chat 117, 59-62): the
+    engine concentrated the beam onto it, graded it, brightened the sight of
+    it, and the page said only that the player was holding a lamp.
+
+    A body, not a room feature, so it is answered here as a predicate and
+    rendered where bodies are (`composer.presence_percepts`). The same two
+    conditions the anchor half uses, and both subtract: inside the cone
+    proper, and actually reached by that source's own cast, so a beam
+    pointed through a counter does not claim the body behind it. An
+    unmeasured body claims nothing -- no cell, no answer, False.
+
+    `holder` only. A beam somebody ELSE is holding is not this observer's
+    fact to be told about as an aim; what it does to what they can SEE has
+    already been counted by the field.
+    """
+    room_id = room_of(scene, holder)
+    if not room_id or room_of(scene, target) != room_id:
+        return False
+    lf = light_field(scene, room_id)
+    if lf is None:
+        return False
+    cell = body_cell(scene, target)
+    if cell is None:
+        return False
+    goal = lf.field.cell_of(room_id, cell)
+    key = str(holder).strip().casefold()
+    for src in lf.sources:
+        if src["axis"] is None or src["room"] != room_id:
+            continue
+        if str(src.get("holder") or "").strip().casefold() != key:
+            continue
+        if lf.per_source.get(src["id"], {}).get(goal, 0.0) <= 0.0:
+            continue
+        if cone_factor(_angle_deg(src["cell"], goal), src["axis"]) >= 1.0:
+            return True
+    return False
+
+
+def _aimed_at(lf: LightField, beams: list, seen_at: list) -> list:
+    """Rule (f): WHAT THE BEAM IS ON -- the descriptions of the anchors a
+    visible CONED source is both pointed at and actually reaching, nearest
+    the source first.
+
+    D5 (review 2026-09-07). A cone already changed the field -- `CONE_GAIN`
+    concentrates it, `cone_factor` masks off-axis -- so the engine knew
+    exactly where a lamp was pointed and the page never said. Measured, chat
+    117 beats 59-62: the player aimed a hand lamp on five consecutive beats
+    and the view named the lamp and the room's grading, never the thing at
+    the end of the beam.
+
+    Two conditions, and both SUBTRACT from what is already in the shape:
+    inside the cone proper (`cone_factor` at its maximum, so the penumbra --
+    which exists only to hide the eight-point quantisation of a worded axis
+    -- claims nothing), and the source's own cast actually reaches the cell,
+    so a beam pointed through a counter names the counter and not what
+    stands behind it. Every description here is an anchor the observer's
+    eyes already reach: `seen_at` is built from the same `feature_visibility`
+    rows rule (b) grades, so this adds no admission of any kind.
+
+    An all-round source has no axis and therefore no beam -- it is not
+    pointed at anything, and saying it "falls on" the whole room is the flat
+    sentence the shape already replaces.
+    """
+    out, seen = [], set()
+    for src in beams:
+        if src.get("axis") is None:
+            continue
+        reached = lf.per_source.get(src["id"], {})
+        hits = []
+        for desc, cell in seen_at:
+            if reached.get(cell, 0.0) <= 0.0:
+                continue
+            if cone_factor(_angle_deg(src["cell"], cell), src["axis"]) < 1.0:
+                continue
+            hits.append(((cell[0] - src["cell"][0]) ** 2
+                         + (cell[1] - src["cell"][1]) ** 2, desc))
+        for _d, desc in sorted(hits, key=lambda h: h[0]):
+            if desc not in seen:
+                seen.add(desc)
+                out.append(desc)
+    return out
 
 
 # ---------------------------------------------------------------------------

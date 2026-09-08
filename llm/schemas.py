@@ -4066,6 +4066,52 @@ def _fill_entity_names(container) -> None:
             entity["name"] = derived
 
 
+def state_diff_fields(model_cls):
+    """Field names of `model_cls` whose OUTER annotation is a `StateDiff`.
+
+    The third of the shape readers beside `list_shaped_fields` and
+    `dict_shaped_fields`, and derived for the same reason: a step's diff was
+    spelled `state_diff` by hand everywhere, so `DirectorInterpret`'s
+    `state_assertions` -- declared a `StateDiff` precisely to make interpret
+    the same authority as resolve -- got none of the preparation or the
+    field-level pruning that field's twin gets (A29, review 2026-09-07).
+    Optional is unwrapped: `Optional["StateDiff"]` is a StateDiff that may
+    be absent, not a different shape.
+    """
+    out = set()
+    if model_cls is None:
+        return out
+    for name, field in (_fields(model_cls) or {}).items():
+        annotation = _strip_optional(_outer_annotation(field))
+        if isinstance(annotation, type) and issubclass(annotation, StateDiff):
+            out.add(name)
+    return out
+
+
+def _prepare_state_diff(target) -> None:
+    """The recoveries a `StateDiff` gets before validation, in place.
+
+    ONE definition for every StateDiff-typed field of every step (A29):
+    siblings written one level too deep inside `entities`, a scalar `time`,
+    a list-shaped empty table, a list-of-rows `conditions`, and an entity
+    def missing the name its own key carries. Each of these was recovered
+    for `state_diff` and failed the call for `state_assertions`.
+    """
+    if not isinstance(target, dict):
+        return
+    _hoist_misplaced_entity_siblings(target, _STATE_DIFF_SIBLING_FIELDS)
+    if "conditions" in target:
+        target["conditions"] = _coerce_conditions(target["conditions"])
+    if "time" in target:
+        target["time"] = _coerce_optional_time(target["time"])
+    for field in _STATE_DIFF_DICT_FIELDS:
+        if field in target:
+            target[field] = _coerce_empty_list_to_dict(target[field])
+    # SceneEntityDef.name is required but the dict key already carries it;
+    # recover rather than fail the turn.
+    _fill_entity_names(target)
+
+
 def _unwrap_envelope(step_key, raw):
     """A model that wrapped its whole answer in one key of its own.
 
@@ -4576,24 +4622,30 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
             # recovery the resolve diff gets).
             _fill_entity_names(result)
 
-    if step_key in ("director_resolve", "director_establish", "resolve_repair"):
-        target = result
-        if step_key in ("director_resolve", "resolve_repair"):
-            state_diff = result.get("state_diff")
-            target = state_diff if isinstance(state_diff, dict) else None
-            if target is not None:
-                _hoist_misplaced_entity_siblings(target, _STATE_DIFF_SIBLING_FIELDS)
-            if target is not None and "conditions" in target:
-                target["conditions"] = _coerce_conditions(target["conditions"])
-            if target is not None and "time" in target:
-                target["time"] = _coerce_optional_time(target["time"])
-        if isinstance(target, dict):
-            for field in _STATE_DIFF_DICT_FIELDS:
-                if field in target:
-                    target[field] = _coerce_empty_list_to_dict(target[field])
-            # SceneEntityDef.name is required but the dict key already carries
-            # it; recover rather than fail the turn.
-            _fill_entity_names(target)
+    if step_key == "director_establish":
+        # Establishment has no `state_diff` field: its channels ARE the
+        # output, so the diff-shaped half of the preparation below runs on
+        # the top-level object. The sibling hoist and the `time`/`conditions`
+        # coercions are deliberately not applied -- establish declares
+        # neither field and its sibling set is its own, not StateDiff's.
+        for field in _STATE_DIFF_DICT_FIELDS:
+            if field in result:
+                result[field] = _coerce_empty_list_to_dict(result[field])
+        # SceneEntityDef.name is required but the dict key already carries
+        # it; recover rather than fail the turn.
+        _fill_entity_names(result)
+
+    # EVERY StateDiff-TYPED FIELD OF THIS STEP, not just resolve's own
+    # (A29, review 2026-09-07). `DirectorInterpret.state_assertions` is a
+    # `StateDiff` -- the same authority scoped to the player's input -- and
+    # it received none of this: an `entities` map missing the name its key
+    # already carries, a scalar `time`, an empty-list `attire`, or a sibling
+    # field written one level too deep failed the whole interpret call and
+    # bought a repair, where the identical shape inside `state_diff` is
+    # recovered silently. Derived from the model rather than listed, so a
+    # field added later is prepared without this being remembered.
+    for field in sorted(state_diff_fields(SCHEMA_MAP.get(step_key))):
+        _prepare_state_diff(result.get(field))
     
     if "speech_volume" in result:
         result["speech_volume"] = normalize_speech_volume(
@@ -4821,6 +4873,14 @@ class ValidationReport:
     warnings: list[str] = field(default_factory=list)
 
 OUTPUT_EXAMPLES = {
+    # EVERY KEY THIS STEP'S PROMPT ASKS FOR (A30, review 2026-09-07). An
+    # example is the object a failed call is told to imitate, and this file's
+    # own argument is that a key absent from it "reads as not part of the
+    # answer" -- so the five keys missing here were five a repaired interpret
+    # dropped, `state_assertions` (what the player says happens, happens THAT
+    # turn) and `ledger_notes` (the ruling that dispatches the hands at all)
+    # among them. `tests/test_output_examples_show_requested_keys.py` holds
+    # every example level with its own prompt's shape from now on.
     "director_interpret": {
         "kind": "mixed",
         "sequence": [],
@@ -4830,6 +4890,17 @@ OUTPUT_EXAMPLES = {
         "action": None,
         "actions": [],
         "movement": None,
+        "follow_op": None,
+        "contact_assertions": [],
+        # A `StateDiff` by the same authority resolve's is: the player's own
+        # declared, already-true state, in the diff's own channels. Empty
+        # here because the shape, not a worked beat, is what this example is.
+        "state_assertions": {},
+        # The ruling that dispatches the hands: one short line per specialist
+        # this declaration bears on, keyed by the hand or by a channel it
+        # owns. Omit a specialist the declaration does not bear on.
+        "ledger_notes": {},
+        "other_players": {},
         "location_query": None,
         "flow": {
             "reactors": [],
@@ -4887,6 +4958,21 @@ OUTPUT_EXAMPLES = {
         "entity_states": {},
         "sensory_events": [],
         "world_facts": [],
+        # The sky the story opens under -- worked, like the rest of this
+        # example, because the scene above is fog off the water and an
+        # opening that names weather in its prose and not in its channels
+        # opens under the engine's fair-and-still default (A30).
+        "weather": {"sky": "fog", "precipitation": "none",
+                    "intensity": "none", "wind": "breeze",
+                    "temperature": "cold"},
+        # Asked for by the sheet, so shown: a place too full to name person
+        # by person is a crowd, voice equipment already installed is a
+        # channel, and a scenario object with escalation in it opens a
+        # pressure from beat 0. Empty because a two-person quay has none of
+        # the three -- not because they are optional to consider.
+        "crowd_ops": [],
+        "comms_ops": [],
+        "world_pressure": [],
         "fiction_frame": {},
         "simulation_clock": {
             "elapsed_seconds": 0.0,
@@ -4955,6 +5041,24 @@ OUTPUT_EXAMPLES = {
             {"category": "pose", "subject": "Maren",
              "change": "Maren has turned from the water to face you."},
         ],
+        # THE RULING TO THE HANDS. One short line per specialist this beat
+        # settled, keyed by the hand or by a channel it owns -- the channel
+        # that DISPATCHES a hand at all. Absent from this example while the
+        # engine dispatched on it (A30): the author had a worked manifest
+        # entry to imitate and nothing showing the ruling that goes with it.
+        "ledger_notes": {
+            "spatial": "Maren now faces the party; her pose is turned from "
+                       "the water.",
+        },
+        # Interior, and deliberately not in the manifest above -- this ledger
+        # never commits and nothing perceives it. Shown so an honestly
+        # interior beat has somewhere to put what it withheld.
+        "thoughts_omitted": [],
+        # Only when this beat stops someone `travel_in_flight` already lists
+        # as under way; only when the beat opens, ticks, holds or resolves a
+        # standing pressure. Empty is the common, correct answer to both.
+        "travel_interrupted": [],
+        "world_pressure": [],
         "dice": [],
         "fiction_frame": {},
         "obligations": [
@@ -5110,10 +5214,16 @@ OUTPUT_EXAMPLES = {
         # Equipment that carries a VOICE between places, which is a spatial
         # fact about the rooms it joins rather than an object in one of them.
         "comms_ops": [
+            # `mode` is one of the two the engine owns (`COMMS_MODES`:
+            # duplex both ways, broadcast one way from `source`). This
+            # example taught "voice", which `_clean_comms_channel` folds to
+            # duplex without a word -- an example teaching a value that only
+            # ever survived by being silently replaced (A30).
             {"id": "gallery_intercom", "op": "open",
              "name": "the gallery intercom",
              "rooms": ["lamp_room", "gallery"], "carriers": [],
-             "mode": "voice", "source": "", "private": False, "live": True},
+             "mode": "duplex", "source": "", "private": False,
+             "live": True},
         ],
         "notes": [],
     },
@@ -5564,28 +5674,37 @@ def _name_what_was_discarded(step_key, raw, error):
     )
 
 
-# Steps whose `state_diff` is an ENCODING of an adjudication rather than the
+# Steps whose diff is an ENCODING of an adjudication rather than the
 # adjudication itself. The prose, the dialogue and the summary are the beat;
 # the diff is how the beat is written into world state, and the engine already
 # treats it as separable -- `resolve_reconcile`/`resolve_repair` exist to
 # detect changes asserted in prose but missing from the diff and merge a
 # correction additively.
-_DIFF_PRUNABLE_STEPS = ("director_resolve", "resolve_repair")
+#
+# DERIVED FROM THE MODELS, not listed (A29, review 2026-09-07): the roots are
+# every StateDiff-typed field a step declares, so `director_interpret` --
+# whose `state_assertions` is the same StateDiff by the same authority, and
+# whose adjudication is its sequence, its speech and its flow -- prunes one
+# malformed channel instead of failing the call and buying a repair.
+def _diff_prunable_roots(step_key):
+    """The StateDiff-typed root fields this step's errors may be pruned in."""
+    return state_diff_fields(SCHEMA_MAP.get(step_key))
 
 
-def _prunable_diff_fields(errors):
-    """The `state_diff` sub-fields every error is rooted under, or None.
+def _prunable_diff_fields(errors, roots=("state_diff",)):
+    """`{root: {sub-field, ...}}` every error is rooted under, or None.
 
     None means at least one error is somewhere else -- in `resolved_event`, in
     `dialogue_log`, in the parse itself -- and nothing may be pruned, because
     those ARE the adjudication and a beat without them is not a beat.
     """
-    fields = set()
+    roots = set(roots or ())
+    fields = {}
     for error in errors:
         loc = [str(part) for part in (error.get("loc") or [])]
-        if len(loc) < 2 or loc[0] != "state_diff":
+        if len(loc) < 2 or loc[0] not in roots:
             return None
-        fields.add(loc[1])
+        fields.setdefault(loc[0], set()).add(loc[1])
     return fields or None
 
 
@@ -5605,6 +5724,63 @@ def _prunable_specialist_fields(step_key, errors):
             return None
         fields.add(loc[0])
     return fields or None
+
+
+# The third prune, for a StateDiff that is NOT a field of a step's output but
+# the whole payload -- the player's `state_assertions` after the specialists
+# have merged their channels into it (`agents/common.py`,
+# `validated_player_state_assertions`; `agents/director.py`'s interpret tail).
+# Same rule, one level shallower again: an error's `loc[0]` IS the channel, so
+# one malformed specialist-written channel costs that channel and nothing else.
+# Before A29 (review 2026-09-07) it cost the entire player assertion set
+# through a bare `except Exception: return {}` -- the same
+# one-bad-channel-buys-the-whole-beat class the two prunes above fixed for the
+# step's own output.
+def prunable_state_diff_channels(errors):
+    """`{channel, ...}` every error of a BARE StateDiff sits under, or None.
+
+    None means at least one error is at the object's own root -- a whole-model
+    validator, or a payload that is not an object at all -- and nothing may be
+    pruned, because the failure is not attributable to a channel.
+    """
+    channels = set()
+    for error in errors:
+        loc = [str(part) for part in (error.get("loc") or [])]
+        if not loc:
+            return None
+        channels.add(loc[0])
+    return channels or None
+
+
+def validated_state_diff_channels(raw):
+    """Validate a bare `StateDiff` payload, dropping ONLY the channels that error.
+
+    Returns `(clean, dropped)`: the validated dict with unset fields excluded,
+    and the sorted names of the channels removed to get there. RAISES the
+    original error when no channel-level drop rescues the payload -- a failure
+    no channel owns is the caller's whole-payload fallback, unchanged.
+
+    DROPPED, NEVER INVENTED, like its two siblings above: absent is already
+    "no change asserted" for every StateDiff channel.
+    """
+    try:
+        model = StateDiff(**raw)
+    except ValidationError as exc:
+        channels = prunable_state_diff_channels(exc.errors())
+        if not channels:
+            raise
+        kept = {key: value for key, value in raw.items()
+                if key not in channels}
+        model = StateDiff(**kept)
+        return _dump_unset(model), sorted(channels)
+    return _dump_unset(model), []
+
+
+def _dump_unset(model):
+    """`model.dict(exclude_unset=True)` across the pydantic major split."""
+    if _PYDANTIC_V2:
+        return model.model_dump(exclude_unset=True)
+    return model.dict(exclude_unset=True)
 
 
 def validate_llm_output_strict(
@@ -5664,14 +5840,15 @@ def validate_llm_output_strict(
         # made. And nothing is pruned when any error sits outside `state_diff`:
         # the prose, the dialogue and the summary ARE the adjudication, and a
         # beat without them is not a beat.
-        prunable = (_prunable_diff_fields(exc.errors())
-                    if step_key in _DIFF_PRUNABLE_STEPS else None)
+        prunable = _prunable_diff_fields(exc.errors(),
+                                         _diff_prunable_roots(step_key))
         if prunable:
             pruned = dict(prepared)
-            diff = dict(pruned.get("state_diff") or {})
-            for field in prunable:
-                diff.pop(field, None)
-            pruned["state_diff"] = diff
+            for root, fields in prunable.items():
+                diff = dict(pruned.get(root) or {})
+                for field in fields:
+                    diff.pop(field, None)
+                pruned[root] = diff
             try:
                 model = _validate(model_cls, pruned)
             except ValidationError:
@@ -5681,12 +5858,14 @@ def validate_llm_output_strict(
                     valid=True,
                     output=_dump(model),
                     warnings=repairs + [
-                        "Dropped malformed state_diff.%s so the beat could "
-                        "commit what it did adjudicate (%s)" % (field, detail)
-                        for field, detail in
-                        ((f, next((e for e in errors
-                                   if e.startswith("state_diff.%s" % f)), ""))
-                         for f in sorted(prunable))
+                        "Dropped malformed %s.%s so the beat could "
+                        "commit what it did adjudicate (%s)" % (
+                            root, field, detail)
+                        for root, field, detail in
+                        ((r, f, next((e for e in errors
+                                      if e.startswith("%s.%s" % (r, f))), ""))
+                         for r in sorted(prunable)
+                         for f in sorted(prunable[r]))
                     ],
                 )
 

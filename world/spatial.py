@@ -59,7 +59,7 @@ from world.spatial_identity import (
     _SUBJECT_KEYED, canonical_subject, canonical_subject_map,
     derived_room_name, is_derived_room_name, normalize_room_id,
     normalize_scene_subjects, room_display_name, room_of, room_of_record,
-    room_spellings, same_subject, scene_room_id,
+    room_spellings, same_subject, scene_names_body, scene_room_id,
 )
 
 
@@ -272,7 +272,7 @@ from world.spatial_light_field import (
     emitted_level,
     FAIL_RATE, fails_on, failing_sources_out, field_effective_light,
     field_light_at, field_rows, FLICKER_RATE, flickers_on, FLOOR_SPILL,
-    glare_between, GLARE_CELLS, GLARE_POWER, light_field,
+    glare_between, GLARE_CELLS, GLARE_POWER, held_beam_falls_on, light_field,
     light_geometry_exists, light_passes, light_shape, light_sources,
     LIGHT_HEIGHTS, LIGHT_SHAPES, LightField, LIT_T, normalize_light_shape,
     normalize_steadiness, observer_light_field, POWER, quantise,

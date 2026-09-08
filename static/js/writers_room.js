@@ -77,6 +77,33 @@ const ROOM_PLANNER_LINES = [
   "The room lost its last answer to the model; what it had already settled stands, and its notes say what that was.",
   "The room finished without a word; what it settled stands, and its status line says what is in motion.",
 ];
+// The panel's own empty status, spelled here for the same reason.
+const ROOM_NO_STATUS_LINE = "Nothing is in motion.";
+
+// WHICH LINES IN THIS PANEL ARE ENGINE TEXT. Everything else in it was
+// written by a model or typed by the reader.
+//
+// `el()` runs a plain string child through `t()` before the node is inserted,
+// and the UI catalog holds 349 keys with no space in them -- so a Planner
+// sentence, a mandate the player wrote, a package title or a claim the room
+// stated was looked up as though it were an interface label, and a one-word
+// title like "Close" came back translated (A74, review 2026-09-07; the same
+// collision `txt()` was introduced for in the transcript).
+//
+// The engine's own lines are a CLOSED set: the unseated line, the Planner's
+// fixed replies and the empty status, each already spelled above so the
+// catalog harvests them. So membership decides -- a line the engine emits is
+// looked up, and anything else becomes a text node the lookup never sees.
+// `translate="no"` on the element that holds it stops the document walk and
+// the mutation observer from reaching it afterward; without both halves the
+// string is translated either on the way in or a frame later.
+const ROOM_FIXED_LINES = new Set(
+  [ROOM_UNSEATED_LINE, ROOM_NO_STATUS_LINE].concat(ROOM_PLANNER_LINES));
+
+function roomStoryText(value) {
+  const line = String(value ?? "").trim();
+  return txt(ROOM_FIXED_LINES.has(line) ? t(line) : String(value ?? ""));
+}
 
 // Class lists are composed from single words so the UI-catalog harvester,
 // which reads every JS string literal, does not publish CSS classes as
@@ -209,6 +236,14 @@ function roomKey() {
   return String(S.chatId ?? "") + "|" + String(S.currentFrameId ?? "") + "|" + turns;
 }
 
+// The story and frame a request was made for, in the shape `inCurrentScope`
+// (chat.js, loaded first) reads. `roomKey` is the RELOAD trigger and carries
+// the turn count too; a scope must not, or committing a turn mid-answer would
+// discard the answer.
+function roomScope() {
+  return { chatId: S.chatId, frameId: S.currentFrameId ?? null };
+}
+
 function roomFrameQuery() {
   return S.currentFrameId != null ? "?frame_id=" + encodeURIComponent(S.currentFrameId) : "";
 }
@@ -243,12 +278,14 @@ async function roomLoad() {
 
 async function roomLoadEarlier() {
   if (!S.chatId || ROOM.oldestId == null) return;
+  const scope = roomScope();
   const sep = roomFrameQuery() ? "&" : "?";
   try {
     const out = await api(
       "GET",
       "/api/chats/" + S.chatId + "/room" + roomFrameQuery() + sep + "before=" + ROOM.oldestId
     );
+    if (!inCurrentScope(scope)) return;   // A73, same rule as the stream
     const earlier = out.messages || [];
     if (!earlier.length) { ROOM.oldestId = null; roomRender(); return; }
     ROOM.messages = earlier.concat(ROOM.messages);
@@ -314,14 +351,28 @@ async function roomSend() {
 // the whole answer instead of being skipped. `streamPost` carries both, plus
 // the structured-`detail` rendering every other error path uses.
 async function roomStream(text) {
-  await streamPost("/api/chats/" + S.chatId + "/room/messages/stream",
-                   { text, frame_id: S.currentFrameId }, roomEvent);
+  // WHAT THIS ANSWER BELONGS TO. The panel is not busy-gated against the story
+  // list, so a reader can open another story -- or another frame -- while the
+  // room is still writing, and every ROOM.* field below outlives that switch.
+  // The scope is captured before the fetch and re-checked at each write, the
+  // same rule chat.js states at `inCurrentScope` (review 2026-09-07, A73).
+  const scope = roomScope();
+  await streamPost("/api/chats/" + scope.chatId + "/room/messages/stream",
+                   { text, frame_id: scope.frameId },
+                   (event) => roomEvent(event, scope));
 }
 
 // One event. Renders on every one: the panel is small, the thread is short,
 // and a render per token is what makes the answer look written rather than
 // delivered -- but ONCE PER FRAME, not once per delta. See roomRenderSoon.
-function roomEvent(event) {
+function roomEvent(event, scope) {
+  // A reply that arrives after the reader has moved on writes nothing. The
+  // `room_done` branch is the one that made this load-bearing: it appends the
+  // old story's replies AND stamps `ROOM.loadedKey = roomKey()` with the NEW
+  // story's key, which is exactly the equality `roomStartWatch` uses to notice
+  // it is showing the wrong thread -- so the stale thread would sit there,
+  // self-heal disarmed, until the next switch (review 2026-09-07, A73).
+  if (!inCurrentScope(scope)) return;
   const live = ROOM.live || (ROOM.live = { text: "", reasoning: "", note: "" });
   if (event.type === "room_message") {
     ROOM.messages = ROOM.messages.concat([event.message]);
@@ -351,10 +402,12 @@ function roomEvent(event) {
 
 async function roomRevoke(uid) {
   if (!S.chatId) return;
+  const scope = roomScope();
   try {
     const out = await api("POST", "/api/chats/" + S.chatId + "/room/mandates/" + encodeURIComponent(uid) + "/revoke", {
       frame_id: S.currentFrameId,
     });
+    if (!inCurrentScope(scope)) return;   // A73, same rule as the stream
     ROOM.mandates = out.mandates || [];
     roomRender();
     toast("Mandate revoked", "ok");
@@ -430,18 +483,19 @@ function roomRenderStatus(box) {
     box.append(el("div", { class: "dim" }, "Select a story to open its room."));
     return;
   }
-  box.append(el("div", { class: "room-status-line" },
-    st && st.line ? st.line : "Nothing is in motion."));
+  box.append(el("div", { class: "room-status-line", translate: "no" },
+    roomStoryText(st && st.line ? st.line : ROOM_NO_STATUS_LINE)));
   if (st && st.in_motion && st.in_motion.length) {
     box.append(el("div", { class: "room-motion" },
       st.in_motion.map(item => el("span", {
-        class: "badge", title: item.kind || "",
-      }, item.label + (item.state ? " · " + item.state : "")))));
+        class: "badge", title: item.kind || "", translate: "no",
+      }, roomStoryText(item.label + (item.state ? " · " + item.state : ""))))));
   }
   if (st && st.questions && st.questions.length) {
     box.append(el("div", { class: "room-questions" },
       el("b", {}, "The room asks"),
-      el("ul", {}, st.questions.map(qn => el("li", {}, qn.text)))));
+      el("ul", {}, st.questions.map(qn =>
+        el("li", { translate: "no" }, roomStoryText(qn.text))))));
   }
 }
 
@@ -458,9 +512,10 @@ function roomRenderMandates(box) {
   }
   for (const m of active) {
     box.append(el("div", { class: "room-mandate" },
-      el("div", { class: "room-mandate-text" }, m.text),
+      el("div", { class: "room-mandate-text", translate: "no" },
+        roomStoryText(m.text)),
       el("div", { class: roomCls("row", "small", "dim") },
-        m.scope ? el("span", {}, m.scope) : null,
+        m.scope ? el("span", { translate: "no" }, roomStoryText(m.scope)) : null,
         m.expires_turn != null
           ? el("span", {}, t("until beat {n}", { n: m.expires_turn })) : null,
         el("span", { class: "spacer" }),
@@ -474,7 +529,7 @@ function roomRenderMandates(box) {
       el("summary", { class: "dim small" },
         t("{n} revoked or expired", { n: spent.length })),
       spent.map(m => el("div", { class: roomCls("room-mandate", "spent", "small") },
-        el("s", {}, m.text),
+        el("s", { translate: "no" }, roomStoryText(m.text)),
         el("span", { class: "dim" }, " · " + (m.status === "revoked" ? t("Revoked") : t("Expired")))))));
   }
 }
@@ -500,11 +555,13 @@ function roomRenderThread(box) {
     let text = m.text;
     if (m.role === "dramaturge" && ROOM.dramaturge === "summarised"
         && text.length > ROOM_SUMMARY_CHARS && !ROOM.expanded.has(m.id)) {
-      node.append(el("div", { class: "room-text" }, text.slice(0, ROOM_SUMMARY_CHARS) + "…"),
+      node.append(el("div", { class: "room-text", translate: "no" },
+          roomStoryText(text.slice(0, ROOM_SUMMARY_CHARS) + "…")),
         el("button", { class: roomCls("ghost", "small"), onclick: () => { ROOM.expanded.add(m.id); roomRender(true); } },
           "More"));
     } else {
-      node.append(el("div", { class: "room-text" }, text));
+      node.append(el("div", { class: "room-text", translate: "no" },
+        roomStoryText(text)));
     }
     box.append(node);
   }
@@ -537,19 +594,29 @@ function roomRenderCitations(box) {
   if (stated.length) {
     node.append(el("div", { class: "room-section-title" }, "States, from what it read"));
     for (const claim of stated) {
+      const cited = el("span", {
+        class: roomCls("dim", "small"),
+        // Already localized here, so the walk has nothing left to do; the
+        // opt-out is for the row ids assigned below.
+        translate: "no",
+      }, " · " + t("{n} cited", { n: (claim.cites || []).length }));
+      // The ids of the rows the room read -- data, not chrome. Set after
+      // construction because `el()` translates a `title` on the way in, and
+      // under `translate="no"` because the observer's attribute pass would
+      // otherwise translate it a frame later (A74).
+      cited.title = (claim.cites || []).join(", ");
       node.append(el("div", { class: roomCls("room-claim", "stated") },
-        el("span", { class: "room-claim-text" }, claim.text),
-        el("span", {
-          class: roomCls("dim", "small"),
-          title: (claim.cites || []).join(", "),
-        }, " · " + t("{n} cited", { n: (claim.cites || []).length }))));
+        el("span", { class: "room-claim-text", translate: "no" },
+          roomStoryText(claim.text)),
+        cited));
     }
   }
   if (proposed.length) {
     node.append(el("div", { class: "room-section-title" }, "Proposes"));
     for (const claim of proposed) {
       node.append(el("div", { class: roomCls("room-claim", "proposed") },
-        el("span", { class: "room-claim-text" }, claim.text),
+        el("span", { class: "room-claim-text", translate: "no" },
+          roomStoryText(claim.text)),
         claim.verdict === "unsupported"
           ? el("span", {
               class: roomCls("dim", "small"),
@@ -579,12 +646,18 @@ function roomLiveNode() {
         roomRender(true);
       },
     }, open ? "Hide working" : "Show working"));
-    if (open) node.append(el("div", { class: "room-think" }, live.reasoning));
+    if (open) node.append(el("div", { class: "room-think", translate: "no" },
+      roomStoryText(live.reasoning)));
   }
   if (live.note && !live.text) {
-    node.append(el("div", { class: roomCls("room-note", "dim") }, live.note));
+    // `roomEvent` already ran the note through `t()` with the tool's own name
+    // interpolated into it; passing it again would re-match the template and
+    // translate the name inside it.
+    node.append(el("div", { class: roomCls("room-note", "dim"), translate: "no" },
+      txt(live.note)));
   }
-  if (live.text) node.append(el("div", { class: "room-text" }, live.text));
+  if (live.text) node.append(el("div", { class: "room-text", translate: "no" },
+    roomStoryText(live.text)));
   else if (!live.reasoning && !live.note) {
     node.append(el("div", { class: roomCls("room-note", "dim") }, "Thinking…"));
   }

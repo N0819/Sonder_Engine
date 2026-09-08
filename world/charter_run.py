@@ -662,7 +662,11 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
                          frequented_places(charter), reach, seed=seed,
                          rate=rate, hours=hours,
                          commons=commons_places(charter),
-                         phase=charter_phase(charter, at + hours / 2.0))
+                         phase=charter_phase(charter, at + hours / 2.0),
+                         # An institution's own hours where it authored them
+                         # (D19); None is the shipped daylit default.
+                         resting_phases=charter.get("resting_phases"),
+                         social_phases=charter.get("social_phases"))
         moves = dict(homecomings(bodies, plan["watch"], visits), **visits)
         if external:
             moves = {body: place for body, place in moves.items()

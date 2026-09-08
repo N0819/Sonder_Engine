@@ -71,8 +71,15 @@ def _normalized_ledger_notes(out):
     }
 
 
-def _resolve_beat_view(out, decls, char_actions, dice, p_name, interp):
-    """The finished beat as every resolve-side specialist reads it."""
+def _resolve_beat_view(out, decls, char_actions, dice, p_name, interp,
+                       cast=None, scene=None):
+    """The finished beat as every resolve-side specialist reads it.
+
+    `cast`/`scene` reach only the manifest fold (A41), which needs the beat's
+    register of who is a body to tell a wearer's name from a garment's. They
+    must be the SAME pair the reconciliation seam passes, or the two would
+    number the same beat's events differently.
+    """
     ledger_notes = _normalized_ledger_notes(out)
     declared = {}
     for name, acts in (char_actions or {}).items():
@@ -191,7 +198,7 @@ def _resolve_beat_view(out, decls, char_actions, dice, p_name, interp):
             for d in (out.get("dialogue_log") or [])[:20]
             if isinstance(d, dict)
         ],
-        "manifest": _manifest_items(out),
+        "manifest": _manifest_items(out, cast, scene),
         "declared_actions": declared,
         "dice": dice if isinstance(dice, list) else [],
         "player": p_name,
@@ -841,7 +848,7 @@ def _structurally_absent_channels(specialists):
             if fact in facts and not facts.get(fact)}
 
 
-def _orchestration_scope_backstop(ctx, out, stage):
+def _orchestration_scope_backstop(ctx, out, stage, scene=None):
     """`changes_asserted` reconciliation pointed at the SCOPE.
 
     Runs LAST, on the final reconciled output, and only on the orchestrated
@@ -914,7 +921,11 @@ def _orchestration_scope_backstop(ctx, out, stage):
         # warnings, so this one is told apart from the real thing and sent
         # to the Director as the categorisation note it actually is.
         structural = _structurally_absent_channels(specialists)
-        for item in _manifest_items(out):
+        # The same (cast, scene) pair the dispatch view and the
+        # reconciliation seam pass (A41): three readers of one manifest, and
+        # a fold that folded differently here would report a channel the
+        # other two had already merged away.
+        for item in _manifest_items(out, ctx.cast, scene):
             channel = _CATEGORY_CHANNELS.get(item.get("category"))
             if not channel or channel in served:
                 continue

@@ -134,6 +134,12 @@ class TestResidueIsContactOnly:
         cid = _make_chat(temp_db)
         from core.db import qi, wset
 
+        # The fired-fuse half of the residue is approach B's SURFACE and
+        # reads B's own depth since A82 (review 2026-09-07) -- fuses are
+        # minted and fire regardless, and this read is one of the two places
+        # a fired one can be learned. The ordering this test is about is
+        # therefore an ordering the story has switched B on for.
+        wset(cid, "living_world", {"scheduled_consequence": "floor"})
         wset(cid, "subject_last_seen",
              {"hearth_room": {"turn": 3, "room": "hearth_room",
                               "elapsed_seconds": 1000.0}})

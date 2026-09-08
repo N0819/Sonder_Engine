@@ -529,6 +529,7 @@ def prepare_memory_commit(ctx, *, scene=None):
     belief_reconciles = []
     memory_disputes = []
     importance_bumps = []
+    recall_accesses = []
     _clock = wget(
         cid, "simulation_clock",
         {"elapsed_seconds": 0.0, "display": "now"},
@@ -567,6 +568,10 @@ def prepare_memory_commit(ctx, *, scene=None):
     for char_row in ctx.cast:
         ccid = char_row["id"]
         sh = json.loads(char_row["sheet"])
+        # Read directly, NOT through `scene.cast_state` (A43): the column
+        # spelling was never wrong here, and the tolerant accessor returns {}
+        # on a JSON decode error. At the commit boundary a corrupt stored
+        # state must roll the turn back, not quietly become an empty mind.
         st = json.loads(char_row["cstate"] or "{}")
         v = views.get(str(ccid))
         episode_content = ""
@@ -1773,6 +1778,20 @@ def prepare_memory_commit(ctx, *, scene=None):
             _cited = _cited_memory_ids(own_result)
             if _cited:
                 importance_bumps.append((ccid, _cited))
+            # WHAT CAME BACK TO THIS MIND, recorded by the writer rather than
+            # by the reader (review 2026-09-07 A78). The character stage's
+            # retrieval used to bump `access_count`/`last_accessed` itself,
+            # mid-pipeline, from a stage that is otherwise read-only -- so a
+            # reroll, a resume or a replay each moved a counter whose only
+            # question is "did this memory ever come BACK", and the two tools
+            # that read it (`tools/remember_lines.py`,
+            # `tools/salience_replay.py`) were measuring their own footprints.
+            # The stage proposes the ids on its step output; this is the
+            # single write, once, for the variant that stands. Row ids, not
+            # event keys: the counter is per row.
+            for _mid in own_result.get("recalled_memory_ids") or []:
+                if _mid is not None:
+                    recall_accesses.append(_mid)
         # Every memory minted for this mind on this beat records both the
         # affect carried into the event (valence/arousal) and the resolved
         # affect after appraisal (encoding_*).  Assign here, after every
@@ -1824,5 +1843,6 @@ def prepare_memory_commit(ctx, *, scene=None):
         "belief_reconciles": belief_reconciles,
         "memory_disputes": memory_disputes,
         "importance_bumps": importance_bumps,
+        "recall_accesses": recall_accesses,
         "event_content": event_content,
     }

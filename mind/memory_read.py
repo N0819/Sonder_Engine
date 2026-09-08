@@ -284,6 +284,14 @@ def update_memory(mid, content=None, salience=None, kind=None, provenance=None, 
     from mind.memory_snapshot import file_memory_vector
     file_memory_vector(_blob(full_vec), _blob(cue_vec),
                        embedded.model_key, embedded.dimensions, memory_id=mid)
+    # THE SAME CHECK `_upsert_memory` MAKES, at the other writer of this same
+    # column (review 2026-09-07 A60). A host edit made while the embeddings
+    # provider was rate-limited overwrote a real vector with a crc32 hash and
+    # queued nothing, so the edited memory was worse off than the one it
+    # replaced and nothing was coming back for it.
+    if getattr(embedded, "fallback", False):
+        from mind.memory_write import note_failed_embedding_write
+        note_failed_embedding_write("memories", [mid])
     return True
 
 def record_dispute(chat_id, char_id, gist, reading, turn_idx, *,

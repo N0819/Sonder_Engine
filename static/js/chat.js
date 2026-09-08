@@ -517,6 +517,10 @@ function updateChatScopedButtons() {
 function renderChat() {
   const M = $("#msgs");
   M.innerHTML = "";
+  // The arrows belong to a turn in THIS render. `_mountRerollNav` re-stamps
+  // them when there is a newest turn to mount on; when there is not -- an empty
+  // story, an empty frame -- nothing else would ever have cleared them (A73).
+  resetRerollNav();
   updateChatScopedButtons();
   renderFrameBar();
   if (typeof backdropResetForRender === "function") backdropResetForRender();
@@ -954,11 +958,34 @@ function handleEvt(ev) {
 // authoritative re-render replaces it wholesale a moment later; nothing here
 // writes, and anything unexpected in the event simply does nothing and leaves
 // the reader waiting exactly as long as they did before.
+
+// WHAT A UI WRITE BELONGS TO, CHECKED WHERE IT WRITES.
+//
+// The story list is not busy-gated -- switching stories mid-run is a thing a
+// reader does, and so is switching frames -- and every piece of state below
+// outlives that switch: `_activeRun` lives until the stream ends, and the
+// reroll arrows keep whatever turn they were mounted on. So a value read at
+// mount time is a claim about a page that may no longer be on screen
+// (review 2026-09-07, A73: arrow keys POSTing a narration select against
+// another story's turn, and an early-narration preview appending story A's
+// prose into story B's transcript).
+//
+// The rule is one line and it belongs at the WRITE, not at the read: anything
+// run-scoped carries the story and frame it was made for and re-checks them at
+// the moment it touches the DOM or the server. The frame is part of the scope
+// because the transcript is frame-filtered (see `renderChat`), so the wrong
+// frame of the right story is the same mistake.
+function inCurrentScope(scope) {
+  return !!scope && scope.chatId === S.chatId
+    && (scope.frameId ?? null) === (S.currentFrameId ?? null);
+}
+
 const _NARRATION_STEPS = new Set(["narrator", "narrator_extra"]);
 const EARLY_TURN_ID = "early-turn";
 
 function showNarrationEarly(ev) {
   if (!ev || !_NARRATION_STEPS.has(ev.key)) return;
+  if (!inCurrentScope(_activeRun)) return;
   const prose = ev.content && ev.content.prose;
   if (typeof prose !== "string" || !prose.trim()) return;
   const M = document.getElementById("msgs");
@@ -1026,6 +1053,12 @@ function clearNarrationEarly() {
 // rendering the reader sees is presentation.
 const RR = {
   turnId: null,     // the turn the arrows currently belong to
+  // The story and frame that turn was rendered under. The arrows are a
+  // document-level key handler and this object is a module global, so without
+  // these two the state simply outlives the transcript it describes -- and the
+  // POST below then lands on another story's turn (A73).
+  chatId: null,
+  frameId: null,
   variants: [],     // [{id, active, prose}] oldest first
   index: 0,
   // Held rather than re-queried. The transcript is rebuilt wholesale on every
@@ -1035,11 +1068,21 @@ const RR = {
   countEl: null,
 };
 
-async function _mountRerollNav(turnId, turnEl) {
+function resetRerollNav() {
   RR.turnId = null;
+  RR.chatId = null;
+  RR.frameId = null;
   RR.variants = [];
+  RR.index = 0;
   RR.proseEl = null;
   RR.countEl = null;
+}
+
+async function _mountRerollNav(turnId, turnEl) {
+  resetRerollNav();
+  // Captured before the request, so the arrows are stamped with the page they
+  // were asked for rather than with whatever is open when the reply lands.
+  const scope = { chatId: S.chatId, frameId: S.currentFrameId };
   let payload;
   try {
     payload = await api("GET", `/api/turns/${turnId}/narration`);
@@ -1048,11 +1091,13 @@ async function _mountRerollNav(turnId, turnEl) {
   }
   // The transcript may have been rebuilt under us while that request was in
   // flight (a reroll finishing, a different story opened).
-  if (!turnEl.isConnected) return;
+  if (!turnEl.isConnected || !inCurrentScope(scope)) return;
   const variants = (payload && payload.variants) || [];
   if (variants.length < 2) return;
 
   RR.turnId = turnId;
+  RR.chatId = scope.chatId;
+  RR.frameId = scope.frameId;
   RR.variants = variants;
   RR.index = Math.max(0, variants.findIndex(v => v.active));
   RR.proseEl = turnEl.querySelector(".prose");
@@ -1088,6 +1133,10 @@ function _paintRerollCount() {
 // than seeking, and hitting a wall mid-comparison is the annoying part.
 async function showRerollVariant(next) {
   if (S.busy || RR.variants.length < 2) return false;
+  // The arrows survive a story or frame switch; the turn they name does not
+  // belong to what is on screen any more, and the POST below would activate a
+  // different rendering of a beat nobody is reading (A73).
+  if (!inCurrentScope(RR)) return false;
   const total = RR.variants.length;
   const index = ((next % total) + total) % total;
   if (index === RR.index) return false;
@@ -1128,7 +1177,7 @@ document.addEventListener("keydown", event => {
   const active = document.activeElement;
   if (active && (active.isContentEditable
       || /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName))) return;
-  if (RR.variants.length < 2) return;
+  if (RR.variants.length < 2 || !inCurrentScope(RR)) return;
   // Only claim the key once there is something to do with it, so ordinary
   // horizontal scrolling still works on a story with no rerolls.
   event.preventDefault();
@@ -1198,7 +1247,11 @@ async function runStream(url, body, context = {}) {
         // The re-render below lands the reader on a brand-new turn. Mark it so
         // its picture and sound are fetched at once rather than after a dwell:
         // waiting two seconds for a beat you just watched arrive is a stall.
-        if (ok) _freshRunPending = true;
+        // Only when the reader is still on the story that ran: this marks the
+        // newest turn of whatever renders next as just-generated, and on
+        // another story that commissions a backdrop for a beat nobody just
+        // wrote (A73).
+        if (ok && S.chatId === run.chatId) _freshRunPending = true;
         await openChat(S.chatId, (ok && heldTurnId && S.chatId === run.chatId)
           ? { sinceTurnId: heldTurnId } : {});
         // After the re-render, so the beat is on screen when it sounds. Only

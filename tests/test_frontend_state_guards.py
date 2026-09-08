@@ -16,6 +16,8 @@ COMPONENTS = (ROOT / "static/js/components.js").read_text(encoding="utf-8")
 LOREBOOKS = (ROOT / "static/js/lorebooks.js").read_text(encoding="utf-8")
 SETTINGS = (ROOT / "static/js/settings.js").read_text(encoding="utf-8")
 WORLD_BROWSER = (ROOT / "static/js/world_browser.js").read_text(encoding="utf-8")
+WRITERS_ROOM = (ROOT / "static/js/writers_room.js").read_text(encoding="utf-8")
+CATALOG = (ROOT / "language_packs/en/ui.json").read_text(encoding="utf-8")
 
 
 def _between(source: str, start: str, end: str) -> str:
@@ -392,3 +394,150 @@ def test_a_failed_quick_start_removes_the_rows_it_generated():
     assert "created.characters" in cleanup and "`/api/characters/${id}`" in cleanup
     assert "created.personas" in cleanup and "`/api/personas/${id}`" in cleanup
     assert "existingCharacterIds" not in cleanup, "library picks are never deleted"
+
+
+def test_every_run_scoped_write_names_the_story_and_frame_it_belongs_to():
+    """A73 (review 2026-09-07). The story list is not busy-gated, so a reader
+    can open another story -- or another frame of the same one -- while a beat
+    is still running, and two long-lived pieces of state outlive that switch:
+    `_activeRun`, until the stream ends, and the reroll arrows, which keep
+    whatever turn they were mounted on.
+
+    Measured then: the arrow keys POSTed a narration select against the other
+    story's turn, and the early-narration preview appended story A's prose into
+    story B's transcript. Both are writes made from state read before the
+    switch, so the check has to sit at the write.
+
+    A browser tier would drive it: start a beat in A, click B in the sidebar
+    before the narrator step lands, and assert B's transcript never grows and
+    that ArrowLeft posts nothing.
+    """
+    scope = _between(CHAT, "function inCurrentScope(scope)", "const _NARRATION_STEPS")
+    assert "scope.chatId === S.chatId" in scope
+    assert "(scope.frameId ?? null) === (S.currentFrameId ?? null)" in scope
+
+    preview = _between(CHAT, "function showNarrationEarly(ev)",
+                       "function clearNarrationEarly()")
+    assert "if (!inCurrentScope(_activeRun)) return;" in preview
+
+    # The arrows carry the scope they were mounted in, and re-check it before
+    # painting or posting.
+    mount = _between(CHAT, "async function _mountRerollNav(", "function _paintRerollCount()")
+    assert "const scope = { chatId: S.chatId, frameId: S.currentFrameId };" in mount
+    assert "if (!turnEl.isConnected || !inCurrentScope(scope)) return;" in mount
+    assert "RR.chatId = scope.chatId;" in mount
+    assert "RR.frameId = scope.frameId;" in mount
+
+    flip = _between(CHAT, "async function showRerollVariant(next)",
+                    "// \u2190 and \u2192 anywhere")
+    assert "if (!inCurrentScope(RR)) return false;" in flip
+    assert flip.index("if (!inCurrentScope(RR)) return false;") < flip.index("api(\"POST\"")
+
+    # A render with no newest turn to mount on is what left them live: an empty
+    # story, or a frame with no turns.
+    render = _between(CHAT, "function renderChat()", "function branchTurn(")
+    assert "resetRerollNav();" in render
+
+    # And the just-generated marker belongs to the run's own story.
+    stream = _between(CHAT, "async function runStream(", "// Rerolling/resuming/")
+    assert "if (ok && S.chatId === run.chatId) _freshRunPending = true;" in stream
+
+
+def test_the_writers_room_answer_belongs_to_the_story_it_was_asked_in():
+    """A73, the other half of the class. The Writers' Room panel is the second
+    place a stream outlives the page it was started from, and it had no scope
+    check at all: `roomStream` awaits a stream opened against `S.chatId`, and
+    `roomEvent` writes ROOM.messages/mandates/status/citations whenever a frame
+    arrives.
+
+    `room_done` is the branch that made it stick rather than merely show: it
+    appends the old story's replies AND stamps `ROOM.loadedKey = roomKey()`
+    with the NEW story's key -- the exact equality `roomStartWatch` polls to
+    notice it is showing the wrong thread -- so the self-heal was disarmed by
+    the same write that needed it.
+
+    A browser tier would drive it: ask the room a question in story A, switch
+    to B before the answer lands, and assert B's panel never gains A's replies
+    and that the watch reloads B's own thread.
+    """
+    scope = _between(WRITERS_ROOM, "function roomScope()", "function roomFrameQuery()")
+    assert "chatId: S.chatId" in scope
+    assert "frameId: S.currentFrameId ?? null" in scope
+
+    stream = _between(WRITERS_ROOM, "async function roomStream(text)",
+                      "function roomEvent(")
+    assert "const scope = roomScope();" in stream
+    assert "(event) => roomEvent(event, scope)" in stream
+
+    event = _between(WRITERS_ROOM, "function roomEvent(event, scope)",
+                     "async function roomRevoke(")
+    assert "if (!inCurrentScope(scope)) return;" in event
+    assert event.index("if (!inCurrentScope(scope)) return;") < event.index(
+        "ROOM.loadedKey = roomKey();")
+
+    # The two other awaits that write ROOM state get the same rule -- an
+    # earlier page prepended into another story's thread, and a revoke's
+    # mandate list landing on the wrong story, are the same mistake.
+    for fn, end in (("async function roomLoadEarlier()", "function roomStartWatch()"),
+                    ("async function roomRevoke(uid)", "// ---- Rendering")):
+        block = _between(WRITERS_ROOM, fn, end)
+        assert "const scope = roomScope();" in block, fn
+        assert "if (!inCurrentScope(scope)) return;" in block, fn
+
+    # `inCurrentScope` is chat.js's, and chat.js is loaded before this file --
+    # one statement of the rule, not two.
+    assert "function inCurrentScope(" not in WRITERS_ROOM
+    index = (ROOT / "static/index.html").read_text(encoding="utf-8")
+    assert index.index("js/chat.js") < index.index("js/writers_room.js")
+
+
+def test_the_raw_record_editor_saves_only_what_it_just_read():
+    """A18 (review 2026-09-07). The world PUT is `DELETE FROM world WHERE
+    chat_id=?` followed by a rewrite from the request body, so this textarea is
+    the whole record and an old copy of it does not merge -- it deletes what the
+    story wrote since.
+
+    The tab used to render from a copy held for the dialog's lifetime, with two
+    `delete state.cache.raw` calls elsewhere standing between that copy and a
+    silent revert. It is read fresh on every entry now, and the reader's own
+    window -- a beat committing while the editor sits open, which
+    `_require_chat_idle` on the route does not cover because the story is idle
+    again by then -- is closed by re-reading at the moment of saving.
+
+    A browser tier would drive it: open the Raw JSON tab, commit a beat in
+    another window, press Save, and assert the confirm appears and that
+    declining leaves the beat's world intact.
+    """
+    block = _between(WORLD_BROWSER, "function wbRenderRaw(", "// ---- The map editor")
+    assert "cache" not in block.split("const render = data => {")[0]
+    assert "const base = JSON.stringify(data);" in block
+    assert 'current = await api("GET", path);' in block
+    assert "JSON.stringify(current) !== base" in block
+    assert "await confirmModal(" in block
+    assert block.index("JSON.stringify(current) !== base") < block.index('api("PUT", path, j)')
+    # And the sentence says what THIS tab's PUT costs. `world_put` deletes the
+    # row and rewrites it; `attire_put` writes the bodies it is named and
+    # leaves the rest of the ledger, so one wording for both overstated the
+    # loss on the attire tab (A18 sibling).
+    confirm = block[block.index("await confirmModal("):
+                    block.index("confirmLabel: \"Save anyway\"")]
+    assert "isAttire" in confirm
+    # Whole sentences, one per branch: `t()` looks a message up by the string
+    # the browser hands it, so a sentence assembled from a shared opening and a
+    # differing clause is one no catalog can hold.
+    joined = re.sub(r'"\s*\n\s*\+ "', "", confirm)
+    assert "Saving replaces everything it wrote. Save anyway?" in joined
+    assert ("Saving overwrites every body this copy names; a body it does not "
+            "name keeps what the story wrote. Save anyway?") in joined
+    for sentence in ("The story has written to this record since it was "
+                     "opened -- a beat committed, or another window saved. "
+                     "Saving replaces everything it wrote. Save anyway?",
+                     "The story has written to this ledger since it was "
+                     "opened -- a beat committed, or another window saved. "
+                     "Saving overwrites every body this copy names; a body it "
+                     "does not name keeps what the story wrote. Save anyway?"):
+        assert sentence in CATALOG, sentence
+    # No copy of the record survives the render, so nothing has to remember to
+    # invalidate one.
+    assert "delete state.cache.raw" not in WORLD_BROWSER
+    assert "cache: {}," not in WORLD_BROWSER

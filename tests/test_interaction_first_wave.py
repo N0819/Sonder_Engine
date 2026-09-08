@@ -58,8 +58,12 @@ class _Ctx:
         self.chat = _Chat()
         self.turn = _Turn()
         self.cast = [
+            # `cstate`, which is how `story.scene.active_cast` projects
+            # `chat_chars.state` -- the spelling every live cast row carries
+            # (review 2026-09-07 A43). A fixture that spells it `state`
+            # agreed with the one reader that got it wrong.
             {"id": cid, "sheet": json.dumps(default_character_data(f"Char{cid}")),
-             "state": "{}", "active": 1, "stance": "{}"}
+             "cstate": "{}", "active": 1, "stance": "{}"}
             for cid in (cast if cast is not None else reactors)
         ]
         self.director_interpret = {
@@ -502,7 +506,7 @@ class TestWhoOpensAnUntargetedBeat:
     def _cast_ctx(self, urgencies):
         ctx = _Ctx(list(urgencies))
         for row in ctx.cast:
-            row["state"] = json.dumps({"active_state": {"wants": [
+            row["cstate"] = json.dumps({"active_state": {"wants": [
                 {"want": "say the thing", "urgency": urgencies[row["id"]]},
             ]}})
         return ctx

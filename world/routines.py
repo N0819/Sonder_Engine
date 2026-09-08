@@ -199,12 +199,20 @@ def residue_for(cid, scene, room_id, frame_id=None, now_seconds=None):
     since (ranked first), and the routine/entropy functions for plausible
     motion. A room never seen returns None — a first arrival owes nothing
     to a diff, and unvisited PLACES are approach D's ledger, not this one.
+
+    The fired-fuse half is approach B's SURFACE and reads B's own depth
+    (A82, review 2026-09-07): fuses are minted and fire whatever the
+    settings say, because adjudicated causality is truth, and the two
+    places a fired one can be learned — this read and the walk-in notice in
+    `mechanics._fire_due_events` — are what "off" actually switches off.
+    The entropy and occupancy halves are A's own and are unaffected.
     """
     from core.db import wget, wget_for_frame
     from story.scene import style_guide
     from world.day_cycle import day_length_hours
     from world.gaps import LAST_SEEN_KEY
-    from world.living_world import fired_consequences_at
+    from world.living_world import (fired_consequences_at, living_world_allows,
+                                    living_world_config)
 
     if not room_id:
         return None
@@ -232,7 +240,11 @@ def residue_for(cid, scene, room_id, frame_id=None, now_seconds=None):
     # entropy thresholds read it rather than each assuming a Terran day.
     day_seconds = day_length_hours(style_guide(cid)) * 3600.0
 
-    facts = list(fired_consequences_at(cid, str(room_id), then_seconds, now))
+    facts = []
+    if living_world_allows(living_world_config(cid),
+                           "scheduled_consequence", "floor"):
+        facts.extend(fired_consequences_at(cid, str(room_id),
+                                           then_seconds, now))
     facts.extend(entropy_facts(room_name, gap, day_seconds))
     shift = occupancy_fact(room_name, f"room:{cid}:{room_id}",
                            then_seconds, now, day_seconds)

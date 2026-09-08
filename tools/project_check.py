@@ -3116,6 +3116,196 @@ def check_character_payload_names(errors: list[str]) -> None:
                     "not have" % (pack.name, stale, "decision.%s" % seen_as))
 
 
+# ---------------------------------------------------------------------------
+# A pipeline side channel nobody declared
+# ---------------------------------------------------------------------------
+
+#: Where a stage may put something on the turn's context.
+_SIDE_CHANNEL_ROOTS = ("agents", "story")
+
+
+def _pipeline_context_fields() -> set[str]:
+    """Every attribute `PipelineContext` declares, so a write to one is a
+    write to a FIELD and not to a side channel."""
+    tree = ast.parse((ROOT / "core" / "pipeline_context.py").read_text(
+        encoding="utf-8"))
+    fields: set[str] = set()
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.ClassDef)
+                and node.name == "PipelineContext"):
+            continue
+        for stmt in node.body:
+            if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target,
+                                                              ast.Name):
+                fields.add(stmt.target.id)
+            elif isinstance(stmt, ast.Assign):
+                for tgt in stmt.targets:
+                    if isinstance(tgt, ast.Name):
+                        fields.add(tgt.id)
+    return fields
+
+
+def _declared_side_channels() -> set[str]:
+    """The keys `agents/runtime.py`'s SIDE_CHANNELS register names."""
+    tree = ast.parse((ROOT / "agents" / "runtime.py").read_text(
+        encoding="utf-8"))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(isinstance(t, ast.Name) and t.id == "SIDE_CHANNELS"
+                   for t in node.targets):
+            continue
+        if not isinstance(node.value, ast.Dict):
+            continue
+        return {k.value for k in node.value.keys
+                if isinstance(k, ast.Constant) and isinstance(k.value, str)}
+    return set()
+
+
+def _module_string_constants(tree: ast.AST) -> dict[str, str]:
+    """Module-level `NAME = "literal"` bindings, so a channel written under a
+    named constant is still checkable."""
+    out: dict[str, str] = {}
+    for stmt in getattr(tree, "body", []):
+        if not isinstance(stmt, ast.Assign) or not isinstance(stmt.value,
+                                                              ast.Constant):
+            continue
+        if not isinstance(stmt.value.value, str):
+            continue
+        for tgt in stmt.targets:
+            if isinstance(tgt, ast.Name):
+                out[tgt.id] = stmt.value.value
+    return out
+
+
+def _pipeline_context_channel_writes(node, constants: dict[str, str]):
+    """Every side-channel key one AST node writes onto the pipeline context.
+
+    THREE WRITE FORMS, not one. Review 2026-09-07 A31's own guard shipped
+    knowing only `ctx["k"] = ...` / `ctx._extra["k"] = ...`, and walked past
+    the two forms that carried the three channels it had itself missed --
+    `reaction_views`, `character_turn_snapshot` and `absent_reactors_noted`,
+    written only as:
+
+      * `ctx._extra.setdefault("k", ...)` -- an `ast.Call`, never an assign
+        target at all (loops.py:120/456/754/803/986/999/1378,
+        character.py:3237);
+      * `ctx._extra["k"][x] = ...` -- an assign whose target is a Subscript
+        OF a Subscript, so the base is not a Name or Attribute
+        (loops.py:987/1379).
+
+    A `setdefault` is a write: the first stage to call it CREATES the channel,
+    and every later stage in the turn reads what it left. That the key never
+    appears to the left of an `=` says nothing about whether a resume has it.
+    """
+    holders = ("ctx", "ctx._extra")
+
+    def holder_of(base) -> str | None:
+        if isinstance(base, ast.Name):
+            return base.id
+        if isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name):
+            return f"{base.value.id}.{base.attr}"
+        return None
+
+    def key_of(sl) -> str | None:
+        if isinstance(sl, ast.Constant) and isinstance(sl.value, str):
+            return sl.value
+        if isinstance(sl, ast.Name) and sl.id in constants:
+            return constants[sl.id]
+        return None
+
+    def from_subscript(tgt) -> str | None:
+        if not isinstance(tgt, ast.Subscript):
+            return None
+        base = tgt.value
+        # `ctx._extra["k"][x] = ...`: the channel is the INNER key; the outer
+        # one indexes into the channel's own contents.
+        if isinstance(base, ast.Subscript):
+            if holder_of(base.value) not in holders:
+                return None
+            return key_of(base.slice)
+        if holder_of(base) not in holders:
+            return None
+        return key_of(tgt.slice)
+
+    targets = []
+    if isinstance(node, ast.Assign):
+        targets = node.targets
+    elif isinstance(node, (ast.AugAssign, ast.AnnAssign)):
+        targets = [node.target]
+    for tgt in targets:
+        key = from_subscript(tgt)
+        if key is not None:
+            yield key
+    if (isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "setdefault"
+            and holder_of(node.func.value) in holders
+            and node.args):
+        key = key_of(node.args[0])
+        if key is not None:
+            yield key
+
+
+def check_pipeline_side_channels(errors: list[str]) -> None:
+    """Every value a stage leaves on `ctx` is a declared field or a registered
+    side channel.
+
+    A stage writes `ctx["_x"] = ...` and a later stage reads it. Nothing
+    carries that across a resume or a single-step reroll except
+    `runtime._rehydrate_side_channels`, and a channel it does not know about
+    does not fail -- it is simply None, and the remaining stages answer a
+    different question than the uninterrupted turn did. Review 2026-09-07 A31
+    measured the shape: the rehydrator rebuilt five values while perception
+    wrote four more, and the onset player room -- read directly by
+    `director_resolve`, the stage that decides where the beat ends up -- was
+    one of the missing ones.
+
+    So the register is the obligation made legible: `runtime.SIDE_CHANNELS`
+    names each channel and says how it survives a resume (rebuilt, a pure
+    memo, or in-stage only). Adding a writer means adding a line, which is
+    the moment to ask the question.
+
+    Three write forms are walked -- plain assignment, an assignment into a
+    channel's contents, and `setdefault` -- because A31's own first guard knew
+    only the first and so walked past three live channels; see
+    `_pipeline_context_channel_writes`.
+
+    LIMIT, stated rather than hidden: a key that is a local variable at the
+    write site cannot be resolved here, so the generic hydration loops in
+    `runtime.py` and the two memo helpers that key on a computed string are
+    not checked. A module-level string constant IS resolved.
+    """
+    fields = _pipeline_context_fields()
+    declared = _declared_side_channels()
+    if not declared:
+        errors.append("agents/runtime.py has no SIDE_CHANNELS register; the "
+                      "pipeline side-channel guard cannot run")
+        return
+    for root in _SIDE_CHANNEL_ROOTS:
+        for path in sorted((ROOT / root).rglob("*.py")):
+            if "__pycache__" in path.parts:
+                continue
+            try:
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+            except (OSError, SyntaxError):
+                continue
+            constants = _module_string_constants(tree)
+            rel = path.relative_to(ROOT).as_posix()
+            for node in ast.walk(tree):
+                for key in _pipeline_context_channel_writes(node, constants):
+                    if key in fields or key in declared:
+                        continue
+                    errors.append(
+                        f"{rel}:{node.lineno} writes {key!r} onto the pipeline "
+                        f"context, which is neither a PipelineContext field "
+                        f"nor listed in agents/runtime.py's SIDE_CHANNELS. A "
+                        f"resume or a single-step reroll will not have it, and "
+                        f"the stages after it will answer a different question "
+                        f"instead of failing. Declare the field, or add the "
+                        f"key with the one word saying how it survives.")
+
+
 def main() -> int:
     errors: list[str] = []
     check_undefined_names(errors)
@@ -3151,6 +3341,7 @@ def main() -> int:
     check_memory_identity_writers(errors)
     check_character_payload_names(errors)
     check_identity_fold_is_owned(errors)
+    check_pipeline_side_channels(errors)
     check_generated_map(errors)
 
     if errors:

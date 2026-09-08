@@ -470,8 +470,14 @@ def plan_public_evidence(charter, evidence_rows, scene, turn_id,
     # overt source is identical for two bodies standing at the same cell
     # with the same facing in the same place, so the cache is keyed by that
     # -- not by place alone, which was exact only while no body had a
-    # within-room position. Targeted concealment remains per identity and
-    # bypasses the cache.
+    # within-room position. AN ANSWER THAT DEPENDS ON WHO THE BODY IS
+    # CANNOT BE SHARED BY PLACE: targeted concealment bypasses the cache
+    # for that reason, and a line that resolves to one addressee is the
+    # same shape -- so a comm with an endpoint bypasses it too (A12).
+    # Bodies in a place the scene holds no room for collapse to one key
+    # (53 of chat 114's 66 charter bodies do), and under the shared answer
+    # a private comm was either delivered verbatim to a body it was not
+    # addressed to or withheld from the one it was, whichever sorted first.
     viewed, observer_keys = observer_view(charter, scene)
     sensory_cache = {}
     recipients = {}
@@ -504,7 +510,8 @@ def plan_public_evidence(charter, evidence_rows, scene, turn_id,
             opportunities += 1
             roles = role_map.get(body_key) or ()
             cacheable = (str(evidence.get("visibility") or "overt").casefold()
-                         != "concealed" and not evidence.get("conceal_from"))
+                         != "concealed" and not evidence.get("conceal_from")
+                         and not comm_endpoint)
             observer = observer_keys.get(str(body_key))
             stood = (viewed.get("stations") or {}).get(observer) or {} \
                 if observer else {}

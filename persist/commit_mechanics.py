@@ -16,7 +16,8 @@ from world.mechanics import (HAZARD_REPORT_CAP, inert_condition_ids,
                             mechanics_sweep, stable_event_key,
                             unanswered_hazard_subjects)
 from persist.commit_common import (ENGINE_NOTICES_KEY, _registered_name_roster,
-                                   _room_of, compose_engine_notices)
+                                   _room_of, compose_engine_notices,
+                                   mark_engine_notices_rewritten)
 from persist.commit_scene_state import prepare_scene_commit
 
 # ---- Mechanics sweep: timed arrivals, expiry, news, engine notices ----
@@ -192,44 +193,71 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
                 ticked += 1
 
         # Living world, approach B: mint this resolution's declared fuses.
-        # Gated by the chat's setting (the mint is the feature's surface);
-        # FIRING above is not gated -- rows exist only if minting was on,
-        # and a story that turns the setting off keeps the consequences it
-        # already caused, the way it keeps its scheduled arrivals.
+        #
+        # MINT EVERY DECLARED FUSE; THE SETTING GATES THE SURFACE (A82,
+        # review 2026-09-07). The mint used to be gated by the chat's own
+        # `scheduled_consequence` depth, which defaults to OFF -- while the
+        # prose author's sheet asks for `state_diff.consequences` on every
+        # beat, gated by nothing (chunk 22 has no gate key). So the default
+        # story spent tokens declaring what the world was about to owe and
+        # the commit threw all of it away with a warning. That is the exact
+        # inversion approach D states one screen below: layer-1 truth
+        # accumulates, settings gate surfaces. A fuse is Director-adjudicated
+        # causality -- it happened, and turning the mechanism on later must
+        # not mean the world forgot the causes it already had.
+        #
+        # The setting gates the surface instead, at the two READS that put a
+        # fired fuse's own `what` on the page: the walk-in notice
+        # (`mechanics._fire_due_events`) and the re-entry residue read
+        # (`routines.residue_for`). Both consult this chat's own depth.
+        #
+        # There is a THIRD place a fired fuse's prose can be learned and it
+        # is deliberately left ungated: the carrier rail
+        # (`story/carriers.py`, `advance_carriers`) hands a located
+        # `world_events` row's `witnessed` surface to a body physically
+        # standing in that room, which is the presence-gated acquisition
+        # LIVING_WORLD.md describes. It is presence, not the menu, that
+        # decides -- so with `scheduled_consequence` off a story still never
+        # meets a fuse through the two notice reads, but a character who
+        # happens to be standing where one fires may still carry what they
+        # saw. Ungating the mint widened WHICH fuses reach that rail, not
+        # whether it was reachable: charter- and ladder-minted consequence
+        # rows (`world/charter_runtime._scheduled_row`, kind 'consequence'
+        # with a witnessed surface, no `living_world_allows` call in that
+        # file) already reached it ungated -- measured on chat 114, 52 rows
+        # minted with the setting off, 46 witnessed, 19 acquirable by a
+        # standing body across 8 rooms. The Director-declared fuse now joins
+        # them. Whether that rail should honour the setting at all is the
+        # owner's call, and if it should, the gate keys on the fuse's ORIGIN
+        # (a Director-declared fuse has no charter in its payload), not on
+        # the kind, or it would also silence the charter's own surfaces.
         consequences_minted = 0
         try:
-            from world.living_world import (living_world_allows,
-                                      living_world_config,
-                                      mint_consequences,
+            from world.living_world import (mint_consequences,
                                       record_obligations)
             _declared_fuses = diff.get("consequences") or []
-            if living_world_allows(living_world_config(cid),
-                                   "scheduled_consequence", "floor"):
-                mint_rows, mint_warnings = mint_consequences(
-                    cid, sc, frame_id, ctx.turn.id, ctx.turn.idx,
-                    float((clock or {}).get("elapsed_seconds") or 0.0),
-                    _declared_fuses,
-                    player_room=_player_room)
-                for row in mint_rows:
-                    qtx(
-                        "INSERT OR REPLACE INTO scheduled_events"
-                        "(event_id,chat_id,due_at,kind,location_id,payload,"
-                        "seed,status) VALUES(?,?,?,?,?,?,?,?)",
-                        (row["event_id"], row["chat_id"], row["due_at"],
-                         row["kind"], row["location_id"], row["payload"],
-                         row["seed"], row["status"]),
-                    )
-                    consequences_minted += 1
-                for warning in mint_warnings:
-                    ctx.add_warning(f"consequence not minted: {warning}")
-            elif _declared_fuses:
-                # A silently swallowed declaration would look like a quiet
-                # world; the ledger's whole failure history is mechanisms
-                # that never fired and nothing saying so.
-                ctx.add_warning(
-                    f"{len(_declared_fuses)} declared consequence(s) "
-                    "dropped: the scheduled-consequence setting is off "
-                    "for this chat")
+            mint_rows, mint_warnings = mint_consequences(
+                cid, sc, frame_id, ctx.turn.id, ctx.turn.idx,
+                float((clock or {}).get("elapsed_seconds") or 0.0),
+                _declared_fuses,
+                player_room=_player_room)
+            for row in mint_rows:
+                qtx(
+                    "INSERT OR REPLACE INTO scheduled_events"
+                    "(event_id,chat_id,due_at,kind,location_id,payload,"
+                    "seed,status) VALUES(?,?,?,?,?,?,?,?)",
+                    (row["event_id"], row["chat_id"], row["due_at"],
+                     row["kind"], row["location_id"], row["payload"],
+                     row["seed"], row["status"]),
+                )
+                consequences_minted += 1
+            # A fuse the validator itself refused (an unplaceable location, a
+            # due time that is not a number, the per-turn ceiling) is still
+            # reported: a silently swallowed declaration looks like a quiet
+            # world, and the ledger's whole failure history is mechanisms
+            # that never fired and nothing saying so.
+            for warning in mint_warnings:
+                ctx.add_warning(f"consequence not minted: {warning}")
             # Approach D's feed: a fuse fired at an ungenerated place is
             # history that place now owes. Recorded regardless of the D
             # setting -- layer-1 truth accumulates; settings gate surfaces
@@ -250,6 +278,9 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
         # (`commit_common.add_engine_notice`).
         notices = compose_engine_notices(ctx, notices)
         wset(cid, ENGINE_NOTICES_KEY, notices)
+        # The rewrite has happened; a notice filed from here on cannot ride
+        # the staged list and has to reach the key itself (A66).
+        mark_engine_notices_rewritten(ctx)
 
     return {"fired": fired, "scheduled": scheduled, "expired": expired,
             "ticked": ticked, "news_fired": news_fired,

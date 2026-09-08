@@ -38,7 +38,7 @@ from mind.memory_common import (  # noqa: F401
     MEMORY_PROVENANCE, SUMMARY_SCOPE_FIRSTHAND, SUMMARY_SCOPE_HEARSAY,
     SUMMARY_SCOPE_SURMISE, _PROVENANCE_SCOPE, _SUMMARY_SCOPES, _UNSET,
     _b64_to_blob, _blob, _blob_to_b64, _cos, _fts_query, _ids, _kw_scores,
-    _ling, _storage_json, _summary_retrieval_text, _vec,
+    _ling, _lore_document, _storage_json, _summary_retrieval_text, _vec,
     summary_context_label, summary_scope_for,
 )
 from mind.memory_lorebooks import (  # noqa: F401
@@ -80,7 +80,8 @@ from mind.memory_retrieval import (  # noqa: F401
     _mood_axis,
     _rank_normalized_importance, _rrf_add, _temporal_mode,
     _warn_stranded_embeddings, contrast_memory, provenance_context_label,
-    recall_confidence, recent_memory_buffer, search_memories,
+    recall_confidence, recent_memory_buffer, record_memory_access,
+    search_memories,
 )
 from mind.memory_summaries import (  # noqa: F401
     _EMPTY_VIEW_MARKERS, _SUPPORT_MAX_REFS, _SUPPORT_MIN_OVERLAP,

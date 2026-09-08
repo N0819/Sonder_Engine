@@ -236,6 +236,93 @@ def update_relationships_from_inference(chat_id, char_id, turn_idx,
     save_relationships(chat_id, char_id, graph)
     return graph
 
+def _because_by_target(chat_id, char_id, targets, frame_id):
+    """Per target, the strongest recorded movement along each axis.
+
+    D22 (review 2026-09-07): `relationship_events` had no reader anywhere.
+    The scalar graph says where a stance stands and structurally cannot say
+    why -- it keeps one `salient_event` string and overwrites it whenever the
+    character feels anything at all -- while the ledger beside it has kept
+    one row per axis per movement since the day it was built. A mind was
+    being handed the five numbers and none of the beats that made them.
+
+    HOW MANY REASONS, and why this is not a size cap: the stance IS five
+    numbers (`RELATIONSHIP_AXES`), and this is the one beat behind each of
+    them, so `because` can never be longer than the thing it explains
+    however many rows the ledger has accumulated. Measured on the descent
+    bench (chat 117): 322 rows for a single pair across 123 beats, five of
+    which reach the payload.
+
+    Frame-scoped exactly as the graph is: `get_relationships` reads through
+    `wget`, whose key is redirected by the ambient `active_frame_id`, so the
+    history a mind reads is its history IN THIS FRAME and an alternate era's
+    reasons can never explain the present's stance.
+
+    `triggers` is deliberately not carried across. A stored trigger id is a
+    ref into the turn that wrote it (`current:78:4` on all 322 descent rows);
+    grounding is a turn-scoped act, so the id is unresolvable afterwards and
+    would reach the mind as a citation to nothing.
+    """
+    if not targets:
+        return {}
+    rows = q("SELECT target,axis,delta,note,provenance,turn_idx "
+             "FROM relationship_events "
+             "WHERE chat_id=? AND char_id=? AND frame_id IS ? "
+             "ORDER BY ABS(delta) DESC, id DESC",
+             (int(chat_id), int(char_id), frame_id)) or []
+    strongest = {}
+    for row in rows:
+        target = str(row["target"] or "")
+        if target not in targets:
+            continue
+        # Ordered by |delta| descending, so the first row seen for an axis is
+        # that axis's largest movement; ties go to the most recent, because a
+        # live reason outranks an equally large ancient one.
+        strongest.setdefault(target, {}).setdefault(
+            str(row["axis"] or ""), row)
+    out = {}
+    for target, held in strongest.items():
+        entries = []
+        for _field, axis in RELATIONSHIP_AXES:
+            row = held.get(axis)
+            if row is None:
+                continue
+            entry = {"axis": axis, "delta": float(row["delta"] or 0.0),
+                     "turn": int(row["turn_idx"] or 0),
+                     "provenance": str(row["provenance"] or "")}
+            # ABSENT RATHER THAN EMPTY, and the measurement that says why the
+            # key is often absent: on 2026-09-08 `note` was empty on all 353
+            # stored rows across both benches, because the only provenance
+            # either story produced is `character` and
+            # `llm.schemas.RelationshipUpdate` carries no `reason` field for
+            # `apply_relationship_updates`' `update.get("reason")` to find.
+            # The greeting, inference, charter-promotion, journey-companion
+            # and charter-acquaintance paths each write a real sentence (the
+            # last two since this item's rework), so the key appears wherever
+            # one exists.
+            if str(row["note"] or ""):
+                entry["note"] = str(row["note"])
+            entries.append(entry)
+        if entries:
+            out[target] = entries
+    return out
+
+
 def relationships_for_payload(chat_id: int, char_id: int) -> dict:
+    """The stance graph as the character agent and the host both read it.
+
+    Each target carries `because`: the beat behind each axis it stands at
+    (`_because_by_target`). Firewall-safe by construction -- every row in
+    `relationship_events` under this `char_id` was written from this mind's
+    own conduct, its own inference, its authored opening stance, or the
+    charter history it lived, so nothing here is another observer's view.
+    """
     graph = get_relationships(chat_id, char_id)
-    return graph.to_dict()
+    out = graph.to_dict()
+    because = _because_by_target(chat_id, char_id, set(out),
+                                 _active_frame_id.get())
+    for name, entry in out.items():
+        reasons = because.get(name)
+        if reasons:
+            entry["because"] = reasons
+    return out

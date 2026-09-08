@@ -41,7 +41,7 @@ from __future__ import annotations
 
 import re
 
-from world.spatial import contacts_of, room_of
+from world.spatial import contacts_of, room_of, scene_names_body
 
 # The absolute ceiling on world-contributed comfort, shared with
 # psychology_runtime's ambient handling. 0.3 ** 1.3 ~= 0.21 absorption --
@@ -177,27 +177,18 @@ def _entity_record(scene, name):
     return None, None
 
 
-def _is_body(scene, eid, ent, name):
-    """A body is never furniture, whatever its description says it wears.
-
-    Same measured split _is_body_entity uses for dock edges: bodies are the
-    things with `attire` or `scales` records (plus `vitals`, which only bodies
-    carry) -- checked so a character described "in a fur cloak" cannot read as
-    a comfort surface to whoever is touching them.
-    """
-    keys = [name, eid]
-    if isinstance(ent, dict):
-        keys.append(ent.get("name"))
-        keys.extend(ent.get("aliases") or [])
-    for source in ("attire", "scales", "vitals"):
-        table = (scene or {}).get(source) or {}
-        if not isinstance(table, dict):
-            continue
-        for key in keys:
-            key = str(key or "").strip().casefold()
-            if key and any(str(k).strip().casefold() == key for k in table):
-                return True
-    return False
+# A BODY IS NEVER FURNITURE, and the question is not this module's to answer
+# twice: `spatial.scene_names_body` is the one predicate (review 2026-09-07
+# A56 rework). The copy that lived here read the wardrobe, the scale and the
+# vitals ledger and stopped, so a subject the scene merely STANDS somewhere --
+# a registered mind on the beat before it is dressed -- came back "not a
+# body" here and "a body" from `spatial_contacts._endpoint_is_body`, and one
+# scene answered the same question about the same endpoint both ways.
+#
+# Measured over both bench copies, 2026-09-08 (272 stored scene blobs, 4,342
+# name asks): the shared ladder answers exactly as the contact floor already
+# did -- 0 differences -- and differs from the copy deleted here on ONE
+# subject, chat 117's `iron_bung`, in 106 blobs.
 
 
 def _station_of(scene, name):
@@ -278,7 +269,7 @@ def _derive(scene, name):
             continue
         eid, ent = _entity_record(scene, other)
         display = str((ent or {}).get("name") or other or "").strip()
-        if _is_body(scene, eid, ent, other):
+        if scene_names_body(scene, other):
             continue
         tokens = _fields(other, eid, (ent or {}).get("kind"),
                          (ent or {}).get("name"),
@@ -320,7 +311,7 @@ def _derive(scene, name):
         eid, ent = _entity_record(scene, other)
         if ent is None:
             continue
-        if _is_body(scene, eid, ent, other):
+        if scene_names_body(scene, other):
             continue
         tokens = _fields(other, eid, ent.get("kind"), ent.get("name"),
                          ent.get("description"))

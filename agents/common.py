@@ -478,11 +478,28 @@ def _claim_realized(elem, resolved):
     return scan_claims_for(elem, resolved).realized
 
 
-def _scene_has_subject(scene, subject):
+def _scene_has_subject(scene, subject, canonical=None):
+    """Is this declared participant a body the scene holds?
+
+    BLOCKING IS A STATEMENT ABOUT PRESENCE, NEVER ABOUT SPELLING (review
+    2026-09-07 A34). A "no" here blocks the phase, and
+    `prune_blocked_phase_changes` then deletes every state record sourced
+    from it -- so a participant this misses is a change the beat loses.
+
+    Two ways it used to answer "no" about a body that was standing there:
+
+    - The self-reference forms were nine English literals, so a sequence
+      written in another language -- the pack's own second-person or
+      reflexive word -- named a "missing participant" on every beat. The
+      set is the pack's (`_PARTICIPANT_SELF_FORMS`).
+    - The scene's own keys were compared literally, so a participant
+      written as the sheet uid or `character:<id>` -- both spellings the
+      engine itself hands out -- matched nothing. `canonical` is
+      `cast_spelling_policy`'s resolver: pass it and every spelling a
+      registered body answers to resolves to the one the scene is keyed by.
+    """
     wanted = str(subject or "").strip().casefold()
-    if not wanted or wanted in {
-            "self", "player", "the player", "you", "me", "him", "her",
-            "them", "it"}:
+    if not wanted or wanted in _ling("_PARTICIPANT_SELF_FORMS"):
         return True
     candidates = set()
     for key in (scene.get("positions") or {}):
@@ -493,7 +510,20 @@ def _scene_has_subject(scene, subject):
             candidates.add(str(entity.get("name") or "").strip().casefold())
             candidates.update(str(alias).strip().casefold()
                               for alias in entity.get("aliases") or [])
-    return wanted in candidates
+    if wanted in candidates:
+        return True
+    if canonical is None:
+        return False
+    resolved = str(canonical(subject) or "").strip().casefold()
+    if not resolved:
+        return False
+    if resolved != wanted and resolved in candidates:
+        return True
+    # Both ends through the same resolver: the scene may be keyed by the uid
+    # while the sequence names the sheet, which is the mirror of the case
+    # above and just as much a body that is present.
+    return any(resolved == str(canonical(key) or "").strip().casefold()
+               for key in candidates)
 
 
 def _scene_has_contact(scene, selector):
@@ -521,16 +551,25 @@ def _scene_has_contact(scene, selector):
     return False
 
 
-def settle_sequence_dispositions(sequence, resolved, scene):
+def settle_sequence_dispositions(sequence, resolved, scene,
+                                 cast=None, player_name=None):
     """Compose model adjudication with explicit causal prerequisites.
 
     The model decides contested outcomes.  The engine decides the structural
     consequence: a dependent phase cannot execute when its prerequisite was
     merely attempted, when a named participant does not exist, or when a
     required standing contact is absent.
+
+    `cast`/`player_name` are the spelling tolerance (A34): the presence test
+    resolves a participant through `cast_spelling_policy` so a body named by
+    its uid or `character:<id>` is the body the scene already holds. Absent
+    them the test falls back to literal scene keys, which is what every
+    caller had before.
     """
     verdicts = []
     by_key = {}
+    canonical = (cast_spelling_policy(cast, player_name)[0]
+                 if (cast or player_name) else None)
     for index, elem in enumerate(sequence or []):
         if not isinstance(elem, dict):
             continue
@@ -549,7 +588,7 @@ def settle_sequence_dispositions(sequence, resolved, scene):
                 break
         if not reason:
             missing = [person for person in elem.get("participants") or []
-                       if not _scene_has_subject(scene, person)]
+                       if not _scene_has_subject(scene, person, canonical)]
             if missing:
                 reason = "missing participant(s): " + ", ".join(missing)
         if not reason:
@@ -1064,7 +1103,14 @@ def _concat_dedup(*value_lists):
 #: Concatenated in beat order and NOT deduped: two rounds may legitimately
 #: carry the same line or motion, and a character who repeats themselves said
 #: it twice.
-_MERGE_APPEND_FIELDS = ("sequence",)
+#:
+#: `recalled_memory_ids` is here for exactly that reason (A78). It is the
+#: memory rows this mind's recall REACHED, handed to commit to record, and
+#: each micro-round runs its own retrieval -- a row that came back in round 0
+#: and again in round 1 came back twice, which is what `access_count` counted
+#: while `search_memories` still made the write itself. Deduping it here
+#: would quietly change the number the replay tools read.
+_MERGE_APPEND_FIELDS = ("sequence", "recalled_memory_ids")
 
 #: Unioned, order-preserving, exact duplicates dropped (a re-emitted identical
 #: update across rounds). Each entry is an independent piece of work, so no
@@ -1151,12 +1197,13 @@ _MERGE_LATEST_WINS_FIELDS = (
 #: Result keys that are NOT CharacterOutput fields: written by the stage after
 #: validation (`norm_sequence` -> ponder, `_sync_sequence_mirrors` ->
 #: speech_volume, `character_step` -> name/char_id/unbidden_probe/
-#: _barren_beat) or legacy inputs commit still reads (stance_updates,
+#: recalled_memory_ids/_barren_beat) or legacy inputs commit still reads (stance_updates,
 #: inference_updates). Enumerated so the guard can insist an unrecognised name
 #: is either a schema field or a deliberate extra.
 _MERGE_NON_SCHEMA_KEYS = frozenset({
     "stance_updates", "inference_updates", "ponder", "speech_volume",
-    "name", "char_id", "unbidden_probe", "_barren_beat",
+    "name", "char_id", "unbidden_probe", "recalled_memory_ids",
+    "_barren_beat",
 })
 
 
@@ -2907,14 +2954,39 @@ def _sequence_has_content(result):
     )
 
 def _asks_player(result, chat, cast=None):
+    """Is this character's turn a question the player is expected to answer?
+
+    Two English/ASCII assumptions used to make the answer always "no" in
+    another language (review 2026-09-07 A34), so the interaction loop never
+    stopped for a question and the beat ran on past the player: the forms
+    that MEAN the player were three English literals, and the fallback asked
+    whether a speech line ends in an ASCII "?". Both are the pack's
+    (`_PLAYER_ADDRESS_FORMS`, `_QUESTION_MARKS`), and who a spelling belongs
+    to is `cast_spelling_policy`'s, so a uid or `character:<id>` in
+    `addresses` names the body it identifies.
+    """
     player_name = persona_name(persona_of(chat))
     interaction = _dict(result.get("interaction"))
     addresses = {
-        str(v).casefold()
+        str(v).strip().casefold()
         for v in _list(interaction.get("addresses"))
+        if str(v or "").strip()
     }
-    aliases = {"player", "the player", "you", player_name.casefold()}
-    if addresses & aliases:
+    canonical, _spellings = cast_spelling_policy(cast, player_name)
+    aliases = set(_ling("_PLAYER_ADDRESS_FORMS"))
+    if player_name:
+        aliases.add(player_name.casefold())
+
+    def _names_player(token):
+        text = str(token or "").strip().casefold()
+        if not text:
+            return False
+        return bool(text in aliases or (
+            player_name
+            and str(canonical(text) or "").strip().casefold()
+            == player_name.casefold()))
+
+    if any(_names_player(form) for form in addresses):
         return True
     # The trailing-"?" fallback (a speech line ending in "?" is treated as a
     # question awaiting the player) must fire ONLY when the speaker didn't
@@ -2923,26 +2995,26 @@ def _asks_player(result, chat, cast=None):
     # "?" alone to end the loop there strands an NPC<->NPC exchange as if the
     # player had been addressed. So: if `addresses` names a registered cast
     # member (and not the player, handled above), never apply the fallback.
-    cast_names = set()
-    for row in (cast or []):
-        try:
-            cast_names.add(character_name_from_text(row["sheet"]).casefold())
-        except Exception:
-            continue
+    # Every spelling a registered body answers to, not just its sheet name:
+    # the same tolerance the presence floor reads, so "who was addressed" and
+    # "who is present" cannot disagree about a uid.
+    cast_names = {form for form, canon in _spellings.items()
+                  if not player_name or canon.casefold() != player_name.casefold()}
     if addresses & cast_names:
         return False
     for event in _dict_list(result.get("sequence")):
         if event.get("type") == "communication":
             if communication_awaits_reply(event):
-                targets = {str(value).casefold()
-                           for value in event.get("targets") or []}
-                if not targets or targets & aliases:
+                targets = {str(value).strip().casefold()
+                           for value in event.get("targets") or []
+                           if str(value or "").strip()}
+                if not targets or any(_names_player(t) for t in targets):
                     return True
             continue
         if event.get("type") != "speech":
             continue
         text = str(event.get("text") or "").strip()
-        if text.endswith("?"):
+        if text.endswith(tuple(_ling("_QUESTION_MARKS"))):
             return True
     return False
 
@@ -3013,7 +3085,15 @@ def authored_other_subject(elem, name_forms, actor_forms=()):
     # verb and the clause that follows are both that character's predicate.
     for cid, forms in (name_forms or {}).items():
         for form in forms:
-            if not any(low.startswith(form + suf) for suf in (" ", "'", "’")):
+            # "Opens with the name" judged in the name's own script (A2): an
+            # unspaced script writes the next morpheme straight onto the
+            # name, so demanding a space or an apostrophe after it matched
+            # nothing at all. Latin forms keep the separator test exactly.
+            if _UNSPACED_SCRIPT.match(str(form)[:1]):
+                if not re.match(name_boundary_pattern(form), low):
+                    continue
+            elif not any(low.startswith(form + suf)
+                         for suf in (" ", "'", "’")):
                 continue
             if (_is_mental_action(elem.get("verb"), "")
                     or _is_autonomous_response(
@@ -3041,7 +3121,8 @@ def authored_other_subject(elem, name_forms, actor_forms=()):
     named = []
     for cid, forms in (name_forms or {}).items():
         for form in forms:
-            hit = re.search(rf"\b{re.escape(form)}\b", low)
+            # The name's own boundary (A2), as in shape 1 above.
+            hit = re.search(name_boundary_pattern(form), low)
             if hit:
                 named.append((cid, hit.end()))
                 break
@@ -3083,7 +3164,12 @@ def bind_sequence_targets(sequence, target_forms):
             continue
         names = []
         for display, forms in (target_forms or {}).items():
-            if any(re.search(rf"\b{re.escape(form)}\b", haystack)
+            # Each name's own boundary, not `\b` (A2): a name followed
+            # directly by a particle is still that name, and an act that
+            # binds nobody is invisible to the reaction gate, to claim
+            # subject binding and to perception's targeted-observer check
+            # alike. Identical for Latin names.
+            if any(re.search(name_boundary_pattern(form), haystack)
                    for form in forms):
                 names.append(display)
         if not names:
@@ -3213,13 +3299,18 @@ def _normalize_effect(effect):
 
 def _named_cast_subject(text, target_forms):
     """The single cast display name `text` names, or None when it names none
-    or more than one (an ambiguous subject is worse than an absent one)."""
+    or more than one (an ambiguous subject is worse than an absent one).
+
+    Matched on each name's own boundary (A2): `\\b` cannot fall between a
+    name and the particle written straight onto it, so in an unspaced script
+    this found no cast member in any text and every claim's subject came back
+    None. Identical for Latin names."""
     low = str(text or "").casefold()
     if not low.strip():
         return None
     hits = [
         display for display, forms in (target_forms or {}).items()
-        if any(re.search(rf"\b{re.escape(form)}\b", low) for form in forms)
+        if any(re.search(name_boundary_pattern(form), low) for form in forms)
     ]
     return hits[0] if len(hits) == 1 else None
 
@@ -4167,6 +4258,45 @@ def norm_sequence(out, warn=None):
     out["sequence"] = clean
     return _sync_sequence_mirrors(out)
 
+def player_communicated(interpreted):
+    """True when the player's beat carried an utterance to somebody -- spoken
+    or otherwise -- and False when it did not.
+
+    ONE ANSWER TO "DID THE PLAYER SPEAK THIS BEAT" (review 2026-09-07 A44).
+    The scalar `speech` mirror is derived from `type == "speech"` elements
+    alone (`_sync_sequence_mirrors`), so every reader that asked it a
+    yes/no question was answering a narrower one: a player who signed, wrote,
+    gestured a meaning or spoke down a radio emits a `communication` element
+    and no `speech`, and `character._player_silence_note` then told every
+    mind in the room that they had stood there saying nothing -- while
+    `_unanswered_question_note` and `narration._narrator_player_declared`,
+    reading the same beat off the sequence, already counted it as speaking.
+    Two readings of one fact, and the silence note was the wrong one.
+
+    THREE READERS, ONE ANSWER. `_narrator_player_declared` kept a third
+    reading until it too was routed here: its own walk said True on a speech
+    element carrying no text and on a whitespace-only `speech` mirror, so a
+    beat could reach the narrator marked as spoken while every mind in the
+    room was told it was silent. It keeps its loop -- it is building the
+    sequence the narrator renders, which is a different job -- and asks this
+    for the yes/no.
+
+    The class is the utterance, not the mouth: what makes this true is that
+    the beat put something to somebody, whatever channel carried it. The
+    scalar is the fallback and nothing more -- it answers for a stored beat
+    from before the sequence existed, where it is the only record there is.
+    """
+    interpreted = interpreted if isinstance(interpreted, dict) else {}
+    for event in interpreted.get("sequence") or []:
+        if not isinstance(event, dict):
+            continue
+        if event.get("type") not in ("speech", "communication"):
+            continue
+        if str(event.get("text") or event.get("content") or "").strip():
+            return True
+    return bool(str(interpreted.get("speech") or "").strip())
+
+
 def _sync_sequence_mirrors(out):
     """Recompute the legacy scalar mirrors (speech/speech_volume/action/
     actions) from out['sequence']. Factored out of norm_sequence so the
@@ -4337,6 +4467,29 @@ _UNSPACED_NAME_TOKEN_MIN = 2
 def _name_tokens(text):
     """The word-runs of a name, in whatever script it is written."""
     return _NAME_TOKEN_RE.findall(str(text or ""))
+
+
+def _countable_word_units(text):
+    """How much CONTENT a span holds, counted in whatever script wrote it.
+
+    A word count is a length measure, and `[A-Za-z']+` measures zero in a
+    script that neither spaces its words nor writes them in Latin -- so
+    every "is this long enough to be an utterance rather than a label" test
+    built on one answered 0 and fell to whichever side 0 points at. Review
+    2026-09-07 A2: `_check_prose_quote_authority`'s minimum is the measured
+    case, where 0 < 3 skipped every quoted line in a Japanese story and the
+    prose-quote authority floor never fired at all.
+
+    A spaced run counts as one unit; an unspaced run counts once per
+    character, which is the trade `_muffle_tokens` and `_display_floor`
+    already make -- the same amount of language is written in fewer
+    characters, so the character is the comparable unit. Identical to the
+    old count for Latin input.
+    """
+    units = 0
+    for run in _name_tokens(text):
+        units += len(run) if _UNSPACED_SCRIPT.match(run[:1]) else 1
+    return units
 
 
 def _name_token_floor(token):
@@ -6156,16 +6309,33 @@ def _predicate_heads(tail, window):
         part = part.strip()
         if not part or _ling("_NEW_SUBJECT_RE").match(part):
             continue
-        heads.append(
-            (" ".join(re.findall(r"[A-Za-z']+", part)[:window]), part))
+        # The window is counted in the clause's own script (A2), the same
+        # unit `_countable_word_units` measures: `[A-Za-z']+` found no head
+        # at all in an unspaced clause, so every conjunct's head was the
+        # empty string. DEFERRED, and measured by the A2 skeptic: the one
+        # consumer, `_check_character_act_authority`, still searches the head
+        # with `\b(?:{verbs})\b`, which never matches inside an unspaced
+        # clause, so in ja that verb check is still inert until that site
+        # takes the script-safe boundary its siblings took -- and a three-
+        # token window also cuts before the verb there, so the window unit
+        # needs thought before it does.
+        heads.append((" ".join(_name_tokens(part)[:window]), part))
     return heads
 
 
 def _strip_subject(sentence, name):
     """A sentence's predicate: everything past its subject, whether that
-    subject was written as the name or as a pronoun continuing it."""
+    subject was written as the name or as a pronoun continuing it.
+
+    The name's own boundary at both ends (A2): the trailing `\\b` described
+    only spaced scripts, so a sentence opening with a name written in an
+    unspaced one yielded no predicate at all -- '' -- and every verb check
+    reading this had nothing to read. The possessive is a second form rather
+    than an optional suffix so the boundary still falls after it. Identical
+    for Latin names."""
     for form in _player_name_forms(name):
-        match = re.match(rf"^{re.escape(form)}(?:'s)?\b", sentence)
+        match = (re.match(name_boundary_pattern(form + "'s"), sentence)
+                 or re.match(name_boundary_pattern(form), sentence))
         if match:
             return sentence[match.end():]
     match = _ling("_SUBJECT_PRONOUN_RE").match(sentence)
@@ -6348,7 +6518,12 @@ def _check_prose_quote_authority(resolved_event, allowed_bodies):
             if not body or body in seen:
                 continue
             seen.add(body)
-            if len(re.findall(r"[A-Za-z']+", body)) < _PROSE_QUOTE_MIN_WORDS:
+            # Counted in the span's own script (A2): `[A-Za-z']+` finds
+            # nothing in Japanese prose, so every quoted line measured 0
+            # words, fell under the minimum, and this authority floor --
+            # the one that catches a line nobody declared -- was inert for
+            # a whole story. Identical count for Latin input.
+            if _countable_word_units(body) < _PROSE_QUOTE_MIN_WORDS:
                 continue
             if body in allowed_bodies:
                 continue
@@ -6586,16 +6761,29 @@ def _check_player_interiority_authority(resolved_event, player_name,
         # Verbs that report a mind's own operation rather than its body's motion.
         #
         # Words that assert an interior state is TRUE, which no observer may know.
+        #
+        # Matched through `cue_boundary_pattern`, the boundary its neighbour
+        # `_undeclared_world_object` already uses (A2): the vocabularies are
+        # the pack's and a pack keeps its own language's words, but `\b` can
+        # never fall around one written in an unspaced script -- so every
+        # alternative a pack added here was unreachable and this floor found
+        # nothing in such a story. The declaration side keeps its PREFIX
+        # semantics (the player's "I have known this" exempts "knows"):
+        # `\S*` carries the prefix through the trailing boundary, which for
+        # English matches exactly what a bare `\b`-prefix search did.
         hits = [w for w in _ling("_INTERIOR_STATES")
-                if re.search(rf"\b{re.escape(w)}\b", low)
-                and not re.search(rf"\b{re.escape(w)}\b", declared)]
+                if re.search(cue_boundary_pattern(re.escape(w)), low)
+                and not re.search(cue_boundary_pattern(re.escape(w)),
+                                  declared)]
         hits += [v for v in _ling("_INTERIOR_VERBS")
-                 if re.search(rf"\b{re.escape(v)}(?:s|es|d|ed|ing)?\b", low)
-                 and not re.search(rf"\b{re.escape(v)}", declared)]
+                 if re.search(cue_boundary_pattern(
+                     re.escape(v) + r"(?:s|es|d|ed|ing)?"), low)
+                 and not re.search(cue_boundary_pattern(
+                     re.escape(v) + r"\S*"), declared)]
         if not hits:
             continue
         certainty = [c for c in _ling("_INTERIOR_CERTAINTY")
-                     if re.search(rf"\b{re.escape(c)}\b", low)]
+                     if re.search(cue_boundary_pattern(re.escape(c)), low)]
         warnings.append(
             "Player interior state not declared this beat "
             "(player-interiority authority): "
@@ -6609,9 +6797,16 @@ def _mentions_player(low_sentence, player_name):
     """Whether a sentence is ABOUT the player -- their name, or a possessive
     reaching for them. Pronouns are not guessed at: "her terror" in a
     two-woman scene could be either of them, and a guess here would flag
-    ordinary NPC description."""
+    ordinary NPC description.
+
+    The name's own boundary, not `\\b` (review 2026-09-07 A2). This is the
+    gate on the WHOLE player-interiority authority floor -- a sentence it
+    cannot see as being about the player is one the floor never reads -- and
+    `\\b` describes only scripts that space their words, so `ヒナミは` never
+    matched `ヒナミ` and the floor was inert for an entire Japanese story.
+    Identical for Latin names."""
     for form in _player_name_forms(player_name):
-        if re.search(rf"\b{re.escape(form.casefold())}\b", low_sentence):
+        if re.search(name_boundary_pattern(form.casefold()), low_sentence):
             return True
     return False
 
@@ -7972,15 +8167,29 @@ def _collapse_empty_quote_debris(prose):
 #: Where one phrase stops and the next begins. A tic is something the
 #: narrator SAYS; a run of words that crosses a stop, a comma or a dash is
 #: two half-phrases welded at a boundary the prose put there on purpose.
-_PHRASE_BREAK = re.compile(r"[^A-Za-z']+")
-_SEGMENT_BREAK = re.compile(r"[.!?;:,()—–\"“”\n]+")
+#:
+#: A TOKEN RULE, NOT A SPLIT RULE (A2). `[^A-Za-z']+` as a separator made
+#: every character of an unspaced script a separator too, so a Japanese
+#: sentence produced no words at all and the tic report was empty on every
+#: beat of such a story. Matching the units instead reads a Latin run
+#: exactly as the split did -- maximal runs of the same class -- and reads a
+#: character of an unspaced script as its own unit, which is the same trade
+#: `_countable_word_units` makes and for the same reason.
+_PHRASE_TOKEN = re.compile(r"[A-Za-z']+|" + _UNSPACED_SCRIPT.pattern)
+#: The punctuation a phrase cannot run across. Fullwidth marks belong here
+#: for the same reason (A2): the class is "the prose put a stop here", and a
+#: Japanese sentence marks its stops with 。、 rather than with . and , --
+#: without them a whole paragraph was one segment, so every "run of words no
+#: punctuation interrupts" crossed every clause boundary in it. No English
+#: text carries these characters, so the Latin answer is unchanged.
+_SEGMENT_BREAK = re.compile(r"[.!?;:,()—–\"“”\n。、；：！？（）「」『』]+")
 
 
 def _phrase_segments(text):
     """`text` split into the runs of words no punctuation interrupts, each as
     a list of (original-case) words."""
     return [seg for seg in
-            ([w for w in _PHRASE_BREAK.split(part) if w]
+            (_PHRASE_TOKEN.findall(part)
              for part in _SEGMENT_BREAK.split(str(text or "")))
             if seg]
 
@@ -8105,6 +8314,111 @@ def _overused_phrases(recent_prose, current_prose="", n=3, min_hits=2, cap=12,
     return kept[:cap]
 
 
+#: A TRAILING PARTICIPIAL PHRASE, as shape rather than as vocabulary: a
+#: comma, then a word carrying English's participial morphology, then the
+#: rest of the sentence with no further clause boundary. It is the cadence
+#: the ban lists were reaching for and kept missing -- review B29 measured
+#: the tell migrating to words no list held ("steady" 48 times, "unyielding"
+#: 11), because the tell was never in the words. Morphology is a fact about
+#: the writing system; a list of participles is a promise that English can be
+#: enumerated.
+_TRAILING_PARTICIPIAL_RE = re.compile(
+    r",\s+\w+(?:ing|ed)\b[^,;:]*[.!?\u2026]*[\"\'\u201d\u2019)\]]*\s*$")
+#: Where a sentence opens on a quotation -- the attribution, if any, then
+#: follows the line instead of announcing it.
+_QUOTE_OPENS_RE = re.compile(r'^[\s\u2014\u2013-]*["\u201c]')
+_ANY_QUOTE_RE = re.compile(r'["\u201c\u201d]')
+
+
+def _closer_class(sentence):
+    """Which SHAPE a sentence ends on -- dialogue, a trailing participial
+    phrase, or a plain statement. Three classes, because they are the three
+    ways a beat can be closed off and the engine can tell them apart from the
+    punctuation and the morphology alone."""
+    text = str(sentence or "").strip()
+    if not text:
+        return ""
+    # Double quotes only: an apostrophe is not a closing quotation mark, and
+    # a sentence ending on one is much the commoner case.
+    if text.rstrip(".!?\u2026 ").endswith(('"', "\u201d")):
+        return "dialogue"
+    if _TRAILING_PARTICIPIAL_RE.search(text):
+        return "participial"
+    return "statement"
+
+
+def _rhythm_report(recent_prose, current_prose=""):
+    """The narrator's own recent CADENCE, measured (review D11, after B29).
+
+    A ban list can only name the words somebody already noticed, and the tell
+    is not in the words: when narrator.txt banned five adverbs and eight
+    gestures, the same flat cadence came back in vocabulary no list held.
+    What recurs is structural -- sentences of one length, a participial
+    phrase hung off every second comma, every line of dialogue announced
+    before it is spoken, four beats closing the same way -- and every one of
+    those is countable without deciding that any particular word is bad.
+
+    So this REPORTS, in the narrator's own payload, what its last few pages
+    actually did. No threshold decides anything here and nothing is banned:
+    the numbers are the evidence, and a writer who can see that all four of
+    their last closers were participial does not need to be told which
+    participles to avoid.
+
+    `repeated_closer` is the one derived judgment, and it is unanimity rather
+    than a cap: EVERY prose in the window closing on the same shape. That is
+    the state `agents/narration.py` warns on.
+
+    Empty (never a shell of zeroes) when there is nothing to measure -- an
+    empty field is a key the model reads and discards, and one carrying
+    `{"sentences": 0}` argues for a rule with no referent.
+    """
+    blocks = [str(p) for p in list(recent_prose or []) + [current_prose]
+              if str(p or "").strip()]
+    if not blocks:
+        return {}
+    lengths, trailing, quoted, quote_leads, closers = [], 0, 0, 0, []
+    for block in blocks:
+        sentences = [s.strip() for s in split_sentences(block, _SENTENCE_SPLIT)
+                     if s and s.strip()]
+        if not sentences:
+            continue
+        for sentence in sentences:
+            # Counted in the sentence's own script (the A2 unit), so a
+            # Japanese page reports a length rather than "one word".
+            units = _countable_word_units(sentence)
+            if not units:
+                continue
+            lengths.append(units)
+            if _TRAILING_PARTICIPIAL_RE.search(sentence):
+                trailing += 1
+            if _ANY_QUOTE_RE.search(sentence):
+                quoted += 1
+                if _QUOTE_OPENS_RE.match(sentence):
+                    quote_leads += 1
+        closer = _closer_class(sentences[-1])
+        if closer:
+            closers.append(closer)
+    if not lengths:
+        return {}
+    ordered = sorted(lengths)
+    report = {
+        "sentences": len(lengths),
+        "words_per_sentence": {
+            "shortest": ordered[0],
+            "median": ordered[len(ordered) // 2],
+            "longest": ordered[-1],
+        },
+        "trailing_participial_sentences": trailing,
+        "quoted_sentences": quoted,
+        # The attribution announced the line rather than following it.
+        "attribution_before_the_quote": quoted - quote_leads,
+        "closers": closers,
+    }
+    if len(closers) > 1 and len(set(closers)) == 1:
+        report["repeated_closer"] = closers[0]
+    return report
+
+
 #: Words that carry no content in a recycling comparison: the attribution
 #: formula the composer emits around every line, and the label-shaped words a
 #: descriptor is built from. Stripped before shingling, because a shingle is
@@ -8140,7 +8454,13 @@ def _word_shingles(text, n=6, *, labels=()):
                         key=len, reverse=True):
         if len(label) > 2:
             lowered = lowered.replace(label, " ")
-    words = [w for w in re.findall(r"[a-z0-9']+", lowered)
+    # Units in the prose's own script (A2): `[a-z0-9']+` returns ONE token
+    # for a whole Japanese clause, so a six-token shingle spanned six
+    # clauses and the recycled-prose comparison never matched anything.
+    # A character of an unspaced script is its own unit; Latin prose
+    # tokenises exactly as before.
+    words = [w for w in re.findall(r"[a-z0-9']+|" + _UNSPACED_SCRIPT.pattern,
+                                   lowered)
              if w not in _SHINGLE_STOPWORDS]
     return {
         " ".join(words[i:i + n])
@@ -8512,18 +8832,32 @@ def _narration_person_counts(raw_input, player_name=None, player_pronouns=None):
         "second": len(_ling("_SECOND_PERSON_RE").findall(narrative)),
         "third": 0,
     }
-    for part in re.findall(r"[A-Za-z']+", str(player_name or "")):
+    for part in _name_tokens(player_name):
         # Case-sensitive, and only for parts written as a proper noun; a
         # lowercase name can't be told apart from the common word it collides
         # with, so we decline to guess and let the fallback hold.
-        if len(part) >= 3 and part[:1].isupper():
-            counts["third"] += len(re.findall(rf"\b{re.escape(part)}\b", narrative))
+        #
+        # AN UNSPACED SCRIPT HAS NO CASE TO READ, and writes the same name in
+        # fewer characters (A2): the Latin tokenizer found no parts at all in
+        # a Japanese name, `\b` would not have matched beside a particle, and
+        # three characters is a whole family name. So the token floor is
+        # `_name_token_floor`'s, the boundary is `name_boundary_pattern`'s,
+        # and the proper-noun test applies only where case exists. Latin
+        # names count exactly as before.
+        unspaced = bool(_UNSPACED_SCRIPT.match(part[:1]))
+        if len(part) < _name_token_floor(part):
+            continue
+        if not unspaced and not part[:1].isupper():
+            continue
+        counts["third"] += len(
+            re.findall(name_boundary_pattern(part), narrative))
     seen_pronouns = set()
     for pron in (player_pronouns or {}).values():
         pron = str(pron or "").strip().lower()
         if pron in _ling("_THIRD_SUBJECT_PRONOUNS") and pron not in seen_pronouns:
             seen_pronouns.add(pron)
-            counts["third"] += len(re.findall(rf"\b{re.escape(pron)}\b", narrative, re.IGNORECASE))
+            counts["third"] += len(re.findall(
+                name_boundary_pattern(pron), narrative, re.IGNORECASE))
     return counts
 
 # Third-person paradigms screened by _check_pronoun_fidelity. Only these three
@@ -10007,6 +10341,29 @@ def player_room_in(sc, ctx, pers=None, interp=None, player_name=None,
     if not room and resolve:
         room = _resolve_player_room(sc, pers, interp, ctx.cast,
                                     ctx.get("input"))
+        # A DECLARATION IS EVIDENCE OF INTENT BEFORE RESOLVE AND OF NOTHING
+        # AFTER (review 2026-09-07 A83). The resolver's second rung answers
+        # with this beat's own `movement.to_room` when the scene places the
+        # body nowhere at all -- and that answer belongs to the stage that
+        # asked for it (`perception_act` composes the onset from where the
+        # player says she is going) and to no stage after it. Caching it
+        # turned it into a fact: `perception_outcome` reads the cache when
+        # the scene still tracks no position, and so does the narrator, so
+        # a destination `director_resolve` had refused -- the refusal is
+        # recorded, `state_diff.movement_refused` -- came back as the room
+        # she was standing in for the rest of the turn. Returned, never
+        # stored: the stages after this one re-derive from the scene, which
+        # is where a move that actually happened lands.
+        # LIKE COMPARED WITH LIKE: the rung above returns `mv["to_room"]`
+        # exactly as the model wrote it, padding included, so a stripped
+        # declaration measured against an unstripped answer would let a
+        # to_room with surrounding whitespace through the mismatch and back
+        # into the cache.
+        movement = interp.get("movement") if isinstance(interp, dict) else None
+        declared = str((movement.get("to_room") or "")
+                       if isinstance(movement, dict) else "").strip()
+        if declared and str(room or "").strip() == declared:
+            return room
     if room:
         ctx["_player_room"] = room
     return room
@@ -10171,16 +10528,30 @@ def validated_player_state_assertions(sc, raw, player_name, report=None):
     not a whitelist's.
 
     Pure: reads nothing, writes nothing, returns a plain dict.
+
+    ONE BAD CHANNEL COSTS THAT CHANNEL (A29, review 2026-09-07). This ran as
+    `StateDiff(**raw)` inside a bare `except Exception: return {}`, and its
+    caller (`agents/director.py`'s interpret tail) hands it the object the
+    specialists have just merged their channels INTO -- so a single malformed
+    specialist-written channel discarded the player's whole declared state,
+    the same class the two prunes in `llm/schemas.py` fix for a step's own
+    output. `validated_state_diff_channels` drops only the channels that
+    error and reports each; the whole-payload discard survives for a failure
+    no channel owns.
     """
     if not isinstance(raw, dict) or not raw:
         return {}
     try:
-        from llm.schemas import StateDiff
-        clean = StateDiff(**raw).dict(exclude_unset=True)
+        from llm.schemas import validated_state_diff_channels
+        clean, dropped = validated_state_diff_channels(raw)
     except Exception as exc:  # noqa: BLE001 - a malformed assertion is not a turn failure
         if report:
             report(f"discarded a malformed state assertion: {exc}")
         return {}
+    if report:
+        for channel in dropped:
+            report("dropped a malformed state assertion channel: "
+                   f"{channel}")
     clean = {key: value for key, value in clean.items() if value}
 
     # A DECLARED PLACE EXISTS, and the failure-proofing is to MINT it rather

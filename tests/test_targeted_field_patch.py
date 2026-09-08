@@ -115,10 +115,18 @@ def test_the_cheap_rung_is_handed_nothing_but_the_broken_fields():
     content nobody complained about. The docstring's whole argument for using
     a small model here is that it cannot touch the beat; the parameter list
     now says so too.
+
+    `validate` joined it for the capture row (review 2026-09-07 A84) and is
+    not a widening: it is a predicate run on this function's own OUTPUT after
+    the provider has answered, so there is nothing it can add to what was
+    sent. Pinned as keyword-only, and pinned by name, so the next argument
+    added here has to be argued for.
     """
     import inspect
 
     from llm import llm_quality
 
-    assert list(inspect.signature(
-        llm_quality._targeted_field_patch).parameters) == ["parsed", "errors"]
+    params = inspect.signature(llm_quality._targeted_field_patch).parameters
+    assert list(params) == ["parsed", "errors", "validate"]
+    assert params["validate"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert params["validate"].default is None

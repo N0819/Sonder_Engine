@@ -379,11 +379,20 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
                 if str(txt or "").strip()]
     embedded = embed_texts_meta([query_text or "memory"]
                                 + [txt for _lbl, txt in _aspects])
+    # `record_access=False` ON EVERY LANE BELOW (review 2026-09-07 A78). This
+    # payload is assembled by the CHARACTER STAGE, which is read-only: it may
+    # be rerolled, resumed or replayed, and a durable counter that moves each
+    # time is a counter that answers a different question than the one
+    # `tools/remember_lines.py` and `tools/salience_replay.py` ask of it. The
+    # ids this beat actually reached ride out on `_internal.memory_access_ids`,
+    # the character step proposes them on its output, and `commit_memory`
+    # makes the one write -- the same shape as the unbidden ledger.
     recalled = search_memories(chat_id, char_id, query_text, k=recall_limit,
                                include_archived=True, current_turn_idx=current_turn_idx,
                                chronological=True, here=here, in_sight=in_sight,
                                aspects=aspects, embedded=embedded,
-                               record_access=True, bank=bank)
+                               record_access=False, bank=bank)
+    access_ids = [m.get("id") for m in recalled if m.get("id") is not None]
     # NO ABSTENTION SIGNAL IS COMPUTED HERE ANY MORE, and the reason is worth
     # the paragraph because the thing that was here looked like it worked.
     #
@@ -451,7 +460,12 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
         pondered = search_memories(
             chat_id, char_id, ponder_query, k=ponder_k, include_archived=True,
             current_turn_idx=current_turn_idx, chronological=True,
-            here=here, in_sight=in_sight, record_access=True, bank=bank)
+            here=here, in_sight=in_sight, record_access=False, bank=bank)
+        # Every row this lane REACHED, before the budget trim below: what the
+        # counter records is what came back to the mind, and search_memories
+        # recorded the untrimmed result when it still made the write itself.
+        access_ids.extend(m.get("id") for m in pondered
+                          if m.get("id") is not None)
         # Chronological-neighbour expansion may return k+2; trim to the budget.
         if len(pondered) > ponder_k:
             pondered = sorted(
@@ -619,12 +633,17 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     resurfaced_payload = {}
     if resurfaced_subject:
         already = normal_refs | set(ponder_refs)
-        back = [m for m in search_memories(
+        _resurfaced = search_memories(
             chat_id, char_id, resurfaced_subject, k=max(4, int(recall_limit)),
             include_archived=True, current_turn_idx=current_turn_idx,
             chronological=True, here=here, in_sight=in_sight,
-            record_access=True, bank=bank)
-            if str(m.get("event_key") or "") not in already]
+            record_access=False, bank=bank)
+        # Before the already-in-mind filter, for the same reason as the
+        # ponder lane: the search reached these rows.
+        access_ids.extend(m.get("id") for m in _resurfaced
+                          if m.get("id") is not None)
+        back = [m for m in _resurfaced
+                if str(m.get("event_key") or "") not in already]
         if back:
             resurfaced_payload = {"resurfaced_without_asking": {
                 "subject": resurfaced_subject,
@@ -647,6 +666,13 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
             "retrieved_ids": [
                 m.get("id") for m in (*recent, *recalled, *pondered)
                               if m.get("id") is not None],
+            # The rows a SEARCH reached this beat, in reach order, duplicates
+            # kept exactly as `search_memories` would have written them
+            # (A78). Distinct from `retrieved_ids`, which answers a different
+            # question -- what is already in this mind, so contrast does not
+            # hand it back -- and which includes the recent buffer, a lane
+            # that has never moved the counter.
+            "memory_access_ids": list(access_ids),
             "scores": score_rows,
         },
         # The one place this payload says what is still open. See

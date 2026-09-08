@@ -688,6 +688,78 @@ def _entity_labels(eid, ent):
     return out
 
 
+#: Channels of a diff, and ledgers of a scene, keyed by ROOM rather than by
+#: subject. A folded entity key is never a room key, so these are left alone
+#: rather than walked -- the walk below matches a bare string, and a room that
+#: happened to answer to the same token would otherwise be renamed onto an
+#: entity. (`scents` is room-keyed too; `rooms`/`remove_rooms`/
+#: `remove_adjacent` are the room ledger's own, and `_apply_room_renames` is
+#: what rewrites those.)
+_ENTITY_RENAME_SKIP = ("rooms", "remove_rooms", "remove_adjacent", "scents")
+
+
+def _apply_entity_renames(node, renames, *, top=True):
+    """Rewrite every reference to a folded entity key, wherever it sits.
+
+    The sibling of `commit_room_registry._apply_room_renames`, and the half
+    that was missing (review 2026-09-07 A67): `_fold_duplicate_mints` dropped
+    the mint from the merged scene's `entities` and `positions` and left it
+    standing everywhere else -- in the prepared DIFF, which
+    `commit_world_entities` projects into `world_entities` row by row, so a
+    folded mint got a phantom normalized row with no scene entity behind it,
+    and `_entity_alias_map` could then pick that row's key as the canonical
+    anchor for the thing it was folded into. It also left it in the merged
+    ledgers the beat's own merge had already written it into -- a station, a
+    pose's `relative_to`, a contact's `target`, a containment's `in`.
+
+    STATED AS A CLASS RATHER THAN A LIST OF SHAPES. The key being renamed was
+    minted by THIS beat and is a duplicate of something the scene already
+    held, so any string in this beat's own output that is exactly that key is
+    a reference to that thing -- whatever channel it sits in and whatever
+    field name it was written under. A per-channel rewrite would have to be
+    extended by hand for every field a channel learns next, which is how the
+    room sibling's own list grew; this cannot fall behind one.
+    """
+    if isinstance(node, dict):
+        out, renamed = {}, []
+        for key, value in node.items():
+            if top and key in _ENTITY_RENAME_SKIP:
+                out[key] = value
+                continue
+            value = _apply_entity_renames(value, renames, top=False)
+            if isinstance(key, str) and key in renames:
+                renamed.append((renames[key], value))
+                continue
+            out[key] = value
+        # Second, and never over an entry that was already the survivor's:
+        # the thing the scene already holds is the thing, and its fields were
+        # folded onto it by the caller before this ran. Order matters because
+        # a dict may carry the mint before or after the record it folds into.
+        for new_key, value in renamed:
+            out.setdefault(new_key, value)
+        node.clear()
+        node.update(out)
+        return node
+    if isinstance(node, list):
+        out = []
+        for item in node:
+            before = item
+            item = _apply_entity_renames(item, renames, top=False)
+            if item != before and item in out:
+                # The RENAME made this entry a duplicate of one already here --
+                # two ends of one reference that turned out to be one end.
+                # Only then: an entry the rename did not touch is the list's
+                # own business, and dropping a repeat it chose to carry would
+                # be this pass editing a ledger it was not asked about.
+                continue
+            out.append(item)
+        node[:] = out
+        return node
+    if isinstance(node, str):
+        return renames.get(node, node)
+    return node
+
+
 def _fold_duplicate_mints(ctx, cid, sc, prev_scene, diff):
     """A MINT NAMING A THING THE SCENE ALREADY HOLDS IS THAT THING.
 
@@ -790,6 +862,14 @@ def _fold_duplicate_mints(ctx, cid, sc, prev_scene, diff):
             positions[held] = room
         entities.pop(eid, None)
         folded.append((eid, held))
+    if folded:
+        # THE FOLD IS NOT DONE UNTIL THE KEY IS GONE EVERYWHERE (A67). The
+        # loop above emptied the merged `entities` and `positions`; the diff
+        # this beat commits from, and every other merged ledger the key had
+        # already been written into, still named it.
+        renames = dict(folded)
+        _apply_entity_renames(diff, renames)
+        _apply_entity_renames(sc, renames)
     for eid, held in folded:
         add_engine_notice(
             ctx, cid,
@@ -1939,14 +2019,17 @@ def prepare_scene_commit(ctx):
     """The world's own tick, on top of the beat's composed scene.
 
     The scene itself is RETURNED, not stored: `commit_scene` is what persists
-    it, and nothing here rewrites the stored scene, the registry or any other
-    durable story state. It is NOT write-free, though: engine notices for the
-    next beat land in the `world` table from here (`add_engine_notice`,
-    reached through the failed-source, duplicate-mint, orphan-mint and
-    started-source reports, and once for a contradictory sight edge), as do
-    the two once-per-chat "already told" flags, `sight_contradictions_told`
-    and `layout_lint_told`. Those are outside the turn's transaction, so each
-    is its own commit.
+    it, and NOTHING HERE WRITES (review 2026-09-07 A66). This function runs
+    before the turn's write lock, so every `wset` it made was its own
+    autocommit and survived the rollback of a turn that failed: engine notices
+    for a beat that never happened, and a chat marked already-told about
+    contradictions nobody told it. Both channels now ride what this function
+    RETURNS -- notices staged on the context (`add_engine_notice`, reached
+    through the failed-source, duplicate-mint, orphan-mint and started-source
+    reports, and once for a contradictory sight edge) and composed into the
+    key by the sweep; the two once-per-chat "already told" flags,
+    `sight_contradictions_told` and `layout_lint_told`, in `world_flags`,
+    written by `commit_scene` inside the transaction.
 
     Keeping the derivation out of the transaction lets the top-level commit
     prepare memory embeddings and other slow derived work before SQLite's
@@ -2163,9 +2246,10 @@ def prepare_scene_commit(ctx):
         # hard it may come down can honestly bind. A Director who declares a
         # downpour has said what the beat is, and is not capped.
         from story.scene import weather_severity
+        # No `cold=` (review 2026-09-07 A88): it re-asked, here, the question
+        # `advance_weather` asks of the same record one line into its own body.
         sc["weather"] = advance_weather(
             sc.get("weather"), elapsed, seed="chat:%s" % cid,
-            cold=normalize_weather(sc.get("weather")).get("temperature") == "freezing",
             severity=weather_severity(cid))
 
     _advance_ground(cid, sc)
@@ -2289,6 +2373,13 @@ def prepare_scene_commit(ctx):
     # its standing pairs. Without it a scene contradictory since before this
     # check existed compares equal to its own previous beat every turn and is
     # never reported at all -- silently walled, with nothing saying why.
+    # The two "already told" flags RIDE THE PREPARED BUNDLE (A66). They used
+    # to be `wset` here, outside the turn's transaction, so a chat whose beat
+    # then rolled back came back already-told about contradictions it had
+    # never been told about -- the once-per-chat report spent on a turn that
+    # did not happen. `commit_scene` writes them inside the transaction with
+    # everything else this function prepared.
+    _world_flags = {}
     _told = wget(cid, "sight_contradictions_told", False)
     _contradictions = contradictory_sight_edges(
         sc, prev_scene if _told else None)
@@ -2305,7 +2396,7 @@ def prepare_scene_commit(ctx):
             ctx.warnings.append(_msg)
             add_engine_notice(ctx, cid, _msg)
     if not _told:
-        wset(cid, "sight_contradictions_told", True)
+        _world_flags["sight_contradictions_told"] = True
 
     # THE TWO FIELDS' BEAT (`world/spatial_light_field.py` § 5,
     # `world/spatial_sound_field.py` § 5). Two things, both deterministic on
@@ -2342,7 +2433,7 @@ def prepare_scene_commit(ctx):
     for _row in room_layout_lint(sc, prev_scene if _layout_told else None):
         ctx.warnings.append("[layout] " + layout_warning(_row))
     if not _layout_told:
-        wset(cid, "layout_lint_told", True)
+        _world_flags["layout_lint_told"] = True
 
     for _room in guessed_room_sizes(sc, prev_scene):
         ctx.warnings.append(
@@ -2381,6 +2472,10 @@ def prepare_scene_commit(ctx):
         # `{region_id: name}` the region registry must hold for this scene's
         # rooms: folded zones and Director-declared regions, named as written.
         "regions": _region_entries,
+        # `{world key: value}` this preparation decided but must not WRITE:
+        # the once-per-chat "already told" flags, landed by `commit_scene`
+        # inside the turn's transaction (A66).
+        "world_flags": _world_flags,
     }
 
 
@@ -2391,6 +2486,9 @@ def commit_scene(ctx, nonce, *, prepared=None):
     with transaction():
         if prepared.get("clock") is not None:
             wset(ctx.chat.id, "simulation_clock", prepared["clock"])
+        # What preparation DECIDED and deliberately did not write (A66).
+        for _flag, _value in (prepared.get("world_flags") or {}).items():
+            wset(ctx.chat.id, _flag, _value)
         wset(ctx.chat.id, "scene", sc)
         sync_anchored_books(ctx.chat.id, sc)
         # Dual-write the room registry beside the scene blob, inside the

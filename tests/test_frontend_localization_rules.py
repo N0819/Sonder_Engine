@@ -30,6 +30,7 @@ STATIC = ROOT / "static"
 CORE = (STATIC / "js/i18n-core.js").read_text(encoding="utf-8")
 UTILS = (STATIC / "js/utils.js").read_text(encoding="utf-8")
 I18N = (STATIC / "js/i18n.js").read_text(encoding="utf-8")
+ROOM = (STATIC / "js/writers_room.js").read_text(encoding="utf-8")
 
 # Every rule the two localizers once held a copy of apiece.
 SHARED_RULES = (
@@ -112,3 +113,59 @@ def test_the_spa_still_owns_only_what_is_its_own():
 
     assert "S.uiCatalog" in body
     assert "out.split(`{${key}}`)" in body
+
+
+def test_the_writers_room_translates_its_own_lines_and_nothing_else():
+    """A74 (review 2026-09-07). `el()` runs a plain string child through `t()`
+    before the node is inserted, and the catalog has 349 keys with no space in
+    them -- so a Planner sentence, a mandate the player typed, a package title
+    or a claim the room stated was looked up as though it were an interface
+    label, and a one-word title like "Close" came back translated. The same
+    collision `txt()` exists for in the transcript.
+
+    The engine's own lines in this panel are a closed set that is already
+    spelled in the file (so the catalog harvests them), so membership decides
+    which strings are looked up. `translate="no"` on the element carrying story
+    text is the other half: without it the document walk and the mutation
+    observer translate the same string a frame later.
+
+    A browser tier would drive it: run the panel under a catalog that maps
+    "Close" to something else, post a room message whose whole text is "Close",
+    and assert the thread still reads "Close" while the empty-status line is
+    translated.
+    """
+    assert "const ROOM_FIXED_LINES = new Set(" in ROOM
+    membership = ROOM[ROOM.index("const ROOM_FIXED_LINES"):]
+    membership = membership[:membership.index("// ---- Rendering ----")
+                            if "// ---- Rendering ----" in membership else 800]
+    for name in ("ROOM_UNSEATED_LINE", "ROOM_NO_STATUS_LINE", "ROOM_PLANNER_LINES"):
+        assert name in membership, name
+
+    helper = ROOM[ROOM.index("function roomStoryText(value)"):]
+    helper = helper[:helper.index("}\n", helper.index("return"))]
+    assert "ROOM_FIXED_LINES.has(line) ? t(line)" in helper
+    assert "txt(" in helper
+
+    # Every rendered piece of story text goes through it, under an element that
+    # opts out of the walk.
+    for field in ('roomStoryText(st && st.line ? st.line : ROOM_NO_STATUS_LINE)',
+                  'roomStoryText(item.label + (item.state ? " \u00b7 " + item.state : ""))',
+                  "roomStoryText(qn.text)",
+                  "roomStoryText(m.text)",
+                  "roomStoryText(text)",
+                  "roomStoryText(claim.text)",
+                  "roomStoryText(live.reasoning)",
+                  "roomStoryText(live.text)"):
+        assert field in ROOM, field
+    for holder in ('class: "room-status-line", translate: "no"',
+                   'class: "room-mandate-text", translate: "no"',
+                   'class: "room-text", translate: "no"',
+                   'class: "room-claim-text", translate: "no"',
+                   'class: "room-think", translate: "no"'):
+        assert holder in ROOM, holder
+
+    # The row ids a claim cites are data too, and `el()` translates a `title`
+    # on the way in -- so they are assigned after construction, under the
+    # opt-out that keeps the observer's attribute pass off them.
+    assert 'cited.title = (claim.cites || []).join(", ");' in ROOM
+    assert 'title: (claim.cites || []).join(", ")' not in ROOM

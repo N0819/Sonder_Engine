@@ -1047,6 +1047,36 @@ def _deep_remap_ids(obj, remap):
         return [_deep_remap_ids(item, remap) for item in obj]
     return obj
 
+def _remap_world_values(world, world_id_remap):
+    """Remap world-id strings inside a world KV mapping's VALUES.
+
+    ONE reading of the world blob for both branch paths. `turn_branch` runs
+    this over the live `world` rows and `_remap_cp_blob` over the checkpoint
+    blob's copy of the same rows, and the two had drifted on exactly one
+    case: a value that is a BARE string rather than JSON. The live side
+    remapped it (`world_id_remap.get(v, v)`); the blob side did nothing at
+    all -- so the first `restore_checkpoint` after a branch or an import put
+    the SOURCE chat's entity id back into a chat whose live rows had already
+    been rekeyed (review 2026-09-07 A17, the half its first fix left).
+    Mutates in place and returns the mapping.
+    """
+    if not world_id_remap or not isinstance(world, dict):
+        return world
+    for key, value in list(world.items()):
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+            except (json.JSONDecodeError, TypeError):
+                parsed = None
+            if isinstance(parsed, (dict, list)):
+                world[key] = json.dumps(_deep_remap_ids(parsed, world_id_remap))
+            else:
+                # Not JSON: the whole value may itself BE an id.
+                world[key] = world_id_remap.get(value, value)
+        elif isinstance(value, (dict, list)):
+            world[key] = _deep_remap_ids(value, world_id_remap)
+    return world
+
 def _remap_row_json_fields(rows, remap):
     """Remap ids INSIDE the JSON-string columns of normalized world-table
     rows (payload/detail). _deep_remap_ids only rewrites exact string
@@ -1287,18 +1317,7 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
                 blob[key] = _deep_remap_ids(blob[key], world_id_remap)
                 _remap_row_json_fields(blob[key], world_id_remap)
         if isinstance(blob.get("world"), dict):
-            for k, v in list(blob["world"].items()):
-                if isinstance(v, str):
-                    try:
-                        parsed = json.loads(v)
-                        if isinstance(parsed, (dict, list)):
-                            blob["world"][k] = json.dumps(
-                                _deep_remap_ids(parsed, world_id_remap)
-                            )
-                    except (json.JSONDecodeError, TypeError):
-                        pass
-                elif isinstance(v, (dict, list)):
-                    blob["world"][k] = _deep_remap_ids(v, world_id_remap)
+            _remap_world_values(blob["world"], world_id_remap)
 
     return blob
 
@@ -4454,8 +4473,10 @@ def submit_extra_player_input(cid: int, idx: int, body: dict = Body(...)):
     chat+idx rather than turn_id since the turn row for that index may not
     exist yet -- this is what makes same-beat resolution possible:
     whichever request actually creates/runs that turn picks up everything
-    already declared for it. Rejects submissions against an already-run
-    turn (has active steps) since the beat has already resolved.
+    already declared for it. Rejects submissions against an already-run beat
+    OF THIS PLAYER'S OWN FRAME (`_reject_resolved_beat`); a turn that took
+    the index in another era is not this player's beat, and their
+    declaration stays pending until their frame's next one takes it.
 
     The HOST-authenticated twin of `POST /api/guest/input`: same
     `_submit_player_input`, same idx contract, different proof of who you
@@ -4477,15 +4498,39 @@ def submit_extra_player_input(cid: int, idx: int, body: dict = Body(...)):
     )
     if not attached:
         raise HTTPException(400, "Persona is not attached to this chat")
-    existing_turn = q("SELECT id FROM turns WHERE chat_id=? AND idx=?", (cid, idx), one=True)
-    if existing_turn:
-        already_run = q(
-            "SELECT 1 FROM steps WHERE turn_id=? LIMIT 1", (existing_turn["id"],), one=True,
-        )
-        if already_run:
-            raise HTTPException(409, "That turn has already been resolved")
+    _reject_resolved_beat(cid, idx, pid)
     _submit_player_input(cid, idx, pid, text)
     return {"ok": True}
+
+def _reject_resolved_beat(cid: int, idx: int, pid: int):
+    """409 only when THIS player's own frame has already resolved that index.
+
+    The two submit routes (`submit_extra_player_input` and `guest_input`)
+    held one copy each of a chat-GLOBAL version of this check, which asked a
+    question neither player is answering: an index is taken by whichever
+    frame's beat ran at it, and a co-player stationed elsewhere is declaring
+    against their own frame's next beat, not that one (review 2026-09-07
+    A71, the same frame/index mismatch `_load_extra_players` folds by). The
+    station is `chat_personas.frame_id`, the one row that says which era a
+    co-player is playing in, and it is what turn creation and the fold both
+    read. An index BELOW this frame's last resolved beat is accepted and can
+    never be served -- no later beat of the frame falls in its window -- so
+    it stays pending under its own index; that is the shape, not a defect.
+    """
+    station = q(
+        "SELECT frame_id FROM chat_personas WHERE chat_id=? AND persona_id=?",
+        (cid, pid), one=True,
+    )
+    frame_id = station["frame_id"] if station else None
+    existing_turn = q(
+        "SELECT id FROM turns WHERE chat_id=? AND idx=? AND frame_id IS ?",
+        (cid, idx, frame_id), one=True,
+    )
+    if not existing_turn:
+        return
+    if q("SELECT 1 FROM steps WHERE turn_id=? LIMIT 1",
+         (existing_turn["id"],), one=True):
+        raise HTTPException(409, "That turn has already been resolved")
 
 def _submit_player_input(cid: int, idx: int, pid: int, text: str):
     qi(
@@ -4543,6 +4588,46 @@ def join_with_code(body: dict = Body(...)):
     # writers with two literal flag lists is how the two drifted apart.
     return set_guest_cookie(response, result["token"])
 
+def _guest_inputs_by_beat(turn_rows, frame_id, filed):
+    """Pair a guest's own declarations with the beats that took them.
+
+    The reader's half of the window `runtime._load_extra_players` folds by: a
+    declaration is served by the first beat OF THIS GUEST'S FRAME at or after
+    the index it was filed under -- the window (that frame's previous beat,
+    this beat] -- and inside a window the most recent declaration is the one
+    the beat ran with. Keying this page by the filed index instead showed a
+    guest their own line pinned to a beat of an era they were never in, while
+    the beat that actually used it showed blank: the same symptom in the
+    human's transcript that the narrator's history block had for the model
+    (review 2026-09-07 A71).
+
+    A declaration this guest's frame has NOT reached yet is still pending and
+    still shown under the index it was filed under, exactly as before -- no
+    beat has served it, so there is no other row to hang it on.
+
+    `turn_rows` are the chat's turns in idx order; `filed` maps a filed
+    turn_idx to the line declared under it.
+    """
+    # One walk over both sorted sequences: the cursor IS the window floor --
+    # everything at or below a served beat is consumed by it, and the tail
+    # after this frame's last beat is exactly the pending case. Linear where
+    # the first cut rebuilt a filtered list per row (38.3 ms -> 0.35 ms at a
+    # thousand turns and a thousand declarations, A71 second skeptic).
+    filed_idxs = sorted(filed)
+    by_idx, cursor = {}, 0
+    for row in turn_rows:
+        if row["frame_id"] != frame_id:
+            continue
+        served = None
+        while cursor < len(filed_idxs) and filed_idxs[cursor] <= row["idx"]:
+            served = filed_idxs[cursor]
+            cursor += 1
+        if served is not None:
+            by_idx[row["idx"]] = filed[served]
+    for i in filed_idxs[cursor:]:
+        by_idx[i] = filed[i]
+    return by_idx
+
 @app.get("/api/guest/state")
 def guest_state(request: Request):
     grant = getattr(request.state, "guest_grant", None)
@@ -4571,18 +4656,30 @@ def guest_state(request: Request):
     # a guest's page POLLS every ten seconds: one steps/variants read and one
     # `turn_player_inputs` read per beat. Measured 2026-09-07 over the 124
     # turns of the review's bench copy of chat 117 (C22), this transcript loop
-    # cost 249 queries and 5.8 ms a poll; it now costs 3 and 0.7 ms, for the
-    # same answer -- the input table is UNIQUE(chat_id, turn_idx, persona_id),
-    # so keying by turn_idx cannot lose a row the `one=True` read returned.
+    # cost 249 queries and 5.8 ms a poll; it now costs 4 (the fourth is the
+    # station read below, added by A71, 0.009 ms and flat) and 0.7 ms, for the
+    # same answer; the fold `_guest_inputs_by_beat` makes over those rows is
+    # one linear walk, 0.35 ms at a thousand turns and declarations -- the
+    # input table is UNIQUE(chat_id, turn_idx, persona_id), so reading it whole
+    # cannot lose a row the per-beat `one=True` read returned.
     extra_by_turn = active_mappings(cid, "narrator_extra")
-    input_by_idx = {
+    filed = {
         r["turn_idx"]: r["input"] for r in q(
             "SELECT turn_idx, input FROM turn_player_inputs "
             "WHERE chat_id=? AND persona_id=?", (cid, pid))
     }
+    # One more small read per poll -- this guest's station, which is what
+    # says which era their own beats belong to (`_guest_inputs_by_beat`).
+    station = q(
+        "SELECT frame_id FROM chat_personas WHERE chat_id=? AND persona_id=?",
+        (cid, pid), one=True,
+    )
+    turn_rows = q("SELECT * FROM turns WHERE chat_id=? ORDER BY idx", (cid,))
+    input_by_idx = _guest_inputs_by_beat(
+        turn_rows, station["frame_id"] if station else None, filed)
 
     turns = []
-    for t in q("SELECT * FROM turns WHERE chat_id=? ORDER BY idx", (cid,)):
+    for t in turn_rows:
         extra = extra_by_turn.get(t["id"]) or {}
         entry = extra.get(str(pid)) or {}
         my_input = input_by_idx.get(t["idx"])
@@ -4613,6 +4710,13 @@ def guest_state(request: Request):
         })
 
     persona = q("SELECT name FROM personas WHERE id=?", (pid,), one=True)
+    # Chat-GLOBAL, and deliberately so: turn indices are play order across
+    # every frame, so the only index a not-yet-created beat can take is one
+    # above every turn there is. Which frame's beat takes it is not this
+    # page's to know -- a declaration filed here stays pending until this
+    # guest's OWN frame resolves a beat (`runtime._load_extra_players`,
+    # review 2026-09-07 A71), so a turn taken by another era costs them
+    # nothing.
     next_idx = (turns[-1]["idx"] + 1) if turns else 0
     return {
         "chat_name": chat["name"],
@@ -4636,13 +4740,7 @@ def guest_input(request: Request, body: dict = Body(...)):
         raise HTTPException(400, "idx must be an integer")
     if idx < 0:
         raise HTTPException(400, "idx must be non-negative")
-    existing_turn = q("SELECT id FROM turns WHERE chat_id=? AND idx=?", (cid, idx), one=True)
-    if existing_turn:
-        already_run = q(
-            "SELECT 1 FROM steps WHERE turn_id=? LIMIT 1", (existing_turn["id"],), one=True,
-        )
-        if already_run:
-            raise HTTPException(409, "That turn has already been resolved")
+    _reject_resolved_beat(cid, idx, pid)
     _submit_player_input(cid, idx, pid, _player_input(body))
     return {"ok": True}
 
@@ -5169,13 +5267,28 @@ def attire_put(cid: int, body: dict = Body(...),
         # body as its index last read them -- so a second editor's save, or
         # a beat committed in between, was overwritten by a stale copy. An
         # entry sent as null is a deletion; a body not named is untouched.
+        # A WRITE LANDS ON THE KEY THE LEDGER ALREADY HOLDS FOR THAT BODY.
+        # The read side is case-tolerant on purpose (`attire.key_for` is the
+        # one statement of the ledger's key rule, and `entry_for` is how
+        # every reader asks), so a client is handed a body's real entry under
+        # whatever spelling the row it came from used -- `world_routes.
+        # body_rows` builds its names from `positions` as well as from the
+        # wardrobe. Writing back under that spelling minted a SECOND key and
+        # forked the ledger in two: the browser's attire editor saves under
+        # `body.name` (static/js/world_browser.js), so one hand edit split a
+        # dressed body into a full record and an empty one, which is the
+        # shape `commit_attire._heal_attire_identity_keys` was written to
+        # repair on the commit path (review 2026-09-07, Section H residual of
+        # B5). Resolving here closes it for every client of the route, not
+        # for the one page that found it.
         current = dict(scene.get("attire") or {})
         for name, entry in (body or {}).items():
+            key = attire.key_for(current, name) or name
             if entry is None:
-                current.pop(name, None)
+                current.pop(key, None)
             else:
-                current[name] = (attire.rederive_entry(entry)
-                                 if isinstance(entry, dict) else entry)
+                current[key] = (attire.rederive_entry(entry)
+                                if isinstance(entry, dict) else entry)
         scene["attire"] = current
         wset(cid, "scene", scene)
     return {"ok": True}
@@ -6350,19 +6463,7 @@ def turn_branch(tid: int):
                 remapped_world[f"{base}{_FRAME_KEY_SEP}{new_frame_id}"] = val
         world = remapped_world
         _remap_active_books(world, bookmap)
-        if world_id_remap:
-            for k, v in list(world.items()):
-                if isinstance(v, str):
-                    try:
-                        parsed = json.loads(v)
-                        if isinstance(parsed, (dict, list)):
-                            world[k] = json.dumps(
-                                _deep_remap_ids(parsed, world_id_remap)
-                            )
-                    except (json.JSONDecodeError, TypeError):
-                        world[k] = world_id_remap.get(v, v)
-                elif isinstance(v, (dict, list)):
-                    world[k] = _deep_remap_ids(v, world_id_remap)
+        _remap_world_values(world, world_id_remap)
         # fixed_points carry integer frame_ids the generic string remap
         # above never touched -- rescope them to the branch's own frames.
         _remap_fixed_points_frames(world, frame_idmap)

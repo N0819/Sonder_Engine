@@ -226,7 +226,7 @@ def _place(obj, path, value):
         node[last] = value
 
 
-def _targeted_field_patch(parsed, errors):
+def _targeted_field_patch(parsed, errors, *, validate=None):
     """Fix the named fields with a small call, and splice deterministically.
 
     The repair rung above this one rebuilds the COMPLETE response on the
@@ -242,11 +242,19 @@ def _targeted_field_patch(parsed, errors):
     outside those paths is byte-identical by construction, which is what
     makes a model this small safe to use here: it cannot touch the beat.
 
-    Takes the parsed object and the errors and NOTHING ELSE. It used to be
-    handed `step_key` and `payload` as well, and read neither -- which is the
-    honest signature for what this is allowed to do. The beat's own request
-    is exactly the context that would let a cheap model rewrite content
-    nobody complained about, and the guarantee above is that it cannot.
+    Takes the parsed object and the errors and NOTHING ELSE THE MODEL COULD
+    SEE. It used to be handed `step_key` and `payload` as well, and read
+    neither -- which is the honest signature for what this is allowed to do.
+    The beat's own request is exactly the context that would let a cheap model
+    rewrite content nobody complained about, and the guarantee above is that
+    it cannot.
+
+    `validate` is the one exception and it is not a widening: a predicate the
+    caller supplies, run on THIS FUNCTION'S OWN OUTPUT after the provider has
+    already answered, and never sent anywhere. It exists because acceptance is
+    the caller's to decide -- a patch that touched fields and still failed
+    validation was logged `ok=True` (review 2026-09-07 A84's own diagnostic
+    saying the opposite of what it means), and only the caller can say.
 
     Returns the patched object, or None to fall through to the full repair.
     """
@@ -263,31 +271,58 @@ def _targeted_field_patch(parsed, errors):
                      if str(e).startswith(path + ":")]
     if not fragments:
         return None
+    _system = get_prompt("patch_json_field")
+    _payload = {"invalid_fragments": fragments,
+                "validation_errors": messages}
+    _wall0 = time.time()
+    raw = ""
     try:
         raw = chat_complete(
             "repair",
-            get_prompt("patch_json_field"),
-            json.dumps({"invalid_fragments": fragments,
-                        "validation_errors": messages}, ensure_ascii=False),
+            _system,
+            json.dumps(_payload, ensure_ascii=False),
             temperature=0.0,
             max_tokens=1500,
         )
         patch = strict_json_parse(raw)
     except Aborted:
         raise
-    except Exception:
+    except Exception as exc:
+        # A PROVIDER CALL WAS MADE AND IS RECORDED (A84). This rung answers
+        # with the corrected FIELDS rather than the step's object, so it
+        # returned through `_accepted` and the capture never saw it at all --
+        # neither its cost nor the cheap model's answer.
+        note_provider_exchange(
+            role="repair", system=_system, payload=_payload, response=raw,
+            ok=False, started=_wall0, error=str(exc))
         return None
-    if not isinstance(patch, dict) or not patch:
-        return None
-    out = json.loads(json.dumps(parsed))
-    touched = []
-    for path, value in patch.items():
-        # ONLY a path that actually failed. A patch naming anything else is
-        # rewriting a field nobody complained about, which is the one thing
-        # this rung must never do.
-        if path in fragments:
-            _place(out, path, value)
-            touched.append(path)
+    usable = isinstance(patch, dict) and bool(patch)
+    out, touched = None, []
+    if usable:
+        out = json.loads(json.dumps(parsed))
+        for path, value in patch.items():
+            # ONLY a path that actually failed. A patch naming anything else
+            # is rewriting a field nobody complained about, which is the one
+            # thing this rung must never do.
+            if path in fragments:
+                _place(out, path, value)
+                touched.append(path)
+    stood = bool(touched)
+    if stood and validate is not None:
+        # A diagnostic must never fail the call it is describing: a predicate
+        # that raises leaves the row honest (`ok=False`) and the caller free
+        # to raise on its own terms.
+        try:
+            stood = bool(validate(out))
+        except Exception:  # noqa: BLE001
+            stood = False
+    note_provider_exchange(
+        role="repair", system=_system, payload=_payload, response=raw,
+        ok=stood, started=_wall0,
+        error=("" if stood else
+               "the patched object still failed validation" if touched
+               else "the patch named no field that failed" if usable
+               else "the repair model answered with no usable object"))
     return out if touched else None
 
 
@@ -423,6 +458,60 @@ def _step_json_schema(step_key: str, wire_variant=None):
     return schema
 
 
+def note_provider_exchange(*, role, system, payload, response, ok,
+                           started, error=""):
+    """Record ONE provider call for the debug capture: what was actually sent
+    on that call, what came back, and whether it stood.
+
+    ONE ROW PER CALL, NOT ONE PER ACCEPTED ANSWER (review 2026-09-07 A84).
+    This used to be a closure over `complete_validated_json`'s OUTER `system`
+    and `payload`, hardcoding `ok: True`, reached from the three success
+    returns that happened to be in scope. So the ladder was invisible in
+    exactly the cases it exists for: a beat that failed validation and was
+    rebuilt by the temperature-0 repair recorded the ORIGINAL sheet and
+    payload against the repair's answer -- an exchange that never happened --
+    while the two rungs that answer with a different object, the targeted
+    field patch and the fallback candidates, recorded nothing at all, and no
+    failed attempt was recorded ever. The invisible-second-call rate that the
+    2026-08-11 audit could not measure is exactly what this makes readable.
+
+    `ok=False` rows are the point: a provider error, a parse failure and a
+    validation failure are three different stories and the capture could tell
+    none of them apart from a call that never happened.
+
+    A diagnostic must never fail the call it is describing, so everything is
+    swallowed. No-op outside a step; the sink is armed on every step, so the
+    debug-capture setting gates the WRITE (`llm_capture.record_exchange`) and
+    not this funnel.
+    """
+    try:
+        from core.pipeline_context import note_step_exchange
+        from llm import providers
+        from llm.providers import last_reasoning
+        note_step_exchange({
+            "role": role,
+            # The model of record for this exchange. The `llm_calls` ledger
+            # already carries requested/served per call; this is only so an
+            # exported turn reads without a join.
+            "requested": str((providers.agent_models().get(role) or {})
+                             .get("model") or ""),
+            "system": system,
+            "payload": payload,
+            # What CAME BACK, verbatim, on every rung. The accepted rung used
+            # to record the validated object instead, which is a different
+            # artefact from the one the provider sent and cannot show a
+            # truncation or a stray prose preamble.
+            "response": response,
+            "reasoning": last_reasoning.get() or "",
+            "started": started,
+            "duration": time.time() - started,
+            "ok": bool(ok),
+            "error": str(error or "")[:400],
+        })
+    except Exception:
+        pass
+
+
 def complete_validated_json(
     *,
     role: str,
@@ -445,45 +534,6 @@ def complete_validated_json(
     # output window"; that invitation did not work.
     user = json.dumps(payload, ensure_ascii=False)
     _capture_t0 = time.time()
-
-    def _captured(report):
-        """Hand this exchange to the debug capture, then return the output.
-
-        Placed here rather than in `_accepted` because THIS is the scope that
-        holds all four halves at once: the system sheet, the payload actually
-        serialised for the wire, the accepted output, and the reasoning the
-        provider returned for it. It is also the single funnel every stage AND
-        every Director specialist sub-call passes through, which is what makes
-        a chronological reading of a whole turn possible -- the five
-        specialists have no step rows, so nothing else sees them.
-
-        No-op outside a step. The sink it hands to is armed on every step, so
-        the debug-capture setting gates the WRITE
-        (`llm_capture.record_exchange`) and not this funnel.
-        """
-        try:
-            from core.pipeline_context import note_step_exchange
-            from llm import providers
-            from llm.providers import last_reasoning
-            note_step_exchange({
-                "role": role,
-                # The model of record for this exchange. The `llm_calls`
-                # ledger already carries requested/served per call; this is
-                # only so an exported turn reads without a join.
-                "requested": str((providers.agent_models().get(role) or {})
-                                 .get("model") or ""),
-                "system": system,
-                "payload": payload,
-                "response": report.output,
-                "reasoning": last_reasoning.get() or "",
-                "started": _capture_t0,
-                "duration": time.time() - _capture_t0,
-                "ok": True,
-            })
-        except Exception:
-            # A diagnostic must never fail the call it is describing.
-            pass
-        return _accepted(report)
 
     provider_errored = False
     last_provider_error = None
@@ -531,6 +581,9 @@ def complete_validated_json(
         raw = ""
         provider_errored = True
         last_provider_error = exc
+        note_provider_exchange(
+            role=role, system=system, payload=payload, response="",
+            ok=False, started=_capture_t0, error=str(exc))
 
     parse_error = None
 
@@ -550,8 +603,14 @@ def complete_validated_json(
         report.valid = False
         report.errors.insert(0, parse_error)
 
+    if not provider_errored:
+        note_provider_exchange(
+            role=role, system=system, payload=payload, response=raw,
+            ok=bool(report.valid), started=_capture_t0,
+            error="" if report.valid else "; ".join(report.errors[:3]))
+
     if report.valid:
-        return _captured(report)
+        return _accepted(report)
 
     previous_raw = raw
     previous_parsed = parsed
@@ -601,6 +660,7 @@ def complete_validated_json(
             # call rate stayed unknowable (audit 2026-08-11: failure floor
             # >=3.5% of character calls, true rate unmeasured).
             _t0 = time.monotonic()
+            _wall0 = time.time()
             try:
                 raw = chat_complete(
                     role,
@@ -619,6 +679,9 @@ def complete_validated_json(
                 raw = ""
                 provider_errored = True
                 last_provider_error = exc
+                note_provider_exchange(
+                    role=role, system=system, payload=payload, response="",
+                    ok=False, started=_wall0, error=str(exc))
                 note_step_warning(
                     "llm second call: truncation re-ask at "
                     f"{token_ceiling} tokens errored after "
@@ -646,8 +709,14 @@ def complete_validated_json(
                     report.valid = False
                     report.errors.insert(0, parse_error)
 
+                note_provider_exchange(
+                    role=role, system=system, payload=payload, response=raw,
+                    ok=bool(report.valid), started=_wall0,
+                    error=("" if report.valid
+                           else "; ".join(report.errors[:3])))
+
                 if report.valid:
-                    return _captured(report)
+                    return _accepted(report)
 
                 ran_out_of_room = output_ran_out_of_room(raw)
                 previous_raw = raw
@@ -660,10 +729,25 @@ def complete_validated_json(
     # untouched to the full rebuild below on any doubt.
     if not provider_errored and repair_attempts > 0:
         _t0 = time.monotonic()
-        _patched = _targeted_field_patch(previous_parsed, report.errors)
+        # ONE VALIDATION, READ TWICE (A84). The rung's capture row has to say
+        # whether the patch STOOD, and only this scope can answer -- the
+        # function itself is deliberately handed nothing about the step. The
+        # predicate keeps its report so the acceptance test below is the same
+        # pass, not a second one.
+        _patch_reports = {}
+
+        def _patch_validates(obj):
+            _patch_reports["report"] = validate_llm_output_strict(
+                step_key, obj, source_payload=payload)
+            return bool(_patch_reports["report"].valid)
+
+        _patched = _targeted_field_patch(previous_parsed, report.errors,
+                                         validate=_patch_validates)
         if _patched is not None:
-            _patched_report = validate_llm_output_strict(
-                step_key, _patched, source_payload=payload)
+            _patched_report = _patch_reports.get("report")
+            if _patched_report is None:
+                _patched_report = validate_llm_output_strict(
+                    step_key, _patched, source_payload=payload)
             if _patched_report.valid:
                 note_step_warning(
                     "llm second call: validation failed "
@@ -691,10 +775,15 @@ def complete_validated_json(
 
         _first_error = str((report.errors or [""])[0])[:120]
         _t0 = time.monotonic()
+        _wall0 = time.time()
+        # WHAT THIS RUNG ACTUALLY SENDS, which is not the step's own sheet or
+        # its own payload (A84): the repair sheet, and a payload wrapping the
+        # failed attempt and the errors it failed on.
+        _repair_system = get_prompt("repair_json")
         try:
             previous_raw = chat_complete(
                 role,
-                get_prompt("repair_json"),
+                _repair_system,
                 json.dumps(
                     repair_payload,
                     ensure_ascii=False,
@@ -709,6 +798,9 @@ def complete_validated_json(
             raise
         except LLMError as exc:
             last_provider_error = exc
+            note_provider_exchange(
+                role=role, system=_repair_system, payload=repair_payload,
+                response="", ok=False, started=_wall0, error=str(exc))
             note_step_warning(
                 "llm second call: temperature-0 repair errored after "
                 f"{time.monotonic() - _t0:.1f}s ({exc})")
@@ -739,8 +831,13 @@ def complete_validated_json(
             report.valid = False
             report.errors.insert(0, parse_error)
 
+        note_provider_exchange(
+            role=role, system=_repair_system, payload=repair_payload,
+            response=previous_raw, ok=bool(report.valid), started=_wall0,
+            error="" if report.valid else "; ".join(report.errors[:3]))
+
         if report.valid:
-            return _captured(report)
+            return _accepted(report)
 
     candidate_count = role_candidate_count(role)
 
@@ -756,10 +853,12 @@ def complete_validated_json(
         }
 
         _t0 = time.monotonic()
+        _wall0 = time.time()
+        _fallback_system = system + "\n\n" + get_prompt("repair_json")
         try:
             fallback_raw = chat_complete(
                 role,
-                system + "\n\n" + get_prompt("repair_json"),
+                _fallback_system,
                 json.dumps(
                     fallback_payload,
                     ensure_ascii=False,
@@ -775,6 +874,9 @@ def complete_validated_json(
             raise
         except LLMError as exc:
             last_provider_error = exc
+            note_provider_exchange(
+                role=role, system=_fallback_system, payload=fallback_payload,
+                response="", ok=False, started=_wall0, error=str(exc))
             note_step_warning(
                 f"llm second call: fallback candidate {candidate_offset} "
                 f"errored after {time.monotonic() - _t0:.1f}s ({exc})")
@@ -791,6 +893,10 @@ def complete_validated_json(
             )
         except Exception as exc:
             report.errors.append(str(exc))
+            note_provider_exchange(
+                role=role, system=_fallback_system, payload=fallback_payload,
+                response=fallback_raw, ok=False, started=_wall0,
+                error=str(exc))
             continue
 
         fallback_report = validate_llm_output_strict(
@@ -798,6 +904,13 @@ def complete_validated_json(
             fallback_parsed,
             source_payload=payload,
         )
+
+        note_provider_exchange(
+            role=role, system=_fallback_system, payload=fallback_payload,
+            response=fallback_raw, ok=bool(fallback_report.valid),
+            started=_wall0,
+            error=("" if fallback_report.valid
+                   else "; ".join(fallback_report.errors[:3])))
 
         if fallback_report.valid:
             return _accepted(fallback_report)

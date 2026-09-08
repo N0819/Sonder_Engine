@@ -59,6 +59,7 @@ from story.scene import (
     active_transformations,
     all_cast_name_to_id,
     awareness_of,
+    cast_state,
     dialogue_budget,
     get_scene,
     persona_of,
@@ -101,6 +102,7 @@ from .common import (
     communication_awaits_reply,
     fuse_speech_run,
     norm_sequence,
+    player_communicated,
     player_speech_lines,
 )
 
@@ -830,10 +832,14 @@ def _player_quiet_beats(chat_id, current_turn_idx, frame_id, cap=8,
     beats = 1
     for row in rows:
         try:
-            spoke = str((json.loads(row["content"]) or {}).get("speech") or "").strip()
+            interpreted = json.loads(row["content"]) or {}
         except (TypeError, ValueError):
             break
-        if spoke:
+        # THE SAME QUESTION THE CALLER ASKED, ANSWERED THE SAME WAY (A44):
+        # a beat the player signed, wrote or radioed is a beat they
+        # communicated on, and reading the `speech` mirror alone counted it
+        # as another beat of silence.
+        if player_communicated(interpreted):
             break
         beats += 1
     return beats
@@ -2550,7 +2556,7 @@ def _en_route(stored_state, here_rid, destination):
 def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
                           here_rid=None, routes_that_worked=None,
                           known_dead_ends=None, place_graph=None,
-                          destination=None, warn=None):
+                          destination=None, warn=None, sight_reaches=True):
     """Mark each exit with whether this character has been through it.
 
     `spatial_digest` renders an exit as {room, barrier} -- identical whether
@@ -2581,7 +2587,18 @@ def _annotate_known_exits(digest, scene, visited_rooms, known_exits=None,
     # threshold; making a character enter it to find out is not caution, it is
     # a missing sense.
     seen_onward, seen_bearings = {}, {}
-    if here_rid:
+    # A STRUCTURED ECHO OF A SENSE MAY NOT EXCEED THE SENSE (review
+    # 2026-09-07 A79). `visible_adjacent_rooms` is sight and nothing else by
+    # construction -- `spatial_routing` filters the edges it follows by
+    # `_SIGHT_BARRIERS` -- so the three keys below are what LOOKING through
+    # the doorway shows. A card whose sight channel is authored ABSENT was
+    # still receiving them: measured with the sibling gate applied, such a
+    # card got `onward_exits_visible: 1`, `onward_bearings: ['n']` and the
+    # far room's name. `sight_reaches` false leaves the keys off entirely,
+    # which is already the right answer here -- absent means "cannot tell
+    # from here", never "none", and `_verdict` reads a missing
+    # `visibly_no_way_through` as untried.
+    if here_rid and sight_reaches:
         # Narrow, and it SAYS SO when it fires. The guard used to wrap the
         # whole loop AND a local re-import of a function already imported at
         # module scope, so an import error and a spatial failure read
@@ -3331,7 +3348,8 @@ def character_step(ctx, cid, nonce):
     # Resolved before the memory context, not after: where the character is
     # standing is a retrieval cue, and the recall is built here.
     char_room = character_room(sc, sh)
-    stored_state = json.loads(row["cstate"] or "{}")
+    # One spelling of the column, and one parse (A43): `cast_state`.
+    stored_state = cast_state(row)
     # How much of this mind its own body currently has. Own interoceptive state
     # only -- another character's pain is never an input to this character's
     # cognition (see AGENTS.md's own-body isolation rule). Resolved up here
@@ -3427,6 +3445,19 @@ def character_step(ctx, cid, nonce):
         affect.steering_intent_ids(_decision_intentions, ctx.turn.idx))
     _here_name = (sc.get("rooms") or {}).get(char_room, {}).get("name") \
         or char_room
+    # A STRUCTURED ECHO OF A SENSE MAY NOT EXCEED THE SENSE (review
+    # 2026-09-07 A79). Three fields in this payload are sight and nothing
+    # else -- what the room visibly affords, what looking down each passage
+    # shows, and the rooms in view as a recall cue -- and each was computed
+    # from the world alone, so an authored-blind card received them beside a
+    # view that had correctly delivered no sight at all. The gate is the
+    # engine's own (`spatial.sense_adjusted`, G4, the same one every
+    # composer builder grades with): a card whose sight channel is ABSENT
+    # cannot be reached by the best sight the world has, and the echo is
+    # withheld with it. A dulled or keen card is untouched here -- these
+    # fields have no ladder to shift, and dulled sight is still sight.
+    _sight_reaches = sense_adjusted(
+        "full", "sight", character_senses(sh)) != "none"
     # Unbidden recall, decided BEFORE the memory context is built and entirely
     # deterministically: a measurably stuck mind gets one contrasting memory
     # of its own surfaced into that context (see _unbidden_trigger).
@@ -3467,7 +3498,7 @@ def character_step(ctx, cid, nonce):
             str(item.get("room_name") or item.get("room_id"))
             for item in (visible_adjacent_rooms(sc, char_room) or [])
             if isinstance(item, dict)
-        ] if char_room else None,
+        ] if char_room and _sight_reaches else None,
         absorption=absorption,
         ponder_query=_ponder_query,
         ponder_why=_ponder_why,
@@ -3888,7 +3919,8 @@ def character_step(ctx, cid, nonce):
         _self["body_state"] = _body_state
     # What the room they stand in visibly affords, computed once for the
     # perception block below.
-    _here_affords_now = here_affords(sc, character_name(sh))
+    _here_affords_now = (here_affords(sc, character_name(sh))
+                         if _sight_reaches else [])
     if _window_open:
         _self["rupture"] = {"why": _rupture.get("why"), "direction": _rupture.get("direction"),
                             "forced": _rupture_forced}
@@ -3966,8 +3998,23 @@ def character_step(ctx, cid, nonce):
     # Absolutely no host-only row ids/counters reach the model.
     memory_context.pop("_internal", None)
     # Did the player speak this beat. Read once: it gates the silence note
-    # and the consecutive-quiet query behind it.
-    _p_spoke = str((ctx.get("director_interpret") or {}).get("speech") or "").strip()
+    # and the consecutive-quiet query behind it. Through the one helper, not
+    # the scalar mirror -- a beat the player signed, wrote or radioed carries
+    # a `communication` element and no `speech` (A44).
+    _p_spoke = player_communicated(ctx.get("director_interpret"))
+    # Hoisted out of the payload literal because the SPEECH BUDGET reads it
+    # too (D23): a question hanging in the air is a line owed, and the budget
+    # was drawn without knowing whether there was one. Same cache, so this
+    # costs no second lookup.
+    _debt = _unanswered_question_note(
+        chat.id, character_name(sh), cid, ctx.turn.idx, ctx.turn.frame_id,
+        cache=shared.setdefault("unanswered_question_notes", {}),
+        label=_contact_label, rows_cache=shared)
+    # A want this mind is sitting on, from ITS OWN stored state -- exactly
+    # one is marked, by `affect.normalize_wants`, and never the enacted one.
+    _withholding = any(
+        isinstance(want, dict) and want.get("suppressed")
+        for want in ((active or {}).get("wants") or []))
 
     payload = {
         "self": _self,
@@ -4006,7 +4053,10 @@ def character_step(ctx, cid, nonce):
                 # it -- see _destination_from_goals for the double gate.
                 destination=_goal_destination,
                 warn=lambda message: ctx.add_warning(
-                    f"character {character_name(sh)}: {message}")),
+                    f"character {character_name(sh)}: {message}"),
+                # A79: the onward counts and bearings are sight. A sightless
+                # card gets them ABSENT, not zeroed.
+                sight_reaches=_sight_reaches),
             # Where they are, named. The digest lists what leads OUT of a room
             # without ever naming the room itself, so a character had to
             # re-derive their own location from the view's prose every beat.
@@ -4017,7 +4067,8 @@ def character_step(ctx, cid, nonce):
             # north the passage comes to an end" is the percept, not a room
             # count -- and it stops at corners, so it is sight rather than a
             # map.
-            "corridor_sight": corridor_sightlines(sc, char_room),
+            "corridor_sight": (corridor_sightlines(sc, char_room)
+                               if _sight_reaches else []),
             # How far a RUN gets down each passage, and what stops it.
             # Knowledge-gated and pruned to the offers worth having -- see
             # sprint_offers. An offer, not an instruction: a body that can
@@ -4046,7 +4097,10 @@ def character_step(ctx, cid, nonce):
         "decision": {
             "deep_tom_requested": cid in _tom,
             "dialogue_mode": bool(_flow.get("dialogue_mode", False)),
-            "speech_budget": dialogue_budget(chat, ctx.turn, cid, nonce),
+            "speech_budget": dialogue_budget(
+                chat, ctx.turn, cid, nonce,
+                verbosity=(character_voice(sh) or {}).get("verbosity"),
+                awaiting_answer=bool(_debt), withholding=_withholding),
             # Silence is a thing the player DID, and nothing was saying so.
             #
             # A beat where they act without speaking produced a payload with no
@@ -4069,11 +4123,7 @@ def character_step(ctx, cid, nonce):
                 label=_contact_label),
             # Somebody asked this character something and they have not spoken
             # since. The engine knew; nothing told them.
-            **_unanswered_question_note(
-                chat.id, character_name(sh), cid,
-                ctx.turn.idx, ctx.turn.frame_id,
-                cache=shared.setdefault("unanswered_question_notes", {}),
-                label=_contact_label, rows_cache=shared),
+            **_debt,
         },
         "simulation_clock": _sim_clock,
         "variant_seed": nonce,
@@ -4398,6 +4448,16 @@ def character_step(ctx, cid, nonce):
     # An earlier micro-round's injection and repeat-screen outcome are carried
     # forward, because _merge_character_results keeps the LATEST probe: the
     # last round's probe must therefore tell the whole beat's story.
+    # WHAT THIS MIND'S RECALL ACTUALLY REACHED, proposed the same way the
+    # probe below is (review 2026-09-07 A78). `search_memories` used to bump
+    # `access_count` and `last_accessed` from inside this stage -- a durable
+    # write in a read-only stage, so a reroll moved the counter, and that
+    # counter is the whole answer `tools/remember_lines.py` and
+    # `tools/salience_replay.py` read. `commit_memory` makes the write once,
+    # for the variant that stands.
+    out["recalled_memory_ids"] = [
+        i for i in (memory_internal.get("memory_access_ids") or [])
+        if i is not None]
     out["unbidden_probe"] = {
         "stuck": bool(_unbidden_reason),
         "trigger": _unbidden_reason or "",

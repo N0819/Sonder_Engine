@@ -64,7 +64,8 @@ import hashlib
 import json
 
 from core import jobs
-from world.spatial import apply_transit_dock_edges, room_of_record
+from world.spatial import (apply_transit_dock_edges, room_of_record,
+                           scene_names_body)
 from world.spatial_frames import infer_companion_carry, infer_vehicle_zones
 
 
@@ -466,7 +467,7 @@ def _payload_of(row):
 
 
 def _fire_due_events(scene, elapsed, frame_id, pending, *, turn_idx=None,
-                     player_room=None):
+                     player_room=None, surface_consequences=True):
     """Pass (a). Returns (event_ops, notices, counts, pending_entity_ids).
 
     pending rows arrive in due_at order (the caller's query) and each is
@@ -482,6 +483,14 @@ def _fire_due_events(scene, elapsed, frame_id, pending, *, turn_idx=None,
     fired row waits to be read at contact (residue, gap skeleton). That
     presence gate is the §0.2 firewall: an event elsewhere is never told,
     only encountered.
+
+    ``surface_consequences`` is the story's own `scheduled_consequence`
+    depth, and it gates THAT NOTICE — the surface — never the firing
+    (A82, review 2026-09-07). Every declared fuse is minted and fires on
+    its clock, because a Director-adjudicated cause is truth and a story
+    that switches the mechanism on later must not find the world had
+    forgotten its own causes; what "off" buys is that no such landing is
+    ever put in front of the party.
     """
     event_ops = []
     notices = []
@@ -504,8 +513,8 @@ def _fire_due_events(scene, elapsed, frame_id, pending, *, turn_idx=None,
                 continue
             event_ops.append(("status", row["event_id"], "fired"))
             consequences_fired += 1
-            if player_room and str(payload.get("where") or "") == \
-                    str(player_room):
+            if surface_consequences and player_room \
+                    and str(payload.get("where") or "") == str(player_room):
                 notices.append(
                     "Falling due here, now: "
                     f"{payload.get('what') or 'a scheduled consequence'} "
@@ -721,17 +730,34 @@ def _tick_spec(payload):
 
 
 def _room_occupants(scene, room_id):
-    """Every body standing in `room_id`, in the scene's own order.
+    """Every BODY standing in `room_id`, in the scene's own order.
 
-    Read straight off `positions`, which is the one map that answers "where is
-    this body" -- not `rooms[...]` membership, which no scene keeps.
+    Read off `positions`, which is the one map that answers "where is this"
+    -- not `rooms[...]` membership, which no scene keeps.
+
+    AND `positions` IS NOT A BODY ROSTER (review 2026-09-07 A56). Everything
+    with a where is in it: docked vehicles, the zones
+    `spatial_frames.infer_vehicle_zones` derives, and every fixture, tool and
+    piece of debris the Director has placed. Measured on chat 117's live
+    scene (bench copy, 2026-09-08, `tools/bench/body_predicate_on_positions`):
+    22 position keys and 2 bodies. A condition standing over every room of
+    that scene reached 22 subjects and now reaches 3 -- it was taking the air
+    of a pry bar, a klaxon speaker, two doors and a wrecked trolley, and
+    warning every beat that no body of those names was in the vitals ledger.
+    `spatial.scene_names_body` is the one predicate that
+    answers this, shared with the contact identity floor, the comfort
+    derivation and the creature's prey table rather than re-typed here; its
+    last tier deliberately keeps a subject the scene records nothing about
+    but where it stands, so a person nobody has dressed yet is never dropped
+    from a fire in silence.
     """
     positions = (scene or {}).get("positions")
     if not isinstance(positions, dict):
         return []
     target = str(room_id or "").strip()
     return [str(name) for name, where in positions.items()
-            if str(where or "").strip() == target and str(name or "").strip()]
+            if str(where or "").strip() == target and str(name or "").strip()
+            and scene_names_body(scene, name)]
 
 
 def condition_subject_room(scene, subject):
@@ -1089,6 +1115,13 @@ def unanswered_hazard_subjects(scene, conditions, bodies, state_diff):
         label = str(name or "").strip()
         if not label or str(where or "").strip() not in hazards:
             continue
+        # `positions` is not a body roster (A56): a boat docked at a flooded
+        # quay is in it, and the warning is about who the world was not
+        # answered FOR. The predicate is `spatial.scene_names_body`, not the
+        # caller's cast list -- the player is a body and is not cast, and the
+        # one production caller passes no roster at all.
+        if not scene_names_body(scene, label):
+            continue
         if bodies is not None and label.casefold() not in {
                 str(b).strip().casefold() for b in bodies}:
             continue
@@ -1138,10 +1171,28 @@ def mechanics_sweep(scene, clock, frame_id, pending, *,
     """
     elapsed = float((clock or {}).get("elapsed_seconds") or 0.0)
 
-    # (a) fire due events for this frame.
+    # (a) fire due events for this frame. A fuse FIRES whatever the story's
+    # settings say -- it is adjudicated causality, and truth accumulates
+    # (A82) -- but whether its landing is put in front of the party is the
+    # `scheduled_consequence` depth's to decide. Read here, once, from the
+    # chat this sweep belongs to; a sweep with no chat behind it (a pure
+    # fixture) surfaces, exactly as it did before the gate existed, and so
+    # does a config that will not read: a knowledge surface must fail toward
+    # telling the player about their own world.
+    surface_consequences = True
+    if chat_id is not None:
+        try:
+            from world.living_world import (living_world_allows,
+                                            living_world_config)
+            surface_consequences = living_world_allows(
+                living_world_config(chat_id), "scheduled_consequence",
+                "floor")
+        except Exception:
+            surface_consequences = True
     event_ops, notices, counts, pending_entity_ids = _fire_due_events(
         scene, elapsed, frame_id, pending or [],
-        turn_idx=turn_idx, player_room=player_room)
+        turn_idx=turn_idx, player_room=player_room,
+        surface_consequences=surface_consequences)
 
     # (b) schedule new arrivals.
     schedule_ops, scheduled = _schedule_new_arrivals(

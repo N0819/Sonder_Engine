@@ -162,3 +162,82 @@ def test_every_stage_asks_the_one_function():
         src = inspect.getsource(fn)
         assert "player_room_in(" in src, fn.__name__
         assert 'ctx.get("_player_room") or' not in src, fn.__name__
+
+
+def test_a_declared_destination_is_never_cached_as_a_room():
+    """Review 2026-09-07 finding A83: a declaration is evidence of intent
+    BEFORE resolve and of nothing after it.
+
+    `_resolve_player_room`'s second rung answers with the beat's own
+    `movement.to_room` when the scene places the body nowhere -- and the
+    comment directly above it says trusting that would show the player as
+    already having arrived "even when director_resolve rejected it". The
+    outcome pass stopped passing `interp` for exactly that reason, and the
+    refused destination reached it anyway through the CACHE: `perception_act`
+    asks with the declaration, the answer was stored, and every later reader
+    (the outcome pass, then the narrator at `resolve=False`) read the stored
+    answer for the rest of the turn.
+
+    So the declared room is returned to the stage that asked and written down
+    nowhere. A move that actually happened lands in the scene, which is rung
+    1 and needs no cache.
+    """
+    ctx = _Ctx()
+    interp = {"movement": {"to_room": "long_gallery"}}
+
+    # perception_act, which is entitled to the declaration.
+    assert player_room_in({"positions": {}}, ctx, pers=PERS,
+                          interp=interp) == "long_gallery"
+    assert ctx.get("_player_room") is None
+
+    # director_resolve refused the move (`state_diff.movement_refused`), so
+    # the scene still places her nowhere -- and no later stage inherits the
+    # room she was held out of.
+    assert player_room_in({"positions": {}}, ctx, pers=PERS,
+                          resolve=False) is None
+
+
+def test_a_resolved_room_is_still_cached(monkeypatch):
+    """The subtraction is scoped to the declaration. Every other rung of the
+    resolver -- the lone-candidate heuristic, the model call -- is an answer
+    about where the body IS, and stays cached for the stages after it."""
+    calls = _no_resolver(monkeypatch)
+    ctx = _Ctx()
+
+    assert player_room_in({"positions": {}}, ctx, pers=PERS,
+                          interp={"movement": {"to_room": "long_gallery"}}
+                          ) == "resolver_room"
+    assert len(calls) == 1
+    assert ctx.get("_player_room") == "resolver_room"
+
+
+def test_a_padded_declaration_is_still_a_declaration():
+    """A83, second half: the rung returns `movement.to_room` exactly as the
+    model wrote it, so the comparison has to be like with like. Measured
+    against an unstripped answer, a stripped declaration missed and the
+    padded destination went into the cache as the room the player was
+    standing in for the rest of the turn."""
+    ctx = _Ctx()
+    interp = {"movement": {"to_room": "  long_gallery\n"}}
+
+    assert player_room_in({"positions": {}}, ctx, pers=PERS,
+                          interp=interp) == "  long_gallery\n"
+    assert ctx.get("_player_room") is None
+
+
+def test_the_onset_pass_resolves_the_room_once():
+    """A83, blast radius: `perception_act` is the one stage entitled to read
+    the declaration, and it resolves the room ONCE, against the scene its
+    views are built from. `_composer_act_views` used to ask a second time
+    with `resolve=False`, which answered from the scene or from the turn
+    cache -- so on the beat A83 stops caching a declared destination, the
+    onset pass would have disagreed with itself about where the speaker
+    stands (`actor_body["room"]` is the speaker origin for
+    `_declared_arrival_room` and the `_spoken_from` path). The room is
+    handed down instead."""
+    import agents.perception as perception
+
+    src = inspect.getsource(perception._composer_act_views)
+    assert "player_room_in(" not in src
+    assert "p_room" in inspect.signature(
+        perception._composer_act_views).parameters

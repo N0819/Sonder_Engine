@@ -50,12 +50,25 @@ from .storage import (
 
 def _load_extra_players(chat_id, turn_idx, frame_id=None):
     """Additional human players attached to this chat AND stationed in
-    this same frame, paired with whatever they've already declared for
-    this specific turn index (via POST
+    this same frame, paired with what they have declared (via POST
     /api/chats/{cid}/turns/{idx}/player_input) -- submitted ahead of the
     primary player's request, which is what makes same-beat resolution
     possible: whichever request actually creates the turn row picks up
-    everything already declared for that index.
+    everything already declared.
+
+    A DECLARATION IS PAIRED WITH THE FIRST BEAT OF THIS FRAME AT OR AFTER
+    THE INDEX IT WAS FILED UNDER: the window is (this frame's previous
+    beat, this beat], and inside it the most recent declaration wins,
+    because a co-player may re-declare before the beat runs. It is NOT the
+    index the line was filed under. Turn indices are chat-GLOBAL (play
+    order across every frame) while turn creation and this fold are
+    per-FRAME, so a co-player stationed away from the frame the host is
+    playing declared against `max(idx) + 1`, watched a turn take that
+    index in another era, and lost the row -- every beat, silently, since
+    nothing ever read it again (review 2026-09-07 A71). In the
+    single-frame chat, and in the common case of everyone stationed
+    together, this frame's previous beat is `turn_idx - 1` and the window
+    is the single index it always was.
 
     A persona stationed in a DIFFERENT frame is excluded entirely -- they
     are not in this scene; they're eras away, playing their own thread.
@@ -72,6 +85,16 @@ def _load_extra_players(chat_id, turn_idx, frame_id=None):
     single beat gets no rendered update at all while someone else keeps
     ticking turns.
     """
+    # The floor of the declaration window the docstring states: this frame's
+    # previous beat, or -1 when this frame has not run one. One read per turn
+    # setup (review 2026-09-07 A71).
+    _prev = q(
+        "SELECT MAX(idx) AS idx FROM turns "
+        "WHERE chat_id=? AND frame_id IS ? AND idx<?",
+        (chat_id, frame_id, turn_idx), one=True,
+    )
+    floor_idx = (_prev["idx"] if _prev and _prev["idx"] is not None else -1)
+
     # Exclude the chat's PRIMARY persona: it is the main player (rendered by
     # narrator, perceived as "player"), never an "extra". chat_personas is for
     # ADDITIONAL co-players only, but an import or a hand-built chat can wrongly
@@ -83,10 +106,14 @@ def _load_extra_players(chat_id, turn_idx, frame_id=None):
         "SELECT cp.persona_id, p.sheet, tpi.input FROM chat_personas cp "
         "JOIN personas p ON p.id=cp.persona_id "
         "LEFT JOIN turn_player_inputs tpi "
-        "  ON tpi.chat_id=cp.chat_id AND tpi.persona_id=cp.persona_id AND tpi.turn_idx=? "
+        "  ON tpi.chat_id=cp.chat_id AND tpi.persona_id=cp.persona_id "
+        "  AND tpi.turn_idx=(SELECT MAX(t2.turn_idx) FROM turn_player_inputs t2 "
+        "                    WHERE t2.chat_id=cp.chat_id "
+        "                      AND t2.persona_id=cp.persona_id "
+        "                      AND t2.turn_idx<=? AND t2.turn_idx>?) "
         "WHERE cp.chat_id=? AND cp.status='active' AND cp.frame_id IS ? "
         "  AND cp.persona_id IS NOT (SELECT persona_id FROM chats WHERE id=cp.chat_id)",
-        (turn_idx, chat_id, frame_id),
+        (turn_idx, floor_idx, chat_id, frame_id),
     )
     extras = []
     for row in rows:
@@ -989,6 +1016,113 @@ def _rehydrate_loop_results(ctx, key, content):
             target.setdefault(cid, result)
 
 
+#: The three stages that compose views, and therefore the three whose step
+#: content carries the two side channels rebuilt below.
+PERCEPTION_STEP_KEYS = (
+    "perception_establish", "perception_act", "perception_outcome",
+)
+
+#: EVERY VALUE A STAGE PUTS ON THE CONTEXT THAT IS NOT A DECLARED FIELD, and
+#: how it survives a resume. `tools/project_check.py` holds this against the
+#: source: a `ctx["..."] =` / `ctx._extra["..."] =` writer anywhere in
+#: `agents/` or `story/` must name a `PipelineContext` field or appear here.
+#:
+#: The register exists because the omission is invisible by construction
+#: (review 2026-09-07 A31). `_rehydrate_side_channels` rebuilt five values and
+#: perception wrote four more; nothing anywhere said so, and the two that
+#: mattered -- the onset player room and the composer's turn ledger -- were
+#: simply None on every resume from `director_resolve`, which reads the first
+#: of them directly. A resumed turn does not crash on a missing side channel;
+#: it quietly answers a different question.
+#:
+#: Three answers are legitimate, and every entry states which it is:
+#:   "rebuilt" -- the rehydrator puts it back from the stored step content.
+#:   "memo"    -- a pure re-derivation of durable or hydrated state, so a miss
+#:                costs a recompute and nothing else.
+#:   "in-stage" or "diagnostic" -- it never has to cross a stage boundary, or
+#:                its absence is a legible "this beat did not run it".
+SIDE_CHANNELS = {
+    "_player_room": "rebuilt: the room each perception stage resolved, on its "
+                    "own step content (`perception._stage_player_room`)",
+    "_composer_turn_ledger": "rebuilt: the perception step's own "
+                             "`composer_ledger` key",
+    "outcome_scene": "rebuilt: `perception_outcome` is re-run for it",
+    "interaction_views": "rebuilt: `loops.rehydrate_loop_views`",
+    "reaction_views": "rebuilt: `loops.rehydrate_loop_views`",
+    "_books": "memo: the chat's lorebook ids",
+    "_book_weights": "memo: the chat's lorebook weights",
+    "_sound_crowds": "memo: the chat's crowd ledger from world state",
+    "_background_beats_cache": "memo: derived from the hydrated "
+                               "`background_react` content",
+    "_composed_beat": "memo: keyed by the stored scene's read token; the "
+                      "commit composes again on a miss",
+    "_composer_extra_parts_cache": "memo: per-body extra-part lines",
+    "_rooms_in_view_cache": "memo: keyed by the aperture's own inputs",
+    "_figures_in_view_cache": "memo: keyed by the aperture's own inputs",
+    "_active_disguises_cache": "memo: dropped wholesale by "
+                               "`drop_body_condition_caches`",
+    "_active_transformations_cache": "memo: dropped wholesale by "
+                                     "`drop_body_condition_caches`",
+    "_route_scene_memo": "memo: one route scene per resolve",
+    "_director_view_scene": "memo: one payload scene per director stage",
+    "_carrier_index_memo": "memo: the carrier index for one scene read",
+    "character_turn_snapshot": "memo: the one scene, transformation set and "
+                               "debt-row parse every mind's step this turn "
+                               "shares",
+    "absent_reactors_noted": "memo: which absent reactors this turn has "
+                             "already warned about, so one drop is one "
+                             "warning",
+    "beat_declared": "in-stage: one interaction loop's own ledger of what "
+                     "each mouth has already said this beat",
+    "_manager_demand_why": "in-stage: the scene manager's gate working, read "
+                           "back inside `background_react`",
+    "_orch_repair": "in-stage: the fan-out's repair view, read back inside "
+                    "`director_resolve`",
+    "_destination_residue_report": "diagnostic: absence reads as `no "
+                                   "chances`, which is what a replayed beat "
+                                   "is (see persist/commit.py)",
+}
+
+
+def _rehydrate_perception_channels(ctx, content):
+    """Put back the two cross-stage values a perception step leaves on `ctx`
+    and its content already carries (review 2026-09-07 A31).
+
+    `_player_room` -- the room the stage resolved the player into. Written by
+    `common.player_room_in`, read afterwards by `director_resolve` directly
+    (it is the stage that DECIDES the room and wants the one the beat arrived
+    with) and by every floor beneath it. Nothing carried it across a resume,
+    so a resume from `director_resolve` graded the player from None: the
+    player's own room dropped out of the figure aperture, and the movement
+    floors below were handed nothing.
+
+    `_composer_turn_ledger` -- what each observer's view has already carried
+    this turn, which is how the composer knows a body's appearance has been
+    described once already. `perception_outcome` merges the previous turn's
+    ledger with THIS turn's; on a resume the act pass's half was gone, so
+    every observer was re-handed a first-mention description of everyone in
+    the room. The step content has always carried it, under
+    `composer_ledger`; nothing read it back.
+
+    A LATER STEP OVERWRITES AN EARLIER ONE, which is why the caller walks the
+    hydrated pairs in ord order: the onset room and the outcome room are
+    different facts about one beat, and the live turn ends holding the last
+    one written. No per-observer view is rebuilt here -- the ledger is keyed
+    by observer and restored whole, exactly as the stage wrote it, so nothing
+    one observer holds can reach another.
+    """
+    if not isinstance(content, dict):
+        return
+    room = str(content.get("player_room") or "").strip()
+    if room:
+        ctx["_player_room"] = room
+    ledger = content.get("composer_ledger")
+    if isinstance(ledger, dict) and ledger:
+        merged = dict(ctx.get("_composer_turn_ledger") or {})
+        merged.update(ledger)
+        ctx["_composer_turn_ledger"] = merged
+
+
 def _rehydrate_side_channels(ctx, key, content):
     """Rebuild everything a stage left on `ctx` that its step content does NOT
     carry, after the pre-turn checkpoint has been restored.
@@ -998,6 +1132,11 @@ def _rehydrate_side_channels(ctx, key, content):
     micro-view maps, and `outcome_scene`. All five were written by direct
     assignment, so every resume and every single-step reroll silently ran the
     remaining stages against a different context than the uninterrupted turn.
+
+    Two more are IN the output and were simply never read back --
+    `_player_room` and `_composer_turn_ledger`. They are restored by
+    `_rehydrate_perception_channels`, whose docstring says what each of them
+    cost while nothing did (A31).
 
     `outcome_scene` is the costly one. The narrator reads it for its spatial
     frame, its position deltas, its portal states and its sensory manifest,
@@ -1020,6 +1159,8 @@ def _rehydrate_side_channels(ctx, key, content):
     if key in ("interaction_loop", "reaction_loop"):
         rehydrate_loop_views(ctx, key, content)
         return
+    if key in PERCEPTION_STEP_KEYS:
+        _rehydrate_perception_channels(ctx, content)
     if key != "perception_outcome":
         return
     if "outcome_scene" in ctx._extra or not ctx.get("director_resolve"):
@@ -1276,6 +1417,14 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
                     )
                 else:
                     ctx[key] = content
+                    # The same rebuild the normal-turn resume does below
+                    # (A31). The opening turn composes views too --
+                    # `perception_establish` stamps `player_room` and writes
+                    # the composer's turn ledger -- so a resume from the
+                    # opening narrator rendered from a None room and a
+                    # first-mention description of everyone present, exactly
+                    # as the normal turn did before the register existed.
+                    _rehydrate_side_channels(ctx, key, content)
                     continue
 
             yield from _step_stream(

@@ -36,7 +36,7 @@ def _no_keyword_scoring(monkeypatch):
     was actually covered rather than trusting that it was.
     """
     bindings = patch_seam(monkeypatch, "mind.memory_common", "_kw_scores",
-                          lambda table, query: {})
+                          lambda table, query, limit=50, **_kw: {})
     assert ("mind.memory_lore_entries", "_kw_scores") in bindings, bindings
 
 def _unit_vector(dims):

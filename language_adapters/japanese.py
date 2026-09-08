@@ -95,6 +95,11 @@ class JapaneseRenderer:
     # -- individual percept kinds ------------------------------------------
 
     def _speech(self, p, data, label, prefix):
+        # An answer that did not come (D6). No words, so no branch below can
+        # render it -- and it is a fact the addresser has, not wording, so a
+        # pack does not get to drop it.
+        if p.fidelity == "silence":
+            return self._text(prefix + "speech_silence", label=label)
         if p.fidelity == "fragment":
             # A fragment loses the WORDS, never the speaker, when the observer
             # can see who spoke (PD3). `attributed` is Layer A's answer; this
@@ -168,7 +173,8 @@ class JapaneseRenderer:
         """Where the light falls (`composer.render_light_shape`, the same
         closed set): the origin as its own sentence, one sentence per light
         word bright to dark, and where the observer stands."""
-        from agents.composer import LIGHT_SHAPE_LEVELS, _clean_shape
+        from agents.composer import (LIGHT_SHAPE_LEVELS, _clean_shape,
+                                     aim_worth_naming)
         shape = _clean_shape(shape, LIGHT_SHAPE_LEVELS)
         if not shape:
             return ""
@@ -179,6 +185,13 @@ class JapaneseRenderer:
         for group in shape["groups"]:
             parts.append(self._text("light_at_" + group["level"],
                                     items=self._items(group["items"])))
+        # What a coned source in view is pointed at (D5). The decision about
+        # whether the aim is worth a sentence is the composer's and shared
+        # (`aim_worth_naming`) -- it is about the aim's information content,
+        # not about a language -- and only the wording is the pack's.
+        aimed = aim_worth_naming(shape)
+        if aimed:
+            parts.append(self._text("light_aimed", items=self._items(aimed)))
         if shape["self"]:
             parts.append(self._text("light_self_" + shape["self"]))
         return "".join(parts)
@@ -228,12 +241,17 @@ class JapaneseRenderer:
         sides = self._value("side_words") or {}
         side_clause = (self._text("side", side=sides.get(side, side))
                        if side in ("left", "right") else "")
+        # The observer's own beam is on this body (D5). A fact their own
+        # eyes have, so it is not the pack's to drop -- only its wording is
+        # the pack's, and here it is its own sentence rather than English's
+        # trailing clause.
+        beam = self._text("presence_in_beam") if data.get("in_beam") else ""
         if not tier:
-            return self._text("presence", label=label)
+            return self._text("presence", label=label) + beam
         # One clause, so distance and side are grammatical rather than
         # concatenated after the name.
         return self._text("presence_placed", label=label,
-                          side=side_clause, tier=tier)
+                          side=side_clause, tier=tier) + beam
 
     def _body_part(self, p, data, label):
         """A body's own anatomy. Dropped entirely before, so an authored tail,

@@ -386,3 +386,46 @@ def test_a_body_with_no_card_hears_exactly_as_before():
                                   senses=None)
     assert body_receives_evidence(scene, "reeve", body, {}, {}, _speech(),
                                   senses={"scent": True})
+
+
+def _outpost_charter(*, first, second):
+    """Two bodies standing where the scene has no room -- the ordinary shape.
+
+    66 of chat 114's 66 charter bodies stand in a place the beat's scene
+    holds no room for, and 53 of them share a place with another body.
+    """
+    return normalize_charter({
+        "key": "town",
+        "bodies": {
+            first: {"name": first.title(), "place": "far_outpost"},
+            second: {"name": second.title(), "place": "far_outpost"},
+        },
+    })
+
+
+def _private_comm(target):
+    return _speech(source_id="comm:0", kind="communication", medium="comm",
+                   target=target, exact_quote='"Come alone."')
+
+
+def test_a_private_comm_reaches_only_its_endpoint_among_bodies_in_one_place():
+    """A12: an answer that depends on WHO the body is cannot be cached by place.
+
+    `plan_public_evidence` shares one reception answer between bodies whose
+    place, station and facing match, which is exact for an overt source and
+    is not for a line addressed to one body. Bodies the scene has no room
+    for all collapse to the same key, so the first body asked decided for
+    every other one in the place: with the endpoint sorting first the comm
+    was delivered verbatim to a body it was not addressed to, and with the
+    endpoint sorting second the addressee lost its own message. Targeted
+    concealment already bypassed the cache for exactly this reason.
+    """
+    from world.charter_observe import plan_public_evidence
+
+    for endpoint, other in (("aida", "zeno"), ("zeno", "aida")):
+        charter = _outpost_charter(first="aida", second="zeno")
+        plan = plan_public_evidence(charter, [_private_comm(endpoint.title())],
+                                    _scene(), turn_id=1)
+        assert plan["recipients"] == {"comm:0": {endpoint}}, endpoint
+        assert list(plan["receiving"]) == [endpoint]
+        assert other not in plan["recipients"].get("comm:0", set())

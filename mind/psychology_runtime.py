@@ -135,15 +135,28 @@ def elapsed_psych_units(previous_seconds, current_seconds, fallback_turns=1):
     One unit is one minute. Explicit multi-hour jumps therefore relax transient
     state much further than a three-second beat, while stories that do not use
     the simulation clock retain the established one-unit-per-turn cadence.
+
+    THE FALLBACK IS FOR AN UNREADABLE CLOCK, NEVER FOR A STILL ONE (review
+    2026-09-07 A81). A readable clock that did not advance is the fiction
+    saying no time passed -- `mechanics.beat_end_elapsed` treats any claim it
+    can read, `duration_seconds: 0` included, as the off switch for the
+    unclaimed-beat floor -- and a beat that asserts zero duration used to
+    relax every transient ledger by a whole unit, six times as far as a beat
+    that honestly took ten seconds (0.167 units) and further than one that
+    took fifty. Time that did not pass decays nothing; the turn cadence still
+    stands for the first beat of a character, whose stored clock is absent,
+    and for anything else this cannot read.
     """
     try:
         previous = float(previous_seconds)
         current = float(current_seconds)
     except (TypeError, ValueError):
         return max(0.0, _float(fallback_turns, 1.0))
+    if previous != previous or current != current:   # NaN is unreadable
+        return max(0.0, _float(fallback_turns, 1.0))
     if current > previous:
         return max(0.001, (current - previous) / 60.0)
-    return max(0.0, _float(fallback_turns, 1.0))
+    return 0.0
 
 
 def resolve_hedonic(previous, appraisal, interoception, body_state,

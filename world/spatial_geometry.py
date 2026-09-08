@@ -29,6 +29,7 @@ from world.spatial_containment import (_NEVER_STATIONED_KINDS,
 from world.spatial_contacts import _clean_contact, _contact_key
 from world.spatial_contacts import contact_endpoint_is_body
 from world.spatial_identity import (_ci_get, _entity_named,
+                                    scene_names_body,
                                     _unique_entity_keyed, room_of,
                                     same_subject)
 
@@ -1583,30 +1584,31 @@ def invalidate_moved_body_place_details(scene: dict, previous_positions,
 def _moved_subject_is_body(scene, subject) -> bool:
     """Is this mover a body, for the purpose of retiring a carriage clause?
 
-    Not `contact_endpoint_is_body`, which answers a different question -- it
-    asks whether an endpoint is a body RATHER THAN an entity record, so a
-    registered character reads as a thing the moment the scene mints a row
-    for them, and live scenes mint one for everybody.
-
-    Here the distinction that matters is only which twin owns the fact: a
+    The distinction that matters here is only which twin owns the fact: a
     carried OBJECT moving is `invalidate_transferred_pose_details`' business,
-    and a body moving is this one's. So a subject counts as a body when the
-    wardrobe knows it, when its record says `person`, or when it has no
-    record at all -- and a portable thing never does.
+    and a body moving is this one's. So this asks the ONE body predicate
+    (`spatial_identity.scene_names_body`, review 2026-09-07 A56 rework) --
+    the same ladder the contact identity floor, the comfort derivation, the
+    standing condition sweep and the creature's prey table ask -- with the
+    one tier that belongs to THIS question in front of it: a portable thing
+    never moves as a body however the scene dressed it. (The person tier this
+    once carried of its own is the shared ladder's tier 2 now, so the two
+    readers cannot disagree about a placed background person.)
+
+    The old spelling read the wardrobe alone under those two tiers and
+    otherwise answered "no entity record at all" -- which is the shared
+    ladder's tiers 1 and 3 written out, minus `scales`, `vitals`, `overlays`
+    and `poses`, every one of them a ledger only a body has a row in. Its
+    docstring's complaint about `contact_endpoint_is_body` ("a registered
+    character reads as a thing the moment the scene mints a row for them") is
+    what the shared ladder's ORDER settles: a body ledger row is read before
+    the entity record, so a dressed character with an entity record is a
+    body at every reader.
     """
     entity = ((scene or {}).get("entities") or {}).get(subject)
-    if isinstance(entity, dict):
-        if entity.get("portable"):
-            return False
-        if str(entity.get("kind") or "").strip().casefold() == "person":
-            return True
-    # "Does the wardrobe know this body" asks the ledger the same way
-    # everything else does -- a case-variant key made a dressed person read
-    # as a thing (review 2026-09-07 B5).
-    from story.attire import key_for as attire_key_for
-    if attire_key_for((scene or {}).get("attire") or {}, subject) is not None:
-        return True
-    return entity is None
+    if isinstance(entity, dict) and entity.get("portable"):
+        return False
+    return scene_names_body(scene, subject)
 
 
 def _detail_names_subject(scene, detail, subject) -> bool:
@@ -1764,7 +1766,10 @@ def invalidate_contact_bound_poses(scene: dict, previous_contacts=None) -> dict:
     old_contacts = previous_contacts or []
 
     def _is_body(value):
-        return bool(value and _ci_get(positions, value) is not None)
+        # The ONE body predicate (A56): a pose's support or referent is a
+        # body by the same ladder every other reader asks, not by membership
+        # in `positions`, which a lift car and a crate are members of too.
+        return bool(value) and scene_names_body(scene, value)
 
     def _touches(left, right):
         a = str(left or "").strip().casefold()

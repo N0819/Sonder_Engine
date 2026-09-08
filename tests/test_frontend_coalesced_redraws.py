@@ -58,7 +58,9 @@ def test_boot_keeps_no_second_copy_of_which_keys_the_half_holds():
 # ---- the Writers' Room: one render per frame -------------------------------
 
 def test_the_room_stream_schedules_a_render_rather_than_running_one():
-    body = _slice(ROOM, "function roomEvent(event)", "async function roomRevoke")
+    # The handler takes the scope its stream was started in (A73), so the
+    # signature is `(event, scope)`.
+    body = _slice(ROOM, "function roomEvent(event, scope)", "async function roomRevoke")
     assert "roomRenderSoon(true);" in body
     assert "roomRender(" not in body
 

@@ -31,6 +31,7 @@ from world.scene_memo import scene_read_pass
 from story import attire as attire_model
 from story.scene import (
     NON_AWAKE_GATED,
+    SINGULAR_BODY_CONDITIONS,
     active_disguises,
     active_transformations,
     conceal_disguised_parts,
@@ -835,7 +836,117 @@ def _outcome_event_stream(ctx, scene, interp, res, player_name,
                       "visibility": "overt",
                       "event_id": "background:%s" % beat["name"]},
         })
+    stream.extend(_unanswered_addresses(scene, sequences, stream, res))
     return stream
+
+
+def _unanswered_addresses(scene, sequences, stream, res):
+    """The beat's addresses that got no answer, as stream entries (D6).
+
+    A line spoken to somebody who says nothing back is an EVENT, and the
+    engine had no channel for it at all: perception is built out of what
+    arrived, and nothing arrives. So the page either let the beat pass as
+    though nobody had been spoken to, or invented "no answer came" about a
+    body that had in fact answered.
+
+    Four conditions, and every one of them SUBTRACTS:
+
+    * the addresser declared the line and named a target (`intended_target`
+      -- their own declaration, so nothing here is inferred from the world);
+    * the target WAS ASKED AND HAD THE BEAT TO ANSWER IN -- they declared a
+      sequence of their own this beat. The dialogue log records what was
+      SAID and never who was RUN, so it cannot tell "chose silence" from
+      "was never asked to speak": `build_plan` plans character steps from
+      `flow.reactors` alone, `addressed_to` only ORDERS the reactors it is
+      given, and the interaction loop has a round budget. Without this
+      condition a reactor the Director's pacing left out minted a refusal
+      on the page every beat (measured: an empty context, where no
+      character ran at all, yielded a silence for the target);
+    * the line REACHED that target (`hear_level` above "none" over the
+      beat's own relation), so an address nobody could hear is not read as
+      a refusal to answer -- the honest reading of that beat is that the
+      addresser does not know whether they were heard;
+    * and NO VOICE OF THE TARGET'S IS ANYWHERE IN THIS BEAT'S STREAM. Every
+      entry that carries a speaker counts, whatever channel carried it: an
+      answer over a radio is an answer (measured -- an interaction_loop
+      round whose sequence was a `communication` produced the stream
+      `[('communication', 'Reya'), ('silence', 'Reya')]`, so the addresser's
+      view carried Reya's answer and a sentence saying she gave none).
+
+    The entry names the ADDRESSER as well as the target, because the fact
+    belongs to the person who was listening for the answer: the per-observer
+    loop mints a percept from it only into that observer's view. Anybody who
+    speaks and names a target has that fact, player or character -- being
+    ignored is a social event, and a character has a view for it to arrive
+    in like anyone else. It states the fact and never the reason -- whether
+    the target refused, was thinking, or answered somebody else is exactly
+    the inference the beat is for.
+    """
+    # A VOICE THAT REACHED THE BEAT, however it travelled. Keyed off the
+    # entry's own speaker rather than the entry's kind, so a channel added
+    # later is counted the day it is added.
+    spoke = [str((e.get("entry") or {}).get("speaker") or "").strip()
+             for e in stream]
+    spoke = [who for who in spoke if who]
+
+    def answered(target):
+        key = target.casefold()
+        return any(who.casefold() == key or same_subject(scene, who, target)
+                   for who in spoke)
+
+    # WHO WAS RUN, under the spelling this beat's own declarations use. It
+    # doubles as the canonicalisation the percept needs: an `intended_target`
+    # spelled as an alias resolves to the body's own name here, which is what
+    # `display_map` is keyed by, so the address does not pass every gate and
+    # then silently mint nothing.
+    declared = [str(actor) for actor, sequence, is_player in sequences
+                if not is_player and actor and sequence]
+
+    def body_asked(target):
+        key = target.casefold()
+        for who in declared:
+            if who.casefold() == key or same_subject(scene, who, target):
+                return who
+        return None
+
+    out, seen = [], set()
+    for actor, sequence, _is_player in sequences:
+        for event in sequence or ():
+            if not isinstance(event, dict) or event.get("type") != "speech":
+                continue
+            if not str(event.get("text") or "").strip():
+                continue
+            if not sequence_event_allowed(event, res):
+                continue                # the line was not spoken at all
+            raw = event.get("intended_target")
+            targets = raw if isinstance(raw, (list, tuple)) else [raw]
+            for target in targets:
+                target = str(target or "").strip()
+                if not target or answered(target):
+                    continue
+                body = body_asked(target)
+                if body is None:
+                    # Nobody who ran this beat: an address to a body the
+                    # Director never gave a turn to, or to a name nothing
+                    # answers to. Neither is a refusal.
+                    continue
+                if room_of(scene, body) is None:
+                    # No body the scene can place: a bodiless voice, a name
+                    # nobody answers to. There is no relation to grade the
+                    # delivery over, so there is no evidence they heard.
+                    continue
+                if same_subject(scene, body, actor):
+                    continue
+                key = (str(actor).casefold(), body.casefold())
+                if key in seen:
+                    continue
+                rel = spatial_rel_between(scene, body, actor)
+                if hear_level(rel, event.get("volume", "normal")) == "none":
+                    continue            # they never heard it: not an answer
+                seen.add(key)
+                out.append({"kind": "silence", "actor": body,
+                            "addresser": str(actor)})
+    return out
 
 
 def _ubiquitous_names(sc):
@@ -2176,6 +2287,32 @@ def _disguise_leak_check(ctx, stage, views, perceivers, subject_name,
                 break
 
 
+def _stage_player_room(out, ctx):
+    """Stamp the room this perception stage resolved the player into onto the
+    stage's own saved content.
+
+    A SIDE CHANNEL THAT SURVIVES A RESUME (review 2026-09-07 A31).
+    `ctx["_player_room"]` is written by `common.player_room_in` and read by
+    the stages after it -- `director_resolve` reads it directly, because it is
+    the stage that DECIDES the room and needs the one the beat arrived with.
+    It was written by assignment and carried by nothing, so a resume from
+    `director_resolve`, or a single-step reroll of it, ran with None there:
+    `_fig_rooms` lost the player's own room and the two floors below it were
+    handed nothing. The step content is the only thing a resume restores, so
+    the room goes on the step content and `runtime._rehydrate_side_channels`
+    puts it back.
+
+    Not a second source of truth: `player_room_in` still answers the question
+    live, scene first, and this is only the record of what it answered. Which
+    is why every stage stamps its own -- the onset room and the outcome room
+    are different facts about the same beat, and rehydration walks them in
+    ord order exactly as the turn did.
+    """
+    if isinstance(out, dict):
+        out["player_room"] = str(ctx.get("_player_room") or "")
+    return out
+
+
 def perception_establish(ctx, nonce):
     chat = ctx.chat
     est = ctx.director_establish or {}
@@ -2282,13 +2419,14 @@ def perception_establish(ctx, nonce):
     for p in perceivers:
         p["awareness"] = awareness_of(amap, p["name"])
 
-    return _composer_establish(
+    return _stage_player_room(_composer_establish(
         ctx, sc, perceivers, known, p_name, p_appearance,
         entity_states, sensory_events,
         # The room's other people, placed on `sc` before the composer reads
         # it (see `_presence_bodies`). A scene that opens in a staffed place
         # opens with the staff in it.
-        _presence_bodies(ctx, sc, [p["room"] for p in perceivers], chatter))
+        _presence_bodies(ctx, sc, [p["room"] for p in perceivers], chatter)),
+        ctx)
 
 def perception_act(ctx, nonce):
     chat = ctx.chat
@@ -2499,10 +2637,10 @@ def perception_act(ctx, nonce):
     for p in perceivers:
         p["awareness"] = awareness_of(amap, p["name"])
 
-    return _composer_act(
+    return _stage_player_room(_composer_act(
         ctx, sc, interp, perceivers, known, p_name, p_visible,
         p_disguise_known, p_disguise_conceals, p_disguise_terms, co_present,
-        amap, speech_elems, action, onset_legs)
+        amap, speech_elems, action, onset_legs, p_room=p_room), ctx)
 
 def _touch_only_sources(scene, perceiver_name, spatial_to_sources,
                         visual_channel_to_sources):
@@ -3007,7 +3145,7 @@ def perception_outcome(ctx, nonce):
     for p in perceivers:
         p["awareness"] = awareness_of(amap, p["name"])
 
-    return _composer_outcome(
+    return _stage_player_room(_composer_outcome(
         ctx, sc, prev_scene, diff, interp, res, known, p_name,
         p_appearance, p_disguise, p_disguise_known, p_disguise_conceals,
         p_disguise_terms, perceivers, appearances, sources, enriched_dlog,
@@ -3016,7 +3154,8 @@ def perception_outcome(ctx, nonce):
         # it (see `_presence_bodies`). A presence that spoke this beat is
         # already a source; this is everyone who merely stood there, which
         # was nobody.
-        _presence_bodies(ctx, sc, [p["room"] for p in perceivers], chatter))
+        _presence_bodies(ctx, sc, [p["room"] for p in perceivers], chatter)),
+        ctx)
 
 
 # ---------------------------------------------------------------------------
@@ -3190,6 +3329,99 @@ def _composer_prev_state(ledger, pid):
     entry = (ledger or {}).get(str(pid)) or {}
     return (frozenset(entry.get("standing") or []),
             frozenset(entry.get("described") or []))
+
+
+def _is_player_view(pid):
+    """Whether this observer is a HUMAN seat -- the player, or one of the
+    extra players in a shared chat. One spelling, because the composer's
+    player tier and the standing record it feeds (D7) must agree on who gets
+    it: `_composer_outcome` had the expression inline and
+    `_composer_establish` had no answer at all."""
+    pid = str(pid or "")
+    return pid == "player" or pid.startswith("extra:")
+
+
+def _composer_prev_meta(ledger, pid):
+    """This observer's standing METADATA from a stored ledger, or {} (D7)."""
+    entry = (ledger or {}).get(str(pid)) or {}
+    meta = entry.get("standing_meta")
+    return meta if isinstance(meta, dict) else {}
+
+
+def _standing_meta(prev_meta, rendered, turn_idx, view):
+    """{dedupe_key: {first_turn, last_rendered_turn, sentence}} for the
+    standing facts THIS observer's view still carries (review D7).
+
+    The ledger was a bare set of keys, which answers "have I been told this"
+    and nothing else. A detail delivered once and then correctly suppressed
+    by the player tier's delta is invisible from that set: the loaded object
+    planted at beat 18 of the descent copy was still in the room 83 beats
+    later, still filed under the same key, and had not reached a sentence
+    since -- while the narrator's own window (`_PAST_NARRATION_TURNS`) reaches
+    twelve turns back. Nothing anywhere held the two numbers that make that
+    sayable.
+
+    A KEY THAT SURVIVES IS AN UNCHANGED FACT. `composer.standing_key` hashes
+    the subject and the CONTENT separately, so a pose that moved or an object
+    that changed mints a different key and its old entry drops out here. The
+    sentence carried forward is therefore still true of the thing it names --
+    it is the observer's own last rendering of it, not a claim re-derived
+    later.
+
+    Entries exist only for keys that have actually reached a sentence: a key
+    that never rendered (a voice key, a percept the tier dropped) has no
+    delivered wording to refer back to. Keys absent from this beat's view are
+    dropped, which is what bounds the record -- measured on the descent copy,
+    5.3 standing keys per beat, never more than 11.
+
+    THE DELIVERED VIEW IS THE AUTHORITY, not `rendered`. `rendered.spans`
+    is the composition BEFORE `_composer_tripwires` runs, and this record
+    outlives the beat: a sentence the identity tripwire rewrote, or one the
+    self-narration strip dropped, would otherwise be filed here in its
+    unrepaired wording and handed back to the narrator dozens of beats later
+    -- the third-representation class `_repaired_observations` was written
+    for, one field over. So a span files an entry only when its sentence
+    survives VERBATIM in the view this observer was actually given; when it
+    does not, the key simply keeps its older, already-delivered wording, or
+    files nothing at all. A tripwire firing is an engine defect either way,
+    and the contract is that when one fires nothing crosses.
+    """
+    try:
+        now = int(turn_idx)
+    except (TypeError, ValueError):
+        return {}
+    delivered = re.sub(r"\s+", " ", str(view or "")).strip()
+    rendered_now = {}
+    for percept, sentence in (getattr(rendered, "spans", None) or []):
+        key = str(getattr(percept, "dedupe_key", "") or "")
+        if not key or getattr(percept, "order_key", 0) is not None:
+            continue
+        flat = re.sub(r"\s+", " ", str(sentence or "")).strip()
+        if flat and delivered and flat in delivered:
+            rendered_now.setdefault(key, str(sentence))
+    out = {}
+    for key in sorted(getattr(rendered, "standing_keys", None) or ()):
+        key = str(key)
+        old = (prev_meta or {}).get(key)
+        old = old if isinstance(old, dict) else {}
+        sentence = rendered_now.get(key) or str(old.get("sentence") or "")
+        if not sentence:
+            continue
+        try:
+            first = int(old.get("first_turn"))
+        except (TypeError, ValueError):
+            first = now
+        if key in rendered_now:
+            last = now
+        else:
+            try:
+                last = int(old.get("last_rendered_turn"))
+            except (TypeError, ValueError):
+                last = now
+        out[key] = {"first_turn": min(first, now),
+                    "last_rendered_turn": last,
+                    "sentence": sentence}
+    return out
 
 
 def _composer_bare_details(rows):
@@ -4458,7 +4690,8 @@ def _scrub_episode_identities(ctx, stage, name, content, gist, known, roster):
 
 def _composer_finish_observer(ctx, stage, pid, name, rendered, known, roster,
                               clean_views, observations, ledger, *,
-                              spoken_lines=None, seen=None):
+                              spoken_lines=None, seen=None, prev_meta=None,
+                              track_standing_meta=False):
     view = _composer_tripwires(
         ctx, stage, pid, name, rendered.text, known, roster,
         spoken_lines=spoken_lines)
@@ -4484,6 +4717,19 @@ def _composer_finish_observer(ctx, stage, pid, name, rendered, known, roster,
         # means "unknown", and only the first can make the next beat a
         # re-encounter.
         **({"seen": sorted(seen)} if seen is not None else {}),
+        # WHEN EACH STANDING FACT WAS FIRST AND LAST SAID TO THIS OBSERVER
+        # (D7). Player tier only -- it is the only view that suppresses a
+        # standing fact it has already delivered, so it is the only one where
+        # "still true, not said for N beats" is a real state; and the narrator
+        # is its only reader. Absent, never empty, wherever it was not
+        # computed, so a chat stored before the field reads as no record.
+        # Built against `view`, the REPAIRED text, for the same reason
+        # `_repaired_observations` two lines up is: a record that outlives
+        # the beat must not carry wording a tripwire took out of it.
+        **({"standing_meta": _standing_meta(
+            prev_meta, rendered,
+            getattr(getattr(ctx, "turn", None), "idx", None), view)}
+           if track_standing_meta else {}),
     }
 
 
@@ -4624,7 +4870,11 @@ def _composer_establish_views(ctx, sc, perceivers, known, p_name,
                                         language=ctx.language)
         _composer_finish_observer(
             ctx, "perception_establish", pid, name, rendered, known, roster,
-            clean_views, observations, ledger, seen=seen_bodies)
+            clean_views, observations, ledger, seen=seen_bodies,
+            # The opening beat is where the standing record STARTS: a full
+            # render for every mind, so every sentence in it is a delivery
+            # this observer can be referred back to (D7).
+            track_standing_meta=_is_player_view(pid))
     ctx["_composer_turn_ledger"] = ledger
     return {
         "views": clean_views,
@@ -4644,7 +4894,7 @@ def _composer_act(ctx, sc, *args, **kwargs):
 def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                         p_disguise_known, p_disguise_conceals,
                         p_disguise_terms, co_present, amap, speech_elems,
-                        action, onset_legs=()):
+                        action, onset_legs=(), *, p_room):
     onset_sequence = sequence_onset_elements(interp.get("sequence") or [])
     if speech_elems and not any(
             isinstance(e, dict) and e.get("type") == "speech"
@@ -4669,8 +4919,19 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
     body_descriptions = _body_descriptions(ctx, sc)
     prev_ledger = _composer_prev_ledger(ctx)
     actor_body = {
-        "name": p_name, "room": player_room_in(sc, ctx, player_name=p_name,
-                                               resolve=False),
+        # THE ROOM THIS STAGE ALREADY RESOLVED, handed down rather than
+        # re-derived (review 2026-09-07 A83). `perception_act` is the one
+        # stage entitled to read the declaration -- it composes the onset
+        # from where the player says she is going -- and it resolves the
+        # room once, against the previewed scene. This used to ask again
+        # with `resolve=False`, which answered from the scene or from the
+        # turn cache; once A83 stopped the declared destination being
+        # cached, the positionless case would have left the onset pass
+        # disagreeing with itself, because `actor_body["room"]` is the
+        # speaker-origin room for `_declared_arrival_room` and the
+        # `_spoken_from` fast path below. One resolution per stage, read by
+        # everything in it.
+        "name": p_name, "room": p_room,
         "appearance": p_visible, "aliases": [],
         "disguise_known_to": p_disguise_known,
         "disguise_conceals_identity": p_disguise_conceals,
@@ -5010,6 +5271,49 @@ def _attire_diff_moves_clothing(entry):
     return False
 
 
+def _outward_form_transitions(diff):
+    """The bodies whose OUTWARD FORM changed state THIS BEAT, read from the
+    beat's own condition channel.
+
+    A STANDING DISGUISE IS NOT A CHANGE (review 2026-09-07 A37). The line
+    this replaces was `if p_disguise: appearance_changed.add(p_name)` --
+    true on every beat a disguise was ACTIVE, not on the beat it went up or
+    came down. The view survived it (`render_view` asks this observer's own
+    ledger before it asks `force`, and a byte-identical description
+    suppresses), but the memory renderer has no such ledger to consult:
+    `_render_episode_english` counts a forced appearance as changed
+    whatever `prev_described` holds, so every NPC in the room minted one
+    identical episode per beat for as long as the mask stayed on.
+
+    The transition is the condition ROW, and the beat's diff is where it is
+    legible: `world_conditions` is written by the commit, which runs after
+    this stage, so the table still holds yesterday's answer here. Both
+    directions count -- a row that arrives active is a mask going up, one
+    that arrives inactive is a mask coming down, and both are things a
+    watcher sees. Both KINDS count too (`scene.SINGULAR_BODY_CONDITIONS`):
+    a transformation is a statement about the body and a disguise about
+    what is shown of it, and either one moves what an observer is looking
+    at. The subjects are returned as the diff spells them; the caller
+    matches them to bodies through `same_subject`.
+    """
+    out = set()
+    conditions = (diff or {}).get("conditions")
+    if not isinstance(conditions, dict):
+        return out
+    for rows in conditions.values():
+        for row in (rows if isinstance(rows, list) else [rows]):
+            if not isinstance(row, dict):
+                continue
+            if str(row.get("kind") or "").strip().casefold() \
+                    not in SINGULAR_BODY_CONDITIONS:
+                continue
+            subject = str(row.get("subject_id") or row.get("subject")
+                          or "").strip()
+            if subject:
+                out.add(subject)
+    return out
+
+
 def _attire_changed_semantically(prev_scene, scene, name):
     """Did this body's clothing ACTUALLY change, or was it merely re-stated?
 
@@ -5093,7 +5397,7 @@ def _composer_outcome(ctx, sc, *args, **kwargs):
 
 
 def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
-                            p_name, p_appearance, p_disguise,
+                            p_name, p_appearance, _p_disguise,
                             p_disguise_known, p_disguise_conceals,
                             p_disguise_terms, perceivers, appearances,
                             sources, enriched_dlog, substance_events,
@@ -5271,8 +5575,11 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
             appearance_changed.add(str(key))
             if entity.get("name"):
                 appearance_changed.add(str(entity["name"]))
-    if p_disguise:
-        appearance_changed.add(p_name)
+    # THE TRANSITION, NEVER THE STANDING STATE (A37): a mask going up or
+    # coming down re-earns a description; a mask that stayed on all beat is
+    # the same body the observer was already looking at. See
+    # `_outward_form_transitions` for the episode this was minting.
+    appearance_changed.update(_outward_form_transitions(diff))
 
     ident_roster = [
         {"name": nm, "appearance": ap, "aliases": cast_aliases.get(nm) or []}
@@ -5348,7 +5655,7 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
     for p in perceivers:
         pid = str(p["id"])
         name = p["name"]
-        is_player_view = pid == "player" or pid.startswith("extra:")
+        is_player_view = _is_player_view(pid)
         # See the note in the act stage: empty is a record, not a gap.
         seen_bodies = set()
         prev_standing, prev_described = _composer_prev_state(base_ledger, pid)
@@ -5505,6 +5812,34 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                         unheard.discard(
                             (str(speaker or "").strip(),
                              str(d.get("exact_quote") or "")))
+                    order += 1
+                    continue
+
+                if beat_event.get("kind") == "silence":
+                    # THE UNANSWERED ADDRESS (D6). Into the ADDRESSER'S view
+                    # alone: it is a fact about what they were listening
+                    # for, and to anybody else in the room a person who did
+                    # not speak is simply a person who did not speak. The
+                    # label goes through the same display map every other
+                    # attribution does, so a stranger stays a stranger.
+                    if not _is_the_observer(
+                            sc, beat_event.get("addresser"), name,
+                            cast_aliases.get(name)) and not (
+                            pid == "player" and is_player_speaker(
+                                beat_event.get("addresser"), chat)):
+                        order += 1
+                        continue
+                    # ...and only about a body this observer can actually
+                    # place. `display_map` is the admission: it holds the
+                    # bodies this view has already composed a presence for,
+                    # under this observer's own label for each. Without one
+                    # the sentence would have to say "a voice says nothing",
+                    # which is not a fact anybody has.
+                    target = beat_event.get("actor")
+                    percept = composer.silence_percept(
+                        display_map.get(target), order_key=order)
+                    if percept:
+                        percepts.append(percept)
                     order += 1
                     continue
 
@@ -5683,7 +6018,14 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
         _composer_finish_observer(
             ctx, "perception_outcome", pid, name, rendered, known,
             ident_roster, clean_views, observations, ledger,
-            spoken_lines=spoken_lines, seen=seen_bodies)
+            spoken_lines=spoken_lines, seen=seen_bodies,
+            # Rolled forward from the PREVIOUS TURN's stored ledger rather
+            # than from `base_ledger` (D7): this turn's `perception_act` entry
+            # for the same observer is a character-mode render that computes
+            # no metadata, and reading it here would reset the record every
+            # beat.
+            prev_meta=_composer_prev_meta(_composer_prev_ledger(ctx), pid),
+            track_standing_meta=is_player_view)
         if not is_player_view:
             content, gist, entities = composer.render_episode(
                 percepts, prev_standing=prev_standing,

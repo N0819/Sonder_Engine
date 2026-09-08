@@ -102,7 +102,20 @@ class TestWhatMustStillFail:
         assert report.warnings == []
 
     def test_other_steps_are_unaffected(self, temp_db):
-        """Only the resolve steps encode an adjudication this way. A mapping
-        or perception step losing a field silently would be a real loss."""
-        from llm.schemas import _DIFF_PRUNABLE_STEPS
-        assert set(_DIFF_PRUNABLE_STEPS) == {"director_resolve", "resolve_repair"}
+        """Only a step that DECLARES a StateDiff encodes an adjudication this
+        way. A mapping or perception step losing a field silently would be a
+        real loss.
+
+        The roster is derived from the models since A29 (review 2026-09-07),
+        so `director_interpret` -- whose `state_assertions` is the same
+        StateDiff by the same authority -- joined it, and nothing else did.
+        """
+        from llm.schemas import SCHEMA_MAP, _diff_prunable_roots
+        rooted = {step: sorted(_diff_prunable_roots(step))
+                  for step in SCHEMA_MAP if _diff_prunable_roots(step)}
+        assert rooted == {
+            "director_interpret": ["onset_state_assertions",
+                                   "state_assertions"],
+            "director_resolve": ["state_diff"],
+            "resolve_repair": ["state_diff"],
+        }

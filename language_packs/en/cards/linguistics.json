@@ -1,5 +1,33 @@
 {
   "agents.common": {
+    "_PARTICIPANT_SELF_FORMS": {
+      "$type": "frozenset",
+      "items": [
+        "self",
+        "player",
+        "the player",
+        "you",
+        "me",
+        "him",
+        "her",
+        "them",
+        "it"
+      ]
+    },
+    "_PLAYER_ADDRESS_FORMS": {
+      "$type": "frozenset",
+      "items": [
+        "player",
+        "the player",
+        "you"
+      ]
+    },
+    "_QUESTION_MARKS": {
+      "$type": "frozenset",
+      "items": [
+        "?"
+      ]
+    },
     "_REACTIVE_VERBS": {
       "$type": "set",
       "items": [

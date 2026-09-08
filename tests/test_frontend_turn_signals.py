@@ -129,12 +129,16 @@ class TestBrowsingTheRerollsOfTheNewestBeat:
 
     def test_arrow_keys_are_not_claimed_when_there_is_nothing_to_flip(self):
         """Ordinary horizontal scrolling still works on a story with no
-        rerolls, so preventDefault comes after the count check."""
+        rerolls, so preventDefault comes after the count check -- and after
+        the scope check too, since arrows left over from a story the reader
+        has navigated away from have nothing to do either (A73, review
+        2026-09-07)."""
         body = CHAT[CHAT.index('if (event.key !== "ArrowLeft"'):]
         body = body[:body.index("showRerollVariant(RR.index +")]
 
-        assert body.index("if (RR.variants.length < 2) return;") < body.index(
-            "event.preventDefault();")
+        assert body.index(
+            "if (RR.variants.length < 2 || !inCurrentScope(RR)) return;"
+        ) < body.index("event.preventDefault();")
 
     def test_it_refuses_to_flip_mid_generation(self):
         body = CHAT[CHAT.index("async function showRerollVariant"):]
@@ -142,11 +146,16 @@ class TestBrowsingTheRerollsOfTheNewestBeat:
 
     def test_the_mount_drops_a_response_the_transcript_outran(self):
         """A reroll finishing or a different story opening rebuilds the
-        transcript, and the nav's own fetch can land after that."""
+        transcript, and the nav's own fetch can land after that.
+
+        The element being detached is one way that shows and not the only
+        one: an empty story or an empty frame renders no turn to be detached
+        from, so the scope the request was made under is checked as well
+        (A73, review 2026-09-07)."""
         body = CHAT[CHAT.index("async function _mountRerollNav"):]
         body = body[:body.index("function _paintRerollCount")]
 
-        assert "if (!turnEl.isConnected) return;" in body
+        assert "if (!turnEl.isConnected || !inCurrentScope(scope)) return;" in body
         assert "if (variants.length < 2) return;" in body
 
 

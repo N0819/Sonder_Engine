@@ -1687,17 +1687,18 @@ def test_a_notice_filed_before_the_sweep_survives_the_sweeps_rewrite(temp_db):
     ctx = _play_ctx(temp_db, cid, {"time": "a moment later"}, turn_idx=out)
 
     prepared = commit.prepare_scene_commit(ctx)
-    assert any("has gone out" in n
-               for n in temp_db.wget(cid, "engine_notices", []))
+    # Since A66 prepare writes nothing durable: the notice is STAGED on the
+    # context and `commit_scene` files it under the write lock, so the sweep's
+    # rewrite of the key has nothing of prepare's to lose in the first place.
+    assert temp_db.wget(cid, "engine_notices", []) == []
+    assert any("has gone out" in n for n in ctx.engine_feedback)
     commit.commit_transit_sweep(ctx, 0, prepared=prepared)
 
-    notices = temp_db.wget(cid, "engine_notices", [])
-    assert any("has gone out" in n for n in notices), notices
-    # And a notice filed AFTER the rewrite lands beside it: the destruction
-    # domain runs later in the same transaction.
+    assert any("has gone out" in n for n in ctx.engine_feedback)
+    # And a notice filed AFTER the rewrite lands in the durable list: the
+    # destruction domain runs later in the same transaction.
     commit.add_engine_notice(None, cid, "the pier has been razed.")
     notices = temp_db.wget(cid, "engine_notices", [])
-    assert any("has gone out" in n for n in notices)
     assert "the pier has been razed." in notices
 
 
@@ -1768,7 +1769,7 @@ def test_the_beat_that_starts_an_emission_is_told_it_started_one(temp_db):
     ctx = _play_ctx(temp_db, cid,
                     {"entities": {"bell": {"state": {"running": True}}}})
     commit.prepare_scene_commit(ctx)
-    notices = temp_db.wget(cid, "engine_notices", [])
+    notices = list(ctx.engine_feedback)     # staged for commit (A66)
     assert any("RUNNING" in n and "bell" in n for n in notices), notices
     assert any("event of that beat" in n for n in notices)
 
@@ -1780,6 +1781,7 @@ def test_a_beat_that_says_nothing_about_a_running_source_is_told_nothing(temp_db
     cid = _play_chat(temp_db, _bell_scene(running=True))
     ctx = _play_ctx(temp_db, cid, {"time": "a moment later"})
     commit.prepare_scene_commit(ctx)
+    assert ctx.engine_feedback == []
     assert temp_db.wget(cid, "engine_notices", []) == []
 
 
@@ -1830,8 +1832,7 @@ def test_a_mint_with_no_room_is_put_where_the_beat_is(temp_db):
                                  "sound_source": "audible"}}})
     sc = commit.prepare_scene_commit(ctx)["scene"]
     assert sc["positions"]["kitchen_sink_tap"] == "kitchen"
-    assert any("minted with no room" in n
-               for n in temp_db.wget(cid, "engine_notices", []))
+    assert any("minted with no room" in n for n in ctx.engine_feedback)
 
 
 def test_a_mint_the_beat_cannot_place_is_not_given_an_invented_room(temp_db):
@@ -1862,8 +1863,7 @@ def test_a_mint_naming_a_thing_the_scene_holds_makes_no_second_one(temp_db):
     assert "intercom" not in sc["entities"]
     assert sc["entities"]["buzzer"]["state"]["running"] is True
     assert sc["positions"]["buzzer"] == "hall"
-    assert any("scene already holds" in n
-               for n in temp_db.wget(cid, "engine_notices", []))
+    assert any("scene already holds" in n for n in ctx.engine_feedback)
 
 
 def test_a_genuinely_new_thing_beside_an_old_one_is_still_minted(temp_db):

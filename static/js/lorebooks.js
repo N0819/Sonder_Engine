@@ -123,6 +123,23 @@ function loreOwnershipKey(book) {
     :`chat:${book.chat_id}`;
 }
 
+// WHERE A TREE STARTS. A book is a root when it names no parent -- and also
+// when the parent it names is not in the set being drawn, which is the case
+// that keeps getting dropped: a book attached to a story whose parent is not
+// attached hung off nothing, so `byParent.get("root")` never reached it and it
+// vanished from the panel along with every control on it (A77, review
+// 2026-09-07, in the Cast › Lorebooks tab; the library sidebar and the
+// workspace tree already had the rule, spelled out twice).
+//
+// It belongs with `loreBooksByParent` because it is the same walk's other
+// half: one says who the children are, this says who is drawn without one.
+function loreRootBooks(books) {
+  const byId = new Map(books.map(book => [book.id, book]));
+  return books.filter(book => (
+    book.parent_id == null || !byId.has(book.parent_id)
+  ));
+}
+
 function loreBooksByParent(books) {
   const result = new Map();
 
@@ -293,17 +310,9 @@ function renderLoreLibrarySidebar(list, actions) {
 
   const byParent = loreBooksByParent(books);
   const visible = loreVisibleIds(books, loreUI.filter);
-  const byId = new Map(
-    books.map(book => [book.id, book])
-  );
   const tree = el("div", { class: "lore-side-tree" });
 
-  const roots = books.filter(book => {
-    return (
-      book.parent_id == null
-      || !byId.has(book.parent_id)
-    );
-  });
+  const roots = loreRootBooks(books);
 
   function renderNode(book) {
     if (!visible.has(book.id)) {
@@ -942,16 +951,8 @@ function renderWorkspaceTree(state, container) {
   };
 
   const byParent = loreBooksByParent(state.books);
-  const byId = new Map(
-    state.books.map(book => [book.id, book])
-  );
 
-  const roots = state.books.filter(book => {
-    return (
-      book.parent_id == null
-      || !byId.has(book.parent_id)
-    );
-  });
+  const roots = loreRootBooks(state.books);
 
   let treeFilter = "";
   let visible = new Set();

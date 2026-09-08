@@ -394,7 +394,8 @@ def compile_journey_history(cid, char_id, sheet, route, *, lore=(), opening="",
     # what play decides, so warmth stays at zero and the axes play moves are
     # left for play to move.
     if companion and rows:
-        from mind.memory import get_relationships, save_relationships
+        from mind.memory import (get_relationships, record_relationship_event,
+                                 save_relationships)
         shared_events = sum(
             1 for event in grounded["events"]
             if any(companion["name"].casefold() in str(person or "").casefold()
@@ -402,12 +403,39 @@ def compile_journey_history(cid, char_id, sheet, route, *, lore=(), opening="",
         if shared_events:
             graph = get_relationships(cid, char_id, frame_id=frame_id)
             depth = min(1.0, shared_events / max(1, len(grounded["events"])))
-            graph.update(
-                companion["name"],
-                trust=round(0.25 + 0.35 * depth, 4),
-                familiarity=round(0.35 + 0.45 * depth, 4),
-                last_interaction_turn=0)
+            before = graph.get(companion["name"])
+            seeded = {"trust": round(0.25 + 0.35 * depth, 4),
+                      "familiarity": round(0.35 + 0.45 * depth, 4)}
+            # Snapshot BEFORE the update: `graph.get` hands back the live
+            # Relationship, so a read after `update` sees the new value and
+            # every movement reads as zero (D22, second skeptic).
+            prior = {axis: float(getattr(before, axis, 0.0) or 0.0)
+                     for axis in seeded}
+            graph.update(companion["name"], **seeded,
+                         last_interaction_turn=0)
             save_relationships(cid, char_id, graph, frame_id=frame_id)
+            # AND THE REASON TRAVELS WITH THE STANCE (D22 rework, review
+            # 2026-09-07). A writer that moves an axis and records no
+            # `relationship_events` row makes the stance unexplainable: the
+            # scalar graph structurally cannot say why, and since D22 the
+            # payload's `because` reads that ledger, so an unrecorded
+            # movement is a number the mind holds with nothing behind it.
+            # The three writers that already recorded (conduct, inference,
+            # charter judgment) are the rule; these two were the silence.
+            #
+            # The delta is the MOVEMENT, not the value: the ledger's whole
+            # meaning is how far a stance travelled, and a seed onto an edge
+            # that already exists has not travelled the whole distance.
+            for axis, value in seeded.items():
+                # `familiarity` is not one of `RELATIONSHIP_AXES`, so this row
+                # reaches `relationship_history` and not `because` -- the
+                # ledger records what moved, and `because` explains the five
+                # numbers the stance IS.
+                record_relationship_event(
+                    cid, char_id, companion["name"], axis,
+                    value - prior[axis],
+                    note=grounded["summary"], provenance="journey",
+                    turn_idx=0, frame_id=frame_id)
 
     record = wget_for_frame(cid, "character_journey_histories", frame_id, {}) or {}
     record[str(char_id)] = {

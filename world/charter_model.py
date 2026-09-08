@@ -430,6 +430,28 @@ def _optional_float(value):
         return None
 
 
+def _phase_set(value):
+    """An authored set of day-cycle phase names, or None for absent (D19).
+
+    Absence and emptiness are different answers and both are legal: None
+    means the shipped `day_cycle` set, `[]` means an institution with no such
+    phase at all. A name is READ the way every other authored phase set in
+    the charter is read -- stripped and casefolded, as
+    `charter_creature.normalize_creature` has always done for
+    `creature.active_phases` -- so one author writing "Night" on two fields
+    of one record gets one answer, not a working field and a warned one.
+    Casing is not a different hour.
+
+    What normalisation does NOT do is filter: a name the day cycle cannot
+    read is kept, never matches a phase, and `registry_warnings` says so out
+    loud, which is what a dropped-in-silence field cannot do.
+    """
+    if value is None:
+        return None
+    return sorted({str(name).strip().casefold() for name in value
+                   if str(name).strip()})
+
+
 def normalize_charter(stored, reservation=None):
     """A whole institution, from any shape, with its priority ordering closed.
 
@@ -778,6 +800,21 @@ def normalize_charter(stored, reservation=None):
         # stirs, which is the pre-circulation behaviour exactly.
         "errand_rate": (None if stored.get("errand_rate") is None
                         else max(0.0, float(stored.get("errand_rate")))),
+        # WHEN THIS INSTITUTION SLEEPS AND WHEN IT GOES OUT (D19, review
+        # 2026-09-07). `day_cycle.RESTING_PHASES`/`SOCIAL_PHASES` are the
+        # daylit majority's hours, and imposing them on every charter says a
+        # nightwatch, a pre-dawn bakery and a house that opens after dusk all
+        # keep a farmer's day. None means the shipped sets — the behaviour
+        # every existing charter has — and an EMPTY list is an institution
+        # with no such phase at all, which is why absence and emptiness are
+        # kept apart here exactly as they are for `errand_rate`.
+        #
+        # Phase names are not validated away: an unknown name simply never
+        # matches a phase, and `charter_runtime.registry_warnings` tells the
+        # author, because a silently dropped field is the failure mode
+        # `CLAUDE.md` records for empty psychology.
+        "resting_phases": _phase_set(stored.get("resting_phases")),
+        "social_phases": _phase_set(stored.get("social_phases")),
         # Windows actually stood, per body per post. Bounded by bodies x
         # posts rather than by time, and the evidence a promotion call needs
         # to deliberate a project from -- a month at the same post is a

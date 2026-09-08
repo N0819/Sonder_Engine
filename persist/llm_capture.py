@@ -36,7 +36,7 @@ import json
 import time
 from typing import Any
 
-from core.db import get_setting, q, qi
+from core.db import get_setting, q, qi, transaction
 
 
 #: Largest single blob stored, in bytes. One pathological payload -- a lore
@@ -215,16 +215,63 @@ def prune(chat_id: int) -> int:
         return 0
 
 
+def referenced_blob_hashes() -> set:
+    """Every blob hash a live capture row still points at.
+
+    FOUR REFERENCE SITES, NOT THREE (review 2026-09-07 A68). Three of them are
+    columns -- `system_hash`, `response_hash`, `reasoning_hash` -- and the
+    fourth is the whole reason this store is small: `_payload_hashes` hashes
+    each TOP-LEVEL PAYLOAD KEY separately and files the map as JSON in
+    `payload_hashes`, so the payload blobs (the larger half of a beat: scene,
+    cast, lore) are referenced from inside a JSON value that no SQL column
+    predicate reaches. The collector's `NOT IN` over the three columns
+    therefore collected every payload blob of every captured call, and
+    `exchanges_for_turn(include_bodies=True)` -- the debug reader, the export
+    -- got `None` back for each of them: a capture that says which sheet was
+    sent and cannot say what it was asked.
+
+    Computed in Python rather than in the predicate because the reference
+    lives in a JSON document, which is where SQL stopped being the right
+    tool; and returned rather than inlined so a caller can ask the question
+    without deleting anything.
+    """
+    live = set()
+    for row in q("SELECT system_hash, response_hash, reasoning_hash, "
+                 "payload_hashes FROM llm_capture") or ():
+        for column in ("system_hash", "response_hash", "reasoning_hash"):
+            digest = row[column]
+            if digest:
+                live.add(str(digest))
+        try:
+            payload = json.loads(row["payload_hashes"] or "{}")
+        except (TypeError, ValueError):
+            # An unreadable map is not licence to collect what it referenced:
+            # nothing here can prove those blobs are dead.
+            continue
+        if isinstance(payload, dict):
+            live.update(str(v) for v in payload.values() if v)
+    return live
+
+
 def vacuum_blobs() -> int:
     """Delete blobs no capture row references any more."""
     try:
         before = q("SELECT COUNT(*) AS n FROM llm_blobs", one=True)["n"]
-        qi("DELETE FROM llm_blobs WHERE hash NOT IN ("
-           "SELECT system_hash FROM llm_capture WHERE system_hash IS NOT NULL "
-           "UNION SELECT response_hash FROM llm_capture "
-           "WHERE response_hash IS NOT NULL "
-           "UNION SELECT reasoning_hash FROM llm_capture "
-           "WHERE reasoning_hash IS NOT NULL)")
+        live = referenced_blob_hashes()
+        # The live set goes into a temp table rather than a parameter list, so
+        # the delete stays ONE statement over any number of references -- no
+        # chunk size, and so no chance of a chunk boundary sparing or eating a
+        # row.
+        with transaction() as c:
+            c.execute("CREATE TEMP TABLE IF NOT EXISTS _live_blobs("
+                      "hash TEXT PRIMARY KEY)")
+            c.execute("DELETE FROM _live_blobs")
+            if live:
+                c.executemany("INSERT OR IGNORE INTO _live_blobs(hash) "
+                              "VALUES(?)", [(h,) for h in live])
+            c.execute("DELETE FROM llm_blobs WHERE hash NOT IN "
+                      "(SELECT hash FROM _live_blobs)")
+            c.execute("DROP TABLE _live_blobs")
         after = q("SELECT COUNT(*) AS n FROM llm_blobs", one=True)["n"]
         return int(before) - int(after)
     except Exception:
