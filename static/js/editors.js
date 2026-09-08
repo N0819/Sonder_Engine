@@ -125,7 +125,7 @@ function defaultCharacterSheet() {
     identity: { name: "New Character", aliases: [], pronouns: { subject: "they", object: "them", possessive: "their" } },
     initial_outfit: { regions: {} },
     simulation: { tier: "mid", temperature: 0.8, sampler: {}, offscreen_agent: false },
-    embodiment: { senses: [{ channel: "general", acuity: "ordinary", range: "ordinary", notes: "ordinary human senses" }], visible: { summary: "A person of unremarkable appearance.", build: "", face: "", hair: "", eyes: "", distinctive_features: [] }, scent: "", latent: [], interoception: { acuity: 0.5, pain_sensitivity: 0.5, fatigue_sensitivity: 0.5, pleasure_sensitivity: 0.5 } },
+    embodiment: { senses: [{ channel: "general", acuity: "ordinary", range: "ordinary", equivalent: "", needs_light: true, notes: "ordinary human senses" }], visible: { summary: "A person of unremarkable appearance.", build: "", face: "", hair: "", eyes: "", distinctive_features: [] }, scent: "", latent: [], interoception: { acuity: 0.5, pain_sensitivity: 0.5, fatigue_sensitivity: 0.5, pleasure_sensitivity: 0.5 } },
     psychology: { drive: { essence: "", expression: "", taboo: "" }, capacity: "", traits: [], values: [], self_model: { summary: "", protected_beliefs: [], pride_triggers: [], shame_triggers: [], beliefs: [] }, coping: { under_stress: [], default_conflict_style: "", strategies: [], recovery_supports: [] }, stress_profile: { baseline_reactivity: 0.5, recovery_rate: 0.5, overload_threshold: 0.8, attentional_style: "", somatic_signs: [] }, learning: { associations: [] } },
     social: { voice: { register: "", cadence: "", verbosity: "natural", markers: [], notes: "" }, baseline_stances: { unknown_person: { trust: 0, warmth: 0, threat_sensitivity: 0 } } },
     competence: { abilities: [] },
@@ -755,7 +755,7 @@ function personaEditor(p) {
     identity: { name: "New Persona", aliases: [], pronouns: { subject: "they", object: "them", possessive: "their" } },
     initial_outfit: { regions: {} },
     embodiment: {
-      senses: [{ channel: "general", acuity: "ordinary", range: "ordinary", notes: "ordinary human senses" }],
+      senses: [{ channel: "general", acuity: "ordinary", range: "ordinary", equivalent: "", needs_light: true, notes: "ordinary human senses" }],
       visible: { summary: "A person of unremarkable appearance.", build: "", face: "", hair: "", eyes: "", distinctive_features: [] },
       scent: "",
       latent: []

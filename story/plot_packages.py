@@ -178,6 +178,78 @@ def _normalize_entry(prefix, uid, entry, index):
     return out
 
 
+#: What a TRIGGERED clock may filter on (D15, review 2026-09-07). The world
+#: writes ONE vocabulary of event kinds -- `world_events.kind`, the column --
+#: and the row carries the room it happened in. A trigger naming anything
+#: else is refused at validation rather than ignored: measured on the bench
+#: copies of chats 114 and 117 (2026-09-08), all 61 `world_events` rows
+#: carried an empty `originator`, so a filter on an actor would have matched
+#: nothing on every beat and said nothing about it -- the exact silence the
+#: ruling forbids.
+TRIGGER_FIELDS = ("event_kind", "location_id")
+
+
+def _int(value, default=None):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _normalize_clock(raw, out):
+    """A clock's typed fields on top of `_normalize_entry`.
+
+    A clock is due by TIME (`due_turns` from publish, `due_story_hours` from
+    the published elapsed) or by EVENTS (D15): `advance_on` names the world
+    events that fill it, `segments` how many it takes, `filled` how many the
+    world has written, and `ticked_turn_idx` the turn its tick last counted
+    a match through -- the guard against one beat counting an event twice.
+
+    The store speaks in turn INDICES everywhere else (`published_turn`,
+    `activated_turn`, `fired_turn`, `refused_turn`), and a branch or clone
+    remaps turn row ids while indices survive the copy, so the watermark is
+    an index: a stored row id would silently stop a clock in a cloned chat,
+    and a clock that stops must say so.
+
+    `_normalize_entry` renders a list value as a list of strings, which
+    would flatten each trigger into prose; the typed fields are re-read from
+    the raw entry here so nothing is lost by being normalised.
+    """
+    raw = raw if isinstance(raw, dict) else {}
+    triggers = []
+    for item in (raw.get("advance_on") or ()):
+        if isinstance(item, str):
+            item = {"event_kind": item}
+        if not isinstance(item, dict):
+            continue
+        trigger = {}
+        for key, value in item.items():
+            text = _text(value, 120)
+            if text:
+                trigger[str(key)] = text
+        # A trigger missing its event_kind is KEPT, so validation can say
+        # what is wrong with it; a dropped field is a silent clock.
+        if trigger:
+            triggers.append(trigger)
+    for key in ("advance_on", "segments", "filled", "ticked_turn_idx"):
+        out.pop(key, None)
+    if not triggers:
+        return out
+    out["advance_on"] = triggers
+    # No cap on the triggers one clock names: LIST_CAP already bounds the
+    # clocks a package may carry, and a clock watching for several kinds of
+    # event is one clock.
+    out["segments"] = max(1, _int(raw.get("segments"), 1))
+    # A clock is never more than full (D15 rework): a stored or authored
+    # `filled` above its segments would read as 5/2 in the panel and mean
+    # nothing the reader can act on.
+    out["filled"] = min(max(0, _int(raw.get("filled"), 0)), out["segments"])
+    ticked = _int(raw.get("ticked_turn_idx"))
+    if ticked is not None:
+        out["ticked_turn_idx"] = ticked
+    return out
+
+
 def normalize_package(entry):
     entry = entry if isinstance(entry, dict) else {}
     uid = str(entry.get("uid") or "")
@@ -241,9 +313,12 @@ def normalize_package(entry):
     }
     for field, prefix in _LIST_FIELDS.items():
         items = entry.get(field) or []
-        items = items if isinstance(items, list) else []
+        items = (items if isinstance(items, list) else [])[:LIST_CAP]
         out[field] = [_normalize_entry(prefix, uid, item, i)
-                      for i, item in enumerate(items[:LIST_CAP])]
+                      for i, item in enumerate(items)]
+        if field == "clocks":
+            out[field] = [_normalize_clock(raw, clock)
+                          for raw, clock in zip(items, out[field])]
     for i, op in enumerate((entry.get("operations") or [])[:OPS_CAP]):
         if isinstance(op, dict) and op.get("op") in OPERATIONS:
             clean = copy.deepcopy(op)
@@ -620,6 +695,10 @@ def _world_snapshot(cid, frame_id=None):
         # keyed by display name; matched exactly, then case-folded.
         "occupied": _occupied_rooms(scene, cast_names),
         "elapsed": _elapsed_seconds(cid, frame_id),
+        # WHAT THIS WORLD HAS WRITTEN, for the clocks that wait on an event
+        # (D15): a clock naming a kind nothing here writes never ticks, and
+        # the validator says so rather than letting it sit silent.
+        "event_kinds": world_event_kinds(cid, frame_id),
     }
 
 
@@ -633,6 +712,30 @@ def _occupied_rooms(scene, names):
         if room:
             out.add(str(room))
     return out
+
+
+def world_event_kinds(cid, frame_id=None):
+    """WHAT THIS WORLD ACTUALLY WRITES: ``{kind: rows}`` over
+    `world_events.kind` for this chat and frame.
+
+    D15's deferral was that `world_events.kind`, `scheduled_events.kind` and
+    the `public_evidence` speech-act kinds are three vocabularies, and a
+    clock keyed on the wrong one never ticks and never says so. The ruling
+    picked the one the world writes; this is how a reader and the validator
+    are told what is in it, rather than being handed a list the engine
+    would have to keep true. Measured on the bench copies (2026-09-08): 52
+    rows in chat 114 and 9 in chat 117, every one of kind `consequence`.
+
+    Whole-story counts, not a window: an empty answer is what tells the
+    validator and the Room lint that this world has recorded nothing yet
+    and that nothing can be concluded about a clock waiting on an event.
+    """
+    from core.db import q
+
+    rows = q("SELECT we.kind AS kind, COUNT(*) AS rows FROM world_events we "
+             "WHERE we.chat_id=? AND we.frame_id IS ? GROUP BY we.kind",
+             (cid, frame_id))
+    return {str(r["kind"]): int(r["rows"]) for r in rows if r["kind"]}
 
 
 def _elapsed_seconds(cid, frame_id=None):
@@ -2715,10 +2818,43 @@ def _package_checks(pkg, world):
             warnings.append("truth %s has %d evidence path(s); a sealed truth "
                             "with one path is unknowable if that path is lost"
                             % (truth["id"], paths))
+    written = world.get("event_kinds") or {}
     for clock in pkg["clocks"]:
-        if clock.get("due_story_hours") is None and clock.get("due_turns") is None:
-            errors.append("clock %s has no due (due_story_hours or due_turns)"
-                          % clock["id"])
+        triggers = clock.get("advance_on") or []
+        if clock.get("due_story_hours") is None and clock.get("due_turns") is None \
+                and not triggers:
+            errors.append("clock %s has no due (due_story_hours or due_turns) "
+                          "and nothing it advances on (advance_on)" % clock["id"])
+        # A CLOCK THAT WILL NEVER TICK SAYS SO HERE (D15), while it is still
+        # a draft: a trigger filtering on something no event carries would
+        # match everything it should not, and a kind this world has never
+        # written matches nothing, forever, in silence.
+        #
+        # BUT ONLY AGAINST A WORLD THAT HAS WRITTEN SOMETHING (D15 rework).
+        # An empty `world_events` is a young story, not a wrong clock -- it
+        # cannot tell the kind this engine writes on every consequence from
+        # a kind nothing will ever write, so warning there fired on a
+        # perfectly good clock (chat 117 wrote 9 rows across 123 turns, so
+        # the empty state persists for dozens of beats). What the author
+        # gets instead is the fact itself: `inspect_events` reports
+        # `event_kinds` as {} for a world that has recorded nothing yet.
+        for trigger in triggers:
+            kind = str(trigger.get("event_kind") or "")
+            extra = sorted(k for k in trigger if k not in TRIGGER_FIELDS)
+            if not kind:
+                errors.append("clock %s: a trigger names the event_kind it "
+                              "waits on" % clock["id"])
+            if extra:
+                errors.append(
+                    "clock %s: a trigger filters on %s -- what an event of "
+                    "this world records -- and this one also names %s"
+                    % (clock["id"], " and ".join(TRIGGER_FIELDS),
+                       ", ".join(extra)))
+            if kind and written and kind not in written:
+                warnings.append(
+                    "clock %s waits on %r, and this world has written %s; a "
+                    "clock waiting on an event nothing writes never ticks"
+                    % (clock["id"], kind, ", ".join(sorted(written))))
     clock_ids = {c["id"] for c in pkg["clocks"]}
     for i, op in enumerate(pkg["operations"]):
         if op.get("clock") and op["clock"] not in clock_ids:
@@ -3047,12 +3183,106 @@ def _apply_operation(cid, frame_id, pkg, op, turn_idx, *, elapsed, turn_id):
     return spec["apply"](cid, frame_id, op, turn_idx)
 
 
+def _trigger_matches(clock, kind, location_id):
+    """Whether one world event fills a segment of this clock (D15). Keyed on
+    `world_events.kind` -- the one vocabulary the world writes -- and, when
+    the trigger names one, the row's own location."""
+    for trigger in clock.get("advance_on") or ():
+        if str(trigger.get("event_kind") or "") != str(kind or ""):
+            continue
+        where = str(trigger.get("location_id") or "")
+        if where and where != str(location_id or ""):
+            continue
+        return True
+    return False
+
+
+def _tick_triggered_clocks(cid, frame_id, stored, turn_idx):
+    """Fill the segments of every triggered clock from the world events the
+    story has written since each last counted one (D15).
+
+    CONSEQUENCES ARRIVE BECAUSE SOMETHING HAPPENED, not because the calendar
+    turned: a clock with `advance_on` ticks on `world_events` rows -- the
+    objective spine `persist/commit_mechanics.commit_world_event_spine`
+    writes inside the turn transaction, so this beat's own events are
+    already there when the commit's out-of-band tail calls
+    `fire_due_clocks`, and a clock may fill and fire on the same beat.
+
+    Counting once is the whole difficulty. The window a clock counts is
+    ``published_turn < t.idx <= turn_idx``, floored by `ticked_turn_idx`,
+    which advances ONLY when a match was counted -- so a second call in the
+    same beat finds an empty window, and a beat whose events matched
+    nothing costs no write. A rewind restores the counter and the watermark
+    with the frame's world row while the checkpoint takes the
+    `world_events` rows back with it, so the clock re-fills from the same
+    events it filled from before.
+
+    A clock cannot be more than FULL: five matching events on one beat
+    against two segments leave it at 2/2, not 5/2 (D15 rework). The
+    overshoot carries nothing -- the clock is due and fires in this same
+    pass -- and a projection reading 5/2 is a number the panel cannot mean.
+
+    Returns the (package, clock, segments-filled-this-beat) triples that
+    advanced.
+    """
+    from core.db import q
+
+    watching = []
+    for pkg in stored:
+        if pkg["status"] not in ("published", "active"):
+            continue
+        published = pkg.get("published_turn")
+        if published is None:
+            continue
+        for clock in pkg["clocks"]:
+            if not clock.get("advance_on"):
+                continue
+            if clock.get("fired_turn") is not None \
+                    or clock.get("refused_turn") is not None:
+                continue
+            ticked = clock.get("ticked_turn_idx")
+            since = int(published) if ticked is None else max(
+                int(ticked), int(published))
+            if since >= int(turn_idx):
+                continue
+            watching.append((pkg, clock, since))
+    if not watching:
+        return []
+    floor = min(since for _, _, since in watching)
+    rows = q("SELECT t.idx AS turn_idx, we.kind AS kind, "
+             "COALESCE(we.location_id,'') AS location_id "
+             "FROM world_events we JOIN turns t ON t.id=we.turn_id "
+             "WHERE we.chat_id=? AND we.frame_id IS ? "
+             "AND t.idx > ? AND t.idx <= ? ORDER BY t.idx",
+             (cid, frame_id, floor, int(turn_idx)))
+    rows = [(int(r["turn_idx"]), r["kind"], r["location_id"]) for r in rows]
+    advanced = []
+    for pkg, clock, since in watching:
+        matched = sum(1 for idx, kind, where in rows
+                      if idx > since and _trigger_matches(clock, kind, where))
+        if not matched:
+            continue
+        before = max(0, _int(clock.get("filled"), 0))
+        filled = min(before + matched, max(1, _int(clock.get("segments"), 1)))
+        if filled == before:
+            continue
+        clock["filled"] = filled
+        clock["ticked_turn_idx"] = int(turn_idx)
+        advanced.append((pkg, clock, filled - before))
+    return advanced
+
+
 def _clock_due(pkg, clock, turn_idx, elapsed):
     if clock.get("fired_turn") is not None or clock.get("refused_turn") is not None:
         return False
     since_turn = pkg.get("published_turn")
     if since_turn is None:
         return False
+    # A triggered clock is due when the world has filled its segments (D15).
+    # A clock may carry both: whichever comes first fires it.
+    if clock.get("advance_on") and clock.get("segments") is not None:
+        if _int(clock.get("filled"), 0) >= _int(clock.get("segments"), 1):
+            return True
     if clock.get("due_turns") is not None:
         try:
             if int(since_turn) + int(clock["due_turns"]) <= int(turn_idx):
@@ -3078,6 +3308,13 @@ def fire_due_clocks(cid, turn_idx, *, elapsed=None, frame_id=None, turn_id=None)
     fire is written into the package's history. Pending region waves land
     the same way. Called from the commit's out-of-band tail every beat.
 
+    A CLOCK IS DUE BY TIME OR BY WHAT HAPPENED (D15). A clock carrying
+    `advance_on` fills a segment for every `world_events` row this world has
+    written that matches it (`_tick_triggered_clocks`), and is due when its
+    segments are full -- so a consequence arrives because something happened
+    in the story, not because the calendar turned. A clock may carry both a
+    due and segments; whichever comes first fires it.
+
     UN-FIRING IS BY CONSTRUCTION. The package store, the registry, the
     artifacts, the scene and the scheduled-event rows all ride the frame's
     world row or the checkpoint snapshot, so a rewind past the fire restores
@@ -3089,10 +3326,26 @@ def fire_due_clocks(cid, turn_idx, *, elapsed=None, frame_id=None, turn_id=None)
     if elapsed is None:
         elapsed = _elapsed_seconds(cid, frame_id)
     fired, landed_waves, dirty = [], 0, False
+    # THE SEGMENTS FIRST (D15): a clock that waits on events counts what the
+    # world wrote since it last counted, and a clock whose segments filled
+    # this beat is due in the same pass.
+    #
+    # A TICK WRITES NO PROVENANCE NOTE. The counter rides the clock and the
+    # projection carries it, so a note would say only what the reader can
+    # already see -- and it would say it on nearly every beat: a clock
+    # watching a kind this world writes often advances constantly (chat 114
+    # wrote 52 `consequence` rows in 14 turns) while `HISTORY_CAP` is 40, so
+    # a 47-beat probe evicted the package's whole authored record -- created,
+    # edited, validated, published -- and left the panel's history window
+    # showing nothing but `clock_advanced` (measured 2026-09-08). The counter
+    # still persists: an advance marks the package dirty and is saved below.
+    advanced = _tick_triggered_clocks(
+        cid, frame_id, list(stored.values()), turn_idx)
+    advanced_uids = {pkg["uid"] for pkg, _clock, _filled in advanced}
     for pkg in stored.values():
         if pkg["status"] not in ("published", "active"):
             continue
-        changed = False
+        changed = pkg["uid"] in advanced_uids
         for clock in pkg["clocks"]:
             if not _clock_due(pkg, clock, turn_idx, elapsed):
                 continue
@@ -3146,7 +3399,9 @@ def fire_due_clocks(cid, turn_idx, *, elapsed=None, frame_id=None, turn_id=None)
         # A refusal is a change too: the clock that could not fire says so
         # on the record, or the next beat would ask the same question.
         save_packages(cid, stored, frame_id)
-    return {"fired": fired, "waves": landed_waves}
+    return {"fired": fired, "waves": landed_waves,
+            "advanced": [(pkg["uid"], clock["id"], filled)
+                         for pkg, clock, filled in advanced]}
 
 
 def visible_packages(cid, turn_idx, *, frame_id=None):
@@ -3234,6 +3489,23 @@ def retire_package(cid, uid, *, note="", frame_id=None):
 # Views
 # ---------------------------------------------------------------------------
 
+def _clock_projection(clock):
+    """One clock as the panel reads it: the label, the dues, and -- for a
+    clock that waits on events (D15) -- what it waits on and how far it has
+    got. A clock waiting on nothing carries none of the machinery, here as
+    in the store, so a reader is not shown three empty fields; and a reader
+    who cannot see 0/4 cannot see a clock that never ticks."""
+    out = {"id": clock["id"], "label": _text(clock.get("label"), 80),
+           "due_story_hours": clock.get("due_story_hours"),
+           "due_turns": clock.get("due_turns"),
+           "fired_turn": clock.get("fired_turn")}
+    if clock.get("advance_on"):
+        out["segments"] = clock.get("segments")
+        out["filled"] = clock.get("filled")
+        out["advance_on"] = [dict(t) for t in clock["advance_on"]]
+    return out
+
+
 def package_projection(pkg):
     """The spoiler-safe view: what is in motion, never what it is. Counts,
     status, revision, validation verdicts without their text, clock labels
@@ -3245,10 +3517,11 @@ def package_projection(pkg):
         "published_turn": pkg.get("published_turn"),
         "counts": {field: len(pkg[field]) for field in _LIST_FIELDS},
         "operations": [op["op"] for op in pkg["operations"]],
-        "clocks": [{"id": c["id"], "label": _text(c.get("label"), 80),
-                    "due_story_hours": c.get("due_story_hours"),
-                    "due_turns": c.get("due_turns"),
-                    "fired_turn": c.get("fired_turn")} for c in pkg["clocks"]],
+        # WHAT A CLOCK IS WAITING FOR AND HOW FAR IT HAS GOT (D15). The
+        # segments and what fills them are mechanism, in the same register
+        # as the dues beside them: a reader who cannot see 0/4 cannot see a
+        # clock that never ticks.
+        "clocks": [_clock_projection(c) for c in pkg["clocks"]],
         "validation": {"ok": pkg["validation"]["ok"],
                        "errors": len(pkg["validation"]["errors"]),
                        "warnings": len(pkg["validation"]["warnings"]),

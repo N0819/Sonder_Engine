@@ -22,9 +22,12 @@ from story.character_schema import (character_name, character_name_from_text,
                               character_appearance as _char_appearance)
 from mind.theory_of_mind import (apply_mind_model_updates, rekey_place_claims,
                             select_active_hypotheses, sheet_capacity)
+from world.charter import (
+    signals_in_public_evidence as charter_signals_in_public_evidence)
 from world.spatial import same_subject
 from world.survival import vitals_of
 from world.comfort import comfort_level
+from world.exposure import discomfort_level
 from world.stimulation import stimulation_of
 from persist.commit_common import (_clamp, _known_name_roster, _monotonic_elapsed,
                            _address_index, _names_heard_in,
@@ -183,6 +186,96 @@ def _marked_for_memory(own_result, qbody):
 
 def _quote_body(quote):
     return (quote or "").strip().strip('"' + "'" + "\u201c\u201d\u2018\u2019")
+
+
+def _evidence_spans(row):
+    """The audible/visible text a `public_evidence` row PUT IN A VIEW.
+
+    A speech row's identity is the words themselves, which is why the quote
+    body is the span: it is the same proof the dialogue-memory loop below
+    uses, and the same join `agents.director._ground_public_evidence` uses to
+    match a source to a final line. A communication row carries no quotation
+    -- `agents.common.communication_surface` renders an indirect predicate --
+    so its SURFACE is the span, and only its surface.
+
+    Its `speech_acts` content is deliberately NOT a span. The surface is
+    built as `f"{communication_verb(elem)} {content}"` over the same
+    whitespace-normalized content and the verb is never empty, so the
+    content is always a strict substring of the surface: it can prove no
+    delivery the surface does not already prove, and can only loosen the
+    `span in view` match into hitting a view for an unrelated reason. That is
+    not hypothetical -- `agents.composer.communication_percept`'s partial-
+    hearing branch replaces the surface with "speaks indistinctly" precisely
+    because partial hearing cannot deliver a proposition whose words were
+    never specified, and a content span re-admitted the proposition anyway
+    (review 2026-09-07 D21 rework: surface "threatens the courier", content
+    "the courier", view "Vek speaks indistinctly. Across the yard the courier
+    waits by the gate." -> a threat signal on a mind told only that somebody
+    spoke).
+
+    An action row never reaches this question: `_ground_public_evidence`
+    gives every non-speech, non-communication source `speech_acts: []`, so
+    `signals_in_public_evidence` yields nothing and the floor returns before
+    it asks for spans. (It would answer with its `surface` if asked.)
+    """
+    if not isinstance(row, dict):
+        return []
+    spans = []
+    if row.get("kind") == "speech":
+        body = _quote_body(row.get("exact_quote") or "")
+        if body:
+            spans.append(body)
+    else:
+        text = " ".join(str(row.get("surface") or "").split())
+        if text:
+            spans.append(text)
+    return spans
+
+
+def _witnessed_signals(evidence, view, holder, holder_known):
+    """The signal floor's source set for ONE mind: what IT was delivered.
+
+    Review 2026-09-07 D21, under the firewall rule the item was approved
+    with. The source set is this mind's OWN delivered observations and never
+    the charter's spatial reception answer, because a reception answer
+    computed for one observer deciding another observer's stance is one head
+    reading through another's eyes. `view` is this character's composed view
+    -- already gated, already scrubbed, already handed to them -- so a span
+    present in it is a span they received, which is the same proof the
+    dialogue-memory loop uses to decide that a heard name was heard.
+
+    A body this mind cannot NAME moves nothing. The stance store is keyed by
+    canonical name (review 2026-09-07 B7: a stance filed under a rendered
+    label is filed against nobody), and `relationships_for_payload` hands
+    those keys straight to the mind -- so a floor that opened a row for an
+    unrecognised speaker would tell the character the name of somebody they
+    have only heard in the dark. What that excludes is real and is stated
+    rather than hidden: fear of a stranger is not recorded here, and becomes
+    recordable the beat the mind learns who they were.
+    """
+    holder = str(holder or "").strip()
+    text = str(view or "")
+    if not text or not holder:
+        return []
+    known = {str(name) for name in (holder_known or ())}
+    out = []
+    for row in evidence or ():
+        if not isinstance(row, dict):
+            continue
+        source_id = str(row.get("source_id") or "")
+        signals = list(charter_signals_in_public_evidence(row))
+        if not signals:
+            continue
+        spans = _evidence_spans(row)
+        if not spans or not any(span in text for span in spans):
+            continue
+        for signal, actor in signals:
+            actor = str(actor or "").strip()
+            if not actor or actor == holder or actor not in known:
+                continue
+            out.append({"subject": actor, "signal": signal,
+                        "source_id": source_id})
+    return out
 
 
 def _is_player(speaker, chat):
@@ -526,6 +619,7 @@ def prepare_memory_commit(ctx, *, scene=None):
                             _names_learned.setdefault(
                                 _hearer_name, []).append(_alias)
     relationship_ops = []
+    witnessed_signals = []
     belief_reconciles = []
     memory_disputes = []
     importance_bumps = []
@@ -851,6 +945,15 @@ def prepare_memory_commit(ctx, *, scene=None):
                                 qbody, d.get("intended_target"),
                             ),
                         })
+            # THE EVIDENCE FLOOR'S SOURCE SET FOR THIS MIND (D21), built
+            # here because this is where its own delivered view is, and
+            # AFTER the dialogue loop above so a name learned this beat
+            # already counts as known. Applied inside the transaction by
+            # `commit_memories`; prepare writes nothing.
+            _witnessed = _witnessed_signals(
+                res.get("public_evidence") or [], v, cname, _hearer_known)
+            if _witnessed:
+                witnessed_signals.append((ccid, _witnessed))
             episode_content = v
             # IR-minted episode (see the top of this function): the composer
             # already rendered this mind's episode from the same gated,
@@ -1329,6 +1432,12 @@ def prepare_memory_commit(ctx, *, scene=None):
                 # construction it never reaches the charge term, because a
                 # warm bench is a resolved state, not an unresolved drive.
                 _comfort, _comfort_src = comfort_level(sc, cname)
+                # World-side DISCOMFORT, comfort's negative twin (D20): what
+                # the weather costs this body where it is standing, off A88's
+                # axes, scaled by what it has bare and how spent it is. Same
+                # seam, same shape, opposite sign -- a floor on the pain
+                # LEVEL, never on the charge.
+                _chill, _chill_src = discomfort_level(sc, cname, body_state)
                 # World-side DRIVE ceiling, comfort's opposite number: what
                 # this body is physically receiving, from the contact ledger
                 # and the clothing between. Comfort may never reach `charge`;
@@ -1345,6 +1454,7 @@ def prepare_memory_commit(ctx, *, scene=None):
                     # up in the first place stays the runtime's.
                     released=bool(proposed_hedonic.get("released")),
                     ambient_comfort=_comfort, comfort_source=_comfort_src,
+                    ambient_discomfort=_chill, discomfort_source=_chill_src,
                     stimulation=_stimulation,
                 )
                 proposed_stress = (
@@ -1840,6 +1950,7 @@ def prepare_memory_commit(ctx, *, scene=None):
         "names_learned": _names_learned,
         "state_updates": state_updates,
         "relationship_ops": relationship_ops,
+        "witnessed_signals": witnessed_signals,
         "belief_reconciles": belief_reconciles,
         "memory_disputes": memory_disputes,
         "importance_bumps": importance_bumps,

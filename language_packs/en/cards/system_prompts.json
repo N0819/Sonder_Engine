@@ -11,6 +11,9 @@
   "extra_parts_note": {
     "$text": "extra_parts_note.txt"
   },
+  "senses_note": {
+    "$text": "senses_note.txt"
+  },
   "interior_note": {
     "$text": "interior_note.txt"
   },

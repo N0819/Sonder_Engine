@@ -280,13 +280,16 @@ def rulebook_rows(cid, scene, frame_id=None, rooms=None, figures=None):
         phase = clock.get("phase") or (
             phase_of_hour(float(hour), length) if hour is not None else None)
         if phase:
-            sky = str(((scene or {}).get("weather") or {}).get("sky") or "")
+            from world.weather import normalize_weather as _nw
+            _sky_record = _nw((scene or {}).get("weather"))
+            sky = str(_sky_record.get("sky") or "")
             # What the sun gives a room is `day_cycle.sun_light`'s answer, not
             # a second copy of its table plus its dimming rule (review
             # 2026-09-07 B9). A phase this cycle does not name still says
             # nothing about the light, which is why the membership test
             # stays here rather than becoming a default of "lit" inside it.
-            light = sun_light(phase, sky) if phase in SUN_LIGHT else ""
+            light = sun_light(phase, _sky_record or None) \
+                if phase in SUN_LIGHT else ""
             text = "The day here runs %g hours; it is %s%s." % (
                 length, phase,
                 (" (about hour %g)" % round(float(hour), 1)) if hour is not None else "")
@@ -299,11 +302,14 @@ def rulebook_rows(cid, scene, frame_id=None, rooms=None, figures=None):
         pass
     # The weather, as declared (`world/weather.normalize_weather`).
     try:
-        from world.weather import normalize_weather
+        from world.weather import is_falling, normalize_weather
         weather = normalize_weather((scene or {}).get("weather"))
         if weather:
             parts = ["sky %s" % weather.get("sky")]
-            if weather.get("precipitation") and weather["precipitation"] != "none":
+            # `is_falling` rather than the name: since A88 a sky keeps the
+            # name of what it drops through a dry spell, and `intensity` is
+            # the one field that says whether anything is coming down.
+            if is_falling(weather):
                 parts.append("%s %s" % (weather.get("intensity") or "",
                                         weather["precipitation"]))
             if weather.get("wind"):

@@ -488,7 +488,67 @@ def sight_level(rel: dict) -> str:
     RAISES sight above what the light allows; it only refuses to let a body
     vanish mid-step. See spatial_frames.infer_threshold_crossings for how long
     it lasts.
+
+    What the PLACE did to this grade -- which of the three refusals a `none`
+    was, and whether a light in the observer's eyes capped it -- is
+    `sight_block(rel)`, derived in the same pass (`_sight_verdict`) so the
+    level and the cause cannot disagree.
     """
+    return _dazzled(*_sight_verdict(rel))
+
+
+def sight_block(rel: dict) -> str:
+    """WHAT THE PLACE DID that a perceiver may be authored to answer:
+    'concealed' | 'barrier' | 'dark' | 'glare', and '' when nothing here is
+    a perceiver's business.
+
+    The fact the engine used to throw away (A87). `none` was one word for
+    three unrelated refusals, and the difference is exactly what a perceiver
+    can be authored to answer: darkness is a property of the PLACE and who it
+    blinds is a property of the perceiver, where a wall between two rooms and
+    a shut bag around a body are properties of the world that no acuity
+    reaches. `sense_adjusted(..., blocked_by=sight_block(rel))` is where that
+    distinction is spent.
+
+    `glare` is the fourth, and the only one that names a CAP rather than a
+    `none` (review 2026-09-07 A87/R1): a light in the eyes takes sight down
+    to shapes, and light that does not feed the sense cannot dazzle it. It is
+    reported UNAPPLIED -- `_sight_verdict` hands back the grade the light
+    alone allowed and `_dazzled` is the one line that spends it -- so the
+    per-body carrier (`visual_level_between`, which skips the cap for a
+    lightless perceiver) and this room-level one cannot disagree about a
+    perceiver both of them can see.
+    """
+    return _sight_verdict(rel)[1]
+
+
+def sight_verdict(rel: dict) -> tuple:
+    """(level, block) in ONE pass, for a caller that holds the perceiver.
+
+    `level` is the grade BEFORE the glare cap and `block` says whether that
+    cap is still owed, so a caller hands both to `sense_adjusted` and lets it
+    decide whether this body's sight is fed by the light that would dazzle
+    it. A caller with no perceiver wants `sight_level`, which applies the cap
+    itself and answers exactly as it always has.
+    """
+    return _sight_verdict(rel)
+
+
+def _dazzled(level: str, block: str) -> str:
+    """Spend a `glare` block: the flashlight in the face, capped at shapes.
+
+    ONE line, called by `sight_level` (which has no perceiver, so it always
+    applies) and by `sense_adjusted` (which has one, and skips it for a sight
+    the light does not feed) -- so the cap has a single derivation and the
+    two readers cannot answer differently.
+    """
+    return _weaker_sight(level, "shapes") if block == "glare" else level
+
+
+def _sight_verdict(rel: dict) -> tuple:
+    """(level, block) -- ONE derivation for the grade and what the place did
+    to it. The glare cap is REPORTED rather than applied; `_dazzled` spends
+    it."""
     crossing = bool(rel.get("crossing"))
     # `concealed` is about a BODY being inside something rather than about the
     # rooms, and it outranks both barrier and light: a body in a closed bag is
@@ -496,22 +556,23 @@ def sight_level(rel: dict) -> str:
     # open the doorway. Only a crossing survives it -- being put in or climbing
     # out is watched.
     if rel.get("concealed"):
-        return "shapes" if crossing else "none"
+        return ("shapes", "") if crossing else ("none", "concealed")
     if not _sight_line(rel):
-        return "shapes" if crossing else "none"
+        return ("shapes", "") if crossing else ("none", "barrier")
     level = _LIGHT_SIGHT.get(normalize_light(rel.get("light")), "full")
+    if level == "none":
+        return ("shapes", "") if crossing else ("none", "dark")
     # GLARE: a strong source between the observer and the target, in the
     # observer's eyes, caps sight at shapes -- the flashlight in your face.
     # Set by `spatial_rel_between` from the light field
     # (`spatial_light_field.glare_between`); never present without geometry.
-    # Written as a cap rather than as `== "full"` so it keeps subtracting at
-    # every rung above `shapes` -- a light in the eyes takes a dim room's
+    # Reported, not applied (A87/R1): `_dazzled` is the one place the cap is
+    # spent, and it keeps subtracting at every rung above `shapes` rather
+    # than testing `== "full"` -- a light in the eyes takes a dim room's
     # conduct grade down too.
-    if rel.get("glare") and level != "none":
-        level = _weaker_sight(level, "shapes")
-    if crossing and level == "none":
-        return "shapes"
-    return level
+    if rel.get("glare"):
+        return level, "glare"
+    return level, ""
 
 
 def _sight_line(rel: dict) -> bool:
@@ -791,7 +852,8 @@ def _opening_view_cap(scene: dict, room_id, body: str, other_room) -> str:
     return "full"
 
 
-def visual_level_between(scene: dict, observer: str, target: str) -> str:
+def visual_level_between(scene: dict, observer: str, target: str,
+                         senses=None) -> str:
     """Graded sight from one BODY to another -- once per read pass, per pair.
 
     The most-asked derivation in the engine: nine call sites ask it 5-9x per
@@ -804,16 +866,22 @@ def visual_level_between(scene: dict, observer: str, target: str) -> str:
 
     FIREWALL: the key names BOTH bodies. This is the objective sight
     derivation, not a per-observer view -- nothing scrubbed for one observer
-    can reach another through it.
+    can reach another through it. `senses` is the OBSERVER's card senses and
+    is spent on exactly one bit -- whether this observer's sight needs light
+    (A87) -- so that bit is in the key too; the answer stays a fact about the
+    pair, parameterised by a property of the observer's body.
 
     The full derivation follows.
     """
+    lightless = "" if sense_needs_light(senses) else "lightless"
     return scene_memo(
-        scene, ("visual_level_between", str(observer), str(target)),
-        lambda: _visual_level_between(scene, observer, target))
+        scene,
+        ("visual_level_between", str(observer), str(target), lightless),
+        lambda: _visual_level_between(scene, observer, target, senses))
 
 
-def _visual_level_between(scene: dict, observer: str, target: str) -> str:
+def _visual_level_between(scene: dict, observer: str, target: str,
+                          senses=None) -> str:
     """Graded sight from one BODY to another, accounting for local light.
 
     The room-level form cannot know that the target is standing in a torch's
@@ -838,6 +906,17 @@ def _visual_level_between(scene: dict, observer: str, target: str) -> str:
     # You see what is LIT, so the light that matters is the light on the thing
     # being looked at.
     level = _LIGHT_SIGHT.get(light_at(scene, target), "full")
+    # A87: DARKNESS IS A PROPERTY OF THE PLACE; WHO IT BLINDS IS A PROPERTY OF
+    # THE PERCEIVER. The two lines above have already answered the questions
+    # acuity does not reach -- a shut container, a wall with no line through
+    # it -- so the only `none` that can stand here is the one the LIGHT
+    # caused, and for a perceiver whose sight does not need light it lifts to
+    # what the barrier alone allowed. Every cap below still applies: a
+    # view-cone, an authored far edge and an opaque anchor take from
+    # night vision exactly what they take from eyes.
+    lightless = not sense_needs_light(senses)
+    if lightless and level == "none":
+        level = SIGHT_LEVELS[-1]
     # DIM IS A RENDERING FACT UP CLOSE, AN ADMISSION FACT AT RANGE (design
     # note 18). The light verdict used to apply FLAT -- distance could only
     # ever weaken it -- so two bodies in continuous contact in a dim room saw
@@ -863,7 +942,9 @@ def _visual_level_between(scene: dict, observer: str, target: str) -> str:
     # observer's cell, with the target beyond it, caps sight at shapes. The
     # same rule `sight_level` applies to `rel["glare"]`; only ever True where
     # the observer's room carries geometry and both bodies hold a cell.
-    if level != "none":
+    # Light that does not feed the sense cannot dazzle it (A87), so glare
+    # falls away for the same perceiver the dark does not blind.
+    if level != "none" and not lightless:
         from world.spatial_light_field import glare_between
         if glare_between(scene, observer, target):
             level = _weaker_sight(level, "shapes")
@@ -1538,13 +1619,55 @@ def _sense_channel(value) -> Optional[str]:
 def sense_entry(senses, channel) -> Optional[dict]:
     """The FIRST card entry for this engine channel (author order wins when a
     card lists a channel twice); None when the card says nothing about it --
-    which reads as ordinary, byte-identical to today."""
+    which reads as ordinary, byte-identical to today.
+
+    TWO PASSES, because a sense the engine does not model may still DELIVER on
+    a channel it does (A87). `_sense_channel` still answers None for a
+    fiction-invented word -- inventing a sense must cost nothing -- so an
+    entry says which engine channel it arrives on with `equivalent`:
+    `{"channel": "echolocation", "equivalent": "sight", "needs_light": false}`
+    IS that body's sight. A directly named channel wins over an equivalent
+    one, so a card that authors both keeps the sight it wrote as sight.
+    """
     if not isinstance(senses, list):
         return None
+    equivalent = None
     for sense in senses:
-        if isinstance(sense, dict) and _sense_channel(sense.get("channel")) == channel:
+        if not isinstance(sense, dict):
+            continue
+        if _sense_channel(sense.get("channel")) == channel:
             return sense
-    return None
+        if equivalent is None \
+                and _sense_channel(sense.get("equivalent")) == channel:
+            equivalent = sense
+    return equivalent
+
+
+def sense_needs_light(senses, channel: str = "sight") -> bool:
+    """Does this perceiver's sight depend on the light in the room (A87)?
+
+    True for every card written before the field existed, and for every card
+    that does not say otherwise -- so an absent, empty or unparseable
+    `needs_light` is byte-identical to today. Only a card that states it does
+    NOT need light gets the lift, which is the safe direction for a field a
+    generator might write as a word: a malformed one reads as ordinary eyes,
+    never as night vision nobody authored.
+    """
+    entry = sense_entry(senses, channel)
+    if not isinstance(entry, dict) or "needs_light" not in entry:
+        return True
+    value = entry.get("needs_light")
+    if isinstance(value, bool):
+        return value
+    # A BOOLEAN THAT ARRIVED AS TEXT, and nothing else. `authored_bool` reads
+    # the words a human writes for false, so a hand-written or generated
+    # "false" behaves as written; every other shape -- an empty string, a
+    # number, a container -- reads as ordinary eyes rather than falling
+    # through Python's truthiness into night vision nobody authored.
+    if not isinstance(value, str) or not value.strip():
+        return True
+    from story.character_schema import authored_bool
+    return authored_bool(value, default=True)
 
 
 def sense_acuity_offset(senses, channel) -> Optional[int]:
@@ -1588,7 +1711,8 @@ def sense_range_class(senses, channel) -> str:
     return "ordinary"
 
 
-def sense_adjusted(level: str, channel: str, senses) -> str:
+def sense_adjusted(level: str, channel: str, senses, *,
+                   blocked_by: str = "") -> str:
     """THE senses gate (G4): shift a channel grade by the perceiver's card
     acuity. Ordinary (offset 0), an unlisted channel, or senses=None return
     the level UNCHANGED -- byte-identical behaviour for every existing card.
@@ -1600,17 +1724,42 @@ def sense_adjusted(level: str, channel: str, senses) -> str:
     on a card -- is semantically capped: a shift never mints content the
     channel did not carry. From `none`, hearing rescues at most `trace`
     (detected, direction at best, no words, no identity) and ONLY at
-    extraordinary (+2); sight and scent never leave `none` (a sight line or
-    an airtight seal is not something acuity penetrates, and `none` cannot
-    say which it was). Above `none`, the shift upgrades clarity of content
-    already flowing (fragment->full is an ear pressed to the door), which is
-    the ladder semantics the card promises.
+    extraordinary (+2); sight and scent never leave `none` on acuity alone (a
+    sight line or an airtight seal is not something acuity penetrates). Above
+    `none`, the shift upgrades clarity of content already flowing
+    (fragment->full is an ear pressed to the door), which is the ladder
+    semantics the card promises.
+
+    `blocked_by` is `sight_block`'s answer, and it is what makes the sentence
+    above true only where it is true (A87). `none` used to be one word for
+    three refusals and could not say which it was; now it can. What the LIGHT
+    did -- a `none` the dark caused, a `shapes` a glare in the eyes capped to
+    -- comes off for a perceiver whose sight does not need light: the dark
+    lifts to what the barrier alone allowed, and the glare cap is simply not
+    spent, because light that does not feed a sense can neither fail it nor
+    dazzle it. What a BODY or a BOUNDARY did (`concealed`, `barrier`) never
+    lifts. Absent -- every caller that does not know the cause -- nothing
+    lifts, exactly as before. Acuity is applied AFTER the lift, so an
+    authored-blind card is still blind in the dark and a dulled night-eye
+    still sees less than a keen one.
+
+    A caller passing `blocked_by='glare'` passes the level the LIGHT alone
+    allowed (`sight_verdict`, not `sight_level`); this is the reader that
+    spends the cap, and it spends it for every perceiver whose sight the
+    light feeds -- senses=None and an ordinary card included, which is why
+    the cap is applied before every early return below.
     """
+    lightless = channel == "sight" and blocked_by in ("dark", "glare") \
+        and not sense_needs_light(senses)
+    if channel == "sight" and not lightless:
+        level = _dazzled(level, blocked_by)
     if senses is None:
         return level
     ladder = _SENSE_LADDERS.get(channel)
     if ladder is None or level not in ladder:
         return level
+    if lightless and blocked_by == "dark" and level == ladder[0]:
+        level = ladder[-1]
     offset = sense_acuity_offset(senses, channel)
     if offset is None:
         return ladder[0]

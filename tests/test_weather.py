@@ -37,25 +37,33 @@ def _scene(weather=None, rooms=None):
 
 # --- vocabulary ------------------------------------------------------------
 
-def test_unknown_terms_never_reach_the_scene():
-    """Model output lands here, and an unrecognised sky would travel on into a
-    cache key, an image prompt and a sound query as a word nothing can act
-    on."""
+def test_an_unreadable_axis_never_reaches_the_scene():
+    """Half of this record is a whitelist and half of it is not (A88).
+
+    The AXES are what the engine acts on, so a word it cannot act on must not
+    travel into a cache key, an image prompt and a sound query. The NAMES are
+    the story's and are matched against nothing: a sky called "apocalyptic"
+    and a fall of frogs arrive exactly as written, and what the engine does
+    not know about the frogs it declines to assert rather than guessing.
+    """
     out = normalize_weather({"sky": "apocalyptic", "precipitation": "frogs",
                              "wind": "unquiet", "temperature": "spicy"})
-    assert out["sky"] == "fair"
-    assert out["precipitation"] == "none"
+    assert out["sky"] == "apocalyptic"
+    assert out["precipitation"] == "frogs"
+    assert out["precipitation_kind"] == "other"
     assert out["wind"] == "still"
     assert out["temperature"] == "mild"
-    # And with a sky to keep, an unreadable word keeps it rather than clearing
-    # it: a term this vocabulary cannot read is not evidence of fair weather.
-    storm = {"sky": "storm", "precipitation": "rain", "intensity": "heavy",
-             "wind": "gale", "temperature": "cold"}
+    # And with a sky to keep, an unreadable AXIS keeps what was there rather
+    # than clearing it: a term this engine cannot read is not evidence of fair
+    # weather.
+    storm = normalize_weather(
+        {"sky": "storm", "precipitation": "rain", "intensity": "heavy",
+         "wind": "gale", "temperature": "cold"})
     # `drift_step` rides along on every write-over: a beat writing a sky over
     # one the scene already had is a declaration, and a declaration starts its
     # own drift window (PD7, below).
     assert normalize_weather({"sky": "apocalyptic"}, storm) == \
-        dict(storm, thundersnow=False, drift_step=DECLARED_STEP)
+        dict(storm, sky="apocalyptic", drift_step=DECLARED_STEP)
 
 
 def test_a_bare_string_is_accepted():
@@ -290,20 +298,39 @@ def test_drift_stays_inside_the_vocabulary():
         assert weather == normalize_weather(weather)
 
 
-def test_freezing_turns_rain_to_snow():
-    """The one place temperature changes what falls rather than how it feels.
+def test_the_drift_never_puts_a_fall_in_a_sky_that_had_none():
+    """A88, and the whole of it. The drift used to read `_SKY_FALL[sky]` and
+    roll ("rain", "heavy") over a storm -- which is how a sandstorm rained,
+    and how a story that had declared a dry sky got weather it never wrote.
 
-    Off the record's own `temperature` and nothing else: the `cold=` argument
-    this used to pass was the same question asked twice, and its one
-    production caller computed it from this very field (review 2026-09-07
-    A88)."""
-    seen = set()
+    Measured over both bench copies (24 stored weather records, four drift
+    windows each): the old table invented a fall over a dry sky in 13 of 96
+    windows and replaced the story's own declared fall with a different one in
+    29 more. The new drift moves intensity and never a name.
+    """
     for hour in range(1, 40):
         out = advance_weather({"sky": "storm", "temperature": "freezing"},
                               hour * 3600, seed="chat:9")
-        seen.add(out["precipitation"])
-    assert "rain" not in seen
-    assert seen & {"snow", "sleet"}
+        assert out["precipitation"] == "none", out
+        assert out["intensity"] == "none", out
+
+
+def test_temperature_reaches_the_floor_rather_than_renaming_the_fall():
+    """What freezing does to falling water is a FOOTING fact, not a rename.
+
+    The drift used to swap the word "rain" for the word "snow" at freezing --
+    the engine rewriting the story's own noun. The consequence that actually
+    mattered survives on the axis: liquid landing on a freezing yard lays ice.
+    """
+    from world.weather import ground_kind
+    icy = {"sky": "overcast", "precipitation": "rain", "intensity": "moderate",
+           "temperature": "freezing"}
+    assert ground_kind(icy) == "ice"
+    assert ground_kind(dict(icy, temperature="mild")) == "wet"
+    # ...and the name is still the story's on the far side of the drift.
+    after = advance_weather(icy, 3600, seed="chat:9")
+    assert after["precipitation"] == "rain"
+    assert after["precipitation_kind"] == "liquid"
 
 
 # --- what the presentation features see ------------------------------------
@@ -590,7 +617,7 @@ class TestGroundState:
             state = ground_after(state, weather_for_room(scene, "yard"), "seasonal")
             seen.append(state["state"])
         assert seen[0] == "a dusting of snow"
-        assert seen[-1] == "snowdrifts"
+        assert seen[-1] == "drifts of snow"
         assert not any("mud" in s for s in seen)
 
     def test_freezing_rain_lays_ice_not_water(self):
@@ -667,87 +694,79 @@ class TestABlizzardIsNotAThunderstorm:
     temperature: freezing}` and the screen flashed with lightning, because
     everything downstream read "storm" as "electrical storm".
 
-    Thundersnow is real. It is also rare enough that having it every time a
-    blizzard blows is worse than never having it -- a reader watching bolts
-    play over a whiteout is being told something false about the weather they
-    are standing in.
+    The answer was three Earth nouns deciding whether a sky flashes -- the
+    word "storm", crossed with the words "snow" and "sleet", plus a
+    `thundersnow` flag bolted on for the case that crossing got wrong. Since
+    A88 it is ONE axis, `electrical`, and the three nouns are read only to
+    recover it for a record written before it existed. These pin both halves:
+    every stored blizzard still does not flash, and a sky that flashes is one
+    the story said flashes -- whatever the story calls it.
     """
 
     BLIZZARD = {"sky": "storm", "precipitation": "snow", "intensity": "heavy",
                 "wind": "gale", "temperature": "freezing"}
 
-    def test_the_blizzard_does_not_flash(self):
-        from world.weather import has_lightning
-        assert not has_lightning(self.BLIZZARD)
+    def test_the_stored_blizzard_still_does_not_flash(self):
+        from world.weather import has_lightning, normalize_weather
+        assert not has_lightning(normalize_weather(self.BLIZZARD))
 
-    def test_but_thundersnow_does(self):
-        """Rare, not forbidden. Derived from the precipitation, every blizzard
-        flashes; forbidden outright, none ever can -- so it is a property of
-        the sky, rolled by the drift or declared by a beat."""
+    def test_the_stored_thundersnow_flag_still_does(self):
+        """A record on disk carrying the flag reads as electrical, once, at
+        read -- so a story mid-blizzard keeps its lightning across the
+        change."""
         from world.weather import has_lightning, normalize_weather
         lit = normalize_weather(dict(self.BLIZZARD, thundersnow=True))
-        assert lit["thundersnow"] is True
+        assert lit["electrical"] is True
         assert has_lightning(lit)
 
-    def test_the_flag_only_survives_where_it_means_something(self):
-        """On a rainstorm it is redundant, on a clear sky meaningless -- and
-        left to linger it would keep lightning over a sky that stopped
-        snowing."""
-        from world.weather import normalize_weather
-        for sky, falling in (("storm", "rain"), ("clear", "none"),
-                             ("overcast", "rain")):
-            out = normalize_weather(
-                {"sky": sky, "precipitation": falling, "thundersnow": True})
-            assert out["thundersnow"] is False, (sky, falling)
+    def test_the_axis_outranks_every_name(self):
+        """The class the three nouns could not state: a sky flashes because
+        the story said it does. A fall of ash under a lightning-throwing sky
+        is a thing a fiction may have, and no fall forbids it."""
+        from world.weather import has_lightning, normalize_weather
+        ashfall = normalize_weather(
+            {"sky": "an ash-choked pall", "precipitation": "ashfall",
+             "precipitation_kind": "particulate", "intensity": "heavy",
+             "electrical": True})
+        assert has_lightning(ashfall)
+        assert ashfall["precipitation"] == "ashfall"
+        # ...and a sky named "storm" that the story says is quiet, is quiet.
+        quiet = normalize_weather(dict(self.BLIZZARD, precipitation="rain",
+                                       electrical=False))
+        assert not has_lightning(quiet)
 
     def test_thundersnow_is_heard_as_well_as_seen(self):
-        from world.weather import weather_words
-        scoped = dict(self.BLIZZARD, thundersnow=True, exposure="open",
-                      audible=True, falls_on_you=True, weather_visible=True)
+        from world.weather import normalize_weather, weather_words
+        scoped = dict(normalize_weather(dict(self.BLIZZARD, thundersnow=True)),
+                      exposure="open", audible=True, falls_on_you=True,
+                      weather_visible=True)
         assert "thunder" in weather_words(scoped, channel="sound")
 
-    def test_the_drift_makes_it_rare_and_repeatable(self):
-        """Seeded like every other drift: a reroll cannot conjure it and a
-        replay cannot lose it."""
-        from world.weather import advance_weather, DRIFT_SECONDS, THUNDERSNOW_ODDS
-        lit = [step for step in range(1, 91)
-               if advance_weather(self.BLIZZARD, DRIFT_SECONDS * step,
-                                  seed="blizzard:46").get("thundersnow")]
-        # Rare enough to stay an event, common enough to be worth building.
-        assert 0 < len(lit) < 90 // (THUNDERSNOW_ODDS - 4)
-        again = [step for step in range(1, 91)
-                 if advance_weather(self.BLIZZARD, DRIFT_SECONDS * step,
-                                    seed="blizzard:46").get("thundersnow")]
-        assert lit == again
-        # A different story gets a different storm.
-        other = [step for step in range(1, 91)
-                 if advance_weather(self.BLIZZARD, DRIFT_SECONDS * step,
-                                    seed="elsewhere:1").get("thundersnow")]
-        assert other != lit
-
-    def test_a_rainstorm_is_never_marked_thundersnow_by_the_drift(self):
-        from world.weather import advance_weather, DRIFT_SECONDS
-        rainy = dict(self.BLIZZARD, precipitation="rain", temperature="cool")
+    def test_the_drift_neither_conjures_the_lightning_nor_puts_it_out(self):
+        """It used to roll one snowing storm in nine electrical. That is the
+        same class of invention as rolling rain out of a sandstorm: whether a
+        sky throws light is the story's to say, and the drift now carries the
+        axis untouched in both directions."""
+        from world.weather import advance_weather, DRIFT_SECONDS, normalize_weather
+        dark = normalize_weather(self.BLIZZARD)
+        lit = normalize_weather(dict(self.BLIZZARD, thundersnow=True))
         for step in range(1, 40):
-            after = advance_weather(rainy, DRIFT_SECONDS * step, seed="s")
-            if after["precipitation"] not in ("snow", "sleet"):
-                assert not after["thundersnow"], after
+            assert not advance_weather(dark, DRIFT_SECONDS * step,
+                                       seed="blizzard:46")["electrical"]
+            assert advance_weather(lit, DRIFT_SECONDS * step,
+                                   seed="blizzard:46")["electrical"]
 
-    def test_sleet_does_not_either(self):
-        from world.weather import has_lightning
-        assert not has_lightning(dict(self.BLIZZARD, precipitation="sleet"))
-
-    def test_rain_and_hail_still_do(self):
-        """Hail comes out of exactly the convective storms that throw
-        lightning, so it is deliberately not on the unlit list."""
-        from world.weather import has_lightning
+    def test_a_stored_rainstorm_still_flashes(self):
+        from world.weather import has_lightning, normalize_weather
         for falling in ("rain", "hail", "none"):
-            assert has_lightning(dict(self.BLIZZARD, precipitation=falling)), falling
+            assert has_lightning(normalize_weather(
+                dict(self.BLIZZARD, precipitation=falling))), falling
 
-    def test_a_sky_that_is_not_a_storm_never_does(self):
-        from world.weather import has_lightning
+    def test_a_stored_sky_that_is_not_a_storm_never_does(self):
+        from world.weather import has_lightning, normalize_weather
         for sky in ("clear", "fair", "overcast", "fog"):
-            assert not has_lightning({"sky": sky, "precipitation": "rain"})
+            assert not has_lightning(normalize_weather(
+                {"sky": sky, "precipitation": "rain"}))
 
     def test_junk_is_not_a_storm(self):
         from world.weather import has_lightning
@@ -757,21 +776,24 @@ class TestABlizzardIsNotAThunderstorm:
     def test_nobody_hears_thunder_in_a_blizzard(self):
         """The audible half of the same mistake: `weather_words` put "thunder"
         into the sound of any storm sky, through walls and into cellars."""
-        from world.weather import weather_words
-        scoped = dict(self.BLIZZARD, exposure="open", audible=True,
-                      falls_on_you=True, weather_visible=True)
+        from world.weather import normalize_weather, weather_words
+        scoped = dict(normalize_weather(self.BLIZZARD), exposure="open",
+                      audible=True, falls_on_you=True, weather_visible=True)
         assert "thunder" not in weather_words(scoped, channel="sound")
-        raining = dict(scoped, precipitation="rain")
+        raining = dict(normalize_weather(
+            dict(self.BLIZZARD, precipitation="rain")), exposure="open",
+            audible=True, falls_on_you=True, weather_visible=True)
         assert "thunder" in weather_words(raining, channel="sound")
 
     def test_a_freezing_sky_keeps_snowing_as_it_drifts(self):
         """The lightning was the bug; this is the thing next to it that was
-        already right, pinned so it stays that way. Storm's own precipitation
-        table offers rain and hail, and only the freezing conversion keeps a
-        blizzard from turning into a downpour an hour in."""
+        already right, pinned so it stays that way. It used to survive only
+        because a freezing conversion caught what `_SKY_FALL["storm"]` rolled;
+        it now survives because nothing rolls a fall at all."""
         from world.weather import advance_weather
         after = advance_weather(self.BLIZZARD, 60 * 60 * 6, seed="blizzard:1")
-        assert after["precipitation"] in ("snow", "sleet", "none")
+        assert after["precipitation"] == "snow"
+        assert after["precipitation_kind"] == "frozen"
         assert after["temperature"] == "freezing"
 
 
@@ -795,28 +817,39 @@ class TestTheDirectorWritesTheVividWord:
 
     DECLARED = {"sky": "blizzard", "precipitation": "heavy snow",
                 "intensity": "severe", "wind": "gale-force",
-                "temperature": "sub-zero", "thundersnow": False}
+                "temperature": "sub-zero"}
     BLOWING = {"sky": "storm", "precipitation": "snow", "intensity": "heavy",
                "wind": "gale", "temperature": "freezing"}
 
     def test_the_blizzard_survives_being_described(self):
+        """And since A88 it survives BY ITS OWN NAME. The axes are read off
+        the words the model reached for; the words themselves stand."""
         from world.weather import normalize_weather
-        assert normalize_weather(self.DECLARED) == \
-            dict(self.BLOWING, thundersnow=False)
+        out = normalize_weather(self.DECLARED)
+        assert out["sky"] == "blizzard"
+        assert out["precipitation"] == "heavy snow"
+        assert out["precipitation_kind"] == "frozen"
+        assert out["cloud"] == "covered"
+        assert out["intensity"] == "heavy"
+        assert out["wind"] == "gale"
+        assert out["temperature"] == "freezing"
 
     def test_and_survives_being_written_over_itself(self):
         from world.weather import normalize_weather
-        assert normalize_weather(self.DECLARED, self.BLOWING) == \
-            dict(self.BLOWING, thundersnow=False, drift_step=DECLARED_STEP)
+        blowing = normalize_weather(self.BLOWING)
+        out = normalize_weather(self.DECLARED, blowing)
+        assert out == dict(blowing, sky="blizzard",
+                           precipitation="heavy snow",
+                           drift_step=DECLARED_STEP)
 
     def test_a_declaration_is_a_report_not_a_restatement(self):
         """A beat that noticed the wind rise says so and says nothing else.
         Replacing the sky wholesale made every partial report a forecast."""
         from world.weather import normalize_weather
+        blowing = normalize_weather(self.BLOWING)
         risen = normalize_weather({"wind": "gale"},
-                                  dict(self.BLOWING, wind="breeze"))
-        assert risen == dict(self.BLOWING, thundersnow=False,
-                             drift_step=DECLARED_STEP)
+                                  dict(blowing, wind="breeze"))
+        assert risen == dict(blowing, drift_step=DECLARED_STEP)
 
     def test_the_storm_can_still_actually_end(self):
         """The point is not that weather never clears -- it is that clearing
@@ -840,12 +873,16 @@ class TestTheDirectorWritesTheVividWord:
         assert normalize_weather({"wind": "gale-force wind"})["wind"] == "gale"
         both = normalize_weather({"precipitation": "heavy snow",
                                   "intensity": "heavy snow"})
-        assert both["precipitation"] == "snow" and both["intensity"] == "heavy"
+        # The name keeps the whole phrase the model wrote; only the axes are
+        # read out of it.
+        assert both["precipitation"] == "heavy snow"
+        assert both["precipitation_kind"] == "frozen"
+        assert both["intensity"] == "heavy"
 
     def test_a_beat_reporting_the_wind_does_not_put_the_lightning_out(self):
         from world.weather import normalize_weather
-        lit = dict(self.BLOWING, thundersnow=True)
-        assert normalize_weather({"wind": "gale"}, lit)["thundersnow"] is True
+        lit = normalize_weather(dict(self.BLOWING, thundersnow=True))
+        assert normalize_weather({"wind": "gale"}, lit)["electrical"] is True
 
 
 def test_the_renderer_mirrors_the_lightning_rule():
@@ -856,11 +893,14 @@ def test_the_renderer_mirrors_the_lightning_rule():
     source = (Path(__file__).resolve().parents[1]
               / "static/js/weather-fx.js").read_text(encoding="utf-8")
     assert "function weatherFxStormy(" in source
-    assert 'weather.precipitation === "snow"' in source
-    assert 'weather.precipitation === "sleet"' in source
+    # ONE AXIS since A88, read here exactly as `has_lightning` reads it.
+    assert "weather.electrical" in source
     # ...and the scheduler re-checks it on every flash, not only on the first.
     assert source.count("weatherFxStormy(") >= 3
-    # ...and it honours the flag rather than banning snow outright.
+    # ...and the pre-axis reading survives for a payload that predates the
+    # field: a cached turn, or a browser holding an older page.
+    assert 'weather.precipitation === "snow"' in source
+    assert 'weather.precipitation === "sleet"' in source
     assert "weather.thundersnow" in source
 
 

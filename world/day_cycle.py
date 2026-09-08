@@ -74,9 +74,11 @@ SUN_LIGHT = {
     "dusk": "dim", "evening": "dark",
 }
 
-#: Skies that take one step off the daylight. Fog and cloud dim a lit room
-#: to dim and never further -- a foggy dusk is not pitch black, and the
-#: darkness a storm brings is the storm's own declaration to make.
+#: What the three dimming AXIS states meant when they were five sky words.
+#: Read only for a record written before `cloud`/`air` existed, or by a caller
+#: holding the name alone. Cloud and fog dim a lit room to dim and never
+#: further -- a foggy dusk is not pitch black, and the darkness a storm brings
+#: is the storm's own declaration to make.
 DIMMING_SKIES = frozenset({"overcast", "storm", "fog"})
 
 #: The phases a charter body spends in its berth rather than on an errand
@@ -185,9 +187,30 @@ def phase_bounds_hours(phase, day_length=DAY_LENGTH_HOURS_DEFAULT):
 
 
 def sun_light(phase, sky=None) -> str:
-    """What an outdoor room has to see by, from the sky alone."""
+    """What an outdoor room has to see by, from the sky alone.
+
+    `sky` is the scene's whole weather record, or -- for a caller that has
+    only the word -- the sky's name. WHAT DIMS A DAY IS AN AXIS (review
+    2026-09-07 A88): a sky that shuts the day's own light out, or air you
+    cannot see through. `DIMMING_SKIES` below is what those axes mean for the
+    five names this engine used to be, and reading the name is now the
+    fallback rather than the rule -- so a story under an ash-choked pall gets
+    the dim its `cloud` states, where the word list gave it broad daylight.
+    """
     level = SUN_LIGHT.get(str(phase or ""), "lit")
-    if level == "lit" and str(sky or "").strip().casefold() in DIMMING_SKIES:
+    if level != "lit":
+        return level
+    if isinstance(sky, dict):
+        dims = (str(sky.get("cloud") or "") == "covered"
+                or str(sky.get("air") or "clear") != "clear")
+        if dims:
+            return "dim"
+        # A record predating the axes carries neither; fall through to the
+        # name it does carry.
+        if sky.get("cloud") or sky.get("air"):
+            return level
+        sky = sky.get("sky")
+    if str(sky or "").strip().casefold() in DIMMING_SKIES:
         return "dim"
     return level
 

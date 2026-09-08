@@ -480,9 +480,12 @@ def test_the_prose_author_can_see_the_sky_it_owns(temp_db, monkeypatch):
 
     The sheet (prose_author_sheet/08.txt) asks for an edit ONLY when the beat
     changes the sky and says the engine drifts it in between, so the hand
-    needs the standing value to answer either half -- and `thundersnow` is a
-    flag the drift sets by itself which the same chunk forbids narrating
-    lightning over snow without.
+    needs the standing value to answer either half -- and whether a flash and
+    a clap reach a room is the `electrical` axis, which the same chunk says
+    is the only thing that decides it (A88, review 2026-09-07). The stored
+    record below is a pre-axis one, carrying the retired `thundersnow` flag;
+    the payload hands the scene's own weather through untouched, which is
+    exactly what a story written before the axes needs it to do.
     """
     scene, payloads = _resolve_payloads(temp_db, monkeypatch)
     view = payloads["director_resolve"]["scene"]
@@ -499,10 +502,17 @@ def test_an_undeclared_sky_costs_two_characters(temp_db, monkeypatch):
     """The cost, and why it is bounded rather than proportional.
 
     `overlays` cost 449 chars on chat 111 and 2 on a scene with no marks:
-    proportional to what the scene holds. Weather cannot grow -- the
-    vocabulary is closed (`world/weather.py`) and the shape fixed -- so the
-    whole cost, forever, is `{}` before any sky is declared and 120-139
-    characters after, against 4,187-8,463 for `attire` on the same scenes.
+    proportional to what the scene holds. Weather cannot grow with the scene
+    -- the axis shape is fixed at ten keys (`world/weather.py`) and the only
+    free text in it is the two authored names, each bounded by `NAME_LIMIT`
+    (60) -- so the whole cost is `{}` before any sky is declared, 185-206
+    characters across the 5x6x4x4x5 cross product of this engine's own sky
+    and fall words with intensity, wind and temperature (measured 2026-09-08
+    over `normalize_weather`), and 316 at the ceiling with both names
+    authored at full length -- 342 once `drift_step` is stamped, which every
+    live record carries after the first declaration -- against 4,187-8,463
+    for `attire` on the
+    same scenes. The record this test measures is a shorter pre-axis one.
     """
     bare = json.loads(json.dumps(RICH_SCENE))
     bare.pop("weather")

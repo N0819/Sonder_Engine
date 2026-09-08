@@ -50,6 +50,7 @@ from .charter_figure import figure_claim
 from .charter_mark import advance_marks
 from .charter_mind import hear_claim
 from .charter_model import normalize_charter
+from .charter_needs import bears_on_duty, worst_need
 from .charter_politics import (NEUTRAL_REGARD, normalize_politics,
                                regard_map, regard_value)
 from .charter_practice import (
@@ -373,12 +374,17 @@ def _figure_act(actor, act, other, figures, bodies, state, practices, minds,
         return {"actor": actor, "act": act, "other": other,
                 "line": f"{actor} accused {other}"}
 
-    # act == "tend"
+    # act == "tend" -- the authored twin of `charter_practice._afford_tend`,
+    # and it services the need that put the body down for the same reason
+    # (`charter_needs.worst_need`; D18 skeptic, 2026-09-08). Two sites, one
+    # selector: a rule spelled out at each door is a rule that gets missed
+    # at the next one.
     held = (needs or {}).get(other) or {}
     if not held:
         return _refusal(actor, act, other, REFUSED_OUTSIDE_LICENCE)
-    worst = min(held.values(),
-                key=lambda n: float(n["level"]) - float(n["floor"]))
+    worst = worst_need(held)
+    if worst is None:
+        return _refusal(actor, act, other, REFUSED_OUTSIDE_LICENCE)
     if float(worst["floor"]) - float(worst["level"]) <= 0.0:
         return _refusal(actor, act, other, REFUSED_OUTSIDE_LICENCE)
     worst["level"] = min(1.0, float(worst["level"]) + 0.05)
@@ -439,9 +445,16 @@ def _disposed(state, needs, commitments, other, actor):
     `FAVOUR_REGARD_FLOOR` (it thinks less of them), or an undertaking the
     asker already owes it and has not made good (settle that first).
     Returns ``(willing, reason)``.
+
+    "PRESSED" IS THE SAME QUESTION `able` ASKS, so it reads the same needs
+    (`charter_needs.bears_on_duty`; D18 skeptic, 2026-09-08). A need the
+    institution may not stand a body down for may not excuse it from a
+    favour either -- and the direction would be wrong anyway: a body short
+    of people is not less disposed to do something with somebody.
     """
     held = (needs or {}).get(other) or {}
-    if any(float(n["level"]) < float(n["floor"]) for n in held.values()):
+    if any(float(n["level"]) < float(n["floor"])
+           for n in held.values() if bears_on_duty(n)):
         return False, "pressed"
     if regard_value(state["regard"], other, actor) < FAVOUR_REGARD_FLOOR:
         return False, "regard"

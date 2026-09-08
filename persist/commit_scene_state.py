@@ -335,7 +335,8 @@ def _advance_ground(cid, sc):
     has turned to mud sounds and looks like one.
     """
     from story.scene import weather_severity
-    from world.weather import ground_after, room_exposure, weather_for_room
+    from world.weather import (ground_after, is_falling, normalize_weather,
+                               room_exposure, weather_for_room)
 
     if not isinstance(sc, dict):
         return
@@ -344,8 +345,10 @@ def _advance_ground(cid, sc):
         return
     previous = sc.get("ground") if isinstance(sc.get("ground"), dict) else {}
     weather = sc.get("weather") if isinstance(sc.get("weather"), dict) else {}
-    if not previous and str(weather.get("precipitation") or "none") \
-            .strip().casefold() in ("", "none"):
+    # `is_falling` rather than the precipitation name (A88): a sky keeps the
+    # name of what it drops through a dry spell, so the name alone no longer
+    # answers "is anything coming down".
+    if not previous and not is_falling(normalize_weather(weather)):
         # Nothing has fallen and nothing is on any floor: every room's
         # answer is {} and the per-room exposure walk (a BFS over the graph
         # per room) would only prove it. The common case on most beats.

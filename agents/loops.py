@@ -232,7 +232,7 @@ def _micro_seen_bodies(scene, observer_name, senses=None):
         subject = str(subject or "").strip()
         if not subject or subject == str(observer_name or "").strip():
             continue
-        level = visual_level_between(scene, observer_name, subject)
+        level = visual_level_between(scene, observer_name, subject, senses)
         if sense_adjusted(level, "sight", senses) != "none":
             seen.add(subject)
     return seen

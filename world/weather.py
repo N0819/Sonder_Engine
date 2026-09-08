@@ -7,7 +7,17 @@ meant it could not change without a description being rewritten, could not
 differ between morning and midnight, and could not agree between two rooms
 standing under the same sky.
 
-Three rules shape what is here.
+Four rules shape what is here.
+
+**0. The engine owns what weather DOES; the story owns what it is called.**
+Review 2026-09-07 A88. This module used to be a closed Earth vocabulary --
+five skies crossed with five falls -- and a sandstorm, an ashfall and a rain
+of blood all normalised to `sky: storm` with the particulate lost, after which
+the drift put ordinary rain in the middle of them once an in-story hour. What
+is closed now is the set of things weather DOES to a body and a room (see
+`AIRS`/`CLOUDS`/`FALL_KINDS` below), which this engine defines and can
+enumerate; the sky's name and the fall's name are authored text nothing
+matches against a list. Everything downstream reads the axis.
 
 **1. Weather is a property of the SCENE, exposure is a property of the ROOM.**
 There is one sky. A cellar, a courtyard and a rooftop under it are not having
@@ -57,26 +67,110 @@ from __future__ import annotations
 import hashlib
 import re
 
-# --- vocabulary ------------------------------------------------------------
+# --- what weather IS, and what weather DOES --------------------------------
 #
-# Small and closed on purpose. These strings reach an image prompt, a sound
-# search and (later) a particle overlay, all of which want a term they can act
-# on rather than a sentence; and a closed set is what lets the drift below be a
-# table instead of a paragraph of prose parsing.
+# Two halves, and the split between them is the whole of review 2026-09-07
+# A88.
+#
+# THE NAME IS THE STORY'S. "rain", "ashfall", "spore drift", "a slow fall of
+# blood" -- authored free text, never matched against a list. This module used
+# to hold a closed Earth vocabulary here instead (clear|fair|overcast|fog|storm
+# crossed with drizzle|rain|snow|sleet|hail) and it failed twice over: a
+# sandstorm and an ashfall both normalised to `sky: storm` with the
+# particulate LOST, and the drift then read `_SKY_FALL["storm"]` and put rain
+# in the middle of them.
+#
+# THE AXES ARE THE ENGINE'S, and they are what weather DOES to a body and to a
+# room. Each is a small set this engine defines and can enumerate, which is a
+# schema rather than a guess at how English will phrase something:
+#
+#   air          how much the air between two things blocks sight
+#   cloud        how much of the day's own light the sky shuts out
+#   electrical   whether the sky throws light and sound of its own
+#   fall kind    what the falling stuff DOES on arrival: wets, piles, dusts
+#   intensity    how much of it -- which is also how far its sound carries
+#   wind         how much the air moves
+#   temperature  what it costs a body to stand in
+#
+# A story that invents a fall this engine has never heard of gives it a name
+# and says which of the four things it does; everything downstream -- footing,
+# wetness, sound carry, the overlay, the discomfort in `world/exposure.py` --
+# reads the AXIS and never the name. Nothing here has to be widened for a
+# fiction to have weather in it.
 
-SKIES = ("clear", "fair", "overcast", "fog", "storm")
-PRECIPITATION = ("none", "drizzle", "rain", "snow", "sleet", "hail")
+#: How much the air itself blocks a look through it.
+AIRS = ("clear", "hazy", "thick")
+#: How much of the day's own light the sky shuts out.
+CLOUDS = ("clear", "broken", "covered")
+#: What a fall does when it lands. `other` is the honest answer for a fall a
+#: story named without saying what it does: it arrives, it is seen and heard,
+#: and this engine asserts nothing about wetness or footing from it. There is
+#: no default of "liquid" -- guessing one is how a sandstorm rained.
+FALL_KINDS = ("none", "liquid", "frozen", "particulate", "other")
 INTENSITIES = ("none", "light", "moderate", "heavy")
 WINDS = ("still", "breeze", "wind", "gale")
 TEMPERATURES = ("freezing", "cold", "mild", "warm", "hot")
+
+#: How long an authored weather name may be. It reaches an image prompt, a
+#: sound query and a cache key, none of which want a paragraph; a name longer
+#: than this is TRUNCATED, never rejected, so a story never loses its weather
+#: to a length. Named per the house rule on caps.
+NAME_LIMIT = 60
 
 # How much of the sky a room is standing under.
 EXPOSURES = ("open", "sheltered", "enclosed")
 
 _DEFAULT = {
-    "sky": "fair", "precipitation": "none", "intensity": "none",
-    "wind": "still", "temperature": "mild",
+    "sky": "fair", "air": "clear", "cloud": "clear", "electrical": False,
+    "precipitation": "none", "precipitation_kind": "none",
+    "intensity": "none", "wind": "still", "temperature": "mild",
 }
+
+# --- reading what is already stored ----------------------------------------
+#
+# The five sky words and five fall words this engine used to be, mapped to
+# their axes ONCE, at read (the ruling's own wording). Every live story's
+# stored sky is one of these, so this is a MIGRATION TABLE and not a
+# vocabulary: nothing consults it to decide whether a weather is valid, and a
+# name it cannot read is a name, not an error.
+_LEGACY_SKY_AXES = {
+    #  sky word:  (air,     cloud,      electrical)
+    "clear":      ("clear",  "clear",   False),
+    "fair":       ("clear",  "broken",  False),
+    "overcast":   ("clear",  "covered", False),
+    "fog":        ("thick",  "covered", False),
+    "storm":      ("clear",  "covered", True),
+}
+
+_LEGACY_FALL_KINDS = {
+    "drizzle": "liquid", "rain": "liquid",
+    "snow": "frozen", "sleet": "frozen", "hail": "frozen",
+}
+
+#: The two engine falls that used to make a storm sky silent. Hail is
+#: deliberately absent and always was -- it comes out of exactly the
+#: convective storms that do throw lightning -- which is why this is read off
+#: the folded NAME and not off `frozen`, the axis that covers all three.
+_LEGACY_UNLIT = ("snow", "sleet")
+
+#: The sight phrase the five engine sky words have always produced. Kept so a
+#: story running under a stored "fair" still reads "open sky" rather than
+#: "fair sky"; any other name takes the general form below.
+_LEGACY_SKY_PHRASE = {
+    "clear": "clear sky", "fair": "open sky", "overcast": "overcast sky",
+    "fog": "thick fog", "storm": "storm sky",
+}
+
+#: The name the engine gives a sky it is itself drifting, read off the axes.
+#: Applied ONLY to a sky still carrying one of the five engine words -- the
+#: drift moves the axes, and it renames the sky only when the name it holds is
+#: one the engine wrote. A story's own word is never rewritten.
+def _engine_sky_name(air, cloud, electrical):
+    if electrical:
+        return "storm"
+    if air in ("hazy", "thick"):
+        return "fog"
+    return {"clear": "clear", "broken": "fair", "covered": "overcast"}[cloud]
 
 # Words that mean a place is under the open sky, standing beneath something
 # that only half covers it, or indoors. Checked longest-list-first in that
@@ -122,21 +216,11 @@ _DEEP_WORDS = (
     "sub-basement", "subbasement", "underground", "deep below", "buried",
 )
 
-# Precipitation that means the storm is NOT an electrical one. A blizzard is a
-# storm sky full of snow, and it does not flash: thundersnow exists, but it is
-# rare enough that having it every time is worse than never having it, and a
-# reader watching lightning play over a whiteout is being told something false
-# about the weather they are standing in. Hail is deliberately absent -- hail
-# comes out of exactly the convective storms that do throw lightning.
-_UNLIT_PRECIPITATION = ("snow", "sleet")
-
-
-# The words a model writes for weather that are not the words this vocabulary
-# uses. Not a nicety: the closed vocabulary is five short enums, a Director
-# describing a storm reaches for the vivid word every time, and an exact-match
-# lookup answers every one of them with the DEFAULT -- which is the mildest
-# reading of each field. Live failure, "The Blizzard" turn 2. The Director
-# declared, correctly and in full:
+# The words a model writes for the CLOSED AXES that are not the axis words
+# themselves. Not a nicety: an exact-match lookup answers every one of them
+# with the DEFAULT -- which is the mildest reading of each field. Live
+# failure, "The Blizzard" turn 2. The Director declared, correctly and in
+# full:
 #
 #     {"sky": "blizzard", "precipitation": "heavy snow", "intensity": "severe",
 #      "wind": "gale-force", "temperature": "sub-zero"}
@@ -149,27 +233,13 @@ _UNLIT_PRECIPITATION = ("snow", "sleet")
 #
 # Substring matching (below) already catches "heavy snow" and "gale-force". This
 # table is for the ones with no vocabulary word inside them at all.
+#
+# NAMES ARE NO LONGER FOLDED THROUGH IT. Since A88 the sky and the fall carry
+# whatever the story called them, so "blizzard" stays "blizzard"; the sky and
+# precipitation halves moved to `_LEGACY_FOLD` below, where their only job is
+# to recognise a name this ENGINE once wrote so its axes can be derived. What
+# remains here is the three closed axes a model still writes in its own words.
 _SYNONYMS = {
-    "sky": {
-        "blizzard": "storm", "snowstorm": "storm", "thunderstorm": "storm",
-        "tempest": "storm", "squall": "storm", "gale": "storm",
-        "hurricane": "storm", "typhoon": "storm", "stormy": "storm",
-        "cloudy": "overcast", "clouded": "overcast", "grey": "overcast",
-        "gray": "overcast", "dull": "overcast", "leaden": "overcast",
-        "sunny": "clear", "bright": "clear", "cloudless": "clear",
-        "blue": "clear", "starry": "clear",
-        "misty": "fog", "mist": "fog", "haze": "fog", "hazy": "fog",
-        "foggy": "fog", "murk": "fog", "smog": "fog",
-        "mild": "fair", "calm": "fair", "settled": "fair",
-    },
-    "precipitation": {
-        "snowing": "snow", "flurries": "snow", "flurry": "snow",
-        "blizzard": "snow", "raining": "rain", "downpour": "rain",
-        "shower": "rain", "showers": "rain", "rainfall": "rain",
-        "drizzling": "drizzle", "misting": "drizzle", "spitting": "drizzle",
-        "sleeting": "sleet", "hailing": "hail", "dry": "none",
-        "clear": "none", "nothing": "none",
-    },
     "intensity": {
         "severe": "heavy", "extreme": "heavy", "torrential": "heavy",
         "violent": "heavy", "driving": "heavy", "hard": "heavy",
@@ -200,11 +270,39 @@ _SYNONYMS = {
     },
 }
 
+# The engine's own five-and-five, plus the English that reaches them. Read for
+# ONE purpose: a name whose axes were not declared, folded here to see whether
+# it is a sky or a fall this engine itself used to mint, so its axes can be
+# recovered. A name that folds to nothing keeps its axes from the record it is
+# written over, or takes `other` -- it is never discarded and never guessed at.
+_LEGACY_FOLD = {
+    "sky": {
+        "blizzard": "storm", "snowstorm": "storm", "thunderstorm": "storm",
+        "tempest": "storm", "squall": "storm", "gale": "storm",
+        "hurricane": "storm", "typhoon": "storm", "stormy": "storm",
+        "cloudy": "overcast", "clouded": "overcast", "grey": "overcast",
+        "gray": "overcast", "dull": "overcast", "leaden": "overcast",
+        "sunny": "clear", "bright": "clear", "cloudless": "clear",
+        "blue": "clear", "starry": "clear",
+        "misty": "fog", "mist": "fog", "haze": "fog", "hazy": "fog",
+        "foggy": "fog", "murk": "fog", "smog": "fog",
+        "mild": "fair", "calm": "fair", "settled": "fair",
+    },
+    "precipitation": {
+        "snowing": "snow", "flurries": "snow", "flurry": "snow",
+        "blizzard": "snow", "raining": "rain", "downpour": "rain",
+        "shower": "rain", "showers": "rain", "rainfall": "rain",
+        "drizzling": "drizzle", "misting": "drizzle", "spitting": "drizzle",
+        "sleeting": "sleet", "hailing": "hail", "dry": "none",
+        "clear": "none", "nothing": "none",
+    },
+}
+
 
 def _resolve(value, allowed, field=""):
-    """One model-written weather word as a vocabulary term, or None.
+    """One model-written word as a CLOSED AXIS value, or None.
 
-    Exact match, then the synonym table, then any vocabulary word CONTAINED in
+    Exact match, then the synonym table, then any axis word CONTAINED in
     the phrase -- "heavy snow" is snow, "gale-force winds" is a gale. Where more
     than one is contained, the EARLIEST in the phrase wins: "gale-force wind"
     names a gale and qualifies it with the noun, and taking the first match in
@@ -234,74 +332,193 @@ def _pick(value, allowed, fallback, field=""):
     return _resolve(value, allowed, field) or fallback
 
 
-def normalize_weather(value, base=None):
-    """A weather dict reduced to the closed vocabulary, or {} for nothing.
+def _name(value, limit=NAME_LIMIT):
+    """One authored weather name: whitespace folded, truncated, never mapped."""
+    return " ".join(str(value or "").split())[:limit].strip()
 
-    Model output reaches this, so it is a whitelist rather than a clean-up: an
-    unrecognised sky must not travel on into a cache key, an image prompt and a
-    sound query as a word nothing downstream can act on. A bare string
-    ("raining") is accepted too, because that is what a model hands you about a
-    third of the time.
+
+def _fold_legacy(value, field):
+    """The engine word a NAME folds to, or ''.
+
+    Read for one purpose only -- recovering AXES from a name this engine
+    itself once minted, or from the English a model writes for one. It never
+    replaces the name: since A88 a story's "blizzard" stays "blizzard" and
+    only its axes are read off the fold.
+    """
+    text = " ".join(str(value or "").split()).casefold()
+    if not text:
+        return ""
+    known = _LEGACY_SKY_AXES if field == "sky" else _LEGACY_FALL_KINDS
+    if text in known:
+        return text
+    table = _LEGACY_FOLD.get(field, {})
+    mapped = table.get(text)
+    if mapped:
+        return mapped
+    for word, mapped in table.items():
+        if re.search(r"\b%s\b" % re.escape(word), text):
+            return mapped
+    hits = [(text.index(term), term) for term in known if term in text]
+    return min(hits)[1] if hits else ""
+
+
+def _weather_from_prose(text):
+    """The fields a bare weather string states. What a model hands you about a
+    third of the time ("heavy rain, gale, cold")."""
+    text = str(text or "").casefold()
+    out = {}
+    for field, allowed in (("wind", WINDS), ("temperature", TEMPERATURES),
+                           ("intensity", INTENSITIES)):
+        found = _resolve(text, allowed, field)
+        if found:
+            out[field] = found
+    for field in ("sky", "precipitation"):
+        folded = _fold_legacy(text, field)
+        if folded:
+            out[field] = folded
+    return out
+
+
+def normalize_weather(value, base=None):
+    """A weather record as a NAME plus the axes it acts on, or {} for nothing.
+
+    Model output reaches this, so the AXES are a whitelist rather than a
+    clean-up: an unreadable axis word must not travel on into a cache key, an
+    image prompt and a sound query as a term nothing downstream can act on.
+    The NAMES are not filtered at all -- since review 2026-09-07 A88 the sky
+    and the fall carry whatever the story called them, and only their length
+    is bounded (`NAME_LIMIT`). A bare string is accepted too.
+
+    Where a name arrives with no axes, the axes are read off the name ONCE, by
+    `_fold_legacy` -- which is how every scene stored before A88, and every
+    Director still writing "storm", keeps behaving exactly as it did.
 
     `base` is the sky this value is being written OVER -- the weather the scene
-    already had. A field left out, or written in words outside the vocabulary,
+    already had. A field left out, or written in words outside the axis,
     keeps what was there rather than collapsing to the default, because the
-    default is the MILDEST reading of every field and a word this vocabulary
+    default is the MILDEST reading of every field and a word this engine
     cannot read is not evidence that the weather has cleared. Without a base a
     missing field still defaults, so a first declaration remains complete.
     See `_SYNONYMS` for the failure that made this necessary.
     """
     if isinstance(value, str):
-        text = value.casefold()
-        value = {}
-        for field, allowed in (("sky", SKIES), ("precipitation", PRECIPITATION),
-                               ("wind", WINDS), ("temperature", TEMPERATURES),
-                               ("intensity", INTENSITIES)):
-            # "raining"/"snowing" are the commonest forms and contain their
-            # noun; `_resolve` also reads the words that do not.
-            found = _resolve(text, allowed, field)
-            if found:
-                value[field] = found
+        value = _weather_from_prose(value)
     if not isinstance(value, dict) or not value:
         return {}
     base = base if isinstance(base, dict) else {}
 
-    def field(name, allowed, default):
+    def axis(name, allowed, default):
         return _pick(value.get(name), allowed,
                      _pick(base.get(name), allowed, default, name), name)
 
+    # --- the names, which are the story's ---------------------------------
+    sky = _name(value.get("sky")) or _name(base.get("sky")) or _DEFAULT["sky"]
+    fall = _name(value.get("precipitation")) or _name(base.get("precipitation"))
+
+    # --- what the fall DOES ------------------------------------------------
+    declared_kind = _resolve(value.get("precipitation_kind"), FALL_KINDS)
+    folded_fall = _fold_legacy(fall, "precipitation")
+    stated_fall = _name(value.get("precipitation"))
+    if declared_kind == "none" or _fold_legacy(
+            stated_fall or fall, "precipitation") == "none" \
+            or (fall or "none").casefold() in ("", "none"):
+        # Nothing is coming down. Both halves say so, so nothing downstream
+        # has to reconcile a name against a kind.
+        fall, kind = "none", "none"
+    elif declared_kind:
+        kind = declared_kind
+    elif folded_fall:
+        kind = _LEGACY_FALL_KINDS[folded_fall]
+    elif not stated_fall:
+        # The name was carried from the base; carry its kind with it.
+        kind = _resolve(base.get("precipitation_kind"), FALL_KINDS) or "other"
+    else:
+        # A fall this engine has never heard of, and the story did not say
+        # what it does. It falls, it is seen and it is heard; wetness and
+        # footing are simply not asserted. Guessing `liquid` here is the A88
+        # defect in one line.
+        kind = "other"
+    if kind != "none" and (fall or "none").casefold() in ("", "none"):
+        # A kind declared with no name at all. The axis word is the last
+        # resort, because the alternative is minting an Earth noun.
+        fall = kind
+
+    # --- how much of it, which is also how far its sound carries -----------
+    stated_intensity = _resolve(value.get("intensity"), INTENSITIES, "intensity")
+    if kind == "none":
+        intensity = "none"
+    elif stated_intensity is not None:
+        # Including an explicit "none": a sky that HAS a fall and is not
+        # dropping it right now. That is the state the drift moves through,
+        # and the only reason `intensity` rather than the name answers
+        # "is anything falling" (`is_falling`).
+        intensity = stated_intensity
+    else:
+        intensity = _resolve(base.get("intensity"), INTENSITIES, "intensity")
+        if intensity is None or intensity == "none":
+            # A fall named with no strength anywhere is a beat declaring that
+            # it is falling, not one declaring an amount of nothing.
+            intensity = "moderate"
+
+    # --- what the sky does, read off its name when it does not say ---------
+    #
+    # ORDER, and it is load-bearing. An axis this record states outranks
+    # everything. Failing that, a record that NAMES a sky is making a
+    # declaration, so the name's own axes are read; a record that names none
+    # is a partial report over a sky that already stands, and that sky's
+    # stored axes are what carry -- otherwise a beat saying only "the wind
+    # rose" would re-derive the lightning from the word "storm" and put out a
+    # flash the story had declared.
+    declared_sky = bool(_name(value.get("sky")))
+    legacy_sky = _LEGACY_SKY_AXES.get(_fold_legacy(sky, "sky")) \
+        if declared_sky or not base else None
+    carried_sky = _LEGACY_SKY_AXES.get(_fold_legacy(sky, "sky"))
+
+    def sky_axis(field, allowed, index, default):
+        stated = _resolve(value.get(field), allowed)
+        if stated:
+            return stated
+        if legacy_sky is not None:
+            return legacy_sky[index]
+        held = _resolve(base.get(field), allowed)
+        if held:
+            return held
+        return (carried_sky[index] if carried_sky else default)
+
+    air = sky_axis("air", AIRS, 0, _DEFAULT["air"])
+    cloud = sky_axis("cloud", CLOUDS, 1, _DEFAULT["cloud"])
+    if isinstance(value.get("electrical"), bool):
+        electrical = value["electrical"]
+    elif legacy_sky is not None:
+        electrical = legacy_sky[2]
+        if electrical and folded_fall in _LEGACY_UNLIT:
+            # The rule the old `_UNLIT_PRECIPITATION` set enforced, kept
+            # exactly for records that still carry the engine's own words: a
+            # snowing storm did not flash unless the record said thundersnow.
+            # Read off the FOLDED NAME rather than the kind, because hail is
+            # frozen and was deliberately not on that set -- it comes out of
+            # exactly the convective storms that do throw lightning.
+            flag = value.get("thundersnow")
+            electrical = bool(base.get("thundersnow") if flag is None else flag)
+    elif isinstance(base.get("electrical"), bool):
+        electrical = base["electrical"]
+    elif carried_sky is not None:
+        electrical = carried_sky[2] and folded_fall not in _LEGACY_UNLIT
+    else:
+        electrical = bool(value.get("thundersnow") or base.get("thundersnow"))
+
     out = {
-        "sky": field("sky", SKIES, _DEFAULT["sky"]),
-        "precipitation": field("precipitation", PRECIPITATION, "none"),
-        "intensity": field("intensity", INTENSITIES, "none"),
-        "wind": field("wind", WINDS, _DEFAULT["wind"]),
-        "temperature": field("temperature", TEMPERATURES,
-                             _DEFAULT["temperature"]),
-        # Thundersnow: a storm that flashes while snowing. Real, spectacular,
-        # and rare enough that it has to be a PROPERTY OF THIS SKY rather than
-        # something derived from the precipitation -- derived, every blizzard
-        # flashes; absent, none ever can. Set deterministically by the drift
-        # (see advance_weather) or declared outright by a beat.
-        # Carried from the base when this declaration says nothing about it,
-        # like every other field: a beat that reports the wind rising must not
-        # also, silently, put the lightning out.
-        "thundersnow": bool(value.get("thundersnow")
-                            if value.get("thundersnow") is not None
-                            else base.get("thundersnow")),
+        "sky": sky,
+        "air": air,
+        "cloud": cloud,
+        "electrical": bool(electrical),
+        "precipitation": fall,
+        "precipitation_kind": kind,
+        "intensity": intensity,
+        "wind": axis("wind", WINDS, _DEFAULT["wind"]),
+        "temperature": axis("temperature", TEMPERATURES,
+                            _DEFAULT["temperature"]),
     }
-    # Falling water with no strength, or a strength with nothing falling, are
-    # both half-written states that would read as "it is raining an amount of
-    # nothing". Reconcile rather than store the contradiction.
-    if out["precipitation"] != "none" and out["intensity"] == "none":
-        out["intensity"] = "moderate"
-    if out["precipitation"] == "none":
-        out["intensity"] = "none"
-    # Only a snowing storm can be thundersnow. Anywhere else the flag is either
-    # meaningless (a clear sky) or redundant (a rainstorm flashes anyway), and
-    # letting it linger would keep lightning over a sky that stopped snowing.
-    if not (out["sky"] == "storm"
-            and out["precipitation"] in _UNLIT_PRECIPITATION):
-        out["thundersnow"] = False
     # WHICH DRIFT WINDOW THIS SKY BELONGS TO. Carried from the RECORD and
     # never from the base, because a record written over is a new record: a
     # re-normalization of a stored sky keeps its window, and a beat DECLARING
@@ -318,6 +535,21 @@ def normalize_weather(value, base=None):
     if stamp is not None:
         out[DRIFT_STEP_KEY] = stamp
     return out
+
+
+def is_falling(weather):
+    """Is anything coming down right now?
+
+    ONE representation, and this is it: `intensity` says WHETHER, the name and
+    the kind say WHAT. Before A88 the pair could disagree -- a record naming a
+    fall at intensity `none` read as raining an amount of nothing -- and the
+    reconcile that hid it also made it impossible for a sky to keep its own
+    fall through a dry spell, which is what the drift needs in order to move
+    along the axes instead of picking a new Earth word out of a table.
+    """
+    weather = weather if isinstance(weather, dict) else {}
+    return (str(weather.get("intensity") or "none") != "none"
+            and str(weather.get("precipitation_kind") or "none") != "none")
 
 
 #: What a room's own record says about it, derived once per record.
@@ -569,7 +801,7 @@ def weather_for_room(scene, room_id):
     if not weather:
         return {}
     exposure = room_exposure(scene, room_id)
-    falling = weather["precipitation"] != "none"
+    falling = is_falling(weather)
     layers = weather_depth(scene, room_id)
     if layers is None and not _mapped(scene, room_id):
         # No path found AND no adjacency to walk: the room is simply not joined
@@ -616,7 +848,13 @@ def weather_for_room(scene, room_id):
         # of it and watching it fall is what sheltering IS. Sight was the only
         # channel treating a porch as a sealed room; sound and wind already
         # reach one.
-        "weather_visible": (falling or weather["sky"] == "storm")
+        #
+        # WHAT MAKES A DRY SKY VISIBLE IS AN AXIS, not the word "storm" (A88):
+        # a sky throwing light of its own, or air you cannot see through, is
+        # weather happening whatever the fiction calls it. Cloud alone is
+        # deliberately not enough -- a grey sky is a colour, not an event.
+        "weather_visible": (falling or weather["electrical"]
+                            or weather["air"] != "clear")
         and exposure in ("open", "sheltered"),
         # And how much of it is in view: all of it in the open, the edges of it
         # from under cover.
@@ -635,26 +873,18 @@ def weather_for_room(scene, room_id):
     })
 
 
-# One drift window in this many turns a snowing storm electrical. Chosen so a
-# passing squall almost never flashes and a long blizzard probably will once:
-# rare enough to stay an event, common enough to be worth having built.
-THUNDERSNOW_ODDS = 9
-
-
 def has_lightning(weather):
-    """Does this sky throw lightning? Storm alone is not enough.
+    """Does this sky throw light and sound of its own?
 
-    A snowing storm is ordinarily silent lightning-wise -- a reader watching
-    bolts play over every whiteout is being told something false about the
-    weather. Unless it is thundersnow, which is a real thing and worth having:
-    rare, deliberate, and marked on the sky itself so that when it happens the
-    whole beat knows, from the flash to the clap to what the room hears.
+    ONE axis now, read here and nowhere else derived (A88). It used to be a
+    question about the word "storm" crossed with the word "snow", with a
+    `thundersnow` flag bolted on for the case that crossing got wrong -- three
+    Earth nouns deciding whether a sky flashes. A sky that flashes is a sky
+    the story said flashes; `normalize_weather` recovers the answer for every
+    record written before the axis existed, including the thundersnow flag.
     """
     weather = weather if isinstance(weather, dict) else {}
-    if weather.get("sky") != "storm":
-        return False
-    return (weather.get("precipitation") not in _UNLIT_PRECIPITATION
-            or bool(weather.get("thundersnow")))
+    return bool(weather.get("electrical"))
 
 
 def weather_words(scoped, channel="sight"):
@@ -676,9 +906,14 @@ def weather_words(scoped, channel="sight"):
     words = []
     if channel == "sight":
         if scoped.get("sky_visible"):
-            words.append({"clear": "clear sky", "fair": "open sky",
-                          "overcast": "overcast sky", "fog": "thick fog",
-                          "storm": "storm sky"}[scoped["sky"]])
+            # The sky's own NAME, which is the story's (A88). The five words
+            # this engine used to mint keep the exact phrase they always
+            # produced, so a scene stored under `fair` still reads "open sky";
+            # anything else takes the general form, and "an ash-choked pall
+            # sky" is the shape a made-up sky arrives in.
+            sky = str(scoped.get("sky") or "").strip()
+            words.append(_LEGACY_SKY_PHRASE.get(sky.casefold())
+                         or ("%s sky" % sky if sky else "sky"))
         if scoped.get("falls_on_you"):
             words.append("%s %s" % (scoped["intensity"], scoped["precipitation"]))
         if scoped.get("wind_reaches"):
@@ -747,33 +982,38 @@ DRIFT_STEP_KEY = "drift_step"
 #: clearing's noise floor to 2.8 and silence a conversation.
 DECLARED_STEP = "declared"
 
-# What each sky can become. Deliberately gradual: clear does not become storm
-# without passing through the states in between, which is what makes an
-# unattended sky read as weather rather than as noise.
-_SKY_NEXT = {
-    "clear": ("clear", "clear", "fair"),
-    "fair": ("fair", "fair", "clear", "overcast"),
-    "overcast": ("overcast", "overcast", "fair", "storm", "fog"),
-    "fog": ("fog", "fog", "overcast"),
-    "storm": ("storm", "storm", "overcast"),
-}
+# THE DRIFT MOVES AXES, AND IT NEVER MOVES A NAME.
+#
+# Review 2026-09-07 A88. There used to be three tables here keyed by the five
+# Earth sky words -- `_SKY_NEXT` (what a sky becomes), `_SKY_FALL` (what it is
+# willing to drop) and `_SKY_WIND` -- and the second of them is the defect: a
+# sandstorm and an ashfall both normalised to `sky: storm`, and `_SKY_FALL`
+# then rolled `("rain", "heavy")` over them once an in-story hour. There is no
+# table of weathers any more, because there is no set of weathers a story may
+# have.
+#
+# What is left is one motion, applied to a ladder: a rung up, a rung down, or
+# stay. Three of the four axes walk it -- `cloud`, `wind`, and `intensity` --
+# and the rule that stops the drift inventing anything is that INTENSITY IS
+# THE ONLY THING IT MAY DO TO A FALL. What falls, and what it is called, are
+# the story's, carried through the drift untouched; a sky with nothing to drop
+# never starts dropping something.
+#
+# `air`, `temperature` and `electrical` are not drifted at all. They are the
+# axes a beat DECLARES -- the fog coming down, the night turning bitter, the
+# storm beginning to throw light -- and guessing at them here is the same
+# mistake in a different field.
+_DRIFT_STEPS = (0, 1, -1)
 
-# What a sky is willing to drop, and how hard.
-_SKY_FALL = {
-    "clear": (("none", "none"),),
-    "fair": (("none", "none"), ("none", "none"), ("drizzle", "light")),
-    "overcast": (("none", "none"), ("drizzle", "light"), ("rain", "light"),
-                 ("rain", "moderate")),
-    "fog": (("none", "none"), ("drizzle", "light")),
-    "storm": (("rain", "heavy"), ("rain", "heavy"), ("rain", "moderate"),
-              ("hail", "moderate")),
-}
 
-_SKY_WIND = {
-    "clear": ("still", "breeze"), "fair": ("still", "breeze"),
-    "overcast": ("breeze", "wind"), "fog": ("still", "still"),
-    "storm": ("wind", "gale"),
-}
+def _walk(ladder, value, roll):
+    """One rung along a closed ladder, chosen by a seeded roll."""
+    try:
+        at = ladder.index(value)
+    except ValueError:
+        return ladder[0]
+    return ladder[max(0, min(len(ladder) - 1,
+                             at + _DRIFT_STEPS[roll % len(_DRIFT_STEPS)]))]
 
 
 def _roll(seed, step, salt):
@@ -790,15 +1030,15 @@ def _roll(seed, step, salt):
 def advance_weather(weather, elapsed_seconds, seed, severity=None):
     """The sky after `elapsed_seconds`, drifted deterministically.
 
-    A freezing sky swaps rain for snow, which is the one place temperature
-    actually changes what falls rather than merely how it feels -- read off
-    the record's own `temperature`, which is the only store of it. This took a
-    `cold` argument as well until the review of 2026-09-07 (A88), and its one
-    production caller computed that argument as
-    `normalize_weather(sc["weather"])["temperature"] == "freezing"` -- the
-    same question this function then asked again, one `or` apart. Returns the
-    input unchanged inside one drift window, so an ordinary conversational
-    beat does not move the weather at all.
+    IT MOVES AXES AND CARRIES NAMES (review 2026-09-07 A88). `cloud` and
+    `wind` walk one rung; `intensity` walks one rung too, but only while the
+    sky is shut in, and only for a fall the story has already established --
+    so a sky that has never dropped anything stays dry, and a sky dropping ash
+    goes on dropping ash. The drift renames a sky only when the name it is
+    carrying is one this engine minted itself (`_engine_sky_name`); a story's
+    own word for its own sky is never rewritten. Returns the input unchanged
+    inside one drift window, so an ordinary conversational beat does not move
+    the weather at all.
 
     `severity` is the story's authored ceiling (see `severity_intensity_cap`).
     A caller that does not know it passes nothing and gets an uncapped drift,
@@ -828,29 +1068,37 @@ def advance_weather(weather, elapsed_seconds, seed, severity=None):
     if stamped == step:
         return weather
 
-    skies = _SKY_NEXT.get(weather["sky"], _SKY_NEXT["fair"])
-    sky = skies[_roll(seed, step, "sky") % len(skies)]
-    falls = _SKY_FALL.get(sky, _SKY_FALL["fair"])
-    precipitation, intensity = falls[_roll(seed, step, "fall") % len(falls)]
+    cloud = _walk(CLOUDS, weather["cloud"], _roll(seed, step, "cloud"))
+    wind = _walk(WINDS, weather["wind"], _roll(seed, step, "wind"))
+    kind = weather["precipitation_kind"]
+    if kind == "none":
+        # Nothing has ever fallen from this sky. The drift does not get to
+        # decide that something does -- that is the whole of A88.
+        intensity = "none"
+    elif cloud == "covered":
+        intensity = _walk(INTENSITIES, weather["intensity"],
+                          _roll(seed, step, "fall"))
+    else:
+        # A sky opening up puts its fall down. Stated as the axis rather than
+        # as a fall table: whatever a story's weather is made of, it does not
+        # come out of a sky that has cleared.
+        intensity = _walk(INTENSITIES, weather["intensity"], 2)
     intensity = _capped_intensity(intensity, severity)
-    if weather["temperature"] == "freezing":
-        precipitation = {"rain": "snow", "drizzle": "snow",
-                         "hail": "sleet"}.get(precipitation, precipitation)
-    winds = _SKY_WIND.get(sky, ("still", "breeze"))
-    # Thundersnow, rolled rather than derived. Rare per window, so most
-    # blizzards never flash -- but a long one might, and that is the point: it
-    # should be something a reader gets to SEE happen rather than a constant.
-    # Seeded like everything else here, so a reroll cannot conjure it and a
-    # replay cannot lose it.
-    thundersnow = (sky == "storm"
-                   and precipitation in _UNLIT_PRECIPITATION
-                   and _roll(seed, step, "thundersnow") % THUNDERSNOW_ODDS == 0)
+    sky = weather["sky"]
+    if _fold_legacy(sky, "sky") == sky.strip().casefold():
+        # The sky is still wearing a word this engine wrote, so this engine
+        # may keep it in step with the axes it just moved. An authored name
+        # is left exactly as the story wrote it.
+        sky = _engine_sky_name(weather["air"], cloud, weather["electrical"])
     return normalize_weather({
         "sky": sky,
-        "precipitation": precipitation,
+        "air": weather["air"],
+        "cloud": cloud,
+        "electrical": weather["electrical"],
+        "precipitation": weather["precipitation"],
+        "precipitation_kind": kind,
         "intensity": intensity,
-        "thundersnow": thundersnow,
-        "wind": winds[_roll(seed, step, "wind") % len(winds)],
+        "wind": wind,
         # Temperature is authored, not drifted: a beat that says the night
         # turns bitter is the Director's to write, and guessing it here would
         # fight that.
@@ -874,21 +1122,36 @@ def advance_weather(weather, elapsed_seconds, seed, severity=None):
 
 # Each ladder is ordered by depth: level 1 takes the first rung, and the last
 # rung is the floor for anything deeper.
+# FOOTING IS AN AXIS TOO (A88). A ladder is chosen by what the fall DOES on
+# arrival crossed with the temperature -- never by its name -- so ash, spores
+# and a fall of blood each land on a floor the engine can describe without
+# ever having heard of them. `piled` carries the fall's own name, which is the
+# whole point: "drifts of ash" and "deep snow" come out of one ladder.
 GROUND_LADDERS = {
     "wet": ("damp ground", "wet ground", "standing puddles", "churned mud"),
-    "snow": ("a dusting of snow", "snow underfoot", "deep snow", "snowdrifts"),
-    "slush": ("slush underfoot", "deep slush"),
-    "hail": ("scattered hailstones",),
     "ice": ("frost underfoot", "sheet ice"),
+    "slush": ("slush underfoot", "deep slush"),
+    "piled": ("a dusting of %s", "%s underfoot", "deep %s", "drifts of %s"),
+    # The names this engine wrote before the axes existed, kept so a floor
+    # already carrying one goes on reading as it did while it drains.
+    "snow": ("a dusting of snow", "snow underfoot", "deep snow", "snowdrifts"),
+    "hail": ("scattered hailstones",),
 }
 
-# Which ladder a given precipitation lays down. Freezing turns the wet ladder
-# into the ice one, which is the single most consequential thing temperature
-# does to a floor.
-_GROUND_KIND = {
-    "rain": "wet", "drizzle": "wet", "snow": "snow", "sleet": "slush",
-    "hail": "hail",
-}
+# Which ladder each fall kind lays down, and where temperature changes the
+# answer. Freezing turns a liquid floor into an ice one -- the single most
+# consequential thing temperature does to a floor -- and a frozen fall landing
+# on ground above freezing turns to slush instead of piling.
+def _ground_ladder(kind, temperature):
+    if kind == "liquid":
+        return "ice" if temperature == "freezing" else "wet"
+    if kind == "frozen":
+        return "piled" if temperature in ("freezing", "cold") else "slush"
+    if kind == "particulate":
+        return "piled"
+    # `other` and `none`: this engine was told a name and no axis, so it
+    # asserts nothing about the floor. Silence, not a guess at mud.
+    return ""
 
 # How fast it piles up, per beat, by intensity.
 _GROUND_GAIN = {"light": 1, "moderate": 2, "heavy": 3}
@@ -901,14 +1164,25 @@ _GROUND_MAX = 12
 
 def ground_kind(weather, ground=None):
     """Which ladder this sky is laying down, or the one already on the ground."""
+    return _ground_of(weather, ground)[0]
+
+
+def _ground_of(weather, ground=None):
+    """`(ladder, name)` for the floor this sky is making.
+
+    The NAME rides with the ladder because `piled` renders with it, and
+    because a floor keeps draining after the sky that made it has cleared --
+    a room three beats into a dry spell still has ash on it, and nothing else
+    on disk remembers what fell.
+    """
     weather = normalize_weather(weather) or {}
-    falling = weather.get("precipitation", "none")
-    if falling != "none":
-        kind = _GROUND_KIND.get(falling, "wet")
-        if kind == "wet" and weather.get("temperature") == "freezing":
-            return "ice"
-        return kind
-    return str((ground or {}).get("kind") or "wet")
+    ground = ground if isinstance(ground, dict) else {}
+    if is_falling(weather):
+        ladder = _ground_ladder(weather.get("precipitation_kind"),
+                                weather.get("temperature"))
+        return ladder, _name(weather.get("precipitation"))
+    return (str(ground.get("kind") or "wet"),
+            _name(ground.get("name")))
 
 
 def ground_after(previous, scoped, severity=None, exposed=True):
@@ -933,14 +1207,21 @@ def ground_after(previous, scoped, severity=None, exposed=True):
         if not level:
             return {}
         return dict(previous, level=level, state=_ground_state(
-            str(previous.get("kind") or "wet"), level))
+            str(previous.get("kind") or "wet"), level,
+            _name(previous.get("name"))))
 
     scoped = scoped or {}
-    falling = scoped.get("precipitation", "none") != "none"
     # `falls_on_you` is the honest test: a porch is under the sky and still
     # dry underfoot, and its floor should stay that way.
-    landing = bool(falling and exposed and scoped.get("falls_on_you"))
-    kind = ground_kind(scoped, previous)
+    landing = bool(is_falling(scoped) and exposed
+                   and scoped.get("falls_on_you"))
+    kind, name = _ground_of(scoped, previous)
+    if not kind:
+        # A fall whose axis nothing stated leaves nothing this engine is
+        # willing to describe underfoot. Whatever was already there drains.
+        landing = False
+        kind, name = str(previous.get("kind") or "wet"), _name(
+            previous.get("name"))
     if landing:
         level = min(_GROUND_MAX,
                     level + _GROUND_GAIN.get(scoped.get("intensity"), 1))
@@ -948,15 +1229,22 @@ def ground_after(previous, scoped, severity=None, exposed=True):
         level = max(0, level - _GROUND_DRAIN)
     if not level:
         return {}
-    return {"kind": kind, "level": level, "state": _ground_state(kind, level)}
+    out = {"kind": kind, "level": level,
+           "state": _ground_state(kind, level, name)}
+    if name and any("%s" in rung for rung in GROUND_LADDERS.get(kind, ())):
+        # Only when the ladder renders with it, so a wet or icy floor
+        # serializes exactly as it did before the field existed.
+        out["name"] = name
+    return out
 
 
-def _ground_state(kind, level):
+def _ground_state(kind, level, name=""):
     ladder = GROUND_LADDERS.get(kind) or GROUND_LADDERS["wet"]
     # Three beats of accumulation per rung, so a floor passes through its
     # states rather than jumping to the deepest one in a single downpour.
     rung = min(len(ladder) - 1, max(0, (level - 1) // 3))
-    return ladder[rung]
+    text = ladder[rung]
+    return text % (name or "fallen matter") if "%s" in text else text
 
 
 def severity_intensity_cap(severity):

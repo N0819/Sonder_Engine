@@ -226,8 +226,11 @@ from world.spatial_senses import (
     COMMS_ATTENDED_ROOMS, comms_reachable_rooms,
     crossing_visible_from, has_visual, hear_level, HEARING_LEVELS,
     is_alarming, normalize_scene_comms, scent_level, SCENT_LEVELS,
-    sense_acuity_offset, sense_adjusted, sense_entry, sense_range_class,
-    sight_level, sound_bearing, sound_bearing_via, sound_path, sound_walk_level,
+    sense_acuity_offset, sense_adjusted, sense_entry, sense_needs_light,
+    sense_range_class,
+    sight_block, sight_level, sight_verdict,
+    sound_bearing, sound_bearing_via, sound_path,
+    sound_walk_level,
     spatial_rel_between, visual_level_between,
 )
 
@@ -287,7 +290,8 @@ from world.spatial_sound_field import (
     OCCLUDER_PASS,
     failing_sound_sources_out, FRAGMENT_SNR, FULL_SNR, gain_at, HEAR_FLOOR,
     heard_events, noise_word, NOISE_WORDS, normalize_sound_level,
-    one_opening_away, open_edge_floor, RAISED_VOLUMES,
+    one_opening_away, open_edge_floor, RAISED_VOLUMES, room_noise_word,
+    room_holds_a_standing_source, STANDING_SOURCE_KINDS,
     quantise_hearing, sound_field, sound_field_hear_level, sound_notices,
     sound_passes, sound_shape, sound_sources, SOUND_LEVELS, SOUND_POWER,
     # An impact is not a voice and is not a machine (2026-09-06).

@@ -250,6 +250,13 @@ def _sense_graded(level, channel, senses):
     before; the one direction that adds is capped inside `sense_adjusted`
     itself. Kept as a named wrapper rather than a bare call so the gate has
     one spelling here and every builder that grades can be seen to use it.
+
+    No `blocked_by` here: every builder in this module grades a level that
+    came back from `visual_level_between`, which was handed the senses and
+    has already spent what the place did (A87) -- the dark has lifted and no
+    glare has been applied by the time the level arrives. The one reader that
+    grades a ROOM-level `sight_level` and needs the cause is
+    `agents.common._delivery_ok`, and it calls `sense_adjusted` directly.
     """
     return sense_adjusted(level, channel, senses) if senses else level
 
@@ -565,7 +572,8 @@ def observer_display_map(scene, observer_name, co_present, known,
             out[name] = name
             continue
         level = _sense_graded(
-            visual_level_between(scene, observer_name, name), "sight", senses)
+            visual_level_between(scene, observer_name, name, senses),
+            "sight", senses)
         if level == "full":
             strangers.append(
                 (name, body.get("appearance"), body.get("aliases") or [],
@@ -978,6 +986,38 @@ def soundscape_percept(shape, room_id):
     )
 
 
+def sound_ceased_percept(room_id):
+    """The room's sound STOPPING, as one standing hearing percept.
+
+    SILENCE WHERE THERE WAS SOUND (review 2026-09-07 D3). A room the sound
+    field grades unevenly composes a `soundscape_percept`; the beat its one
+    source stops, the field goes even and the percept is simply not built --
+    so the observer's ledger holds a key nothing renews and nothing anywhere
+    says the humming stopped. Measured in the descent run: the PLAYER wrote
+    "nothing hummed" themselves, because the page never did. A multi-source
+    room is already covered -- one source of several stopping moves the
+    shape, which moves the content hash, which is `changed` -- and this is
+    the single-source case that hash cannot see, because the key it needs to
+    compare against is the one that vanished.
+
+    THE SAME SUBJECT AS THE SOUND IT ENDS, deliberately: `standing_key`
+    hashes subject and content apart, so this key threads the room's sound
+    ledger rather than opening a second one. The sound coming back is
+    `changed` against this, the silence continuing is `unchanged` (said
+    once, not every beat), and an observer who was never delivered the sound
+    gets `first` -- which `unheard_ceasing` drops, because a silence is only
+    news to an ear that had the noise.
+    """
+    if not room_id:
+        return None
+    return Percept(
+        kind="ambient", channel="hearing",
+        data={"ceased": True},
+        salience=0.4,
+        dedupe_key=standing_key("soundscape", (room_id,), ("ceased",)),
+    )
+
+
 def _shape_clauses(shape, prefix, levels):
     return [_en(prefix + level,
                 items=_join_clauses([_noun_phrase(i) for i in group["items"]]))
@@ -1233,7 +1273,8 @@ def presence_percepts(scene, observer_name, co_present, display_map,
         if not name or name == observer_name:
             continue
         level = _sense_graded(
-            visual_level_between(scene, observer_name, name), "sight", senses)
+            visual_level_between(scene, observer_name, name, senses),
+            "sight", senses)
         if level == "none":
             continue
         tier = proximity_rel(scene, observer_name, name)
@@ -2035,7 +2076,7 @@ def pose_percepts(scene, observer_name, co_present, display_map,
             if proximity_rel(scene, observer_name, name) is None:
                 continue
             level = _sense_graded(
-                visual_level_between(scene, observer_name, name),
+                visual_level_between(scene, observer_name, name, senses),
                 "sight", senses)
             if level == "none":
                 continue
@@ -3204,12 +3245,14 @@ _SIZE_PHRASES = dict(_ENGLISH_COMPOSITOR["size_phrases"])
 _PRESENCE_SLOT = ("presence-slot", None)
 
 
-#: The four verdicts a standing percept can carry for ONE observer.
+#: The five verdicts a standing percept can carry for ONE observer.
 #: `unchanged` -- this observer's own previous ledger holds this exact key.
 #: `changed`   -- it holds this subject under different content.
 #: `first`     -- it holds nothing about this subject at all.
 #: `reearn`    -- first sight again: a body met before, being re-delivered.
-STANDING_VERDICTS = ("unchanged", "changed", "first", "reearn")
+#: `ceased`    -- a standing sound this observer was being delivered, and
+#:               this beat there is none of it (D3).
+STANDING_VERDICTS = ("unchanged", "changed", "first", "reearn", "ceased")
 
 
 def standing_verdicts(percepts, prev_standing=frozenset(),
@@ -3245,6 +3288,16 @@ def standing_verdicts(percepts, prev_standing=frozenset(),
             out[p.dedupe_key] = "unchanged"
             continue
         prefix = _subject_prefix(p.dedupe_key)
+        # A SILENCE IS ONLY NEWS TO AN EAR THAT HAD THE NOISE (D3). The
+        # percept says a standing sound is gone; whether this observer was
+        # ever delivered it is the ledger's question, and the answer is the
+        # same subject test every other verdict here uses. No prior sound,
+        # no `ceased` -- `first`, which `unheard_ceasing` drops rather than
+        # rendering "it has stopped" about a noise nobody was told about.
+        if (p.data or {}).get("ceased"):
+            out[p.dedupe_key] = ("ceased" if prefix and prefix in subjects
+                                 else "first")
+            continue
         if prefix and prefix in subjects:
             out[p.dedupe_key] = "changed"
             continue
@@ -3317,11 +3370,27 @@ def leads_the_beat(percept, verdict, prev_standing):
     """
     if not prev_standing:
         return False
-    if verdict == "changed":
+    if verdict in ("changed", "ceased"):
         return True
     if percept.kind == "appearance" and appearance_delta(percept):
         return True
     return verdict == "first" and percept.kind in _FIRST_SIGHT_LEADS
+
+
+def unheard_ceasing(percept, verdict):
+    """Whether this percept claims a sound stopped that this observer was
+    never delivered (D3) -- in which case it renders nothing at all.
+
+    Both renderers ask, because the answer is an information decision and
+    not a wording one. Two ways it is True. The observer's ledger holds no
+    sound for this room, so `standing_verdicts` said `first` and there is no
+    silence for them to notice; or nothing computed a verdict at all -- the
+    character tier renders the full standing state every beat and has no
+    ledger to diff against, and a room's own sound is not a thing that
+    happens to a mind that was never following it.
+    """
+    return bool((getattr(percept, "data", None) or {}).get("ceased")) \
+        and verdict != "ceased"
 
 
 def as_beat(percept):
@@ -3904,6 +3973,8 @@ def _render_standing(p):
                     if place.casefold() in PLURAL_PLACES else "exposed_detail")
         return _en(template, subject=subject, detail=detail)
     if p.kind == "ambient":
+        if p.data.get("ceased"):
+            return _en("sound_ceased")
         if p.data.get("soundscape"):
             return render_sound_shape(p.data.get("soundscape"))
         if p.data.get("distant"):
@@ -4114,6 +4185,11 @@ def _render_view_english(percepts, *, mode="character",
             continue
         seen_dedupe.add(p.dedupe_key)
         verdict = verdicts.get(p.dedupe_key, "first")
+        # A silence is only news to an ear that had the noise (D3). The key
+        # is already filed above, so the sound coming back next beat still
+        # reads as a change against it.
+        if unheard_ceasing(p, verdict):
+            continue
         leads = player and leads_the_beat(p, verdict, prev_standing)
         if p.kind == "presence":
             # NEVER SUPPRESSED, only shortened. A body that stands still is

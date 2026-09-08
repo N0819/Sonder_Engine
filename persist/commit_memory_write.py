@@ -11,6 +11,7 @@ from core.db import qi, transaction, wget, wset, wset_if_changed
 from mind.memory import (add_memories_batch, delete_turn_memories,
                     record_dispute, raise_importance, record_memory_access,
                     apply_relationship_updates,
+                    apply_witnessed_signals,
                     update_relationships_from_inference,
                     maybe_consolidate_character_memory,
                     reconcile_inference_confidence)
@@ -275,6 +276,18 @@ def commit_memories(ctx, nonce, *, prepared=None, consolidate=True):
                 update_relationships_from_inference(
                     cid, char_id, turn.idx, updates,
                 )
+        # THE EVIDENCE FLOOR, AFTER the model's own ops (review 2026-09-07
+        # D21). Order is the whole of it: a stance the character declared is
+        # the stance the floor then moves from, so the deterministic part
+        # never overwrites a declaration and the diminishing returns are
+        # measured against where the mind actually stands. The source set is
+        # each mind's OWN delivered view, answered in prepare.
+        for char_id, witnessed in prepared.get("witnessed_signals") or []:
+            try:
+                apply_witnessed_signals(cid, char_id, turn.idx, witnessed,
+                                        frame_id=turn.frame_id)
+            except Exception as exc:
+                ctx.add_warning(f"witnessed stance floor not applied: {exc}")
         for chat_id, char_id, state_json in prepared["state_updates"]:
             set_char_state(
                 chat_id, char_id, state_json, frame_id=turn.frame_id,

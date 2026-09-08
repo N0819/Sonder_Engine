@@ -419,10 +419,23 @@ function weatherFxVisible(weather) {
 function weatherFxApply(weather) {
   WFX.weather = weather || null;
   const visible = weatherFxVisible(weather);
-  const falling = visible && weather.precipitation !== "none";
+  // WHAT IS DRAWN COMES OFF THE AXIS, NOT THE NAME (engine A88). The engine
+  // says whether anything is coming down (`intensity`) and what it does on
+  // arrival (`precipitation_kind`); a fall that piles or drifts is drawn with
+  // the slow, wide tiles, and everything else with streaks. The name is the
+  // story's -- "ashfall", "spore drift" -- and this file never reads it.
+  // The `precipitation !== "none"` fallback is for a payload written before
+  // the axes existed: a cached turn, or a browser holding an older page.
+  const kindAxis = weather.precipitation_kind;
+  const falling = visible && (kindAxis === undefined
+    ? weather.precipitation !== "none"
+    : (kindAxis !== "none" && weather.intensity !== "none"));
   const kind = !falling ? ""
-    : (weather.precipitation === "snow" || weather.precipitation === "sleet")
-      ? "snow" : "rain";
+    : (kindAxis === undefined
+      ? ((weather.precipitation === "snow" || weather.precipitation === "sleet")
+        ? "snow" : "rain")
+      : ((kindAxis === "frozen" || kindAxis === "particulate")
+        ? "snow" : "rain"));
   const storm = visible && weatherFxStormy(weather);
 
   if ((!kind && !storm) || weatherFxReduced() || weatherFxEffectsOff()
@@ -456,12 +469,15 @@ function weatherFxApply(weather) {
 // must keep mirroring it: a sky that flashes here with no thunder written into
 // what the room hears is the worse half of the bug this came from.
 //
-// A snowing storm is silent unless it is THUNDERSNOW, which the engine marks on
-// the sky itself -- rolled rarely by the weather drift, or declared outright by
-// a beat. Derived from the precipitation instead, every blizzard would flash;
-// forbidden outright, none ever could.
+// ONE AXIS since engine A88: `electrical` says whether this sky throws light
+// and sound of its own, whatever the fiction calls the sky. It used to be the
+// word "storm" crossed with the word "snow" plus a `thundersnow` flag for the
+// case that crossing got wrong, and the engine now folds all three into the
+// axis when it reads a record written before it. The old reading survives
+// only for a payload that predates the field.
 function weatherFxStormy(weather) {
   weather = weather || {};
+  if (weather.electrical !== undefined) return !!weather.electrical;
   if (weather.sky !== "storm") return false;
   const snowing = weather.precipitation === "snow"
     || weather.precipitation === "sleet";

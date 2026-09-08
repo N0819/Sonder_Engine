@@ -3585,19 +3585,26 @@ def director_resolve(ctx, nonce, _corrections=None):
             # in between (`weather.advance_weather`, written back to
             # `sc["weather"]` at commit_scene_state.py:1032). Both halves need
             # the current value: "did THIS beat change it" is unanswerable
-            # against a sky nobody showed you, and so is "is the flash I am
-            # about to write thundersnow" -- a flag the drift sets on its own,
-            # one snowing storm in nine, which the same chunk forbids
-            # narrating lightning over snow without.
+            # against a sky nobody showed you, and so is "may the flash I am
+            # about to write reach this room" -- which since A88 (review
+            # 2026-09-07) is the `electrical` axis and nothing else, the same
+            # chunk telling this hand that a sky flashes when `electrical`
+            # says so and that no name implies it and no fall forbids it.
             #
             # Same class as `stations`, `contacts` and `overlays` above: a
             # ledger the Director is asked to maintain and was never allowed
             # to read. Cost, unlike those three, is BOUNDED rather than
-            # proportional -- the vocabulary is closed (world/weather.py) and
-            # the shape fixed, so it is 2 chars (`{}`) before any sky has been
-            # declared and 120-139 for every sky the engine can hold, measured
-            # over every `normalize_weather` output the vocabulary admits,
-            # against 4,187-8,463 for `attire` on the same scenes.
+            # proportional -- the axis shape is fixed (ten keys,
+            # world/weather.py) and the only free text in it is the two
+            # authored names, each bounded by `NAME_LIMIT` (60). So it is 2
+            # chars (`{}`) before any sky has been declared, 185-206 across
+            # the 5x6x4x4x5 cross product of the sky and fall words this
+            # engine itself minted crossed with intensity, wind and
+            # temperature (measured 2026-09-08 over `normalize_weather`), and
+            # 316 at the ceiling with both names authored at full length,
+            # 342 once `drift_step` is stamped -- which every live record
+            # carries after the first declaration -- against 4,187-8,463 for
+            # `attire` on the same scenes.
             "weather": sc.get("weather") or {},
         },
         "simulation_clock": clock,

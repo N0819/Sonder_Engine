@@ -236,6 +236,135 @@ def update_relationships_from_inference(chat_id, char_id, turn_idx,
     save_relationships(chat_id, char_id, graph)
     return graph
 
+
+#: Which scalar field on the graph each judgment axis is stored in. The
+#: ledger and `world.charter_social.JUDGMENT_AXES` both call the second one
+#: `warmth`; the dataclass has called it `emotional_valence` since before
+#: either existed, and one map here is cheaper than renaming a stored field.
+_WITNESSED_AXIS_FIELD = {"trust": "trust", "warmth": "emotional_valence",
+                         "fear": "fear", "respect": "respect",
+                         "suspicion": "suspicion"}
+
+#: The provenance a floor movement is stamped with. Not `character` (the mind
+#: declared nothing), not `inference` (it concluded nothing), not
+#: `unevidenced` (it cites the observation it read): it WITNESSED an act.
+WITNESSED_PROVENANCE = "witnessed"
+
+
+def apply_witnessed_signals(chat_id, char_id, turn_idx, witnessed,
+                            frame_id=_UNSET):
+    """The deterministic evidence floor for a registered mind's stances.
+
+    Review 2026-09-07 D21. A charter body's five axes move from the
+    speech-act kinds it witnesses, deterministically, on every beat
+    (`charter_social.update_judgments_from_minds`); a registered character's
+    moved only when the model chose to emit `relationship_updates`. So
+    promoting a body stopped it obeying the rules that formed it, and two
+    people standing in the same room -- one registered, one not -- came out
+    of the same insult with different arithmetic. This is the same table,
+    the same diminishing returns and the same axes, applied to the graph the
+    registered mind actually keeps.
+
+    `witnessed` is what THIS mind was delivered: entries of
+    ``{"subject", "signal", "source_id"}`` that
+    `persist.commit_memory._witnessed_signals` built from this observer's OWN
+    composed view. The source set is never the charter's spatial reception
+    answer and never another observer's -- one head's gate deciding another
+    head's stance is the firewall failure this floor is most able to cause,
+    so the delivery proof is made where the view is and this function only
+    ever sees one mind's already-answered list.
+
+    Runs AFTER the model's own ops for the beat, so a stance the character
+    declared is the stance the floor moves from, and never the other way
+    round.
+    """
+    resolved_frame_id = (
+        _active_frame_id.get() if frame_id is _UNSET else frame_id)
+    items = []
+    seen = set()
+    for entry in witnessed or ():
+        if not isinstance(entry, dict):
+            continue
+        subject = str(entry.get("subject") or "").strip()
+        signal = str(entry.get("signal") or "").strip()
+        source_id = str(entry.get("source_id") or "").strip()
+        if not subject or not signal:
+            continue
+        key = (subject, signal, source_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        items.append(key)
+    if not items:
+        return None
+    # ONCE PER BEAT, EVEN IF THE BEAT IS COMMITTED TWICE. `commit_memories`
+    # deletes and re-mints this turn's memories on a re-run, but the graph is
+    # cumulative and the ledger is append-only, so a re-run would move every
+    # stance a second time from the same evidence. The ledger is the record
+    # of what has already been read: an act cites its `source_id` in
+    # `triggers` and names its signal in `note`, which is exactly the
+    # `evidence_id|signal` idempotence key `update_judgments_from_minds`
+    # keeps in a stance's `seen` list.
+    already = set()
+    # SCOPED BY FRAME, like the graph it guards: `relationships:` is in
+    # `core.db.FRAME_SCOPED_WORLD_PREFIXES`, so each era keeps its own stance
+    # row, and turn indices repeat across eras by construction. Unscoped, one
+    # era's ledger silenced another's -- the same witnessed insult at turn 5
+    # in a branch moved nothing and left the mind there with no `because` row
+    # for a beat it lived (D21 skeptic, reproduced 2026-09-08).
+    for row in q("SELECT target,triggers,note FROM relationship_events "
+                 "WHERE chat_id=? AND char_id=? AND turn_idx=? AND "
+                 "provenance=? AND frame_id IS ?",
+                 (int(chat_id), int(char_id), int(turn_idx or 0),
+                  WITNESSED_PROVENANCE, resolved_frame_id)) or []:
+        already.add((str(row["target"] or ""), str(row["note"] or ""),
+                     str(row["triggers"] or "")))
+    graph = get_relationships(chat_id, char_id)
+    movements = []
+    for subject, signal, source_id in items:
+        if (subject, signal, source_id) in already:
+            continue
+        current = graph.get(subject)
+        if current is None:
+            graph.update(subject)
+            current = graph.get(subject)
+        stance = {axis: float(getattr(current, field, 0.0) or 0.0)
+                  for axis, field in _WITNESSED_AXIS_FIELD.items()}
+        # ONE ARITHMETIC, and it lives with the table it reads. A deferred
+        # import: `world` imports `mind` at module level in four places, so
+        # an eager one here would be a new package cycle.
+        from world.charter import signal_landing
+        landed = signal_landing(signal, stance)
+        if not landed:
+            continue
+        fields = {}
+        for axis, after in landed.items():
+            delta = round(after - stance[axis], 6)
+            if not delta:
+                continue
+            field = _WITNESSED_AXIS_FIELD[axis]
+            fields[field] = after
+            record_relationship_event(
+                chat_id, char_id, subject, axis, delta,
+                triggers=[source_id] if source_id else (),
+                note=signal, provenance=WITNESSED_PROVENANCE,
+                turn_idx=turn_idx, frame_id=resolved_frame_id)
+            movements.append({"subject": subject, "signal": signal,
+                              "axis": axis, "delta": delta,
+                              "source_id": source_id})
+        if not fields:
+            continue
+        # `familiarity` and `salient_event` are deliberately left alone. The
+        # first is a tally of time spent, which witnessing one act is not;
+        # the second is the model's own sentence about why a stance moved,
+        # and a floor that overwrote it would erase the history
+        # `apply_relationship_updates` takes care not to erase.
+        graph.update(subject, last_interaction_turn=turn_idx, **fields)
+    if movements:
+        save_relationships(chat_id, char_id, graph)
+    return movements
+
+
 def _because_by_target(chat_id, char_id, targets, frame_id):
     """Per target, the strongest recorded movement along each axis.
 

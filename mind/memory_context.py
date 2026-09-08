@@ -119,7 +119,13 @@ def _with_reading(mem, clock):
                "epistemic_origin", "confidence", "felt_importance"}}
     out["when"] = clock.of_memory(mem)
     dispute = mem.get("disputed")
-    if not dispute:
+    # Shape-checked before it is read, the same guard `memory_summaries.
+    # _consolidator_row` carries (A86). `memory_write._dispute_of` hands
+    # back dict-or-None on the read path, but a row that reached here
+    # another way -- a hand-edited `disputed` column, an archive -- must not
+    # take a TURN down with an AttributeError, and this site is the live
+    # payload handed to a character rather than a reconstructible job.
+    if not isinstance(dispute, dict) or not dispute:
         return out
     out["i_now_read_this_differently"] = dispute.get("reading") or ""
     if dispute.get("count", 0) > 1:

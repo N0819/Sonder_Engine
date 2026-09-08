@@ -95,6 +95,7 @@ import zlib
 from .charter_commitment import OPEN_STATES
 from .charter_figure import figure_claim
 from .charter_mind import PERSONAL_FLOOR, hear, see
+from .charter_needs import worst_need
 from .charter_politics import regard_key, regard_value
 from .charter_social import familiarity
 from .charter_talk import RETOLD_RETENTION, co_present, tellable
@@ -613,14 +614,25 @@ def _afford_tell(actor, other, practice, state):
 
 
 def _afford_tend(actor, other, practice, state):
-    """Attend somebody who has gone down. Services their worst need."""
+    """Attend somebody who has gone down. Services their worst need.
+
+    THE WORST NEED IS THE ONE THAT PUT THEM DOWN, not the widest gap they
+    carry (`charter_needs.worst_need`; D18 skeptic, 2026-09-08). Selecting
+    across every need sent the carer to the wrong one the moment a need
+    existed that cannot stand a body down: `company`'s floor of 0.12 is the
+    highest of the four, so a body on the floor with sustenance at 0.0 (gap
+    0.10) was tended for loneliness (gap 0.12), took its +0.05 there, and
+    stayed down -- exactly the case tending exists for, since the
+    opportunity gate already requires the subject to be unavailable.
+    """
     if not _within_speech(actor, other, state):
         return None
     held = (state["needs"] or {}).get(other) or {}
     if not held:
         return None
-    worst = min(held.values(), key=lambda n: float(n["level"]) -
-                float(n["floor"]))
+    worst = worst_need(held)
+    if worst is None:
+        return None
     gap = float(worst["floor"]) - float(worst["level"])
     if gap <= 0.0:
         return None

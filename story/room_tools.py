@@ -661,7 +661,12 @@ def _t_inspect_events(cid, frame_id, *, n=None, full=False):
                                             or payload.get("charter_event")
                                             or "", 200),
                         "source": payload.get("source")})
-    return {"recent": recent, "pending": pending}
+    # WHAT THIS WORLD WRITES (D15): the kinds of objective event it has
+    # actually recorded, with their counts, so a clock that waits on one can
+    # be drafted against the vocabulary rather than against a guess.
+    from story.plot_packages import world_event_kinds
+    return {"recent": recent, "pending": pending,
+            "event_kinds": world_event_kinds(cid, frame_id)}
 
 
 def _t_inspect_clock(cid, frame_id):
@@ -762,7 +767,8 @@ def _t_inspect_contradictions(cid, frame_id):
     warnings, structure warnings, and dangling references -- a planned
     exit to nowhere, a plan placed in no room, a bill in a room that is
     gone, a need for a room that is gone, a package participant nobody
-    holds, a clock past due on an active package, two rooms of the registry
+    holds, a clock past due on an active package, a clock waiting on a kind
+    of event this world has never written (D15), two rooms of the registry
     that answer to one spelling, and a planted structure no live room can be
     walked to."""
     from story.artifacts import POSTED, standing_artifacts
@@ -913,14 +919,49 @@ def _t_inspect_contradictions(cid, frame_id):
     # nothing of the exemption, so it reported a charter body, an authored
     # plan (or its alias) and a package's own `plan_entity` subject as
     # strangers that validation had already accepted (B19, 2026-09-07).
-    from story.plot_packages import reserved_names, unheld_participants
+    from story.plot_packages import (reserved_names, unheld_participants,
+                                     world_event_kinds)
     reserved = reserved_names(cid, frame_id)
+    # A CLOCK THAT NEVER TICKS SAYS SO (D15, owner ruling 2026-09-08). A
+    # clock with `advance_on` waits on `world_events.kind` -- the one
+    # vocabulary the world writes -- so a live clock that has filled nothing
+    # and names no kind this world has ever written is a fuse that will sit
+    # there for the rest of the story in silence. Data-driven, never a list
+    # of kinds kept here: the world is asked what it writes.
+    #
+    # A world that has written NOTHING is not evidence of anything (D15
+    # rework): an empty `world_events` is a young story, and reporting there
+    # would flag the kind this engine writes on every consequence as if it
+    # were a kind nothing writes. The lint speaks once the world has
+    # recorded an event and that clock's kind is not among them; until then
+    # `inspect_events` reports `event_kinds` as {} and says so plainly.
+    written = None
     for pkg in packages(cid, frame_id).values():
         if pkg["status"] not in ("published", "active"):
             continue
         for name in unheld_participants(pkg, reserved):
             out["dangling"].append({"kind": "participant_nobody_holds",
                                     "package": pkg["uid"], "name": name})
+        for clock in pkg["clocks"]:
+            triggers = clock.get("advance_on") or []
+            if not triggers or clock.get("fired_turn") is not None \
+                    or clock.get("refused_turn") is not None:
+                continue
+            if int(clock.get("filled") or 0):
+                continue
+            if written is None:
+                written = world_event_kinds(cid, frame_id)
+            if not written:
+                continue
+            waits = sorted({str(t.get("event_kind") or "") for t in triggers})
+            if set(waits) & set(written):
+                continue
+            out["dangling"].append(
+                {"kind": "clock_waits_on_unwritten_event",
+                 "package": pkg["uid"], "clock": clock["id"],
+                 "waits_on": waits, "filled": 0,
+                 "segments": clock.get("segments"),
+                 "world_writes": sorted(written)})
     return out
 
 
@@ -1396,7 +1437,7 @@ TOOLS = [
      "reads": True,
      "handler": _t_inspect_charters},
     {"name": "inspect_events",
-     "description": "The most recent objective beats as the engine recorded them (the last few, each as a short excerpt; pass n for more and full=true for the whole record of each), and every scheduled event still pending (authored events, charter events, couriers) with its due time.",
+     "description": "The most recent objective beats as the engine recorded them (the last few, each as a short excerpt; pass n for more and full=true for the whole record of each), every scheduled event still pending (authored events, charter events, couriers) with its due time, and under event_kinds the kinds of objective event this world has actually written, with their counts -- the vocabulary a package clock's advance_on waits on.",
      "args": _schema({"n": _I, "full": _B}), "reads": True,
      "handler": _t_inspect_events},
     {"name": "inspect_clock",
@@ -1436,7 +1477,7 @@ TOOLS = [
                       "scope": _O, "authority": _O}, ["title"]),
      "handler": _t_new_package, "takes_actor": True},
     {"name": "edit_package",
-     "description": "Change a draft's fields: title, premise, truths, questions, participants, evidence, pressures, clocks, opportunities, constraints, planner_requests, scope, authority, spoiler_policy. A truth is a fact about the WORLD; give it known_by ([the names of the minds this fact is already inside, or `player` for the player's own character]) when somebody already holds it, and leave known_by off when nobody does. Everyone else reaches it through evidence, which needs an origin, a location, the truth ids it bears_on and an admission_path. A published package accepts only a superseding truth ({supersedes: <truth id>, text}) with a reason.",
+     "description": "Change a draft's fields: title, premise, truths, questions, participants, evidence, pressures, clocks, opportunities, constraints, planner_requests, scope, authority, spoiler_policy. A truth is a fact about the WORLD; give it known_by ([the names of the minds this fact is already inside, or `player` for the player's own character]) when somebody already holds it, and leave known_by off when nobody does. Everyone else reaches it through evidence, which needs an origin, a location, the truth ids it bears_on and an admission_path. A published package accepts only a superseding truth ({supersedes: <truth id>, text}) with a reason. A clock is due by TIME (due_turns from publish, or due_story_hours) or by WHAT HAPPENS: give it advance_on ([{event_kind, location_id?}] -- the kinds of objective event that fill it, which inspect_events lists under event_kinds for this world) and segments (how many fillings it takes, 1 unless you say otherwise), and it fires when they are filled. A clock with neither a due nor an advance_on never fires, and a clock waiting on a kind this world does not write is warned about at validation.",
      "args": _schema({"uid": _S, "fields": _O, "reason": _S}, ["uid", "fields"]),
      "handler": _t_edit_package},
     {"name": "draft_operation",

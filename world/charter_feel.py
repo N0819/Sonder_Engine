@@ -76,7 +76,7 @@ from __future__ import annotations
 from mind.psychology_runtime import resolve_hedonic, resolve_stress
 
 from .charter_mark import BODY_MARKS
-from .charter_needs import body_state
+from .charter_needs import bears_on_duty, body_state
 from .charter_temper import (
     interoception_of,
     stress_profile_of,
@@ -267,6 +267,23 @@ def appraise_window(body_key, place, upkeeps, events, held_needs=None,
     pain = 0.0
     pain_why = ""
     for name, need in (held_needs or {}).items():
+        # ONLY A NEED THAT BEARS ON DUTY MAY HURT HERE, and this is the back
+        # door the owner's D18 constraint has to be defended at as well as
+        # the front. `somatic_impact` is what `resolve_stress` turns into
+        # strain, and `charter_run` hands last window's strain back to
+        # `advance_needs` as a multiplier on rest drift -- so a need that
+        # `able` refuses to stand a body down for would stand it down anyway,
+        # one window later, through exhaustion. Measured on the SHIP fixture
+        # the moment `company` was added: a simulated week that had emitted
+        # ZERO events emitted 67 `body_unable` and 51 `post_unfilled`, every
+        # one of them sourced "company below its floor".
+        #
+        # What loneliness does instead is pull (`charter_move.errands`) and
+        # travel with the body: `charter_needs.body_state` hands the level
+        # itself to the character tier, which is the layer that owns what a
+        # feeling MEANS.
+        if not bears_on_duty(need):
+            continue
         gap = float(need.get("floor", 0.0)) - float(need.get("level", 1.0))
         if gap <= 0.0:
             continue
@@ -329,9 +346,17 @@ def advance_feel(feel, bodies, needs, watch, posts, upkeeps, events, hours,
         if key in marked or str(body.get("place") or "") in stirred:
             stimulated.add(key)
         else:
+            # A NEED WAKES AN APPRAISAL ONLY IF THE APPRAISAL WILL HURT FOR
+            # IT (D18 skeptic, 2026-09-08). `appraise_window` skips a need
+            # that does not bear on duty, so waking a body for one buys an
+            # appraisal that then discards the reason it was woken -- and
+            # `company` breaches on nearly every quiet body, which would
+            # have turned "who has anything to feel about" into everybody
+            # and the empty feel dict this gate exists to keep into a full
+            # one. The pull toward people is `charter_move.errands`' job.
             held = (needs or {}).get(key) or {}
             if any(float(n.get("floor", 0.0)) > float(n.get("level", 1.0))
-                   for n in held.values()):
+                   for n in held.values() if bears_on_duty(n)):
                 stimulated.add(key)
 
     out = {}

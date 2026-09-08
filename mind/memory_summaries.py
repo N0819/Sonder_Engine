@@ -417,12 +417,11 @@ def _consolidator_row(memory):
     Absent, not empty, on a memory nobody has re-read -- a key that is there
     and blank on every row teaches the reader to skip it.
 
-    HALF DONE, AND SAYING SO. A86 is a payload change plus one sentence on the
-    consolidator card telling the model what to do with the field, and the
-    sentence is the owner's to write (it pairs with D24). Until it lands this
-    key reaches the model unannounced by any prompt, which is a field a
-    reader may or may not honour rather than an instruction -- so the
-    behaviour this was written for is not yet proven, only made possible.
+    The card announces it: the `memory_consolidate` prompt carries the
+    sentence that says what the field IS (a re-read memory is consolidated as
+    what it now means, the earlier reading kept as something the character
+    used to think), in both packs, so this is an instruction rather than a
+    key a reader may or may not honour.
     """
     row = {"id": memory["id"], "turn_idx": memory["turn_idx"],
            "category": memory["category"], "provenance": memory["provenance"],
@@ -432,7 +431,15 @@ def _consolidator_row(memory):
            "location": memory["location"],
            "emotional_context": memory["emotional_context"]}
     dispute = memory.get("disputed") if isinstance(memory, dict) else None
-    reading = str((dispute or {}).get("reading") or "").strip()
+    # Shape-checked before it is read, like every other blob-valued field
+    # here. `memory_write._dispute_of` hands back dict-or-None on the read
+    # path, but a row that reached this function another way (a hand-edited
+    # `disputed` column, an archive) must not take a consolidation job down
+    # with an AttributeError -- the summary is reconstructible and the crash
+    # would not be.
+    if not isinstance(dispute, dict):
+        dispute = {}
+    reading = str(dispute.get("reading") or "").strip()
     if reading:
         row["now_reads"] = reading
     return row

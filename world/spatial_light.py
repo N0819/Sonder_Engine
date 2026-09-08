@@ -113,9 +113,12 @@ def room_light(scene: dict, room_id: str) -> str:
 def _sky_light(scene: dict, phase: str) -> str:
     """What the sky alone gives a room the weather reaches, this phase."""
     from world.day_cycle import sun_light
+    from world.weather import normalize_weather
     weather = (scene or {}).get("weather")
-    return sun_light(phase, weather.get("sky") if isinstance(weather, dict)
-                     else None)
+    # The whole record, not the sky's NAME: what dims a day is an axis since
+    # A88, and normalising here is what recovers those axes for a scene stored
+    # before they existed.
+    return sun_light(phase, normalize_weather(weather) or None)
 
 
 def _declaration_is_the_only_account(scene, room_id, room, exposure,

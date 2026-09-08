@@ -337,6 +337,88 @@ def _signals_in_claim(claim, signal_kinds):
         yield event_kind, actor
 
 
+def signal_landing(signal, stance, *, weight=1.0, signals=None):
+    """Where each axis of one stance LANDS after one witnessed signal.
+
+    THE ARITHMETIC OF A SIGNAL, ONCE, and it is the reason this is a function
+    rather than four lines inside the loop below. Review 2026-09-07 D21: a
+    charter body moved five axes deterministically from the speech-act kinds
+    it witnessed, and a REGISTERED character moved only when the model chose
+    to emit ops -- so promoting a body stopped it obeying the rules that
+    formed it. `mind.memory.apply_witnessed_signals` folds a registered
+    mind's own delivered observations through this same function, so a
+    promotion changes who is asking and not what the answer is. A second copy
+    of `_room` is exactly how the two would drift apart.
+
+    `stance` is any mapping from `JUDGMENT_AXES` to the holder's current
+    value; only the axes the signal names come back.
+
+    THE LANDING AND NOT THE MOVEMENT, which is not a taste: a caller handed a
+    movement has to round it and add it back, and `_clamp` rounds to six
+    decimals too, so the sixth decimal of the sum depends on which of the two
+    roundings happened first. Measured while this was hoisted -- 20 of 4,004
+    replayed stances differed in exactly that digit. A caller that wants the
+    movement subtracts, once, from a number both callers already agree on.
+    """
+    table = signals if isinstance(signals, dict) else DEFAULT_SIGNALS
+    deltas = table.get(str(signal)) or {}
+    held = stance if isinstance(stance, dict) else {}
+    try:
+        weight = float(weight)
+    except (TypeError, ValueError):
+        weight = 1.0
+    landed = {}
+    for axis, raw in deltas.items():
+        if axis not in JUDGMENT_AXES:
+            continue
+        before = float(held.get(axis) or 0.0)
+        delta = float(raw) * weight * _room(before, raw)
+        # AN AXIS WITH NO ROOM LEFT IS ABSENT, not present-and-unmoved:
+        # `_room` returns 0.0 at saturation in the direction of travel, and a
+        # zero landing is dropped rather than reported. Callers read the
+        # absence as "this signal moved nothing on this axis" --
+        # `mind.memory.apply_witnessed_signals` skips the whole evidence row
+        # when no axis lands, so a saturated stance leaves the source
+        # unrecorded in `relationship_events` and the same evidence would
+        # land again the moment an axis reopens. Behaviour predates D21; the
+        # comment is here because it is easy to read the loop the other way.
+        if not delta:
+            continue
+        landed[axis] = _clamp(before + delta)
+    return landed
+
+
+def signals_in_public_evidence(row, signal_kinds=None):
+    """The signals one grounded ``public_evidence`` row carries, and by whom.
+
+    Yields ``(signal, actor)`` pairs, at most one per signal per row: the same
+    de-duplication `_signals_in_claim`'s caller performs with its
+    ``evidence_id|signal`` key, hoisted here because a row's ``source_id`` is
+    the only identity a registered mind's floor has to be idempotent against.
+
+    The ACTOR is the subject, because a speech act is a fact about the body
+    that performed it. The row's canonical actor is used and never its
+    rendered label -- keying a stance by what a witness would say files it
+    against nobody (review 2026-09-07 B7, and the same argument as
+    `_signals_in_claim`'s docstring).
+    """
+    if not isinstance(row, dict):
+        return
+    kinds = (set(signal_kinds) if signal_kinds is not None
+             else set(DEFAULT_SIGNALS))
+    actor = str(row.get("actor") or "").strip()
+    if not actor:
+        return
+    seen = set()
+    for act in row.get("speech_acts") or ():
+        if not isinstance(act, dict):
+            continue
+        signal = str(act.get("kind") or "")
+        if signal in kinds and signal not in seen:
+            seen.add(signal)
+            yield signal, actor
+
+
 def update_judgments_from_minds(judgments, minds, *, politics=None,
                                 norms=None):
     """Fold newly held evidence into local stances, exactly once per holder.
@@ -373,17 +455,15 @@ def update_judgments_from_minds(judgments, minds, *, politics=None,
                 if seen_key in stance.get("seen", ()) \
                         or str(evidence_id) in stance.get("seen", ()):
                     continue
-                deltas = cfg["signals"].get(signal) or {}
-                moved = {}
-                for axis, raw in deltas.items():
-                    before = float(stance.get(axis) or 0.0)
-                    delta = float(raw) * weight * _room(before, raw)
-                    if not delta:
-                        continue
-                    stance[axis] = _clamp(before + delta)
-                    moved[axis] = round(stance[axis] - before, 6)
-                if not moved:
+                landed = signal_landing(signal, stance, weight=weight,
+                                        signals=cfg["signals"])
+                if not landed:
                     continue
+                moved = {}
+                for axis, after in landed.items():
+                    before = float(stance.get(axis) or 0.0)
+                    stance[axis] = after
+                    moved[axis] = round(after - before, 6)
                 reason = {"evidence_id": str(evidence_id), "signal": signal,
                           "source": source, "weight": round(weight, 6)}
                 stance["reasons"] = (stance["reasons"] + [reason])[-REASON_CAP:]
