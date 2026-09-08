@@ -332,6 +332,19 @@ function quickStartModal(character, greetingIndex) {
                   // The last moment before the card starts BEHAVING.
                   showCardWarnings(r);
                 },
+                onError: async () => {
+                  // A FAILED START LEAVES A SETUP, AND THE LIBRARY HAS TO BE
+                  // TOLD. The list renders from `S.boot`, which only the
+                  // success path refreshed -- so the entry was written, the
+                  // retry was waiting, and the author saw an error and an
+                  // unchanged library: "still no temp story library entry and
+                  // everything is just gone and deleted with no recover path"
+                  // (owner, 2026-09-08). The record was there the whole time
+                  // and a page reload would have shown it, which is the worst
+                  // shape a recovery path can have.
+                  closeAllModals();
+                  await boot();
+                },
                 successMessage: "Story started.",
                 errorPrefix: "Quick start failed"
               });

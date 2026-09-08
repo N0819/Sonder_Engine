@@ -159,3 +159,44 @@ def test_a_fenced_object_with_a_trailing_comma_is_read():
     """The two repairs compose, which is the shape a real response has."""
     value = strict_json_parse('```json\n{"a": [1,],}\n```')
     assert value == {"a": [1]}
+
+
+def test_the_generation_calls_go_through_the_whole_ladder():
+    """The class the live failures pointed at (2026-09-08).
+
+    Every pipeline stage calls `complete_validated_json`, which sends the
+    step's JSON Schema so the provider constrains decoding, validates the
+    result, patches the fields that failed, and asks again WITH ROOM when the
+    answer was cut off. The prestory generators called `chat_complete`
+    directly with only the advisory `json_mode` flag, so they had none of it
+    -- and they were the only calls failing: one of them died three runs
+    running on a fence, a trailing comma, and an unterminated string against
+    its own budget. The first two are what a schema prevents; the third is
+    what the escalation answers.
+    """
+    import ast
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    for path, step in (("story/journey_history.py", "prestory_journey"),
+                       ("world/charter_history.py", "prestory_resident")):
+        source = (root / path).read_text(encoding="utf-8")
+        assert "complete_validated_json" in source, path
+        assert step in source, (path, step)
+        # ...and no bare provider call left behind in that module.
+        tree = ast.parse(source)
+        bare = [n.lineno for n in ast.walk(tree)
+                if isinstance(n, ast.Call)
+                and (getattr(n.func, "id", None)
+                     or getattr(n.func, "attr", None)) == "chat_complete"]
+        assert not bare, (path, bare)
+
+
+def test_both_prestory_steps_have_a_schema_to_send():
+    """The ladder can only constrain what it has a schema for, and a step
+    missing from `SCHEMA_MAP` would send the advisory flag again in silence."""
+    from llm.llm_quality import _step_json_schema
+
+    for step in ("prestory_journey", "prestory_resident"):
+        schema = _step_json_schema(step)
+        assert isinstance(schema, dict) and schema.get("properties"), step

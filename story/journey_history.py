@@ -149,18 +149,29 @@ def _source_rows(sheet, lore):
 
 def _model_value(payload, model_call=None):
     if model_call is None:
-        from llm.providers import chat_complete
-        # One call carries every requested recollection, and a recollection is
+                # One call carries every requested recollection, and a recollection is
         # now a paragraph rather than a dossier line, so the budget follows the
         # author's count instead of a constant sized for six.
         count = journey_event_count(payload.get("maximum_events"))
-        raw = chat_complete(
-            "utility", _SYSTEM, json.dumps(payload, ensure_ascii=False),
+        # THE WHOLE LADDER, NOT A BARE CALL. Every pipeline stage goes
+        # through `complete_validated_json`: it sends the step's JSON Schema
+        # so the provider CONSTRAINS decoding, validates against the model,
+        # patches the fields that failed, and -- the half that matters most
+        # here -- ASKS AGAIN WITH ROOM when the answer was cut off for want
+        # of output budget. The generation calls sent the advisory `json_mode`
+        # flag to `chat_complete` and got none of it, which is why this one
+        # call failed three runs running on three different faults: a
+        # Markdown fence, a trailing comma, and an unterminated string at
+        # 10,272 characters against its own 14,000-token ceiling (2026-09-08).
+        # The first two are what constrained decoding prevents; the third is
+        # what the escalation answers, and neither was reachable from here.
+        from llm.llm_quality import complete_validated_json
+
+        value = complete_validated_json(
+            role="utility", step_key="prestory_journey", system=_SYSTEM,
+            payload=payload,
             temperature=.55 if payload["mode"] == "generated" else .3,
-            max_tokens=min(14000, 2000 + 600 * count), json_mode=True)
-        # One reader for a model's JSON, fences and all (2026-09-08).
-        from llm.llm_quality import strict_json_parse
-        value = strict_json_parse(raw)
+            max_tokens=min(14000, 2000 + 600 * count))
     else:
         value = model_call(copy.deepcopy(payload))
     from llm.schemas import PrestoryJourneyHistory
