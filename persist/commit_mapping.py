@@ -32,7 +32,7 @@ the engine already held or was not the Director's to author:
 """
 
 import json, re
-from core.db import q, qi, transaction, wget, wset
+from core.db import q, qi, transaction, wget, wset, wset_if_changed
 from mind.memory import (search_lore, add_lore, update_lore, LORE_CATEGORIES,
                     LOREBOOK_TYPES, chat_lorebook_ids, chat_lorebook_weights,
                     ensure_chat_canon_book)
@@ -537,9 +537,15 @@ def commit_mapping(ctx, nonce, *, prepared=None):
 
     world = ctx.world_context()
     if prepared.get("skipped"):
-        wset(cid, "lore_cache", _lore_for(ctx)[:12])
+        # WRITE ON CHANGE, here and at every sibling below. These three rows
+        # are re-derived from the same inputs every beat and are byte-identical
+        # on nearly all of them; a rewrite costs the INSERT, the WAL page and
+        # the row's read token (review 2026-09-07 C20: measured 3 INSERTs and
+        # 3,186 bytes per beat on chat 114, 64 on chat 117, none of it a
+        # change).
+        wset_if_changed(cid, "lore_cache", _lore_for(ctx)[:12])
         if isinstance(world.get("relevant_books"), list):
-            wset(cid, "active_books", world["relevant_books"])
+            wset_if_changed(cid, "active_books", world["relevant_books"])
         return {
             "mout": mout,
             "applied": {"created": 0, "updated": 0},
@@ -611,9 +617,9 @@ def commit_mapping(ctx, nonce, *, prepared=None):
                 (lb, turn.idx - 20),
             )
 
-    wset(cid, "lore_cache", _lore_for(ctx)[:12])
+    wset_if_changed(cid, "lore_cache", _lore_for(ctx)[:12])
     if isinstance(world.get("relevant_books"), list):
-        wset(cid, "active_books", world["relevant_books"])
+        wset_if_changed(cid, "active_books", world["relevant_books"])
 
     needs = prepared.get("needs") or []
     if needs:
@@ -633,7 +639,7 @@ def commit_mapping(ctx, nonce, *, prepared=None):
     # O(bodies) and this runs on every beat; a thousand-body institution must
     # not be walked for a turn that introduced nobody.
     if not introductions:
-        wset(cid, "known", known)
+        wset_if_changed(cid, "known", known)
         return {"mout": mout, "applied": applied, "book_ids": book_ids,
                 "seed": seed}
     # WIDE for resolution: an introduction naming an offscreen person is still
@@ -725,7 +731,7 @@ def commit_mapping(ctx, nonce, *, prepared=None):
         for learned in charter_aliases.get(learns, [learns]):
             if learned not in known[who]:
                 known[who].append(learned)
-    wset(cid, "known", known)
+    wset_if_changed(cid, "known", known)
     return {"mout": mout, "applied": applied, "book_ids": book_ids, "seed": seed}
 
 # ---- Fallback helpers ----

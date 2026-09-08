@@ -26,9 +26,12 @@ from mind.memory import search_lore
 from story.scene import (
     cast_scene_context,
     get_scene,
+    persona_name,
+    persona_of,
     recent_events,
 )
-from world.spatial import normalize_room_id, room_spellings, scene_room_id
+from world.spatial import (
+    normalize_room_id, room_of, room_spellings, scene_room_id)
 
 from .common import (
     _books,
@@ -36,6 +39,8 @@ from .common import (
     _join_text,
     _lore_fingerprint,
     _normalize_scene_patch,
+    figures_in_view,
+    rooms_in_view,
 )
 
 #: Candidates retrieved for a beat -- the full stage's `k`.
@@ -53,8 +58,6 @@ WORLD_CONTEXT_RECENT_EVENTS = 5
 #: institutions in view does not hand the Director a treatise.
 RULEBOOK_ROWS_CAP = 8
 RULEBOOK_ROW_CHARS = 400
-#: Rooms of the scene walked for figures and creatures in view.
-RULEBOOK_ROOMS_CAP = 24
 
 #: The fields a relevant-lore row carries onto the step. The engine's own
 #: rows, verbatim -- there is no model echo to join any more, which was the
@@ -247,11 +250,23 @@ def _rulebook_text(text):
     return " ".join(str(text or "").split())[:RULEBOOK_ROW_CHARS]
 
 
-def rulebook_rows(cid, scene, frame_id=None):
+def rulebook_rows(cid, scene, frame_id=None, rooms=None, figures=None):
     """The RULEBOOK slice: what the Director rules on, rendered verbatim
     from the engine's own typed data -- no model, no lore entry, no second
     authored copy. Rows: ``{source, subject, text}``. Fail-open: a story with
     no clock, no weather and no charter has no rulebook.
+
+    ``rooms`` is the beat's aperture -- the rooms whose figures and creatures
+    this rulebook describes (`common.rooms_in_view`). Omitted, every room the
+    scene holds is walked, UNCAPPED: until review 2026-09-07 finding C18 this
+    took the first 24 keys of `scene["rooms"]` in dict order, so a plan with
+    more rooms than that could hand the Director the charter of a town four
+    rooms away and omit the room the player was standing in. A dict's
+    insertion order is not a measure of what a beat is about; the aperture is.
+
+    ``figures`` is that walk's answer where the caller already has it
+    (`common.figures_in_view`), so the compiler and `director_resolve` share
+    one walk of the charter instead of paying two.
     """
     rows = []
     # The day. `simulation_clock` is the day cycle's ledger
@@ -305,8 +320,12 @@ def rulebook_rows(cid, scene, frame_id=None):
         from agents.common import present_charter_figures
         from world.charter_creature import normalize_creature
         from world.charter_runtime import registry_for
-        rooms = list(((scene or {}).get("rooms") or {}).keys())[:RULEBOOK_ROOMS_CAP]
-        figures = present_charter_figures(cid, scene, rooms, frame_id=frame_id) if rooms else []
+        if figures is None:
+            walk = ({str(r) for r in rooms if str(r or "")}
+                    if rooms is not None
+                    else {str(r) for r in ((scene or {}).get("rooms") or {})})
+            figures = present_charter_figures(
+                cid, scene, walk, frame_id=frame_id) if walk else []
         by_charter = {}
         for row in figures:
             key = str(row.get("charter") or "")
@@ -477,8 +496,42 @@ def compile_world_context(ctx, nonce):
                f"{len(relevant_books)} book(s)")
     if unique:
         summary += f"; {len(unique)} planning need(s) raised"
+    # THE BEAT'S APERTURE, derived once (`common.rooms_in_view`, C18) and
+    # recorded on the step: the rulebook's charter walk reads it here and
+    # `director_resolve` reads the same answer off the context rather than
+    # deriving a second one. The player's room comes from THIS stage's own
+    # scene read -- the compiler runs beside `perception_act`, which may
+    # refresh `ctx["_player_room"]`, and a stage documented deterministic
+    # must not depend on which of the two lands first.
     try:
-        rulebook = rulebook_rows(cid, scene, frame_id)
+        _pers = persona_of(chat) or {}
+        _p_name = _pers.get("name") or persona_name(_pers)
+        _view = rooms_in_view(
+            ctx, scene,
+            (room_of(scene, _p_name) if _p_name else None)
+            or ctx.get("_player_room"),
+            movement.get("to_room") if isinstance(movement, dict) else None)
+    except Exception as exc:
+        # Fail-open WIDE, not narrow: an aperture that could not be derived
+        # walks every room rather than none, so a charter the beat is
+        # standing in front of is never silently dropped.
+        ctx.add_warning(f"rooms in view not derived: {exc}")
+        _view = None
+    # The one walk of the charter for that aperture, shared with resolve
+    # (`common.figures_in_view`). Guarded on its own so a charter that cannot
+    # be read costs the charter rows and not the day and the weather beside
+    # them -- which is what the inner guard inside `rulebook_rows` did while
+    # the walk lived there.
+    _figures = None
+    if _view is not None:
+        try:
+            _figures = figures_in_view(ctx, scene, _view, frame_id)
+        except Exception as exc:
+            ctx.add_warning(f"figures in view not derived: {exc}")
+            _figures = []
+    try:
+        rulebook = rulebook_rows(cid, scene, frame_id, rooms=_view,
+                                 figures=_figures)
     except Exception as exc:
         ctx.add_warning(f"rulebook not compiled: {exc}")
         rulebook = []
@@ -488,6 +541,10 @@ def compile_world_context(ctx, nonce):
         "relevant_books": relevant_books,
         # Engine rows the Director rules on, rendered from typed data.
         "rulebook": rulebook,
+        # The rooms this beat is about (C18): the player's room, its ambient
+        # scope, and a declared destination. One derivation, read by the
+        # rulebook above and by `director_resolve`'s figures in view.
+        "rooms_in_view": sorted(_view or ()),
         # The compiler never stages and never patches: a room the beat
         # reached with no plan is a NEED, not a proposal.
         "staged_lore": [],

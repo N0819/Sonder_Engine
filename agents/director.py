@@ -167,6 +167,7 @@ from .director_views import (
     _couriers_view,
     _artifacts_view,
     _carried_reports_view,
+    _lazy_view,
 )
 from .director_movement import (
     declared_walk_leg,
@@ -1199,16 +1200,26 @@ def director_interpret(ctx, nonce):
     # registry, and the gate's private no-idx recompute was 2 of the turn's
     # 4 `_crowds_view` calls (3.05s total on the 307-body town, measured
     # 2026-08-28, chat 95). The payload below reuses these same rows.
-    _icrowds = _crowds_view(chat["id"], sc, ctx.turn["idx"])
+    #
+    # AND NONE OF THE FIVE IS BUILT ON A BEAT NOBODY READS THEM ON. Interpret
+    # dispatches no hand on most declarations, and then there is no payload to
+    # carry them and no gate to consult (`_dispatch_specialists`): every one
+    # of these was built and read by nobody, 48 ms of a 205 ms deterministic
+    # interpret on a copy of chat 114 at turn 13 (C8, review 2026-09-07). A
+    # thunk keeps the one-build-per-stage rule intact -- the gate and the
+    # payload still read the same rows, so they still cannot disagree.
+    _icrowds = _lazy_view(lambda: _crowds_view(chat["id"], sc, ctx.turn["idx"]))
     # The view carries the interpret author's own ruling (`ledger_notes`),
     # which is what decides who runs; the facts decide how much sheet an
     # addressed hand is assembled with.
     _iview = _interpret_beat_view(ctx, out, p_name)
-    # The four views the gate and the payload both read, built once.
-    _inotices = _artifacts_view(chat["id"], sc)
-    _icouriers = _couriers_view(chat["id"], sc)
-    _ireports = _carried_reports_view(ctx)
-    _iunratified = _unratified_background_claims(chat["id"], ctx.turn["idx"])
+    # The four views the gate and the payload both read, built once, and only
+    # if one of them reads them.
+    _inotices = _lazy_view(lambda: _artifacts_view(chat["id"], sc))
+    _icouriers = _lazy_view(lambda: _couriers_view(chat["id"], sc))
+    _ireports = _lazy_view(lambda: _carried_reports_view(ctx))
+    _iunratified = _lazy_view(
+        lambda: _unratified_background_claims(chat["id"], ctx.turn["idx"]))
     _idispatch = _dispatch_specialists(ctx, sc, _gate_facts(
         ctx, sc,
         physical=_beat_has_physical_activity(out, {}, []),
@@ -1217,19 +1228,15 @@ def director_interpret(ctx, nonce):
         couriers_rows=_icouriers, reports_rows=_ireports,
         unratified_rows=_iunratified,
     ), _iview)
-    _iparts = scene_extra_parts(ctx.cast, pers, p_name)
     # The remaining extras -- three DB-backed condition views, sightlines,
-    # exits -- exist only for a hand's payload; on a beat that dispatches no
-    # hand (most declarations) they were built and read by nobody.
+    # exits, the cast's authored body parts -- exist only for a hand's
+    # payload; on a beat that dispatches no hand (most declarations) they
+    # were built and read by nobody.
     _any_hand = any(bool((d or {}).get("scope"))
                     for d in (_idispatch or {}).values())
-    _run_specialists(
-        ctx, out, sc, _idispatch,
-        _iview,
-        {
-            "nonce": nonce,
-            "clock": clock,
-        } if not _any_hand else {
+    if _any_hand:
+        _iparts = scene_extra_parts(ctx.cast, pers, p_name)
+        _iextras = {
             "nonce": nonce,
             "clock": clock,
             "active_awareness": _awareness_view(
@@ -1246,18 +1253,20 @@ def director_interpret(ctx, nonce):
                             for name, parts in _iparts.items()}
                            if _iparts else None),
             "contacts": sc.get("contacts") or [],
-            "notices": _inotices,
+            "notices": _inotices(),
             "movement": out.get("movement"),
             "movers": {p_name: {"exits": _egocentric_exits(sc, p_name)}},
             "planning_needs": [],
             "author_notes": payload.get("author_notes"),
             "sightlines": _sightlines_view(sc, ctx, p_name),
-            "crowds": _icrowds,
-            "couriers": _icouriers,
-            "carried_reports": _ireports,
-            "unratified_claims": _iunratified,
-        },
-        "interpret")
+            "crowds": _icrowds(),
+            "couriers": _icouriers(),
+            "carried_reports": _ireports(),
+            "unratified_claims": _iunratified(),
+        }
+    else:
+        _iextras = {"nonce": nonce, "clock": clock}
+    _run_specialists(ctx, out, sc, _idispatch, _iview, _iextras, "interpret")
 
     _declared_actions = [
         item for item in (out.get("sequence") or [])
@@ -3453,16 +3462,24 @@ def director_resolve(ctx, nonce, _corrections=None):
     _dwellings = []
     _fig_rooms = set()
     try:
-        from .common import present_charter_figures
-        from world.spatial import ambient_scope
-        if ctx.get("_player_room"):
-            _fig_rooms.add(str(ctx.get("_player_room")))
-            _nearby, _ = ambient_scope(sc, str(ctx.get("_player_room")))
-            _fig_rooms.update(str(r) for r in (_nearby or ()) if r)
-        if _mv_target:
-            _fig_rooms.add(str(_mv_target))
-        _present_figures = present_charter_figures(
-            chat["id"], sc, _fig_rooms, frame_id=ctx.turn.frame_id)
+        from .common import figures_in_view, rooms_in_view
+        # ONE APERTURE PER BEAT (review 2026-09-07 finding C18). The
+        # world-context compiler derived this same set and recorded it on its
+        # step (`compile_world_context` -> `rooms_in_view`); this reads that
+        # answer instead of walking the scene a second time. The player's room
+        # is still `ctx["_player_room"]` -- the room the beat arrived with,
+        # which is what this stage is entitled to (see the B36 note at
+        # `_reconcile_resolution`) -- so a beat where nothing moved her
+        # derives the set once for both stages, and one where an assertion did
+        # gets the room this stage decided on rather than a stale set.
+        _fig_rooms = rooms_in_view(
+            ctx, sc, ctx.get("_player_room"), _mv_target)
+        # And ONE WALK of the charter for that aperture: the compiler already
+        # made it for the rulebook (`common.figures_in_view`, C18), and it is
+        # invalidated by the charter row's own read token, so a beat that
+        # wrote the registry walks again.
+        _present_figures = figures_in_view(
+            ctx, sc, _fig_rooms, ctx.turn.frame_id)
         # THE AUTHORED PLANS standing in the same rooms, and -- for the
         # floor only -- every unrendered plan elsewhere, by name
         # (`world.planned_entities`; the plan half of plan-and-render).

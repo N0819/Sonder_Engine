@@ -12,6 +12,7 @@ from llm.prompts import payload_legacy
 from mind.memory_common import (
     SUMMARY_SCOPE_FIRSTHAND, _SUMMARY_SCOPES, summary_context_label,
 )
+from mind.memory_read import memory_bank_cache
 from mind.memory_write import _clamp
 from mind.memory_retrieval import (
     _RECALL_LIMIT, _SUMMARY_RECALL_LIMIT, provenance_context_label,
@@ -250,8 +251,17 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
                                    recent_turns=4, recall_limit=_RECALL_LIMIT, here=None,
                                    in_sight=None, absorption=0.0,
                                    ponder_query="", ponder_why="",
-                                   resurfaced_subject=""):
+                                   resurfaced_subject="", bank=None):
     active_state = active_state or {}
+    # ONE READ OF THIS MIND'S BANK, HOWEVER MANY LANES ASK FOR IT. Ordinary
+    # recall, a ponder and an unbidden resurfacing are three retrievals over
+    # the identical seam-filtered rows, and `SELECT *` on `memories` carries
+    # both 20 KB embedding BLOBs per row -- 8.2 MB on a 401-row bank, 21 ms a
+    # read (review 2026-09-07, C15). The memo is a plain dict; when the caller
+    # supplies one it also covers the contrast pass that runs after this
+    # payload is built (agents/character.py), and either way it is dropped
+    # with the beat -- see `memory_bank_cache` for what its key holds.
+    bank = memory_bank_cache() if bank is None else bank
     # WHERE THIS MIND IS READING FROM: who, on which turn, at which reading of
     # this frame's simulation clock. Bound once and handed to every stamping
     # site below, so a payload cannot contain two answers to "how long ago".
@@ -277,7 +287,7 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
         recent_limit, summary_limit = 12, _SUMMARY_RECALL_LIMIT
     recent = recent_memory_buffer(
         chat_id, char_id, current_turn_idx, turns=recent_turns,
-        limit=recent_limit)
+        limit=recent_limit, bank=bank)
     recent_ids = {m["id"] for m in recent}
     summary = get_memory_summary(
         chat_id, char_id, before_turn_idx=current_turn_idx)
@@ -373,7 +383,7 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
                                include_archived=True, current_turn_idx=current_turn_idx,
                                chronological=True, here=here, in_sight=in_sight,
                                aspects=aspects, embedded=embedded,
-                               record_access=True)
+                               record_access=True, bank=bank)
     # NO ABSTENTION SIGNAL IS COMPUTED HERE ANY MORE, and the reason is worth
     # the paragraph because the thing that was here looked like it worked.
     #
@@ -441,7 +451,7 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
         pondered = search_memories(
             chat_id, char_id, ponder_query, k=ponder_k, include_archived=True,
             current_turn_idx=current_turn_idx, chronological=True,
-            here=here, in_sight=in_sight, record_access=True)
+            here=here, in_sight=in_sight, record_access=True, bank=bank)
         # Chronological-neighbour expansion may return k+2; trim to the budget.
         if len(pondered) > ponder_k:
             pondered = sorted(
@@ -613,7 +623,7 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
             chat_id, char_id, resurfaced_subject, k=max(4, int(recall_limit)),
             include_archived=True, current_turn_idx=current_turn_idx,
             chronological=True, here=here, in_sight=in_sight,
-            record_access=True)
+            record_access=True, bank=bank)
             if str(m.get("event_key") or "") not in already]
         if back:
             resurfaced_payload = {"resurfaced_without_asking": {

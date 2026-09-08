@@ -7,7 +7,7 @@ See docs/experiments/AUDIT_COMMIT.md for the split record.
 """
 
 import json, re
-from core.db import q, wget, wset
+from core.db import q, wget, wset, wset_if_changed
 from story.character_schema import (_UNSPACED_SCRIPT, character_name_from_text,
                               fold_identity_key, persona_name)
 from world.mechanics import beat_end_elapsed, clock_elapsed, stable_event_key
@@ -456,7 +456,10 @@ def seed_mutual_recognition(cid, name, others):
         known.setdefault(other, [])
         if name not in known[other]:
             known[other].append(name)
-    wset(cid, "known", known)
+    # Write on change (review 2026-09-07 C20): a roster that already holds
+    # every pair is the ordinary case here, and the rewrite would also throw
+    # away every token-validated parse of the row.
+    wset_if_changed(cid, "known", known)
 
 
 def _resolve_roster_name(value, roster, address_index=None):

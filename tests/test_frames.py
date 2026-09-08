@@ -213,3 +213,83 @@ class TestConcurrentFrameStorage:
         chat_id = _make_chat(temp_db)
         wset(chat_id, "scene", {"location": "Earth"})
         assert wget(chat_id, "scene") == {"location": "Earth"}
+
+
+class TestFrameLookupMemo:
+    """The per-call memo `is_memory_visible` judges a whole bank through.
+
+    A memory bank is filtered row by row, and every row used to ask the
+    database for the same handful of declared eras again: 1,070 SELECTs to
+    judge 401 rows across three eras, 47.14 ms of pure lookup (review
+    2026-09-07, C15). The memo is a dict the CALLER owns, filled on demand,
+    so the two things that could go wrong with it are the two things tested
+    here -- that it answers exactly what per-row lookups answered, and that
+    an unframed chat, which never reaches a lookup at all, is not made to pay
+    for one.
+    """
+
+    def _eras(self, temp_db):
+        chat_id = _make_chat(temp_db)
+        alice = _make_char(temp_db, "Alice")
+        past = frames.create_frame(chat_id, label="Past", ordinal=-5, kind="past")
+        future = frames.create_frame(chat_id, label="Future", ordinal=5,
+                                     kind="future", travelers=[alice])
+        split = frames.create_frame(chat_id, label="Away", ordinal=0,
+                                    kind="spatial", parent_frame_id=None,
+                                    split_turn_idx=10)
+        return chat_id, alice, (None, past, future, split)
+
+    def test_the_memo_answers_exactly_what_per_row_lookups_answered(self, temp_db):
+        _chat_id, alice, eras = self._eras(temp_db)
+        index = {}
+        for memory_frame in eras:
+            for viewer_frame in eras:
+                for turn_idx in (None, 0, 10, 11, 999):
+                    plain = frames.is_memory_visible(
+                        alice, memory_frame, viewer_frame, turn_idx)
+                    memoised = frames.is_memory_visible(
+                        alice, memory_frame, viewer_frame, turn_idx, index=index)
+                    assert plain is memoised, (memory_frame, viewer_frame, turn_idx)
+
+    def test_the_memo_asks_once_per_era_not_once_per_row(self, temp_db, monkeypatch):
+        _chat_id, alice, eras = self._eras(temp_db)
+        selects = []
+        real_q = frames.q
+        monkeypatch.setattr(
+            frames, "q",
+            lambda sql, *a, **k: (selects.append(sql), real_q(sql, *a, **k))[1])
+        index = {}
+        for _row in range(50):
+            for memory_frame in eras:
+                frames.is_memory_visible(alice, memory_frame, eras[2], 3,
+                                         index=index)
+        # Three declared eras plus the implicit present, whatever the bank size.
+        assert len(selects) <= len(eras), selects
+
+    def test_an_unframed_chat_still_asks_nothing(self, temp_db, monkeypatch):
+        """The common case must not be made to pay for the feature it does
+        not use: both sides are NULL, the comparison short-circuits, and the
+        memo stays empty."""
+        alice = _make_char(temp_db, "Alice")
+        selects = []
+        real_q = frames.q
+        monkeypatch.setattr(
+            frames, "q",
+            lambda sql, *a, **k: (selects.append(sql), real_q(sql, *a, **k))[1])
+        index = {}
+        for turn_idx in range(50):
+            assert frames.is_memory_visible(alice, None, None, turn_idx,
+                                            index=index) is True
+        assert selects == []
+        assert index == {}
+
+    def test_list_frames_reads_the_table_once(self, temp_db, monkeypatch):
+        chat_id, _alice, _eras = self._eras(temp_db)
+        selects = []
+        real_q = frames.q
+        monkeypatch.setattr(
+            frames, "q",
+            lambda sql, *a, **k: (selects.append(sql), real_q(sql, *a, **k))[1])
+        listed = frames.list_frames(chat_id)
+        assert [f["ordinal"] for f in listed] == [0, -5, 0, 5]
+        assert len(selects) == 1, selects

@@ -320,16 +320,60 @@ def normalize_weather(value, base=None):
     return out
 
 
-def room_exposure(scene, room_id):
-    """'open' | 'sheltered' | 'enclosed' for one room.
+#: What a room's own record says about it, derived once per record.
+#:
+#: Review 2026-09-07 C17. Everything that asks whether the sky reaches a place
+#: goes through `room_exposure` -- the ground ledger, the light field, the
+#: sound and scent fields, the backdrop prompt -- and `weather_depth`'s graph
+#: walk asks it once per node it visits, for every room it is asked about. On
+#: chat 117's stored 38-room scene one `weather_for_room` pass over the scene
+#: made 1341 of those calls: 35 asks per room, each casefolding the room's
+#: name and description afresh and scanning ~110 keywords over the result.
+#:
+#: The key is the WHOLE READ SET -- the four fields the derivation looks at --
+#: so the memo cannot go stale: a room whose text is edited is a different key
+#: the next time it is asked, and two chats whose rooms read identically have
+#: the same right answer. It holds objective world state and no observer, so
+#: it cannot carry one mind's view to another. Bounded the way
+#: `spatial_fov._ANCHOR_CACHE` and `spatial_light_field._FIELD_CACHE` are:
+#: cleared whole when full, because every entry is recomputable and dropping
+#: one costs a casefold and a keyword pass, never an answer.
+_ROOM_FACTS: dict = {}
+_ROOM_FACTS_MAX = 1024
 
-    The authored `exposure` field wins. Everything else is the keyword fallback
-    described in rule 2 -- present because no existing scene has the field, and
-    conservative by construction: a room whose text says nothing recognisable
-    is treated as indoors, so weather appears in fewer places than it should
-    rather than in places it should not.
+
+def _room_facts(room):
+    """`(haystack, exposure)` for one room record, memoised on the record.
+
+    The casefolded text is handed back alongside the exposure because it is
+    the same parse: `_matches` scans it for the deep and reverberant words
+    that `room_exposure` has already built it to answer.
     """
-    room = (((scene or {}).get("rooms") or {}).get(room_id) or {})
+    key = (room.get("parent_entity"), room.get("exposure"),
+           room.get("name"), room.get("desc"))
+    try:
+        cached = _ROOM_FACTS.get(key)
+    except TypeError:
+        # One of the four fields holds an unhashable value -- a malformed
+        # record rather than a shape this engine writes. Answer it without
+        # the memo rather than refusing it.
+        return _derive_room_facts(room)
+    if cached is not None:
+        return cached
+    facts = _derive_room_facts(room)
+    if len(_ROOM_FACTS) >= _ROOM_FACTS_MAX:
+        _ROOM_FACTS.clear()
+    _ROOM_FACTS[key] = facts
+    return facts
+
+
+def _derive_room_facts(room):
+    haystack = ("%s %s" % (room.get("name") or "",
+                           room.get("desc") or "")).casefold()
+    return (haystack, _derive_exposure(room, haystack))
+
+
+def _derive_exposure(room, haystack):
     # AN INSIDE IS ENCLOSED, AND THAT IS NOT THE AUTHOR'S CALL. A room whose
     # record carries `parent_entity` is the inside of a body or a vehicle
     # (`world/spatial_transit.py`), and the sky is not its ceiling however the
@@ -346,8 +390,6 @@ def room_exposure(scene, room_id):
     declared = _pick(room.get("exposure"), EXPOSURES, "")
     if declared:
         return declared
-    haystack = "%s %s" % (room.get("name") or "", room.get("desc") or "")
-    haystack = haystack.casefold()
     if any(word in haystack for word in _ENCLOSED_WORDS):
         return "enclosed"
     # Sheltered BEFORE deep, so "Cave Mouth" is the overhang it is rather than
@@ -363,6 +405,19 @@ def room_exposure(scene, room_id):
     if any(word in haystack for word in _OPEN_WORDS):
         return "open"
     return "enclosed"
+
+
+def room_exposure(scene, room_id):
+    """'open' | 'sheltered' | 'enclosed' for one room.
+
+    The authored `exposure` field wins. Everything else is the keyword fallback
+    described in rule 2 -- present because no existing scene has the field, and
+    conservative by construction: a room whose text says nothing recognisable
+    is treated as indoors, so weather appears in fewer places than it should
+    rather than in places it should not.
+    """
+    return _room_facts(
+        (((scene or {}).get("rooms") or {}).get(room_id) or {}))[1]
 
 
 # Barriers that do not muffle: an open doorway is not a layer of building
@@ -422,8 +477,10 @@ _REVERBERANT_WORDS = (
 
 
 def _matches(scene, room_id, words):
-    room = (((scene or {}).get("rooms") or {}).get(room_id) or {})
-    haystack = ("%s %s" % (room.get("name") or "", room.get("desc") or "")).casefold()
+    # Same parse as `room_exposure`'s, and memoised with it (C17): the room's
+    # text is casefolded once per record, not once per word list asked about.
+    haystack = _room_facts(
+        (((scene or {}).get("rooms") or {}).get(room_id) or {}))[0]
     return any(word in haystack for word in words)
 
 

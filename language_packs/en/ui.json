@@ -206,6 +206,7 @@
   "?frame_id=": "?frame_id=",
   "?frame_id=${run.frameId}": "?frame_id=${run.frameId}",
   "?frame_id=${S.currentFrameId}": "?frame_id=${S.currentFrameId}",
+  "?since_turn_id=": "?since_turn_id=",
   "[${channel}] ${text}${flags}": "[${channel}] ${text}${flags}",
   "[${operation.book_type || \"general\"}]": "[${operation.book_type || \"general\"}]",
   "[data-entry-id=\"${entryId}\"]": "[data-entry-id=\"${entryId}\"]",

@@ -237,8 +237,21 @@ def test_a_transformation_wins_over_a_disguise_that_outlived_it(temp_db,
         lambda _c: {"hinami": {"subject": "Hinami",
                                "appearance": "a kitsune, ears and tails bare"}})
 
+    # The two maps are read once per turn onto the ctx now (C13), so the
+    # subject context takes the ctx rather than a bare chat id.
     visible, payload, known_to, _ci = _subject_disguise_context(
-        1, "Hinami", "a kitsune, ears and tails bare", {})
+        _Ctx(), "Hinami", "a kitsune, ears and tails bare", {})
     assert payload is None, "a transformed body is concealing nothing"
     assert known_to is None
     assert "ordinary human" not in visible
+
+
+class _Ctx(dict):
+    """Just enough PipelineContext for `_subject_disguise_context`: a chat id
+    and somewhere to keep the turn's condition maps (review 2026-09-07 C13)."""
+
+    chat = {"id": 1}
+
+    @property
+    def _extra(self):
+        return self

@@ -13,6 +13,7 @@ import hashlib
 import json
 import random
 import re
+import threading
 
 from world.charter_model import integer as _integer
 from world.regions import normalize_region_id
@@ -87,21 +88,106 @@ def _payload(row):
         return {}
 
 
-def skeleton_rooms(cid, structure_key, frame_id=None):
-    """Read one planned skeleton in ordinary spatial scene shape."""
+# ---- one parse of the registry, shared by every planned_* reader ----------
+# THE PLAN IS ONE OBJECT AND THE TURN READS IT ONCE. Every `planned_*`
+# question below used to re-run its own
+# `SELECT ... WHERE chat_id=? AND retired_turn_id IS NULL` and re-parse every
+# row's payload JSON. Measured on chat 114's 51-room plan (review item C16,
+# 2026-09-07, `tools/bench/room_registry_scan.py`): a normal turn asks 19
+# times -- three Director payload builders, two movement readers, two room-
+# slice readers, four region readers, the frontier reader and six commit
+# domains -- for 22.3 ms of pure re-derivation with nothing changed in
+# between.
+#
+# Thread-local, and one chat's snapshot at a time. Thread-local because the
+# validity token is a property of THIS thread's connection (`db_read_token`),
+# and the Director's specialists run in parallel: a shared entry would make
+# five threads with five different `total_changes` counters thrash one slot.
+# One chat because a turn reads one story; a reader for another chat replaces
+# the entry rather than growing the cache, which costs that reader a parse and
+# drops no data.
+_REGISTRY_CACHE = threading.local()
+
+
+def _read_registry_rows(cid):
+    """Every live registry row for one chat, parsed. ``{uid: entry}``, in the
+    order the table returns them -- the order every reader below used to see.
+
+    Fields are carried as STORED, not coerced, because the readers disagree
+    about what an absent one means: `skeleton_rooms` falls back to the uid for
+    an empty name and `_planned_spellings` folds it to "" and drops it, so the
+    entry keeps the raw string and each reader states its own default.
+    """
     from core.db import q
 
-    rooms = {}
+    out = {}
     for row in q(
-            "SELECT room_uid,name,payload FROM room_registry "
-            "WHERE chat_id=? AND retired_turn_id IS NULL", (cid,)):
+            "SELECT room_uid,owning_book_id,parent_entity,name,aliases,payload"
+            " FROM room_registry WHERE chat_id=? AND retired_turn_id IS NULL",
+            (cid,)):
         payload = _payload(row)
         planned = payload.get("planned") if isinstance(payload, dict) else None
+        try:
+            aliases = json.loads(row["aliases"] or "[]")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            aliases = []
+        uid = str(row["room_uid"])
+        out[uid] = {
+            "room_uid": uid,
+            "owning_book_id": row["owning_book_id"],
+            "parent_entity": row["parent_entity"],
+            "name": str(row["name"] or ""),
+            "aliases": aliases,
+            "payload": payload,
+            "planned": planned if isinstance(planned, dict) else None,
+        }
+    return out
+
+
+def registry_rows(cid):
+    """Every live `room_registry` row for one chat, parsed once: SHARED and
+    READ-ONLY.
+
+    Every reader in this module gets the same entries until a write lands
+    (`core.db.db_read_token` decides that, and over-invalidates rather than
+    under-). MUTATING WHAT THIS RETURNS IS A BUG -- a spec's `adjacent` list
+    handed out here is the same list the next reader sees, exactly as the
+    charter registry's shared parse works (`charter_runtime.cached_registry`).
+    A caller that intends to mutate uses `registry_rows_for_update`.
+    """
+    from core.db import db_read_token
+
+    token = db_read_token()
+    entry = getattr(_REGISTRY_CACHE, "entry", None)
+    # The chat id is keyed as GIVEN, not coerced: the readers hand down
+    # whatever `ctx.chat["id"]` held, and two spellings of one id costing a
+    # re-parse is nothing beside a coercion that can raise where the old
+    # query simply answered nothing.
+    if entry is not None and entry[0] == cid and entry[1] == token:
+        return entry[2]
+    rows = _read_registry_rows(cid)
+    _REGISTRY_CACHE.entry = (cid, token, rows)
+    return rows
+
+
+def registry_rows_for_update(cid):
+    """The same rows, PRIVATE: a fresh parse for the one caller that mutates
+    what it reads (`prepare_frontier_expansion` appends to a planned spec's
+    `adjacent` and rewrites its `frontier`). Never cached, and never poisons
+    the shared parse."""
+    return _read_registry_rows(cid)
+
+
+def skeleton_rooms(cid, structure_key, frame_id=None):
+    """Read one planned skeleton in ordinary spatial scene shape."""
+    rooms = {}
+    for uid, entry in registry_rows(cid).items():
+        planned = entry["planned"]
         if not isinstance(planned, dict) \
                 or str(planned.get("structure") or "") != str(structure_key):
             continue
-        rooms[str(row["room_uid"])] = {
-            "name": str(row["name"] or row["room_uid"]),
+        rooms[uid] = {
+            "name": str(entry["name"] or uid),
             "adjacent": [dict(edge) for edge in planned.get("adjacent") or ()
                          if isinstance(edge, dict) and edge.get("to")],
             "planned": True,
@@ -422,23 +508,13 @@ def plant_structure(cid, structure, rooms, *, owning_book_id=None,
 
 def materialize_planned_fringe(cid, scene):
     """Add planned neighbours of occupied rooms as small live-scene stubs."""
-    from core.db import q
-
     scene = scene if isinstance(scene, dict) else {}
     rooms = scene.setdefault("rooms", {})
     occupied = {str(room) for room in (scene.get("positions") or {}).values()
                 if str(room)}
     if not occupied:
         return scene, 0
-    planned = {}
-    for row in q(
-            "SELECT room_uid,name,payload FROM room_registry "
-            "WHERE chat_id=? AND retired_turn_id IS NULL", (cid,)):
-        payload = _payload(row)
-        spec = payload.get("planned") if isinstance(payload, dict) else None
-        if isinstance(spec, dict):
-            planned[str(row["room_uid"])] = (str(row["name"] or
-                                                    row["room_uid"]), spec)
+    planned = _planned_specs(cid)
     added = 0
     targets = set()
     #: room uid -> the planned edges this pass offers it, applied below once
@@ -590,19 +666,14 @@ def _settle_stub_barriers(rooms):
 
 
 def _planned_specs(cid):
-    """{room_uid: (name, planned spec)} for every live planned registry row."""
-    from core.db import q
+    """{room_uid: (name, planned spec)} for every live planned registry row.
 
-    out = {}
-    for row in q(
-            "SELECT room_uid,name,payload FROM room_registry "
-            "WHERE chat_id=? AND retired_turn_id IS NULL", (cid,)):
-        payload = _payload(row)
-        spec = payload.get("planned") if isinstance(payload, dict) else None
-        if isinstance(spec, dict):
-            out[str(row["room_uid"])] = (str(row["name"] or row["room_uid"]),
-                                         spec)
-    return out
+    Off the shared parse (`registry_rows`), so the spec IS the one every
+    other reader of this turn holds: read it, never mutate it.
+    """
+    return {uid: (str(entry["name"] or uid), entry["planned"])
+            for uid, entry in registry_rows(cid).items()
+            if entry["planned"] is not None}
 
 
 def _planned_spellings(cid):
@@ -620,25 +691,15 @@ def _planned_spellings(cid):
     `subjects.resolve_subject` already read aliases; the plan's own tables
     did not.
     """
-    from core.db import q
-
     out = {}
-    for row in q(
-            "SELECT room_uid,name,aliases,payload FROM room_registry "
-            "WHERE chat_id=? AND retired_turn_id IS NULL", (cid,)):
-        payload = _payload(row)
-        spec = payload.get("planned") if isinstance(payload, dict) else None
-        if not isinstance(spec, dict):
+    for uid, entry in registry_rows(cid).items():
+        if entry["planned"] is None:
             continue
-        try:
-            aliases = json.loads(row["aliases"] or "[]")
-        except (TypeError, ValueError, json.JSONDecodeError):
-            aliases = []
-        keys = {normalize_room_id(str(row["room_uid"])),
-                normalize_room_id(str(row["name"] or ""))}
-        keys.update(normalize_room_id(str(a or "")) for a in aliases or ())
+        keys = {normalize_room_id(uid), normalize_room_id(entry["name"])}
+        keys.update(normalize_room_id(str(a or ""))
+                    for a in entry["aliases"] or ())
         keys.discard("")
-        out[str(row["room_uid"])] = keys
+        out[uid] = keys
     return out
 
 
@@ -896,27 +957,22 @@ def settle_developed_stubs(scene):
 
 def planned_context(cid, query):
     """Short structural context for mapping a specifically requested room."""
-    from core.db import q
-
     folded = normalize_room_id(str(query or ""))
     if not folded:
         return None
     rows = []
-    all_rows = q(
-        "SELECT room_uid,name,payload FROM room_registry "
-        "WHERE chat_id=? AND retired_turn_id IS NULL", (cid,))
-    names = {str(row["room_uid"]): str(row["name"] or row["room_uid"])
-             for row in all_rows}
+    all_rows = registry_rows(cid)
+    names = {uid: str(entry["name"] or uid)
+             for uid, entry in all_rows.items()}
     # AND EVERY SPELLING THE ROOM ANSWERS TO, the old name a claim retired
     # included (`_planned_spellings`): a brief asked for under the name the
     # story has been using is the same room, not an unplanned destination.
     spellings = _planned_spellings(cid)
-    for row in all_rows:
-        payload = _payload(row)
-        spec = payload.get("planned") if isinstance(payload, dict) else None
-        if not isinstance(spec, dict):
+    for uid, entry in all_rows.items():
+        spec = entry["planned"]
+        if spec is None:
             continue
-        uid, name = str(row["room_uid"]), str(row["name"] or row["room_uid"])
+        name = names[uid]
         keys = set(spellings.get(uid) or ())
         keys.update({normalize_room_id(uid), normalize_room_id(name)})
         keys.discard("")
@@ -970,22 +1026,25 @@ def prepare_frontier_expansion(cid, scene):
     same transaction as the scene, so a frontier can never point at a room
     whose planned identity failed to land.
     """
-    from core.db import q, wget_for_frame
+    from core.db import wget_for_frame
 
     scene = scene if isinstance(scene, dict) else {}
     occupied = {str(room) for room in (scene.get("positions") or {}).values()
                 if str(room)}
     if not occupied:
         return scene, []
-    rows = q(
-        "SELECT room_uid,owning_book_id,parent_entity,name,aliases,payload "
-        "FROM room_registry WHERE chat_id=? AND retired_turn_id IS NULL", (cid,))
-    by_uid = {str(row["room_uid"]): row for row in rows}
+    # THE ONE READER THAT MUTATES, so it pays for its own parse
+    # (`registry_rows_for_update`): the `dict(spec)` below is shallow, and
+    # `spec.setdefault("adjacent", []).append(...)` reaches straight through
+    # it into the list the parse produced. Off the shared snapshot that edge
+    # would land in every other reader's view of the plan for the rest of the
+    # turn (C16, 2026-09-07).
+    by_uid = registry_rows_for_update(cid)
     specs = {}
     counts = {}
-    for uid, row in by_uid.items():
-        payload = _payload(row)
-        spec = payload.get("planned") if isinstance(payload, dict) else None
+    for uid, entry in by_uid.items():
+        payload = entry["payload"]
+        spec = entry["planned"]
         if isinstance(spec, dict):
             specs[uid] = (payload, dict(spec))
             skey = str(spec.get("structure") or "")
@@ -997,14 +1056,10 @@ def prepare_frontier_expansion(cid, scene):
     # not be minted under any spelling the plan already answers to, and an
     # axis written in one of those spellings is an edge to that room.
     by_name = {}
-    for row_uid, row in by_uid.items():
+    for row_uid, entry in by_uid.items():
         by_name.setdefault(row_uid, row_uid)
-        by_name.setdefault(normalize_room_id(str(row["name"] or "")), row_uid)
-        try:
-            aliases = json.loads(row["aliases"] or "[]")
-        except (TypeError, ValueError):
-            aliases = []
-        for alias in aliases or ():
+        by_name.setdefault(normalize_room_id(entry["name"]), row_uid)
+        for alias in entry["aliases"] or ():
             by_name.setdefault(normalize_room_id(str(alias or "")), row_uid)
     by_name.pop("", None)
     existing = set(by_uid) | set(by_name)
@@ -1101,7 +1156,7 @@ def prepare_frontier_expansion(cid, scene):
                 "owning_book_id": by_uid[uid]["owning_book_id"],
                 "parent_entity": by_uid[uid]["parent_entity"],
                 "name": str(by_uid[uid]["name"] or uid),
-                "aliases": json.loads(by_uid[uid]["aliases"] or "[]"),
+                "aliases": by_uid[uid]["aliases"],
                 "payload": payload,
             })
     return scene, mutations
@@ -1157,17 +1212,8 @@ def frontier_spaces(cid):
 
 def _registry_aliases(cid):
     """``{room_uid: [alias, ...]}`` as the registry stores them."""
-    from core.db import q
-
-    out = {}
-    for row in q("SELECT room_uid,aliases FROM room_registry WHERE chat_id=? "
-                 "AND retired_turn_id IS NULL", (cid,)):
-        try:
-            aliases = json.loads(row["aliases"] or "[]")
-        except (TypeError, ValueError, json.JSONDecodeError):
-            aliases = []
-        out[str(row["room_uid"])] = [str(a) for a in aliases or () if str(a)]
-    return out
+    return {uid: [str(a) for a in entry["aliases"] or () if str(a)]
+            for uid, entry in registry_rows(cid).items()}
 
 
 def claim_frontier_spaces(cid, rooms, *, scene=None):
@@ -1461,5 +1507,6 @@ __all__ = [
     "materialize_planned_fringe", "prepare_frontier_expansion",
     "mint_frontier", "normalize_structure", "normalize_structures",
     "planned_context",
+    "registry_rows", "registry_rows_for_update",
     "plant_structure", "skeleton_rooms", "structure_warnings",
 ]

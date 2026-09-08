@@ -48,7 +48,7 @@ from persist.chat_delete import delete_chat_data
 # Reading NAMED KEYS off a step's content: `active_mapping` narrows first,
 # because a step edited through `/api/steps/{sid}/edit` holds whatever the
 # body held (review 2026-09-07, B23).
-from persist.steps import active_mapping
+from persist.steps import active_mapping, active_mappings
 from core.frames import create_frame, get_frame, list_frames
 from world import paradox
 from story import greetings
@@ -3675,7 +3675,32 @@ def chat_del(cid: int):
     return {"ok": True}
 
 @app.get("/api/chats/{cid}")
-def chat_get(cid: int):
+def chat_get(cid: int, since_turn_id: int | None = None):
+    """The whole story payload -- or, with `?since_turn_id=`, only what a
+    reader who already holds turn `since_turn_id` is missing.
+
+    THE TRANSCRIPT IS THE BULK OF THIS PAYLOAD AND IT ONLY EVER GROWS AT THE
+    END. A beat that just finished appends one turn and touches no earlier
+    one: `stale` is only ever set within a single turn's own steps
+    (`UPDATE steps SET stale=1 WHERE turn_id=?`), and prose, player input and
+    `dialogue_log` are written once per turn. So the client re-reading the
+    entire story to learn about one new beat is re-reading what it already
+    has. Measured 2026-09-07 on the review's bench copy of chat 117 (124
+    turns, C22): the whole payload is 266,689 bytes read out of 649,566 bytes
+    of rows; asked with `?since_turn_id=` at the beat before the last, 32,209
+    out of 91,137. The transcript is what shrinks -- 124 turns to 1 -- and it
+    is what grows without bound.
+
+    The rest of the payload -- cast, colours, lorebooks, frames, the bank
+    check -- is ALWAYS whole, because none of it is append-only: a character
+    is renamed, a book is detached, a frame is created. Only `turns` narrows,
+    and the reply says so (`turns_since`) so a client cannot mistake a slice
+    for the story.
+
+    An EDIT to an existing turn (a reroll, a prose edit, a rerun from a
+    stage, a delete) is not an append and must be refetched whole: the caller
+    that passes this parameter is the one that just watched a NEW beat commit.
+    """
     chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
     if not chat:
         raise HTTPException(404)
@@ -3743,9 +3768,24 @@ def chat_get(cid: int):
     # it without storing an offset that a prose edit would invalidate. A quote
     # that no longer matches simply goes uncoloured; nothing is coloured by
     # guess.
+    #
+    # PARSED IN PYTHON, NOT BY SQLITE. `json_extract(content,'$.dialogue_log')`
+    # is the obvious narrowing -- the committed record also carries the turn
+    # index, the summary and the event text, so only about 40% of these bytes
+    # are wanted -- and it is SLOWER: SQLite parses the whole document to find
+    # the subtree, serialises the subtree back out, and Python parses that.
+    # Measured 2026-09-07 over the 124 turns of the review's bench copy of chat
+    # 117 (C22): this loop 5.5 ms / 251,708 row bytes, bare `json_extract`
+    # 6.0 ms / 99,802 bytes, the `json_valid`-guarded form 7.4 ms; all three
+    # answer identically. Fewer bytes is not the same claim as less time, and
+    # the saving that pays here is `since_turn_id` -- a beat that just
+    # committed re-reads one record instead of the whole story's.
     speech_by_turn = {}
     for row in q("SELECT turn_id, content FROM events WHERE chat_id=? "
-                 "AND turn_id IS NOT NULL", (cid,)):
+                 "AND turn_id IS NOT NULL"
+                 + (" AND turn_id>?" if since_turn_id is not None else ""),
+                 (cid, since_turn_id) if since_turn_id is not None
+                 else (cid,)):
         try:
             entries = (json.loads(row["content"]) or {}).get("dialogue_log")
         except (json.JSONDecodeError, TypeError, ValueError):
@@ -3767,16 +3807,27 @@ def chat_get(cid: int):
         "SELECT s.turn_id, s.key, s.label, s.ord "
         "FROM steps s JOIN turns t ON t.id = s.turn_id "
         "WHERE t.chat_id = ? AND s.stale = 1 "
-        "ORDER BY s.turn_id, s.ord",
-        (cid,),
+        + ("AND s.turn_id > ? " if since_turn_id is not None else "")
+        + "ORDER BY s.turn_id, s.ord",
+        (cid, since_turn_id) if since_turn_id is not None else (cid,),
     )
     stale_by_turn = {}
     for r in stale_rows:
         stale_by_turn.setdefault(r["turn_id"], []).append(r)
 
+    # The same one-query-for-the-whole-chat rule, applied to the prose: this
+    # loop used to call `active_mapping` per turn, which is one steps/variants
+    # read per beat of the story on every open (review 2026-09-07, C22).
+    prose_by_turn = active_mappings(cid, "narrator", after_turn_id=since_turn_id)
+
     turns = []
-    for t in q("SELECT * FROM turns WHERE chat_id=? ORDER BY idx", (cid,)):
-        nar = active_mapping(t["id"], "narrator")
+    turn_sql = "SELECT * FROM turns WHERE chat_id=? "
+    if since_turn_id is not None:
+        turn_sql += "AND id>? "
+    turn_sql += "ORDER BY idx"
+    for t in q(turn_sql,
+               (cid, since_turn_id) if since_turn_id is not None else (cid,)):
+        nar = prose_by_turn.get(t["id"]) or {}
         rows = stale_by_turn.get(t["id"]) or []
         # Lowest ord, not rows[0]. First-row indexing is correct only while
         # the ORDER BY above holds; min() survives an arbitrary row order.
@@ -3910,9 +3961,9 @@ def chat_get(cid: int):
         _dv = data_version()
         _max_turn = max((t.get("id") or 0) for t in turns) if turns else 0
         _pipeline_logger.info(
-            "chat_read chat=%s turns=%d max_turn_id=%s data_version=%s "
-            "thread=%s", cid, len(turns), _max_turn, _dv,
-            threading.get_ident())
+            "chat_read chat=%s turns=%d max_turn_id=%s since=%s "
+            "data_version=%s thread=%s", cid, len(turns), _max_turn,
+            since_turn_id, _dv, threading.get_ident())
     except Exception:
         pass
 
@@ -3922,6 +3973,10 @@ def chat_get(cid: int):
         "chat": chat_payload,
         "participants": parts,
         "turns": turns,
+        # Absent on a whole read, so a client that never asks for a slice
+        # cannot be handed one by accident, and present (never null) when
+        # `turns` holds only what follows that turn.
+        **({"turns_since": since_turn_id} if since_turn_id is not None else {}),
         "dialogue_colors": dialogue_colors,
         "lorebook": lbc,
         "lorebooks": books,
@@ -4314,20 +4369,30 @@ def guest_state(request: Request):
     for r in stale_rows:
         stale_by_turn.setdefault(r["turn_id"], []).append(r)
 
+    # Two more whole-chat reads that used to be per-turn queries, on the route
+    # a guest's page POLLS every ten seconds: one steps/variants read and one
+    # `turn_player_inputs` read per beat. Measured 2026-09-07 over the 124
+    # turns of the review's bench copy of chat 117 (C22), this transcript loop
+    # cost 249 queries and 5.8 ms a poll; it now costs 3 and 0.7 ms, for the
+    # same answer -- the input table is UNIQUE(chat_id, turn_idx, persona_id),
+    # so keying by turn_idx cannot lose a row the `one=True` read returned.
+    extra_by_turn = active_mappings(cid, "narrator_extra")
+    input_by_idx = {
+        r["turn_idx"]: r["input"] for r in q(
+            "SELECT turn_idx, input FROM turn_player_inputs "
+            "WHERE chat_id=? AND persona_id=?", (cid, pid))
+    }
+
     turns = []
     for t in q("SELECT * FROM turns WHERE chat_id=? ORDER BY idx", (cid,)):
-        extra = active_mapping(t["id"], "narrator_extra")
+        extra = extra_by_turn.get(t["id"]) or {}
         entry = extra.get(str(pid)) or {}
-        my_input = q(
-            "SELECT input FROM turn_player_inputs WHERE chat_id=? AND turn_idx=? "
-            "AND persona_id=?",
-            (cid, t["idx"], pid), one=True,
-        )
+        my_input = input_by_idx.get(t["idx"])
         rows = stale_by_turn.get(t["id"]) or []
         earliest = min(rows, key=lambda r: r["ord"]) if rows else None
         turns.append({
             "idx": t["idx"],
-            "player_input": my_input["input"] if my_input else None,
+            "player_input": my_input,
             "prose": entry.get("prose", ""),
             "stale": bool(rows),
             "stale_from": (

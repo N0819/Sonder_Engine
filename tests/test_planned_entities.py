@@ -356,6 +356,32 @@ class TestPlanningNeeds:
         again, fresh = file_planning_need(cid, {"kind": "thing", "surface": {"name": "the letter"}})
         assert fresh and again["uid"] == need["uid"]
 
+    def test_no_job_is_queued_for_needs_the_drain_cannot_answer(self, temp_db):
+        """The drain answers person-needs alone; a room- or thing-need waits
+        for the Writers' Room. A ledger holding only those queued a no-op job
+        on every beat -- measured on chat 117, 20 open needs and 124 beats
+        (review 2026-09-07 C20)."""
+        cid = _chat(temp_db)
+        _households(cid)
+        ctx = _ctx(temp_db, cid)
+        file_planning_need(cid, {"kind": "room", "surface": {"room": "house_c"}})
+        file_planning_need(cid, {"kind": "thing", "surface": {"name": "a key"}})
+        assert len(open_planning_needs(cid)) == 2
+        assert schedule_planning_needs(ctx) is None
+        # A person-need alongside them is work, and the job is queued for it.
+        file_planning_need(cid, {"kind": "person",
+                                 "surface": {"name": "Dock Hand", "room": "quay"}})
+        job = schedule_planning_needs(ctx)
+        assert job is not None
+        deadline = time.time() + 10.0
+        while job.state in ("pending", "running") and time.time() < deadline:
+            time.sleep(0.02)
+        assert job.state == "done", (job.state, job.error)
+        from core import jobs
+        jobs.drain(timeout=1.0)
+        # The two the drain cannot answer are still open, untouched.
+        assert {n["kind"] for n in open_planning_needs(cid)} == {"room", "thing"}
+
     def test_the_job_runs_only_when_something_is_open(self, temp_db):
         from core import jobs
         cid = _chat(temp_db)

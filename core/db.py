@@ -2592,12 +2592,78 @@ def world_read_token(chat_id, key):
     return storage_key, (
         _world_epoch, _world_write_gen.get((int(chat_id), storage_key), 0))
 
+def db_read_token():
+    """A token for caching something derived from a TABLE, the way
+    `world_read_token` covers one world row.
+
+    ASK THE DATABASE, DO NOT ASK THE WRITERS. A world row has one write
+    chokepoint (`wset`), so its token can be bumped by hand. A table has
+    none: `room_registry` alone is written by `commit_room_registry`,
+    `commit_destruction`, `world/structure.py`, `checkpoints` and the world
+    routes, and a hand-bumped token is one new writer away from serving a
+    stale answer for a whole turn. So this reads the counters SQLite keeps
+    instead -- `Connection.total_changes` counts every row this connection
+    has inserted, updated or deleted, and `PRAGMA data_version` moves when
+    any OTHER connection commits (`data_version`, above).
+
+    Two readings compare equal only if no write of any kind landed in
+    between. That over-invalidates on purpose -- an unrelated `steps` insert
+    drops the entry -- and can never under-invalidate, which is the only
+    direction that could change an answer.
+
+    The connection OBJECT is part of the token and is held by it, so a
+    `configure()` swap, or any close-and-reopen, cannot let a counter that
+    restarted at zero look like the one a cache was built under. The world
+    epoch rides along for the same reason at one remove: it moves on every
+    database swap.
+
+    Introduced for review item C16 (2026-09-07), where the plan's registry
+    was re-read and re-parsed 19 times a turn.
+    """
+    c = conn()
+    return (c, _world_epoch, c.total_changes, data_version())
+
 def wset(chat_id, key, val):
+    _wset_encoded(chat_id, _scoped_world_key(key), json.dumps(val))
+
+
+def wset_if_changed(chat_id, key, val):
+    """`wset`, except that a byte-identical value is not written at all.
+
+    Returns True when a write landed. A re-derived ledger that did not move
+    is the common case for several per-beat writers -- `known`, `lore_cache`,
+    `active_books`, the obligation/pressure/fact ledgers -- and rewriting it
+    costs three things that are all avoidable: the INSERT itself, the WAL
+    page, and (the expensive one) the row's read token, which `wset` bumps
+    unconditionally and which throws away every token-validated parse of
+    that row (`world_read_token`, `charter_runtime.cached_registry`).
+
+    Measured for review 2026-09-07 C20 on stored chats: `commit_mapping`
+    wrote `known`/`lore_cache`/`active_books` byte-identical on every beat --
+    3 INSERTs and 3,186 bytes per beat on chat 114, 64 bytes on chat 117 --
+    and none of the three had changed.
+
+    The comparison is over the JSON text, so a value that re-serializes
+    differently (a dict rebuilt in another key order) is written as before:
+    this can only miss a saving, never skip a real change.
+    """
     storage_key = _scoped_world_key(key)
+    encoded = json.dumps(val)
+    row = q("SELECT value FROM world WHERE chat_id=? AND key=?",
+            (chat_id, storage_key), one=True)
+    if row is not None and row["value"] == encoded:
+        return False
+    _wset_encoded(chat_id, storage_key, encoded)
+    return True
+
+
+def _wset_encoded(chat_id, storage_key, encoded):
+    """The write itself, shared by `wset` and `wset_if_changed`: one INSERT
+    and the read-token bump that must follow every real write."""
     qi(
         "INSERT INTO world(chat_id,key,value) VALUES(?,?,?) "
         "ON CONFLICT(chat_id,key) DO UPDATE SET value=excluded.value",
-        (chat_id, storage_key, json.dumps(val)),
+        (chat_id, storage_key, encoded),
     )
     # After the write, not before: a reader between the bump and the write
     # would otherwise cache the OLD row under the NEW token. Bumping after

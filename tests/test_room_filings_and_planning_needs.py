@@ -265,3 +265,77 @@ def test_the_room_is_told_why_a_need_is_open_and_not_only_its_kind(temp_db):
     rows = [n for room in _plan_here(cid, None, ["hall"]).values()
             for n in room.get("needs") or ()]
     assert {n["reason"] for n in rows} == {"setting_fact", "generation_request"}
+
+
+# ---- one read and one write for the beat (review 2026-09-07 C20) ------------
+
+def _world_statements(fn):
+    """Every world-row statement one call issues."""
+    from core import db as _db
+    seen = []
+    connection = _db.conn()
+    connection.set_trace_callback(
+        lambda sql: seen.append(" ".join(sql.split())))
+    try:
+        fn()
+    finally:
+        connection.set_trace_callback(None)
+    return [s for s in seen if "world" in s]
+
+
+def test_a_beat_files_all_its_needs_in_one_read_and_one_write(temp_db):
+    """Filing was read-normalize-write PER NEED: on chat 117's ledger (21
+    records, 13,040 bytes) two needs cost two reads and 26,082 bytes of
+    writes for one change. The ledger is the same either way."""
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Needs", "", time.time()))
+    beat = [planning_need("room", "location_query_unmatched",
+                          subject="the sail loft"),
+            planning_need("thing", "generation_request",
+                          subject="a brass key"),
+            # A repeat of the first, as a rerun of the beat files it.
+            planning_need("room", "location_query_unmatched",
+                          subject="the sail loft")]
+    statements = _world_statements(
+        lambda: record_planning_needs(cid, beat, frame_id=None))
+    assert len([s for s in statements if s.startswith("SELECT")]) == 1
+    assert len([s for s in statements if s.startswith("INSERT")]) == 1
+    one_at_a_time = temp_db.qi(
+        "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+        ("Needs one by one", "", time.time()))
+    for need in beat:
+        record_planning_needs(one_at_a_time, [need], frame_id=None)
+    assert [(n["kind"], n["subject"], n["status"])
+            for n in open_planning_needs(cid)] \
+        == [(n["kind"], n["subject"], n["status"])
+            for n in open_planning_needs(one_at_a_time)]
+
+
+def test_a_beat_that_files_nothing_new_writes_nothing(temp_db):
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Needs", "", time.time()))
+    need = planning_need("room", "location_query_unmatched",
+                         subject="the sail loft")
+    record_planning_needs(cid, [need], frame_id=None)
+    statements = _world_statements(
+        lambda: record_planning_needs(cid, [need], frame_id=None))
+    assert [s for s in statements if s.startswith("INSERT")] == []
+
+
+def test_the_ledgers_a_beat_re_derives_are_written_only_when_they_move(
+        temp_db, wired):
+    """`known`, `lore_cache` and `active_books` are rebuilt from the same
+    inputs every beat and were written byte-identical every beat -- 3,186
+    bytes per beat on chat 114, none of it a change (C20)."""
+    from core import db as _db
+    ctx, _book = _story(temp_db)
+    cm.commit_mapping(ctx, "n", prepared=cm.prepare_mapping_commit(ctx))
+    before = {key: _db.world_read_token(ctx.chat.id, key)
+              for key in ("known", "lore_cache", "active_books")}
+    statements = _world_statements(
+        lambda: cm.commit_mapping(ctx, "n",
+                                  prepared=cm.prepare_mapping_commit(ctx)))
+    assert [s for s in statements if s.startswith("INSERT")] == []
+    # Nothing moved, so no cached parse of those rows was invalidated.
+    assert {key: _db.world_read_token(ctx.chat.id, key)
+            for key in before} == before

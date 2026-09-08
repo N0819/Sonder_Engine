@@ -19,6 +19,7 @@ Import direction: nothing outside `agents/director*.py` may import an
 `agents.director` (that is the cycle the facade exists to prevent).
 """
 
+from collections.abc import Mapping
 from typing import get_origin
 
 from core.db import q
@@ -621,6 +622,87 @@ _PROSE_DUTY_SHIPPED = {
 }
 
 
+#: The gate facts, in the order the record carries them.
+_GATE_FACT_ORDER = (
+    "physical_beat",
+    "speech_present",
+    "resolved_stage",
+    "anyone_wears",
+    "active_conditions",
+    "overlays_present",
+    "vitals_tracked",
+    "contacts_standing",
+    "containment_active",
+    "scales_active",
+    "material_effects_declared",
+    "notices_in_scene",
+    "reports_carried",
+    "destructible_entity",
+    "crowds_present",
+    "couriers_present",
+    "unratified_claims_present",
+)
+
+
+class _GateFacts(Mapping):
+    """The stage's gate facts, with the world-view-derived five built on read.
+
+    A Mapping rather than a dict for one property: a fact whose source is a
+    world VIEW -- crowds, couriers, posted notices, carried reports,
+    unratified hearsay -- is built when a gate asks for it and never
+    otherwise. Every other fact is standing scene state or one indexed row,
+    and stays eager because it costs nothing.
+
+    C8 (review 2026-09-07): on an interpret beat whose ruling reaches no hand
+    nothing asks. The gates decide how much sheet an ADDRESSED hand loads, so
+    with no hand addressed they decide nothing, and no specialist payload is
+    assembled either. Measured on a copy of chat 114 at turn 13, the five
+    builds cost 48 ms of a 205 ms deterministic interpret. Where the caller
+    already HOLDS the rows -- the resolve stage hands its payload's in --
+    nothing here is lazy and this behaves exactly as the dict it replaced.
+
+    `consulted()` is the record's copy: the facts actually read, in the
+    canonical order, as a plain JSON-serialisable dict.
+    """
+
+    def __init__(self, eager, lazy):
+        self._eager = dict(eager)
+        self._lazy = dict(lazy)
+        self._read = {}
+
+    def __getitem__(self, key):
+        if key in self._eager:
+            return self._eager[key]
+        if key in self._read:
+            return self._read[key]
+        build = self._lazy[key]          # KeyError names the missing fact
+        try:
+            value = bool(build())
+        except Exception:
+            # FAIL OPEN, as the eager read did: a fact whose read fails
+            # degrades to True and never gates a channel out on an error.
+            value = True
+        self._read[key] = value
+        return value
+
+    def __iter__(self):
+        return iter(_GATE_FACT_ORDER)
+
+    def __len__(self):
+        return len(_GATE_FACT_ORDER)
+
+    def pending(self):
+        """Whether any fact would still cost a build to read."""
+        return any(key not in self._read for key in self._lazy)
+
+    def consulted(self):
+        """The facts actually read, in canonical order, as a plain dict."""
+        return {key: (self._eager[key] if key in self._eager
+                      else self._read[key])
+                for key in _GATE_FACT_ORDER
+                if key in self._eager or key in self._read}
+
+
 def _gate_facts(ctx, sc, *, physical, speech, material_effects=False,
                 resolved_stage=False, crowds_rows=None, notices_rows=None,
                 couriers_rows=None, reports_rows=None, unratified_rows=None):
@@ -640,7 +722,14 @@ def _gate_facts(ctx, sc, *, physical, speech, material_effects=False,
     turn's own idx: the gate's old no-idx read froze the presented-bodies
     lapse (§C3), subtracting long-lapsed bodies from the derived crowds and
     so gating the channel OUT on beats where the payload's aged read had
-    crowds to offer."""
+    crowds to offer.
+
+    Each of the five ``*_rows`` arguments takes THE ROWS OR THE THUNK THAT
+    BUILDS THEM (`director_views._lazy_view`). A stage that may read none of
+    them -- interpret, whose ruling reaches no hand on most beats -- hands in
+    thunks, and a view is built only if a gate asks for its fact (C8); rows
+    handed in are facts immediately, exactly as before.
+    """
     chat_id = ctx.chat["id"]
     entities = sc.get("entities") or {}
     destructible = any(
@@ -649,46 +738,7 @@ def _gate_facts(ctx, sc, *, physical, speech, material_effects=False,
                 "vehicle", "building", "structure", "ship", "boat")
             or e.get("interior_rooms"))
         for e in entities.values())
-    # THE PAYLOAD'S OWN ROWS, when the stage built them (the `crowds_rows`
-    # rule, extended to the other four views this gate recomputed): two
-    # reads for one bool, and the gate and the payload could not disagree.
-    if notices_rows is not None:
-        notices = bool(notices_rows)
-    else:
-        try:
-            notices = bool(_artifacts_view(chat_id, sc))
-        except Exception:
-            notices = True
-    if reports_rows is not None:
-        reports = bool(reports_rows)
-    else:
-        try:
-            reports = bool(_carried_reports_view(ctx))
-        except Exception:
-            reports = True
-    if crowds_rows is not None:
-        crowds = bool(crowds_rows)
-    else:
-        try:
-            crowds = bool(_crowds_view(chat_id, sc, ctx.turn["idx"]))
-        except Exception:
-            crowds = True
-    if couriers_rows is not None:
-        couriers = bool(couriers_rows)
-    else:
-        try:
-            couriers = bool(_couriers_view(chat_id, sc))
-        except Exception:
-            couriers = True
-    if unratified_rows is not None:
-        unratified = bool(unratified_rows)
-    else:
-        try:
-            unratified = bool(_unratified_background_claims(
-                chat_id, ctx.turn["idx"]))
-        except Exception:
-            unratified = True
-    return {
+    eager = {
         "physical_beat": bool(physical),
         "speech_present": bool(speech),
         "resolved_stage": bool(resolved_stage),
@@ -706,13 +756,32 @@ def _gate_facts(ctx, sc, *, physical, speech, material_effects=False,
             isinstance(v, (int, float)) and float(v) != 1.0
             for v in (sc.get("scales") or {}).values()),
         "material_effects_declared": bool(material_effects),
-        "notices_in_scene": notices,
-        "reports_carried": reports,
         "destructible_entity": destructible,
-        "crowds_present": crowds,
-        "couriers_present": couriers,
-        "unratified_claims_present": unratified,
     }
+    lazy = {}
+
+    # THE PAYLOAD'S OWN ROWS, when the stage built them (the `crowds_rows`
+    # rule, extended to the other four views this gate recomputed): two
+    # reads for one bool, and the gate and the payload could not disagree.
+    # A THUNK where the stage may never read them (C8), and the gate's own
+    # recompute where a caller has no payload at all.
+    def _fact(key, rows, build):
+        if rows is not None and not callable(rows):
+            eager[key] = bool(rows)
+        else:
+            lazy[key] = rows if callable(rows) else build
+
+    _fact("notices_in_scene", notices_rows,
+          lambda: _artifacts_view(chat_id, sc))
+    _fact("reports_carried", reports_rows,
+          lambda: _carried_reports_view(ctx))
+    _fact("crowds_present", crowds_rows,
+          lambda: _crowds_view(chat_id, sc, ctx.turn["idx"]))
+    _fact("couriers_present", couriers_rows,
+          lambda: _couriers_view(chat_id, sc))
+    _fact("unratified_claims_present", unratified_rows,
+          lambda: _unratified_background_claims(chat_id, ctx.turn["idx"]))
+    return _GateFacts(eager, lazy)
 
 
 #: Channels whose existence is a property of the STORY, not of the beat: the
@@ -888,17 +957,36 @@ def _dispatch_specialists(ctx, sc, facts, view):
     against the same value. The record carries the two halves separately
     -- `gated` (what the scene admitted) and `addressed_by` (what the ruling
     said) -- so a reader of the step can tell "the ruling never reached this
-    hand" from "this story has no such ledger".
+    hand" from "this story has no such ledger". `gated` is None, and the
+    view-derived facts absent, on a beat whose ruling reached no hand: there
+    the gates were never asked, because nothing they could say would change
+    a scope (C8).
     """
     dispatch = {}
+    rulings = {name: _ruling_for(name, view) for name in SPECIALISTS}
+    # THE GATES ARE CONSULTED WHEN A HAND COULD RUN, OR WHEN CONSULTING THEM
+    # IS FREE. They decide how much sheet an ADDRESSED hand loads, so on a
+    # beat whose ruling reached no hand at all they decide nothing -- and
+    # reading them would build five world views (crowds, couriers, notices,
+    # carried reports, unratified hearsay) that no payload will carry: 48 ms
+    # of a 205 ms deterministic interpret, measured on a copy of chat 114 at
+    # turn 13 (C8, review 2026-09-07). One decision for the whole beat, never
+    # per hand, so the record cannot say one hand's gates were read and its
+    # neighbour's were not. `facts` is a plain dict for callers that build one
+    # themselves -- nothing pending, so the gates are read exactly as before.
+    _consult = (
+        any(addressed for addressed, _named in rulings.values())
+        or any(spec.get("ext_id") for spec in SPECIALISTS.values())
+        or not getattr(facts, "pending", lambda: False)())
     for name, spec in SPECIALISTS.items():
         # `.get` with a fail-open default, not `[]`: a channel whose gate is
         # missing is a registration bug, and raising KeyError here would turn
         # it into a dead Director on every beat rather than one specialist
         # running more often than it needs to.
         gated = [channel for channel in spec["channels"]
-                 if _CHANNEL_GATES.get(channel, _default_channel_gate)(facts)]
-        addressed_by, named = _ruling_for(name, view)
+                 if _CHANNEL_GATES.get(channel, _default_channel_gate)(facts)
+                 ] if _consult else None
+        addressed_by, named = rulings[name]
         scope = []
         if spec.get("ext_id"):
             # An extension family has no chunk in the prose author's sheet
@@ -923,9 +1011,27 @@ def _dispatch_specialists(ctx, sc, facts, view):
         dispatch[name] = {
             "run": bool(scope),
             "scope": scope,
+            # None where the gates were not consulted (see `_consult`): the
+            # honest record of "nothing asked", never an empty list, which
+            # would read as "the scene admitted no channel".
             "gated": gated,
             "addressed_by": addressed_by,
             "channels": list(spec["channels"]),
-            "facts": facts,
         }
+    # ONE facts object shared by every hand, as before: the facts actually
+    # read. A BEAT THAT DISPATCHED A HAND RECORDS ALL OF THEM -- that hand's
+    # payload builds every one of these views a moment later
+    # (`director_interpret`'s extras), so completing the record costs the beat
+    # nothing it was not about to pay, and a fact a gate skipped by
+    # short-circuit (`artifact_ops` never asks about notices on a beat with no
+    # physical activity) stays in the record where it always was.
+    if hasattr(facts, "consulted"):
+        if any(state["run"] for state in dispatch.values()):
+            for key in facts:
+                facts[key]
+        consulted = facts.consulted()
+    else:
+        consulted = facts
+    for state in dispatch.values():
+        state["facts"] = consulted
     return dispatch

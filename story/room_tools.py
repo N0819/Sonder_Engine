@@ -967,20 +967,17 @@ def _rooms_named_alike(cid):
     empty for half the story (PM10/PM11, multitude run turns 8-9,
     2026-09-05).
     """
-    from core.db import q
     from world.spatial import normalize_room_id
+    from world.structure import registry_rows
 
     by_spelling = {}
-    for row in q("SELECT room_uid,name,aliases,payload FROM room_registry "
-                 "WHERE chat_id=? AND retired_turn_id IS NULL", (cid,)):
-        uid = str(row["room_uid"])
-        try:
-            aliases = json.loads(row["aliases"] or "[]")
-        except (TypeError, ValueError, json.JSONDecodeError):
-            aliases = []
+    # Off the turn's one parse of the registry (C16), the same rows every
+    # `planned_*` reader sees.
+    for uid, entry in registry_rows(cid).items():
         for spelling in {normalize_room_id(uid),
-                         normalize_room_id(str(row["name"] or "")),
-                         *(normalize_room_id(str(a or "")) for a in aliases or ())}:
+                         normalize_room_id(entry["name"]),
+                         *(normalize_room_id(str(a or ""))
+                           for a in entry["aliases"] or ())}:
             if spelling:
                 by_spelling.setdefault(spelling, set()).add(uid)
     return [{"kind": "rooms_named_alike", "spelling": spelling,

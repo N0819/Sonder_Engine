@@ -1238,12 +1238,19 @@ def _beneath_visible():
     exposure is objective and the story needs it -- and the body's own
     appearance is what fills the rest, which is where it lived before regions
     existed.
+
+    ONE ANSWER PER COMPOSED VIEW, NOT ONE PER BODY. This is a host setting --
+    a SELECT on `settings` -- and it cannot differ between two bodies or two
+    observers in the same view, so every function below that walks bodies
+    resolves it once and passes it down (`beneath=`). Measured for review
+    2026-09-07 C20: a scene of twelve bodies composed for six observers asked
+    the database 84 times for the one answer.
     """
     return str(get_setting("attire_beneath") or "").strip().casefold() in (
         "1", "on", "true", "yes")
 
 
-def attire_view(entry, body=""):
+def attire_view(entry, body="", beneath=None):
     """One body's clothing as a stage should see it.
 
     The flat `wearing`/`state` pair stays, because that is the shape the
@@ -1251,6 +1258,10 @@ def attire_view(entry, body=""):
     one line per region, which is the only representation that can say a robe
     is open rather than merely present -- and the only one that can say a
     region is bare while the body is still dressed.
+
+    ``beneath`` is the host's `attire_beneath` answer when a caller walking
+    several bodies already resolved it; None asks for it here (see
+    `_beneath_visible`).
     """
     if not isinstance(entry, dict):
         return {}
@@ -1268,7 +1279,9 @@ def attire_view(entry, body=""):
     coherent = attire_model.rederive_entry(entry)
     regions = coherent.get("regions") or {}
     lines = attire_model.describe(
-        regions, beneath_visible=_beneath_visible(), body=body)
+        regions,
+        beneath_visible=_beneath_visible() if beneath is None else beneath,
+        body=body)
     exposed = attire_model.exposed_regions(regions)
     partial = attire_model.partially_exposed_regions(regions)
     return {
@@ -1335,8 +1348,9 @@ def exposure_owner_refs(narration_person, display, pronouns=None):
 
 def scene_attire_view(sc):
     """`attire_view` across every body in the scene."""
+    beneath = _beneath_visible()
     return {
-        name: attire_view(entry)
+        name: attire_view(entry, beneath=beneath)
         for name, entry in (sc.get("attire") or {}).items()
         if isinstance(entry, dict)
     }
@@ -1349,7 +1363,7 @@ def scene_attire_view(sc):
 ATTIRE_LOOK_CHARS = 60
 
 
-def compact_attire(entry, look=ATTIRE_LOOK_CHARS):
+def compact_attire(entry, look=ATTIRE_LOOK_CHARS, beneath=None):
     """One body's clothing as a single line -- see `attire.compact_line`.
 
     Replaces the multi-field `attire_view` in PAYLOADS only. Measured on chat
@@ -1362,18 +1376,24 @@ def compact_attire(entry, look=ATTIRE_LOOK_CHARS):
     render the reconciled truth. It is also what migrates a LEGACY body -- a
     story whose attire predates regions entirely -- into regions on read, so
     an old chat needs no backfill to be rendered by this.
+
+    ``beneath`` as in `attire_view`: the host answer, resolved once by a
+    caller walking bodies.
     """
     if not isinstance(entry, dict):
         return ""
     regions = (attire_model.rederive_entry(entry) or {}).get("regions") or {}
     return attire_model.compact_line(
-        regions, beneath_visible=_beneath_visible(), look=look)
+        regions,
+        beneath_visible=_beneath_visible() if beneath is None else beneath,
+        look=look)
 
 
 def scene_compact_attire(sc, look=ATTIRE_LOOK_CHARS):
     """`compact_attire` across every body in the scene."""
+    beneath = _beneath_visible()
     return {
-        name: compact_attire(entry, look=look)
+        name: compact_attire(entry, look=look, beneath=beneath)
         for name, entry in (sc.get("attire") or {}).items()
         if isinstance(entry, dict)
     }
@@ -1582,6 +1602,8 @@ def observer_body_regions(sc, observer, body_labels=None, extra_parts=None):
     labels = dict(body_labels or {str(observer): "you"})
     ledger = sc.get("attire") or {}
     parts_map = extra_parts if isinstance(extra_parts, dict) else {}
+    # One host answer for the whole delivery, not one per body (C20).
+    beneath = _beneath_visible()
     results = []
     for body, label in labels.items():
         folded = str(body or "").strip().casefold()
@@ -1604,7 +1626,7 @@ def observer_body_regions(sc, observer, body_labels=None, extra_parts=None):
                     if isinstance(entry, dict) else {})
         regions = coherent.get("regions") or {}
         surfaces = attire_model.perceptible_region_surfaces(
-            regions, beneath_visible=_beneath_visible())
+            regions, beneath_visible=beneath)
         visibility = region_visibility(
             sc, observer, body, entry=coherent if coherent else None)
         # The scale gap is a fact about the PAIR, not about a shoulder, so it
@@ -1731,8 +1753,9 @@ def crowds_for_room(cid, sc, room_id, inputs=None):
     # see across and what `drift` turns into CARRY. One question, one answer.
     size = effective_room_size(sc or {}, room_id)
     out = []
-    for crowd in crowds_model.crowds_in_room(wget(cid, CROWDS_KEY, []) or [],
-                                             room_id):
+    standing = _standing(inputs, "crowds",
+                         lambda: wget(cid, CROWDS_KEY, []) or [])
+    for crowd in crowds_model.crowds_in_room(standing, room_id):
         out.append({
             "uid": crowd.get("uid"),
             "what": crowds_model.describe(crowd, size),
@@ -1880,7 +1903,33 @@ def chatter_inputs(cid, sc, turn_idx=None):
                 str(k) for k in (state.get("bindings") or {})),
             "feel": state.get("feel") or {},
         })
-    return {"charters": charters, "memo": {}}
+    # `standing` is the stage's slot for the OTHER per-room ledgers -- crowds,
+    # couriers, posted notices (see `_standing`). Empty and filled on first
+    # use, so a stage that reads none of them pays for none.
+    return {"charters": charters, "memo": {}, "standing": {}}
+
+
+def _standing(inputs, key, fetch):
+    """One standing ledger, fetched at most once for the stage.
+
+    Crowds, couriers and posted notices are objective per-ROOM facts read per
+    PERCEIVER, so each row was fetched and parsed once per body in the scene:
+    measured for review 2026-09-07 C20, 20 world reads for six perceivers
+    where five answer the whole stage. What a room holds is the same fact for
+    everyone standing in it -- the per-observer subtraction happens downstream
+    in the composer -- so the shared object here is the parsed LEDGER, never a
+    composed view, and every reader still slices it by its own room.
+
+    A caller outside a perception stage (a panel, a test) brings no `inputs`
+    and pays for its own read, exactly as before.
+    """
+    standing = (inputs or {}).get("standing") if isinstance(inputs, dict) \
+        else None
+    if not isinstance(standing, dict):
+        return fetch()
+    if key not in standing:
+        standing[key] = fetch()
+    return standing[key]
 
 
 def charter_ground_for_room(cid, sc, room_id, inputs=None, *, turn_idx=None):
@@ -2548,7 +2597,7 @@ def chatter_for_room(cid, sc, room_id, inputs=None):
     return [dict(e) for e in out]
 
 
-def couriers_for_room(cid, sc, room_id):
+def couriers_for_room(cid, sc, room_id, inputs=None):
     """What couriers an observer in this room registers, already described.
 
     The perception half of the interception seam: a courier the player could
@@ -2561,12 +2610,17 @@ def couriers_for_room(cid, sc, room_id):
     makes for, whether he is waiting. NEVER the message -- a satchel does not
     broadcast its contents, and the report itself moves only through delivery,
     questioning, or seizure, all of which are commit-validated ops.
+
+    ``inputs`` is `chatter_inputs`' shared fetch, as `crowds_for_room` takes
+    it: the standing ledger is one read for the stage, not one per perceiver.
     """
     from story import couriers as couriers_model
 
     if not room_id:
         return []
-    standing = wget(cid, couriers_model.COURIERS_WORLD_KEY, []) or []
+    standing = _standing(
+        inputs, "couriers",
+        lambda: wget(cid, couriers_model.COURIERS_WORLD_KEY, []) or [])
     out = []
     for courier in couriers_model.couriers_in_room(standing, room_id):
         route = [str(r) for r in courier.get("route") or []]
@@ -2598,7 +2652,7 @@ def couriers_for_room(cid, sc, room_id):
     return out
 
 
-def artifacts_for_room(cid, sc, room_id):
+def artifacts_for_room(cid, sc, room_id, inputs=None):
     """What posted notices an observer in this room registers.
 
     The perception half of the reading seam, `couriers_for_room`'s twin: a
@@ -2611,16 +2665,19 @@ def artifacts_for_room(cid, sc, room_id):
     through the explicit `read`, which is what keeps walking past a wall
     from broadcasting it into every mind in the room. A torn-down bill
     shows nothing at all; that silence is the feature.
+
+    ``inputs`` as in `couriers_for_room`: the stage's shared fetch.
     """
     from story import artifacts as artifacts_model
 
     if not room_id:
         return []
+    standing = _standing(inputs, "artifacts",
+                         lambda: artifacts_model.standing_artifacts(cid))
     return [{
         "artifact_id": artifact.get("uid"),
         "what": artifacts_model.artifact_voice(artifact),
-    } for artifact in artifacts_model.posted_in_room(
-        artifacts_model.standing_artifacts(cid), room_id)]
+    } for artifact in artifacts_model.posted_in_room(standing, room_id)]
 
 
 def _subject_spellings(sc, subject):
@@ -9935,6 +9992,112 @@ def player_room_in(sc, ctx, pers=None, interp=None, player_name=None,
     if room:
         ctx["_player_room"] = room
     return room
+
+
+def rooms_in_view(ctx, sc, player_room, destination=None):
+    """The rooms THIS BEAT is about: the player's room, the rooms its
+    ambient scope reaches (`spatial.ambient_scope`), and the room a declared
+    move targets.
+
+    ONE DERIVATION, memoised on the context. Review 2026-09-07 finding C18:
+    two stages needed the same aperture and neither asked the other. The
+    world-context compiler walked the first `RULEBOOK_ROOMS_CAP` = 24 keys of
+    `scene["rooms"]` in DICT ORDER for the rulebook's creatures and posts --
+    a set that is at once too wide (a town four rooms away) and too narrow
+    (on a plan with more than 24 rooms it can omit the room the player is
+    standing in, which is the one room the rulebook exists to describe) --
+    while `director_resolve` derived this set properly and walked
+    `present_charter_figures` over it a second time. The cap is gone; the
+    aperture is derived here, once, and both stages read it.
+
+    Keyed by ``(player_room, destination)`` rather than cached bare, because
+    the room the beat is about is not fixed for the whole beat: the compiler
+    runs BESIDE `perception_act` (`runtime.build_plan`), which previews the
+    player's own state assertions and may move her before resolve reads
+    `ctx["_player_room"]`. Each caller passes the room it is entitled to --
+    the compiler its own scene read, resolve the room the beat arrived with
+    -- and a key that has not moved is derived once for both. The scene graph
+    itself does not change within a beat (nothing writes `world.scene` until
+    commit), so it is not part of the key.
+
+    Objective, not perceptual: this is which rooms the beat touches, never
+    what any observer may see of them, so sharing it across stages carries no
+    information through a channel nobody had.
+
+    THE SCENE IS THE ONE THE BEAT OPENED WITH -- what `story.scene.get_scene`
+    returns, which nothing writes until commit. Four other sites derive the
+    same SHAPE over a different world and are deliberately not callers here:
+    `background._background_react`, `background.managed_presences`,
+    `commit_background.descriptor_bindings` and
+    `commit_background.pick_background_reactors` all ask "here plus
+    ambient scope" of `beat_scene` -- the scene the beat LEAVES -- so an
+    answer memoised from the opening scene would be the wrong world under a
+    key that could not tell.
+    """
+    key = (str(player_room or ""), str(destination or ""))
+    cached = ctx.get("_rooms_in_view_cache")
+    if isinstance(cached, tuple) and cached and cached[0] == key:
+        return set(cached[1])
+    rooms = set()
+    if player_room:
+        rooms.add(str(player_room))
+        try:
+            nearby, _ = ambient_scope(sc, str(player_room))
+        except Exception:
+            nearby = ()
+        rooms.update(str(r) for r in (nearby or ()) if r)
+    if destination:
+        rooms.add(str(destination))
+    ctx["_rooms_in_view_cache"] = (key, frozenset(rooms))
+    return set(rooms)
+
+
+def figures_in_view(ctx, sc, rooms, frame_id=None):
+    """`present_charter_figures` over the beat's aperture, walked ONCE.
+
+    The second half of review 2026-09-07 finding C18. With the aperture
+    settled above, the world-context compiler (for the rulebook's creatures
+    and posts) and `director_resolve` (for the figures its hands are shown)
+    ask the same question of the same rooms in the same beat, and each paid
+    a full walk of the charter for it. Measured on the bench copy of chat
+    114 (4 charters, 66 bodies, 22 charter places): the walk is 8.1 ms over
+    3 rooms and 14.9 ms over 22, against 0.04-0.76 ms to hand back a copy of
+    the answer -- 20x to 201x.
+
+    Keyed by the rooms, the frame, and the charter row's own read token
+    (`core.db.world_read_token`, which is what `charter_runtime`'s registry
+    cache validates itself with), so a beat that WRITES the registry walks
+    again rather than serving what stood there before. A copy is returned
+    because the rows are the caller's to hold; the memo keeps its own.
+
+    Same scene rule as `rooms_in_view`: the beat's opening scene, not a
+    `beat_scene`.
+    """
+    from copy import deepcopy
+
+    places = frozenset(str(r) for r in (rooms or ()) if str(r or ""))
+    if not places:
+        return []
+    token = None
+    try:
+        from core.db import active_frame_id, world_read_token
+        from world.charter_runtime import CHARTERS_KEY
+        _frame = active_frame_id.set(frame_id)
+        try:
+            token = world_read_token(ctx.chat["id"], CHARTERS_KEY)
+        finally:
+            active_frame_id.reset(_frame)
+    except Exception:
+        token = None
+    key = (places, frame_id, token)
+    cached = ctx.get("_figures_in_view_cache")
+    if isinstance(cached, tuple) and cached and cached[0] == key \
+            and token is not None:
+        return deepcopy(cached[1])
+    rows = present_charter_figures(
+        ctx.chat["id"], sc, places, frame_id=frame_id)
+    ctx["_figures_in_view_cache"] = (key, rows)
+    return deepcopy(rows)
 
 
 # ---- What the player asserts is true before anyone reacts to it ----

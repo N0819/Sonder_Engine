@@ -463,6 +463,35 @@ def _report_unowned_address_forms(ctx, out, p_name):
         ctx.add_warning(note)
 
 
+def _lazy_view(build):
+    """A view built AT MOST ONCE, and only if somebody reads it.
+
+    ONE BUILD PER STAGE STAYS THE RULE (the `crowds_rows` rule: the gate and
+    the payload read the same rows, so they cannot disagree about what stands
+    in reach). What this adds is the other half -- a stage that reads the rows
+    NOWHERE does not build them. On an interpret beat whose ruling reaches no
+    hand, the five world views below are read by nobody: no specialist payload
+    is assembled, and the channel gates decide how much sheet an ADDRESSED
+    hand loads, so with no hand addressed they decide nothing (C8, review
+    2026-09-07). Measured on a copy of chat 114 at turn 13: building them cost
+    48 ms of a 205 ms deterministic interpret, dominated by
+    `_carried_reports_view` (47 ms, 125 carried reports through the charter
+    carrier walk).
+
+    Returns a zero-arg callable. `_gate_facts` and the specialist payload both
+    accept one where they accept rows, so the first reader pays and every
+    later one is free.
+    """
+    cell = []
+
+    def read():
+        if not cell:
+            cell.append(build())
+        return cell[0]
+
+    return read
+
+
 def _crowds_view(chat_id, scene, turn_idx=None):
     """Crowds the party could act on, by room, with the id ops require.
 

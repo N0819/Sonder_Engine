@@ -19,9 +19,19 @@ import agents.perception as perception
 from agents.perception import _disguise_leak_check, _subject_concealed_terms
 
 
-class _Ctx:
+class _Ctx(dict):
+    """Warnings for the leak check, and somewhere for the turn's condition
+    maps: `_subject_concealed_terms` reads them once per ctx now (C13)."""
+
+    chat = {"id": 74}
+
     def __init__(self):
+        super().__init__()
         self.warnings = []
+
+    @property
+    def _extra(self):
+        return self
 
 
 DISGUISE = {
@@ -37,14 +47,14 @@ def test_a_transformed_body_has_no_concealed_terms(monkeypatch):
                         lambda _cid: {"hinami": DISGUISE})
     monkeypatch.setattr(perception, "active_transformations",
                         lambda _cid: {"hinami": {"true_appearance": "Fox ears."}})
-    assert _subject_concealed_terms(74, "Hinami") == []
+    assert _subject_concealed_terms(_Ctx(), "Hinami") == []
 
 
 def test_an_undisturbed_disguise_still_yields_its_terms(monkeypatch):
     monkeypatch.setattr(perception, "active_disguises",
                         lambda _cid: {"hinami": DISGUISE})
     monkeypatch.setattr(perception, "active_transformations", lambda _cid: {})
-    assert _subject_concealed_terms(74, "Hinami") == ["fox ears", "six tails"]
+    assert _subject_concealed_terms(_Ctx(), "Hinami") == ["fox ears", "six tails"]
 
 
 def test_the_tripwire_stays_silent_once_the_glamour_is_dropped(monkeypatch):
@@ -59,7 +69,7 @@ def test_the_tripwire_stays_silent_once_the_glamour_is_dropped(monkeypatch):
         ctx, "perception_outcome",
         {"2": "Her fox ears twitch as she turns toward the console."},
         [{"id": "2", "name": "The Doctor"}],
-        "Hinami", _subject_concealed_terms(74, "Hinami"), None)
+        "Hinami", _subject_concealed_terms(ctx, "Hinami"), None)
     assert ctx.warnings == []
 
 
@@ -74,7 +84,7 @@ def test_a_genuinely_unaware_observer_is_still_caught(monkeypatch):
         ctx, "perception_outcome",
         {"9": "A young woman with unmistakable fox ears steps through."},
         [{"id": "9", "name": "Security Guard"}],
-        "Hinami", _subject_concealed_terms(74, "Hinami"), {"hinami"})
+        "Hinami", _subject_concealed_terms(ctx, "Hinami"), {"hinami"})
     assert len(ctx.warnings) == 1
     assert "Security Guard" in ctx.warnings[0]
     assert "fox ears" in ctx.warnings[0]

@@ -182,6 +182,12 @@ there rather than adding another partial sweep at a caller.
 - `qtx(sql, args)`: write only inside `transaction()`.
 - `wget(chat_id, key, default)`: decode a JSON value from `world`.
 - `wset(chat_id, key, value)`: JSON upsert into `world`.
+- `wset_if_changed(chat_id, key, value)`: the same upsert, skipped when the
+  stored JSON is byte-identical; returns whether a write landed. Reach for it
+  where a per-beat writer re-derives a ledger that usually has not moved
+  (`known`, `lore_cache`, `active_books`, the obligation/pressure/fact
+  ledgers): an identical rewrite still costs a WAL page and still bumps the
+  row's read token, which throws away every token-validated parse of it.
 - `wget_for_frame(chat_id, key, frame_id, default)` / `wset_for_frame(...)`: the
   same, addressed to one temporal frame. Most `world` keys are frame-scoped —
   use these when the era matters, which for live world state it almost always

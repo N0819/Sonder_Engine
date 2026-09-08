@@ -45,6 +45,7 @@ from mind.memory import (
     contrast_memory,
     declared_circles,
     knowledge_for_character,
+    memory_bank_cache,
     payload_legacy,
     provenance_context_label,
     relationships_for_payload,
@@ -188,8 +189,33 @@ def _merge_standing_intentions(authored, emergent):
     return kept_authored + emergent
 
 
+def _variant_window(cache, key, fetch):
+    """One turn's shared read of a window of stored active variants.
+
+    THE WINDOW IS A FACT ABOUT THE CHAT, NOT ABOUT THE MIND READING IT. The
+    four ledgers below each query `turns JOIN steps JOIN variants` over the
+    last few committed beats, and each was asked once per character per step
+    -- 12 window queries for three minds where 4 answer the whole turn
+    (measured on chat 117's 124 beats, review 2026-09-07 C20). The rows are
+    committed beats (`t.idx < current`), so nothing this turn can change
+    them; `cache` is the per-turn `character_turn_snapshot` dict, and a
+    caller without one just pays for its own read.
+
+    What is shared is the RAW ROWS. Every per-character judgment -- whose
+    line this is, which result belongs to this mind, what it was handed --
+    still happens in the ledger that asked, so no mind receives another's
+    reading.
+    """
+    if not isinstance(cache, dict):
+        return fetch()
+    window = cache.setdefault("prior_variants", {})
+    if key not in window:
+        window[key] = fetch()
+    return window[key]
+
+
 def _recent_self_lines(chat_id, char_name, current_turn_idx, n_turns=6, cap=6,
-                       frame_id=None):
+                       frame_id=None, cache=None):
     """The character's own most-recent spoken lines, verbatim, oldest->newest,
     from the last few committed turns' director_resolve dialogue_log.
 
@@ -209,14 +235,16 @@ def _recent_self_lines(chat_id, char_name, current_turn_idx, n_turns=6, cap=6,
     declared."""
     if current_turn_idx is None:
         return []
-    rows = q(
-        "SELECT t.idx AS idx, v.content AS content FROM turns t "
-        "JOIN steps s ON s.turn_id=t.id AND s.key='director_resolve' "
-        "JOIN variants v ON v.step_id=s.id AND v.active=1 "
-        "WHERE t.chat_id=? AND t.idx < ? AND t.frame_id IS ? "
-        "ORDER BY t.idx DESC LIMIT ?",
-        (chat_id, current_turn_idx, frame_id, n_turns),
-    )
+    rows = _variant_window(
+        cache, ("self_lines", chat_id, current_turn_idx, frame_id, n_turns),
+        lambda: q(
+            "SELECT t.idx AS idx, v.content AS content FROM turns t "
+            "JOIN steps s ON s.turn_id=t.id AND s.key='director_resolve' "
+            "JOIN variants v ON v.step_id=s.id AND v.active=1 "
+            "WHERE t.chat_id=? AND t.idx < ? AND t.frame_id IS ? "
+            "ORDER BY t.idx DESC LIMIT ?",
+            (chat_id, current_turn_idx, frame_id, n_turns),
+        ))
     cf = str(char_name or "").casefold()
     lines = []
     for r in rows:
@@ -234,7 +262,7 @@ def _recent_self_lines(chat_id, char_name, current_turn_idx, n_turns=6, cap=6,
 
 
 def _recent_self_moves(chat_id, char_id, current_turn_idx, n_turns=12, cap=12,
-                       frame_id=None):
+                       frame_id=None, cache=None):
     """Recent conversational jobs this character selected, oldest->newest.
 
     Lines answer *what words did I use?*  They do not answer *what was I
@@ -252,17 +280,29 @@ def _recent_self_moves(chat_id, char_id, current_turn_idx, n_turns=12, cap=12,
         lower = max(0, int(current_turn_idx) - max(1, int(n_turns)))
     except (TypeError, ValueError):
         return []
-    rows = q(
-        "SELECT t.idx AS idx,s.key AS step_key,v.content AS content "
-        "FROM turns t JOIN steps s ON s.turn_id=t.id "
-        "JOIN variants v ON v.step_id=s.id AND v.active=1 "
-        "WHERE t.chat_id=? AND t.idx>=? AND t.idx<? AND t.frame_id IS ? "
-        "AND (s.key='interaction_loop' OR s.key=?) "
-        "ORDER BY t.idx,s.key",
-        (chat_id, lower, current_turn_idx, frame_id, f"character:{char_id}"),
-    )
+    # EVERY MIND'S DECLARATION STEP, filtered to this one below. The window
+    # was `s.key='character:<this id>'`, which is the same window with a
+    # different WHERE per character -- so a three-mind beat read the same
+    # twelve turns three times (C20). One read, one shared row set, and the
+    # ordering of the rows this character keeps is what it always was
+    # (filtering preserves order under the same ORDER BY).
+    own_step = "character:%s" % char_id
+    rows = _variant_window(
+        cache, ("self_moves", chat_id, lower, current_turn_idx, frame_id),
+        lambda: q(
+            "SELECT t.idx AS idx,s.key AS step_key,v.content AS content "
+            "FROM turns t JOIN steps s ON s.turn_id=t.id "
+            "JOIN variants v ON v.step_id=s.id AND v.active=1 "
+            "WHERE t.chat_id=? AND t.idx>=? AND t.idx<? AND t.frame_id IS ? "
+            "AND (s.key='interaction_loop' OR s.key LIKE 'character:' || '%') "
+            "ORDER BY t.idx,s.key",
+            (chat_id, lower, current_turn_idx, frame_id),
+        ))
     by_turn = {}
     for row in rows:
+        if row["step_key"] != "interaction_loop" \
+                and row["step_key"] != own_step:
+            continue
         try:
             content = json.loads(row["content"])
         except (TypeError, ValueError):
@@ -503,7 +543,8 @@ def _lines_delivered_to(char_id, rows):
 
 
 def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
-                              frame_id, n_turns=3, cache=None, label=None):
+                              frame_id, n_turns=3, cache=None, label=None,
+                              rows_cache=None):
     """`{"awaiting_your_answer": {...}}` when somebody asked THIS character
     something, they received it, and they have not spoken since.
 
@@ -561,24 +602,33 @@ def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
         lower = max(0, int(current_turn_idx) - max(1, int(n_turns)))
     except (TypeError, ValueError):
         return {}
-    rows = q(
-        "SELECT t.idx AS idx,s.key AS step_key,v.content AS content "
-        "FROM turns t JOIN steps s ON s.turn_id=t.id "
-        "JOIN variants v ON v.step_id=s.id AND v.active=1 "
-        "WHERE t.chat_id=? AND t.idx>=? AND t.idx<? AND t.frame_id IS ? "
-        # `character:` steps too, and not as an afterthought: `build_plan`
-        # plans BARE character steps instead of an `interaction_loop`
-        # whenever `autonomy == 0` on an uncontested beat, so on those
-        # chats every declaration is stored under `character:<id>` and
-        # this note was permanently absent -- which is exactly what a beat
-        # with nothing owed looks like, so nothing could report it. The
-        # sibling ledger five hundred lines up reads both step keys.
-        "AND (s.key IN ('director_interpret','interaction_loop',"
-        "'reaction_loop','perception_act','perception_outcome') "
-        "OR s.key LIKE 'character:' || '%') "
-        "ORDER BY t.idx, CASE s.key WHEN 'director_interpret' THEN 0 ELSE 1 END",
-        (chat_id, lower, current_turn_idx, frame_id),
-    )
+    # THE WINDOW IS THE BEAT'S, THE READING IS THIS MIND'S. The query names
+    # no character -- `_lines_delivered_to` below is what picks out what THIS
+    # mind was handed -- so the rows are shared across the turn's minds and
+    # the per-character judgment is untouched (C20; the rows carry every
+    # perceiver's delivered view, which is why only the reading may be
+    # per-mind and never the cache key).
+    rows = _variant_window(
+        rows_cache, ("debt", chat_id, lower, current_turn_idx, frame_id),
+        lambda: q(
+            "SELECT t.idx AS idx,s.key AS step_key,v.content AS content "
+            "FROM turns t JOIN steps s ON s.turn_id=t.id "
+            "JOIN variants v ON v.step_id=s.id AND v.active=1 "
+            "WHERE t.chat_id=? AND t.idx>=? AND t.idx<? AND t.frame_id IS ? "
+            # `character:` steps too, and not as an afterthought: `build_plan`
+            # plans BARE character steps instead of an `interaction_loop`
+            # whenever `autonomy == 0` on an uncontested beat, so on those
+            # chats every declaration is stored under `character:<id>` and
+            # this note was permanently absent -- which is exactly what a beat
+            # with nothing owed looks like, so nothing could report it. The
+            # sibling ledger five hundred lines up reads both step keys.
+            "AND (s.key IN ('director_interpret','interaction_loop',"
+            "'reaction_loop','perception_act','perception_outcome') "
+            "OR s.key LIKE 'character:' || '%') "
+            "ORDER BY t.idx, "
+            "CASE s.key WHEN 'director_interpret' THEN 0 ELSE 1 END",
+            (chat_id, lower, current_turn_idx, frame_id),
+        ))
     heard = _lines_delivered_to(char_id, rows)
 
     def _reached(text, idx):
@@ -746,7 +796,8 @@ def _labelled_debt(result, label):
     return result
 
 
-def _player_quiet_beats(chat_id, current_turn_idx, frame_id, cap=8):
+def _player_quiet_beats(chat_id, current_turn_idx, frame_id, cap=8,
+                        cache=None):
     """How many consecutive beats up to and including this one the player has
     not spoken on. 1 means only this beat.
 
@@ -760,14 +811,19 @@ def _player_quiet_beats(chat_id, current_turn_idx, frame_id, cap=8):
         lower = max(0, int(current_turn_idx) - cap)
     except (TypeError, ValueError):
         return 1
-    rows = q(
-        "SELECT t.idx AS idx,v.content AS content "
-        "FROM turns t JOIN steps s ON s.turn_id=t.id AND s.key='director_interpret' "
-        "JOIN variants v ON v.step_id=s.id AND v.active=1 "
-        "WHERE t.chat_id=? AND t.idx>=? AND t.idx<? AND t.frame_id IS ? "
-        "ORDER BY t.idx DESC",
-        (chat_id, lower, current_turn_idx, frame_id),
-    )
+    # Whether the PLAYER spoke is one answer for the beat, so every mind's
+    # step read the same window (C20): shared here, judged the same.
+    rows = _variant_window(
+        cache, ("player_quiet", chat_id, lower, current_turn_idx, frame_id),
+        lambda: q(
+            "SELECT t.idx AS idx,v.content AS content "
+            "FROM turns t JOIN steps s ON s.turn_id=t.id "
+            "AND s.key='director_interpret' "
+            "JOIN variants v ON v.step_id=s.id AND v.active=1 "
+            "WHERE t.chat_id=? AND t.idx>=? AND t.idx<? AND t.frame_id IS ? "
+            "ORDER BY t.idx DESC",
+            (chat_id, lower, current_turn_idx, frame_id),
+        ))
     beats = 1
     for row in rows:
         try:
@@ -3315,10 +3371,13 @@ def character_step(ctx, cid, nonce):
     # measurement forced: telling a mind that two memories disagree scored
     # 13/16 against 16/16 for handing it the rows and saying nothing.
     _resurfaced = pending_subject(stored_state, ctx.turn.idx)
+    # `shared` is the turn's snapshot: these windows are committed beats, so
+    # every mind's step reads the same rows (see `_variant_window`).
     _self_lines = _recent_self_lines(
-        chat.id, character_name(sh), ctx.turn.idx, frame_id=ctx.turn.frame_id)
+        chat.id, character_name(sh), ctx.turn.idx, frame_id=ctx.turn.frame_id,
+        cache=shared)
     _self_moves = _recent_self_moves(
-        chat.id, cid, ctx.turn.idx, frame_id=ctx.turn.frame_id)
+        chat.id, cid, ctx.turn.idx, frame_id=ctx.turn.frame_id, cache=shared)
     # The beat's OWN earlier rounds join the ledger. Both committed
     # projections stop at `t.idx < current`, so a second micro-round in the
     # same beat was judged -- by the model and by every guard below -- as if
@@ -3356,6 +3415,15 @@ def character_step(ctx, cid, nonce):
         stored_state, _active_annotated, _refrain, ctx.turn.idx, absorption)
     if _prior_probe.get("fired"):
         _unbidden_fire = False
+    # This mind's bank, read once for the whole beat. Every retrieval below
+    # -- ordinary recall, the ponder lane, an unbidden resurfacing, and the
+    # contrast pass after the payload returns -- asks the seam the same
+    # question, and the answer carries both 20 KB embedding BLOBs per row
+    # (review 2026-09-07, C15). The dict is local to this step: one character,
+    # one beat, dropped on return, so nothing crosses to another mind or
+    # another turn. The pool thread fills it and the contrast pass reads it
+    # only after `future.result()`, which is the barrier between them.
+    _memory_bank = memory_bank_cache()
     memory_job_context = copy_context()
     memory_context_future = _MEMORY_CONTEXT_POOL.submit(
         memory_job_context.run,
@@ -3378,6 +3446,7 @@ def character_step(ctx, cid, nonce):
         ponder_query=_ponder_query,
         ponder_why=_ponder_why,
         resurfaced_subject=_resurfaced,
+        bank=_memory_bank,
     )
     known_tags, excl_titles, circles = _char_known_tags(sh)
     # The sheet says where this mind began; the story says where it has gone
@@ -3526,7 +3595,8 @@ def character_step(ctx, cid, nonce):
                 view or "", str((active or {}).get("goal") or ""),
                 str((active or {}).get("mood") or "")) if p),
             ctx.turn.idx, here=_here_name,
-            exclude_ids=[i for i in _in_mind if i is not None])
+            exclude_ids=[i for i in _in_mind if i is not None],
+            bank=_memory_bank)
         if _contrast:
             _unbidden_mem_id = _contrast[0]["id"]
             _unbidden_mem_ref = _contrast[0].get("event_key") or ""
@@ -3969,7 +4039,7 @@ def character_step(ctx, cid, nonce):
             **_player_silence_note(
                 sc, chat, sh, _p_spoke,
                 quiet_beats=(0 if _p_spoke else _player_quiet_beats(
-                    chat.id, ctx.turn.idx, ctx.turn.frame_id)),
+                    chat.id, ctx.turn.idx, ctx.turn.frame_id, cache=shared)),
                 label=_contact_label),
             # Somebody asked this character something and they have not spoken
             # since. The engine knew; nothing told them.
@@ -3977,7 +4047,7 @@ def character_step(ctx, cid, nonce):
                 chat.id, character_name(sh), cid,
                 ctx.turn.idx, ctx.turn.frame_id,
                 cache=shared.setdefault("unanswered_question_notes", {}),
-                label=_contact_label),
+                label=_contact_label, rows_cache=shared),
         },
         "simulation_clock": _sim_clock,
         "variant_seed": nonce,
