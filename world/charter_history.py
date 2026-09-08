@@ -726,7 +726,9 @@ def flesh_resident_history(packet, sheet, *, author_guidance="", model_call=None
             "utility", _RECENT_LIFE_SYSTEM,
             json.dumps(payload, ensure_ascii=False), temperature=0.62,
             max_tokens=7000, json_mode=True)
-        value = json.loads(raw)
+        # One reader for a model's JSON, fences and all (2026-09-08).
+        from llm.llm_quality import strict_json_parse
+        value = strict_json_parse(raw)
     else:
         value = model_call(payload)
     if not isinstance(value, dict):

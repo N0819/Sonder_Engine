@@ -126,16 +126,16 @@ def _row_for_review(mem):
 
 def _parse(raw):
     """The consolidator's own tolerance, for the same reason it has it."""
+    # The one reader, which already strips a fence and then takes the first
+    # balanced object out of surrounding prose -- the two things this did by
+    # hand, less well (2026-09-08). Still answers None rather than raising:
+    # a recall the judge cannot read is a recall it declines to judge.
+    from llm.llm_quality import strict_json_parse
+
     try:
-        return json.loads(raw)
+        return strict_json_parse(raw)
     except Exception:
-        match = re.search(r"\{.*\}", raw or "", re.S)
-        if not match:
-            return None
-        try:
-            return json.loads(re.sub(r",\s*([}\]])", r"\1", match.group(0)))
-        except Exception:
-            return None
+        return None
 
 
 def _clean_tension(item, known):

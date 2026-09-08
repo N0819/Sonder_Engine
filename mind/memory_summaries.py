@@ -466,7 +466,8 @@ def _write_consolidated_window(chat_id, char_id, char_name, memories, previous_s
     raw = chat_complete("utility", get_prompt("memory_consolidate"),
                         json.dumps(payload, ensure_ascii=False), temperature=0.1, max_tokens=5000)
     try:
-        result = json.loads(raw)
+        from llm.llm_quality import strict_json_parse
+        result = strict_json_parse(raw)
     except Exception:
         # THE REPAIR MAY NOT RAISE THE RAW ERROR. Stripping a trailing comma
         # out of the first {...} span fixes the common half-written object;
