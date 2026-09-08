@@ -257,3 +257,28 @@ def test_no_stage_of_a_start_deletes_its_own_chat():
               for n in ast.walk(start) if isinstance(n, ast.Call)}
     assert "delete_chat_data" not in called, (
         "a failed start is kept and marked; the library discards it")
+
+
+def test_a_failed_start_refreshes_the_library_that_shows_it():
+    """The record is only half of a recovery path; being SEEN is the other.
+
+    The story list renders from `S.boot`, and only the success path refreshed
+    it -- so a failed start wrote its entry, kept its plan, armed its retry,
+    and left the author looking at an unchanged library: "still no temp story
+    library entry and everything is just gone and deleted with no recover
+    path" (owner, 2026-09-08), when a page reload would have shown it. Both
+    surfaces that can leave a setup behind re-read the library on failure.
+    """
+    editors = (ROOT / "static/js/editors.js").read_text(encoding="utf-8")
+
+    start = editors.index("/api/characters/${character.id}/start")
+    block = editors[start:start + 1400]
+    assert "onError" in block, "the quick start does not refresh on failure"
+    # The comment above it is long on purpose; the call is what matters.
+    assert "boot()" in block.split("onError", 1)[1][:1200]
+
+    # And the retry, which leaves the setup where it was when it fails.
+    retry = APP_JS.index("/api/chats/${chat.id}/retry_start")
+    retry_block = APP_JS[retry:retry + 600]
+    assert "onError" in retry_block
+    assert "boot()" in retry_block.split("onError", 1)[1][:200]

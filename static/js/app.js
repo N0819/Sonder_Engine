@@ -330,6 +330,9 @@ function failedSetupRow(chat, failure) {
           backgroundTask("Retrying story setup",
             () => api("POST", `/api/chats/${chat.id}/retry_start`),
             { onSuccess: async r => { await boot(); openChat(r.chat_id); },
+              // A retry that fails leaves the setup where it was; the library
+              // has to be re-read to show it as it now stands.
+              onError: async () => { await boot(); },
               successMessage: "Story started." });
         },
       }, "↻"),

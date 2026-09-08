@@ -101,7 +101,7 @@
 | `story/greetings.py` | 1117 |  | `agents.runtime`, `core`, `core.db`, `core.logging_utils`, `llm.llm_quality`, `llm.prompts`, `mind.memory`, `mind.theory_of_mind`, `persist.steps`, `story.character_schema`, `story.importers`, `world.charter_runtime` |
 | `story/history_routing.py` | 215 |  | — |
 | `story/importers.py` | 3155 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema`, `story.scene` |
-| `story/journey_history.py` | 461 |  | — |
+| `story/journey_history.py` | 472 |  | — |
 | `story/lore_structure.py` | 248 |  | — |
 | `story/mandates.py` | 594 |  | `core.db` |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
@@ -140,7 +140,7 @@
 | `world/charter_figure.py` | 140 |  | — |
 | `world/charter_generate.py` | 1462 |  | `world.charter_identity`, `world.charter_model`, `world.charter_needs`, `world.charter_roster`, `world.charter_surface` |
 | `world/charter_harm.py` | 264 |  | — |
-| `world/charter_history.py` | 883 |  | — |
+| `world/charter_history.py` | 885 |  | — |
 | `world/charter_identity.py` | 1167 |  | — |
 | `world/charter_intervene.py` | 344 |  | `world.charter_model` |
 | `world/charter_log.py` | 521 |  | `world.charter_commitment`, `world.charter_decide`, `world.charter_economy`, `world.charter_feel`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_needs`, `world.charter_news`, `world.charter_politics`, `world.charter_social`, `world.charter_temper` |
@@ -1262,11 +1262,11 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `compile_journey_history()` | 290 | 165 lines |
-| `ground_journey_history()` | 171 | 92 lines |
+| `compile_journey_history()` | 301 | 165 lines |
+| `ground_journey_history()` | 182 | 92 lines |
+| `_model_value()` | 150 | 30 lines |
 | `_source_rows()` | 120 | 28 lines |
-| `companion_of()` | 265 | 23 lines |
-| `_model_value()` | 150 | 19 lines |
+| `companion_of()` | 276 | 23 lines |
 | `journey_event_count()` | 95 | 12 lines |
 | `_content_key()` | 113 | 5 lines |
 | `_text()` | 109 | 2 lines |
@@ -1712,14 +1712,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `integrate_featured_resident()` | 743 | 129 lines |
+| `integrate_featured_resident()` | 745 | 129 lines |
 | `ground_recent_history()` | 532 | 122 lines |
 | `_recent_life_context()` | 260 | 87 lines |
 | `ground_personal_history()` | 452 | 78 lines |
 | `resident_history_packet()` | 349 | 73 lines |
 | `_record_shared_recent_history()` | 656 | 48 lines |
 | `featured_resident_private_habits()` | 148 | 47 lines |
-| `flesh_resident_history()` | 706 | 35 lines |
+| `flesh_resident_history()` | 706 | 37 lines |
 
 ### `world/charter_identity.py`
 
@@ -2900,9 +2900,9 @@ Sections: Room ambience (`:2`); seamless looping (`:256`); one-shots (`:735`); t
 
 Declared functions: `ambienceStored()`, `ambienceElement()`, `entryAudios()`, `ambiencePlayers()`, `applyAmbienceMute()`, `setAmbienceVolume()`, `ambienceLevel()`, `setLayerGain()`, `toggleAmbienceMute()`, `ambienceFadeClock()`, `ambienceEnsureSounding()`, `ambienceFadeMix()`, `armSeamlessLoop()`, `crossLoop()`, `retireEntries()`, `stopAmbience()`, `playAmbience()`, `armAmbienceUnlock()`, `ambienceWorking()`, `awaitAmbience()`, `resolveAmbience()`, `ambienceForTurn()`, `rerollAmbience()`, `ambienceOnVisibleTurn()`, `ambienceResetForRender()`, `updateAmbienceBtn()`, `playAmbienceOneshot()`, `ambienceCandidateRow()`, `ambienceLayerRow()`, `ambienceMixPanel()`, `openAmbiencePanel()`, `toggleAmbience()`, `syncAmbience()`.
 
-### `static/js/app.js` (1336 lines)
+### `static/js/app.js` (1339 lines)
 
-Sections: Boot & sidebar (`:1`); and then nothing showed the report, so a host who installed a pack got (`:50`); New chat wizard (`:366`); NSFW (`:1021`); Composer (`:1049`); Init (`:1127`); Embedding reconciler progress (`:1187`).
+Sections: Boot & sidebar (`:1`); and then nothing showed the report, so a host who installed a pack got (`:50`); New chat wizard (`:369`); NSFW (`:1024`); Composer (`:1052`); Init (`:1130`); Embedding reconciler progress (`:1190`).
 
 Declared functions: `boot()`, `renderSide()`, `syncExtensionTabs()`, `renderChatSidebar()`, `failedSetupRow()`, `newChatWizard()`, `renderWizardChoice()`, `storyLanguagePacks()`, `defaultStoryLanguage()`, `wizardState()`, `wizardHistoryCharacters()`, `discardFailedStorySetup()`, `wizardFromScratch()`, `renderWizardPersona()`, `renderWizardCharacters()`, `renderWizardScenario()`, `runWizard()`, `renderCharacterSidebar()`, `renderPersonaSidebar()`, `renderLegacyLoreSidebar()`, `updateNSFWBtn()`, `toggleNSFW()`, `resizeComposer()`, `erCard()`, `erDismiss()`, `erPoll()`, `erWatch()`, `erOfferRebuild()`.
 
@@ -2930,9 +2930,9 @@ Sections: Modal (`:38`); Book covers (`:54`); confirm()/prompt() replacements (`
 
 Declared functions: `txt()`, `el()`, `coverOfRow()`, `coverOfTitle()`, `modal()`, `modalOwnership()`, `closeModal()`, `closeAllModals()`, `_confirmOverlay()`, `confirmModal()`, `promptModal()`, `promptModalWithToggle()`, `livedLocationControl()`, `attachStoryLorebook()`, `generateStoryLocation()`, `openLivedLocationDialog()`, `toastHost()`, `toast()`, `renderActivity()`, `elapsedLabel()`, `activityTicking()`, `backgroundTask()`, `buttonTask()`, `loadingBlock()`, `emptyState()`, `fText()`, `fArea()`, `fSelect()`, `fNum()`, `fLineList()`, `fStrList()`, `attireRegions()`, `attireRegionZones()`, `fCoveragePicker()`, `fAttireGarments()`, `fList()`, `fAbilities()`, `fTraits()`, `fValues()`, `fBeliefs()`, `fCopingStrategies()`, `fAssociations()`, `fGoals()`, `fSenses()`, `fLatent()`, `extraPartAspects()`, `fExtraParts()`, `interiorLights()`, `fInteriorStations()`, `fPronouns()`, `phEditor()`, `fetchModels()`, `fetchImageModels()`, `modelCombobox()`, `emitChange()`, `load()`, `showDD()`.
 
-### `static/js/editors.js` (1045 lines)
+### `static/js/editors.js` (1058 lines)
 
-Sections: how many stations, and how many of them are new -- rather than letting a (`:62`); Carrying the fields an editor has no widget for (`:138`); Background-character promotion (`:873`); Import (file upload) (`:927`); Generate (`:998`); Lorebook generate (`:1016`); Export (`:1033`).
+Sections: how many stations, and how many of them are new -- rather than letting a (`:62`); Carrying the fields an editor has no widget for (`:138`); Background-character promotion (`:886`); Import (file upload) (`:940`); Generate (`:1011`); Lorebook generate (`:1029`); Export (`:1046`).
 
 Declared functions: `appearanceFillButton()`, `interiorFillButton()`, `defaultCharacterSheet()`, `carryUnpresentedFields()`, `greetingCarousel()`, `quickStartModal()`, `charEditor()`, `personaEditor()`, `promotionReviewModal()`, `promoteBackgroundPresence()`, `importModal()`, `generateModal()`, `generateLoreModal()`, `exportCharacter()`, `exportPersona()`, `exportLorebook()`.
 

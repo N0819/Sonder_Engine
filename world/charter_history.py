@@ -721,14 +721,16 @@ def flesh_resident_history(packet, sheet, *, author_guidance="", model_call=None
         "lesson_vocabulary": sorted(PERSONAL_LESSONS),
     }
     if model_call is None:
-        from llm.providers import chat_complete
-        raw = chat_complete(
-            "utility", _RECENT_LIFE_SYSTEM,
-            json.dumps(payload, ensure_ascii=False), temperature=0.62,
-            max_tokens=7000, json_mode=True)
-        # One reader for a model's JSON, fences and all (2026-09-08).
-        from llm.llm_quality import strict_json_parse
-        value = strict_json_parse(raw)
+        # The whole ladder -- schema, validation, repair, and the retry with
+        # room when the answer was cut off -- rather than a bare call and a
+        # parse. See the note at `story/journey_history._model_value`
+        # (2026-09-08).
+        from llm.llm_quality import complete_validated_json
+
+        value = complete_validated_json(
+            role="utility", step_key="prestory_resident",
+            system=_RECENT_LIFE_SYSTEM, payload=payload, temperature=0.62,
+            max_tokens=7000)
     else:
         value = model_call(payload)
     if not isinstance(value, dict):
