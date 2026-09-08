@@ -419,9 +419,14 @@ def passable_route_exists(
     spatial_rel answers the DIRECT-adjacency question; this answers the
     traversal question the director_resolve movement backstop needs for a
     legitimate multi-room walk ("cross the corridor into the far office").
-    Adjacency is treated as traversable in BOTH directions -- an open
-    doorway declared from either side can be walked through either way
-    (the nearby_rooms undirected-reachability precedent).
+    An edge counts from EITHER side -- a doorway declared by one room only
+    is still a doorway (the nearby_rooms reachability precedent) -- but the
+    walk is not symmetric. This crosses `passable_neighbors`, which is
+    DIRECTED where an edge says so, so a `passage_from` edge is walkable
+    only from the room it names: a chute answers True downward and False
+    back up. (E24, 2026-09-07: this said "traversable in BOTH directions"
+    for the whole life of the directional walk; the asymmetry is pinned in
+    `tests/test_adjacency_reciprocity.py`.)
 
     A route requiring a still-closed door, wall, or unknown barrier does
     NOT count: only edges already passable this beat make a path. Callers

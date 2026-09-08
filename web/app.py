@@ -58,6 +58,7 @@ from agents import (
     fanout_is_parallel as director_fanout_is_parallel,
 )
 from story.character_schema import (
+    EXTRA_PART_ASPECTS,
     character_card_warnings,
     character_export_document,
     character_initial_outfit,
@@ -113,7 +114,8 @@ from language_runtime import (
 from mind.memory import (
     add_lore, update_lore, delete_lore, LORE_CATEGORIES,
     LOREBOOK_TYPES, MEMORY_CATEGORIES, MEMORY_PROVENANCE, 
-    LOREBOOK_LINK_TYPES, duplicate_lorebook_for_chat,
+    LOREBOOK_LINK_TYPES, LORE_INHERITANCE_MODES, KNOWLEDGE_TAGS,
+    KNOWLEDGE_RANGES, duplicate_lorebook_for_chat,
     list_memories, update_memory, delete_memory, add_memory,
     search_memories, build_character_memory_context,
     get_memory_summary, consolidate_character_memory,
@@ -1380,6 +1382,17 @@ def _bootstrap_extensions():
         return [], [{"dir": "", "error": str(exc)}], []
 
 
+def _interior_light_levels():
+    """The light ladder, read through the `world.spatial` facade at call time.
+
+    Imported at call time, which is how every other `world.spatial` use in
+    this file is spelled (`room_of`, twice, below), and through the facade
+    rather than `world.spatial_light` directly.
+    """
+    from world.spatial import LIGHT_LEVELS
+    return LIGHT_LEVELS
+
+
 @app.get("/api/bootstrap")
 def bootstrap():
     selected_ui, language_packs, language_error = _bootstrap_language()
@@ -1400,8 +1413,45 @@ def bootstrap():
         "default_samplers": DEFAULT_SAMPLERS,
         "lore_categories": LORE_CATEGORIES,
         "lorebook_types": LOREBOOK_TYPES,
+        # A lorebook's inheritance mode, from the constant `PUT
+        # /api/lorebooks/{id}` validates against, so the menu offers exactly
+        # what the route will accept (review 2026-09-07, B24: the browser had
+        # its own copy and the route its own inline tuple).
+        "lorebook_inheritance_modes": LORE_INHERITANCE_MODES,
+        # A lore entry's knowledge tag and range, and a chat's paradox
+        # consequence mode: three more closed sets the engine owns that the
+        # browser had retyped at the point of use (B24, second rework). The
+        # paradox one is the loudest of the family -- `world/paradox.py`
+        # RAISES on a mode it does not know rather than coercing -- so the
+        # menu and the validator must quote one source. The ranges ship in
+        # the constant's own order (`local`, `global`); the browser's copy
+        # listed them the other way round, which was the drift itself.
+        "knowledge_tags": list(KNOWLEDGE_TAGS),
+        "knowledge_ranges": list(KNOWLEDGE_RANGES),
+        "paradox_modes": list(paradox.MODES),
         "memory_categories": MEMORY_CATEGORIES,
         "memory_provenance": MEMORY_PROVENANCE,
+        # The card editor's closed vocabularies, from the modules that OWN
+        # them rather than from a second copy typed into the browser
+        # (review 2026-09-07, B24: `static/js/components.js` carried its own
+        # `ATTIRE_REGIONS`/`ATTIRE_REGION_ZONES` while `world_browser.js` was
+        # already reading the shipped `attire_regions`, so the same question
+        # had two answers and nothing shipped the zones at all). Both ends
+        # coerce silently -- `attire.py` rewrites an unknown region to the
+        # default region and drops an unknown zone -- so drift here has no
+        # symptom: a region added server-side is merely missing from the
+        # picker, and one removed is offered and quietly discarded on save.
+        "attire_regions": list(attire.REGIONS),
+        "attire_region_zones": {region: list(zones)
+                                for region, zones in attire.REGION_ZONES.items()},
+        # Which face of a body region an extra part emerges from
+        # (`story/character_schema.py`, validated there on save).
+        "extra_part_aspects": list(EXTRA_PART_ASPECTS),
+        # An interior station's light. World vocabulary, resolved at mint by
+        # `world.spatial_containment.materialize_enclosure_interiors` through
+        # `normalize_light`, so the menu the author picks from has to be the
+        # ladder that normalisation will accept.
+        "interior_lights": list(_interior_light_levels()),
         "agent_models": json.loads(get_setting("agent_models") or "{}"),
         # The narrator's voice anchor. Read by agents/narration.py and named in
         # the narrator prompt's STYLE EXEMPLARS clause since that prompt was
@@ -3093,11 +3143,7 @@ def lore_edit(lid: int, body: dict = Body(...)):
         if "inheritance_mode" in body
         else current["inheritance_mode"]
     )
-    if inheritance_mode not in (
-        "inherit",
-        "isolated",
-        "reference_only",
-    ):
+    if inheritance_mode not in LORE_INHERITANCE_MODES:
         raise HTTPException(400, "Invalid inheritance mode")
 
     summary = str(

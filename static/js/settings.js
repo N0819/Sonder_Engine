@@ -1,5 +1,21 @@
 // ---- Chat tool modals ----
 
+// `world/paradox.py`'s MODES, READ FROM THE ENGINE: the bootstrap carries
+// `paradox_modes`, and `PUT /api/chats/{cid}/paradox_policy` RAISES on a mode
+// the module does not know rather than coercing it, so the menu and the
+// validator must quote one source (review 2026-09-07, B24, second rework:
+// this file typed the five modes into the select at the point of use). The
+// literal survives only as the fallback for a tab whose cached JavaScript is
+// running ahead of its first bootstrap response.
+const PARADOX_MODES_FALLBACK = ["dread", "hazard", "toll", "warden", "bureau"];
+
+function paradoxModes() {
+  const shipped = S.boot && S.boot.paradox_modes;
+  return Array.isArray(shipped) && shipped.length
+    ? shipped
+    : PARADOX_MODES_FALLBACK;
+}
+
 // The era the reader is currently viewing (chat.js's frame pills), as a
 // query string for the scene-authoring routes -- positions, attire, vitals,
 // survival seeding. Empty for the present, which is also the frameless-chat
@@ -1681,7 +1697,7 @@ function renderParadoxPanel(chatId) {
     }
 
     const modeSel = el("select", {},
-      ...["dread", "hazard", "toll", "warden", "bureau"].map(m => el("option", {
+      ...paradoxModes().map(m => el("option", {
         value: m, ...(policy.mode === m ? { selected: "" } : {}),
       }, m)));
     modeSel.onchange = async () => {
@@ -2706,10 +2722,10 @@ function renderFullApiSettings(b) {
       b.append(el("h4", {}, "Director specialists"),
         el("div", { class: "small dim" },
           "The Director works as a writer plus specialists: one call writes "
-          + "the beat's account, and the five roles below encode only the "
+          + "the beat's account, and the roles below encode only the "
           + "kinds of change the beat actually contains — a scene with no "
           + "clothing change never loads the clothing rules at all. Most "
-          + "beats need about two of the five."),
+          + "beats need about two of them."),
         el("div", { class: "small dim", style: "margin-top:4px" },
           "They are handed separate parts of the same finished beat and have "
           + "nothing to say to each other, so by default they run at once and "

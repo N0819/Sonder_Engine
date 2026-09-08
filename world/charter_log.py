@@ -195,7 +195,8 @@ def life_of(body_key, charter, events, trace=(), hours_per_day=24.0):
         # or empty dicts for a body currently feeling nothing.
         "feel": normalize_feel(charter.get("feel")).get(key) or {},
         "temperament": temperament_of(dict(body, key=key)),
-        # Reported, never acted on -- see `charter_needs.mood`.
+        # Reported here; acted on only where `mood_weight` is above its
+        # shipped 0.0 (`charter_run`) -- see `charter_needs.mood`.
         "mood": mood(
             needs,
             blamed=int((politics.get("blame") or {}).get(key, 0)),
@@ -245,7 +246,8 @@ def own_state_of(held_needs, feel_entry):
     `unmet` (how far below its floor the worst need is, 0 until a breach)
     from `charter_needs`, the worst need's own name, and the hedonic and
     stress records `charter_feel` persists, only when they carry anything.
-    No third affect model: `mood()` stays unwired by its own decision.
+    No third affect model: `mood()` reaches the planner only through the
+    `mood_weight` dial, which ships at 0.0 (E31, 2026-09-07).
     """
     held = held_needs or {}
     worst = ""

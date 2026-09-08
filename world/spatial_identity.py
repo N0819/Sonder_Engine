@@ -7,14 +7,21 @@ from collections import defaultdict
 from typing import Optional
 
 
-def _positions_lookup(positions: dict, name: str):
+def _positions_lookup(positions: dict, name: str, *, index=None):
     """Where `positions` puts this exact SPELLING, tolerating case, spacing and
     script. Never resolves one name into another -- that is `room_of`'s job,
     and keeping the two apart is what stops the identity pass from recursing
-    through itself."""
+    through itself.
+
+    `index` is `PositionsIndex(positions)` prepared once by a caller that
+    asks this many times over one unchanged table; it answers identically and
+    is the same three probes, done against a folded map instead of two linear
+    scans per ask."""
     if name in positions:
         return positions[name]
     lname = (name or "").lower().strip()
+    if index is not None:
+        return index.lookup(lname)
     for k, v in positions.items():
         if k.lower().strip() == lname:
             return v
@@ -28,6 +35,58 @@ def _positions_lookup(positions: dict, name: str):
             if fold_identity_key(k) == norm:
                 return v
     return None
+
+
+class PositionsIndex:
+    """One folded read of a `positions` table, for a pass that asks it once
+    per label per entity.
+
+    A SWEEP HOLDS THE WHOLE ENTITY TABLE AGAINST THE WHOLE POSITIONS TABLE,
+    and `_positions_lookup`'s tolerance is two linear scans -- one lowering
+    every key, one folding every key through `fold_identity_key` -- paid
+    again for every label of every entity. `room_of_record` walks three
+    labels, so the emitter sweeps that run per field build re-fold the whole
+    table three times per entity, and the full-miss path -- a carried or
+    contained thing has no `positions` row at all -- is the common one.
+    Measured during this review's B18 rework, 60 entities against 40
+    positions: 20.6 ms per sweep unindexed, 0.86 ms indexed.
+
+    The answer is the same one. The scans yielded the FIRST key that matched
+    a lowered or folded form, so the map keeps the first and later
+    collisions lose, exactly as before; the exact-spelling probe stays on
+    the caller's side against the real dict, so it still wins first.
+    """
+
+    __slots__ = ("_lower", "_fold")
+
+    def __init__(self, positions: dict):
+        from story.character_schema import fold_identity_key
+
+        self._lower = {}
+        self._fold = {}
+        # A malformed `positions` is nobody's placement, not a crash: the
+        # `_ci_get` reads this replaced at the emitter sweeps answered None
+        # for one, and a sweep must not be the thing that raises.
+        if not isinstance(positions, dict):
+            positions = {}
+        for k, v in positions.items():
+            lk = str(k).lower().strip()
+            if lk not in self._lower:
+                self._lower[lk] = v
+            norm = fold_identity_key(str(k))
+            if norm and norm not in self._fold:
+                self._fold[norm] = v
+
+    def lookup(self, lname: str):
+        """The answer for an already-lowered spelling, or None."""
+        if lname in self._lower:
+            return self._lower[lname]
+        from story.character_schema import fold_identity_key
+
+        norm = fold_identity_key(lname)
+        if norm and norm in self._fold:
+            return self._fold[norm]
+        return None
 
 
 def room_of(scene: dict, name: str, *,
@@ -97,13 +156,43 @@ def room_of(scene: dict, name: str, *,
     eid, entity = _unique_entity_keyed(scene, name)
     if not entity:
         return None
-    # The id first: `positions` keys objects, fixtures and unregistered
-    # presences by entity id as a matter of course, and that key is the one
-    # a name-only walk could never reach.
-    for label in (eid, entity.get("name"), *(entity.get("aliases") or [])):
+    return room_of_record(scene, eid, entity)
+
+
+def room_of_record(scene: dict, eid, entity, *, index=None) -> Optional[str]:
+    """`room_of`'s answer for a record the caller ALREADY HOLDS: where
+    `positions` puts this entity under any spelling it owns.
+
+    The id first: `positions` keys objects, fixtures and unregistered
+    presences by entity id as a matter of course, and that key is the one a
+    name-only walk could never reach. Then the name, then the aliases, each
+    through `_positions_lookup`'s case/space/script tolerance.
+
+    EVERY PASS THAT ITERATES `scene["entities"]` WANTS EXACTLY THIS and has
+    the record in hand, so no name has to be re-resolved -- the transit
+    dock-edge rewrite, the light and sound emitter sweeps, the vehicle
+    gap-crossing stamp, the narrator's visible-portal sweep, the transit
+    arrival scheduler, the shed-garment reclaim. Sharing the walk is the
+    point (review 2026-09-07, B18): each of those sites had grown its own
+    narrower copy -- `positions.get(eid)`, or that walked one further label
+    -- and a lift car whose `positions` row was filed under `lift_car`
+    against the id `Lift_Car` was nowhere to all of them at once: its
+    interior's dock edge left unrewritten, a lit lamp lighting no room, a
+    ferry arriving in no zone, a hatch the narrator never reported.
+
+    Ambiguity is not this function's problem, because a record cannot be
+    ambiguous: `room_of` resolves the NAME (and refuses a tie) before
+    arriving here.
+
+    `index` is a `PositionsIndex` over the same `positions`, for a sweep
+    asking this once per entity; the answer does not depend on it.
+    """
+    positions = scene.get("positions") or {}
+    record = entity if isinstance(entity, dict) else {}
+    for label in (eid, record.get("name"), *(record.get("aliases") or [])):
         if not label:
             continue
-        found = _positions_lookup(positions, str(label))
+        found = _positions_lookup(positions, str(label), index=index)
         if found is not None:
             return found
     return None

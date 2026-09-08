@@ -384,7 +384,8 @@ OPTION_LABEL = (
 #: `static/js` are rejected by it, and 683 are CSS custom properties, MIME
 #: types, event names, class names and route fragments. The other five are
 #: members of six module-level tables (`MEM_CATS_FALLBACK`, `MEM_PROV_FALLBACK`,
-#: `ATTIRE_REGIONS`, `EXTRA_PART_ASPECTS`, `LORE_INHERITANCE_MODES`,
+#: `ATTIRE_REGIONS_FALLBACK`, `EXTRA_PART_ASPECTS_FALLBACK`,
+#: `LORE_INHERITANCE_MODES_FALLBACK`,
 #: `DEFAULT_LORE_LINK_TYPES`) whose elements ARE rendered as dropdown labels --
 #: and every one of them is a stored enum value: `memories.category`,
 #: `memories.provenance`, an attire region key, a lorebook `relation_type`.

@@ -77,11 +77,16 @@ def test_the_lore_link_type_fallback_still_agrees_with_the_engine():
 
 
 def test_the_browser_copy_of_the_inheritance_modes_agrees_with_the_engine():
-    """The full repair for this one is not available from here: the bootstrap
-    does not ship `lore_inheritance_modes`, and `lore_create` validates the
-    field against nothing at all while `lore_edit` raises 400 on the same
-    values -- both in `web/app.py`. Until the list is shipped and the create
-    path validates against `mind/memory.py`'s constant, the least this can do
-    is refuse to let the browser's copy drift away from it unnoticed.
+    """Shipped since review 2026-09-07 (B24): the bootstrap carries
+    `lorebook_inheritance_modes` and `lore_edit` raises its 400 against the
+    same `mind/memory.py` constant, so the browser keeps only a fallback for a
+    tab running ahead of its first bootstrap response. That the menu reads the
+    shipped list is pinned in `tests/test_card_editor_vocabularies.py`; what
+    this file adds is that the fallback cannot drift away unnoticed.
+
+    Still true and still not fixed here: `lore_create` validates the field
+    against nothing at all, so a mode `lore_edit` refuses can be stored by the
+    create route.
     """
-    assert _js_array(LOREBOOKS, "LORE_INHERITANCE_MODES") == LORE_INHERITANCE_MODES
+    assert (_js_array(LOREBOOKS, "LORE_INHERITANCE_MODES_FALLBACK")
+            == LORE_INHERITANCE_MODES)

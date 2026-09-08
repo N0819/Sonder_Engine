@@ -651,12 +651,34 @@ function fStrList(label, vals) {
   return { node: el("div", { class: "ff" }, el("label", {}, label), i), read: () => i.value.split(",").map(s => s.trim()).filter(Boolean) };
 }
 
-// The closed set from attire.py. `waist` and `groin` are separate on purpose:
-// a sash covers the belt line and nothing else, so conflating them would
-// report a body wearing only an obi as covered where it matters most.
-const ATTIRE_REGIONS = ["head", "torso", "arms", "hands", "waist", "groin",
-                        "legs", "feet"];
-const ATTIRE_REGION_ZONES = { torso: ["chest", "midriff"] };
+// The closed sets from attire.py, READ FROM THE ENGINE. `/api/bootstrap`
+// carries `attire_regions` and `attire_region_zones` straight off
+// `story/attire.py`'s REGIONS/REGION_ZONES, the same posture the memory
+// vocabularies keep in utils.js, and `world_browser.js` already renders the
+// shipped list. A second copy here could not be seen to drift: attire.py
+// rewrites an unknown region to the default region and drops an unknown
+// zone, so a region added server-side would merely be missing from this
+// picker and one removed would be offered and quietly discarded on save.
+//
+// `waist` and `groin` are separate on purpose: a sash covers the belt line
+// and nothing else, so conflating them would report a body wearing only an
+// obi as covered where it matters most.
+//
+// The literals below survive only as the fallback for a tab whose cached
+// JavaScript is running ahead of its first bootstrap response.
+const ATTIRE_REGIONS_FALLBACK = ["head", "torso", "arms", "hands", "waist", "groin",
+                                 "legs", "feet"];
+const ATTIRE_REGION_ZONES_FALLBACK = { torso: ["chest", "midriff"] };
+
+function attireRegions() {
+  const shipped = S.boot && S.boot.attire_regions;
+  return Array.isArray(shipped) && shipped.length ? shipped : ATTIRE_REGIONS_FALLBACK;
+}
+
+function attireRegionZones() {
+  const shipped = S.boot && S.boot.attire_region_zones;
+  return shipped && typeof shipped === "object" ? shipped : ATTIRE_REGION_ZONES_FALLBACK;
+}
 
 // Coverage presets, offered as one-click shortcuts inside the picker. Not the
 // only way to answer -- the checkboxes are -- but the four spans real clothing
@@ -673,7 +695,7 @@ const ATTIRE_COVERAGE = [
 // `auto` is the default and means "work it out from the name" -- resolved in
 // attire.py, so the cue table has exactly one implementation.
 function fCoveragePicker(covers, auto, attaches, coveredZones = {}) {
-  const boxes = new Map(ATTIRE_REGIONS.map(region => [region, el("input", {
+  const boxes = new Map(attireRegions().map(region => [region, el("input", {
     type: "checkbox", ...((covers || []).includes(region) ? { checked: "" } : {})
   })]));
   const autoBox = el("input", { type: "checkbox", ...(auto ? { checked: "" } : {}) });
@@ -687,9 +709,9 @@ function fCoveragePicker(covers, auto, attaches, coveredZones = {}) {
   // matters: a host fixing a ledger by hand is a first-class path, and a
   // field the editor cannot express is a field the editor will silently
   // erase.
-  const zonesFor = region => ATTIRE_REGION_ZONES[region] || [region];
+  const zonesFor = region => attireRegionZones()[region] || [region];
   const zoneBoxes = new Map();
-  ATTIRE_REGIONS.forEach(region => {
+  attireRegions().forEach(region => {
     const zones = zonesFor(region);
     const explicit = Object.prototype.hasOwnProperty.call(coveredZones || {}, region);
     const selected = explicit ? (coveredZones[region] || []) : zones;
@@ -699,7 +721,7 @@ function fCoveragePicker(covers, auto, attaches, coveredZones = {}) {
   });
   const summary = el("summary", { style: "cursor:pointer;font-size:12px" });
 
-  const picked = () => ATTIRE_REGIONS.filter(r => boxes.get(r).checked);
+  const picked = () => attireRegions().filter(r => boxes.get(r).checked);
   const sync = () => {
     const on = picked();
     boxes.forEach(b => { b.disabled = autoBox.checked; });
@@ -732,7 +754,7 @@ function fCoveragePicker(covers, auto, attaches, coveredZones = {}) {
     el("label", { class: "small", style: "display:block;margin:6px 0" },
       attachBox, " worn at, covers nothing (ribbon, necklace, ring)"),
     el("div", { class: "row", style: "flex-wrap:wrap;gap:8px" },
-      ...ATTIRE_REGIONS.map(region =>
+      ...attireRegions().map(region =>
         el("label", { class: "small" }, boxes.get(region), " " + region))),
     el("div", { class: "small dim", style: "margin-top:6px" },
       "waist is the belt line; groin is covered separately, so a sash alone "
@@ -740,7 +762,7 @@ function fCoveragePicker(covers, auto, attaches, coveredZones = {}) {
     ...[...zoneBoxes.entries()].map(([region, zoneMap]) =>
       el("div", { class: "row small", style: "flex-wrap:wrap;gap:8px;margin-top:6px" },
         el("span", { class: "dim" },
-          (ATTIRE_REGION_ZONES[region]
+          (attireRegionZones()[region]
             ? region + " zones still covered:"
             : "still covering:")),
         ...[...zoneMap.entries()].map(([zone, box]) =>
@@ -771,7 +793,7 @@ function fAttireGarments(label, regions) {
   // per region, which cannot express a garment that spans several and made
   // the author place the same kimono four times.
   const seen = new Map();
-  ATTIRE_REGIONS.forEach(region => {
+  attireRegions().forEach(region => {
     ((regions || {})[region] || {}).garments?.forEach(g => {
       const name = (typeof g === "string" ? g : g?.name || "").trim();
       if (!name || seen.has(name.toLowerCase())) return;
@@ -808,12 +830,12 @@ function fAttireGarments(label, regions) {
               attaches: false, condition: "" }));
 
   // "Underneath" stays per region: it describes a body part, not a garment.
-  const beneath = ATTIRE_REGIONS.map(region => {
+  const beneath = attireRegions().map(region => {
     const input = el("input", {
       value: ((regions || {})[region] || {}).beneath || "",
       placeholder: "underneath (optional)", style: "flex:2;min-width:0"
     });
-    const zoneInputs = (ATTIRE_REGION_ZONES[region] || []).map(zone => ({
+    const zoneInputs = (attireRegionZones()[region] || []).map(zone => ({
       zone,
       input: el("input", {
         value: (((regions || {})[region] || {}).beneath_zones || {})[zone] || "",
@@ -997,20 +1019,29 @@ function fLatent(label, latent) {
 }
 
 // Structured extra body parts (tails, wings, horns, extra arms). WHERE is
-// chosen from closed menus -- the attachment region reuses ATTIRE_REGIONS and
-// the aspect names which face of it the part emerges from -- so the engine
-// gates and renders the part deterministically instead of re-reading prose.
+// chosen from closed menus -- the attachment region reuses the shipped attire
+// regions and the aspect names which face of it the part emerges from -- so
+// the engine gates and renders the part deterministically instead of
+// re-reading prose.
 // The part noun itself stays free text: anatomy is open-ended, and the noun
 // is also the handle contacts use ("her tail" grabs THIS tail).
-const EXTRA_PART_ASPECTS = ["front", "back", "top", "underside", "left", "right", "sides"];
+// The aspect list is `story/character_schema.py`'s EXTRA_PART_ASPECTS,
+// shipped on the bootstrap; the literal is the pre-bootstrap fallback.
+const EXTRA_PART_ASPECTS_FALLBACK = ["front", "back", "top", "underside", "left", "right", "sides"];
+
+function extraPartAspects() {
+  const shipped = S.boot && S.boot.extra_part_aspects;
+  return Array.isArray(shipped) && shipped.length ? shipped : EXTRA_PART_ASPECTS_FALLBACK;
+}
+
 function fExtraParts(label, parts) {
   return fList(label, parts, "+ body part", x => {
     const kind = el("input", { value: x.kind || "", placeholder: "part (tail, wings, horns…)", style: "flex:1" });
     const count = el("input", { type: "number", min: "1", max: "12", step: "1", value: x.count ?? 1, title: "how many", style: "width:60px" });
     const at = el("select", { title: "emerges from which body region" },
-      ATTIRE_REGIONS.map(r => el("option", { value: r, ...(r === (x.at || "waist") ? { selected: "" } : {}) }, r)));
+      attireRegions().map(r => el("option", { value: r, ...(r === (x.at || "waist") ? { selected: "" } : {}) }, r)));
     const aspect = el("select", { title: "which face of that region: front (in front) / back (behind) / top (above) / underside (below) / left / right / sides (one per side)" },
-      EXTRA_PART_ASPECTS.map(a => el("option", { value: a, ...(a === (x.aspect || "back") ? { selected: "" } : {}) }, a)));
+      extraPartAspects().map(a => el("option", { value: a, ...(a === (x.aspect || "back") ? { selected: "" } : {}) }, a)));
     const through = el("label", { class: "small", title: "clothing over that region is worn around the part (a tail through a skirt). Unchecked: the part is tucked beneath clothing and hidden while the region is covered." },
       el("input", { type: "checkbox" }), " through clothing");
     through.querySelector("input").checked = x.through_clothing !== false;
@@ -1031,7 +1062,15 @@ function fExtraParts(label, parts) {
 // moves them, which is what a place to stay in is. A number means the clock
 // carries them onward by itself once it is spent. The way in and out is never
 // a station: it is derived from the body.
-const INTERIOR_LIGHTS = ["dark", "dim", "lit", "bright"];
+// The light ladder is `world/spatial_light.py`'s LIGHT_LEVELS, which is what
+// resolves this field at mint; shipped on the bootstrap, literal as fallback.
+const INTERIOR_LIGHTS_FALLBACK = ["dark", "dim", "lit", "bright"];
+
+function interiorLights() {
+  const shipped = S.boot && S.boot.interior_lights;
+  return Array.isArray(shipped) && shipped.length ? shipped : INTERIOR_LIGHTS_FALLBACK;
+}
+
 function fInteriorStations(label, stations) {
   const wrap = el("div"), rows = [];
   const move = (card, by) => {
@@ -1045,7 +1084,7 @@ function fInteriorStations(label, stations) {
     const name = el("input", { value: x.name || "", placeholder: "station name (the handle the story says out loud)", style: "flex:1" });
     const desc = el("input", { value: x.desc || "", placeholder: "what standing there is like", style: "flex:2" });
     const light = el("select", { title: "how much can be seen there; unstated reads as dark" },
-      INTERIOR_LIGHTS.map(v => el("option", { value: v, ...(v === (x.light || "dark") ? { selected: "" } : {}) }, v)));
+      interiorLights().map(v => el("option", { value: v, ...(v === (x.light || "dark") ? { selected: "" } : {}) }, v)));
     const barrier = el("input", { value: x.barrier || "", placeholder: "passage in (membrane)", style: "width:130px", title: "the passage from the station before this one. Blank means membrane — a body passes through, nothing sees through. The first station has none: the way in is derived from the body." });
     const transit = el("input", { type: "number", min: "0", step: "1", value: x.transit_seconds ?? "", placeholder: "crossing s", style: "width:110px", title: "how long passing through this station takes, in story seconds. Blank = the station holds its occupant until the story moves them." });
     const up = el("button", { title: "move outward (earlier in the chain)", onclick: () => move(card, -1) }, "↑");

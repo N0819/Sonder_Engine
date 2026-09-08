@@ -374,9 +374,13 @@ def inherit_regions(rooms, eligible, priority=(), graph=None):
             chosen = None
             standing = sorted(o for o in named if o in priority)
             if standing:
-                # Several occupied neighbours that disagree: the one the
-                # most bodies stand in is the one the beat is in; ties
-                # fall to the first id, so a reroll gets the same answer.
+                # Several occupied neighbours that disagree: the first by
+                # id wins, so a reroll gets the same answer. `priority` is a
+                # SET of rooms bodies stood in and carries no counts, so
+                # this cannot be and never was a majority (E29,
+                # 2026-09-07: the comment claimed "the one the most bodies
+                # stand in"). Counting would need the caller to pass the
+                # census, which no caller has.
                 chosen = standing[0]
             elif len(set(named.values())) == 1:
                 chosen = sorted(named)[0]

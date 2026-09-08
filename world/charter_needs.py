@@ -274,17 +274,26 @@ def unmet(held):
 
 
 def mood(held, blamed=0, regard_of_others=(), weights=None):
-    """A single scalar for how a background body is doing. NOT WIRED IN.
+    """A single scalar for how a background body is doing. WIRED, AND OFF.
 
-    An experiment, deliberately kept out of the planner and off by default,
-    because the case against it is real: `mind/psychology_runtime.py` already
-    owns hedonic tone and stress for characters, and a second affect model
-    would leave a promoted body holding two incompatible interiors. The case
-    FOR measuring it anyway is equally real — "do not build it" and "do not
-    find out whether it matters" are different claims, and this repo settles
-    that kind of question with a number.
+    An experiment, kept out of the planner by a DIAL rather than by an
+    absent call, because the case against it is real:
+    `mind/psychology_runtime.py` already owns hedonic tone and stress for
+    characters, and a second affect model would leave a promoted body
+    holding two incompatible interiors. The case FOR measuring it anyway is
+    equally real — "do not build it" and "do not find out whether it
+    matters" are different claims, and this repo settles that kind of
+    question with a number.
 
-    So: computed on request, reported by `charter_log`, read by nothing.
+    So: computed on request, reported by `charter_log`, and folded into the
+    watch bill's reluctance by `charter_run` as `mood_weight * mood(...)` —
+    where `mood_weight` ships at **0.0** (`charter_model.normalize_charter`),
+    so a shipped run never calls this and is byte-identical to one that
+    could not. An arm that raises the dial buys the double-count with the
+    disgrace term that `charter_run` states inline and `docs/UNBUILT.md`
+    § 1.99a records. (E31, 2026-09-07: this said "NOT WIRED IN … read by
+    nothing", which was true until the reluctance fold landed.)
+
     Three inputs the background tier already has, and no new authored rates:
 
       * how spent the body is (`pressure`)

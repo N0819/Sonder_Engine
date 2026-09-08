@@ -17,12 +17,6 @@
   "card_person_note": {
     "$text": "card_person_note.txt"
   },
-  "narrator_fidelity_correction": {
-    "$text": "narrator_fidelity_correction.txt"
-  },
-  "narrator_craft_correction": {
-    "$text": "narrator_craft_correction.txt"
-  },
   "nsfw_overlay": {
     "$text": "nsfw_overlay.txt"
   },

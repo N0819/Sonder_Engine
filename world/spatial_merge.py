@@ -1358,10 +1358,10 @@ def sync_scene_passages(scene: dict, prior_scene: dict = None) -> list:
     each `scene.passages[id]` and the two edges naming it in step, so a
     doorway has ONE answer from either room.
 
-    For every passage the hygiene keeps (`normalize_scene_passages`: two live
-    rooms, a readable barrier): both edges exist -- the missing one is minted
-    with `to` and `passage` and nothing else, so the far room's list gains a
-    doorway it always had; then the passage's `PASSAGE_FIELDS` are written
+    For every passage the hygiene keeps (`normalize_scene_passages`: two
+    live rooms, which is its only drop test): both edges exist -- the
+    missing one is minted with `to` and `passage` and nothing else, so the
+    far room's list gains a doorway it always had; then the passage's `PASSAGE_FIELDS` are written
     onto both edges, and its `vertical` (as seen from `rooms[0]`) onto the
     first with the opposite onto the second.
 

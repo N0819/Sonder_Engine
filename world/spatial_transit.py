@@ -6,7 +6,7 @@ from typing import Optional
 
 from world.spatial_barriers import (_AMBIENT_BARRIERS, neighbor_map,
                                     normalize_barrier)
-from world.spatial_identity import _ci_get
+from world.spatial_identity import _ci_get, PositionsIndex, room_of_record
 
 
 # ---------------------------------------------------------------------------
@@ -272,20 +272,21 @@ def _link_state(entity) -> Optional[dict]:
         return None
     return link
 
-def _entity_exterior_room(scene: dict, eid: str, entity: dict) -> Optional[str]:
-    """The room the entity itself currently occupies -- tolerating positions
-    keyed by entity id, display name, or an alias (the same read tolerance
-    merge_scene_with_diff's remove_entities path already applies)."""
-    positions = scene.get("positions") or {}
-    candidates = [eid]
-    if isinstance(entity, dict):
-        candidates.append(entity.get("name"))
-        candidates.extend(entity.get("aliases") or [])
-    for cand in candidates:
-        cand = str(cand or "").strip()
-        if cand and cand in positions:
-            return positions[cand]
-    return None
+def _entity_exterior_room(scene: dict, eid: str, entity: dict, *,
+                          index=None) -> Optional[str]:
+    """The room the entity itself currently occupies: `room_of`'s answer for
+    the record this pass already holds, so positions keyed by entity id,
+    display name or alias resolve with the same case/space/script tolerance
+    every other spatial reader gets.
+
+    This walked the same three labels with exact-string `cand in positions`
+    (review 2026-09-07, B18), which is `room_of` answered a second time and
+    more narrowly: a car filed under `lift_car` against the id `Lift_Car` had
+    no exterior room, so nothing derived its interior's doorway.
+
+    `index` is the caller's one folded read of `positions` when it is asking
+    this for every entity in the scene."""
+    return room_of_record(scene, eid, entity, index=index)
 
 def apply_transit_dock_edges(scene: dict) -> bool:
     """Rewrite every parent_entity room's exterior adjacency to match
@@ -320,6 +321,8 @@ def apply_transit_dock_edges(scene: dict) -> bool:
     rooms = scene.get("rooms") or {}
     entities = scene.get("entities") or {}
     changed = False
+    # One folded read of `positions` for the whole sweep (B18).
+    index = PositionsIndex(scene.get("positions") or {})
 
     interiors: dict[str, list] = {}
     for rid, room in rooms.items():
@@ -362,7 +365,7 @@ def apply_transit_dock_edges(scene: dict) -> bool:
             continue
         same = set(interior_ids)
         transit = _transit_state(ent)
-        exterior = _entity_exterior_room(scene, eid, ent)
+        exterior = _entity_exterior_room(scene, eid, ent, index=index)
 
         # A container is not "in transit" -- a jar with a lid has a hatch and
         # no journey -- so the lid is read from state.hatch as well as from a

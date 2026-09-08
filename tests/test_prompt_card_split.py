@@ -48,7 +48,13 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 116   # +1 (2026-09-05): the social hand's charter_ops chunk, the
+PART_COUNT = 114   # -2 (2026-09-07, review E45): narrator_fidelity_correction
+                   # and narrator_craft_correction, the two rewrite-pass
+                   # fragments left behind when the second narrator call was
+                   # deleted -- `agents/narration.py` says "THE FIDELITY
+                   # CORRECTION PASS IS GONE" and no engine code named either
+                   # fragment;
+                   # +1 (2026-09-05): the social hand's charter_ops chunk, the
                    # channel an order given to somebody an institution employs
                    # is written in (PB13: the Planner could dispatch an errand
                    # and the Director, which had just narrated the order,

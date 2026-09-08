@@ -544,3 +544,48 @@ def test_character_step_combines_move_and_spent_intention_rewrite(
     assert any("intention_correction" in w for w in ctx.warnings)
     assert result["speech"] == (
         "After the shrine, the archives of Calufrax?")
+
+
+# ---------------------------------------------------------------------------
+# What the engine records AFTER the answer is not part of the ask
+# ---------------------------------------------------------------------------
+
+def _correction_keys() -> list[str]:
+    """The `_corrections` record's keys, read from the code that builds it.
+
+    Derived rather than restated: a fourth correction added to
+    `agents/character.py` is checked here without anyone remembering to.
+    """
+    import re
+    import inspect
+    from agents import character as character_module
+
+    keys = sorted(set(re.findall(r'_corrections\["(\w+)"\]\s*=',
+                                 inspect.getsource(character_module))))
+    assert keys, "no _corrections assignments found in agents/character.py"
+    return keys
+
+
+def test_no_pack_asks_the_character_about_its_own_corrections():
+    """Review E46. `_corrections` is built from the character's FINISHED
+    output and, since the re-ask went out with `e629d60`, is read by the
+    warning line and `_barren_beat` alone -- it never enters a payload, so a
+    prompt that says "if `repeat_correction` is present in your input" names
+    a key no input can carry, and the character reads a conditional it can
+    never satisfy. The en sheet dropped those three paragraphs with the
+    re-ask; the ja sheet kept them, so for a week a ja story asked its minds
+    about `repeat_correction`, `move_correction` and `intention_correction`
+    on every beat. The rule is the class, not the three names: what the
+    engine computes after a hand answers is not a field of the question.
+    """
+    from language_runtime import installed_language_packs
+
+    keys = _correction_keys()
+    for language, pack in sorted(installed_language_packs().items()):
+        sheet = str(pack.card("system_prompts")["prompts"]["character"])
+        named = [k for k in keys if k in sheet]
+        assert not named, (
+            f"{language}: the character sheet names {named}, which the "
+            "engine builds from the character's own output after the call "
+            "and never sends -- an instruction conditioned on a key no "
+            "payload carries is one the character can never act on.")

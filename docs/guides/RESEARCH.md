@@ -9,8 +9,9 @@ parts:
    instantiates but does not cite. These mappings are reconstructed after the
    fact, not attributions the original authors made.
 
-Line numbers drift; treat file paths as the durable anchor and grep for the
-named symbol if a line has moved. A verification note appears at the end.
+Citations name a file and a SYMBOL, never a line number: a line number is a
+claim about a file's current shape, and every edit to that file falsifies it
+silently. Grep for the named symbol. A verification note appears at the end.
 
 ---
 
@@ -18,7 +19,7 @@ named symbol if a line has moved. A verification note appears at the end.
 
 ### 1.1 Belief revision — `mind/theory_of_mind.py`
 
-The module docstring (`theory_of_mind.py:9-25`) names five findings from the
+The module docstring (`mind/theory_of_mind.py`) names five findings from the
 psychology of how minds revise beliefs about other people. They drive the
 per-kind confidence caps, plasticity, and half-lives in
 `_TOM_CONFIDENCE_CAPS` / `_TOM_PLASTICITY` and the `decayed_confidence()`
@@ -43,15 +44,15 @@ decay model.
   doi:10.1037/0033-2909.114.1.3.
   [PDF](https://memlab.yale.edu/sites/default/files/files/1993_Johnson_Hashtroudi_Lindsay_PsychBull.pdf)
   · [PubMed](https://pubmed.ncbi.nlm.nih.gov/8346328/) — provenance is tracked
-  per memory (`MEMORY_PROVENANCE`, `memory.py:51`).
+  per memory (`MEMORY_PROVENANCE`, defined in `mind/memory_common.py`).
 - **"Explaining away"** — term from Pearl, J. (1988). *Probabilistic Reasoning
   in Intelligent Systems.* Morgan Kaufmann. Used here in the colloquial
   belief-revision sense: a competing claim suppresses but does not erase a
   prior belief.
 
 The epistemic confidence-cap ladder (`observation` 1.0 → `identity` 0.35,
-`theory_of_mind.py:49-52`; mirrored in `Design.md`) is an original design
-device, not a cited result.
+`mind/theory_of_mind.py`'s `_TOM_CONFIDENCE_CAPS`; mirrored in `Design.md`) is
+an original design device, not a cited result.
 
 ### 1.2 Time travel and paradox — `world/paradox.py`
 
@@ -59,13 +60,14 @@ device, not a cited result.
   Novikov, I. D., Echeverria, F., Klinkhammer, G., Thorne, K. S., & Yurtsever,
   U. (1990). *Cauchy problem in spacetimes with closed timelike curves.*
   Physical Review D, 42(6), 1915–1930.
-  <https://link.aps.org/doi/10.1103/PhysRevD.42.1915> — named at
-  `paradox.py:51-53` as the shape of future pre-commit deflection.
-- **Doctor Who, "Father's Day"** (S1E8, 2005, Paul Cornell) — named at
-  `paradox.py:6-8` as the reference beat for a violated fixed point (fiction,
-  not research).
+  <https://link.aps.org/doi/10.1103/PhysRevD.42.1915> — named in
+  `world/paradox.py`'s module docstring as the shape of future pre-commit
+  deflection.
+- **Doctor Who, "Father's Day"** (S1E8, 2005, Paul Cornell) — named in
+  `world/paradox.py`'s module docstring as the reference beat for a violated
+  fixed point (fiction, not research).
 
-### 1.3 Information-retrieval algorithms implemented in `mind/memory.py`
+### 1.3 Information-retrieval algorithms behind `mind/memory.py`
 
 The hybrid memory retriever names and implements four standard IR techniques.
 
@@ -74,8 +76,9 @@ The hybrid memory retriever names and implements four standard IR techniques.
   learning methods.* SIGIR '09, 758–759.
   [ACM](https://dl.acm.org/doi/10.1145/1571941.1572114) ·
   [PDF](https://cormack.uwaterloo.ca/cormacksigir09-rrf.pdf) — the
-  `weight / (60 + rank)` fusion in `_rrf_add` (`memory.py:977`), fusing
-  semantic / cue-vector / lexical / exact rankings (`memory.py:1013-1016`).
+  `weight / (60 + rank)` fusion in `_rrf_add` (`mind/memory_retrieval.py`),
+  fusing semantic / cue-vector / lexical / exact rankings (the four `_rrf_add`
+  calls in `search_memories`).
 - **BM25** — Robertson, S. & Zaragoza, H. (2009). *The Probabilistic Relevance
   Framework: BM25 and Beyond.* Foundations and Trends in IR, 3(4). Used via
   SQLite FTS5 `bm25()`; see the [FTS5 docs](https://www.sqlite.org/fts5.html).
@@ -83,7 +86,8 @@ The hybrid memory retriever names and implements four standard IR techniques.
   use of MMR, diversity-based reranking for reordering documents and producing
   summaries.* SIGIR '98, 335–336.
   [abstract](https://people.eng.unimelb.edu.au/ammoffat/sigir98/abstracts/carbonell.html)
-  — the λ≈0.82 diversity re-ranker at `memory.py:1046`.
+  — the λ≈0.82 diversity re-ranker in `mind/memory_retrieval.py`'s
+  `search_memories`.
 - **The signed hashing trick** — Weinberger, K., Dasgupta, A., Langford, J.,
   Smola, A., & Attenberg, J. (2009). *Feature hashing for large scale
   multitask learning.* ICML '09, 1113–1120.
@@ -194,7 +198,7 @@ neither project is a dependency.
   last: a memory that opens with "I was in the Long Hall" every time
   embeds as *the Long Hall* and retrieves as a near-duplicate of every
   other beat there. Cited at the site it governs
-  (`agents/composer.py:1014`). Measured effect on this corpus:
+  (`agents/composer.py`, `_render_episode_english`). Measured effect on this corpus:
   verbatim-twin rate within the memory bank 14.6% → 0.4%.
 
 - **Li, Zhou, He, Wang, Yang & Li, "On the Sentence Embeddings from
@@ -562,7 +566,8 @@ existing Sonder modules than from any outside source.
   rather than premises, which is exactly the relationship between the
   background tier and the character tier.
 
-Apart from §1.6's single in-code citation at `agents/composer.py:1014` and
+Apart from §1.6's single in-code citation in `agents/composer.py`
+(`_render_episode_english`) and
 §1.7's citations in `world/charter_practice.py` and `world/charter_talk.py`,
 the repo contains no bibliography, arXiv links, DOIs, or "inspired by"
 attributions — including throughout `Design.md`, `AGENTS.md`, and `docs/`.
