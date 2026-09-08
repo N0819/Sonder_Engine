@@ -218,3 +218,42 @@ def test_a_failure_anywhere_in_the_start_leaves_a_setup(temp_db, monkeypatch):
     record = wget(rows[0]["id"], QUICK_START_FAILURE_KEY, None)
     assert record and record["error_type"] == "RuntimeError"
     assert record["retry"]["char_id"] == cid_char
+
+
+def test_recording_the_failure_never_replaces_it(temp_db, monkeypatch):
+    """The marker is written against the chat row, and a sibling path used to
+    delete that row first -- so the FOREIGN KEY error from writing the mark
+    travelled in place of the JSON error that actually happened, and the
+    author got a 500 about the database and no entry at all (2026-09-08).
+    Recording a failure is best-effort; the failure itself is not.
+    """
+    from core import db as core_db
+    from story import greetings
+
+    def boom(*a, **k):
+        raise RuntimeError("the marker could not be written")
+
+    monkeypatch.setattr(core_db, "wset", boom)
+    # Must not raise, and must not replace the caller's exception.
+    greetings._mark_failed_setup(
+        999999, ValueError("the real failure"), char_id=1, persona_id=2,
+        greeting_index=0, lorebook_id=None, already_known=True,
+        language="en", lived_location=None)
+
+
+def test_no_stage_of_a_start_deletes_its_own_chat():
+    """The class, so the next stage added does not reintroduce it: three
+    stages each deleted the chat on failure, and removing the first two left
+    the third to hand the guard a row that was gone."""
+    import ast
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parents[1]
+              / "story/greetings.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    start = next(n for n in ast.walk(tree)
+                 if isinstance(n, ast.FunctionDef) and n.name == "start_story")
+    called = {getattr(n.func, "id", None) or getattr(n.func, "attr", None)
+              for n in ast.walk(start) if isinstance(n, ast.Call)}
+    assert "delete_chat_data" not in called, (
+        "a failed start is kept and marked; the library discards it")
