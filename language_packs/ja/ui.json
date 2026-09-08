@@ -2183,6 +2183,7 @@
   "Stored memory vectors": "保存された記憶ベクトル",
   "Stories": "物語",
   "Stories may promote an extra into a full character on their own.": "物語が自分の判断で端役を正式なキャラクターへ昇格させられるようになりました。",
+  "story ${cid} not found": "ストーリー ${cid} が見つかりません",
   "story ${state.selected.chat_id}": "物語${state.selected.chat_id}",
   "Story branch created.": "物語の分岐が作成されました。",
   "story card": "物語カード",

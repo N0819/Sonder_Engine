@@ -99,7 +99,7 @@ def test_the_setup_log_carries_what_the_attempt_recorded(temp_db):
     assert doc["failure"]["traceback"]
     # What was asked for travels with it, so the report is reproducible.
     assert doc["failure"]["retry"]["lived_location"]["brief"] == "the port"
-    assert "attempt" in doc
+    assert "exchanges" in doc and "turns" in doc
 
 
 def test_a_story_that_did_not_fail_has_no_setup_log(temp_db):
@@ -114,18 +114,22 @@ def test_a_story_that_did_not_fail_has_no_setup_log(temp_db):
         client.__exit__(None, None, None)
 
 
-def test_a_retry_asks_the_same_question_and_clears_the_failed_row(
+def test_a_retry_resumes_the_same_story_rather_than_starting_another(
         temp_db, monkeypatch):
+    """RESUMED IN PLACE (owner, 2026-09-08): "have it overwrite the existing
+    temp entry for this particular story with each attempt instead of opening
+    new entries", and "resume off the failed step, to actually save what
+    succeeded". The failed attempt's chat IS the retry's chat, so what already
+    landed in it is kept and the library never grows a second row for one
+    story."""
     cid = _failed_chat(temp_db)
     asked = {}
 
     def fake_start(char_id, persona_id, greeting_index=0, **kwargs):
         asked.update({"char_id": char_id, "persona_id": persona_id,
                       "greeting_index": greeting_index, **kwargs})
-        import time
-        new = qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
-                 ("Retried", "", time.time()))
-        return new, 1
+        wset(kwargs["resume_chat_id"], QUICK_START_FAILURE_KEY, {})
+        return kwargs["resume_chat_id"], 1
 
     from story import greetings
     monkeypatch.setattr(greetings, "start_story", fake_start)
@@ -139,9 +143,12 @@ def test_a_retry_asks_the_same_question_and_clears_the_failed_row(
 
     assert asked["char_id"] == 58 and asked["persona_id"] == 10
     assert asked["lived_location"] == {"enabled": True, "brief": "the port"}
-    # The failed row is gone only once the new story exists.
-    assert q("SELECT id FROM chats WHERE id=?", (cid,), one=True) is None
-    assert out.json()["chat_id"] != cid
+    assert asked["resume_chat_id"] == cid
+    # One story, still there, and no longer a failed setup.
+    assert out.json()["chat_id"] == cid
+    assert q("SELECT id FROM chats WHERE id=?", (cid,), one=True) is not None
+    assert len(q("SELECT id FROM chats")) == 1
+    assert not wget(cid, QUICK_START_FAILURE_KEY, None)
 
 
 def test_a_retry_that_fails_leaves_the_setup_where_it_was(temp_db, monkeypatch):
@@ -282,3 +289,97 @@ def test_a_failed_start_refreshes_the_library_that_shows_it():
     retry_block = APP_JS[retry:retry + 600]
     assert "onError" in retry_block
     assert "boot()" in retry_block.split("onError", 1)[1][:200]
+
+
+def test_the_export_carries_everything_sent_and_received(temp_db, monkeypatch):
+    """"logging capabilities similar to others where the export contains
+    everything sent and received" (owner, 2026-09-08).
+
+    A quick start runs OUTSIDE any pipeline step, and the exchange funnel a
+    step arms is what every rung of the quality ladder reports through -- so
+    the attempt's traffic was invisible and the export could say what broke
+    but not what was asked. The start now arms that same funnel for itself.
+    """
+    from core.pipeline_context import current_exchange_sink
+    from story import greetings
+
+    # The recorder is the engine's own sink, so anything reporting through
+    # `note_provider_exchange` while a start runs is captured.
+    with greetings._recording_exchanges() as collected:
+        from llm.llm_quality import note_provider_exchange
+        note_provider_exchange(role="utility", system="SYS", payload={"a": 1},
+                               response='{"ok": true}', ok=True, started=0.0)
+    assert collected and collected[0]["response"] == '{"ok": true}'
+    assert current_exchange_sink.get() is None, "the sink is not left armed"
+
+    # ...and what it keeps is bounded, with the trim said out loud.
+    big = "x" * (greetings.SETUP_EXCHANGE_CHARS + 500)
+    trimmed = greetings._trimmed_exchanges([{"system": big, "response": big}])
+    assert len(trimmed[0]["system"]) < len(big)
+    assert "trimmed" in trimmed[0]["system"]
+
+
+def test_the_setup_log_hands_over_the_traffic(temp_db):
+    cid = _failed_chat(temp_db)
+    record = wget(cid, QUICK_START_FAILURE_KEY, None)
+    record["exchanges"] = [{"role": "utility", "system": "SYS",
+                            "payload": {"ask": "a town"},
+                            "response": "{}", "ok": False}]
+    wset(cid, QUICK_START_FAILURE_KEY, record)
+
+    client = _client()
+    try:
+        doc = client.get(f"/api/chats/{cid}/setup_log").json()
+    finally:
+        client.__exit__(None, None, None)
+
+    assert doc["exchanges"][0]["system"] == "SYS"
+    assert doc["exchanges"][0]["payload"] == {"ask": "a town"}
+    assert "turns" in doc
+
+
+def test_a_resumed_start_keeps_the_town_it_already_planted(temp_db, monkeypatch):
+    """"resume off the failed step, to actually save what succeeded" (owner,
+    2026-09-08). The location generation is three model calls and most of the
+    minute a start takes; when the chat already holds a planted registry, a
+    resume does not pay for it again. The check asks the CHAT, not a recorded
+    stage name -- the registry rows are the fact, a marker is a claim about it.
+    """
+    import time
+
+    from story import greetings
+
+    cid_char = qi(
+        "INSERT INTO characters(name,sheet,source,created,resource_uid) "
+        "VALUES(?,?,?,?,?)",
+        ("Doc", json.dumps({
+            "identity": {"name": "Doc"},
+            "opening": {"greetings": [{"prose": "You arrive at the gate."}]},
+        }), "{}", 0.0, "char_doc2"))
+    pid = qi("INSERT INTO personas(name,sheet,source) VALUES(?,?,?)",
+             ("Wren", json.dumps({"name": "Wren"}), "{}"))
+    cid = qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+             ("half-built", "", time.time()))
+    # A planted registry: the fact a resume reads.
+    qi("INSERT INTO room_registry(chat_id,room_uid,name,aliases,payload) "
+       "VALUES(?,?,?,?,?)", (cid, "gate", "The Gate", "[]", "{}"))
+
+    monkeypatch.setattr(greetings, "extract_greeting",
+                        lambda sheet, prose: {"knowledge_seeds": [],
+                                              "time": "now"})
+    called = []
+    from world import charter_runtime
+    monkeypatch.setattr(charter_runtime, "generate_lived_location",
+                        lambda *a, **k: called.append(1))
+    # Stop before turn 0; the location decision has already been taken by then.
+    monkeypatch.setattr(greetings, "_seed_minds",
+                        lambda *a, **k: (_ for _ in ()).throw(
+                            RuntimeError("stop here")))
+
+    with pytest.raises(RuntimeError):
+        greetings.start_story(cid_char, pid, resume_chat_id=cid,
+                              lived_location={"enabled": True,
+                                              "brief": "the port"})
+
+    assert called == [], "a resume regenerated a location the chat already had"
+    assert len(q("SELECT id FROM chats")) == 1, "no second story was minted"

@@ -224,7 +224,9 @@ def historian_budget(resident_count):
 
 def _json_call(system, payload, *, max_tokens=PLAN_MAX_TOKENS,
                temperature=0.5):
-    from llm.llm_quality import strict_json_parse
+    import time as _time
+
+    from llm.llm_quality import note_provider_exchange, strict_json_parse
     from llm.providers import chat_complete
     # REASONING OFF, EXPLICITLY. Every OpenAI-style seam counts private
     # reasoning against `max_tokens`, so a thinking model spends the plan's
@@ -233,10 +235,23 @@ def _json_call(system, payload, *, max_tokens=PLAN_MAX_TOKENS,
     # settings map). These calls are JSON-shaped and the output IS the
     # budget; the provider layer already turns reasoning off on the retry
     # after that failure, and here it is off on the first attempt.
-    raw = chat_complete(
-        "utility", system, json.dumps(payload, ensure_ascii=False),
-        temperature=temperature, max_tokens=max_tokens, json_mode=True,
-        reasoning_effort="off")
+    _started = _time.time()
+    # THE ONE FUNNEL, so this family is visible where every other call is
+    # (2026-09-08). These three calls -- the town, its history and the
+    # historian -- are most of what a quick start spends, and they reported
+    # nothing at all: a failed setup's export could say what broke and not
+    # what was sent, which is the half a report needs.
+    raw = ""
+    try:
+        raw = chat_complete(
+            "utility", system, json.dumps(payload, ensure_ascii=False),
+            temperature=temperature, max_tokens=max_tokens, json_mode=True,
+            reasoning_effort="off")
+    except Exception as _exc:
+        note_provider_exchange(
+            role="utility", system=system, payload=payload, response="",
+            ok=False, started=_started, error=str(_exc))
+        raise
     try:
         # THE ONE READER OF A MODEL'S JSON (2026-09-08). This parsed with a
         # bare `json.loads`, so a response wrapped in a ```json fence -- which
@@ -254,6 +269,9 @@ def _json_call(system, payload, *, max_tokens=PLAN_MAX_TOKENS,
         # the host to ask for fewer rooms -- which could not have helped, and
         # narrows a story for no reason (multitude, 2026-09-05, PM20).
         from llm.llm_quality import json_failure_diagnosis
+        note_provider_exchange(
+            role="utility", system=system, payload=payload, response=raw,
+            ok=False, started=_started, error=str(exc))
         raise ValueError(
             "the location generator returned %d characters of unparseable "
             "JSON (%s). %s Tail: ...%s"
@@ -261,7 +279,13 @@ def _json_call(system, payload, *, max_tokens=PLAN_MAX_TOKENS,
                json_failure_diagnosis(raw, max_tokens=max_tokens),
                (raw or "")[-160:].replace("\n", " "))) from exc
     if not isinstance(value, dict):
+        note_provider_exchange(
+            role="utility", system=system, payload=payload, response=raw,
+            ok=False, started=_started, error="non-object")
         raise ValueError("town generator returned a non-object")
+    note_provider_exchange(
+        role="utility", system=system, payload=payload, response=raw,
+        ok=True, started=_started)
     return value
 
 

@@ -2167,15 +2167,19 @@ def chat_retry_start(cid: int):
     """
     record = _failure_record(cid)
     retry = record.get("retry") or {}
-    from persist.chat_delete import delete_chat_data
     try:
+        # RESUMED IN PLACE. The failed attempt's chat IS the retry's chat, so
+        # everything that already succeeded is kept -- the planted town above
+        # all -- and a story that fails five times has ONE entry in the
+        # library rather than five (owner, 2026-09-08).
         chat_id, turn_id = greetings.start_story(
             int(retry["char_id"]), int(retry["persona_id"]),
             int(retry.get("greeting_index") or 0),
             lorebook_id=retry.get("lorebook_id"),
             already_known=bool(retry.get("already_known", True)),
             language=_require_story_language(retry.get("language")),
-            lived_location=retry.get("lived_location"))
+            lived_location=retry.get("lived_location"),
+            resume_chat_id=cid)
     except ValueError as exc:
         _pipeline_logger.exception("quick start retry failed for chat %s", cid)
         raise HTTPException(
@@ -2183,9 +2187,6 @@ def chat_retry_start(cid: int):
     except providers.LLMError as exc:
         _pipeline_logger.exception("quick start retry failed for chat %s", cid)
         raise HTTPException(502, _lived_location_llm_detail(exc)) from exc
-    # Only once the new story exists: a retry that fails leaves the author
-    # exactly where they were, with one failed setup rather than none.
-    delete_chat_data(cid)
     return {"chat_id": chat_id, "turn_id": turn_id}
 
 
@@ -2200,13 +2201,17 @@ def chat_setup_log(cid: int):
     from persist.pipeline_trace import export_chat_debug
 
     record = dict(_failure_record(cid))
+    # The attempt's own model traffic rides the record (every call the start
+    # made, sent and received); the chat debug export is what the pipeline
+    # captured if turn 0 ever ran, which for most failed setups is nothing.
     try:
-        exchanges = export_chat_debug(cid, include_content=True, limit=50)
+        turns = export_chat_debug(cid, include_content=True, limit=50)
     except Exception as exc:                      # noqa: BLE001 -- best effort
-        exchanges = {"error": "%s: %s" % (type(exc).__name__, exc)}
+        turns = {"error": "%s: %s" % (type(exc).__name__, exc)}
     return {"kind": "quick_start_failure", "chat_id": cid,
             "exported": time.time(), "failure": record,
-            "attempt": exchanges}
+            "exchanges": record.get("exchanges") or [],
+            "turns": turns}
 
 
 @app.get("/api/chats/{cid}/debug")
