@@ -96,6 +96,7 @@ from .charter_commitment import OPEN_STATES
 from .charter_figure import figure_claim
 from .charter_mind import PERSONAL_FLOOR, hear, see
 from .charter_politics import regard_key, regard_value
+from .charter_social import familiarity
 from .charter_talk import RETOLD_RETENTION, co_present, tellable
 
 #: Practices one body may hold at once. Past this the oldest is dropped: a
@@ -137,17 +138,6 @@ HISTORY_WEIGHT = 0.15
 #: should be -- `EXPERIENCE_CAP` is 4,000 and a body that lived to it would
 #: otherwise be scanned in full, four practices deep, every window.
 PAIR_TAIL = 256
-
-#: Windows-plus-occasions with one person at which familiarity reads 1.0.
-#:
-#: Measured 2026-08-27 over a simulated year: the nonzero `served_beside`
-#: distribution has median 272 on `big_ship(crew=40)` and median 219 on the
-#: healthy six-body `SHIP` harness (`tests/test_charter_run.py`'s `KEPT`
-#: needs, everybody in `galley`, `active_places = []`). 250 sits between the
-#: two, so on either fixture about half the pairs who have stood a year
-#: together read above 0.5 -- a year of somebody being the person you were
-#: beside, not the ceiling of what a friendship can be.
-FAMILIAR_SATURATION = 250.0
 
 #: The judgment axes that say whether a body is easy to be near, signed so
 #: they sum toward liking. `charter_social.JUDGMENT_AXES`'s fifth, `respect`,
@@ -337,18 +327,19 @@ def _between(state, actor, other):
     needs are never touched. See the module docstring for why symmetry does
     not make the other side readable.
     """
-    beside = float(((state["served_beside"].get(actor) or {})
-                    .get(other) or 0))
     acc = _pair_rows(state, actor).get(other) or (0, 0.0, 0, 0.0)
 
-    # ONE UNIT, DELIBERATELY. A window stood beside somebody and a specific
-    # occasion with them are both "time with this person" at the resolution
-    # this layer works at, and keeping them apart would need a second
-    # constant nobody can set from evidence. The tally carries the volume
-    # (it is what a quiet institution deposits) and the rows carry the
-    # occasions (they are what a busy one does); a pair has whichever of the
-    # two its life actually produced.
-    familiar = min(1.0, (beside + acc[0]) / FAMILIAR_SATURATION)
+    # ONE SCALE, AND IT IS NOT THIS MODULE'S. `charter_social.familiarity` is
+    # where "how well do these two know each other" is answered -- for the
+    # tie label, for the `close` gate and for the promotion payload -- and
+    # this layer scored its own `min(1.0, (beside + occasions) / 250.0)`
+    # against that function's `/ TIE_SATURATION` until review 2026-09-07 B17,
+    # so an affordance and a tie could read the same pair differently. The
+    # occasion rows fold in as the `occasions` term; the argument for
+    # counting them as one unit with the windows moved into the function's
+    # docstring with them.
+    familiar = familiarity(state["served_beside"], actor, other,
+                           occasions=acc[0])
 
     # HOW THEY SIT WITH ME, from the two records of that the actor holds:
     # the affect stamped on its own rows by `charter_feel` at the time, and

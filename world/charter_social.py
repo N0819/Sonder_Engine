@@ -94,12 +94,26 @@ DEFAULT_SIGNALS = {
 TIE_LABELS = ("close", "at_odds", "wary", "afraid_of", "looks_up_to",
               "familiar")
 
-#: Shared windows at which familiarity reads 1.0. HOISTED from
-#: `charter_promote.acquainted`, which had it inline as `shared / 200.0`: the
-#: same saturation now has two readers, and two copies of a tuned constant is
-#: how they drift. The claim is unchanged -- the difference between never and
-#: often is most of the signal, and the difference between often and
-#: constantly is nearly none.
+#: Time with one person -- shared windows plus occasions -- at which
+#: familiarity reads 1.0. HOISTED from `charter_promote.acquainted`, which had
+#: it inline as `shared / 200.0`: the same saturation now has four readers,
+#: and two copies of a tuned constant is how they drift. The claim is
+#: unchanged -- the difference between never and often is most of the signal,
+#: and the difference between often and constantly is nearly none.
+#:
+#: THE SECOND COPY DRIFTED EXACTLY AS PREDICTED, and this is the only scale
+#: now. `charter_practice` carried `FAMILIAR_SATURATION = 250.0` until review
+#: 2026-09-07 B17, so the affordance layer and the tie layer answered "how
+#: well do these two know each other" with different numbers for the same
+#: pair. The deleted copy took the only distribution anyone has measured
+#: (2026-08-27, over a simulated year): the nonzero `served_beside` counts
+#: run to a median of 272 on `tests/charter_worlds.big_ship(crew=40)` and 219
+#: on the six-body `SHIP` harness, so a pair who stood a year together reads
+#: at or near the ceiling here. That is the shape a saturating scale is for
+#: -- what it still separates is a life spent together from a few crossings,
+#: which is the whole of what its readers ask it -- and the reading that a
+#: year should sit short of the ceiling was the second scale's argument for
+#: itself, which is not a thing a second scale gets to have.
 TIE_SATURATION = 200
 
 #: Shared windows before a pair reads `familiar` at all. Measured on
@@ -292,6 +306,20 @@ def normalize_judgments(stored):
 
 
 def _signals_in_claim(claim, signal_kinds):
+    """The signals a held claim carries, each with the CANONICAL subject.
+
+    A judgment is keyed by the engine's name for a person -- the same key
+    ``judgments[holder][other]``, ``ties``, co-presence and every promotion
+    read use.  A claim also carries a LABEL: ``about`` and the licensed
+    ``public_evidence.actor`` are what the witnesses would say ("the slight
+    woman"), because those fields are copied into voiced payloads
+    (`charter_observe.evidence_claim`).  Keying a stance by the label files
+    it against nobody: no other reader ever looks there, so the stance is
+    written, never merged, and never found again (review 2026-09-07 B7).
+    So: ``subject`` where the claim carries one, the rendered fields only
+    for claim writers that mint no canonical field of their own.
+    """
+    canonical = str(claim.get("subject") or "").strip()
     public = claim.get("public_evidence")
     if isinstance(public, dict):
         for act in public.get("speech_acts") or ():
@@ -301,10 +329,11 @@ def _signals_in_claim(claim, signal_kinds):
             # A promise changes no trust merely by being uttered.  Its later
             # fulfilment/default is the evidence that moves judgment.
             if kind in signal_kinds:
-                yield kind, str(public.get("actor") or claim.get("about") or "")
+                yield kind, (canonical or str(public.get("actor")
+                                              or claim.get("about") or ""))
     event_kind = str(claim.get("event_kind") or "")
     if event_kind in signal_kinds:
-        actor = str(claim.get("actor") or claim.get("about") or "")
+        actor = canonical or str(claim.get("actor") or claim.get("about") or "")
         yield event_kind, actor
 
 
@@ -394,17 +423,30 @@ def judgment_view(judgments, holder, *, subjects=(), cap=4):
 # --------------------------------------------------------------------------
 
 
-def familiarity(served_beside, holder, other):
-    """How much of a life two people have spent in the same room, 0.0-1.0.
+def familiarity(served_beside, holder, other, *, occasions=0):
+    """How much of a life two people have spent together, 0.0-1.0.
 
     The holder's OWN co-presence tally and nothing else -- the same number
     `charter_promote.acquainted` hands a promotion, saturating at the same
     `TIE_SATURATION`, so the promotion payload and the tie cannot disagree
-    about how well two people know each other.
+    about how well two people know each other. THE ONE ANSWER TO THAT
+    QUESTION: `charter_practice._between` scored its own until review
+    2026-09-07 B17 and got a different number for the same pair.
+
+    ``occasions`` is specific occasions with this person that the tally does
+    not count -- the pair rows in a holder's own diary. ONE UNIT,
+    DELIBERATELY, and the practice layer's argument for it stands: a window
+    stood beside somebody and an occasion with them are both "time with this
+    person" at the resolution this layer works at, and keeping them apart
+    would need a second constant nobody can set from evidence. The tally
+    carries the volume a quiet institution deposits, the rows carry the
+    occasions a busy one does, and a pair has whichever of the two its life
+    actually produced.
     """
     shared = int(((served_beside or {}).get(str(holder)) or {})
                  .get(str(other)) or 0)
-    return round(min(1.0, max(0, shared) / float(TIE_SATURATION)), 4)
+    total = max(0, shared) + max(0.0, float(occasions or 0))
+    return round(min(1.0, total / float(TIE_SATURATION)), 4)
 
 
 def _regard_offset(regard, holder, other):

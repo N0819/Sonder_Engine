@@ -22,11 +22,14 @@ WHO MAY LEARN WHAT, AND BY WHAT ROUTE (enforced structurally):
     were in is their own gap record's business (``gaps.interim_for``), on
     their own sightings, not the player's.
   * Facts are relative or entropic — "quieter than when last seen", "the
-    hearth stands cold" — never absolute clock claims. The engine's clock
-    has no day anchor (``display`` is prose the Director owns), so a fact
-    like "it is midday" would assert something no ledger holds. A relative
-    diff asserts only the passage the clock actually measured, which is
-    why it cannot contradict the story's own sense of time.
+    hearth stands cold" — never absolute clock claims. Which hour of the
+    day it is has exactly one owner (``world/day_cycle``, off the clock's
+    anchor), and it is not this module: a fact like "it is midday" written
+    here would be a second answer to a question already answered. A
+    relative diff asserts only the passage the clock actually measured,
+    which is why it cannot contradict the story's own sense of time. How
+    LONG a day is comes from the same owner, because the watches a routine
+    turns on are the world's day and not a Terran one.
   * Fired consequence fuses at the entered room outrank texture: they are
     layer-1 fact (see ``living_world``), the texture is plausible motion.
     Both arrive as state; the Director stages, the narrator renders — the
@@ -38,10 +41,17 @@ from __future__ import annotations
 
 import hashlib
 
-#: One in-story day, for cycles and entropy thresholds. The clock is
-#: elapsed seconds with no absolute anchor; a DAY here is a period, not a
-#: date.
-DAY_SECONDS = 86400.0
+from world.day_cycle import DAY_LENGTH_HOURS_DEFAULT
+
+#: One in-story day on a world that never said otherwise, for cycles and
+#: entropy thresholds. A DAY here is a period, not a date: the clock is
+#: elapsed seconds and this module still asserts nothing about the hour.
+#: HOW LONG THAT PERIOD IS BELONGS TO `world/day_cycle`, though -- a story
+#: whose author set `day_length_hours` has a longer or shorter day, and
+#: every function below takes it rather than assuming this one (review
+#: 2026-09-07 B9: a literal 86400 here kept a tavern on Terran watches
+#: while the sky outside it kept the author's).
+DAY_SECONDS = DAY_LENGTH_HOURS_DEFAULT * 3600.0
 
 #: Below this gap a return is a round trip, not an absence; the room owes
 #: no difference worth a payload's tokens.
@@ -78,6 +88,15 @@ _CURVE = (0, 0, 1, 2, 3, 3, 2, 1)
 _SOCIAL_AFFORDANCES = frozenset({"food", "drink", "rest"})
 
 
+def _day_span(day_seconds):
+    """One in-story day in seconds, defaulting when handed nothing usable."""
+    try:
+        span = float(day_seconds)
+    except (TypeError, ValueError):
+        return DAY_SECONDS
+    return span if span > 0.0 else DAY_SECONDS
+
+
 def _roll(seed, step, salt):
     """A stable pseudo-random integer for (seed, step, salt).
 
@@ -89,22 +108,25 @@ def _roll(seed, step, salt):
     return int(hashlib.sha256(blob.encode("utf-8")).hexdigest()[:8], 16)
 
 
-def routine_band(place_key, elapsed_seconds):
+def routine_band(place_key, elapsed_seconds, day_seconds=DAY_SECONDS):
     """Occupancy band index (0–3) for one place at one clock reading. Pure.
 
     Phase-jittered per place, amplitude-jittered per day: the same place at
     the same clock always answers the same, two places never quite agree,
     and yesterday's peak is not exactly today's — a rhythm, not a schedule.
+    The watches divide THIS world's day (`day_seconds`), so a rhythm and the
+    sun it is kept by turn over together.
     """
     try:
         elapsed = max(0.0, float(elapsed_seconds))
     except (TypeError, ValueError):
         elapsed = 0.0
+    span = _day_span(day_seconds)
     key = str(place_key or "")
-    watch = int(elapsed % DAY_SECONDS // (DAY_SECONDS / _WATCHES))
+    watch = int(elapsed % span // (span / _WATCHES))
     phase = _roll(key, 0, "phase") % _WATCHES
     band = _CURVE[(watch + phase) % _WATCHES]
-    day = int(elapsed // DAY_SECONDS)
+    day = int(elapsed // span)
     nudge = _roll(key, day, "nudge") % 4
     if nudge == 0 and band > 0:
         band -= 1
@@ -113,7 +135,8 @@ def routine_band(place_key, elapsed_seconds):
     return band
 
 
-def occupancy_fact(room_name, place_key, then_seconds, now_seconds):
+def occupancy_fact(room_name, place_key, then_seconds, now_seconds,
+                   day_seconds=DAY_SECONDS):
     """One relative occupancy fact, or None when the band did not move.
 
     Relative on purpose — "quieter than when the party last saw it" — see
@@ -124,8 +147,8 @@ def occupancy_fact(room_name, place_key, then_seconds, now_seconds):
 
     if not _SOCIAL_AFFORDANCES & set(assumed_affords(room_name)):
         return None
-    before = routine_band(place_key, then_seconds)
-    after = routine_band(place_key, now_seconds)
+    before = routine_band(place_key, then_seconds, day_seconds)
+    after = routine_band(place_key, now_seconds, day_seconds)
     if before == after:
         return None
     word = "busier" if after > before else "quieter"
@@ -133,7 +156,7 @@ def occupancy_fact(room_name, place_key, then_seconds, now_seconds):
             f"{OCCUPANCY_BANDS[after]} now.")
 
 
-def entropy_facts(room_name, gap_seconds):
+def entropy_facts(room_name, gap_seconds, day_seconds=DAY_SECONDS):
     """What elapsed time alone did to the room. Pure; tag-gated.
 
     Each fact is asserted only when the room's own name affords the thing
@@ -148,15 +171,16 @@ def entropy_facts(room_name, gap_seconds):
         gap = max(0.0, float(gap_seconds))
     except (TypeError, ValueError):
         return []
+    span = _day_span(day_seconds)
     affords = set(assumed_affords(room_name))
     facts = []
     if "warmth" in affords and gap > 4 * 3600.0:
         facts.append("Any fire has long burned down; the hearth stands "
                      "cold.")
-    if affords & {"food", "drink"} and gap > DAY_SECONDS:
+    if affords & {"food", "drink"} and gap > span:
         facts.append("Whatever food or drink stood out has been cleared "
                      "away or gone stale.")
-    if not (affords & _SOCIAL_AFFORDANCES) and gap > 7 * DAY_SECONDS:
+    if not (affords & _SOCIAL_AFFORDANCES) and gap > 7 * span:
         facts.append("Dust and disuse show plainly on every surface.")
     return facts
 
@@ -171,6 +195,8 @@ def residue_for(cid, scene, room_id, frame_id=None, now_seconds=None):
     to a diff, and unvisited PLACES are approach D's ledger, not this one.
     """
     from core.db import wget, wget_for_frame
+    from story.scene import style_guide
+    from world.day_cycle import day_length_hours
     from world.gaps import LAST_SEEN_KEY
     from world.living_world import fired_consequences_at
 
@@ -195,10 +221,15 @@ def residue_for(cid, scene, room_id, frame_id=None, now_seconds=None):
     room_name = (room or {}).get("name") if isinstance(room, dict) else None
     room_name = room_name or str(room_id)
 
+    # How long this story's day is has one owner -- `day_cycle.day_length_hours`
+    # over the author's style guide -- and the routine's watches and the
+    # entropy thresholds read it rather than each assuming a Terran day.
+    day_seconds = day_length_hours(style_guide(cid)) * 3600.0
+
     facts = list(fired_consequences_at(cid, str(room_id), then_seconds, now))
-    facts.extend(entropy_facts(room_name, gap))
+    facts.extend(entropy_facts(room_name, gap, day_seconds))
     shift = occupancy_fact(room_name, f"room:{cid}:{room_id}",
-                           then_seconds, now)
+                           then_seconds, now, day_seconds)
     if shift:
         facts.append(shift)
     if not facts:

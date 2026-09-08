@@ -196,17 +196,28 @@ def sun_light(phase, sky=None) -> str:
 # Reading a label.
 # ---------------------------------------------------------------------------
 
-def clock_reading_hour(text):
-    """The hour a clock reading inside `text` names, as a float in [0, 24),
-    or None when the text carries none this reader trusts."""
+def clock_reading_hour(text, day_length=DAY_LENGTH_HOURS_DEFAULT):
+    """The hour a clock reading inside `text` names, as a float in
+    [0, `day_length`), or None when the text carries none this reader trusts.
+
+    HOW LONG THE DAY IS HAS ONE ANSWER IN THIS ENGINE (`day_length_hours`),
+    and the bound on a readable hour is that answer rather than a second
+    statement of a Terran day: "27:30" is a time on a thirty-hour world and
+    "25:30" is a time on none. (Review 2026-09-07 B9: this guard read
+    `hour > 23` while both of its callers already carried the world's day
+    length and re-checked the reading against it afterwards.)
+    """
     text = str(text or "").casefold()
+    length = max(1e-9, float(day_length))
     for match in CLOCK_READING.finditer(text):
         found = [g for g in match.groups() if g is not None]
         hour, minute = int(found[0]), int(found[1])
-        if hour > 23 or minute > 59:
+        if minute > 59:
             continue
         if hour < 12 and PM_MARKER.match(text[match.end():match.end() + 12]):
             hour += 12
+        if hour >= length:
+            continue
         return float(hour) + float(minute) / 60.0
     return None
 
@@ -217,16 +228,14 @@ def label_phase(label, day_length=DAY_LENGTH_HOURS_DEFAULT):
     A clock reading is read first -- it is the more exact statement -- and
     placed on THIS world's day; a phase word is read second. On a world whose
     day is shorter than the reading (a 20-hour day, a "22:00" label) the
-    reading is refused rather than wrapped, because it cannot be a time on
-    that clock.
+    reading is refused rather than wrapped by `clock_reading_hour`, because
+    it cannot be a time on that clock.
     """
     text = str(label or "").casefold().strip()
     if not text:
         return None
-    hour = clock_reading_hour(text)
+    hour = clock_reading_hour(text, day_length)
     if hour is not None:
-        if hour >= float(day_length):
-            return None
         return phase_of_hour(hour, day_length)
     for name, words in _PHASE_WORDS:
         if any(word in text for word in words):
@@ -241,9 +250,9 @@ def label_hour(label, day_length=DAY_LENGTH_HOURS_DEFAULT):
     text = str(label or "").casefold().strip()
     if not text:
         return None
-    hour = clock_reading_hour(text)
+    hour = clock_reading_hour(text, day_length)
     if hour is not None:
-        return hour if hour < float(day_length) else None
+        return hour
     phase = label_phase(text, day_length)
     return phase_midpoint_hour(phase, day_length) if phase else None
 
