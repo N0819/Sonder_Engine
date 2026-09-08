@@ -10,7 +10,7 @@
 | `agents/background.py` | 1739 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
 | `agents/character.py` | 4303 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/common.py` | 9978 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
-| `agents/composer.py` | 4462 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
+| `agents/composer.py` | 4521 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 5135 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 476 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 1327 |  | `agents.common`, `agents.director_lingua`, `llm`, `world.spatial` |
@@ -25,7 +25,7 @@
 | `agents/loops.py` | 1396 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/mapping.py` | 522 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `mind.memory`, `story.scene`, `world.spatial` |
 | `agents/narration.py` | 2302 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
-| `agents/perception.py` | 5567 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
+| `agents/perception.py` | 5594 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/runtime.py` | 1506 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 123 | Step and active-variant persistence helpers. | `core.db` |
 | `agents/story_planner.py` | 1265 |  | `core.logging_utils`, `story.room_calls` |
@@ -254,14 +254,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_render_view_english()` | 3683 | 219 lines |
-| `observations_from_render()` | 4254 | 209 lines |
-| `pose_percepts()` | 1814 | 150 lines |
-| `presence_percepts()` | 1081 | 139 lines |
-| `speech_percept()` | 2547 | 124 lines |
-| `line_hear_level()` | 617 | 107 lines |
-| `_pose_referent()` | 1494 | 107 lines |
-| `act_percept()` | 2709 | 103 lines |
+| `_render_view_english()` | 3733 | 228 lines |
+| `observations_from_render()` | 4313 | 209 lines |
+| `speech_percept()` | 2557 | 154 lines |
+| `pose_percepts()` | 1824 | 150 lines |
+| `presence_percepts()` | 1091 | 139 lines |
+| `line_hear_level()` | 627 | 107 lines |
+| `_pose_referent()` | 1504 | 107 lines |
+| `act_percept()` | 2749 | 103 lines |
 
 ### `agents/director.py`
 
@@ -441,14 +441,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_composer_outcome()` | 4943 | 625 lines |
-| `perception_outcome()` | 2691 | 294 lines |
-| `_composer_standing_percepts()` | 3996 | 240 lines |
-| `_composer_act()` | 4505 | 234 lines |
-| `perception_act()` | 2237 | 207 lines |
-| `_outcome_event_stream()` | 678 | 152 lines |
-| `_source_channels()` | 1023 | 139 lines |
-| `_scent_sources_for()` | 3716 | 129 lines |
+| `_composer_outcome()` | 4968 | 627 lines |
+| `perception_outcome()` | 2692 | 294 lines |
+| `_composer_standing_percepts()` | 4019 | 240 lines |
+| `_composer_act()` | 4528 | 236 lines |
+| `perception_act()` | 2238 | 207 lines |
+| `_outcome_event_stream()` | 679 | 152 lines |
+| `_source_channels()` | 1024 | 139 lines |
+| `_scent_sources_for()` | 3739 | 129 lines |
 
 ### `agents/runtime.py`
 

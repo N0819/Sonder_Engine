@@ -176,6 +176,16 @@ def _pack_words(name):
         return frozenset()
 
 
+def _lower_lead(text):
+    """Sentence case off an authored phrase about to be spliced mid-sentence:
+    the first letter is lowered when it is the ONLY capital in its word, so
+    an acronym or a capitalised name inside the phrase keeps its case."""
+    text = str(text or "").strip()
+    if len(text) > 1 and text[0].isupper() and text[1].islower():
+        return text[0].lower() + text[1:]
+    return text
+
+
 def _strip_sentence_ends(text):
     """Take the terminal stops off a phrase about to be spliced into a
     sentence -- the pack's stops, not the ASCII full stop alone. A Japanese
@@ -2546,8 +2556,21 @@ def residue_percepts(level, *, targeted=False, loud_event=False, pain=False):
 
 def speech_percept(entry, rel, observer_name, *, display, can_see,
                    proximity=None, order_key=0, observer_id=None,
-                   senses=None):
+                   senses=None, voice="", prev_standing=None):
     """Admit one spoken line for one observer, or None.
+
+    A VOICE IS ESTABLISHED ONCE (D2; Wood -- theatre gives a vocal quality
+    once). `voice` is the speaker's own register from their sheet
+    (`social.voice.register`). The FIRST line this observer hears from that
+    body renders the register as its manner and files a `voice:<body>` key
+    in the observer's standing ledger; every later line renders a manner
+    only where the line's own `tone` names a departure. The declared `tone`
+    stays in `data["tone"]` regardless -- what renders is `data["manner"]`.
+    Measured before this: "in a flat, hushed monotone voice, she said" on
+    63-98 of 79 lines in one story and 6 of 7 on the descent copy, because a
+    speaker's ordinary voice was re-declared as tone on every line and the
+    view had no notion of a voice already known. Tone strings are never
+    compared: the ledger decides, not the wording.
 
     Gates, in order: concealment (absolute exclusion, never a volume),
     audibility (`line_hear_level`, including the comm/addressed rescue).
@@ -2604,12 +2627,29 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
     if level == "none":
         return None
     channel = rel.get("comm_channel")
+    tone = str(entry.get("tone") or "").strip()
+    # A register is AUTHORED sheet text and arrives as a sentence ("Clinical,
+    # deadpan, and strictly monotone.") where a tone is a phrase; splice it
+    # as the manner slot expects, or the page reads "in a Clinical, deadpan,
+    # and strictly monotone voice" (descent copy, beat 119).
+    register = _lower_lead(_strip_sentence_ends(voice))
+    # Keyed on the sheet's OWN text, not the spliced rendering: the key names
+    # the voice, and a change to how the manner is worded must not make a
+    # known voice new again (measured: one renderer change between two
+    # beats re-established Sarah's voice on the descent copy, beat 120).
+    voice_key = standing_key(
+        "voice", (body_key(str(entry.get("speaker") or "")),),
+        (str(voice or "").strip(),)) if register else ""
+    established = bool(voice_key) and voice_key in (prev_standing or ())
+    manner = register if (register and not established) else tone
     data = {
         "level": level,
         "volume": volume,
         "can_see": bool(can_see),
         "conducted": bool(rel.get("inside_source")),
-        "tone": str(entry.get("tone") or ""),
+        "tone": tone,
+        "manner": manner,
+        **({"voice_key": voice_key} if voice_key else {}),
         "articulation": str(entry.get("articulation") or ""),
         "directed_at_self": _addresses(
             entry.get("intended_target"), observer_name),
@@ -3629,6 +3669,16 @@ def _render_scent(p, *, episode=False):
     return _en(prefix + "scent_air", scent=scent)
 
 
+VOICE_KEY_PREFIX = "voice:"
+
+
+def carried_voices(prev_standing):
+    """The voice keys an observer's previous view filed -- the one family of
+    standing key that persists without being re-earned each beat."""
+    return {str(k) for k in (prev_standing or ())
+            if str(k).startswith(VOICE_KEY_PREFIX)}
+
+
 def _render_event(p):
     if p.kind == "speech":
         body = p.data.get("body") or ""
@@ -3646,7 +3696,7 @@ def _render_event(p):
                 "", p.source_label, f'"{body}"', p.data.get("level", "full"),
                 p.data.get("volume", "normal"), p.data.get("can_see", False),
                 conducted=p.data.get("conducted", False),
-                tone=p.data.get("tone", ""),
+                tone=p.data.get("manner", p.data.get("tone", "")),
                 articulation=p.data.get("articulation", ""))
         # The route is part of what was perceived, not a flourish. A voice on a
         # speaker and a voice at your shoulder are different facts, and the
@@ -3742,7 +3792,13 @@ def _render_view_english(percepts, *, mode="character",
     player = mode == "player"
     delta = player and not full_render
     described = set(prev_described)
-    standing_keys = set()
+    # A VOICE ONCE KNOWN STAYS KNOWN. The ledger is rolled forward a turn at
+    # a time and a standing key survives only while something re-files it;
+    # a voice key was re-filed only on a beat the speaker spoke, so one
+    # silent beat made their next line a first hearing again (descent copy,
+    # beats 120-121). Carried forward unconditionally, like a description
+    # already delivered: knowing how somebody sounds does not lapse.
+    standing_keys = carried_voices(prev_standing)
     seen_dedupe = set()
     verdicts = standing_verdicts(
         standing, prev_standing, prev_described) if player else {}
@@ -3868,6 +3924,9 @@ def _render_view_english(percepts, *, mode="character",
         sentence = _render_event(p)
         if sentence:
             event_spans.append((p, _cap(sentence)))
+            # A voice heard is a voice established for this observer.
+            if p.data.get("voice_key"):
+                standing_keys.add(str(p.data["voice_key"]))
 
     if player:
         # The ordering rule itself lives in `player_view_order`, which every
