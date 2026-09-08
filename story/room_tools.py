@@ -34,6 +34,7 @@ from story.plot_packages import operation_shape_text
 from story.room_research import tool_entries as _research_tool_entries
 from story.room_slice import containment as _containment
 from story.room_slice import read_scene as _scene
+from story.room_slice import room_graph as _room_graph
 
 #: Result ceiling, in characters of JSON; past it trailing items are
 #: dropped until the result fits (`fit_result`), and the result says how many
@@ -291,40 +292,10 @@ def _t_inspect_rooms(cid, frame_id, *, room_ids=None):
             "rooms": slices(near)}
 
 
-def _route_graph(cid, scene, contained):
-    """The rooms a story can WALK BETWEEN, as an undirected map.
-
-    A CLOSED DOOR IS NOT A WALL. This asks where the story can reach, not
-    where a body may step this beat, and the engine already owns the set for
-    that question: `_ROUTE_MEMORY_BARRIERS` -- the passable set plus
-    `closed_door` -- with the comment that says exactly why ("a map that
-    forgot every closed door would forget most of a house"). Read over
-    `passable_neighbors` instead, `inspect_route` called three of six live
-    rooms of a house unreachable and the Room warned on its own good package
-    (PX15, masque run, 2026-09-05).
-
-    The plan's topology counts as walkable too: a planned stub is a room the
-    Director furnishes on entry. By ID: `planned_context` renders edges by
-    NAME for a reader, and a walk over names reached nothing planned.
-    """
-    from world.spatial import _ROUTE_MEMORY_BARRIERS, neighbor_map
-    from world.structure import planned_topology
-
-    graph = {str(k): {str(v) for v in vs if str(v) not in contained}
-             for k, vs in neighbor_map(scene, _ROUTE_MEMORY_BARRIERS,
-                                       directional=True).items()
-             if str(k) not in contained}
-    for rid, others in planned_topology(cid).items():
-        for other in others:
-            graph.setdefault(rid, set()).add(other)
-            graph.setdefault(other, set()).add(rid)
-    return graph
-
-
 def _t_inspect_route(cid, frame_id, *, from_room, to_room):
     scene = _scene(cid, frame_id)
     contained = _containment(scene)
-    graph = _route_graph(cid, scene, contained)
+    graph = _room_graph(cid, scene)
     origin, goal = str(from_room), str(to_room)
     if goal in contained:
         raise ToolError("%r is the inside of %s, not a place a route "
@@ -332,8 +303,9 @@ def _t_inspect_route(cid, frame_id, *, from_room, to_room):
                         "Director's" % (goal, contained[goal]))
     # A route may START inside a body -- the player riding a lift car is
     # standing in a room whatever holds it -- and its first step is out,
-    # into the room the holder stands in (`room_slice.room_graph`). It may
-    # not pass through one or end in one.
+    # into the room the holder stands in (`room_slice.room_graph`, which
+    # joins an inside to its holder's room and to nothing else, so nothing
+    # routes THROUGH one). It may not end in one.
     prefix = []
     start = origin
     if origin in contained:
@@ -369,7 +341,10 @@ def _t_inspect_route(cid, frame_id, *, from_room, to_room):
         frontier = nxt
         hops += 1
     return {"from": origin, "to": goal, "hops": None, "path": [],
-            "reachable": sorted(seen)[:LIST_CAP_ROUTE]}
+            # An inside the walk stepped into is somewhere the story got to
+            # and nowhere a route may end, so it is not offered as one.
+            "reachable": sorted(r for r in seen
+                                if r not in contained)[:LIST_CAP_ROUTE]}
 
 
 LIST_CAP_ROUTE = 60
@@ -381,30 +356,23 @@ def _t_inspect_reserved_identities(cid, frame_id):
     here, under its charter: this tool answers "is the name taken", and a
     body's place, availability and post are `inspect_charters`' answer
     (measured 2026-09-04, chat 114: 9,137 of 9,677 characters were the
-    same 66 bodies' place and availability that `inspect_charters` lists)."""
-    from core.db import q
-    from world.planned_entities import planned_entities
-    out = {"characters": [], "charter_bodies": {}, "plans": [],
+    same 66 bodies' place and availability that `inspect_charters` lists).
+
+    The set itself is `plot_packages.reserved_identities`, which is what
+    package validation compares a new name against: this tool REPORTS the
+    reservation, it does not keep a second one (B19)."""
+    from story.plot_packages import reserved_identities
+    identities = reserved_identities(cid, frame_id)
+    out = {"characters": [dict(row) for row in identities["cast"]],
+           "charter_bodies": dict(identities["charter_bodies"]),
+           "plans": [{"uid": plan["uid"], "kind": plan["kind"],
+                      "name": plan["name"], "aliases": plan["aliases"],
+                      "rendered": bool(plan.get("rendered"))}
+                     for plan in identities["plans"].values()],
            "charter_bodies_note": "names under their charter; a body's place "
                                   "and availability are inspect_charters'"}
-    for row in q("SELECT c.id, c.name, cc.status FROM chat_chars cc "
-                 "JOIN characters c ON c.id=cc.char_id WHERE cc.chat_id=?", (cid,)):
-        out["characters"].append({"id": row["id"], "name": row["name"],
-                                  "status": row["status"]})
-    try:
-        from world.charter_runtime import registry_for
-        registry = registry_for(cid, frame_id)
-        for key, item in sorted((registry.get("items") or {}).items()):
-            names = [str(body.get("name") or bkey) for bkey, body in sorted(
-                ((item.get("state") or {}).get("bodies") or {}).items())]
-            if names:
-                out["charter_bodies"][key] = names
-    except Exception as exc:
-        out["charter_bodies_error"] = str(exc)
-    for plan in planned_entities(cid, frame_id).values():
-        out["plans"].append({"uid": plan["uid"], "kind": plan["kind"],
-                             "name": plan["name"], "aliases": plan["aliases"],
-                             "rendered": bool(plan.get("rendered"))})
+    if identities["charter_error"]:
+        out["charter_bodies_error"] = identities["charter_error"]
     return out
 
 
@@ -939,17 +907,20 @@ def _t_inspect_contradictions(cid, frame_id):
         out["dangling"].append({"kind": "regions_unreadable", "error": str(exc)})
     out["dangling"].extend(_rooms_named_alike(cid))
     out["dangling"].extend(_structures_out_of_reach(cid, scene, contained))
-    reserved = {r["name"].casefold() for r in
-                _t_inspect_reserved_identities(cid, frame_id)["characters"]
-                if r.get("name")}
+    # NOBODY THE WORLD HOLDS IS ONE QUESTION. Both the reserved set and the
+    # exemption for a participant the package itself plans live in
+    # `plot_packages`; this lint read the registered cast alone and knew
+    # nothing of the exemption, so it reported a charter body, an authored
+    # plan (or its alias) and a package's own `plan_entity` subject as
+    # strangers that validation had already accepted (B19, 2026-09-07).
+    from story.plot_packages import reserved_names, unheld_participants
+    reserved = reserved_names(cid, frame_id)
     for pkg in packages(cid, frame_id).values():
         if pkg["status"] not in ("published", "active"):
             continue
-        for part in pkg["participants"]:
-            name = str(part.get("name") or part.get("text") or "")
-            if name and name.casefold() not in reserved:
-                out["dangling"].append({"kind": "participant_nobody_holds",
-                                        "package": pkg["uid"], "name": name})
+        for name in unheld_participants(pkg, reserved):
+            out["dangling"].append({"kind": "participant_nobody_holds",
+                                    "package": pkg["uid"], "name": name})
     return out
 
 
@@ -1039,7 +1010,7 @@ def _structures_out_of_reach(cid, scene, contained):
             and str(rid) not in contained}
     if not live:
         return []
-    graph = _route_graph(cid, scene, contained)
+    graph = _room_graph(cid, scene)
     seen, stack = set(live), list(live)
     while stack:
         for other in graph.get(stack.pop(), ()):
