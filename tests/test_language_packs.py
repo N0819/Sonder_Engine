@@ -799,6 +799,8 @@ JAPANESE_PERCEPT_FIXTURES = {
                      "constraint": "縛られて"}),
     "appearance": ("レイヤ", {"description": "背の高い人物"}),
     "act": ("レイヤ", {"surface": "扉を開ける"}),
+    "cue": ("レイヤ", {"cue": "手すりに手が長く留まる"}),
+    "demeanor": ("レイヤ", {"demeanor": "落ち着いている"}),
     "speech": ("レイヤ", {"body": "手すりに気をつけて。", "can_see": True,
                           "volume": "whisper", "articulation": "slurred",
                           "tone": "不安"}),

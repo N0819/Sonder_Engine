@@ -121,7 +121,7 @@ from .common import (
 # hand-maintained lists of one thing, and only the unread one was wrong.
 PERCEPT_KINDS = (
     "environment", "presence", "pose", "appearance", "act", "speech",
-    "communication",
+    "communication", "cue", "demeanor",
     "sensation", "substance", "body_part", "body_region", "body_state",
     "crossing", "residue", "ambient", "scent",
 )
@@ -2036,6 +2036,44 @@ def appearance_percept(source_name, label, description, *, force=False,
     )
 
 
+def cue_percept(source_name, label, cue, *, order_key, can_see=True):
+    """One physical tell that reached this observer -- a glance, a grip, a
+    catch in the voice the character did not declare as an action (D1;
+    Wood/Stanislavski: the actor's body). `cue` is the OBSERVABLE text
+    alone: `_delivered_manifest` has already decided, per observer and per
+    channel, which tells land, and neither the tell's `because` nor its
+    `betrays` ever reaches a percept -- meaning stays with the mind that
+    has it. Observations derive from the render, so a reader downstream
+    cannot recover more than the page says. Review A36 measured the payload
+    computed for 101 beats and read by nothing."""
+    text = _strip_sentence_ends(cue)
+    if not text or not label:
+        return None
+    return Percept(
+        kind="cue", channel="sight" if can_see else "hearing",
+        source_label=label, order_key=order_key,
+        data={"cue": text, "body": body_key(source_name)},
+        salience=0.55,
+        dedupe_key=standing_key("cue", (body_key(source_name),), (text,)),
+    )
+
+
+def demeanor_percept(source_name, label, demeanor):
+    """A body's surface demeanor as STANDING state: how it carries itself
+    this beat, rendered while it holds and again only when it changes --
+    the standing ledger's ordinary verdicts, so a calm that lasts ten beats
+    costs one sentence (D1)."""
+    text = _lower_lead(_strip_sentence_ends(demeanor))
+    if not text or not label:
+        return None
+    return Percept(
+        kind="demeanor", channel="sight", source_label=label,
+        data={"demeanor": text, "body": body_key(source_name)},
+        salience=0.45,
+        dedupe_key=standing_key("demeanor", (body_key(source_name),), (text,)),
+    )
+
+
 def body_state_percept(entity_state):
     state = {k: entity_state.get(k) for k in ("posture", "activity", "held_items")
              if entity_state.get(k)}
@@ -2908,9 +2946,13 @@ _STANDING_ORDER = {
     # arranged. Before appearance, because how a body is held is a fact
     # about this beat and its authored description is a fact about the body.
     "environment": 0, "presence": 1, "pose": 2, "appearance": 3,
-    "body_state": 4, "sensation": 5, "body_part": 6, "body_region": 7,
+    # How a body CARRIES itself this beat -- its surface demeanor -- sits
+    # with the body's arrangement and description, before the observer's
+    # own state (D1).
+    "demeanor": 4,
+    "body_state": 5, "sensation": 6, "body_part": 7, "body_region": 8,
     # The air of the place, after the bodies in it and after what is on them.
-    "ambient": 8, "scent": 9,
+    "ambient": 9, "scent": 10,
 }
 
 #: Standing kinds that DESCRIBE a body's own surface rather than report its
@@ -3609,6 +3651,10 @@ def _render_standing(p):
         return _render_pose(p)
     if p.kind == "body_part":
         return _render_body_part(p)
+    if p.kind == "demeanor":
+        text = str(p.data.get("demeanor") or "").strip()
+        return _en("demeanor", label=_cap(p.source_label), demeanor=text) \
+            if text else ""
     if p.kind == "body_state":
         parts = []
         if p.data.get("posture"):
@@ -3720,6 +3766,9 @@ def _render_event(p):
             return _en("act_shapes", label=_cap(p.source_label))
         return _observable_predicate(
             p.source_label, p.data.get("surface")) or ""
+    if p.kind == "cue":
+        cue = str(p.data.get("cue") or "").strip()
+        return _en("cue", label=_cap(p.source_label), cue=cue) if cue else ""
     if p.kind == "crossing":
         if p.data.get("direction") == "arrived":
             return _en("arrived", label=_cap(p.source_label))
@@ -4083,6 +4132,9 @@ def _episode_sentence(p):
                     action=base, ending=ending)
         sentence = _observable_predicate(p.source_label, surface)
         return sentence or ""
+    if p.kind == "cue":
+        cue = str(p.data.get("cue") or "").strip()
+        return _en("episode_cue", label=p.source_label, cue=cue) if cue else ""
     if p.kind == "crossing":
         if p.data.get("direction") == "arrived":
             return _en("episode_arrived", label=_cap(p.source_label))

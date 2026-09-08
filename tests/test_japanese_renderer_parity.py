@@ -45,6 +45,8 @@ KINDS = {
     "appearance": _percept("appearance", description="a tall figure",
                            source_key="reya"),
     "act": _percept("act", surface="crosses to the shelf", order=1),
+    "cue": _percept("cue", cue="a hand that lingers on the rail", order=5),
+    "demeanor": _percept("demeanor", demeanor="calm, attentive"),
     "crossing": _percept("crossing", direction="arrived", order=2),
     "pose": _percept("pose", posture="kneeling", support="the floor"),
     "body_part": _percept("body_part", count=2, part="tail", aspect="back",
