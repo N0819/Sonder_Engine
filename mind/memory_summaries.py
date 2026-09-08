@@ -468,10 +468,34 @@ def _write_consolidated_window(chat_id, char_id, char_name, memories, previous_s
     try:
         result = json.loads(raw)
     except Exception:
+        # THE REPAIR MAY NOT RAISE THE RAW ERROR. Stripping a trailing comma
+        # out of the first {...} span fixes the common half-written object;
+        # when the span is itself truncated it does not, and `json.loads`
+        # then raised a bare `JSONDecodeError` -- "Unterminated string
+        # starting at: line 130 column 17" -- naming a line and column in
+        # output nobody had asked to see, from a call site the reader has no
+        # way to identify (reported from play 2026-09-08). Say which call
+        # failed and how much came back, the way `charter_generate._json_call`
+        # already does for the location plan.
         match = re.search(r"\{.*\}", raw or "", re.S)
-        if not match:
-            raise RuntimeError("Memory consolidator returned invalid JSON")
-        result = json.loads(re.sub(r",\s*([}\]])", r"\1", match.group(0)))
+        cause = None
+        result = None
+        if match:
+            try:
+                result = json.loads(
+                    re.sub(r",\s*([}\]])", r"\1", match.group(0)))
+            except Exception as exc:      # noqa: BLE001 -- reported below
+                cause = exc
+        if result is None:
+            # Not a `raise` inside the guard: `tools/extract_ui_catalog.py`
+            # reads every raised literal in this package as user-facing text,
+            # and an internal control-flow message is not a UI string.
+            raise RuntimeError(
+                "the memory consolidator returned %d characters of "
+                "unparseable JSON (%s). Tail: ...%s"
+                % (len(raw or ""),
+                   cause if cause is not None else "no JSON object in it",
+                   (raw or "")[-160:].replace("\n", " ")))
     start_turn = min(m["turn_idx"] for m in memories)
     end_turn = max(m["turn_idx"] for m in memories)
     # One row per epistemic class. The first-hand row is written

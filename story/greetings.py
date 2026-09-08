@@ -17,6 +17,8 @@ import re
 import time
 
 from core import db
+from core.logging_utils import logger
+from world.charter_runtime import lived_location_job, salvage_plan
 from story.character_schema import (
     character_name, character_appearance, character_initial_active_state,
     character_public_history, persona_name, persona_private_history,
@@ -712,8 +714,19 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
     # by default (the greeting is written TO the player), but a strangers-meeting
     # greeting starts with `already_known=False` so neither party begins knowing
     # the other's name.
+    # A QUICK START NARRATES ITSELF. Nothing here used to say anything at
+    # all: a run that failed left one access-log line and a toast, and a run
+    # that worked left nothing, so neither could be read afterwards. These
+    # lines name the stage, and every stage below can fail -- the location
+    # generator, the minds routing, turn 0 -- so a failure is attributable to
+    # the stage that raised it without reading a traceback (2026-09-08).
+    logger.info("quick start: character %s (%s) as persona %s (%s), "
+                "greeting %s, language %s",
+                char_id, c_name, persona_id, p_name, greeting_index,
+                language or DEFAULT_LANGUAGE)
     cid = db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
                 (f"{c_name} — {p_name}", prose_final, time.time()))
+    logger.info("quick start: chat %s created for character %s", cid, char_id)
     # Recorded before anything is seeded, because turn 0 runs below and every
     # stage of it -- establishment, perception, the narrator -- reads this.
     set_story_language(cid, language or DEFAULT_LANGUAGE)
@@ -798,13 +811,38 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
             # rooms in a book the story owns.
             request["lorebook_id"] = lb["id"]
             request["owning_lorebook_id"] = generation_book_id
+        logger.info("quick start: generating a lived location for chat %s", cid)
         try:
             generated_location = generate_lived_location(cid, request)
-        except Exception:
+        except Exception as exc:
             # No turn exists yet and this chat was minted by this call.  A
             # failed location proposal must not leave an invisible half-story
             # that appears after refresh or gets duplicated on the next try.
+            #
+            # WHAT THIS COSTS, SAID OUT LOUD (2026-09-08). The generator saves
+            # its two model calls as a resumable artifact on the chat's own
+            # job record -- "exactly what is worth not paying for twice" --
+            # and `delete_chat_data` takes that record with the chat, so a
+            # retry pays for both calls again and the job's `stage` and
+            # `error`, the only record of what went wrong, go with it. The
+            # log line below is the whole of what survives today; making the
+            # artifact outlive the chat is a persistence question and is the
+            # owner's to answer.
             from persist.chat_delete import delete_chat_data
+            job = lived_location_job(cid) or {}
+            # THE PLAN IS KEPT EVEN THOUGH THE STORY IS NOT. The two model
+            # calls that made it are the expensive part and they had already
+            # succeeded; deleting the chat used to take the artifact holding
+            # them with it, so a retry paid for both again. It is saved
+            # against what was ASKED FOR, so the next start that asks the
+            # same thing adopts it and goes straight to the writes.
+            kept = salvage_plan(cid, request, reason=str(exc))
+            logger.error(
+                "quick start: lived location failed for chat %s at stage %r "
+                "(%s: %s); discarding the chat, %s",
+                cid, job.get("stage") or "planning", type(exc).__name__, exc,
+                "keeping the finished plan for the next attempt" if kept
+                else "with no finished plan to keep", exc_info=True)
             delete_chat_data(cid)
             raise
 

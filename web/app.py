@@ -3013,9 +3013,38 @@ def character_start_story(cid: int, body: dict = Body(default={})):
                             if isinstance(body.get("lived_location"), dict)
                             else None))
     except ValueError as exc:
-        raise HTTPException(404, str(exc)) from exc
+        # A QUICK START THAT FAILS SAYS SO IN THE LOG, WITH THE LINE THAT
+        # RAISED IT. Every `ValueError` out of this call graph used to become
+        # a bare 404 and nothing else: the reason travelled in `detail`, the
+        # toast showed it for four seconds, and the server recorded a line
+        # reading "404 Not Found" -- which names a missing route, which this
+        # never is. Reported from play 2026-09-08 as an unattributable
+        # "Unterminated string starting at: line 130 column 17", a
+        # `JSONDecodeError` (a ValueError) from a model response somewhere in
+        # a graph that spans the greeting extraction, the location generator
+        # and the minds routing, with nothing to say which.
+        _pipeline_logger.exception(
+            "quick start failed for character %s: %s", cid, exc)
+        # AND ONLY A MISSING ROW IS A 404. The four things this call reports
+        # as missing say so in their own words; everything else it raises --
+        # a lorebook belonging to another story, a history request naming an
+        # unattached character, a model returning unparseable JSON -- is a
+        # request that cannot be carried out, not a thing that is not there.
+        raise HTTPException(
+            404 if str(exc).endswith("not found") else 422, str(exc)) from exc
     except providers.LLMError as exc:
+        _pipeline_logger.exception(
+            "quick start LLM failure for character %s: %s", cid, exc)
         raise HTTPException(502, _lived_location_llm_detail(exc)) from exc
+    except Exception as exc:
+        # The rest of the graph raises plenty that is not a ValueError (a
+        # RuntimeError from the consolidator's own repair path, a KeyError
+        # from a half-written artifact). Those became a 500 with a traceback
+        # only in the terminal's default handler; this names the request they
+        # belong to before letting the handler have it.
+        _pipeline_logger.exception(
+            "quick start failed for character %s: %s", cid, exc)
+        raise
     # The last moment before the card starts BEHAVING. A driveless sheet reads
     # as a dull character rather than a missing field once play begins, and
     # this is the surface where the host is about to find that out the slow
