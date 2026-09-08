@@ -26,7 +26,7 @@ from story.scene import (
     get_scene,
     recent_events,
 )
-from world.spatial import normalize_room_id
+from world.spatial import normalize_room_id, room_spellings, scene_room_id
 
 from .common import (
     _books,
@@ -173,8 +173,19 @@ def classify_movement(interp, scene, *, planned_for):
     if not target:
         return {"to_room": None, "status": None}
     target = str(target)
-    if target in ((scene or {}).get("rooms") or {}):
-        return {"to_room": target, "status": "known"}
+    # THE WORLD'S ROOM ENTERS UNDER THE WORLD'S ID, the same rule the plan's
+    # room gets below. A room answers to its id and to its name, folded
+    # (`spatial.scene_room_id`); a Director that spells a room the scene
+    # already holds its own way is naming that room, not a new one. Review
+    # 2026-09-07 B2: this compared the model's spelling to the scene keys
+    # EXACTLY while commit's mint dedup folded, so one beat could raise a
+    # planning need here and a redirect there for the same room.
+    held = scene_room_id(scene, target)
+    if held:
+        out = {"to_room": held, "status": "known"}
+        if held != target:
+            out["declared_as"] = target
+        return out
     plan = planned_for(target)
     if plan:
         # THE PLAN'S ROOM ENTERS UNDER THE PLAN'S IDENTITY. The Director
@@ -217,11 +228,11 @@ def _location_query_status(query, scene, *, planned_for, destination=None):
         return None
     rooms = (scene or {}).get("rooms") or {}
     for rid, room in rooms.items():
-        spellings = {normalize_room_id(str(rid))}
-        if isinstance(room, dict):
-            spellings.add(normalize_room_id(str(room.get("name") or "")))
-        spellings.discard("")
-        if any(sp == folded or sp in folded for sp in spellings):
+        # Same spellings as every other reader (`spatial.room_spellings`);
+        # only the PREDICATE differs, because a query is a description and a
+        # description contains the room's spelling rather than being it.
+        if any(sp == folded or sp in folded
+               for sp in room_spellings(rid, room)):
             return "known"
     if planned_for(query):
         return "planned"

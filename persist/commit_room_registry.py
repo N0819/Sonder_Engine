@@ -8,7 +8,7 @@ See docs/experiments/AUDIT_COMMIT.md for the split record.
 import json
 from core.db import q, qi
 from story.character_schema import persona_name
-from world.spatial import normalize_room_id
+from world.spatial import normalize_room_id, room_spellings
 from persist.commit_common import _room_of
 
 
@@ -45,10 +45,12 @@ def _anchored_book_ids(cid):
     }
 
 def _room_display_slug(room_id, room_def):
-    name = ""
-    if isinstance(room_def, dict):
-        name = str(room_def.get("name") or "")
-    return normalize_room_id(name or str(room_id))
+    """The room's display slug: its name folded, else its id. The first of
+    `spatial.room_spellings`, which is the ONE producer of what spellings a
+    room answers to (review 2026-09-07 B2 -- four sites folded a room's
+    identity four ways)."""
+    spellings = room_spellings(room_id, room_def)
+    return spellings[0] if spellings else ""
 
 def _registry_alias_index(cid, book_id):
     """{normalized name/alias: room_uid} for every LIVE room registered
@@ -189,6 +191,7 @@ def dedup_minted_rooms(cid, prev_scene, diff, add_warning=None):
                     )
             continue
         # Brand-new key: name/alias dedup within the same containment scope.
+        spellings = set(room_spellings(rid, rdef))
         slug = _room_display_slug(rid, rdef)
         rid_slug = normalize_room_id(rid)
         match = None
@@ -197,8 +200,12 @@ def dedup_minted_rooms(cid, prev_scene, diff, add_warning=None):
                 continue
             if prev_def.get("parent_entity") != incoming_owner:
                 continue
-            if _room_display_slug(prev_id, prev_def) == slug \
-                    or normalize_room_id(prev_id) in (slug, rid_slug):
+            # ONE identity per room: a room answers to its name and to its
+            # id, folded, and any spelling in common is the same room.
+            # Reassembling that comparison here read the incoming id
+            # against the held room's id but not against its NAME (review
+            # 2026-09-07 B2).
+            if spellings & set(room_spellings(prev_id, prev_def)):
                 match = prev_id
                 break
         if match is None and incoming_owner in anchor_books:

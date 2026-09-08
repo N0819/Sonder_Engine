@@ -207,9 +207,10 @@ def _planned_elsewhere_view(sc, ctx, briefed):
 def movement_for_resolve(ctx, interp):
     """The beat's declared movement with its destination spelled as the
     world spells it. The compiler (`agents/mapping.classify_movement`)
-    resolved the Director's spelling against the plan and put the plan's id
-    on its step; every resolve-side reader of the destination -- the
-    planned-room brief, the residue, the figures in view, the hands'
+    resolved the Director's spelling against the scene and the plan and put
+    the resolved id on its step; every resolve-side reader of the
+    destination -- the planned-room brief, the residue, the figures in
+    view, the hands'
     payloads -- takes it from here, so a planned room is furnished under
     its own id rather than minted again beside itself. Unchanged when the
     compiler classified nothing or agreed with the spelling."""

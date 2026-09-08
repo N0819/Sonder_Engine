@@ -890,13 +890,18 @@ _FIELD_CACHE_MAX = 64
 
 
 def _cache_key(scene: dict, room_id) -> str:
+    """The key is the WHOLE READ SET (review B10). The entity table used to
+    go in as its LIGHT SOURCES alone, and the derivation reads more of it
+    than that: every entity's names and aliases are what seat a body at the
+    room feature it is touching (`_anchor_for_entity`, through
+    `effective_station`), and a lamp hangs where the body carrying it
+    stands. Measured on the sibling sound field, whose key was short the
+    same way, dropping one alias off an entity that neither sounds nor
+    shines moved a carried source two cells. So entities go in entire.
+    """
     sc = scene or {}
-    sources = {}
-    for eid, ent in (sc.get("entities") or {}).items():
-        if isinstance(ent, dict) and ent.get("light_source"):
-            sources[str(eid)] = ent
     return json.dumps([
-        str(room_id), sc.get("rooms"), sources, sc.get("positions"),
+        str(room_id), sc.get("rooms"), sc.get("entities"), sc.get("positions"),
         sc.get("stations"), sc.get("orientation"), sc.get("poses"),
         sc.get("contacts"), sc.get("contained"), sc.get("crossings"),
         sc.get("day_phase"), sc.get("weather"), sc.get(BEAT_KEY),

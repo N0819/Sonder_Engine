@@ -84,6 +84,7 @@ from world.spatial import (
     resolve_substance_ops,
     room_of,
     body_visibility,
+    scene_room_id,
     scent_level,
     sight_level,
     comms_link,
@@ -913,10 +914,13 @@ def _declared_arrival_room(sc, interp, p_room):
         return ""
     if str(mv.get("mover") or "self").strip().casefold() not in ("", "self"):
         return ""
-    dest = str(mv.get("to_room") or "").strip()
+    # The destination as the WORLD spells it: a room answers to its id and
+    # its name, folded (`spatial.scene_room_id`), and the resolved id is
+    # what every reader below compares against (review 2026-09-07 B2).
+    dest = scene_room_id(sc, str(mv.get("to_room") or "").strip())
     if not dest or dest == str(p_room or ""):
         return ""
-    return dest if dest in ((sc or {}).get("rooms") or {}) else ""
+    return dest
 
 
 def _speech_room_for(sc, event, arrival_room, p_room):

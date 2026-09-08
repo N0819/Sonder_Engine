@@ -83,6 +83,7 @@ from world.spatial import (
     room_of,
     can_perceive_onset,
     same_subject,
+    scene_room_id,
     spatial_rel,
     speech_articulation_impediment,
     ARTICULATION_STIFLED,
@@ -1426,10 +1427,20 @@ def director_interpret(ctx, nonce):
     else:
         out["location_query"] = None
 
-    existing_rooms = set((sc.get("rooms") or {}).keys())
     mv = out.get("movement")
     if isinstance(mv, dict) and mv.get("to_room"):
-        if mv["to_room"] not in existing_rooms:
+        # ONE ANSWER TO "DOES THE WORLD ALREADY HOLD THIS ROOM?" A room
+        # answers to its id and its name, folded (`spatial.scene_room_id`),
+        # and the destination is carried under the world's id from here on
+        # so no later reader has to fold it again. Review 2026-09-07 B2:
+        # this compared exactly, `_location_query_status` and commit's mint
+        # dedup folded, and a room the scene held under another spelling
+        # drew a room-description request it did not need.
+        held = scene_room_id(sc, mv["to_room"])
+        if held and held != mv["to_room"]:
+            mv["declared_as"] = str(mv["to_room"])
+            mv["to_room"] = held
+        if not held:
             fl["needs_mapping"] = True
             mr = fl.get("mapping_request") or ""
             extra = (f" Player movement targets new room '{mv['to_room']}' "
@@ -4252,8 +4263,13 @@ def director_resolve(ctx, nonce, _corrections=None):
             # _merge_room -- live (Elevator Adventure branch 41) mapping's
             # "Branching Junction" became "Site17 Deep Shelter Branching
             # Junction", the id slug, as the player-visible location label.
-            if room_id and room_id not in sd["rooms"] \
-                    and room_id not in (sc.get("rooms") or {}):
+            # A lore key is a NAME ("Branching Junction"), so the spelling
+            # test has to be the fold every other room-identity reader
+            # uses (`spatial.scene_room_id`, review 2026-09-07 B2) -- an
+            # exact-key miss here is what put the placeholder name back on
+            # a room the scene had already named.
+            if room_id and not scene_room_id({"rooms": sd["rooms"]}, room_id) \
+                    and not scene_room_id(sc, room_id):
                 prev_room = subject_prev_room
                 adj = []
                 if prev_room:

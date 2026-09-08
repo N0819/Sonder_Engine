@@ -36,7 +36,7 @@ from story.character_schema import character_name, normalize_persona_data, perso
 from core.db import q, qi, transaction, wget, wget_for_frame, wset, wset_for_frame
 from core.frames import create_frame, get_frame
 from world.paradox import get_paradox
-from story.scene import (CAST_STATUS_PRESENT, active_cast, cast_change_status,
+from story.scene import (CAST_STATUS_ABSENT, active_cast, cast_change_status,
                          persona_of, set_char_state, set_char_status)
 from world.spatial import (THRESHOLD_CROSSING_BEATS, _SUBJECT_KEYED, _anchor_dir, _hiding_holders,
                      anchor_bearing_of, effective_anchors, has_visual,
@@ -331,15 +331,25 @@ def _cast_changes_leaving(cast_changes):
     departure: the same entry that said someone rejoined the story was read as
     proof they had gone.
 
-    An unrecognized status still counts as leaving. That is the direction that
-    cannot lose a beat -- the guard raises rather than warns -- and
-    `commit_cast_changes` has already warned about the word itself.
+    ONLY A WORD THE VOCABULARY HOLDS SENDS A BODY OUT (B33). An unrecognized
+    status is not an answer, and no reader may turn a non-answer into one:
+    `commit_cast_changes` leaves the roster untouched on such a word and warns,
+    so counting it as a departure here made the two readers of one entry
+    disagree -- the roster said present, the scene said gone. What that cost:
+    destruction's vacate pops the position of everyone in this set on the
+    stated promise that "the guard has already proven every doomed-room
+    occupant repositioned or departed, so this pop can never lose a person",
+    and on a word like `"fled"` it lost one -- still `active` in the roster,
+    addressable, running a character step every beat, and standing in no room
+    at all. Refusing the word here costs at most the stranding raise the guard
+    already raises for an occupant with no recorded exit, and that raise names
+    the remedy where the silent pop named nothing.
     """
     return {
         str(chg.get("who") or "").casefold()
         for chg in (cast_changes or [])
         if isinstance(chg, dict) and chg.get("who")
-        and cast_change_status(chg.get("status")) != CAST_STATUS_PRESENT
+        and cast_change_status(chg.get("status")) == CAST_STATUS_ABSENT
     }
 
 
