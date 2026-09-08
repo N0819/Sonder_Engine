@@ -180,3 +180,41 @@ def test_the_row_is_rendered_as_a_setup_rather_than_opened():
     assert "openChat(chat.id)" not in body, "a failed setup has none to open"
     for needed in ("retry_start", "setup_log", "DELETE", "⚠"):
         assert needed in body, needed
+
+
+def test_a_failure_anywhere_in_the_start_leaves_a_setup(temp_db, monkeypatch):
+    """The marker used to be written only around the location generation, so
+    a start that got PAST it and died later -- the journey history, the minds
+    routing, turn zero -- left a chat with no turn, no mark and no way back:
+    "no retry entry in chat library" (owner, 2026-09-08). The guard is around
+    everything after the chat exists, because the author is in the same
+    position whichever stage raised.
+    """
+    from story import greetings
+
+    cid_char = qi(
+        "INSERT INTO characters(name,sheet,source,created,resource_uid) "
+        "VALUES(?,?,?,?,?)",
+        ("Doc", json.dumps({
+            "identity": {"name": "Doc"},
+            "opening": {"greetings": [{"prose": "You arrive at the gate."}]},
+        }), "{}", 0.0, "char_doc"))
+    pid = qi("INSERT INTO personas(name,sheet,source) VALUES(?,?,?)",
+             ("Wren", json.dumps({"name": "Wren"}), "{}"))
+
+    monkeypatch.setattr(greetings, "extract_greeting",
+                        lambda sheet, prose: {"knowledge_seeds": [],
+                                              "time": "now"})
+    # A failure at the LAST stage, well past the location step.
+    monkeypatch.setattr(greetings, "_run_pipeline",
+                        lambda *a, **k: (_ for _ in ()).throw(
+                            RuntimeError("LLM returned invalid JSON")))
+
+    with pytest.raises(RuntimeError):
+        greetings.start_story(cid_char, pid)
+
+    rows = q("SELECT id FROM chats")
+    assert len(rows) == 1
+    record = wget(rows[0]["id"], QUICK_START_FAILURE_KEY, None)
+    assert record and record["error_type"] == "RuntimeError"
+    assert record["retry"]["char_id"] == cid_char

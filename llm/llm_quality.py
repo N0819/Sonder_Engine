@@ -20,6 +20,42 @@ from llm.schemas import (
 )
 from llm.prompts import get_prompt
 
+def _without_trailing_commas(text: str) -> str:
+    r"""`{"a": 1,}` -> `{"a": 1}`, without touching a comma inside a string.
+
+    The one repair a model's JSON needs that the parser cannot do for itself,
+    and the commonest malformation there is: a list or object written with a
+    comma after its last member. Two call sites used to carry this as
+    `re.sub(r",\s*([}\]])", ...)`, which cannot see quoting and would edit
+    the inside of a sentence that happened to end `, }`; it belongs here, once,
+    where every reader of model output gets it (2026-09-08, a journey history
+    lost at position 8118).
+    """
+    out = []
+    in_str = escape = False
+    for index, ch in enumerate(str(text or "")):
+        if in_str:
+            out.append(ch)
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+            out.append(ch)
+            continue
+        if ch == ",":
+            rest = text[index + 1:]
+            stripped = rest.lstrip()
+            if stripped[:1] in ("}", "]"):
+                continue          # the comma has nothing after it but a close
+        out.append(ch)
+    return "".join(out)
+
+
 def _extract_balanced_object(text: str):
     """Extract the first balanced {...} object from prose-wrapped output.
     Some models habitually prefix "Here is the JSON:" or append commentary
@@ -48,11 +84,14 @@ def _extract_balanced_object(text: str):
         elif ch == "}":
             depth -= 1
             if depth == 0:
-                try:
-                    value = json.loads(text[start:i + 1])
-                except json.JSONDecodeError:
-                    return None
-                return value if isinstance(value, dict) else None
+                span = text[start:i + 1]
+                for candidate in (span, _without_trailing_commas(span)):
+                    try:
+                        value = json.loads(candidate)
+                    except json.JSONDecodeError:
+                        continue
+                    return value if isinstance(value, dict) else None
+                return None
     return None
 
 

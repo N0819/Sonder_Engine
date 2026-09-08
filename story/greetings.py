@@ -656,6 +656,40 @@ def claim_greeting_mind(chat_id, char_id, name, sheet):
     return entry
 
 
+def _mark_failed_setup(cid, exc, *, char_id, persona_id, greeting_index,
+                       lorebook_id, already_known, language, lived_location,
+                       character_name="", persona_name="", stage=""):
+    """Keep this attempt as a failed SETUP, with everything a retry needs.
+
+    One writer, because the library, the retry and the export all read one
+    record -- and because a second spelling of it would be a setup the author
+    can see but not retry, or retry with different answers than they gave.
+    """
+    from world.charter_runtime import lived_location_job
+
+    job = lived_location_job(cid) or {}
+    db.wset(cid, QUICK_START_FAILURE_KEY, {
+        "version": 1,
+        "when": time.time(),
+        "stage": stage or job.get("stage") or "start",
+        "error": str(exc),
+        "error_type": type(exc).__name__,
+        "traceback": traceback.format_exc()[-4000:],
+        "plan_kept": bool(job.get("artifact")),
+        "retry": {
+            "char_id": int(char_id), "persona_id": int(persona_id),
+            "greeting_index": int(greeting_index),
+            "lorebook_id": int(lorebook_id) if lorebook_id else None,
+            "already_known": bool(already_known),
+            "language": language or DEFAULT_LANGUAGE,
+            "lived_location": copy.deepcopy(lived_location)
+            if isinstance(lived_location, dict) else None,
+        },
+        "character_name": character_name,
+        "persona_name": persona_name,
+    })
+
+
 def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
                 lorebook_id: int | None = None,
                 already_known: bool = True,
@@ -729,251 +763,248 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
     cid = db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
                 (f"{c_name} — {p_name}", prose_final, time.time()))
     logger.info("quick start: chat %s created for character %s", cid, char_id)
-    # Recorded before anything is seeded, because turn 0 runs below and every
-    # stage of it -- establishment, perception, the narrator -- reads this.
-    set_story_language(cid, language or DEFAULT_LANGUAGE)
-    db.qi("UPDATE chats SET persona_id=? WHERE id=?", (persona_id, cid))
-    db.qi("INSERT INTO chat_chars(chat_id,char_id,status) VALUES(?,?, 'active')", (cid, char_id))
-    if already_known:
-        # Through the one writer, not by hand: recognition established when a
-        # cast membership is created belongs to `seed_mutual_recognition`, so
-        # the three creating paths cannot drift into three semantics again.
-        # The answer stays this path's own -- a greeting card is written TO
-        # the player, which is the stated reason the default here is yes.
-        from persist.commit import seed_mutual_recognition
-        seed_mutual_recognition(cid, c_name, [p_name])
-    db.wset(cid, "fiction_model", {"genre": {"primary": "as written in the card"},
-                                   "ontology": {}, "causal_regimes": [],
-                                   "scale_rules": {}, "abstraction_rules": {}})
-    # `display` is the scene's TIME OF DAY restated on the clock, and turn 0's
-    # establish inherits this where it names none of its own. "now" as the
-    # fallback made a story that said nothing about time claim a time anyway.
-    db.wset(cid, "simulation_clock", {"elapsed_seconds": 0.0,
-                                      "display": sub(extraction.get("time") or ""),
-                                      "time_scale": "scene"})
+    # EVERY FAILURE AFTER THIS POINT LEAVES A SETUP TO ACT ON. The marker
+    # was written only around the location generation at first, so a start
+    # that got past it and died later -- in the journey history, the minds
+    # routing, turn zero -- left a chat with no turn, no mark and no way
+    # back: "no retry entry in chat library" (owner, 2026-09-08). The whole
+    # of what happens after the chat exists is inside the guard now, because
+    # the author's position is the same whichever stage raised.
+    try:
+        # Recorded before anything is seeded, because turn 0 runs below and every
+        # stage of it -- establishment, perception, the narrator -- reads this.
+        set_story_language(cid, language or DEFAULT_LANGUAGE)
+        db.qi("UPDATE chats SET persona_id=? WHERE id=?", (persona_id, cid))
+        db.qi("INSERT INTO chat_chars(chat_id,char_id,status) VALUES(?,?, 'active')", (cid, char_id))
+        if already_known:
+            # Through the one writer, not by hand: recognition established when a
+            # cast membership is created belongs to `seed_mutual_recognition`, so
+            # the three creating paths cannot drift into three semantics again.
+            # The answer stays this path's own -- a greeting card is written TO
+            # the player, which is the stated reason the default here is yes.
+            from persist.commit import seed_mutual_recognition
+            seed_mutual_recognition(cid, c_name, [p_name])
+        db.wset(cid, "fiction_model", {"genre": {"primary": "as written in the card"},
+                                       "ontology": {}, "causal_regimes": [],
+                                       "scale_rules": {}, "abstraction_rules": {}})
+        # `display` is the scene's TIME OF DAY restated on the clock, and turn 0's
+        # establish inherits this where it names none of its own. "now" as the
+        # fallback made a story that said nothing about time claim a time anyway.
+        db.wset(cid, "simulation_clock", {"elapsed_seconds": 0.0,
+                                          "display": sub(extraction.get("time") or ""),
+                                          "time_scale": "scene"})
 
-    # Attach the chosen lorebook before turn 0 runs. A LIBRARY book is
-    # attached BY REFERENCE, the same way attach_lore does (2026-09-03: a
-    # story's deviations are overlays, never a copy); a book this chat owns
-    # attaches directly; another story's book is forked, since it has no
-    # shared origin to overlay.
-    generation_book_id = None
-    if lb:
-        if lb["chat_id"] is None or lb["chat_id"] == cid:
-            new_lb, origin = lb["id"], None
-        else:
-            new_lb = duplicate_lorebook_for_chat(lb["id"], cid)
-            origin = lb["id"]
-        db.qi("INSERT OR IGNORE INTO chat_lorebooks(chat_id,lorebook_id,origin_id,enabled) "
-              "VALUES(?,?,?,1)", (cid, new_lb, origin))
-        # The generated location is GROUNDED in a book the story owns -- its
-        # rooms' registry ownership and the phonology the generator records
-        # are the story's, never the library's -- so a library attachment
-        # grounds in the story's canon book, minted here if it has none.
-        generation_book_id = (new_lb if lb["chat_id"] is not None
-                              else ensure_chat_canon_book(cid))
-
-    # A selected prehistory must exist before establishment authors turn 0.
-    # Running this from the browser after /start returns made the supposedly
-    # old residents and institutions arrive one scene late, after the opening
-    # had already decided what the location contained.
-    generated_location = None
-    history_route = None
-    if isinstance(lived_location, dict) and lived_location.get("enabled", True):
-        from world.charter_runtime import generate_lived_location
-        from story.history_routing import (
-            resolve_character_history_route, route_uses_charter)
-        from world.charter_history import (
-            featured_resident_private_habits, featured_resident_seed)
-        request = dict(lived_location)
-        route_request = request.get("character_history") or {}
-        route = resolve_character_history_route(
-            sheet, requested=route_request,
-            opening=prose_final, location_brief=request.get("brief") or "")
-        route["guidance"] = str(
-            (route_request if isinstance(route_request, dict) else {}).get(
-                "brief") or "")[:2000]
-        from story.journey_history import journey_event_count
-        route["event_count"] = journey_event_count(
-            (route_request if isinstance(route_request, dict) else {}).get(
-                "events"))
-        db.wset(cid, "character_history_routes", {str(char_id): route})
-        history_route = route
-        if route_uses_charter(route):
-            resident_seed = featured_resident_seed(char_id, sheet)
-            request["featured_residents"] = [resident_seed]
-            request["featured_resident_private"] = {
-                resident_seed["seed_id"]: {
-                    "habits": featured_resident_private_habits(sheet)}}
-        else:
-            request.pop("featured_residents", None)
-            request.pop("featured_resident_private", None)
-        if generation_book_id is not None:
-            # Read the selected library subtree while grounding the resulting
-            # rooms in a book the story owns.
-            request["lorebook_id"] = lb["id"]
-            request["owning_lorebook_id"] = generation_book_id
-        logger.info("quick start: generating a lived location for chat %s", cid)
-        try:
-            generated_location = generate_lived_location(cid, request)
-        except Exception as exc:
-            # No turn exists yet and this chat was minted by this call.  A
-            # failed location proposal must not leave an invisible half-story
-            # that appears after refresh or gets duplicated on the next try.
-            #
-            # WHAT THIS COSTS, SAID OUT LOUD (2026-09-08). The generator saves
-            # its two model calls as a resumable artifact on the chat's own
-            # job record -- "exactly what is worth not paying for twice" --
-            # and `delete_chat_data` takes that record with the chat, so a
-            # retry pays for both calls again and the job's `stage` and
-            # `error`, the only record of what went wrong, go with it. The
-            # log line below is the whole of what survives today; making the
-            # artifact outlive the chat is a persistence question and is the
-            # owner's to answer.
-            job = lived_location_job(cid) or {}
-            # THE PLAN IS KEPT EVEN THOUGH THE STORY IS NOT. The two model
-            # calls that made it are the expensive part and they had already
-            # succeeded; deleting the chat used to take the artifact holding
-            # them with it, so a retry paid for both again. It is saved
-            # against what was ASKED FOR, so the next start that asks the
-            # same thing adopts it and goes straight to the writes.
-            kept = salvage_plan(cid, request, reason=str(exc))
-            # THE SETUP STAYS, AS A SETUP. Deleting the chat left the author
-            # with nothing at all -- "you can't retry a quickstart as the
-            # story receives no entry" (owner, 2026-09-08) -- so the failed
-            # start is kept and MARKED, and the story library shows it as a
-            # setup that did not finish, with what went wrong, a retry that
-            # reuses the plan already paid for, a discard, and an export of
-            # everything the attempt recorded. It is not a story: it has no
-            # turn, and `quick_start_failure` is what says so to every reader.
-            db.wset(cid, QUICK_START_FAILURE_KEY, {
-                "version": 1,
-                "when": time.time(),
-                "stage": job.get("stage") or "planning",
-                "error": str(exc),
-                "error_type": type(exc).__name__,
-                "traceback": traceback.format_exc()[-4000:],
-                "plan_kept": bool(kept),
-                # Everything a retry needs to ask the same question again.
-                "retry": {
-                    "char_id": int(char_id), "persona_id": int(persona_id),
-                    "greeting_index": int(greeting_index),
-                    "lorebook_id": int(lorebook_id) if lorebook_id else None,
-                    "already_known": bool(already_known),
-                    "language": language or DEFAULT_LANGUAGE,
-                    "lived_location": copy.deepcopy(lived_location)
-                    if isinstance(lived_location, dict) else None,
-                },
-                "character_name": c_name,
-                "persona_name": p_name,
-            })
-            logger.error(
-                "quick start: lived location failed for chat %s at stage %r "
-                "(%s: %s); keeping it as a failed setup, %s",
-                cid, job.get("stage") or "planning", type(exc).__name__, exc,
-                "with the finished plan for the retry" if kept
-                else "with no finished plan to keep", exc_info=True)
-            raise
-
-    # Route every mind the extraction established -- the card character's in
-    # full (memories, beliefs, stances, opening affect), the player's within
-    # what the page delivered, and everyone else retained for promotion --
-    # and record what each received in the chat's `greeting_minds` key.
-    # BEFORE turn 0 runs, deliberately: the pipeline's checkpoint 0 then
-    # snapshots the seeded state, so a rerun of the opening keeps it.
-    with language_scope(language or DEFAULT_LANGUAGE):
-        _seed_minds(cid, char_id, sheet, extraction, c_name, seed_handle,
-                    p_name, psheet)
-
-    # Itinerant history is a separate topology. Canon/authored travelers get
-    # a cited compiler; an invented journey runs only after the author chose
-    # that route explicitly. Neither path places the character in Charter.
-    if isinstance(history_route, dict) and (
-            history_route.get("mode") == "visitor"
-            or history_route.get("mode") == "generated_journey"
-            or (history_route.get("mode") == "auto"
-                and history_route.get("opening_relationship") == "visiting")):
-        from story.journey_history import compile_journey_history
-        journey_lore = []
+        # Attach the chosen lorebook before turn 0 runs. A LIBRARY book is
+        # attached BY REFERENCE, the same way attach_lore does (2026-09-03: a
+        # story's deviations are overlays, never a copy); a book this chat owns
+        # attaches directly; another story's book is forked, since it has no
+        # shared origin to overlay.
+        generation_book_id = None
         if lb:
-            from world.charter_runtime import generation_lore
-            journey_lore, _source = generation_lore(
-                cid, lb["id"], query=f"{c_name} journeys visits history")
-        try:
-            with language_scope(language or DEFAULT_LANGUAGE):
-                journey_result = compile_journey_history(
-                    cid, char_id, sheet, history_route, lore=journey_lore,
-                    opening=prose_final,
-                    # A journey ends where the story begins: the lived-location
-                    # brief was computed for routing and then thrown away, so
-                    # nothing could author the approach to the opening place.
-                    arrival_brief=str(
-                        lived_location.get("brief") or ""
-                        if isinstance(lived_location, dict) else ""))
-            routes = db.wget(cid, "character_history_routes", {}) or {}
-            routes[str(char_id)]["handoff"] = {
-                "complete": True,
-                "memory_count": len(
-                    journey_result.get("memory_event_keys") or ()),
-                "journey_events": len(journey_result.get("events") or ()),
-            }
-            db.wset(cid, "character_history_routes", routes)
-        except Exception as exc:
-            if history_route.get("mode") == "generated_journey":
-                from persist.chat_delete import delete_chat_data
-                delete_chat_data(cid)
-                raise
-            routes = db.wget(cid, "character_history_routes", {}) or {}
-            routes[str(char_id)]["handoff"] = {
-                "complete": False,
-                "safe_fallback": "authored card and greeting only",
-                "error": f"{type(exc).__name__}: {str(exc)[:240]}",
-            }
-            db.wset(cid, "character_history_routes", routes)
+            if lb["chat_id"] is None or lb["chat_id"] == cid:
+                new_lb, origin = lb["id"], None
+            else:
+                new_lb = duplicate_lorebook_for_chat(lb["id"], cid)
+                origin = lb["id"]
+            db.qi("INSERT OR IGNORE INTO chat_lorebooks(chat_id,lorebook_id,origin_id,enabled) "
+                  "VALUES(?,?,?,1)", (cid, new_lb, origin))
+            # The generated location is GROUNDED in a book the story owns -- its
+            # rooms' registry ownership and the phonology the generator records
+            # are the story's, never the library's -- so a library attachment
+            # grounds in the story's canon book, minted here if it has none.
+            generation_book_id = (new_lb if lb["chat_id"] is not None
+                                  else ensure_chat_canon_book(cid))
 
-    # The card character lived through the requested prehistory as a Charter
-    # body, then crosses the cognition boundary exactly once: their grounded
-    # service becomes a few pre-story memories and their full character agent
-    # owns them from turn zero onward. A generator that could not place them
-    # leaves the ordinary card launch untouched and records no counterfeit
-    # past.
-    if isinstance(generated_location, dict):
-        seed_id = f"character:{int(char_id)}"
-        binding = (generated_location.get("featured_residents") or {}).get(
-            seed_id)
-        if binding:
-            from world.charter_history import integrate_featured_resident
+        # A selected prehistory must exist before establishment authors turn 0.
+        # Running this from the browser after /start returns made the supposedly
+        # old residents and institutions arrive one scene late, after the opening
+        # had already decided what the location contained.
+        generated_location = None
+        history_route = None
+        if isinstance(lived_location, dict) and lived_location.get("enabled", True):
+            from world.charter_runtime import generate_lived_location
+            from story.history_routing import (
+                resolve_character_history_route, route_uses_charter)
+            from world.charter_history import (
+                featured_resident_private_habits, featured_resident_seed)
+            request = dict(lived_location)
+            route_request = request.get("character_history") or {}
+            route = resolve_character_history_route(
+                sheet, requested=route_request,
+                opening=prose_final, location_brief=request.get("brief") or "")
+            route["guidance"] = str(
+                (route_request if isinstance(route_request, dict) else {}).get(
+                    "brief") or "")[:2000]
+            from story.journey_history import journey_event_count
+            route["event_count"] = journey_event_count(
+                (route_request if isinstance(route_request, dict) else {}).get(
+                    "events"))
+            db.wset(cid, "character_history_routes", {str(char_id): route})
+            history_route = route
+            if route_uses_charter(route):
+                resident_seed = featured_resident_seed(char_id, sheet)
+                request["featured_residents"] = [resident_seed]
+                request["featured_resident_private"] = {
+                    resident_seed["seed_id"]: {
+                        "habits": featured_resident_private_habits(sheet)}}
+            else:
+                request.pop("featured_residents", None)
+                request.pop("featured_resident_private", None)
+            if generation_book_id is not None:
+                # Read the selected library subtree while grounding the resulting
+                # rooms in a book the story owns.
+                request["lorebook_id"] = lb["id"]
+                request["owning_lorebook_id"] = generation_book_id
+            logger.info("quick start: generating a lived location for chat %s", cid)
+            try:
+                generated_location = generate_lived_location(cid, request)
+            except Exception as exc:
+                # No turn exists yet and this chat was minted by this call.  A
+                # failed location proposal must not leave an invisible half-story
+                # that appears after refresh or gets duplicated on the next try.
+                #
+                # WHAT THIS COSTS, SAID OUT LOUD (2026-09-08). The generator saves
+                # its two model calls as a resumable artifact on the chat's own
+                # job record -- "exactly what is worth not paying for twice" --
+                # and `delete_chat_data` takes that record with the chat, so a
+                # retry pays for both calls again and the job's `stage` and
+                # `error`, the only record of what went wrong, go with it. The
+                # log line below is the whole of what survives today; making the
+                # artifact outlive the chat is a persistence question and is the
+                # owner's to answer.
+                job = lived_location_job(cid) or {}
+                # THE PLAN IS KEPT EVEN THOUGH THE STORY IS NOT. The two model
+                # calls that made it are the expensive part and they had already
+                # succeeded; deleting the chat used to take the artifact holding
+                # them with it, so a retry paid for both again. It is saved
+                # against what was ASKED FOR, so the next start that asks the
+                # same thing adopts it and goes straight to the writes.
+                kept = salvage_plan(cid, request, reason=str(exc))
+                # THE SETUP STAYS, AS A SETUP. Deleting the chat left the author
+                # with nothing at all -- "you can't retry a quickstart as the
+                # story receives no entry" (owner, 2026-09-08) -- so the failed
+                # start is kept and MARKED, and the story library shows it as a
+                # setup that did not finish, with what went wrong, a retry that
+                # reuses the plan already paid for, a discard, and an export of
+                # everything the attempt recorded. It is not a story: it has no
+                # turn, and `quick_start_failure` is what says so to every reader.
+                logger.error(
+                    "quick start: lived location failed for chat %s at stage %r "
+                    "(%s: %s); keeping it as a failed setup, %s",
+                    cid, job.get("stage") or "planning", type(exc).__name__, exc,
+                    "with the finished plan for the retry" if kept
+                    else "with no finished plan to keep", exc_info=True)
+                raise
+
+        # Route every mind the extraction established -- the card character's in
+        # full (memories, beliefs, stances, opening affect), the player's within
+        # what the page delivered, and everyone else retained for promotion --
+        # and record what each received in the chat's `greeting_minds` key.
+        # BEFORE turn 0 runs, deliberately: the pipeline's checkpoint 0 then
+        # snapshots the seeded state, so a rerun of the opening keeps it.
+        with language_scope(language or DEFAULT_LANGUAGE):
+            _seed_minds(cid, char_id, sheet, extraction, c_name, seed_handle,
+                        p_name, psheet)
+
+        # Itinerant history is a separate topology. Canon/authored travelers get
+        # a cited compiler; an invented journey runs only after the author chose
+        # that route explicitly. Neither path places the character in Charter.
+        if isinstance(history_route, dict) and (
+                history_route.get("mode") == "visitor"
+                or history_route.get("mode") == "generated_journey"
+                or (history_route.get("mode") == "auto"
+                    and history_route.get("opening_relationship") == "visiting")):
+            from story.journey_history import compile_journey_history
+            journey_lore = []
+            if lb:
+                from world.charter_runtime import generation_lore
+                journey_lore, _source = generation_lore(
+                    cid, lb["id"], query=f"{c_name} journeys visits history")
             try:
                 with language_scope(language or DEFAULT_LANGUAGE):
-                    history_result = integrate_featured_resident(
-                        cid, char_id, binding, sheet,
-                        author_guidance=(history_route or {}).get(
-                            "guidance") or "")
+                    journey_result = compile_journey_history(
+                        cid, char_id, sheet, history_route, lore=journey_lore,
+                        opening=prose_final,
+                        # A journey ends where the story begins: the lived-location
+                        # brief was computed for routing and then thrown away, so
+                        # nothing could author the approach to the opening place.
+                        arrival_brief=str(
+                            lived_location.get("brief") or ""
+                            if isinstance(lived_location, dict) else ""))
                 routes = db.wget(cid, "character_history_routes", {}) or {}
-                if str(char_id) in routes:
-                    routes[str(char_id)]["handoff"] = {
-                        "complete": True,
-                        "memory_count": len(
-                            history_result.get("memory_event_keys") or ()),
-                        "binding": copy.deepcopy(binding),
-                    }
-                    db.wset(cid, "character_history_routes", routes)
-            except Exception:
-                from persist.chat_delete import delete_chat_data
-                delete_chat_data(cid)
-                raise
+                routes[str(char_id)]["handoff"] = {
+                    "complete": True,
+                    "memory_count": len(
+                        journey_result.get("memory_event_keys") or ()),
+                    "journey_events": len(journey_result.get("events") or ()),
+                }
+                db.wset(cid, "character_history_routes", routes)
+            except Exception as exc:
+                if history_route.get("mode") == "generated_journey":
+                    from persist.chat_delete import delete_chat_data
+                    delete_chat_data(cid)
+                    raise
+                routes = db.wget(cid, "character_history_routes", {}) or {}
+                routes[str(char_id)]["handoff"] = {
+                    "complete": False,
+                    "safe_fallback": "authored card and greeting only",
+                    "error": f"{type(exc).__name__}: {str(exc)[:240]}",
+                }
+                db.wset(cid, "character_history_routes", routes)
 
-    # Turn 0: run establishment (valid, committed), then show the greeting verbatim.
-    tid = db.qi("INSERT INTO turns(chat_id,idx,player_input,created,frame_id) VALUES(?,?,?,?,?)",
-                (cid, 0, "", time.time(), None))
-    # `_run_pipeline` is called directly here rather than through
-    # `run_pipeline`, which is the ONLY place the story language was ever set.
-    # The opening beat is the first prose a reader sees, and it was always
-    # English.
-    with story_language_scope(cid):
-        list(_run_pipeline(cid, tid))
-    _override_narrator(tid, prose_final)
-    return cid, tid
+        # The card character lived through the requested prehistory as a Charter
+        # body, then crosses the cognition boundary exactly once: their grounded
+        # service becomes a few pre-story memories and their full character agent
+        # owns them from turn zero onward. A generator that could not place them
+        # leaves the ordinary card launch untouched and records no counterfeit
+        # past.
+        if isinstance(generated_location, dict):
+            seed_id = f"character:{int(char_id)}"
+            binding = (generated_location.get("featured_residents") or {}).get(
+                seed_id)
+            if binding:
+                from world.charter_history import integrate_featured_resident
+                try:
+                    with language_scope(language or DEFAULT_LANGUAGE):
+                        history_result = integrate_featured_resident(
+                            cid, char_id, binding, sheet,
+                            author_guidance=(history_route or {}).get(
+                                "guidance") or "")
+                    routes = db.wget(cid, "character_history_routes", {}) or {}
+                    if str(char_id) in routes:
+                        routes[str(char_id)]["handoff"] = {
+                            "complete": True,
+                            "memory_count": len(
+                                history_result.get("memory_event_keys") or ()),
+                            "binding": copy.deepcopy(binding),
+                        }
+                        db.wset(cid, "character_history_routes", routes)
+                except Exception:
+                    from persist.chat_delete import delete_chat_data
+                    delete_chat_data(cid)
+                    raise
+
+        # Turn 0: run establishment (valid, committed), then show the greeting verbatim.
+        tid = db.qi("INSERT INTO turns(chat_id,idx,player_input,created,frame_id) VALUES(?,?,?,?,?)",
+                    (cid, 0, "", time.time(), None))
+        # `_run_pipeline` is called directly here rather than through
+        # `run_pipeline`, which is the ONLY place the story language was ever set.
+        # The opening beat is the first prose a reader sees, and it was always
+        # English.
+        with story_language_scope(cid):
+            list(_run_pipeline(cid, tid))
+        _override_narrator(tid, prose_final)
+        return cid, tid
+        return cid, tid
+    except Exception as exc:
+        _mark_failed_setup(
+            cid, exc, char_id=char_id, persona_id=persona_id,
+            greeting_index=greeting_index, lorebook_id=lorebook_id,
+            already_known=already_known,
+            language=language or DEFAULT_LANGUAGE,
+            lived_location=lived_location,
+            character_name=c_name, persona_name=p_name)
+        raise
 
 
 def generate_greeting(char_id: int, brief: str = "",
