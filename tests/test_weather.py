@@ -101,6 +101,66 @@ def test_an_unrecognised_room_is_treated_as_indoors():
     assert room_exposure(_scene(), "nonexistent") == "enclosed"
 
 
+# --- the exposure memo (review 2026-09-07, C17) -----------------------------
+#
+# The derivation is asked the same room many times a beat -- one
+# `weather_for_room` pass over chat 117's stored 38-room scene made 1341 calls
+# -- so it is memoised on the four fields it reads. The key IS the read set,
+# which is the only reason the memo is allowed to outlive a turn; these pin
+# that, because a memo keyed on the room's NAME instead would answer a rewritten
+# room with its old weather for the rest of the process.
+
+def test_rewriting_a_rooms_text_rewrites_its_exposure():
+    scene = _scene(rooms={"place": {"name": "Courtyard", "desc": "Flagstones."}})
+    assert room_exposure(scene, "place") == "open"
+    scene["rooms"]["place"]["desc"] = "A cellar under the flagstones."
+    assert room_exposure(scene, "place") == "enclosed"
+    scene["rooms"]["place"]["name"] = "Porch"
+    scene["rooms"]["place"]["desc"] = "Under the awning."
+    assert room_exposure(scene, "place") == "sheltered"
+
+
+def test_authoring_exposure_on_a_room_already_asked_about_takes_effect():
+    scene = _scene(rooms={"place": {"name": "Courtyard", "desc": "Flagstones."}})
+    assert room_exposure(scene, "place") == "open"
+    scene["rooms"]["place"]["exposure"] = "sheltered"
+    assert room_exposure(scene, "place") == "sheltered"
+
+
+def test_a_room_that_becomes_an_interior_stops_being_open():
+    """`parent_entity` outranks everything, including a memo of the answer
+    given before the room was swallowed."""
+    scene = _scene(rooms={"place": {"name": "Courtyard", "desc": "Flagstones."}})
+    assert room_exposure(scene, "place") == "open"
+    scene["rooms"]["place"]["parent_entity"] = "Whale"
+    assert room_exposure(scene, "place") == "enclosed"
+
+
+def test_two_scenes_sharing_a_room_id_do_not_share_an_answer():
+    """Two stories name a room `hall`; the memo is not keyed on that name."""
+    outdoors = _scene(rooms={"hall": {"name": "Hall", "desc": "An open courtyard."}})
+    indoors = _scene(rooms={"hall": {"name": "Hall", "desc": "A cellar below."}})
+    assert room_exposure(outdoors, "hall") == "open"
+    assert room_exposure(indoors, "hall") == "enclosed"
+    assert room_exposure(outdoors, "hall") == "open"
+
+
+def test_a_malformed_record_is_still_answered():
+    """An unhashable value in one of the four fields cannot be a memo key, and
+    must not be an exception either -- the derivation just runs uncached."""
+    scene = _scene(rooms={"odd": {"name": "Hall", "desc": ["a", "list"],
+                                  "exposure": {"not": "a word"}}})
+    assert room_exposure(scene, "odd") == "enclosed"
+
+
+def test_clearing_the_memo_at_its_bound_changes_no_answer():
+    from world import weather as _weather
+    scene = _scene(rooms={"place": {"name": "Courtyard", "desc": "Flagstones."}})
+    assert room_exposure(scene, "place") == "open"
+    _weather._ROOM_FACTS.clear()
+    assert room_exposure(scene, "place") == "open"
+
+
 # --- one sky, many rooms ---------------------------------------------------
 
 def test_one_sky_reaches_rooms_differently():

@@ -7,7 +7,7 @@ See docs/experiments/AUDIT_COMMIT.md for the split record.
 
 import contextvars
 from concurrent.futures import ThreadPoolExecutor
-from core.db import qi, transaction, wget, wset
+from core.db import qi, transaction, wget, wset, wset_if_changed
 from mind.memory import (add_memories_batch, delete_turn_memories,
                     record_dispute, raise_importance,
                     apply_relationship_updates,
@@ -259,7 +259,8 @@ def commit_memories(ctx, nonce, *, prepared=None, consolidate=True):
                 for _name in _names:
                     if _name not in _known[_hearer]:
                         _known[_hearer].append(_name)
-            wset(cid, "known", _known)
+            # Write on change, as every `known` writer does (C20).
+            wset_if_changed(cid, "known", _known)
         delete_turn_memories(turn.id)
         memory_ids = add_memories_batch(
             prepared_batch=prepared["memory_batch"],

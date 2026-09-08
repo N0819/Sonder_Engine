@@ -5,7 +5,7 @@ Extracted verbatim from commit.py, which re-exports every name here.
 See docs/experiments/AUDIT_COMMIT.md for the split record.
 """
 
-from core.db import wget, wset
+from core.db import wget, wset_if_changed
 from core.pipeline_context import note_step_decision
 from persist.commit_common import _normalized_fact
 
@@ -168,7 +168,7 @@ def commit_obligations(ctx, nonce):
                    entry.get("kind"), entry.get("opened_turn"), age,
                    " (WAS OVERDUE)" if age >= OBLIGATION_OVERDUE_AGE else ""))
         ledger = ledger[-OBLIGATION_CAP:]
-    wset(cid, "pending_obligations", ledger)
+    wset_if_changed(cid, "pending_obligations", ledger)
     return {"opened": opened, "discharged": discharged,
             "open": len(ledger), "overdue": len(overdue)}
 
@@ -368,7 +368,7 @@ def commit_world_pressure(ctx, nonce):
                    " (WAS STALLED)" if held >= WORLD_PRESSURE_STALL_AGE
                    else ""))
         ledger = ledger[-WORLD_PRESSURE_CAP:]
-    wset(cid, "world_pressures", ledger)
+    wset_if_changed(cid, "world_pressures", ledger)
     return {"opened": opened, "ticked": ticked, "held": held,
             "resolved": resolved, "unaddressed": unaddressed,
             "stalled": stalled, "open": len(ledger)}
@@ -461,5 +461,5 @@ def commit_world_facts(ctx, nonce):
                 "recorded." % (len(ledger), WORLD_FACTS_CAP, entry.get("id"),
                                entry.get("turn_idx")))
         ledger = ledger[-WORLD_FACTS_CAP:]
-    wset(cid, "world_facts", ledger)
+    wset_if_changed(cid, "world_facts", ledger)
     return {"recorded": recorded, "held": len(ledger)}

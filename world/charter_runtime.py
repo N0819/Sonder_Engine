@@ -178,19 +178,32 @@ def _body_of(pid):
     return str(pid).split("/", 1)[-1]
 
 
-def _split_person_state(state, charter_key=""):
-    """Take a whole charter state apart: (institution, {person_id: person})."""
+def _split_person_state(state, charter_key="", *, copy_people=True):
+    """Take a whole charter state apart: (institution, {person_id: person}).
+
+    THE COPY IS FOR A CALLER THAT KEEPS BOTH HALVES ALIVE. `transfer_person`
+    and `absorb_view` go on using the state they split, so the people they
+    lift out must be theirs; `copy_people=False` is for the one caller that
+    keeps NEITHER half -- the write path, which serializes the result and
+    drops it (`_stored_shape` -> `wset_for_frame` -> `json.dumps`). The
+    institution half was never copied, so sharing the person half only makes
+    the two halves agree. Review 2026-09-07 C1, measured on a 41 MB / 3168-body
+    registry: the split cost 1.74 s of a 2.92 s save, and 1.72 s of that was
+    thirteen `copy.deepcopy` calls per body whose only reader was the dump.
+    """
     institution = {k: v for k, v in state.items() if k not in PERSON_STORES}
     bodies = state.get("bodies") or {}
     people = {}
     for key in bodies:
-        person = {"bodies": copy.deepcopy(bodies[key])}
+        person = {"bodies": copy.deepcopy(bodies[key]) if copy_people
+                  else bodies[key]}
         for store in PERSON_STORES:
             if store == "bodies":
                 continue
             held = state.get(store)
             if isinstance(held, dict) and key in held:
-                person[store] = copy.deepcopy(held[key])
+                person[store] = copy.deepcopy(held[key]) if copy_people \
+                    else held[key]
         people[person_id(charter_key, key)] = person
     return institution, people
 
@@ -217,12 +230,20 @@ def _join_person_state(institution, people, members):
     return state
 
 
-def _stored_shape(registry):
-    """The on-disk registry: people once, institutions naming their members."""
+def _stored_shape(registry, *, copy_people=True):
+    """The on-disk registry: people once, institutions naming their members.
+
+    ``copy_people=False`` shares the live person objects rather than copying
+    them, for a caller that only serializes the result (see
+    `_split_person_state`). Every container this builds is new either way, so
+    the shape itself is safe to reshape; what a sharing caller must not do is
+    MUTATE a person it was handed, or keep it past the registry's next write.
+    """
     people = dict(registry.get("people") or {})
     items = {}
     for key, item in (registry.get("items") or {}).items():
-        institution, held = _split_person_state(item.get("state") or {}, key)
+        institution, held = _split_person_state(
+            item.get("state") or {}, key, copy_people=copy_people)
         people.update(held)
         institution["members"] = sorted(held)
         items[str(key)] = dict(item, state=institution)
@@ -657,6 +678,144 @@ def registry_for_update(cid, frame_id=None):
         wget_for_frame(cid, CHARTERS_KEY, frame_id, {}) or {})
 
 
+#: The identity maps of a CACHED parse, keyed exactly as `_REGISTRY_CACHE`
+#: is and holding its token, so the write that invalidates a registry
+#: invalidates its index in the same breath. Never larger than the registry
+#: cache: entries whose key has been evicted are dropped on the next store.
+_IDENTITY_INDEX = {}
+
+
+class _DealtMap(dict):
+    """One charter's ``{body_key: identity}``, dealt PER BODY on first ask
+    and kept.
+
+    A reader pays for the bodies it asks about and the next reader pays for
+    none of them again -- which is what the two shapes of reader here need
+    at once: `charter_speaker_records` wants the whole population,
+    `charter_carriers` wants the few standing in one room. A key naming
+    nobody is answered exactly as the identity readers answer a body with no
+    stored name, rather than raised: this is an index of a registry, not an
+    assertion about one.
+
+    Iterating it yields only what has been asked for; a caller that hands
+    the whole map on calls `deal_all` first.
+    """
+
+    def __init__(self, deal, bodies, roles, naming):
+        super().__init__()
+        self._deal, self._bodies = deal, bodies
+        self._roles, self._naming = roles, naming
+
+    def __missing__(self, body_key):
+        value = self[body_key] = self._deal(
+            self._bodies.get(body_key) or {},
+            self._roles.get(body_key) or (), self._naming)
+        return value
+
+    def deal_all(self):
+        """Every body of the charter, dealt; returns the map itself."""
+        for body_key in self._bodies:
+            self[body_key]
+        return self
+
+
+class _IdentityIndex:
+    """Watch roles, display names and authored aliases of the bodies in one
+    parsed registry: roles per charter, names per body, each dealt on first
+    ask and held for the life of the parse.
+
+    C19 (2026-09-07): ten registry walkers rebuilt the same maps on every
+    call -- ``roles`` inverted out of ``watch``, then
+    `charter_identity.display_name` per body and, for three of them,
+    `identity_aliases` too. Measured on chat 114's four-charter, 66-body
+    town: 66 `display_name` calls inside `_body_refs` were 28% of each 26 ms
+    `presence_view`, and `charter_speaker_records` cost 24 ms of its own.
+    Every one of those maps is a pure function of ``watch``, ``bodies`` and
+    ``naming``, so one per parse is the same answer.
+
+    The maps handed back are the index's own; a caller that means to add to
+    one (`promotion_bundle` names figures beside bodies) copies it first.
+    """
+
+    def __init__(self, registry):
+        self._items = (registry or {}).get("items") or {}
+        self._roles, self._display, self._aliases = {}, {}, {}
+
+    def _state(self, charter_key):
+        item = self._items.get(str(charter_key))
+        state = (item or {}).get("state")
+        return state if isinstance(state, dict) else {}
+
+    def roles(self, charter_key):
+        """``{body_key: [post, ...]}`` -- the watch posts each body stands."""
+        key = str(charter_key)
+        held = self._roles.get(key)
+        if held is None:
+            held = {}
+            for post, assigned in (self._state(key).get("watch") or {}).items():
+                held.setdefault(str(assigned), []).append(str(post))
+            self._roles[key] = held
+        return held
+
+    def display(self, charter_key):
+        """``{body_key: display name}`` for one charter's bodies."""
+        from world.charter_identity import display_name
+        return self._map(self._display, charter_key, display_name)
+
+    def aliases(self, charter_key):
+        """``{body_key: [every authored formal form]}`` for one charter's
+        bodies. Three times the cost of the display map over the same
+        population (21.7 ms against 7.2 ms for the bench town), which is
+        the whole reason both are dealt per body rather than per charter."""
+        from world.charter_identity import identity_aliases
+        return self._map(self._aliases, charter_key, identity_aliases)
+
+    def _map(self, held, charter_key, reader):
+        key = str(charter_key)
+        dealt = held.get(key)
+        if dealt is None:
+            state = self._state(key)
+            dealt = held[key] = _DealtMap(
+                reader, state.get("bodies") or {}, self.roles(key),
+                state.get("naming"))
+        return dealt
+
+
+def identity_index(registry):
+    """The identity maps of one parsed registry, shared while the parse is.
+
+    Cached against the `registry_for` parse the object IS, under that
+    parse's own token, so a write that invalidates the registry invalidates
+    its index too. A registry that is NOT that parse -- a
+    `registry_for_update` copy, a session copy mid-commit, a freshly
+    generated one -- gets a fresh index and no caching: those are mutable by
+    contract, and an index naming a body somebody has since renamed is worse
+    than no index at all.
+    """
+    slot = None
+    with _REGISTRY_CACHE_LOCK:
+        for cache_key, (token, cached) in _REGISTRY_CACHE.items():
+            if cached is registry:
+                slot = (cache_key, token)
+                break
+        if slot is not None:
+            held = _IDENTITY_INDEX.get(slot[0])
+            if held is not None and held[0] == slot[1] \
+                    and held[1] is registry:
+                return held[2]
+    # Built outside the lock for the same reason the parse is: a second
+    # thread racing here builds the same maps, which costs milliseconds once
+    # and corrupts nothing.
+    index = _IdentityIndex(registry)
+    if slot is not None:
+        with _REGISTRY_CACHE_LOCK:
+            _IDENTITY_INDEX[slot[0]] = (slot[1], registry, index)
+            for stale in [key for key in _IDENTITY_INDEX
+                          if key not in _REGISTRY_CACHE]:
+                _IDENTITY_INDEX.pop(stale, None)
+    return index
+
+
 def save_registry(cid, stored, frame_id=None):
     """Persist an explicitly authored registry in one temporal frame.
 
@@ -708,8 +867,11 @@ def _write_registry(cid, stored, frame_id=None):
     # employs, so a body carries its identity, memory and relationships across
     # a transfer instead of being re-keyed with thirteen stores behind it.
     # Rebuilt from the ITEMS rather than from the incoming `people`, because
-    # the joined item state is what the session has been mutating.
-    stored_shape = _stored_shape(normalized)
+    # the joined item state is what the session has been mutating -- and
+    # SHARING them, because the shape built here is handed straight to `wset`,
+    # which dumps it to JSON and drops it. Nothing outlives this line to be
+    # aliased; `normalized` is what the caller keeps, and it is untouched.
+    stored_shape = _stored_shape(normalized, copy_people=False)
     wset_for_frame(cid, CHARTERS_KEY, stored_shape, frame_id)
     return normalized
 
@@ -1976,6 +2138,7 @@ def land_presim(cid, frame_id, registry, produced, *, base_turn=0,
 def registry_warnings(registry, scene=None, *, cid=None, frame_id=None):
     """Author-facing validation; warnings never silently rewrite a Charter."""
     registry = normalize_registry(registry)
+    index = identity_index(registry)
     rooms = set((scene or {}).get("rooms") or {})
     warnings = []
     for key, item in registry["items"].items():
@@ -1989,7 +2152,6 @@ def registry_warnings(registry, scene=None, *, cid=None, frame_id=None):
             except Exception:
                 pass
         from story.dialogue_colors import normalize_color
-        from world.charter_identity import display_name
         if not state["upkeeps"]:
             warnings.append(f"{key}: no upkeeps; this institution has no goal")
         if not state["posts"]:
@@ -2003,13 +2165,10 @@ def registry_warnings(registry, scene=None, *, cid=None, frame_id=None):
         # belongs in the authoring surface on the day the field lands.
         for notice in trigger_warnings(state.get("triggers")):
             warnings.append(f"{key}: {notice}")
-        roles = {}
-        for post, assigned in (state.get("watch") or {}).items():
-            roles.setdefault(str(assigned), []).append(str(post))
+        names = index.display(key)
         display_groups = {}
         for body_key, body in state["bodies"].items():
-            display = display_name(
-                body, roles.get(body_key) or (), state.get("naming"))
+            display = names[body_key]
             display_groups.setdefault(display.casefold(), []).append(body_key)
             raw_color = str(body.get("dialogue_color") or "").strip()
             if raw_color and not normalize_color(raw_color):
@@ -2312,6 +2471,14 @@ def advance_snapshot(registry, *, elapsed_seconds, epoch_id, base_turn,
     Nothing is lost either way; the town catches up.
     """
     registry = normalize_registry(copy.deepcopy(registry))
+    # THE STORY'S CLOCK, READ ONCE FOR THIS ADVANCE (C19, 2026-09-07). It
+    # was read inside the catch-up loop, so the simulation clock row and the
+    # style guide were fetched once per charter -- two reads a charter, per
+    # advance, for an answer nothing in the loop can change (`run` simulates
+    # a state in memory and writes no world row). Re-derived every ADVANCE
+    # still, which is what the phase comment below is about: a re-anchored
+    # story clock reaches the town on its next window either way.
+    story_day = _story_day(cid, frame_id)
     rows, produced = [], []
     elapsed_seconds = max(0.0, float(elapsed_seconds or 0.0))
     deadline = None
@@ -2401,12 +2568,12 @@ def advance_snapshot(registry, *, elapsed_seconds, epoch_id, base_turn,
         # `before_hours` is story elapsed `previous_elapsed` by construction
         # (the two advance together below), so the story's hour of the day
         # at that elapsed, less the charter's own count, is the hour its
-        # count began at. Re-derived every catch-up rather than once, so a
-        # re-anchored story clock (a declared time skip) reaches the town
-        # on its next window instead of never. A story with no anchor
-        # leaves the charter's own field alone, which is None for every
-        # charter that predates the cycle: no phase, no change.
-        _day = _story_day(cid, frame_id)
+        # count began at. Re-derived every advance rather than held across
+        # them, so a re-anchored story clock (a declared time skip) reaches
+        # the town on its next window instead of never. A story with no
+        # anchor leaves the charter's own field alone, which is None for
+        # every charter that predates the cycle: no phase, no change.
+        _day = story_day
         if _day is not None:
             _anchor, _length = _day
             state["day_anchor_hours"] = round(
@@ -3149,17 +3316,16 @@ def carrier_entries(cid, frame_id=None):
     ``save_carrier_state`` translates only newly acquired rows back into the
     owning body's sparse Charter mind.
     """
-    from world.charter_identity import display_name, identity_aliases
     from world.charter_news import report_from_claim
 
     registry = registry_for(cid, frame_id)
+    index = identity_index(registry)
     out = []
     for charter_key, item in sorted(registry["items"].items()):
         state = item["state"]
         anchor = clock_anchor(item)
-        roles = {}
-        for post, body_key in (state.get("watch") or {}).items():
-            roles.setdefault(str(body_key), []).append(str(post))
+        names = index.display(charter_key)
+        spellings = index.aliases(charter_key)
         for body_key, body in sorted(state["bodies"].items()):
             if body_key in (state.get("bindings") or {}):
                 continue
@@ -3170,10 +3336,8 @@ def carrier_entries(cid, frame_id=None):
                                         anchor=anchor)
                 if row is not None:
                     reports.append(row)
-            aliases = identity_aliases(
-                body, roles.get(body_key) or (), state.get("naming"))
-            shown = display_name(
-                body, roles.get(body_key) or (), state.get("naming"))
+            aliases = spellings[body_key]
+            shown = names[body_key]
             out.append({
                 "row": None,
                 "charter": True,
@@ -3755,19 +3919,17 @@ def charter_carriers(cid, rooms, frame_id=None):
     cached registry, keyed by body key, name, display name and authored
     aliases so the Director's spelling can land on it.
     """
-    from world.charter_identity import display_name, identity_aliases
-
     places = {str(r) for r in (rooms or ()) if str(r or "")}
     if not places:
         return {}
     out = {}
     registry = registry_for(cid, frame_id)
+    index = identity_index(registry)
     for charter_key, item in sorted((registry.get("items") or {}).items()):
         state = item["state"]
         bindings = state.get("bindings") or {}
-        roles = {}
-        for post, assigned in (state.get("watch") or {}).items():
-            roles.setdefault(str(assigned), []).append(str(post))
+        names = index.display(charter_key)
+        aliases = index.aliases(charter_key)
         for body_key, body in sorted((state.get("bodies") or {}).items()):
             if body_key in bindings:
                 continue
@@ -3775,10 +3937,8 @@ def charter_carriers(cid, rooms, frame_id=None):
             if place not in places:
                 continue
             spellings = [str(body_key), str(body.get("name") or ""),
-                         display_name(body, roles.get(body_key) or (),
-                                      state.get("naming"))]
-            spellings.extend(identity_aliases(
-                body, roles.get(body_key) or (), state.get("naming")))
+                         names[body_key]]
+            spellings.extend(aliases[body_key])
             for spelling in spellings:
                 spelling = " ".join(str(spelling or "").split())
                 if spelling and spelling not in out:
@@ -3818,7 +3978,21 @@ def presence_view(cid, place, name, frame_id=None, figures=None, *,
                              actors) if actors and scene is not None else []
     for charter_key, body_key in _body_refs(registry, name=name):
         item = registry["items"][charter_key]
-        state = copy.deepcopy(item["state"])
+        shared = item["state"]
+        # COPY WHAT THIS CALL WRITES, SHARE THE REST (C19, 2026-09-07). The
+        # whole institution was deep-copied here and again for the act
+        # preview -- 40% of a 26 ms call on chat 114's four-charter town,
+        # paid once per voiced presence -- to protect the shared registry
+        # from the two stores this function actually writes: the figures it
+        # injects and the practices `opportunities` opens. Every other
+        # reader below returns new structures (`scene_ledger`,
+        # `surface_of`, `member_noun`; `action_instances` normalizes its
+        # argument first) and writes nothing back. The act preview keeps its
+        # own deep copy, because `apply_figure_acts` mutates through
+        # `charter_author.authored`.
+        state = dict(shared)
+        state["figures"] = dict(shared.get("figures") or {})
+        state["practices"] = dict(shared.get("practices") or {})
         body = state["bodies"].get(body_key) or {}
         if str(body.get("place") or "") != str(place or ""):
             continue
@@ -3910,12 +4084,12 @@ def _body_refs(registry, *, name=None, refs=None, include_bound=False):
         if isinstance(ref, dict) and ref.get("charter") and ref.get("body"):
             exact.add((str(ref["charter"]), str(ref["body"])))
     found = []
+    # Exact refs name their body outright, so the display names stay unbuilt
+    # for a caller that already knows who it means.
+    index = None if exact else identity_index(registry)
     for charter_key, item in sorted(registry["items"].items()):
         state = item["state"]
-        from world.charter_identity import display_name
-        roles = {}
-        for post, assigned in (state.get("watch") or {}).items():
-            roles.setdefault(str(assigned), []).append(str(post))
+        names = {} if index is None else index.display(charter_key)
         for body_key, body in sorted(state["bodies"].items()):
             if body_key in (state.get("bindings") or {}) and not include_bound:
                 continue
@@ -3925,8 +4099,7 @@ def _body_refs(registry, *, name=None, refs=None, include_bound=False):
                 matches = bool(wanted) and wanted in {
                     str(body_key).casefold(),
                     str(body.get("name") or "").strip().casefold(),
-                    display_name(body, roles.get(body_key) or (),
-                                 state.get("naming")).casefold(),
+                    names[body_key].casefold(),
                 }
             if matches:
                 found.append((charter_key, body_key))
@@ -3974,6 +4147,7 @@ def background_presence_records(cid, *, places=None, names=None,
     """
     from world.charter_model import body_of_an_authored_mind
     registry = registry_for(cid, frame_id)
+    index = identity_index(registry)
     place_set = {str(p) for p in (places or ()) if str(p or "")}
     name_set = {str(n).strip().casefold() for n in (names or ())
                 if str(n or "").strip()}
@@ -3981,10 +4155,8 @@ def background_presence_records(cid, *, places=None, names=None,
     counts = {}
     for charter_key, item in sorted(registry["items"].items()):
         state = item["state"]
-        from world.charter_identity import display_name
-        roles = {}
-        for post, body_key in (state.get("watch") or {}).items():
-            roles.setdefault(str(body_key), []).append(str(post))
+        roles = index.roles(charter_key)
+        shown = index.display(charter_key)
         for body_key, body in sorted(state["bodies"].items()):
             # An authored person is not an anonymous extra. Bound OR RESERVED
             # -- chat 95 was generated through `generate_lived_location(
@@ -3995,8 +4167,7 @@ def background_presence_records(cid, *, places=None, names=None,
                 continue
             if body.get("departed"):
                 continue  # a guest whose stay ran out stands nowhere
-            display = display_name(
-                body, roles.get(body_key) or (), state.get("naming"))
+            display = shown[body_key]
             place = str(body.get("place") or "")
             if place_set and place not in place_set:
                 continue
@@ -4130,8 +4301,6 @@ def charter_dwellings(cid, rooms, frame_id=None):
     them standing there now). Read-only; a story with no registry lists
     nothing.
     """
-    from world.charter_identity import display_name
-
     wanted = {str(r) for r in (rooms or ()) if str(r or "")}
     if not wanted:
         return []
@@ -4139,21 +4308,19 @@ def charter_dwellings(cid, rooms, frame_id=None):
         registry = registry_for(cid, frame_id)
     except Exception:
         return []
+    index = identity_index(registry)
     homes = {}
     for charter_key, item in sorted((registry.get("items") or {}).items()):
         state = (item or {}).get("state") or {}
         work = charter_work_places(state)
-        roles = {}
-        for post, body_key in (state.get("watch") or {}).items():
-            roles.setdefault(str(body_key), []).append(str(post))
+        shown = index.display(charter_key)
         for body_key, body in sorted((state.get("bodies") or {}).items()):
             if not isinstance(body, dict):
                 continue
             berth = str(body.get("berth") or "")
             if berth not in wanted or berth in work:
                 continue
-            name = display_name(
-                body, roles.get(body_key) or (), state.get("naming"))
+            name = shown[body_key]
             if not name:
                 continue
             row = homes.setdefault(berth, {"home_of": set(), "at_home": set()})
@@ -4184,6 +4351,7 @@ def bodies_acting_toward_authored(cid, authored, frame_id=None):
     means must not voice either.
     """
     registry = registry_for(cid, frame_id)
+    index = identity_index(registry)
     authored_cf = {str(a or "").strip().casefold() for a in (authored or ())
                    if str(a or "").strip()}
     acting = []
@@ -4197,13 +4365,9 @@ def bodies_acting_toward_authored(cid, authored, frame_id=None):
         actors = {str((row or {}).get("actor") or "")
                   for row in (state.get("window_acts") or [])
                   if str((row or {}).get("other") or "") in wanted}
-        from world.charter_identity import display_name
-        roles = {}
-        for post, body_key in (state.get("watch") or {}).items():
-            roles.setdefault(str(body_key), []).append(str(post))
-        for body_key, body in sorted(state["bodies"].items()):
-            display = display_name(
-                body, roles.get(body_key) or (), state.get("naming"))
+        shown = index.display(charter_key)
+        for body_key in sorted(state["bodies"]):
+            display = shown[body_key]
             counts[display.casefold()] = counts.get(display.casefold(), 0) + 1
             if body_key in actors and body_key not in bindings:
                 acting.append(display)
@@ -4318,27 +4482,25 @@ def charter_speaker_records(cid, frame_id=None, *, include_bound=False):
     calls and stores no duplicate palette.  A thousand bodies are cheap; the
     transcript still colours only exact quotes that were actually spoken.
     """
-    from world.charter_identity import (
-        display_name, identity_aliases, identity_seed)
+    from world.charter_identity import identity_seed
 
     registry = registry_for(cid, frame_id)
+    index = identity_index(registry)
     out = []
     for charter_key, item in sorted(registry["items"].items()):
         state = item["state"]
-        roles = {}
-        for post, assigned in (state.get("watch") or {}).items():
-            roles.setdefault(str(assigned), []).append(str(post))
+        shown = index.display(charter_key)
+        spellings = index.aliases(charter_key)
         for body_key, body in sorted(state["bodies"].items()):
             if body_key in (state.get("bindings") or {}) and not include_bound:
                 continue
-            name = display_name(
-                body, roles.get(body_key) or (), state.get("naming"))
+            name = shown[body_key]
             if not name:
                 continue
             out.append({
                 "name": name,
-                "aliases": identity_aliases(
-                    body, roles.get(body_key) or (), state.get("naming")),
+                # A caller's row, not the index's list.
+                "aliases": list(spellings[body_key]),
                 "charter": charter_key,
                 "body": body_key,
                 "seed": identity_seed(charter_key, body_key),
@@ -4438,13 +4600,11 @@ def promotion_bundle(cid, name, *, record=None, frame_id=None,
         events=_charter_events(cid, charter_key, frame_id))
     body = registry["items"][charter_key]["state"]["bodies"][body_key]
     state = registry["items"][charter_key]["state"]
-    from world.charter_identity import display_name
-    roles = {}
-    for post, assigned in (state.get("watch") or {}).items():
-        roles.setdefault(str(assigned), []).append(str(post))
-    social_names = {
-        key: display_name(value, roles.get(key) or (), state.get("naming"))
-        for key, value in state["bodies"].items()}
+    # Every body, because the promoted mind is handed the whole town's
+    # address book -- and a copy of it, because the figures below are added
+    # to it and the index's map is the index's own.
+    social_names = dict(identity_index(registry).display(
+        charter_key).deal_all())
     for key, figure in (state.get("figures") or {}).items():
         surface = figure.get("surface") or {}
         social_names[key] = str(surface.get("name") or surface.get("label")

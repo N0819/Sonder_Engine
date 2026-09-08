@@ -225,11 +225,23 @@ def _scene(light="normal", attire_ledger=None):
     }
 
 
+class _Ctx(dict):
+    """Just enough PipelineContext for `_body_descriptions`: a chat id, a
+    cast, and somewhere to keep the turn's disguise/transformation maps,
+    which are read once per ctx now (review 2026-09-07 C13)."""
+
+    def __init__(self, sheet):
+        super().__init__()
+        self.chat = {"id": 1}
+        self.cast = [{"sheet": json.dumps(sheet), "cstate": "{}"}]
+
+    @property
+    def _extra(self):
+        return self
+
+
 def _ctx(sheet):
-    return type("Ctx", (), {
-        "chat": {"id": 1},
-        "cast": [{"sheet": json.dumps(sheet), "cstate": "{}"}],
-    })()
+    return _Ctx(sheet)
 
 
 def _rendered(sc, descriptions, *, recognized=True):

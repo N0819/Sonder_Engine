@@ -634,3 +634,72 @@ def test_the_pool_worker_is_importable_rather_than_a_closure():
     from world.charter_runtime import _presim_one
 
     assert pickle.loads(pickle.dumps(_presim_one)) is _presim_one
+
+
+def test_the_aperture_writes_nothing_into_the_shared_registry(temp_db):
+    """C19: `presence_view` copies the two stores it writes -- the figures
+    it injects and the practices `opportunities` opens -- instead of the
+    whole institution, twice, per voiced presence. Every other reader this
+    turn holds that same parse, so the registry has to come out of the call
+    byte for byte."""
+    cid = _chat(temp_db)
+    state = _working_pair()
+    state["bodies"]["bob"]["name"] = "Bob Vale"
+    save_registry(cid, {"works": state})
+
+    shared = registry_for(cid)
+    before = json.dumps(shared, sort_keys=True, default=str)
+    view = presence_view(cid, "room_b", "Bob Vale", figures=["the traveller"])
+
+    assert view and view[0]["body"] == "bob"
+    assert registry_for(cid) is shared          # the same parse, not a reparse
+    assert json.dumps(shared, sort_keys=True, default=str) == before
+    stored = shared["items"]["works"]["state"]
+    assert "the traveller" not in (stored.get("figures") or {})
+
+
+def test_identity_names_are_indexed_once_per_parse_and_die_with_it(temp_db):
+    """C19: ten registry walkers rebuilt `display_name` -- and three of them
+    `identity_aliases` -- per body per call. The maps are memoised against
+    the parse `registry_for` hands out, under that parse's own token, so a
+    write that reparses the registry must not hand back the old name, and a
+    registry the caller may mutate must not be indexed at all."""
+    from world.charter_identity import display_name, identity_aliases
+    from world.charter_runtime import identity_index, registry_for_update
+
+    cid = _chat(temp_db)
+    state = _working_pair()
+    state["bodies"]["bob"]["name"] = "Bob Vale"
+    save_registry(cid, {"works": state})
+
+    index = identity_index(registry_for(cid))
+    stored = registry_for(cid)["items"]["works"]["state"]
+    # The index answers exactly as the readers it replaced answered.
+    for body_key, body in stored["bodies"].items():
+        roles = index.roles("works").get(body_key) or ()
+        assert index.display("works")[body_key] == display_name(
+            body, roles, stored.get("naming"))
+        assert index.aliases("works")[body_key] == identity_aliases(
+            body, roles, stored.get("naming"))
+    assert identity_index(registry_for(cid)) is index     # one per parse
+
+    renamed = _working_pair()
+    renamed["bodies"]["bob"]["name"] = "Robert Vale"
+    save_registry(cid, {"works": renamed})
+
+    fresh = identity_index(registry_for(cid))
+    assert fresh is not index
+    assert fresh.display("works")["bob"] == "Robert Vale"
+    assert [row["name"] for row in charter_speaker_records(cid)
+            if row["body"] == "bob"] == ["Robert Vale"]
+
+    # A private copy is mutable by contract, so it is never indexed against
+    # the cache: an index naming a body somebody has since renamed is worse
+    # than no index.
+    private = registry_for_update(cid)
+    private["items"]["works"]["state"]["bodies"]["bob"]["name"] = "Bo Vale"
+    private_index = identity_index(private)
+    assert private_index is not fresh
+    assert private_index.display("works")["bob"] == "Bo Vale"
+    assert identity_index(registry_for(cid)).display("works")["bob"] \
+        == "Robert Vale"

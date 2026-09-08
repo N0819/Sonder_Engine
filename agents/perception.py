@@ -1874,6 +1874,13 @@ def _delivered_manifest(ctx, scene, observer, sources, known, cast_by_name,
     focus = _focus_target(scene, observer)
     behind = set(_behind_sources(scene, observer, sources))
     o_room = room_of(scene, observer)
+    # HOW WELL THIS OBSERVER SEES AND HEARS IS A FACT ABOUT THE OBSERVER: it
+    # cannot differ between two sources, and reading it inside the loop
+    # normalized the observer's own card once per source (review 2026-09-07
+    # C20 -- 7 reads for one observer's 8 sources, and it is per observer per
+    # beat, so it grew as N x M). Resolved on the first source that has a
+    # tell to gate, so a beat where nobody declared one still reads nothing.
+    acuity = None
     for s in sources:
         sname = s.get("name")
         cid = cast_by_name.get(sname) if sname else None
@@ -1901,11 +1908,12 @@ def _delivered_manifest(ctx, scene, observer, sources, known, cast_by_name,
         # unchanged).
         audible = bool(rel.get("same_room")) \
             and hear_level(rel, "normal") == "full"
-        acuity = _tell_acuity(observer_sheet)
         familiarity = 0.45 if (observer in (known.get(sname) or [])
                                or sname in (known.get(observer) or [])) else 0.15
         attention = 0.4 if focus == sname else 0.15
         cues = []
+        if tells and acuity is None:
+            acuity = _tell_acuity(observer_sheet)
         for t in tells:
             reachable = visible or (audible
                                     and tell_is_audible(t.get("channel")))
@@ -1921,7 +1929,67 @@ def _delivered_manifest(ctx, scene, observer, sources, known, cast_by_name,
     return out
 
 
-def _subject_disguise_context(chat_id, subject_name, true_appearance, known_map):
+#: THE TWO STANDING BODY-CONDITION MAPS, READ ONCE PER TURN (review
+#: 2026-09-07 C13). Each is one SELECT over `world_conditions` plus a JSON
+#: parse per row, and each was re-derived PER BODY PER STAGE: the disguise
+#: context reads both for the player and again for every cast member, the
+#: tripwire terms read both once more, `_body_descriptions` reads both again
+#: for each of the same bodies, and the extra-parts cache reads both on its
+#: first miss -- ~4N+6 queries a stage on a cast of N. Counted on a fixture
+#: that asks for all four per body: 14 reads at N=1, 75 at N=12, 243 at
+#: N=40, against 2 after the memo. A read costs 32.5us and 28.1us against
+#: chat 114 on the bench copy, which carries no `world_conditions` rows at
+#: all so pays only the round trip, and 65-70us against a fixture with rows
+#: to parse.
+#:
+#: THE MAP IS FIXED FOR THE LENGTH OF A TURN, which is why one read serves
+#: every stage. Every engine writer of `world_conditions` is in the commit
+#: path (`commit_entities`, `commit_mechanics`) or in a checkpoint restore,
+#: and `_run_pipeline` runs its restores before the first step -- so no
+#: stage's read can straddle a write. `drop_body_condition_caches` is the
+#: seam for the one place that could, and runtime calls it there.
+#:
+#: On the PipelineContext, never on a module global: a turn builds a fresh
+#: ctx, so nothing here survives into the next turn or another chat. The
+#: `_composer_extra_parts_cache` precedent, one derivation earlier -- and
+#: that cache is a product of these two, so it is dropped with them.
+_DISGUISES_CACHE = "_active_disguises_cache"
+_TRANSFORMATIONS_CACHE = "_active_transformations_cache"
+
+
+def _turn_disguises(ctx):
+    """Active physical disguises by casefolded subject, once per turn (C13)."""
+    cached = ctx.get(_DISGUISES_CACHE)
+    if cached is None:
+        cached = active_disguises(ctx.chat["id"])
+        ctx[_DISGUISES_CACHE] = cached
+    return cached
+
+
+def _turn_transformations(ctx):
+    """Active physical transformations by casefolded subject, once per turn."""
+    cached = ctx.get(_TRANSFORMATIONS_CACHE)
+    if cached is None:
+        cached = active_transformations(ctx.chat["id"])
+        ctx[_TRANSFORMATIONS_CACHE] = cached
+    return cached
+
+
+def drop_body_condition_caches(ctx):
+    """Forget this turn's condition reads and everything derived from them.
+
+    A checkpoint restore rewrites `world_conditions` wholesale mid-run, and
+    it also re-reads the cast -- so the extra-parts cache, which is built
+    from the cast AND from these two maps, goes with them. Called from
+    `runtime._restore_and_refresh`, which is the only place inside a turn
+    that changes either input.
+    """
+    for key in (_DISGUISES_CACHE, _TRANSFORMATIONS_CACHE,
+                "_composer_extra_parts_cache"):
+        ctx._extra.pop(key, None)
+
+
+def _subject_disguise_context(ctx, subject_name, true_appearance, known_map):
     """Resolve a subject's active physical_disguise into perception inputs.
 
     Returns (visible_appearance, disguise_active, known_to_or_None,
@@ -1966,11 +2034,11 @@ def _subject_disguise_context(chat_id, subject_name, true_appearance, known_map)
     # it lands here, before the concealment layer, and a body that is merely
     # transformed returns with no disguise payload and no known_to at all.
     key = str(subject_name or "").casefold()
-    transformation = active_transformations(chat_id).get(key)
+    transformation = _turn_transformations(ctx).get(key)
     true_appearance = transformed_true_appearance(
         true_appearance, transformation)
 
-    disguise = active_disguises(chat_id).get(key)
+    disguise = _turn_disguises(ctx).get(key)
     if transformation and disguise:
         # ONE OUTWARD FORM, AND THE TRANSFORMATION IS IT. The two kinds are a
         # singular GROUP (`scene.SINGULAR_BODY_CONDITIONS`), enforced at the
@@ -1994,7 +2062,7 @@ def _subject_disguise_context(chat_id, subject_name, true_appearance, known_map)
         "conceals_identity"))
 
 
-def _subject_concealed_terms(chat_id, subject_name):
+def _subject_concealed_terms(ctx, subject_name):
     """Tripwire terms for a body, through the SAME precedence the concealment
     layer uses.
 
@@ -2016,9 +2084,9 @@ def _subject_concealed_terms(chat_id, subject_name):
     the feature. So there is nothing to tripwire on.
     """
     key = str(subject_name or "").casefold()
-    if active_transformations(chat_id).get(key):
+    if _turn_transformations(ctx).get(key):
         return []
-    return [t for t in ((active_disguises(chat_id).get(key) or {})
+    return [t for t in ((_turn_disguises(ctx).get(key) or {})
                         .get("concealed_terms") or []) if t]
 
 
@@ -2151,8 +2219,8 @@ def perception_establish(ctx, nonce):
         "ambient_location": _ambient_location_for(sc, p_room),
         "crowds": crowds_for_room(ctx.chat.id, sc, p_room, chatter),
         "chatter": chatter_for_room(ctx.chat.id, sc, p_room, chatter),
-        "couriers": couriers_for_room(ctx.chat.id, sc, p_room),
-        "notices": artifacts_for_room(ctx.chat.id, sc, p_room),
+        "couriers": couriers_for_room(ctx.chat.id, sc, p_room, chatter),
+        "notices": artifacts_for_room(ctx.chat.id, sc, p_room, chatter),
         "visible_rooms": _visible_rooms_for(sc, p_name, p_room),
         "senses": senses_of(pers), "sense_card": _sense_card(pers),
         "attention": "engaged",
@@ -2185,8 +2253,8 @@ def perception_establish(ctx, nonce):
             "ambient_location": _ambient_location_for(sc, r),
             "crowds": crowds_for_room(ctx.chat.id, sc, r, chatter),
             "chatter": chatter_for_room(ctx.chat.id, sc, r, chatter),
-            "couriers": couriers_for_room(ctx.chat.id, sc, r),
-            "notices": artifacts_for_room(ctx.chat.id, sc, r),
+            "couriers": couriers_for_room(ctx.chat.id, sc, r, chatter),
+            "notices": artifacts_for_room(ctx.chat.id, sc, r, chatter),
             "visible_rooms": _visible_rooms_for(sc, character_name(sh), r),
             "senses": senses_of(sh), "sense_card": _sense_card(sh),
             "attention": act.get("goal") or "ambient",
@@ -2281,8 +2349,8 @@ def perception_act(ctx, nonce):
     # is never rendered as perceived.
     (p_visible, _p_disguise, p_disguise_known,
      p_disguise_conceals) = _subject_disguise_context(
-        chat["id"], p_name, p_appearance, known)
-    p_disguise_terms = _subject_concealed_terms(chat["id"], p_name)
+        ctx, p_name, p_appearance, known)
+    p_disguise_terms = _subject_concealed_terms(ctx, p_name)
 
     speech_elems = [
         e for e in (interp.get("sequence") or [])
@@ -2307,7 +2375,7 @@ def perception_act(ctx, nonce):
         b_true = _appearance_as_prose(appearance_of(
             b_name, character_appearance(b_sh), sc))
         b_visible, _, b_known_to, _ci = _subject_disguise_context(
-            chat["id"], b_name, b_true, known)
+            ctx, b_name, b_true, known)
         co_present.append({
             "name": b_name, "room": b_room, "appearance": b_visible,
             "aliases": character_scene_keys(b_sh)[1:],
@@ -2380,8 +2448,8 @@ def perception_act(ctx, nonce):
             "ambient_location": _ambient_location_for(sc, r),
             "crowds": crowds_for_room(ctx.chat.id, sc, r, chatter),
             "chatter": chatter_for_room(ctx.chat.id, sc, r, chatter),
-            "couriers": couriers_for_room(ctx.chat.id, sc, r),
-            "notices": artifacts_for_room(ctx.chat.id, sc, r),
+            "couriers": couriers_for_room(ctx.chat.id, sc, r, chatter),
+            "notices": artifacts_for_room(ctx.chat.id, sc, r, chatter),
             "visible_rooms": _visible_rooms_for(sc, character_name(sh), r),
             "senses": senses_of(sh), "sense_card": _sense_card(sh),
             "attention": act.get("goal") or "ambient",
@@ -2781,8 +2849,8 @@ def perception_outcome(ctx, nonce):
     # what went missing when its prose payload did.
     (p_appearance, p_disguise, p_disguise_known,
      p_disguise_conceals) = _subject_disguise_context(
-        chat["id"], p_name, p_appearance_true, known)
-    p_disguise_terms = _subject_concealed_terms(chat["id"], p_name)
+        ctx, p_name, p_appearance_true, known)
+    p_disguise_terms = _subject_concealed_terms(ctx, p_name)
 
     # background_react (agents/background.py) is a separate, later stage
     # in the plan -- its output is merged in HERE rather than by mutating
@@ -2875,8 +2943,8 @@ def perception_outcome(ctx, nonce):
         "ambient_location": _ambient_location_for(sc, p_room),
         "crowds": crowds_for_room(ctx.chat.id, sc, p_room, chatter),
         "chatter": chatter_for_room(ctx.chat.id, sc, p_room, chatter),
-        "couriers": couriers_for_room(ctx.chat.id, sc, p_room),
-        "notices": artifacts_for_room(ctx.chat.id, sc, p_room),
+        "couriers": couriers_for_room(ctx.chat.id, sc, p_room, chatter),
+        "notices": artifacts_for_room(ctx.chat.id, sc, p_room, chatter),
         "visible_rooms": _visible_rooms_for(sc, p_name, p_room),
         "senses": senses_of(pers), "sense_card": _sense_card(pers),
         "attention": "engaged",
@@ -2902,8 +2970,8 @@ def perception_outcome(ctx, nonce):
             "ambient_location": _ambient_location_for(sc, e_room),
             "crowds": crowds_for_room(ctx.chat.id, sc, e_room, chatter),
             "chatter": chatter_for_room(ctx.chat.id, sc, e_room, chatter),
-            "couriers": couriers_for_room(ctx.chat.id, sc, e_room),
-            "notices": artifacts_for_room(ctx.chat.id, sc, e_room),
+            "couriers": couriers_for_room(ctx.chat.id, sc, e_room, chatter),
+            "notices": artifacts_for_room(ctx.chat.id, sc, e_room, chatter),
             "visible_rooms": _visible_rooms_for(sc, e_name, e_room),
             "senses": senses_of(extra), "sense_card": _sense_card(extra),
             "attention": "engaged",
@@ -2933,8 +3001,8 @@ def perception_outcome(ctx, nonce):
             "ambient_location": _ambient_location_for(sc, r),
             "crowds": crowds_for_room(ctx.chat.id, sc, r, chatter),
             "chatter": chatter_for_room(ctx.chat.id, sc, r, chatter),
-            "couriers": couriers_for_room(ctx.chat.id, sc, r),
-            "notices": artifacts_for_room(ctx.chat.id, sc, r),
+            "couriers": couriers_for_room(ctx.chat.id, sc, r, chatter),
+            "notices": artifacts_for_room(ctx.chat.id, sc, r, chatter),
             "visible_rooms": _visible_rooms_for(sc, character_name(sh), r),
             "senses": senses_of(sh), "sense_card": _sense_card(sh),
             "attention": act.get("goal") or "ambient",
@@ -3407,8 +3475,7 @@ def _composer_extra_parts(ctx, p_name):
         # that body currently has. The order is the whole model: you can
         # glamour a transformed body, and the glamour hides the fox's tail
         # rather than the woman's.
-        chat_id = ctx.chat["id"]
-        shifted = active_transformations(chat_id)
+        shifted = _turn_transformations(ctx)
         if shifted:
             cached = {
                 name: transformed_parts(
@@ -3420,7 +3487,7 @@ def _composer_extra_parts(ctx, p_name):
                 if form.get("parts") and not any(
                         str(n).casefold() == key for n in cached):
                     cached[form.get("subject") or key] = form["parts"]
-        cached = conceal_disguised_parts(cached, active_disguises(chat_id))
+        cached = conceal_disguised_parts(cached, _turn_disguises(ctx))
         ctx["_composer_extra_parts_cache"] = cached
     return cached
 
@@ -3740,12 +3807,11 @@ def _body_descriptions(ctx, sc):
     body drops back to the description it had before this delivered anything.
     """
     out = {}
-    chat_id = ctx.chat["id"]
 
     def _own_form(name):
         key = str(name or "").casefold()
-        return not (active_disguises(chat_id).get(key)
-                    or active_transformations(chat_id).get(key))
+        return not (_turn_disguises(ctx).get(key)
+                    or _turn_transformations(ctx).get(key))
 
     pers = persona_of(ctx.chat)
     if isinstance(pers, dict):
@@ -4444,10 +4510,9 @@ def _composer_finish_observer(ctx, stage, pid, name, rendered, known, roster,
 
 def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
                         entity_states, sensory_events, presence_bodies=()):
-    chat_id = ctx.chat["id"]
     bodies = []
     p_visible, _, p_known_to, _ci = _subject_disguise_context(
-        chat_id, p_name, p_appearance, known)
+        ctx, p_name, p_appearance, known)
     bodies.append({
         "name": p_name, "room": room_of(sc, p_name),
         "appearance": p_visible, "aliases": [],
@@ -4462,7 +4527,7 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
         b_true = _appearance_as_prose(appearance_of(
             b_name, character_appearance(sh), sc))
         b_visible, _, b_known_to, _ci = _subject_disguise_context(
-            chat_id, b_name, b_true, known)
+            ctx, b_name, b_true, known)
         bodies.append({
             "name": b_name, "room": character_room(sc, sh),
             "appearance": b_visible,
@@ -5012,7 +5077,6 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                       appearances, sources, enriched_dlog, substance_events,
                       amap, presence_bodies=()):
     chat = ctx.chat
-    chat_id = chat["id"]
     pers = persona_of(chat)
 
     cast_aliases = {}
@@ -5113,7 +5177,7 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
             conceals = p_disguise_conceals
         else:
             visible, _, known_to, conceals = _subject_disguise_context(
-                chat_id, nm, app, known)
+                ctx, nm, app, known)
         bodies.append({
             "name": nm, "room": cast_room(sc, nm, ctx.cast),
             "appearance": visible,

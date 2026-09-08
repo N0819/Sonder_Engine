@@ -41,7 +41,8 @@ from .director import director_establish, director_interpret, director_resolve
 from .loops import interaction_loop, reaction_loop, rehydrate_loop_views
 from .mapping import compile_world_context
 from .narration import narrator, narrator_extra
-from .perception import perception_act, perception_establish, perception_outcome
+from .perception import (drop_body_condition_caches, perception_act,
+                         perception_establish, perception_outcome)
 from .storage import (
     ENGINE_NOTES_KEY, active_content, clear_steps_stale, delete_step,
     mark_steps_stale, save_step, step_is_stale, variant_count,
@@ -1117,6 +1118,12 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
            (chat_id, turn_row["idx"]))
         restore_checkpoint(chat_id, turn_row["idx"])
         ctx.cast = active_cast(chat_id, turn_row["frame_id"])
+        # A restore rewrites `world_conditions` and the cast wholesale, and
+        # this turn's disguise/transformation maps are read once and kept
+        # (review 2026-09-07 C13). Every call below is still ahead of the
+        # first step, so nothing has read them yet -- the drop is here so
+        # that stays true of a restore that one day is not.
+        drop_body_condition_caches(ctx)
 
     establishment = (turn_row["idx"] == 0)
 

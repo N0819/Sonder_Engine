@@ -120,9 +120,28 @@ function observeVisibleTurn(msgsEl, turnEntries) {
   for (const { el } of turnEntries) _visibleTurnObserver.observe(el);
 }
 
-async function openChat(id) {
+// The transcript only ever GROWS AT THE END, so a refresh that follows a new
+// beat does not have to re-read the story. `openChat(id, {sinceTurnId})` asks
+// the route for the turns after the one the page already holds and splices
+// them onto the ones it has -- everything else in the payload (cast, colours,
+// lorebooks, frames) still arrives whole, because none of that is
+// append-only. Measured 2026-09-07 on the review's bench copy of chat 117
+// (124 turns, C22): 266,689 payload bytes for the whole story against 32,209
+// for the slice, on a request the page makes after EVERY beat.
+//
+// ONLY FOR AN APPEND. A reroll, a resume, a per-step rerun, a prose edit or a
+// removed turn all change a turn already on the page, and a page that spliced
+// would keep showing the old one -- so every one of those refreshes whole, and
+// so does a run that failed, which may have left a turn half-written.
+async function openChat(id, { sinceTurnId = null } = {}) {
   const switching = S.chatId !== id;
   const loadSeq = ++_chatLoadSeq;
+  // Captured BEFORE the fetch, and used only if it really holds that turn:
+  // the splice is a claim about what this page has, so it is made from the
+  // array in hand rather than from whatever S.chat becomes while we wait.
+  const heldTurns = (!switching && sinceTurnId != null && S.chat
+    && Array.isArray(S.chat.turns)
+    && S.chat.turns.some(t => t.id === sinceTurnId)) ? S.chat.turns : null;
   // Clear the outgoing story's condition panel BEFORE the awaits below. It
   // belongs to that story, and leaving it up while the next one loads showed
   // the previous character's bars against the new story's prose. Story-bound
@@ -135,7 +154,8 @@ async function openChat(id) {
   S.chatId = id;
   let chat;
   try {
-    chat = await api("GET", "/api/chats/" + id);
+    chat = await api("GET", "/api/chats/" + id
+      + (heldTurns ? "?since_turn_id=" + sinceTurnId : ""));
   } catch (error) {
     // A superseded request failing after a newer navigation succeeded is no
     // longer actionable and must not produce a misleading global error toast.
@@ -143,6 +163,15 @@ async function openChat(id) {
     throw error;
   }
   if (loadSeq !== _chatLoadSeq || S.chatId !== id) return false;
+
+  // `turns_since` is the route saying it answered with a slice; without it the
+  // reply is the whole story and replaces what the page held, as it always
+  // has. What is kept is defined by turn id, not by position, so it survives
+  // any reordering the payload does.
+  if (heldTurns && chat.turns_since != null) {
+    chat.turns = heldTurns.filter(t => t.id <= chat.turns_since)
+      .concat(chat.turns || []);
+  }
 
   S.chat = chat;
   // A genuine story switch starts in that story's present. Ordinary refreshes
@@ -1130,6 +1159,16 @@ async function runStream(url, body, context = {}) {
     // can show it above the prose and look like the finished beat.
     playerInput: context.playerInput || "",
   };
+  // The newest turn this page already holds, read BEFORE the beat runs, and
+  // only for a run that APPENDS one -- `run.turnId` names the turn a reroll,
+  // resume or per-step rerun is rewriting, and a rewritten turn has to be
+  // re-read whole. By id rather than by array position: id order is the order
+  // turns were created, which is what "everything after this one is new" means
+  // (review 2026-09-07, C22).
+  const heldTurnId = (!run.turnId && S.chat && S.chatId === run.chatId
+    && Array.isArray(S.chat.turns) && S.chat.turns.length)
+    ? S.chat.turns.reduce((m, t) => (t.id > m ? t.id : m), 0)
+    : null;
   _activeRun = run;
   S.busy = true;
   $("#send").disabled = true;
@@ -1160,7 +1199,8 @@ async function runStream(url, body, context = {}) {
         // its picture and sound are fetched at once rather than after a dwell:
         // waiting two seconds for a beat you just watched arrive is a stall.
         if (ok) _freshRunPending = true;
-        await openChat(S.chatId);
+        await openChat(S.chatId, (ok && heldTurnId && S.chatId === run.chatId)
+          ? { sinceTurnId: heldTurnId } : {});
         // After the re-render, so the beat is on screen when it sounds. Only
         // on success: a failure already raised a toast, and a chime that means
         // "ready" must not also mean "gone wrong".

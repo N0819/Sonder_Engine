@@ -127,24 +127,90 @@ def _exact_cue_score(memory, query_text):
         score = max(score, 0.7)
     return score
 
-def _jaccard_text(a, b):
-    # Same content-word rule as `_content_words`, and the same pack key: this
-    # is the fallback whenever two memories have no vectors to compare, and an
+def _content_word_set(text):
+    # Same content-word rule as `_content_words`, and the same pack key: an
     # English-only tokenizer scored every Japanese pair at 0.0 similarity --
     # which reads as "unrelated", not as "could not tell".
-    word_re = _ling("_SUPPORT_WORD_RE")
-    la = set(word_re.findall((a or "").lower()))
-    lb = set(word_re.findall((b or "").lower()))
+    return set(_ling("_SUPPORT_WORD_RE").findall((text or "").lower()))
+
+def _jaccard_sets(la, lb):
     if not la or not lb:
         return 0.0
     return len(la & lb) / len(la | lb)
 
-def _memory_similarity(a, b):
+def _jaccard_text(a, b):
+    # The fallback whenever two memories have no vectors to compare.
+    return _jaccard_sets(_content_word_set(a), _content_word_set(b))
+
+def _memory_tokens(mem, cache):
+    """One memory's content words, tokenised once per caller-owned `cache`.
+
+    The MMR pass below compares the same candidate against a new selection
+    every round, so on a bank with no usable vectors the jaccard fallback
+    re-ran this regex over the same row up to k times (review 2026-09-07,
+    C15). `cache is None` is the plain per-call form, unchanged; a row with
+    no id is never cached, because the key would be shared with every other
+    idless row.
+    """
+    text = f"{mem.get('gist','')} {mem.get('content','')}"
+    mid = mem.get("id")
+    if cache is None or mid is None:
+        return _content_word_set(text)
+    toks = cache.get(mid)
+    if toks is None:
+        toks = cache[mid] = _content_word_set(text)
+    return toks
+
+def _memory_similarity(a, b, tokens=None):
     av, bv = a.get("_vector"), b.get("_vector")
     if av is not None and bv is not None and len(av) == len(bv):
         return max(0.0, _cos(av, bv))
-    return _jaccard_text(f"{a.get('gist','')} {a.get('content','')}",
-                         f"{b.get('gist','')} {b.get('content','')}")
+    return _jaccard_sets(_memory_tokens(a, tokens), _memory_tokens(b, tokens))
+
+def _mmr_select(memories, fused, k):
+    """Greedy maximal marginal relevance: relevance minus the worst overlap
+    with what has already been chosen.
+
+    THE REDUNDANCY TERM IS CARRIED FORWARD RATHER THAN REBUILT. A candidate's
+    `red` is the largest similarity between it and anything already selected,
+    and a max only ever grows -- once a pair has been compared, that comparison
+    never changes and never needs making again. Rebuilding it from scratch
+    every round cost pool x k x (k-1)/2 evaluations: measured 48,668 on chat
+    117's 401-row bank at k=24, 66% of the whole retrieval call (review
+    2026-09-07, C15). Folding the ONE new selection into a running maximum
+    makes the identical number in 4,308, because `max` over a set is `max` of
+    the running value and the new member -- exactly, in float arithmetic, not
+    approximately.
+
+    `tokens` memoises the content-word set the jaccard fallback tokenises,
+    which is otherwise re-derived per comparison on any bank whose rows have
+    no usable vectors. It is local to this call and keyed by memory id.
+
+    Ties fall to the pool's own order -- descending fused score, oldest first
+    within a tie -- because the comparison is strictly greater-than, as it was
+    when the redundancy was recomputed.
+    """
+    ranked = sorted(memories, key=lambda x: fused[x], reverse=True)
+    selected = []
+    pool = ranked[:max(k * 8, 40)]
+    redundancy = dict.fromkeys(pool, 0.0)
+    tokens = {}
+    while pool and len(selected) < k:
+        best_id, best = None, float("-inf")
+        for mid in pool:
+            mmr = 0.82 * fused[mid] - 0.18 * redundancy[mid]
+            if mmr > best:
+                best = mmr
+                best_id = mid
+        selected.append(best_id)
+        pool.remove(best_id)
+        chosen = memories[best_id]
+        for mid in pool:
+            sim = _memory_similarity(memories[mid], chosen, tokens)
+            if sim > redundancy[mid]:
+                redundancy[mid] = sim
+    return selected
+
 
 # The bridge between two score scales that were being added together as though
 # they shared one.
@@ -472,7 +538,7 @@ def _rank_normalized_importance(memories):
 def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
                     current_turn_idx=None, chronological=True, viewer_frame_id=_UNSET,
                     here=None, in_sight=None, aspects=None, embedded=None,
-                    record_access=False):
+                    record_access=False, bank=None):
     """Retrieve, fusing the main query with any `aspects` given alongside it.
 
     `aspects` is [(label, text), ...] -- short, separate facets of what the
@@ -499,6 +565,7 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
         before_turn_idx=current_turn_idx,
         viewer_frame_id=viewer_frame_id,
         include_archived=include_archived,
+        bank=bank,
     )
     here_set = {str(here).strip().casefold()} if here else set()
     in_sight_set = {
@@ -728,20 +795,7 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
                 for t in _ling("_PROMISE_QUERY_CUES")):
             fused[mid] += 0.1
             reasons[mid].append("promise category")
-    ranked = sorted(memories, key=lambda x: fused[x], reverse=True)
-    selected = []
-    pool = ranked[:max(k * 8, 40)]
-    while pool and len(selected) < k:
-        best_id, best = None, float("-inf")
-        for mid in pool:
-            rel = fused[mid]
-            red = max((_memory_similarity(memories[mid], memories[s]) for s in selected), default=0.0)
-            mmr = 0.82 * rel - 0.18 * red
-            if mmr > best:
-                best = mmr
-                best_id = mid
-        selected.append(best_id)
-        pool.remove(best_id)
+    selected = _mmr_select(memories, fused, k)
     expanded = list(selected)
     if len(expanded) < k + 2:
         by_turn = sorted((m for m in memories.values() if m["turn_idx"] is not None), key=lambda m: (m["turn_idx"], m["id"]))
@@ -873,7 +927,7 @@ _RECALL_ABSTAIN_LIFT = 1.7
 
 def recall_confidence(chat_id, char_id, query, *, current_turn_idx,
                       viewer_frame_id=_UNSET, k=None, embedded=None,
-                      include_archived=True):
+                      include_archived=True, bank=None):
     """How convinced retrieval is that this bank speaks to this query.
 
     Deterministic, no model call beyond the query embedding the caller
@@ -894,6 +948,7 @@ def recall_confidence(chat_id, char_id, query, *, current_turn_idx,
         before_turn_idx=current_turn_idx,
         viewer_frame_id=viewer_frame_id,
         include_archived=include_archived,
+        bank=bank,
     )
     out = {"available": False, "lift_sigma": None, "abstain": False,
            "bank": len(rows), "comparable": 0}
@@ -966,7 +1021,8 @@ _CONTRAST_MIN_SALIENCE = 0.5
 
 
 def contrast_memory(chat_id, char_id, query_text, current_turn_idx, *,
-                    here=None, exclude_ids=(), k=1, viewer_frame_id=_UNSET):
+                    here=None, exclude_ids=(), k=1, viewer_frame_id=_UNSET,
+                    bank=None):
     """Up to `k` high-salience memories DISSIMILAR to the current beat.
 
     Deliberately ignores `confidence`: a belief the character has since set
@@ -991,6 +1047,7 @@ def contrast_memory(chat_id, char_id, query_text, current_turn_idx, *,
         before_turn_idx=current_turn_idx,
         viewer_frame_id=viewer_frame_id,
         include_archived=True,
+        bank=bank,
     )
     if len(rows) < _CONTRAST_MIN_BANK:
         return []
@@ -1104,7 +1161,8 @@ def provenance_context_label(provenance):
     return "what_i_experienced"
 
 
-def recent_memory_buffer(chat_id, char_id, current_turn_idx, turns=4, limit=12, viewer_frame_id=_UNSET):
+def recent_memory_buffer(chat_id, char_id, current_turn_idx, turns=4, limit=12,
+                         viewer_frame_id=_UNSET, bank=None):
     # Fetch newest-first so a memory-dense window (many self/episodic/
     # inference rows in a short span) truncates its OLDEST rows against
     # `limit`, not its newest -- ORDER BY turn_idx, id ASC with LIMIT would
@@ -1133,6 +1191,7 @@ def recent_memory_buffer(chat_id, char_id, current_turn_idx, turns=4, limit=12, 
         include_archived=False,
         since_turn_idx=max(0, current_turn_idx - turns),
         require_turn_idx=True,
+        bank=bank,
     )
     # Truncate against `limit` from the NEWEST end, then hand back in
     # chronological order. Sorting ascending and slicing would drop exactly

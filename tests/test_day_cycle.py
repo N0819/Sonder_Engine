@@ -563,6 +563,36 @@ def test_the_catch_up_tells_the_town_when_it_is(temp_db, monkeypatch):
     assert charter_phase(state, 104.0) == "night"
 
 
+def test_every_charter_in_one_advance_is_told_the_same_hour(temp_db):
+    """C19: the story clock was read from the database once per charter
+    inside the catch-up loop -- the clock row and the style guide, twice a
+    charter, per advance. It is read once for the advance now, and EVERY
+    institution in the registry still gets its phase from it."""
+    from world import charter_runtime
+    cid = _make_chat(temp_db)
+    _open(temp_db, cid, "dusk")                    # anchor 18.75 at elapsed 0
+    first, second = _town(), _town()
+    first["clock_hours"] = 100.0
+    second["key"] = "second"
+    second["clock_hours"] = 40.0
+    registry = {"items": {
+        "town": {"state": first, "window_hours": 4.0,
+                 "last_elapsed_seconds": 0.0, "last_epoch_id": "old"},
+        "second": {"state": second, "window_hours": 4.0,
+                   "last_elapsed_seconds": 0.0, "last_epoch_id": "old"}}}
+
+    advanced, _rows, _produced = charter_runtime.advance_snapshot(
+        registry, elapsed_seconds=4 * 3600.0, epoch_id="e1", base_turn=1,
+        cid=cid, frame_id=None, scene=None)
+
+    for key, charter_hours in (("town", 100.0), ("second", 40.0)):
+        state = advanced["items"][key]["state"]
+        assert state["day_length_hours"] == 24.0
+        assert state["day_anchor_hours"] == pytest.approx(
+            (18.75 - charter_hours) % 24.0, abs=0.01)
+        assert charter_phase(state, charter_hours) == "dusk"
+
+
 def test_a_story_with_no_anchor_leaves_the_town_unanchored(temp_db):
     from world import charter_runtime
     cid = _make_chat(temp_db)

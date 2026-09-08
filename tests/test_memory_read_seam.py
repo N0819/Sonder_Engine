@@ -392,3 +392,91 @@ def test_a_dump_written_before_this_still_restores(bank, temp_db):
                      "WHERE chat_id=?", (bank["chat"],))
     assert rows and all(r["access_count"] == 0 and r["last_accessed"] is None
                         for r in rows)
+
+
+# --- the per-beat bank memo ------------------------------------------------
+#
+# `SELECT *` on `memories` carries both embedding BLOBs -- 8.2 MB across chat
+# 117's 401-row bank, 21 ms a read -- and one character's beat asks the seam
+# the same question up to four times (review 2026-09-07, C15). The memo that
+# answers the repeat is a plain dict the caller owns, and the only way it can
+# be wrong is its KEY: a hit served for a read that was not identical would be
+# a leak, not a slow path. These pin the key.
+
+class TestBankMemo:
+    def test_one_memo_never_answers_a_second_mind_with_the_firsts_rows(self, bank):
+        memo = memory.memory_bank_cache()
+        mine = {r["id"] for r in visible_memory_rows(
+            bank["chat"], bank["mine"], before_turn_idx=None,
+            viewer_frame_id=None, include_archived=True, bank=memo)}
+        theirs = {r["id"] for r in visible_memory_rows(
+            bank["chat"], bank["theirs"], before_turn_idx=None,
+            viewer_frame_id=None, include_archived=True, bank=memo)}
+        assert mine and theirs
+        assert mine & theirs == set()
+        assert theirs == {bank["ids"]["foreign"]}
+
+    @pytest.mark.parametrize("varied", [
+        {"before_turn_idx": 9},
+        {"include_archived": False},
+        {"since_turn_idx": 9},
+        {"require_turn_idx": True},
+        {"viewer_frame_id": 12345},
+    ])
+    def test_every_filter_is_in_the_key(self, bank, varied):
+        """A memo shared across a beat must not answer one read with another
+        read's rows. Each of these is a different question, so each must MISS
+        -- tested as a second entry in the memo rather than as a different
+        answer, because two different questions are allowed to happen to have
+        the same answer on one small bank and that would prove nothing."""
+        memo = memory.memory_bank_cache()
+        wide = dict(before_turn_idx=None, viewer_frame_id=None,
+                    include_archived=True)
+        visible_memory_rows(bank["chat"], bank["mine"], bank=memo, **wide)
+        assert len(memo) == 1
+        narrow = dict(wide)
+        narrow.update(varied)
+        memoised = {r["id"] for r in visible_memory_rows(
+            bank["chat"], bank["mine"], bank=memo, **narrow)}
+        plain = {r["id"] for r in visible_memory_rows(
+            bank["chat"], bank["mine"], **narrow)}
+        assert memoised == plain
+        assert len(memo) == 2, "the varied filter reused the first read's key"
+
+    def test_a_repeat_of_the_identical_read_touches_no_table(self, bank, monkeypatch):
+        memo = memory.memory_bank_cache()
+        kwargs = dict(before_turn_idx=None, viewer_frame_id=None,
+                      include_archived=True)
+        first = [r["id"] for r in visible_memory_rows(
+            bank["chat"], bank["mine"], bank=memo, **kwargs)]
+
+        from mind import memory_read
+        seen = []
+        real_q = memory_read.q
+        monkeypatch.setattr(
+            memory_read, "q",
+            lambda sql, *a, **k: (seen.append(sql), real_q(sql, *a, **k))[1])
+        again = [r["id"] for r in visible_memory_rows(
+            bank["chat"], bank["mine"], bank=memo, **kwargs)]
+        assert again == first
+        assert seen == []
+
+    def test_what_one_reader_got_back_cannot_reshuffle_the_next_ones(self, bank):
+        memo = memory.memory_bank_cache()
+        kwargs = dict(before_turn_idx=None, viewer_frame_id=None,
+                      include_archived=True)
+        first = visible_memory_rows(bank["chat"], bank["mine"], bank=memo, **kwargs)
+        order = [r["id"] for r in first]
+        first.reverse()
+        del first[0]
+        again = visible_memory_rows(bank["chat"], bank["mine"], bank=memo, **kwargs)
+        assert [r["id"] for r in again] == order
+
+    def test_no_memo_is_always_a_correct_answer(self, bank):
+        kwargs = dict(before_turn_idx=9, viewer_frame_id=None,
+                      include_archived=False)
+        with_memo = [r["id"] for r in visible_memory_rows(
+            bank["chat"], bank["mine"], bank=memory.memory_bank_cache(), **kwargs)]
+        without = [r["id"] for r in visible_memory_rows(
+            bank["chat"], bank["mine"], **kwargs)]
+        assert with_memo == without

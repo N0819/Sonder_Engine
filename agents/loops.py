@@ -751,7 +751,8 @@ def interaction_loop(ctx, nonce):
         shared = ctx._extra.setdefault("character_turn_snapshot", {})
         debt = (_unanswered_question_note(
             ctx.chat.id, name, char_id, ctx.turn.idx, ctx.turn.frame_id,
-            cache=shared.setdefault("unanswered_question_notes", {}))
+            cache=shared.setdefault("unanswered_question_notes", {}),
+            rows_cache=shared)
             or {}).get("awaiting_your_answer")
         if not debt:
             continue

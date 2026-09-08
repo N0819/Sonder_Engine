@@ -48,9 +48,36 @@ from mind.memory_write import (
 # rather than a configurable query builder.
 
 
+def memory_bank_cache():
+    """A memo one BEAT owns for one mind's repeated reads of its own bank.
+
+    `SELECT *` on `memories` carries both embedding BLOBs -- 20 KB a row, 8.2
+    MB across a 401-row bank (chat 117, char 78) -- and one character's beat
+    reads that same bank up to four times: ordinary recall, a ponder, an
+    unbidden resurfacing, and the contrast pass (review 2026-09-07, C15).
+    Every one of those reads asks the same question with the same answer.
+
+    THE LIFETIME IS THE POINT. This is a plain dict the CALLER creates and
+    drops -- `character_step` makes one per character per beat and lets it go
+    -- so nothing survives the beat that made it, and nothing is shared
+    between two minds or two turns. A memo on a module global would be both
+    of those leaks at once.
+
+    THE KEY IS EVERY ARGUMENT THE ANSWER DEPENDS ON, resolved: the two filters
+    (`before_turn_idx`, and the viewer frame AFTER the `_UNSET` contextvar
+    read) plus the narrowing clauses and their bound values. `char_id` is in
+    it, which is what makes a hit impossible to serve across the firewall: one
+    mind's rows can never answer another mind's read.
+
+    A cached list is copied on the way out, so a caller that sorts what it got
+    (`list_memories` does) cannot reorder what the next reader sees.
+    """
+    return {}
+
+
 def visible_memory_rows(chat_id, char_id, *, before_turn_idx, viewer_frame_id,
                         include_archived, since_turn_idx=None,
-                        require_turn_idx=False):
+                        require_turn_idx=False, bank=None):
     """Raw rows this character may legitimately read. The only way to get them.
 
     `before_turn_idx` is the turn being decided, and the cutoff is strict:
@@ -65,6 +92,10 @@ def visible_memory_rows(chat_id, char_id, *, before_turn_idx, viewer_frame_id,
     decision is visible at the call site. A caller on a worker thread must
     pass the real value -- contextvars do not propagate into
     ThreadPoolExecutor workers (see maybe_consolidate_character_memory).
+
+    `bank` is an optional `memory_bank_cache` -- see its docstring for what
+    the key holds and why the lifetime is the caller's. Omitting it is always
+    correct; passing one only saves a repeat of the identical read.
     """
     clauses = ["chat_id=?", "char_id=?"]
     args = [chat_id, char_id]
@@ -89,10 +120,26 @@ def visible_memory_rows(chat_id, char_id, *, before_turn_idx, viewer_frame_id,
         # from a bare `turn_idx < ?`.
         clauses.append("(turn_idx IS NULL OR turn_idx<?)")
         args.append(before_turn_idx)
-    rows = q("SELECT * FROM memories WHERE " + " AND ".join(clauses), tuple(args))
     vf = _active_frame_id.get() if viewer_frame_id is _UNSET else viewer_frame_id
-    return [r for r in rows
-            if _frames.is_memory_visible(char_id, r["frame_id"], vf, r["turn_idx"])]
+    key = (vf, tuple(clauses), tuple(args))
+    if bank is not None and key in bank:
+        return list(bank[key])
+    rows = q("SELECT * FROM memories WHERE " + " AND ".join(clauses), tuple(args))
+    # ONE lookup per declared era, not two to six per row. The frame rule asks
+    # about a handful of eras and was asking the database again for every
+    # memory it judged (review 2026-09-07, C15). An unframed chat still issues
+    # nothing: `frame_id` is NULL on both sides, the comparison short-circuits
+    # before any lookup, and this memo stays empty -- which is why the cost
+    # only ever appeared in the chats that use the feature, and why the memo
+    # is filled on demand rather than loaded up front.
+    index = {}
+    kept = [r for r in rows
+            if _frames.is_memory_visible(char_id, r["frame_id"], vf, r["turn_idx"],
+                                         index=index)]
+    if bank is not None:
+        bank[key] = kept
+        return list(kept)
+    return kept
 
 
 # ---- Host-facing reads, which deliberately cross character boundaries ----

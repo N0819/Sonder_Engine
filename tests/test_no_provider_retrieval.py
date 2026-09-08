@@ -262,10 +262,10 @@ class TestTheSketchKeepsItsOwnJob:
         seen = []
         real = memory_retrieval._memory_similarity
 
-        def _spy(a, b):
+        def _spy(a, b, *args, **kwargs):
             seen.append((a.get("_vector") is not None,
                          b.get("_vector") is not None))
-            return real(a, b)
+            return real(a, b, *args, **kwargs)
 
         monkeypatch.setattr(memory_retrieval, "_memory_similarity", _spy)
         chat_id, char_id = bank

@@ -64,19 +64,15 @@ from core.db import q, qi
 PRESENT_ORDINAL = 0
 
 
-def get_frame(frame_id):
-    """Returns a plain dict, or None if frame_id doesn't exist. frame_id
-    of None is a valid input -- it always resolves to the implicit
-    present frame, never a lookup miss."""
-    if frame_id is None:
-        return {
-            "id": None, "chat_id": None, "label": "Present", "ordinal": PRESENT_ORDINAL,
-            "kind": "present", "travelers": [], "nonexistent_cast": [], "created": None,
-            "parent_frame_id": None, "split_turn_idx": None, "merged_turn_idx": None,
-        }
-    row = q("SELECT * FROM frames WHERE id=?", (frame_id,), one=True)
-    if not row:
-        return None
+def _present_frame():
+    return {
+        "id": None, "chat_id": None, "label": "Present", "ordinal": PRESENT_ORDINAL,
+        "kind": "present", "travelers": [], "nonexistent_cast": [], "created": None,
+        "parent_frame_id": None, "split_turn_idx": None, "merged_turn_idx": None,
+    }
+
+
+def _frame_from_row(row):
     return {
         "id": row["id"], "chat_id": row["chat_id"], "label": row["label"],
         "ordinal": row["ordinal"], "kind": row["kind"],
@@ -89,10 +85,62 @@ def get_frame(frame_id):
     }
 
 
+def get_frame(frame_id):
+    """Returns a plain dict, or None if frame_id doesn't exist. frame_id
+    of None is a valid input -- it always resolves to the implicit
+    present frame, never a lookup miss."""
+    if frame_id is None:
+        return _present_frame()
+    row = q("SELECT * FROM frames WHERE id=?", (frame_id,), one=True)
+    return _frame_from_row(row) if row else None
+
+
+def frame_index(chat_id):
+    """Every frame of one chat in ONE select, keyed by frame_id.
+
+    For a reader that wants the whole set anyway. The implicit present is in
+    it under `None`, so a caller never has to special-case it.
+    """
+    index = {None: _present_frame()}
+    for row in q("SELECT * FROM frames WHERE chat_id=?", (int(chat_id),)):
+        index[row["id"]] = _frame_from_row(row)
+    return index
+
+
+def frame_lookup(frame_id, index):
+    """One frame, remembered in `index` so a repeated id costs one SELECT.
+
+    The lookup a per-ROW visibility check needs. `is_memory_visible` asks for
+    a frame two to six times for every memory it judges, and a mind's recall
+    judges its whole bank on every read -- so a framed chat paid hundreds of
+    single-row SELECTs to answer a question about a handful of declared eras
+    (review 2026-09-07, C15). One query per distinct era, not per row.
+
+    `index` is any dict the caller owns and drops; `{}` is the ordinary
+    starting point, and it stays EMPTY until something is actually asked for.
+    That is what keeps the common case free: an unframed chat compares None
+    against None, never reaches a lookup, and so still issues no query at all
+    -- rather than paying for an index of a table it has no rows in.
+
+    `index is None` means "no memo": the plain per-call SELECT. An id the
+    index does not hold is not an error either way -- it is fetched once and
+    remembered -- so a row pointing at another chat's frame, or at one
+    deleted underneath the read, answers exactly as it did before.
+    """
+    if index is None:
+        return get_frame(frame_id)
+    if frame_id not in index:
+        index[frame_id] = get_frame(frame_id)
+    return index[frame_id]
+
+
 def list_frames(chat_id):
     """Present first, then every declared frame ordered by ordinal."""
-    rows = q("SELECT id FROM frames WHERE chat_id=? ORDER BY ordinal", (chat_id,))
-    return [get_frame(None)] + [get_frame(r["id"]) for r in rows]
+    index = frame_index(chat_id)
+    present = index.pop(None)
+    # Stable sort over the scan's own (rowid) order, which is what
+    # `ORDER BY ordinal` gave ties before this read one row at a time.
+    return [present] + sorted(index.values(), key=lambda f: f["ordinal"])
 
 
 def create_frame(chat_id, *, label, ordinal, kind="other", travelers=None, nonexistent_cast=None,
@@ -116,14 +164,15 @@ def create_frame(chat_id, *, label, ordinal, kind="other", travelers=None, nonex
     )
 
 
-def frame_ordinal(frame_id):
+def frame_ordinal(frame_id, index=None):
     if frame_id is None:
         return PRESENT_ORDINAL
-    frame = get_frame(frame_id)
+    frame = frame_lookup(frame_id, index)
     return frame["ordinal"] if frame else PRESENT_ORDINAL
 
 
-def is_memory_visible(char_id, memory_frame_id, viewer_frame_id, memory_turn_idx=None):
+def is_memory_visible(char_id, memory_frame_id, viewer_frame_id, memory_turn_idx=None,
+                      index=None):
     """A memory formed in memory_frame_id is visible to char_id currently
     being portrayed in viewer_frame_id iff it's diegetically at-or-before
     the viewer's frame, OR char_id is a registered traveler of EITHER frame
@@ -140,9 +189,15 @@ def is_memory_visible(char_id, memory_frame_id, viewer_frame_id, memory_turn_idx
     merged_turn_idx is set the ordinary ordinal rule resumes and (since
     ordinals are equal) grants full bidirectional visibility, matching
     a genuine reunion.
+
+    `index` is an optional lookup memo (`frame_lookup`) -- an empty dict a
+    caller shares across a whole bank's worth of rows, so a repeated era costs
+    one SELECT rather than one per memory. Every lookup below goes through it
+    when it is given and falls back to a per-call SELECT when it is not, so
+    the answer never depends on whether a caller supplied one.
     """
     if memory_frame_id != viewer_frame_id:
-        viewer_frame = get_frame(viewer_frame_id)
+        viewer_frame = frame_lookup(viewer_frame_id, index)
         if (viewer_frame and viewer_frame.get("kind") == "spatial"
                 and viewer_frame.get("merged_turn_idx") is None
                 and memory_frame_id == viewer_frame.get("parent_frame_id")):
@@ -162,7 +217,7 @@ def is_memory_visible(char_id, memory_frame_id, viewer_frame_id, memory_turn_idx
                 return False
             return memory_turn_idx <= (viewer_frame.get("split_turn_idx") or 0)
 
-        memory_frame = get_frame(memory_frame_id)
+        memory_frame = frame_lookup(memory_frame_id, index)
         if (memory_frame and memory_frame.get("kind") == "spatial"
                 and memory_frame.get("merged_turn_idx") is None):
             # The memory itself was formed inside an unmerged spatial
@@ -174,7 +229,7 @@ def is_memory_visible(char_id, memory_frame_id, viewer_frame_id, memory_turn_idx
                 return True
             return False
 
-    if frame_ordinal(memory_frame_id) <= frame_ordinal(viewer_frame_id):
+    if frame_ordinal(memory_frame_id, index) <= frame_ordinal(viewer_frame_id, index):
         return True
     # A later era than the one they are standing in. Two ways that is still
     # their own memory to reach, and BOTH are needed:
@@ -199,10 +254,10 @@ def is_memory_visible(char_id, memory_frame_id, viewer_frame_id, memory_turn_idx
     # widening of anybody's information -- it is what having been there means.
     # A native of the present is not a traveller of the future frame and still
     # sees nothing, which is the firewall the whole feature exists for.
-    viewer_frame = get_frame(viewer_frame_id)
+    viewer_frame = frame_lookup(viewer_frame_id, index)
     if viewer_frame and int(char_id) in (viewer_frame.get("travelers") or []):
         return True
-    memory_frame = get_frame(memory_frame_id)
+    memory_frame = frame_lookup(memory_frame_id, index)
     return bool(memory_frame
                 and int(char_id) in (memory_frame.get("travelers") or []))
 

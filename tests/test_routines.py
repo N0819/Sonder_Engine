@@ -173,7 +173,8 @@ class TestResidueIsContactOnly:
                 raise AssertionError("routines reached %s" % name)
             return _fail
 
-        for seam in ("wset", "qi", "qtx", "transaction", "wset_for_frame"):
+        for seam in ("wset", "wset_if_changed", "qi", "qtx", "transaction",
+                     "wset_for_frame"):
             if hasattr(db, seam):
                 monkeypatch.setattr(db, seam, _refuse("db.%s" % seam))
         monkeypatch.setattr(providers, "chat_complete",

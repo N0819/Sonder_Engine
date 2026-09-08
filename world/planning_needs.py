@@ -226,48 +226,73 @@ def open_planning_needs(cid, frame_id=None, kind=None):
             if n["status"] == "open" and (kind is None or n["kind"] == kind)]
 
 
-def file_planning_need(cid, need, frame_id=None, turn_idx=None):
-    """File a typed need; returns ``(record, fresh)``. Deduplicated on the
-    subject's identity: a need already open (or already filled) for the same
-    person, thing or room is returned as it stands and not filed twice. Past
-    `PLANNING_NEEDS_CAP` open needs, the oldest open one is closed as stale."""
+def _fold_need(needs, need, frame_id=None, turn_idx=None):
+    """Fold one need into a ledger held in memory; returns ``(record, fresh)``.
+
+    The whole of filing, minus the read and the write, so a beat filing
+    several needs pays for one of each instead of one per need (review
+    2026-09-07 C20). `needs` is mutated in place exactly as the stored ledger
+    was: the dedup, the identity replacement and the stale-cap eviction all
+    read the list as it stands after the previous need in the same beat.
+    """
     need = dict(need or {})
     if turn_idx is not None and need.get("filed_turn") is None:
         need["filed_turn"] = int(turn_idx)
     if not need.get("filed_at"):
         need["filed_at"] = time.time()
     record = normalize_need(need, frame_id=frame_id)
-    needs = planning_needs(cid, frame_id)
     for existing in needs:
         if existing["identity"] == record["identity"] \
                 and existing["status"] != "closed":
             return existing, False
-    needs = [n for n in needs if n["identity"] != record["identity"]]
+    needs[:] = [n for n in needs if n["identity"] != record["identity"]]
     needs.append(record)
     open_needs = [n for n in needs if n["status"] == "open"]
     while len(open_needs) > PLANNING_NEEDS_CAP:
         stale = open_needs.pop(0)
         stale["status"] = "closed"
         stale["closed_reason"] = "stale: past the open-need cap"
-    save_planning_needs(cid, needs, frame_id)
     return record, True
+
+
+def file_planning_need(cid, need, frame_id=None, turn_idx=None):
+    """File a typed need; returns ``(record, fresh)``. Deduplicated on the
+    subject's identity: a need already open (or already filled) for the same
+    person, thing or room is returned as it stands and not filed twice. Past
+    `PLANNING_NEEDS_CAP` open needs, the oldest open one is closed as stale."""
+    needs = planning_needs(cid, frame_id)
+    record, fresh = _fold_need(needs, need, frame_id=frame_id,
+                              turn_idx=turn_idx)
+    if fresh:
+        save_planning_needs(cid, needs, frame_id)
+    return record, fresh
 
 
 def record_planning_needs(cid, needs, *, frame_id=None):
     """File this beat's needs onto the frame's ledger; returns the number
     newly filed. A need already open under its identity is left as it was:
     a rerun of the beat, or a second beat at the same unplanned door, is
-    the same need, not a second one."""
+    the same need, not a second one.
+
+    ONE READ AND ONE WRITE FOR THE BEAT, not one of each per need: the ledger
+    is normalized on read and on write, so filing k needs one at a time
+    re-normalized and rewrote the whole ledger k times. Measured on chat 117's
+    ledger (21 records, 13,040 bytes): two needs cost 2 reads + 2 writes and
+    26,082 bytes, where the beat only ever changes the ledger once.
+    """
+    ledger = planning_needs(cid, frame_id)
     added = 0
     for need in list(needs or []):
         if not isinstance(need, dict):
             continue
         try:
-            _record, fresh = file_planning_need(cid, need, frame_id=frame_id)
+            _record, fresh = _fold_need(ledger, need, frame_id=frame_id)
         except ValueError:
             continue
         if fresh:
             added += 1
+    if added:
+        save_planning_needs(cid, ledger, frame_id)
     return added
 
 
@@ -330,13 +355,21 @@ def drain_planning_needs(cid, frame_id=None, scene=None):
 def schedule_planning_needs(ctx):
     """Queue the drain out of band, beside memory consolidation: nothing
     here is a turn fact, and a need the commit could not answer is answered
-    at leisure or left for the room. Returns the job, or None when there is
-    nothing open."""
+    at leisure or left for the room. Returns the job, or None when the drain
+    has nothing it could answer.
+
+    QUEUED FOR WORK THE DRAIN CAN DO, not for a non-empty ledger. The drain
+    above answers person-needs alone -- a thing- or room-need is the Writers'
+    Room's, and stays open until the room exists -- so a ledger holding only
+    those queued a job every beat that read the ledger twice and filled
+    nothing. Measured on chat 117 (review 2026-09-07 C20): 20 open needs, all
+    room or thing, and a no-op job on every one of its 124 beats.
+    """
     from core import jobs
 
     cid = ctx.chat.id
     frame_id = getattr(ctx.turn, "frame_id", None)
-    if not open_planning_needs(cid, frame_id):
+    if not open_planning_needs(cid, frame_id, kind="person"):
         return None
     base_turn = getattr(ctx.turn, "idx", None)
 

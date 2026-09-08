@@ -65,8 +65,8 @@ from mind.memory_write import (  # noqa: F401
 )
 from mind.memory_read import (  # noqa: F401
     HOST_SCOPE_READERS, delete_memory, dramatic_irony_feed, list_memories,
-    promise_ledger, raise_importance, record_dispute, update_memory,
-    visible_memory_rows,
+    memory_bank_cache, promise_ledger, raise_importance, record_dispute,
+    update_memory, visible_memory_rows,
 )
 from mind.memory_retrieval import (  # noqa: F401
     _ASPECT_WEIGHT, _CONTRAST_EXCLUDED_CATEGORIES, _CONTRAST_MIN_BANK,
@@ -74,8 +74,10 @@ from mind.memory_retrieval import (  # noqa: F401
     _ENCODED_SHARE, _MOOD_CONGRUENCE, _RECALL_ABSTAIN_LIFT, _RECALL_CONFIDENCE_TOPK, _RECALL_LIMIT,
     _RRF_SCALE,
     _STRANDED_REPORTED, _SUMMARY_RECALL_LIMIT, _congruence_valence,
-    _exact_cue_score, _jaccard_text, _lexical_memory_ranking,
-    _memory_fts_query, _memory_similarity, _mood_axis,
+    _content_word_set, _exact_cue_score, _jaccard_sets, _jaccard_text,
+    _lexical_memory_ranking,
+    _memory_fts_query, _memory_similarity, _memory_tokens, _mmr_select,
+    _mood_axis,
     _rank_normalized_importance, _rrf_add, _temporal_mode,
     _warn_stranded_embeddings, contrast_memory, provenance_context_label,
     recall_confidence, recent_memory_buffer, search_memories,

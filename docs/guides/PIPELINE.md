@@ -748,6 +748,11 @@ outside every served scope through `tell_director`, a note keyed by a name
 no hand answers to is reported as unrouted rather than guessed at, and the
 dispatch/scope record (per hand: `addressed_by`, `gated`, `scope`; granted
 vs served vs produced overall) persists on the step under `orchestration`.
+`gated` is `null` — and the five world-view facts absent from `facts` — on a
+beat whose ruling reached no hand: the gates decide how much sheet an
+ADDRESSED hand loads, so with none addressed they were never asked, and
+asking would have built crowds, couriers, notices, carried reports and
+unratified hearsay for a beat with no payload to carry them.
 
 ### `background_react`
 

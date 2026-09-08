@@ -70,6 +70,8 @@ from .common import (
     self_reference_forms,
     _resolve_player_room,
     player_room_in,
+    figures_in_view,
+    rooms_in_view,
 )
 from .director import (director_establish, director_interpret,
                        director_resolve, fanout_is_parallel)

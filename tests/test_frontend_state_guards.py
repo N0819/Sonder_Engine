@@ -23,7 +23,7 @@ def _between(source: str, start: str, end: str) -> str:
 
 
 def test_open_chat_only_publishes_the_latest_navigation():
-    block = _between(CHAT, "async function openChat(id)", "function renderFrameBar()")
+    block = _between(CHAT, "async function openChat(id", "function renderFrameBar()")
     guard = "if (loadSeq !== _chatLoadSeq || S.chatId !== id) return false;"
 
     assert "const loadSeq = ++_chatLoadSeq;" in block
@@ -32,7 +32,7 @@ def test_open_chat_only_publishes_the_latest_navigation():
 
 
 def test_same_story_refresh_preserves_a_valid_selected_frame():
-    block = _between(CHAT, "async function openChat(id)", "function renderFrameBar()")
+    block = _between(CHAT, "async function openChat(id", "function renderFrameBar()")
 
     switch_branch = _between(block, "if (switching) {", "let chat;")
     assert "closeAllModals();" in switch_branch
@@ -53,6 +53,27 @@ def test_stop_uses_the_context_captured_by_the_active_stream():
     assert "abortActiveRun();" in stop
     assert "S.chatId" not in stop
     assert "S.currentFrameId" not in stop
+
+
+def test_the_transcript_is_only_spliced_after_an_appended_beat():
+    """`?since_turn_id=` is sound because a transcript grows at the END
+    (review 2026-09-07, C22). Two conditions carry that, and neither shows up
+    as a failure the next reader would connect to this: splice a reply into a
+    page that does not hold the turn it is measured from and turns go missing;
+    splice after a reroll and the page keeps showing prose the story replaced.
+    """
+    block = _between(CHAT, "async function openChat(id", "function renderFrameBar()")
+    stream = _between(CHAT, "async function runStream(", "// Rerolling/resuming/")
+
+    # Asked for only when this page really holds that turn, and spliced only
+    # when the route says it answered with a slice.
+    assert "S.chat.turns.some(t => t.id === sinceTurnId)" in block
+    assert 'heldTurns ? "?since_turn_id=" + sinceTurnId : ""' in block
+    assert "if (heldTurns && chat.turns_since != null)" in block
+    # And passed only by a run that APPENDS a turn: every rewrite of an
+    # existing one names it in `run.turnId`.
+    assert "const heldTurnId = (!run.turnId" in stream
+    assert "{ sinceTurnId: heldTurnId }" in stream
 
 
 def test_model_catalogue_only_applies_to_the_latest_selected_provider():
@@ -232,7 +253,7 @@ def test_freshness_is_a_property_of_the_turn_not_a_one_shot_flag():
     content-visibility makes the first scrollHeight an estimate), which then
     reported a brand-new turn as one being scrolled past.
     """
-    block = _between(CHAT, "function observeVisibleTurn(", "async function openChat(id)")
+    block = _between(CHAT, "function observeVisibleTurn(", "async function openChat(id")
 
     assert "let _freshTurnPending" not in CHAT       # the one-shot is gone
     assert "let _freshTurnId = null;" in CHAT

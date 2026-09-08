@@ -68,6 +68,7 @@
   "?frame_id=": "URL, route, or query-string fragment",
   "?frame_id=${run.frameId}": "URL, route, or query-string fragment",
   "?frame_id=${S.currentFrameId}": "URL, route, or query-string fragment",
+  "?since_turn_id=": "URL, route, or query-string fragment",
   "[${channel}] ${text}${flags}": "placeholders and punctuation only — no prose to translate",
   "[${operation.book_type || \"general\"}]": "placeholders and punctuation only — no prose to translate",
   "[data-entry-id=\"${entryId}\"]": "CSS or DOM selector used to find elements",
