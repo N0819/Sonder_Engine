@@ -1115,12 +1115,26 @@ def scene_after_turn(chat_id, turn_idx):
                           {}) or {}
 
 
-def build_backdrop_request(chat_id, turn_idx, player_name=None, style=None):
+def build_backdrop_request(chat_id, turn_idx, player_name=None, style=None,
+                           *, for_prompt=False):
     """Everything needed to generate (or serve from cache) one backdrop.
 
-    Returns `{room, room_name, signature, cached, place, time, location,
-    weather}`, or None when there is no room to depict. `place` is the
-    structured, occupant-free room projection an image prompt is written from.
+    Returns `{room, room_name, signature, cached, location, weather}`, or None
+    when there is no room to depict.
+
+    `for_prompt` adds `place`: the structured, occupant-free room projection an
+    image prompt is written from. It is OFF by default for the same reason
+    `flavour` left this dict entirely (see `arrival_flavour`) -- it is only
+    ever read by the one caller that writes a prompt, and every other caller is
+    a read: `GET /api/turns/{id}/backdrop`, which the reader's scrolling polls
+    and which serves cache hits, plus `request_backdrop`'s cache check.
+    Measured at review 2026-09-07 (C22b, `tools/bench/bench_poll_paths.py`):
+    `room_projection` was 1.63 ms of the 4.26 ms this function took on chat
+    117's last beat, and 0.77 of 2.21 ms on chat 114 -- spent on a field the
+    payload does not carry, so `GET /api/turns/{id}/backdrop` fell from 7.21
+    ms to 5.43 ms. The signature is NOT derived from it -- `visual_signature`
+    hashes its own material -- so the cache key is the same either way, and
+    `for_prompt=True` reproduces the old dict byte for byte.
 
     There is NO `flavour` key and no cheaper name for one: the
     perception-derived setting text used to be computed here and was moved out
@@ -1139,16 +1153,11 @@ def build_backdrop_request(chat_id, turn_idx, player_name=None, style=None):
     signature = visual_signature(scene, room_id, style, viewer=player_name,
                                  regions=regions, viewer_camera=viewer_camera)
     room = ((scene.get("rooms") or {}).get(room_id) or {})
-    return {
+    out = {
         "room": room_id,
         "room_name": room.get("name") or room_id,
         "signature": signature,
         "cached": cached_backdrop(chat_id, signature),
-        # Structured, occupant-free: this is what an image prompt is written
-        # from. Rich (architecture, light, exits, damage) and safe by
-        # construction (no entities, no positions, no people).
-        "place": room_projection(scene, room_id, viewer=player_name,
-                                 regions=regions, viewer_camera=viewer_camera),
         # `flavour` USED TO BE COMPUTED HERE, and it was by far the most
         # expensive thing this function did -- see `arrival_flavour`, which the
         # one caller that needs it now calls for itself. Nothing else may put
@@ -1167,6 +1176,14 @@ def build_backdrop_request(chat_id, turn_idx, player_name=None, style=None):
         # into a cellar by reading the wrong field.
         "weather": weather_for_room(scene, room_id),
     }
+    if for_prompt:
+        # Structured, occupant-free: this is what an image prompt is written
+        # from. Rich (architecture, light, exits, damage) and safe by
+        # construction (no entities, no positions, no people).
+        out["place"] = room_projection(scene, room_id, viewer=player_name,
+                                       regions=regions,
+                                       viewer_camera=viewer_camera)
+    return out
 
 
 # --- prompt composition and generation ------------------------------------
@@ -1566,7 +1583,8 @@ def generate_backdrop(chat_id, turn_idx, player_name=None, style=None,
     """
     from llm.providers import edit_image, generate_image
 
-    req = build_backdrop_request(chat_id, turn_idx, player_name, style)
+    req = build_backdrop_request(chat_id, turn_idx, player_name, style,
+                                 for_prompt=True)
     if not req:
         return None
     if req["cached"] and not force:
@@ -1719,14 +1737,21 @@ def cancel_backdrops(chat_id):
 
 
 def request_backdrop(chat_id, turn_idx, player_name=None, style=None,
-                     force=False):
+                     force=False, req=None):
     """Ensure this turn's backdrop exists, generating in the background.
 
     Returns {signature, status, room} and NEVER blocks on the image. A retry
     after a failure is explicit: the error is cleared here, when someone asks
     again, rather than expiring on a timer.
+
+    `req` is the caller's already-built request. The POST route needs the same
+    dict to answer with, and building it twice per press was the whole cost of
+    the route twice over (review 2026-09-07, C22b). Passing it in is also the
+    only way the answer and the picture are provably about ONE reading of the
+    scene: two builds a moment apart can straddle a commit.
     """
-    req = build_backdrop_request(chat_id, turn_idx, player_name, style)
+    if req is None:
+        req = build_backdrop_request(chat_id, turn_idx, player_name, style)
     if not req:
         return None
     signature = req["signature"]

@@ -1356,61 +1356,78 @@ TOOLS = [
     {"name": "search_lore",
      "description": "Search the story's attached lorebooks for entries about a subject. Returns the best matches with a stable citation (lore:<id>), the book, title, keys, category, whether the entry is locked, and an excerpt. Cite an entry by its citation when you rely on it; use read_lore for the full text.",
      "args": _schema({"query": _S, "k": _I, "categories": _SL}, ["query"]),
+     "reads": True,
      "handler": _t_search_lore},
     {"name": "read_lore",
      "description": "Read one lore entry in full by its numeric id, including its provenance note. Only entries in books attached to this story are readable.",
-     "args": _schema({"entry_id": _I}, ["entry_id"]), "handler": _t_read_lore},
+     "args": _schema({"entry_id": _I}, ["entry_id"]), "reads": True,
+     "handler": _t_read_lore},
     {"name": "scan_lore",
      "description": "Page through the attached lorebooks in id order, optionally one book or one category at a time. Returns excerpts and a next_cursor when more remain.",
      "args": _schema({"book_id": _I, "category": _S, "cursor": _I, "limit": _I}),
+     "reads": True,
      "handler": _t_scan_lore},
     {"name": "inspect_structures",
      "description": "The planted structures (settlements, buildings), every planned room id the registry holds -- the town's own topology, which a beat may furnish and may not delete -- and `frontiers`, the spaces the plan is still holding open: each is an axis, the room it hangs off, and whether it is `open` (nothing minted there yet) or `provisional` (a stub stands in it, named from the structure's grammar, until a plan claims it). To fill one, plan a room with `claims: {room, axis}` copied from the row: the space BECOMES that room -- same id, so every edge and everything standing in it survives -- instead of a second room beside it. A room the story has already been in keeps the name it is known by and takes the rest.",
-     "args": _schema({}), "handler": _t_inspect_structures},
+     "args": _schema({}), "reads": True,
+     "handler": _t_inspect_structures},
     {"name": "inspect_rooms",
      "description": "The map and the neighbourhood. With no arguments: `index` is every room the story knows -- live, planned (a stub nobody has entered) or retired (an id that is spent) -- with its holder when it is the inside of a body, its `region` (the part of the map it belongs to; the index is grouped by it, the cast's region first) and its distance in hops from the cast; `rooms` is the full slice of every room within two hops (description, exits with barriers, who stands there and in what, what stands there, the plan's brief for a stub, and what the author layer already claims for it: planned entities, open needs, package operations). Everything farther is index-only: pass room_ids to open any rooms by id, whatever their status. The room a body stands in is a room whatever holds it.",
      "args": _schema({"room_ids": _SL}),
+     "reads": True,
      "handler": _t_inspect_rooms},
     {"name": "inspect_route",
      "description": "Whether one room can be walked to from another over the edges a body could cross -- a closed door is a hop, not a wall -- and the plan's topology, and the shortest path if so. When unreachable, lists what IS reachable from the start.",
      "args": _schema({"from_room": _S, "to_room": _S}, ["from_room", "to_room"]),
+     "reads": True,
      "handler": _t_inspect_route},
     {"name": "inspect_reserved_identities",
      "description": "Every name the room may not reuse: the registered characters, every charter body's name under its charter, and every authored plan with its aliases. A new person must not collide with any of these. Names only: a body's place, availability and post are inspect_charters' answer.",
-     "args": _schema({}), "handler": _t_inspect_reserved_identities},
+     "args": _schema({}), "reads": True,
+     "handler": _t_inspect_reserved_identities},
     {"name": "inspect_plans",
      "description": "The authored plans for people, things and creatures: what each is for, what is true of it, where the clock has put it, and whether the Director has rendered it yet.",
-     "args": _schema({"kind": _S}), "handler": _t_inspect_plans},
+     "args": _schema({"kind": _S}), "reads": True,
+     "handler": _t_inspect_plans},
     {"name": "inspect_charters",
      "description": "The institutions the town simulates, as institutions: `upkeeps` (each condition it owes, its level against its floor, whether it is below it, what it drifts and what it depends on, the posts that serve it and who is tending it), `posts` (place, purpose, what it serves, what it requires, who it reports to, the fixture it is stood at, and who holds it), `watch` (who is standing what, right now) with `unfilled_posts`, `bodies` (place, within-room station, berth, home post, the duty being stood now, availability, condition, and any walk or errand under way), and `roster` -- what the institution BELIEVES about its people where that differs from the bodies, because a roster improves by observation and decays otherwise, so a town learns of a death when somebody sees the body. Every section is PAGED, never truncated: `withheld` names how many rows were held back and the exact call that returns them; pass section and cursor to page one. Name a charter for that one institution at a fuller page plus its author-only diagnostics (beliefs, judgments, commitments, economy, refused interventions), and a body within it for that body's life.",
      "args": _schema({"charter": _S, "body": _S, "section": _S, "cursor": _I,
                       "limit": _I}),
+     "reads": True,
      "handler": _t_inspect_charters},
     {"name": "inspect_events",
      "description": "The most recent objective beats as the engine recorded them (the last few, each as a short excerpt; pass n for more and full=true for the whole record of each), and every scheduled event still pending (authored events, charter events, couriers) with its due time.",
-     "args": _schema({"n": _I, "full": _B}), "handler": _t_inspect_events},
+     "args": _schema({"n": _I, "full": _B}), "reads": True,
+     "handler": _t_inspect_events},
     {"name": "inspect_clock",
      "description": "Where the story stands in time: the latest turn index, elapsed story seconds, the hour of the day, the day phase, and the scene's declared time of day. Your payload already carries this under `clock`, rebuilt every step; a call is answered with that key, not a copy.",
-     "args": _schema({}), "handler": _t_inspect_clock, "payload_key": "clock"},
+     "args": _schema({}), "reads": True,
+     "handler": _t_inspect_clock, "payload_key": "clock"},
     {"name": "inspect_config",
      "description": "The dials this story runs under, which the host owns and the room only reads: house style (genre, tone, what to avoid, weather, tense, day length), the scene's pacing and call budget, how many of the populace may speak in a beat and what earns a promotion, and whether minds may think off screen. Read it before proposing anything that leans on one, and when asked whether a change would land.",
-     "args": _schema({}), "handler": _t_inspect_config},
+     "args": _schema({}), "reads": True,
+     "handler": _t_inspect_config},
     {"name": "inspect_needs",
      "description": "The open planning needs: what a beat reached for that no plan holds -- an unplanned destination, a query nobody answered, a person the Director rendered with no plan behind them. Each carries the surface the beat committed, which a plan may add to and never contradict.",
-     "args": _schema({"kind": _S}), "handler": _t_inspect_needs},
+     "args": _schema({"kind": _S}), "reads": True,
+     "handler": _t_inspect_needs},
     {"name": "inspect_contradictions",
      "description": "What the world holds that does not agree with itself: charter registry warnings, structure warnings, and dangling references (a planned exit to nowhere, a plan in no room, a bill in a vanished room, a need for a vanished room, a package participant nobody holds, a region whose live rooms are in pieces no path joins -- a possible duplicate room, two rooms of the registry that answer to one spelling, a planted structure no live room can be walked to), and `layout`: where the rooms' geometry cannot all be true (two sides of one doorway naming bearings that are not opposites, rooms that land on top of each other when placed by their bearings, a wall whose anchors need more paces than its extent holds, two doorways placed on one cell, a shape that contradicts itself).",
-     "args": _schema({}), "handler": _t_inspect_contradictions},
+     "args": _schema({}), "reads": True,
+     "handler": _t_inspect_contradictions},
     {"name": "inspect_minds",
      "description": "What a character wants and believes, so the world you place can invite it; you cannot place a want or a belief. For each attached cast member (or the one named): the drive that survives every goal (its essence, how it shows, what it will not do; whether a rupture shifted it and what it was before), how strained that drive is and whether a rupture window is open, the resolved stress, the current beat goal, the held projects (aim, criterion, probation, how long unserved) and the ones given up with the stated reason, the standing and formed intentions with their progress, the beliefs by credence, and the leading claim this mind holds about each other person. Author knowledge, read the way the pipeline drawer reads it: nothing here reaches a mind by being read, and nothing you place may name what a character will conclude from it.",
-     "args": _schema({"name": _S}), "handler": _t_inspect_minds},
+     "args": _schema({"name": _S}), "reads": True,
+     "handler": _t_inspect_minds},
     {"name": "inspect_packages",
      "description": "The plot packages in this frame as spoiler-safe projections: status, revision, counts, clocks, operation kinds, validation verdict. Filter by status. Your payload already carries every package under `packages`, rebuilt every step; a call is answered with that key, not a copy.",
-     "args": _schema({"status": _S}), "handler": _t_inspect_packages,
+     "args": _schema({"status": _S}), "reads": True,
+     "handler": _t_inspect_packages,
      "payload_key": "packages"},
     {"name": "read_package",
      "description": "One package in full when it is open, or its projection when sealed. reveal=true returns a sealed package's hidden text and is a host action.",
      "args": _schema({"uid": _S, "reveal": _B}, ["uid"]),
+     "reads": True,
      "handler": _t_read_package, "host_only_args": ["reveal"]},
     # -- write, every one through a package ---------------------------------
     {"name": "new_package",
@@ -1458,6 +1475,24 @@ TOOLS = [
 ]
 
 TOOL_INDEX = {tool["name"]: tool for tool in TOOLS}
+
+
+def tool_only_reads(name):
+    """Whether running ``name`` can leave the database saying anything
+    different. A tool the table marks ``reads`` cannot; ANYTHING ELSE CAN.
+
+    The default is the point (review 2026-09-07, C21). The Room's agents
+    hold a per-reply memo of the half of their payload that comes out of
+    the database (`room_calls.ReplyMemo`), and a tool that writes is what
+    drops it. An unknown name, an unmarked entry, a tool somebody adds next
+    year: each counts as a writer, so the memo is dropped for nothing at
+    worst, and a stale frontier is never served for the rest of a reply.
+    The research tools are deliberately unmarked -- they disclose into the
+    thread and fill a cache -- and so is `preview_package`, whose reads are
+    pure but whose neighbours in the table are not.
+    """
+    tool = TOOL_INDEX.get(str(name))
+    return bool(tool) and bool(tool.get("reads"))
 
 
 def tool_manifest(*, include_host_only=False):
@@ -1562,6 +1597,18 @@ def fit_result(result, cap):
     was cutting (12,109 -> 13,076 characters on chat 114's room read) and
     unparseable by the model it was cut for. A tool that orders its lists
     nearest-first (`inspect_rooms`) therefore loses the farthest rooms.
+
+    THE CUT IS COUNTED, NOT RE-ENCODED (review 2026-09-07, C21). Choosing
+    each item to drop re-serialized the whole result and every top-level
+    value again, so cutting a result to size cost the encoder one full pass
+    PER DROPPED ITEM -- quadratic in exactly the case the cut exists for.
+    Measured on the bench copy of chat 114: `inspect_charters` fell from
+    30,988 characters in 6 drops and spent 11.3 ms doing it. Sizes are
+    composed instead: JSON writes a dict as ``{`` + ``"k": v`` joined by
+    ``", "`` + ``}`` and a list the same way, so a container's length is its
+    parts' lengths plus its punctuation, and dropping the last item of a
+    list subtracts that item's length and its separator. Same arithmetic,
+    same choices, same bytes out.
     """
     if not isinstance(result, dict):
         return result
@@ -1571,17 +1618,41 @@ def fit_result(result, cap):
     out = json.loads(json.dumps(result, ensure_ascii=False, default=str))
     out["truncated"] = True
     out["dropped"] = 0
-    while _encoded_length(out) > cap:
-        lists = [(k, _encoded_length(v)) for k, v in out.items()
+    # Every top-level value's encoded length, and every list's per-item
+    # lengths, measured once. `_joined` composes a container's length from
+    # them, which is what json.dumps would have answered.
+    items = {k: [_encoded_length(e) for e in v] if isinstance(v, list) else None
+             for k, v in out.items()}
+    sizes = {k: _joined(items[k], 2) if items[k] is not None
+             else _encoded_length(v) for k, v in out.items()}
+
+    def _total():
+        sizes["dropped"] = _encoded_length(out["dropped"])
+        return _joined([_encoded_length(k) + 2 + sizes[k] for k in out], 2)
+
+    while _total() > cap:
+        lists = [(k, sizes[k]) for k, v in out.items()
                  if isinstance(v, list) and v]
         if lists:
             key = max(lists, key=lambda kv: kv[1])[0]
             out[key].pop()
+            gone = items[key].pop()
+            sizes[key] -= gone + (2 if items[key] else 0)
         else:
-            keys = [(k, _encoded_length(v)) for k, v in out.items()
+            keys = [(k, sizes[k]) for k in out
                     if k not in ("truncated", "dropped")]
             if not keys:
                 break
-            out.pop(max(keys, key=lambda kv: kv[1])[0])
+            key = max(keys, key=lambda kv: kv[1])[0]
+            out.pop(key)
+            sizes.pop(key)
+            items.pop(key)
         out["dropped"] += 1
     return out
+
+
+def _joined(lengths, punctuation):
+    """The encoded length of a JSON container holding parts of these
+    lengths: the two brackets plus the parts plus ``", "`` between them."""
+    lengths = list(lengths)
+    return punctuation + sum(lengths) + 2 * max(0, len(lengths) - 1)

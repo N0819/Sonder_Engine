@@ -152,7 +152,7 @@ def parse_scoped_world_key(key):
 #: runs from the root. `or` rather than a default argument, so an empty
 #: `ENGINE_DB=` falls through to the anchored path instead of naming the cwd.
 DB = os.environ.get("ENGINE_DB") or os.path.join(INSTALL_ROOT, "engine.db")
-SCHEMA_VERSION = 37
+SCHEMA_VERSION = 38
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -652,6 +652,18 @@ CREATE TABLE IF NOT EXISTS memories(
     last_accessed_turn INTEGER,
     embedding BLOB,
     cue_embedding BLOB,
+    -- The content address of the two blobs above, filed by whichever writer
+    -- put them there (`memory_snapshot.file_memory_vector`). Derived, never
+    -- authoritative: it is the ONE thing the per-turn checkpoint needed the
+    -- blobs for, and reading 20KB per memory to sha1 it was 65ms of the 81ms
+    -- the dump of chat 117's 401-memory bank cost, on every beat and twice on
+    -- a data_version race (review 2026-09-07 C2). NULL means "not filed" --
+    -- a row written before this column, or one whose vectors were rewritten
+    -- without a restamp (the `memories_vkey_stale` trigger in LATE_SCHEMA
+    -- puts it back to NULL for exactly that case) -- and the dump falls back
+    -- to hashing the blobs, so a missing or cleared address costs time and
+    -- never an answer.
+    vkey TEXT,
     embedding_model TEXT NOT NULL DEFAULT '',
     embedding_dim INTEGER,
     archived INTEGER NOT NULL DEFAULT 0,
@@ -1828,6 +1840,21 @@ MIGRATIONS = [
         # files every existing memory's vector pair once so the per-turn
         # checkpoint can stop inserting the whole bank on every beat.
     ],
+    # v37 -> v38
+    [
+        # The vector's ADDRESS, beside the vectors it addresses. v37 stopped
+        # the checkpoint WRITING the store; the checkpoint still had to read
+        # both 20KB blobs off every memory row and sha1 them to learn the
+        # address it files by reference (review 2026-09-07 C2). The writers
+        # already compute it -- `file_memory_vector` hashes the same bytes to
+        # file them -- so the column carries what was being re-derived.
+        # `backfill_memory_vectors` stamps every existing row when a file
+        # crosses this version, and the `memories_vkey_stale` trigger in
+        # LATE_SCHEMA clears an address whose blobs were rewritten without
+        # one, so the column can be absent or stale-and-cleared but never
+        # wrong.
+        "ALTER TABLE memories ADD COLUMN vkey TEXT",
+    ],
 ]
 
 # DDL that must run AFTER the migration chain, on every path -- init()
@@ -1843,6 +1870,22 @@ MIGRATIONS = [
 LATE_SCHEMA = """
 CREATE INDEX IF NOT EXISTS idx_lorebooks_anchor ON lorebooks(anchor_entity_id)
     WHERE anchor_entity_id IS NOT NULL;
+
+-- A vector address that outlived its vectors is worse than no address: the
+-- checkpoint would file the memory by reference to bytes that are no longer
+-- its own, and the restore would put the wrong vector back silently. So any
+-- write that touches the blobs and does not restamp the address in the same
+-- statement clears it, and the dump falls back to hashing (review 2026-09-07
+-- C2). Every engine writer does restamp -- this is the floor under the next
+-- one, not a substitute for it.
+CREATE TRIGGER IF NOT EXISTS memories_vkey_stale
+AFTER UPDATE OF embedding, cue_embedding ON memories
+WHEN (new.embedding IS NOT old.embedding
+      OR new.cue_embedding IS NOT old.cue_embedding)
+     AND new.vkey IS old.vkey
+BEGIN
+    UPDATE memories SET vkey=NULL WHERE id=new.id;
+END;
 """
 
 _local = threading.local()
@@ -2530,8 +2573,11 @@ def init():
         backfill_regions(c)
     # Memory vectors, once: a file crossing v37 files every existing vector
     # pair in the content-addressed store (mind/memory_snapshot), after which
-    # the writers file their own and the checkpoint writes nothing.
-    if not is_fresh_db and current < 37:
+    # the writers file their own and the checkpoint writes nothing. The same
+    # pass stamps each row's `vkey` since v38 -- it is hashing those bytes
+    # anyway -- so a file that stopped at 37 crosses 38 by re-running it
+    # (idempotent: INSERT OR IGNORE into the store, one UPDATE per row).
+    if not is_fresh_db and current < 38:
         from mind.memory import backfill_memory_vectors
         backfill_memory_vectors(c)
     c.commit()

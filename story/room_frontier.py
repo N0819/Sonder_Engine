@@ -71,7 +71,7 @@ def _player_room(cid, scene):
     return str(room) if room else None
 
 
-def rooms_ahead(cid, scene, start, depth=FRONTIER_DEPTH_HOPS):
+def rooms_ahead(cid, scene, start, depth=FRONTIER_DEPTH_HOPS, contained=None):
     """Room ids within ``depth`` hops of ``start`` over passable edges plus
     the plan's topology, and which of them are still the plan's unfurnished
     stubs. Returns ``(reachable, stubs)``.
@@ -82,16 +82,25 @@ def rooms_ahead(cid, scene, start, depth=FRONTIER_DEPTH_HOPS):
     holder stands in (one hop); no other inside is ahead of the player or a
     frontier gap, because where the world puts a body is the Director's and
     transient (owner ruling, 2026-09-03) -- so contained rooms are counted
-    through and never listed."""
-    from story.room_slice import containment, room_hops
+    through and never listed.
+
+    ONE READ EACH. The containment map and the plan's topology are what the
+    graph is built from and what the stub test asks; both were made here and
+    again inside `room_graph` (C21). ``contained`` lets the caller that
+    already holds the map hand it in."""
+    from story.room_slice import containment, room_graph, room_hops
     from world.structure import is_planned_stub, planned_topology
 
     if not start:
         return [], []
-    hops = room_hops(cid, scene, [str(start)])
+    contained = containment(scene) if contained is None else contained
+    topology = planned_topology(cid)
+    hops = room_hops(cid, scene, [str(start)],
+                     graph=room_graph(cid, scene, contained=contained,
+                                      planned=topology))
     rooms = scene.get("rooms") or {}
-    contained = set(containment(scene))
-    planned = set(planned_topology(cid))
+    contained = set(contained)
+    planned = set(topology)
     reachable = sorted(rid for rid, n in hops.items()
                        if 0 < n <= max(0, int(depth)) and rid not in contained)
     stubs = [rid for rid in reachable
@@ -109,10 +118,11 @@ def frontier_report(cid, frame_id=None, scene=None):
     if scene is None:
         from story.room_slice import read_scene
         scene = read_scene(cid, frame_id) or {}
-    start = _player_room(cid, scene)
-    reachable, stubs = rooms_ahead(cid, scene, start)
     from story.room_slice import containment
-    holder = containment(scene).get(start) if start else None
+    start = _player_room(cid, scene)
+    contained = containment(scene)
+    reachable, stubs = rooms_ahead(cid, scene, start, contained=contained)
+    holder = contained.get(start) if start else None
     plans = [p for p in planned_entities(cid, frame_id).values()
              if not p.get("rendered") and p.get("name")]
     identities = [p["name"] for p in plans if p["kind"] == "person"]

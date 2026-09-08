@@ -995,3 +995,57 @@ def test_the_read_path_does_not_walk_the_checkpoint_history(temp_db, monkeypatch
     # atmosphere is forced to the function that makes it instead of silently
     # composing a prompt with a blank where the arrival prose should be.
     assert "flavour" not in req
+
+
+def test_the_write_path_asks_for_the_place(tmp_path, monkeypatch):
+    """A key that left this dict is a KeyError waiting at the one caller that
+    still wants it, and that has already happened once here (C22b, second
+    skeptic): `generate_backdrop` reads `req["place"]` before any provider
+    call, `build_backdrop_request` only carries it under `for_prompt=True`,
+    and the other tests in this file hand the generator a dict that already
+    holds the key, so deleting the flag left 168 tests green and every first
+    generation of every story broken. This one lets the caller's own request
+    reach a recorder."""
+    from dressing import backdrops as bd
+
+    asked = []
+    monkeypatch.setattr(bd, "BACKDROP_DIR", str(tmp_path))
+
+    def build(*a, **k):
+        asked.append(k)
+        return {"signature": "c" * 24, "cached": None, "room_name": "Corridor",
+                "place": {"name": "Corridor"}}
+    monkeypatch.setattr(bd, "build_backdrop_request", build)
+    monkeypatch.setattr(bd, "refine_prompt", lambda draft, place: draft)
+    monkeypatch.setattr(__import__("llm.providers", fromlist=["providers"]),
+                        "generate_image", lambda prompt, *a, **k: b"\x89PNG fake")
+
+    bd.generate_backdrop(12, 0)
+    assert asked and asked[0].get("for_prompt") is True
+
+
+def test_the_read_path_does_not_derive_the_projection(temp_db, monkeypatch):
+    """The saving itself is pinned (C22b): the scrolling reader's GET builds
+    no `place`, so `room_projection` -- 1.6 ms of a 4.5 ms build on the
+    descent -- runs only for the prompt. The positive control matters: a
+    builder handed no player name returns None before it derives anything,
+    and an absence proves nothing on its own."""
+    from dressing import backdrops as bd
+
+    derived = []
+    real = bd.room_projection
+    monkeypatch.setattr(bd, "room_projection",
+                        lambda *a, **k: derived.append(a) or real(*a, **k))
+
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Backdrop projection path", "", 0.0))
+    temp_db.qi("INSERT INTO checkpoints(chat_id,turn_idx,blob,created) "
+               "VALUES(?,?,?,?)",
+               (cid, 1, json.dumps({"world": {"scene": _scene()}}), 0.0))
+
+    req = bd.build_backdrop_request(cid, 0, "Hinami", None)
+    assert req is not None and "place" not in req
+    assert derived == []
+    req = bd.build_backdrop_request(cid, 0, "Hinami", None, for_prompt=True)
+    assert req is not None and "place" in req
+    assert len(derived) == 1

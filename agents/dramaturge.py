@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import time
 
+from core.db import data_version
 from core.logging_utils import logger
 
 #: The model role (`providers.ROLES`). Its own row: the owner may want a
@@ -136,30 +137,52 @@ def system_block(cid, frame_id=None):
 
 
 def _payload(cid, frame_id, *, dial, brief, transcript, step, lore_left,
-             seconds_left, turn_idx):
+             seconds_left, turn_idx, memo=None):
+    """The step's payload. Everything but the dial, the transcript and the
+    budget is derived from the database, and a pass reads far more often
+    than it writes, so ``memo`` (`room_calls.ReplyMemo`) holds that half
+    across the pass's steps and `propose` drops it whenever the pass
+    writes. Measured (review 2026-09-07, C21): the player-visible stream
+    alone is one query for the beats and one per beat for their narration,
+    thirteen for twelve beats, rebuilt on every one of
+    `DRAMATURGE_STEPS`."""
     from story import room_conversation as room
     from story.mandates import beats_per_proposal
+    from story.room_calls import memo_part
     from story.room_proposals import proposals
     from core.db import q
-    chat = q("SELECT name, scenario FROM chats WHERE id=?", (cid,), one=True)
-    standing = [{"uid": p["uid"], "kind": p["kind"], "title": p["title"],
+
+    def _story():
+        chat = q("SELECT name, scenario FROM chats WHERE id=?", (cid,), one=True)
+        return {"name": chat["name"] if chat else "",
+                "scenario": chat["scenario"] if chat else ""}
+
+    def _standing():
+        return [{"uid": p["uid"], "kind": p["kind"], "title": p["title"],
                  "wants_true": p["wants_true"], "status": p["status"],
                  "judgements": [{"verdict": j["verdict"], "reason": j["reason"]}
                                 for j in p["judgements"][-2:]]}
                 for p in proposals(cid, frame_id)
                 if p["status"] in ("open", "revised", "accepted", "implemented",
                                    "refused", "returned")][-12:]
-    thread = [{"role": m["role"], "text": m["text"][:600]}
-              for m in room.messages(cid, frame_id, limit=DRAMATURGE_THREAD_LINES)]
+
+    def _thread():
+        return [{"role": m["role"], "text": m["text"][:600]}
+                for m in room.messages(cid, frame_id,
+                                       limit=DRAMATURGE_THREAD_LINES)]
+
     payload = {
-        "story": {"name": chat["name"] if chat else "",
-                  "scenario": chat["scenario"] if chat else ""},
+        "story": memo_part(memo, "story", _story),
         "dial": int(dial), "dial_scale": DIAL_SCALE,
-        "pacing_beats": beats_per_proposal(cid, frame_id, turn_idx),
-        "stream": player_visible_stream(cid, frame_id),
-        "standing_proposals": standing,
-        "status_line": room.status(cid, frame_id).get("line"),
-        "thread": thread,
+        "pacing_beats": memo_part(
+            memo, "pacing_beats",
+            lambda: beats_per_proposal(cid, frame_id, turn_idx)),
+        "stream": memo_part(memo, "stream",
+                            lambda: player_visible_stream(cid, frame_id)),
+        "standing_proposals": memo_part(memo, "standing_proposals", _standing),
+        "status_line": memo_part(memo, "status_line",
+                                 lambda: room.status(cid, frame_id).get("line")),
+        "thread": memo_part(memo, "thread", _thread),
         "kinds": ["pressure", "reversal", "revelation", "arrival",
                   "opportunity", "quiet"],
         "transcript": transcript,
@@ -200,23 +223,29 @@ def propose(cid, frame_id=None, *, dial, brief=None, turn_idx=None):
     filed as state (`room_proposals`); the note is the Dramaturge's line
     for the thread and is the caller's to store."""
     from story import room_conversation as room
-    from story.room_tools import ToolError, run_tool
+    from story.room_calls import ReplyMemo
+    from story.room_tools import ToolError, run_tool, tool_only_reads
     turn_idx = room.current_turn_idx(cid) if turn_idx is None else int(turn_idx)
     system = system_block(cid, frame_id)
     started = time.time()
     transcript, filed, refused = [], [], []
     calls_made, steps, stopped = 0, 0, None
     note, none_needed = "", False
+    # The pass's derived half, dropped by what the pass writes -- a filed
+    # proposal, a tool the table does not mark a pure read -- and by a beat
+    # landing under it, which no write of the pass's own would report (C21).
+    memo = ReplyMemo()
     for step in range(1, DRAMATURGE_STEPS + 1):
         seconds_left = DRAMATURGE_WALL_SECONDS - (time.time() - started)
         if seconds_left <= 0:
             stopped = "wall"
             break
         steps = step
+        memo.at_version(data_version())
         out = _call(system, _payload(
             cid, frame_id, dial=dial, brief=brief, transcript=transcript,
             step=step, lore_left=DRAMATURGE_LORE_CALLS - calls_made,
-            seconds_left=seconds_left, turn_idx=turn_idx))
+            seconds_left=seconds_left, turn_idx=turn_idx, memo=memo))
         if not any(k in out for k in ANSWER_KEYS):
             transcript.append({"tool": None, "args": None,
                                "result": {"error": CUT_OFF_NOTE}})
@@ -233,8 +262,10 @@ def propose(cid, frame_id=None, *, dial, brief=None, turn_idx=None):
                              brief=brief)
             if row is None:
                 refused.append(why)
-            elif all(f["uid"] != row["uid"] for f in filed):
-                filed.append(row)
+            else:
+                memo.wrote()  # the standing proposals the next payload states
+                if all(f["uid"] != row["uid"] for f in filed):
+                    filed.append(row)
         calls = out.get("calls") if isinstance(out.get("calls"), list) else []
         if not calls:
             break
@@ -257,6 +288,8 @@ def propose(cid, frame_id=None, *, dial, brief=None, turn_idx=None):
                 stopped = "calls"
                 break
             calls_made += 1
+            if not tool_only_reads(name):
+                memo.wrote()
             try:
                 result = run_tool(cid, name, args, frame_id=frame_id,
                                   actor="dramaturge")

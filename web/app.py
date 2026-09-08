@@ -1,4 +1,4 @@
-import contextvars, ipaddress, json, queue, random, re, sys, time, threading, os, zlib
+import contextvars, hashlib, ipaddress, json, queue, random, re, sys, time, threading, os, zlib
 from core import updates
 from contextlib import asynccontextmanager, contextmanager
 from fastapi import FastAPI, Body, HTTPException, Query, Request
@@ -39,6 +39,7 @@ from llm.providers import (
 )
 from story.dialogue_colors import normalize_color, resolve_cast_colors
 from persist.checkpoints import (ensure_checkpoint, restore_checkpoint, snapshot_state,
+                         snapshot_blob,
                          refresh_checkpoint, insert_world_tables,
                          checkpoint_storage_status, compaction_progress,
                          start_compaction,
@@ -380,6 +381,20 @@ class SelectiveGZipMiddleware:
     Keyed on the response's CONTENT TYPE rather than its path, so a streaming
     route added later is covered without anyone remembering to list it.
 
+    TEXT ONLY, for the same reason. gzip is a text codec; a PNG, an MP3 and a
+    font are already compressed, so deflating them buys nothing and costs the
+    whole file's worth of CPU on the way out. Measured at review 2026-09-07
+    (C22b, `tools/bench/bench_poll_paths.py`): a 1MB backdrop PNG took 36ms
+    and came out 1,048,914 bytes against 1,048,576 in -- 338 bytes LARGER --
+    and a 2MB ambience bed 72ms for 658 bytes larger. Paid on every scroll
+    back through a story's rooms, since those two routes serve one file per
+    beat. The test is the type's own shape rather than a list of media the
+    engine happens to serve today: `text/*`, plus the types whose subtype IS
+    or ENDS IN a structured text suffix (RFC 6839's `+json`/`+xml` and the
+    bare `application/json`-shaped spellings). That reaches `image/svg+xml`,
+    which is text wearing an image type, and it reaches whatever textual type
+    a route invents next.
+
     Compresses with `zlib` directly and touches NOTHING private. The first
     version wrapped Starlette's `GZipResponder` and reached for
     `.send_with_gzip`, an internal that `requirements.txt`'s own declared range
@@ -392,9 +407,23 @@ class SelectiveGZipMiddleware:
 
     STREAMED = ("application/x-ndjson", "text/event-stream")
 
+    # The structured text suffixes (RFC 6839) plus the bare spellings that
+    # predate them. A subtype ENDING in one of these is text: `json`,
+    # `ld+json`, `manifest+json`, `xml`, `svg+xml`, `javascript`.
+    TEXT_SUFFIXES = ("json", "xml", "javascript", "ecmascript")
+
     def __init__(self, app, minimum_size: int = 2048):
         self.app = app
         self.minimum_size = minimum_size
+
+    @classmethod
+    def is_text(cls, content_type):
+        """Whether gzip has anything to gain on this media type."""
+        kind = (content_type or "").split(";", 1)[0].strip().lower()
+        if kind.startswith("text/"):
+            return True
+        subtype = kind.partition("/")[2]
+        return bool(subtype) and subtype.endswith(cls.TEXT_SUFFIXES)
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -402,7 +431,8 @@ class SelectiveGZipMiddleware:
         if "gzip" not in Headers(scope=scope).get("accept-encoding", ""):
             return await self.app(scope, receive, send)
         await _SelectiveGZipResponder(
-            self.app, self.minimum_size, self.STREAMED).run(scope, receive, send)
+            self.app, self.minimum_size, self.STREAMED,
+            self.is_text).run(scope, receive, send)
 
 
 class _SelectiveGZipResponder:
@@ -415,10 +445,11 @@ class _SelectiveGZipResponder:
     buffered beyond it.
     """
 
-    def __init__(self, app, minimum_size, streamed):
+    def __init__(self, app, minimum_size, streamed, is_text):
         self.app = app
         self.minimum_size = minimum_size
         self.streamed = streamed
+        self.is_text = is_text
         self.send = None
         self.start = None
         self.compressor = None
@@ -443,6 +474,7 @@ class _SelectiveGZipResponder:
             already = headers.get("content-encoding", "")
             small = not more and len(body) < self.minimum_size
             if (already or small
+                    or not self.is_text(content_type)
                     or any(kind in content_type for kind in self.streamed)):
                 start, self.start = self.start, None
                 await self.send(start)
@@ -1393,8 +1425,134 @@ def _interior_light_levels():
     return LIGHT_LEVELS
 
 
+#: Bootstrap keys whose value is a property of the INSTALLATION -- the
+#: engine's own closed vocabularies, its prompt cards, its UI catalog, the
+#: language packs it found on disk -- rather than of the host's stories.
+#:
+#: THE CLASS, stated here so a key added later lands on the right side of it:
+#: a value that changes only when the installation changes does not have to be
+#: re-sent because the host saved a character. A value that a story, a setting
+#: or a toggle can change does. `extensions` is deliberately in the other half
+#: even though it describes the install: enabling one changes it mid-session
+#: and it costs 3 KB, so keeping it out is what keeps this half stable.
+#:
+#: Measured on the owner's 307-body town database (review 2026-09-07, C22):
+#: the whole payload is 2,002,515 bytes and this half is 767,608 of them
+#: (38.3%), almost all `default_prompts` (520 KB) and `ui_messages` (256 KB).
+#: `boot()`
+#: re-runs on every import, save, provider edit and NSFW toggle -- 61 call
+#: sites in `static/js` -- and re-downloaded all of it every time.
+_INSTALL_BLOCK_KEYS = frozenset({
+    "provider_presets", "roles", "role_fallbacks", "sampler_keys",
+    "default_samplers", "lore_categories", "lorebook_types",
+    "lorebook_inheritance_modes", "knowledge_tags", "knowledge_ranges",
+    "paradox_modes", "memory_categories", "memory_provenance",
+    "attire_regions", "attire_region_zones", "extra_part_aspects",
+    "interior_lights", "exemplar_bounds", "max_output_tokens_bounds",
+    "reasoning_effort_levels", "lorebook_link_types", "ambience_licenses",
+    "default_prompts", "language_packs", "ui_messages",
+})
+
+
+#: FastAPI's `JSONResponse` encoding, spelled out because `/api/bootstrap`'s
+#: full path hand-serializes while the other half of the same route is still
+#: serialized by FastAPI: a bare `json.dumps` defaults to `ensure_ascii=True`,
+#: which escapes every non-ASCII character and changes the bytes on the wire.
+#: Measured (review 2026-09-07, C22): the English payload carries 7,621
+#: non-ASCII characters and escaping them cost +23,192 bytes; a Japanese
+#: install is worse -- `language_packs/ja/ui.json` alone goes 296,318 ->
+#: 443,201 bytes escaped (+49.6%). `allow_nan=False` is the same parity in the
+#: other direction: FastAPI raises on a NaN rather than emitting the bare
+#: `NaN` literal, which no JSON parser is obliged to accept.
+_JSON_WIRE = {"ensure_ascii": False, "allow_nan": False,
+              "separators": (",", ":")}
+
+
+def _bootstrap_split(payload: dict) -> tuple[bytes, str, dict]:
+    """The install half serialized, its version, and everything else.
+
+    The version is a digest of the half's OWN BYTES, so it cannot go stale:
+    whatever changes the half -- a language pack edit, a switched UI language,
+    a prompt card rewritten in the tree -- changes the digest, and the client
+    is handed the new half. There is no invalidation rule to get wrong, which
+    is the whole reason it is content-addressed rather than a version number
+    someone has to remember to bump.
+
+    Serialized with `_JSON_WIRE`, which is FastAPI's own `JSONResponse`
+    encoding, and handed back as UTF-8 BYTES -- the form the digest reads and
+    the form the response body wants, so neither half is encoded twice.
+    Anything else here would encode this half differently from the route's
+    other branch and from every response the app has ever sent.
+    """
+    install = {key: payload[key] for key in sorted(payload)
+               if key in _INSTALL_BLOCK_KEYS}
+    install_json = json.dumps(install, **_JSON_WIRE).encode("utf-8")
+    version = hashlib.blake2b(install_json, digest_size=8).hexdigest()
+    rest = {key: value for key, value in payload.items()
+            if key not in _INSTALL_BLOCK_KEYS}
+    rest["install_version"] = version
+    rest["install_keys"] = list(install)
+    return install_json, version, rest
+
+
+def _json_object_merge(*chunks: bytes) -> bytes:
+    """Splice already-serialized JSON objects into one object.
+
+    So the install half is serialized ONCE -- to be digested -- rather than
+    once for the digest and again for the response, and the splice stays in
+    bytes so the 2 MB body is not built as text and encoded again on the way
+    out. Measured on the owner's 307-body town (review 2026-09-07, C22,
+    `tools/bench/bootstrap_payload.py`): building and serializing the whole
+    response costs 29.7 ms this way against 41.3 ms for the single
+    `jsonable_encoder` + `json.dumps` the route used before the split, so the
+    first boot is faster too rather than only paying for the repeats. Splicing
+    in TEXT and letting the response encode it was 51.4 ms in the same harness
+    -- slower than not splitting at all, which is what the measurement was
+    for: `str.strip()` and `[1:-1]` each copy a 2 MB body.
+    """
+    bodies = [chunk[1:-1] for chunk in chunks if chunk not in (b"", b"{}")]
+    return b"{" + b",".join(bodies) + b"}"
+
+
 @app.get("/api/bootstrap")
-def bootstrap():
+def bootstrap_response(known_install: str = ""):
+    """The whole payload, minus the install half the caller already holds.
+
+    `known_install` is the `install_version` of the copy the client cached.
+    Omit it -- as every non-browser caller does -- and the response carries
+    every key it always did with the same value and in the same ENCODING
+    (`_JSON_WIRE`), plus `install_version`/`install_keys` naming the half:
+    2,001,987 bytes on the town database against 2,002,515, the +528 being
+    exactly those two keys. What does move is the order the object's keys are
+    written in -- the half is spliced in first -- which no JSON reader can
+    observe. `bootstrap()` below stays the dict-returning payload builder the
+    tests and any in-process reader call.
+
+    The full path hand-serializes, so it does NOT run FastAPI's
+    `jsonable_encoder`: every bootstrap value must be JSON-native. Every one
+    is today -- verified on the town database, raw `json.dumps` bytes equal to
+    the encoder's -- and a key added later holding a set, an `Enum` or a
+    `Path` would raise here rather than be quietly encoded for you.
+    """
+    payload = bootstrap()
+    install_json, version, rest = _bootstrap_split(payload)
+    if known_install and known_install == version:
+        rest["install_unchanged"] = True
+        # The same wire as the full branch, not a bare dict: a dict would go
+        # through FastAPI's `jsonable_encoder` over the 896KB `characters`
+        # key this half still carries (45.9ms measured against 28.5ms
+        # modelled, second C22c skeptic), and the two branches would accept
+        # different payloads -- a non-native value raising on a first boot
+        # and passing on a repeat, the hardest shape of that bug to find.
+        return Response(content=json.dumps(rest, **_JSON_WIRE).encode("utf-8"),
+                        media_type="application/json")
+    return Response(
+        content=_json_object_merge(
+            install_json, json.dumps(rest, **_JSON_WIRE).encode("utf-8")),
+        media_type="application/json")
+
+
+def bootstrap() -> dict:
     selected_ui, language_packs, language_error = _bootstrap_language()
     extensions, extension_errors, extension_lanes = _bootstrap_extensions()
     return {
@@ -5729,12 +5887,12 @@ def turn_new(cid: int, body: dict = Body(...)):
         # positive -- some unrelated write landing in the window -- costs one
         # rebuild under the lock, which is exactly the pre-change behaviour.
         pre_version = data_version()
-        pre_blob = json.dumps(snapshot_state(cid))
+        pre_blob = snapshot_blob(cid)
         with transaction():
             last = _latest_turn(cid)
             idx = (last["idx"] + 1) if last else 0
             if data_version() != pre_version:
-                pre_blob = json.dumps(snapshot_state(cid))
+                pre_blob = snapshot_blob(cid)
             ensure_checkpoint(cid, idx, blob=pre_blob)
             tid = qi("INSERT INTO turns(chat_id,idx,player_input,created,frame_id) VALUES(?,?,?,?,?)",
                      (cid, idx, _player_input(body), time.time(), frame_id))
@@ -6711,6 +6869,12 @@ def _backdrop_payload(cid, req, status=None, ready=None):
     signature = req["signature"]
     if ready is None:
         ready = bool(req["cached"])
+    # ONE reading. It was asked twice -- once for `status`, once to decide
+    # whether `error` was worth looking up -- and the two could disagree, since
+    # a generation finishing between them turns 'error' into 'ready' and the
+    # payload would then have carried a stale error beside a ready status
+    # (review 2026-09-07, C22b).
+    status = status or backdrop_status(cid, signature)
     return {
         "enabled": enabled,
         "configured": configured,
@@ -6725,9 +6889,8 @@ def _backdrop_payload(cid, req, status=None, ready=None):
         # 'ready' | 'pending' | 'error' | 'absent'. Pending is why the GET is
         # worth polling: it is how a caller waits for an image without
         # anything holding a connection open for the length of a generation.
-        "status": status or backdrop_status(cid, signature),
-        "error": backdrop_error(signature)
-        if (status or backdrop_status(cid, signature)) == "error" else None,
+        "status": status,
+        "error": backdrop_error(signature) if status == "error" else None,
         "url": _backdrop_url(cid, signature) if ready else None,
         # What the weather overlay should draw over this room, already scoped
         # to what the room can see. {} for anywhere with no sky. `severity` is
@@ -6769,15 +6932,18 @@ def turn_backdrop_generate(tid: int, body: dict = Body(default={})):
     if not image_model():
         raise HTTPException(
             503, "No image model configured — pick one under ⚙ API › Scene backdrops.")
-    out = request_backdrop(cid, turn["idx"], _backdrop_player(cid),
-                           style_guide(cid), force=bool(body.get("force")))
+    # ONE build, shared. The browser caches THIS payload under the turn id, so
+    # it has to carry everything the GET's does -- which used to mean
+    # resolving the room, the region registry and the cache signature a second
+    # time, and asking the chat and the style guide for the player's name
+    # twice on top (review 2026-09-07, C22b). `build_backdrop_request` never
+    # generates, and `request_backdrop` takes the request it is handed.
+    player, style = _backdrop_player(cid), style_guide(cid)
+    req = build_backdrop_request(cid, turn["idx"], player, style)
+    out = request_backdrop(cid, turn["idx"], player, style,
+                           force=bool(body.get("force")), req=req)
     if not out:
         raise HTTPException(409, "This turn has no room to depict yet.")
-    # Re-resolved rather than reconstructed from `out`'s three fields: the
-    # browser caches THIS payload under the turn id, so it has to carry
-    # everything the GET's does. `build_backdrop_request` never generates.
-    req = build_backdrop_request(cid, turn["idx"], _backdrop_player(cid),
-                                 style_guide(cid))
     return _backdrop_payload(cid, req, status=out["status"],
                              ready=out["status"] == "ready")
 
@@ -6931,14 +7097,15 @@ def turn_ambience_resolve(tid: int, body: dict = Body(default={})):
         reroll_layer = int(layer) if layer is not None else None
     except (TypeError, ValueError):
         reroll_layer = None
-    out = request_ambience(cid, turn["idx"], _backdrop_player(cid),
-                           style_guide(cid), force=bool(body.get("force")),
+    # ONE build, shared with the payload -- see the backdrop twin.
+    player, style = _backdrop_player(cid), style_guide(cid)
+    req = build_ambience_request(cid, turn["idx"], player, style)
+    out = request_ambience(cid, turn["idx"], player, style,
+                           force=bool(body.get("force")),
                            reroll=bool(body.get("reroll")),
-                           reroll_layer=reroll_layer)
+                           reroll_layer=reroll_layer, req=req)
     if not out:
         raise HTTPException(409, "This turn has no room to give a sound to yet.")
-    req = build_ambience_request(cid, turn["idx"], _backdrop_player(cid),
-                                 style_guide(cid))
     return _ambience_payload(cid, req, status=out["status"])
 
 

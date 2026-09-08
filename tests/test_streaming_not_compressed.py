@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import pytest
 from starlette.applications import Starlette
-from starlette.responses import JSONResponse, StreamingResponse
+from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
@@ -47,8 +47,20 @@ def _probe_app():
     async def blob(_request):
         return JSONResponse({"pad": "x" * 8000})
 
+    async def picture(_request):
+        return Response(b"\x89PNG" + b"\x00" * 8000, media_type="image/png")
+
+    async def bed(_request):
+        return Response(b"ID3" + b"\x00" * 8000, media_type="audio/mpeg")
+
+    async def drawing(_request):
+        return Response(b"<svg>" + b"<rect/>" * 2000 + b"</svg>",
+                        media_type="image/svg+xml")
+
     application = Starlette(routes=[
-        Route("/stream", ndjson), Route("/sse", sse), Route("/blob", blob)])
+        Route("/stream", ndjson), Route("/sse", sse), Route("/blob", blob),
+        Route("/picture", picture), Route("/bed", bed),
+        Route("/drawing", drawing)])
     application.add_middleware(SelectiveGZipMiddleware, minimum_size=2048)
     return application
 
@@ -79,6 +91,55 @@ def test_a_large_json_body_is_still_compressed(client):
     response = client.get("/blob", headers={"accept-encoding": "gzip"})
     assert response.headers.get("content-encoding") == "gzip"
     assert len(response.json()["pad"]) == 8000
+
+
+# ------------------------------------------------------- text only (C22b)
+#
+# gzip is a text codec. A PNG, an MP3 and a font are already compressed, so
+# deflating them buys nothing and costs the whole file's worth of CPU on the
+# way out: measured at review 2026-09-07 (C22b), a 1MB backdrop PNG took 36ms
+# and came out 338 bytes LARGER, a 2MB ambience bed 72ms for 658 bytes larger.
+# Both routes serve one file per beat, so a reader scrolling back through a
+# story's rooms paid it over and over.
+
+
+@pytest.mark.parametrize("path", ["/picture", "/bed"])
+def test_already_compressed_bytes_are_not_deflated_again(client, path):
+    response = client.get(path, headers={"accept-encoding": "gzip"})
+    assert response.headers.get("content-encoding") is None
+    # and the bytes arrived whole, not merely unlabelled
+    assert response.content.endswith(b"\x00" * 8000)
+
+
+def test_text_wearing_an_image_type_is_still_compressed(client):
+    """`image/svg+xml` is markup. The test is the type's own shape -- a
+    structured text suffix -- not a list of the media the engine serves, so a
+    textual type a route invents next is covered without being listed."""
+    response = client.get("/drawing", headers={"accept-encoding": "gzip"})
+    assert response.headers.get("content-encoding") == "gzip"
+
+
+@pytest.mark.parametrize("content_type,is_text", [
+    ("application/json", True),
+    ("application/json; charset=utf-8", True),
+    ("text/html; charset=utf-8", True),
+    ("text/css", True),
+    ("application/javascript", True),
+    ("application/ld+json", True),
+    ("image/svg+xml", True),
+    ("image/png", False),
+    ("image/webp", False),
+    ("audio/mpeg", False),
+    ("audio/ogg", False),
+    ("video/mp4", False),
+    ("font/woff2", False),
+    ("application/zip", False),
+    ("application/octet-stream", False),
+    ("", False),
+])
+def test_the_classifier_reads_the_type_and_not_a_list_of_routes(
+        content_type, is_text):
+    assert SelectiveGZipMiddleware.is_text(content_type) is is_text
 
 
 def test_a_client_that_cannot_decompress_is_left_alone(client):

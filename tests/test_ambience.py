@@ -1365,3 +1365,56 @@ class TestErrorKind:
                                      "enabled": True})
         with pytest.raises(ambience.AmbienceNotFound):
             ambience.resolve_oneshot(1, "thunder")
+
+
+def test_the_write_path_asks_for_the_place(monkeypatch):
+    """The same rule as the backdrop's (C22b, second skeptic): `resolve_ambience`
+    reads `req["place"]` before any search, `build_ambience_request` only
+    carries it under `for_prompt=True`, and every other test here hands the
+    resolver a dict that already holds the key -- so the flag's deletion was
+    invisible to the suite and fatal to the first resolution of every story."""
+    asked = []
+
+    def build(*a, **kw):
+        asked.append(kw)
+        return {"room": "yard", "room_name": "Yard", "signature": "sigwp",
+                "pin": None, "cached": None, "fingerprint": {},
+                "place": {"name": "Yard", "desc": "Flagstones.", "weather": []},
+                "weather": {"gain": 0.6}}
+    monkeypatch.setattr(ambience, "build_ambience_request", build)
+    monkeypatch.setattr(ambience, "refine_layers", lambda layers, place: (layers, {}))
+    monkeypatch.setattr(ambience, "search_candidates",
+                        lambda *a, **k: [{"source": "freesound", "id": 9,
+                                          "title": "Rain", "preview": "http://x/p.mp3",
+                                          "fit": 1, "vetoed": False}])
+    monkeypatch.setattr(
+        ambience, "_materialize",
+        lambda cid, sig, index, choice, role="tone", gain=1.0, query="":
+        {"role": role, "gain": gain, "query": query, "source": "freesound",
+         "id": choice["id"], "title": choice["title"], "file": "f.mp3"})
+
+    ambience.resolve_ambience(1, 0)
+    assert asked and asked[0].get("for_prompt") is True
+
+
+def test_the_read_path_does_not_derive_the_soundscape(temp_db, monkeypatch):
+    """The saving pinned (C22b): the reader's GET builds no `place`, so
+    `room_soundscape` runs only for the prompt. With the positive control,
+    because a builder handed no player name returns None before deriving."""
+    derived = []
+    real = ambience.room_soundscape
+    monkeypatch.setattr(ambience, "room_soundscape",
+                        lambda *a, **k: derived.append(a) or real(*a, **k))
+
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Ambience soundscape path", "", 0.0))
+    temp_db.qi("INSERT INTO checkpoints(chat_id,turn_idx,blob,created) "
+               "VALUES(?,?,?,?)",
+               (cid, 1, json.dumps({"world": {"scene": _scene()}}), 0.0))
+
+    req = ambience.build_ambience_request(cid, 0, "Hinami", None)
+    assert req is not None and "place" not in req
+    assert derived == []
+    req = ambience.build_ambience_request(cid, 0, "Hinami", None, for_prompt=True)
+    assert req is not None and "place" in req
+    assert len(derived) == 1

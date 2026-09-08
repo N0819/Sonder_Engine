@@ -195,3 +195,77 @@ class TestAHandEditedStepIsAnyJSON:
         greetings._override_narrator(turn_id, "The gate stands open.")
         assert storage.active_content(turn_id, "narrator") == {
             "prose": "The gate stands open."}
+
+
+class TestTheWholeChatAtOnce:
+    """`active_mappings`: the same answer for every turn of a chat, one query.
+
+    The bulk reader is C22a's, and `tests/test_transcript_read_is_one_query.py`
+    pins its COST and the two routes that read through it. These pin its
+    ANSWER against the per-turn reader that lives beside it here, driving
+    through `storage.save_step` -- the writer the engine actually uses --
+    rather than building the rows by hand: a reroll supersedes a variant
+    through that function, not through an `active` column written as 0. The
+    neighbouring-key case is covered nowhere else, and it is the one a JOIN
+    over `steps` gets wrong (review 2026-09-07, C22b).
+    """
+
+    def _chat_with_turns(self, temp_db, name="Bulk"):
+        chat_id = temp_db.qi(
+            "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+            (name, "", time.time()))
+        turns = [temp_db.qi(
+            "INSERT INTO turns(chat_id,idx,player_input,created) "
+            "VALUES(?,?,?,?)", (chat_id, idx, "", time.time()))
+            for idx in range(4)]
+        return chat_id, turns
+
+    def test_it_answers_what_the_per_turn_reader_answers(self, temp_db):
+        chat_id, turns = self._chat_with_turns(temp_db)
+        storage.save_step(turns[0], "narrator_extra", "Extra", 0,
+                          {"7": {"prose": "yours"}})
+        storage.save_step(turns[1], "narrator_extra", "Extra", 0,
+                          {"7": {"prose": "and yours"},
+                           step_store.ENGINE_NOTES_KEY: {"warnings": ["x"]}})
+        storage.save_step(turns[2], "narrator_extra", "Extra", 0, ["bare"])
+        # turns[3] never ran that step at all.
+        bulk = step_store.active_mappings(chat_id, "narrator_extra")
+        assert {turn: bulk.get(turn) or {} for turn in turns} == {
+            turn: step_store.active_mapping(turn, "narrator_extra")
+            for turn in turns}
+        assert bulk[turns[1]] == {"7": {"prose": "and yours"}}
+        # A hand-edited non-mapping and a step that never ran are both absent,
+        # which the callers read as the `{}` the per-turn form answers.
+        assert turns[2] not in bulk and turns[3] not in bulk
+
+    def test_it_stops_at_the_chat_it_was_asked_about(self, temp_db):
+        mine, my_turns = self._chat_with_turns(temp_db, "Mine")
+        theirs, their_turns = self._chat_with_turns(temp_db, "Theirs")
+        storage.save_step(my_turns[0], "narrator_extra", "Extra", 0,
+                          {"7": {"prose": "mine"}})
+        storage.save_step(their_turns[0], "narrator_extra", "Extra", 0,
+                          {"7": {"prose": "theirs"}})
+        assert step_store.active_mappings(mine, "narrator_extra") == {
+            my_turns[0]: {"7": {"prose": "mine"}}}
+        assert step_store.active_mappings(theirs, "narrator_extra") == {
+            their_turns[0]: {"7": {"prose": "theirs"}}}
+
+    def test_it_reads_the_active_variant_and_not_a_superseded_one(self, temp_db):
+        """A reroll through `save_step`, which is how a superseded variant is
+        really made: the row is written, not flagged."""
+        chat_id, turns = self._chat_with_turns(temp_db)
+        storage.save_step(turns[0], "narrator_extra", "Extra", 0,
+                          {"7": {"prose": "first draft"}})
+        storage.save_step(turns[0], "narrator_extra", "Extra", 0,
+                          {"7": {"prose": "second draft"}})
+        assert step_store.active_mappings(chat_id, "narrator_extra") == {
+            turns[0]: {"7": {"prose": "second draft"}}}
+
+    def test_it_answers_one_key_and_not_its_neighbours(self, temp_db):
+        chat_id, turns = self._chat_with_turns(temp_db)
+        storage.save_step(turns[0], "narrator", "Narrator", 0,
+                          {"prose": "the room"})
+        storage.save_step(turns[0], "narrator_extra", "Extra", 1,
+                          {"7": {"prose": "your corner of it"}})
+        assert step_store.active_mappings(chat_id, "narrator_extra") == {
+            turns[0]: {"7": {"prose": "your corner of it"}}}

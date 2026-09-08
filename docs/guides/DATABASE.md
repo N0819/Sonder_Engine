@@ -403,10 +403,42 @@ Two rules follow, and neither is optional:
   store to resolve against. `dump_chat_memories(inline_vectors=...)` is that
   distinction.
 
+A third rule joined them at schema v38: **the address is filed with the bytes.**
+`memories.vkey` carries what `vector_address` computes, written by
+`file_memory_vector(..., memory_id=...)` from every writer that puts vectors on
+a row, so the checkpoint reads the address instead of reading both 20 KB blobs
+off every memory to hash them (review 2026-09-07 C2: 73ms of a 401-memory
+bank's 81ms dump, on every beat and twice on a `data_version` race). The column
+is DERIVED and never authoritative — NULL means "not filed", and
+`dump_chat_memories` falls back to hashing the blobs, which is exactly the old
+behaviour. What must never happen is a STALE address, because the checkpoint
+would then reference bytes that are no longer the memory's own and a rollback
+would restore the wrong vector silently; the `memories_vkey_stale` trigger
+(`LATE_SCHEMA`) clears the column on any write that changes the blobs without
+restamping it in the same statement, so the column can be absent but not wrong.
+`backfill_memory_vectors` stamps an existing bank once, when a file crosses 38.
+
 `tools`-free conversion of an existing database lives in
 `checkpoints.compact_checkpoints`, exposed in the UI under Software updates. It
 verifies each story against its original before writing anything and refuses
 any story it cannot prove lossless.
+
+### The checkpoint blob is text, and so is the `world` table
+
+`checkpoints.snapshot_blob` is the checkpoint's JSON TEXT and
+`checkpoints.snapshot_state` is the same snapshot as OBJECTS. Anything that
+only SAVES a snapshot wants the first: a world value is already JSON text in
+the database (`wset` serialises it there), so parsing every row and re-emitting
+it was an identity transform paid for twice a beat — 57ms per checkpoint on the
+sanitized bench copy of chat 114 whose `charters` row is 867 KB, against a live
+one of 41 MB. The spliced document is byte-identical wherever the stored row is
+itself `json.dumps` output, which is every world row across the two bench
+stories. Anything that WALKS a snapshot (branch remap, tests) still wants
+`snapshot_state`. Splicing does not weaken the check the parse performed: the
+same read asks SQLite `json_valid(value)` for each row (2.9 ms over chat 114's
+40 rows against the 20.9 ms parse), so a world row that does not hold JSON
+still stops the turn where it always did instead of writing a checkpoint that
+cannot be read back.
 
 Per-story card overrides are preserved by portable chat archives and branches.
 They are intentionally not rolled back by turn checkpoints: like other explicit

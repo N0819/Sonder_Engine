@@ -5,11 +5,43 @@
 // repeated on each of those is a nag rather than a report.
 let languagePackErrorReported = false;
 
+// The install half of the bootstrap, held for the life of the page.
+//
+// `boot()` re-runs on every import, save, provider edit and NSFW toggle --
+// 61 call sites across static/js -- and re-downloaded the whole payload each
+// time. On the owner's 307-body town database that payload is 2,002,515
+// bytes and 767,608 of them (38.3%) are the same bytes on every run: the UI
+// catalog and every default prompt (review 2026-09-07, C22).
+//
+// The server versions that half by a digest of its OWN CONTENT and names its
+// keys in the response, so two things this file would otherwise have to get
+// right are not its problem: the cache cannot go stale (anything that changes
+// the half changes the digest), and there is no second copy here of WHICH
+// keys the half holds -- the drift B24 spent a rework removing.
+let bootInstall = null;
+
 async function boot() {
-  S.boot = await api("GET", "/api/bootstrap");
-  S.uiCatalog = S.boot.ui_messages || {};
+  const known = bootInstall
+    ? "?" + new URLSearchParams({ known_install: bootInstall.version }) : "";
+  const fresh = await api("GET", "/api/bootstrap" + known);
+  if (fresh.install_unchanged && bootInstall) {
+    Object.assign(fresh, bootInstall.block);
+  } else if (typeof fresh.install_version === "string"
+             && Array.isArray(fresh.install_keys)) {
+    const block = {};
+    for (const key of fresh.install_keys) block[key] = fresh[key];
+    bootInstall = { version: fresh.install_version, block };
+  }
+  S.boot = fresh;
+  // Recompile the catalog's 393 templates only when the catalog is a
+  // different object -- which, on the unchanged path, it is not: the merged
+  // half hands back the very object the rules were compiled from.
+  const catalog = S.boot.ui_messages || {};
+  if (catalog !== S.uiCatalog) {
+    S.uiCatalog = catalog;
+    S.uiTemplateRules = null;
+  }
   S.uiLanguage = S.boot.ui_language || "en";
-  S.uiTemplateRules = null;
   localizeDocument();
   watchUILanguage();
   S.nsfw = S.boot.nsfw_enabled || false;

@@ -101,6 +101,67 @@ class TestLifecycle:
         assert out["published_turn"] == 2 and out["visible_from_turn"] == 3
         assert get_package(cid, uid)["status"] == "published"
 
+    def test_validation_puts_the_status_back_before_it_records_the_verdict(
+            self, temp_db, monkeypatch):
+        """Three whole-store writes: `validating` for the panel to poll, the
+        status put back, then the verdict. The middle one looks like a
+        duplicate of the last (review 2026-09-07, C21) and is not -- it is
+        what makes the package editable again when the verdict write is the
+        one that fails, which the next test holds."""
+        import story.plot_packages as pp
+        cid = _story(temp_db)
+        uid = _ready(temp_db, cid)
+        seen = []
+        real = pp.save_packages
+
+        def counted(cid_, stored, frame_id=None):
+            seen.append({u: p["status"] for u, p in stored.items()})
+            return real(cid_, stored, frame_id)
+
+        monkeypatch.setattr(pp, "save_packages", counted)
+        verdict = validate_package(cid, uid)
+        assert [row[uid] for row in seen] == ["validating", "draft", "draft"]
+        assert verdict["ok"] and verdict["at_revision"] == 1
+        assert get_package(cid, uid)["status"] == "draft"
+        assert get_package(cid, uid)["validation"] == verdict
+
+    def test_a_preview_that_raises_still_puts_the_status_back(
+            self, temp_db, monkeypatch):
+        import story.plot_packages as pp
+        cid = _story(temp_db)
+        uid = _ready(temp_db, cid)
+
+        def boom(*a, **kw):
+            raise RuntimeError("the preview fell over")
+
+        monkeypatch.setattr(pp, "preview_package", boom)
+        with pytest.raises(RuntimeError, match="fell over"):
+            validate_package(cid, uid)
+        assert get_package(cid, uid)["status"] == "draft"
+
+    def test_a_verdict_write_that_raises_leaves_the_package_editable(
+            self, temp_db, monkeypatch):
+        """`EDITABLE == ("draft",)`, so a package left at `validating` can
+        never be edited, validated, prepared or published again. The write
+        that puts the status back runs whether or not the verdict write
+        lands, which is why it is not the duplicate it looks like."""
+        import story.plot_packages as pp
+        cid = _story(temp_db)
+        uid = _ready(temp_db, cid)
+        real, calls = pp.save_packages, []
+
+        def failing(cid_, stored, frame_id=None):
+            calls.append(1)
+            if len(calls) == 3:
+                raise RuntimeError("the store would not take the verdict")
+            return real(cid_, stored, frame_id)
+
+        monkeypatch.setattr(pp, "save_packages", failing)
+        with pytest.raises(RuntimeError, match="would not take"):
+            validate_package(cid, uid)
+        assert get_package(cid, uid)["status"] == "draft"
+        assert get_package(cid, uid)["status"] in pp.EDITABLE
+
     def test_visibility_is_next_turn_and_activation_follows(self, temp_db):
         cid = _story(temp_db)
         uid = _ready(temp_db, cid)

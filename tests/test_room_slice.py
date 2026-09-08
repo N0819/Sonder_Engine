@@ -300,6 +300,64 @@ class TestFitResult:
             big = {"rows": ["x" * 100] * 80}
             assert len(json.dumps(fit_result(big, cap))) <= len(json.dumps(big))
 
+    def test_the_counted_cut_is_the_re_encoded_cut(self):
+        """`fit_result` composes each container's encoded length from its
+        parts instead of re-serializing the whole result once per dropped
+        item (review 2026-09-07, C21: 22.4 s to cut 2,942 rows down to the
+        cap, 0.14 s after; `inspect_charters` on the bench copy of chat 114,
+        8.4 ms to 2.9 ms). The arithmetic is the claim, so it is checked
+        against the encoder it replaced, over the shapes it has to get right
+        -- unicode, escapes, nested containers, empty lists, non-string
+        values.
+        """
+        import random
+
+        def _length(value):
+            return len(json.dumps(value, ensure_ascii=False, default=str))
+
+        def re_encoded_cut(result, cap):
+            """What it did before: measure by encoding, every time."""
+            if not isinstance(result, dict):
+                return result
+            if _length(result) <= cap:
+                return result
+            out = json.loads(json.dumps(result, ensure_ascii=False, default=str))
+            out["truncated"] = True
+            out["dropped"] = 0
+            while _length(out) > cap:
+                lists = [(k, _length(v)) for k, v in out.items()
+                         if isinstance(v, list) and v]
+                if lists:
+                    out[max(lists, key=lambda kv: kv[1])[0]].pop()
+                else:
+                    keys = [(k, _length(v)) for k, v in out.items()
+                            if k not in ("truncated", "dropped")]
+                    if not keys:
+                        break
+                    out.pop(max(keys, key=lambda kv: kv[1])[0])
+                out["dropped"] += 1
+            return out
+
+        random.seed(11)
+        alphabet = "abc \u00e9\u65e5\\\""
+        shapes = [{"rows": [{"i": i, "text": "x" * 180} for i in range(60)]},
+                  {"only": ["\u00e9" * 30] * 12},
+                  {"a": [], "b": "z" * 400, "c": {"deep": [1, 2, [3, {"d": 4}]]}},
+                  {"n": 12, "f": 3.5, "t": True, "none": None,
+                   "rows": [["a", "b"], ["c"]]}]
+        for _ in range(60):
+            shape = {}
+            for k in range(random.randint(1, 5)):
+                shape["k%d" % k] = [
+                    "".join(random.choice(alphabet)
+                            for _ in range(random.randint(0, 30)))
+                    for _ in range(random.randint(0, 25))]
+            shapes.append(shape)
+        for shape in shapes:
+            for cap in (12, 80, 300, 1500, 12_000):
+                assert (json.dumps(fit_result(shape, cap))
+                        == json.dumps(re_encoded_cut(shape, cap))), (shape, cap)
+
     def test_the_run_tool_wrapper_is_the_same_cut(self, temp_db, monkeypatch):
         from story.room_tools import TOOL_INDEX
         cid = _story(temp_db)

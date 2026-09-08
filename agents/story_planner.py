@@ -50,6 +50,7 @@ import json
 import re
 import time
 
+from core.db import data_version
 from core.logging_utils import logger
 from story.room_calls import room_max_tokens
 
@@ -428,48 +429,71 @@ def _shown_transcript(transcript, cap=None):
 
 
 def _payload(cid, frame_id, *, text, task, transcript, step, calls_left,
-             seconds_left, turn_idx, spend=None, regime="reply"):
+             seconds_left, turn_idx, spend=None, regime="reply", memo=None,
+             shown=None):
+    """The step's payload. Everything but the transcript and the budget is
+    DERIVED FROM THE DATABASE, and nothing derived can move while the reply
+    is only reading, so ``memo`` (`room_calls.ReplyMemo`) holds that half
+    for the reply and `run_planner` drops it whenever the reply writes.
+    Without a memo every part is re-derived, exactly as before.
+
+    ``shown`` is the trimmed transcript when the caller has already made it
+    -- `run_planner` needs the same cut for its echo policy, and made it
+    twice per step (C21)."""
     from story import room_conversation as room
     from story.mandates import (MANDATE_CAPABILITIES, MANDATE_LIMITS,
                                 active_mandates, revoked_since)
     from story.plot_packages import list_packages
+    from story.room_calls import memo_part
     from story.room_frontier import frontier_report
     from story.room_proposals import pending_proposals
     from story.room_tools import cast_minds_summary, run_tool
-    shown, _whole = _shown_transcript(transcript)
-    try:
-        clock = run_tool(cid, "inspect_clock", frame_id=frame_id)
-    except Exception:
-        clock = {}
-    try:
-        frontier = frontier_report(cid, frame_id)
-    except Exception as exc:
-        frontier = {"error": str(exc)[:200]}
+    if shown is None:
+        shown, _whole = _shown_transcript(transcript)
+
+    def _clock():
+        try:
+            return run_tool(cid, "inspect_clock", frame_id=frame_id)
+        except Exception:
+            return {}
+
+    def _frontier():
+        try:
+            return frontier_report(cid, frame_id)
+        except Exception as exc:
+            return {"error": str(exc)[:200]}
+
     # One line per cast member -- the drive's essence and each held project's
     # aim -- so the Planner knows what `inspect_minds` would answer before it
     # reaches (measured 2026-09-04 on chat 114: 136 characters for the one
     # cast member). Author knowledge; the seam that reads it is this loop
     # and nothing a mind is shown (`tests/test_room_minds.py`).
-    try:
-        minds = cast_minds_summary(cid, frame_id)
-    except Exception as exc:
-        minds = [{"error": str(exc)[:200]}]
+    def _minds():
+        try:
+            return cast_minds_summary(cid, frame_id)
+        except Exception as exc:
+            return [{"error": str(exc)[:200]}]
+
     payload = {
-        "story": _story(cid),
-        "clock": clock,
-        "minds": minds,
-        "conversation": _conversation(cid, frame_id),
-        "mandates": active_mandates(cid, frame_id, turn_idx),
-        "withdrawn": [{"uid": m["uid"], "text": m["text"], "status": m["status"]}
-                      for m in revoked_since(cid, frame_id, max(0, turn_idx - 1))],
+        "story": memo_part(memo, "story", lambda: _story(cid)),
+        "clock": memo_part(memo, "clock", _clock),
+        "minds": memo_part(memo, "minds", _minds),
+        "conversation": memo_part(memo, "conversation",
+                                  lambda: _conversation(cid, frame_id)),
+        "mandates": memo_part(memo, "mandates",
+                              lambda: active_mandates(cid, frame_id, turn_idx)),
+        "withdrawn": memo_part(memo, "withdrawn", lambda: [
+            {"uid": m["uid"], "text": m["text"], "status": m["status"]}
+            for m in revoked_since(cid, frame_id, max(0, turn_idx - 1))]),
         "capabilities": list(MANDATE_CAPABILITIES),
         "limits": list(MANDATE_LIMITS),
-        "status": room.status(cid, frame_id),
-        "frontier": frontier,
-        "packages": list_packages(cid, frame_id=frame_id),
-        "pending_proposals": [
+        "status": memo_part(memo, "status", lambda: room.status(cid, frame_id)),
+        "frontier": memo_part(memo, "frontier", _frontier),
+        "packages": memo_part(memo, "packages",
+                              lambda: list_packages(cid, frame_id=frame_id)),
+        "pending_proposals": memo_part(memo, "pending_proposals", lambda: [
             {"uid": p["uid"], "kind": p["kind"], "title": p["title"],
-             "status": p["status"]} for p in pending_proposals(cid, frame_id)],
+             "status": p["status"]} for p in pending_proposals(cid, frame_id)]),
         "transcript": shown,
         "budget": {"regime": regime, "step": step,
                    "steps": PLANNER_STEPS_PER_REPLY,
@@ -687,9 +711,11 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
     from core.jobs import story_rewound_past
     from story import room_conversation as room
     from story.mandates import expire_mandates, spend_citation, spend_limits
+    from story.room_calls import ReplyMemo
     from story.room_citations import normalize_claim
     from story.room_frontier import record_spend, spend_this_hour
-    from story.room_tools import TOOL_INDEX, ToolError, run_tool
+    from story.room_tools import (TOOL_INDEX, ToolError, run_tool,
+                                  tool_only_reads)
 
     def _call_key(name, args):
         return name + "\x00" + json.dumps(args, sort_keys=True, ensure_ascii=False,
@@ -715,6 +741,19 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
     # the step to look at, never a second copy. `in_view` is what the model
     # saw whole in the payload it just read, plus what this step appended.
     answered, in_view = {}, set()
+    # THE STATIC HALF OF THE PAYLOAD, ONCE PER WRITE (review 2026-09-07,
+    # C21). Every step rebuilt the frontier, the cast's minds, the clock,
+    # the packages, the mandates and the status row. Measured on the bench
+    # copy of chat 114 (`tools/bench/room_payload.py`): 17.3 ms a step,
+    # 0.69 s over a forty-step reply, against 0.02 s held. The memo is
+    # dropped by what the reply WRITES -- a tool that is not a pure read, an
+    # applied grant, a rewritten status row -- and by a BEAT LANDING UNDER
+    # IT: this loop runs in `converse_stream`'s daemon thread against no
+    # lock, which is why `story_rewound_past` is checked below, so each step
+    # hands the memo the database's own `data_version` (0.013 ms median), the
+    # counter that moves on ANOTHER connection's commit -- the turn index
+    # moves when a beat starts, not when it commits (C21, second skeptic).
+    memo = ReplyMemo()
     if hour_left <= 0:
         stopped = "spend_hour"
     for step in range(1, PLANNER_STEPS_PER_REPLY + 1):
@@ -727,12 +766,19 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
             stopped = "wall"
             break
         steps = step
+        memo.at_version(data_version())
         calls_left = max(0, min(reply_cap - calls_made, hour_left - calls_made))
+        # ONE CUT PER STEP. The trim the model is shown and the `in_view`
+        # set the echo policy holds it to are the same cut of the same
+        # unchanged transcript; it was made twice, once inside `_payload`
+        # and once after the call (C21).
+        shown, whole = _shown_transcript(transcript)
+        first_shown = len(transcript) - len(shown)
         try:
             out = _call(system, _payload(
                 cid, frame_id, text=text, task=task, transcript=transcript,
                 step=step, calls_left=calls_left, seconds_left=seconds_left,
-                turn_idx=turn_idx, regime=regime,
+                turn_idx=turn_idx, regime=regime, memo=memo, shown=shown,
                 spend={"calls_per_reply": reply_cap,
                        "calls_per_hour_left": hour_left}),
                 max_tokens=room_max_tokens())
@@ -760,8 +806,6 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
             notes.extend(_session_account(transcript))
             stopped = "model"
             break
-        shown, whole = _shown_transcript(transcript)
-        first_shown = len(transcript) - len(shown)
         in_view = {first_shown + n for n in whole}
         if not any(k in out for k in ANSWER_KEYS):
             # A truncated or shapeless output is reported, not read as "done":
@@ -774,6 +818,7 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
         if text is not None and out.get("grants"):
             _rows, grant_notes = _apply_grants(cid, frame_id, out["grants"], turn_idx)
             notes.extend(grant_notes)
+            memo.wrote()  # the mandates the next payload states
         if out.get("status_line"):
             status_line = str(out["status_line"])
         if isinstance(out.get("questions"), list):
@@ -797,6 +842,7 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
         if regime == "reply" and status_line:
             write_status(cid, frame_id, line=status_line, questions=questions,
                          turn_idx=turn_idx)
+            memo.wrote()  # the status row the next payload states
         calls = out.get("calls") if isinstance(out.get("calls"), list) else []
         if not calls:
             break
@@ -861,6 +907,11 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
                     published.append(str(result.get("uid") or args.get("uid") or ""))
                 if name in ("publish_package", "resolve_package"):
                     _note_bible(cid, frame_id, name, args, result, turn_idx)
+            # A CALL THE TABLE DOES NOT MARK AS A PURE READ MAY HAVE MOVED
+            # ANYTHING (`room_tools.tool_only_reads`), and so may the
+            # Charter Planner's delegation, so the next step re-derives.
+            if name == CHARTER_PLANNER_TOOL or not tool_only_reads(name):
+                memo.wrote()
             echo = result
             answered_ok = isinstance(result, dict) and not (
                 "error" in result or "refused" in result)

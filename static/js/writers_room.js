@@ -320,7 +320,7 @@ async function roomStream(text) {
 
 // One event. Renders on every one: the panel is small, the thread is short,
 // and a render per token is what makes the answer look written rather than
-// delivered.
+// delivered -- but ONCE PER FRAME, not once per delta. See roomRenderSoon.
 function roomEvent(event) {
   const live = ROOM.live || (ROOM.live = { text: "", reasoning: "", note: "" });
   if (event.type === "room_message") {
@@ -346,7 +346,7 @@ function roomEvent(event) {
     ROOM.loadedKey = roomKey();
     if (event.error) toast(t("The room could not answer: {why}", { why: event.error }), "err");
   }
-  roomRender(true);
+  roomRenderSoon(true);
 }
 
 async function roomRevoke(uid) {
@@ -369,7 +369,41 @@ const ROOM_ROLE_LABELS = {
   player: "You", planner: "Story Planner", dramaturge: "Dramaturge", room: "Room",
 };
 
+// A redraw asked for by a burst of events runs ONCE PER FRAME, not once per
+// event (review 2026-09-07, C22).
+//
+// THE CLASS: a render nothing can observe is a render nobody asked for. The
+// browser paints once a frame, so a redraw overwritten before the next paint
+// was never seen -- and this one is not cheap: `roomRenderThread` empties the
+// thread and re-appends every message, which the localizer's MutationObserver
+// then walks, running each text node against the catalog's 393 compiled
+// template regexes. A streamed answer fires an event per token, so a 60
+// message thread paid for all 60 messages on every delta. `liveAppend`/
+// `liveFlush` in chat.js is the same mechanism for the turn stream.
+//
+// Any direct `roomRender()` call flushes: it cancels the pending frame and
+// draws now, so a click never waits on a frame and the final state after a
+// stream is drawn by the caller that owns it.
+let roomRenderFrame = 0;
+let roomRenderKeepScroll = false;
+
+function roomRenderSoon(keepScroll = false) {
+  roomRenderKeepScroll = roomRenderKeepScroll || keepScroll;
+  if (roomRenderFrame) return;
+  roomRenderFrame = requestAnimationFrame(() => {
+    roomRenderFrame = 0;
+    const keep = roomRenderKeepScroll;
+    roomRenderKeepScroll = false;
+    roomRender(keep);
+  });
+}
+
 function roomRender(keepScroll = false) {
+  if (roomRenderFrame) {
+    cancelAnimationFrame(roomRenderFrame);
+    roomRenderFrame = 0;
+    roomRenderKeepScroll = false;
+  }
   const R = $("#room");
   if (!R) return;
   const thread = R.querySelector(".room-thread");
