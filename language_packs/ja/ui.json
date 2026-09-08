@@ -1399,7 +1399,6 @@
   "Memory archived.": "記憶をアーカイブしました。",
   "Memory browser": "記憶ブラウザ",
   "Memory browser — ${p.name}": "記憶ブラウザ — ${p.name}",
-  "Memory consolidator returned invalid JSON": "記憶統合器が無効なJSONを返しました",
   "Memory deleted.": "記憶を削除しました。",
   "Memory restored.": "記憶を復元しました。",
   "Memory saved.": "記憶を保存しました。",

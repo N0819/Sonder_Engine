@@ -534,6 +534,85 @@ _ARTIFACT_FIELDS = ("town", "required_rooms_added", "lore_manifest",
                     "source_book", "owning_book", "horizon", "wants_history")
 
 
+#: Where a plan goes when the story it was generated for is thrown away. A
+#: quick start that fails after the two model calls used to delete the chat
+#: and, with it, the job holding the artifact those calls produced -- so a
+#: retry paid for both again (reported from play, 2026-09-08). The store is
+#: global rather than per-chat for exactly that reason: the chat is the thing
+#: that does not survive.
+SALVAGED_PLAN_KEY = "lived_location_salvage"
+
+#: HOW MANY SALVAGED PLANS ARE KEPT: one, the most recent. A retry follows a
+#: failure within seconds and asks for the same thing, so a deeper store would
+#: hold plans nobody comes back for and answer a question nobody asked. Named
+#: here because it is a cap, and the cost of it is that two failed starts in a
+#: row keep only the second plan.
+SALVAGED_PLANS_KEPT = 1
+
+
+def _plan_fingerprint(request, frame_id):
+    """`_request_digest` without the chat: what was ASKED FOR, so a plan can
+    be recognised as answering the same question in a story that did not
+    exist when it was made."""
+    payload = json.dumps(
+        {"frame": frame_id,
+         "request": request if isinstance(request, dict) else {}},
+        sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def salvage_plan(cid, request, *, frame_id=None, reason=""):
+    """Keep this chat's finished plan before the chat is discarded.
+
+    Returns True when there was one to keep. Deliberately silent about
+    everything else the job holds: the artifact is what the model calls
+    bought, and the rest describes a run that is over.
+    """
+    from core.db import set_setting
+
+    job = lived_location_job(cid) or {}
+    artifact = job.get("artifact")
+    if not isinstance(artifact, dict) or not isinstance(
+            artifact.get("town"), dict):
+        return False
+    set_setting(SALVAGED_PLAN_KEY, json.dumps({
+        "fingerprint": _plan_fingerprint(request, frame_id),
+        "artifact": artifact,
+        "reason": str(reason or "")[:400],
+        "stage": job.get("stage") or "",
+        "saved": time.time(),
+    }, ensure_ascii=False, default=str))
+    return True
+
+
+def take_salvaged_plan(request, frame_id=None):
+    """The kept plan, if it answers THIS request. Taken, not read: a plan is
+    adopted by one story, and leaving it would let a later unrelated start
+    adopt a town from a story the author abandoned."""
+    from core.db import get_setting, set_setting
+
+    raw = get_setting(SALVAGED_PLAN_KEY, "")
+    if not raw:
+        return None
+    try:
+        stored = json.loads(raw)
+    except (TypeError, ValueError):
+        set_setting(SALVAGED_PLAN_KEY, "")
+        return None
+    if not isinstance(stored, dict):
+        set_setting(SALVAGED_PLAN_KEY, "")
+        return None
+    if stored.get("fingerprint") != _plan_fingerprint(request, frame_id):
+        return None
+    artifact = stored.get("artifact")
+    if not isinstance(artifact, dict) or not isinstance(
+            artifact.get("town"), dict):
+        set_setting(SALVAGED_PLAN_KEY, "")
+        return None
+    set_setting(SALVAGED_PLAN_KEY, "")
+    return copy.deepcopy(artifact)
+
+
 def _resumable_plan(cid, digest):
     """The stored pure prefix this call may reuse instead of paying again.
 
@@ -1622,6 +1701,17 @@ def generate_lived_location(cid, request, *, frame_id=None):
         raise ValueError("story not found")
     digest = _request_digest(cid, request, frame_id)
     artifact, prior = _resumable_plan(cid, digest)
+    if artifact is None:
+        # A PLAN OUTLIVES THE STORY IT WAS MADE FOR. This chat has no prefix
+        # of its own, so ask whether one was kept from a start that was
+        # discarded before it could use it -- the same request, made again,
+        # is the same question, and the two model calls that answered it have
+        # already been paid for (2026-09-08).
+        artifact = take_salvaged_plan(request, frame_id)
+        if artifact is not None:
+            logger.info(
+                "lived location: adopting a plan salvaged from a discarded "
+                "start (chat %s)", cid)
     if prior and prior.get("stage") in PAST_BOUNDARY_STAGES:
         # PAST THE BOUNDARY, whatever else is true of it. Rooms may already be
         # planted and the registry saved, and `_remap_generated_town` reads

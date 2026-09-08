@@ -1399,7 +1399,6 @@
   "Memory archived.": "Memory archived.",
   "Memory browser": "Memory browser",
   "Memory browser — ${p.name}": "Memory browser — ${p.name}",
-  "Memory consolidator returned invalid JSON": "Memory consolidator returned invalid JSON",
   "Memory deleted.": "Memory deleted.",
   "Memory restored.": "Memory restored.",
   "Memory saved.": "Memory saved.",
