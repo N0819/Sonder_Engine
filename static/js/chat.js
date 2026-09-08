@@ -1335,7 +1335,7 @@ function loopMindIds(content) {
 // What this step can be read one-of-at-a-time. Per mind where the step IS
 // per-mind; otherwise per top-level key, which is the generic fallback and the
 // reason an unfamiliar step still gets a usable bar.
-// The Director's six specialists, in the order the fan-out dispatches them.
+// The Director's five specialists, in the order the fan-out dispatches them.
 // Sourced from the step's own record rather than hardcoded, so a specialist
 // added or renamed in agents/director.py needs nothing here.
 function specialistIds(content) {

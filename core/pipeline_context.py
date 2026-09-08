@@ -65,16 +65,21 @@ current_decision_sink: contextvars.ContextVar[Optional[Any]] = \
 
 # Where one provider EXCHANGE (what was sent, what came back, the reasoning)
 # should land. Separate from call_ledger_sink, which carries the same call's
-# metadata and is always on: this one is content, off by default, and exists
-# so the Director's six specialist sub-calls -- which have no step rows and so
-# no variants -- are readable at all.
+# metadata: this one is content, and exists so the Director's five specialist
+# sub-calls -- which have no step rows and so no variants -- are readable at
+# all. Both sinks are armed on every step (`runtime._run_step`); the
+# `llm_capture_enabled` setting gates only whether what lands here is WRITTEN
+# (`llm_capture.record_exchange` returns early when it is off), so an unset
+# sink means "outside a step", never "capture is off" (review 2026-09-07 E5).
 current_exchange_sink: contextvars.ContextVar[Optional[Any]] = \
     contextvars.ContextVar("current_exchange_sink", default=None)
 
 
 def note_step_exchange(entry: dict) -> None:
-    """Record one provider exchange on the running step. No-op outside a step
-    and no-op when debug capture is off."""
+    """Record one provider exchange on the running step. No-op outside a
+    step; inside one the sink is armed unconditionally (`runtime._run_step`),
+    and the debug-capture setting decides only whether what lands here is
+    persisted (review 2026-09-07 E5)."""
     sink = current_exchange_sink.get()
     if sink is not None:
         try:
@@ -86,8 +91,10 @@ def note_step_exchange(entry: dict) -> None:
 def note_step_decision(kind: str, subject: str, verdict: str,
                        reason: str = "") -> None:
     """Record one deterministic decision on the running step. No-op outside a
-    step, and no-op when debug capture is off -- which is the default, so the
-    hot paths that call this pay one ContextVar read and nothing else."""
+    step; inside one the sink is armed unconditionally (`runtime._run_step`)
+    and every decision is kept, so a hot path calling this pays one ContextVar
+    read plus one append bounded by DECISION_LOG_LIMIT. Debug capture gates
+    the `llm_capture` table, never this (review 2026-09-07 E5)."""
     sink = current_decision_sink.get()
     if sink is not None:
         try:
@@ -490,7 +497,11 @@ class PipelineContext:
         Cheap enough to call on the hot path: it is a no-op once the turn's
         ceiling is reached, and the ceiling is hit by exactly the callers that
         would flood it. Tagged by contextvar for the same reason
-        `note_llm_call` is -- perception fans out across a thread pool.
+        `note_llm_call` is: the pipeline fans out on copied contexts -- the
+        parallel character steps, the Director's specialists, the extra-player
+        narrators -- so a producer never has to know its step. Perception is
+        not one of them: it is deterministic and runs in the caller's thread
+        (review 2026-09-07 E6).
         """
         if len(self.decisions) >= DECISION_LOG_LIMIT:
             return

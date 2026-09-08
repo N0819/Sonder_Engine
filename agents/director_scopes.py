@@ -61,9 +61,9 @@ from .director_views import (
 # answers for. A hand neither names does not run: every sheet already tells
 # a hand with no note that "the Director settled nothing in your channels",
 # so a call made anyway was a call whose correct answer was `{}`. Measured
-# before this rule: five of six hands ran on an ordinary physical beat, and
-# the sheet's own absence rule made most of those answers empty by
-# instruction.
+# before this rule, with the six hands registered then: five of them ran on
+# an ordinary physical beat, and the sheet's own absence rule made most of
+# those answers empty by instruction.
 #
 # The per-channel gates below survive with a narrower job. They key on
 # SCENE STATE, never on the beat's prose -- prose matching as a boundary is
@@ -173,11 +173,11 @@ SPEECH_WRITTEN_CHANNELS = frozenset((
 def reads_dialogue(name):
     """Does this specialist own a channel a speech act can write.
 
-    The beat's dialogue used to ride in the COMMON payload, so all six hands
-    got it whether or not any channel they own could be written by somebody
-    talking. Three cannot: `body`, `contact` and `objects` own physical
-    ledgers, and for them a transcript is text they can only echo. That
-    matters because echoing the payload into the diff is this fan-out's
+    The beat's dialogue used to ride in the COMMON payload, so every hand got
+    it whether or not any channel they own could be written by somebody
+    talking. Three of the five cannot: `body`, `contact` and `objects` own
+    physical ledgers, and for them a transcript is text they can only echo.
+    That matters because echoing the payload into the diff is this fan-out's
     measured failure mode, not a hypothetical one -- chat 78 t7's `coverage`
     block is the wardrobe it was shown, transposed -- and because the body
     sheet is already ~6,700 tokens of instruction whose correct answer on an
@@ -400,7 +400,7 @@ _CHANNEL_GATES = {
 
 # ---------------------------------------------------------------- extensions
 #
-# A seventh family, and an eighth, authored outside this tree.
+# A sixth family, and a seventh, authored outside this tree.
 #
 # Every registry above is one an extension could only reach by mutating a
 # module global, and there are SIX of them (`SPECIALISTS`, `_CHANNEL_GATES`,
@@ -475,7 +475,7 @@ def _rebuild_channel_owners():
                 ch for ch in spec["channels"] if ch in schema_shapes)
 
 
-#: The engine's own six, populated the same way an extension's seventh will be.
+#: The engine's own five, populated the same way an extension's sixth will be.
 _rebuild_channel_owners()
 
 

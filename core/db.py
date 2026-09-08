@@ -1025,9 +1025,9 @@ CREATE INDEX IF NOT EXISTS idx_room_registry_book
 -- three actually are: `fiction_worlds` and `fiction_locations` are in
 -- `chat_archive.WORLD_TABLES` and in the checkpoint blob. `transit_edges` is
 -- named in exactly one place outside this file -- the chat-deletion sweep in
--- `web/app.py` -- so nothing snapshots, exports, imports or restores it, and
--- an old archive carrying rows loses them on import. Dropping all three is
--- Phase 3.
+-- `persist/chat_delete.py` -- so nothing snapshots, exports, imports or
+-- restores it, and an old archive carrying rows loses them on import.
+-- Dropping all three is Phase 3.
 CREATE TABLE IF NOT EXISTS fiction_worlds(
     world_id TEXT PRIMARY KEY,
     chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
@@ -2059,9 +2059,12 @@ _ADD_COLUMN_RE = re.compile(
 def _column_addition_already_applied(c, stmt):
     """True when stmt is an ADD COLUMN whose column already exists.
 
-    DDL runs in autocommit, so a crash mid-migration-list leaves the
-    earlier statements applied with the version not advanced; the re-run
-    must then skip what already landed. That used to ride on catching
+    The FIRST migration list runs in autocommit -- Python's legacy
+    transaction control opens a transaction only for DML -- so a crash
+    mid-list leaves its earlier statements applied with the version not
+    advanced, and the re-run must then skip what already landed. (From the
+    version stamp on, an INSERT has a transaction open and the later lists
+    ride inside it; review 2026-09-07 E3.) That used to ride on catching
     "duplicate column" in the error text; introspection answers the same
     question deterministically, without depending on SQLite's message
     wording."""
@@ -2479,9 +2482,15 @@ def init():
         for i in range(current, SCHEMA_VERSION):
             if 0 <= i - 1 < len(MIGRATIONS):
                 for stmt in MIGRATIONS[i - 1]:
-                    # DDL autocommits, so a crash mid-list leaves earlier
-                    # statements applied with the version not advanced;
-                    # re-runnability is what recovers that. ADD COLUMN
+                    # Re-runnability, because the FIRST list here is not
+                    # transactional: DDL runs in autocommit until something
+                    # opens a transaction, so a crash inside list one leaves
+                    # its earlier statements applied with the version not
+                    # advanced. `_set_schema_version`'s INSERT then opens one
+                    # (legacy isolation opens a transaction for DML only), and
+                    # every later list and stamp rides inside it until
+                    # `executescript(LATE_SCHEMA)` below commits -- so those
+                    # roll back together (review 2026-09-07 E3). ADD COLUMN
                     # idempotence is decided by introspection rather than
                     # by string-matching "duplicate column" in the error.
                     if _column_addition_already_applied(c, stmt):

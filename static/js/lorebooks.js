@@ -2993,10 +2993,12 @@ function renderLoreGenerator(state, container) {
     }
   );
 
-  // Raises the per-call read timeout above the 300s default. A slow local
-  // model can still be producing tokens when the default expires, and that
-  // shows up as an interruption -- so this is also what a resume needs in
-  // order to be given longer than the attempt that just ran out.
+  // Raises the per-call read timeout above whichever default the transport
+  // picks (generation streams, so 90s between chunks rather than the 300s a
+  // plain POST gets). A slow local model can still be working when the
+  // default expires, and that shows up as an interruption -- so this is also
+  // what a resume needs in order to be given longer than the attempt that
+  // just ran out.
   const timeoutInput = el(
     "input",
     {

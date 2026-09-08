@@ -4,9 +4,11 @@
 it is enough whenever chunks keep arriving. It is no help for the case that
 actually strands a session: a connection that has stopped sending. `iter_lines`
 blocks inside a socket read, no chunk arrives, the poll never runs, and the
-flag the abort set is invisible until `REQUEST_TIMEOUT`'s read deadline --
-300 seconds. A turn cancelled in its first second still held the pipeline for
-five minutes, which is why force-killing the server was the faster way out.
+flag the abort set is invisible until the read deadline -- `REQUEST_TIMEOUT`'s
+90s between chunks on a stream, `BLOCKING_READ_TIMEOUT`'s 300s on a plain
+POST, and 300 seconds on both when this was written. A turn cancelled in its
+first second still held the pipeline for that long, which is why force-killing
+the server was the faster way out.
 
 So the abort closes the socket as well as setting the flag.
 """

@@ -8,11 +8,15 @@ tests it. This harness replays turns the engine actually ran -- their own
 view, their own beat record, their own preceding narration -- and scores the
 output with THE ENGINE'S OWN CHECKS rather than bespoke regexes.
 
-That last part is the point. Ten of the thirteen fidelity checks are
-enforceable (`_ENFORCEABLE_PREFIXES`), and an enforceable warning buys a whole
-extra narrator call; the craft screen buys up to two more. So the decision
-variable for cutting a block is not "did the prose read fine", it is "how many
-extra model calls did this arm buy, and did any fact reach the page wrong".
+That last part is the point. Ten of the thirteen fidelity checks carry a
+prefix in `_ENFORCEABLE_PREFIXES`, and when this harness was written each such
+warning bought a whole extra narrator call and the craft screen up to two more.
+NEITHER BUYS A CALL NOW (E12, 2026-09-06): the fidelity correction pass and the
+craft rewrite are both gone, narration blocks on being parseable JSON and on
+nothing else, and every check reports. So the decision variable for cutting a
+block is no longer "how many extra model calls did this arm buy" -- it is "did
+any fact reach the page wrong", and the warning counts below are the count of
+facts that did, at a fixed one call per beat.
 
 Baseline for comparison, free and offline -- the stored warnings on the
 variants the engine already wrote (`fidelity_warnings` is persisted on the
@@ -716,10 +720,11 @@ def score(raw, beat):
         # a composition failure: the model writes "you—you're" where the
         # view has "you — you're", and DIALOGUE FIDELITY demands the line
         # character for character. Four of six enforceable findings in one
-        # arm were this. It is a real cost (each still buys a rewrite) but
-        # it moves with the model's typesetting habits rather than with
-        # anything a sheet or a payload says, so an arm comparison that
-        # does not separate it is mostly measuring noise.
+        # arm were this. It cost a rewrite when this was written and costs a
+        # note now (E12), but either way it moves with the model's
+        # typesetting habits rather than with anything a sheet or a payload
+        # says, so an arm comparison that does not separate it is mostly
+        # measuring noise.
         "typography": typography,
         "act_coverage": _act_coverage(prose, beat),
         "direction_agreement": _direction_agreement(prose, beat),

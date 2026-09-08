@@ -48,14 +48,19 @@ import time
 
 from core.db import wget, wset
 
-#: The mandate capability both tools require. Added to
-#: `story.mandates.MANDATE_CAPABILITIES` by the fork that owns that table;
-#: until it is there, nothing can grant it and both tools refuse.
+#: The mandate capability both tools require. It IS in
+#: `story.mandates.MANDATE_CAPABILITIES`, so a request can ask for it and a
+#: host can grant it (E38, review of 2026-09-07 -- the note here still said
+#: nothing could). The check stays a read of that table at call time rather
+#: than an assumption, so a build whose vocabulary lacks the word refuses and
+#: says that is why.
 RESEARCH_CAPABILITY = "research"
 
-#: The provenance disposition a filed result carries. Belongs in
-#: `mind/canon_provenance.ADJUDICATED_DISPOSITIONS` (that module's owner
-#: wires it); the `as_lore` template names it so the filing can carry it.
+#: The provenance disposition a filed result carries. It IS in
+#: `mind/canon_provenance.ADJUDICATED_DISPOSITIONS` (E38, review of
+#: 2026-09-07 -- the note here still said someone else had yet to wire it),
+#: so a filed reference outranks a provisional claim like any other
+#: adjudicated fact; the `as_lore` template names it so the filing carries it.
 WEB_REFERENCE_DISPOSITION = "web_reference"
 
 #: Searches allowed per beat (see the module docstring for why per beat).

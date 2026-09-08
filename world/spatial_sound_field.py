@@ -1098,9 +1098,11 @@ def sound_sources(scene: dict, *, turn_idx=None, crowds=None, events=None,
     voices; the reader path grades one line at a time).
 
     `notices` are the engine notices a `failing` source that went quiet this
-    beat files (§ 5): silence where there was noise is heard, and the
-    Director reads it next beat through the channel every other engine
-    notice uses (`ctx.engine_feedback` -> `engine_notices`)."""
+    beat files (§ 5). WHO HEARS THEM IS THE DIRECTOR (E16): the notice reaches
+    it next beat through the channel every other engine notice uses
+    (`ctx.engine_feedback` -> `engine_notices`), and nothing mints a percept
+    for a sound that stopped, so § 5's "silence where there was noise is
+    heard" is heard on the page only if the Director answers the notice."""
     out = []
     notices = []
     positions = scene.get("positions") or {}

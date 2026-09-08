@@ -86,9 +86,9 @@ a description of that feature.
   deterministic — perception already knows exactly who received the beat —
   and is the highest-value unbuilt item here.
 
-### Why this is a ladder, not a seventh specialist
+### Why this is a ladder, not another specialist
 
-The obvious shape is a `disguise` specialist beside the six. It is the wrong
+The obvious shape is a `disguise` specialist beside the five. It is the wrong
 one, for a reason worth writing down:
 
 **recognition is a per-observer question, and the Director emits one diff for

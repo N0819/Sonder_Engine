@@ -1212,12 +1212,22 @@ def _report_started_sources(ctx, cid, sc, diff, turn_idx):
 
 
 def prepare_scene_commit(ctx):
-    """Build the exact post-turn scene without mutating durable state.
+    """Build the exact post-turn scene before the outer write transaction.
 
-    Keeping scene preparation pure lets the top-level commit prepare memory
-    embeddings and other slow derived work before SQLite's outer write
-    transaction begins.  It also gives every later commit domain one stable
-    post-diff scene instead of independently reconstructing it.
+    The scene itself is RETURNED, not stored: `commit_scene` is what persists
+    it, and nothing here rewrites the stored scene, the registry or any other
+    durable story state. It is NOT write-free, though: engine notices for the
+    next beat land in the `world` table from here (`add_engine_notice`,
+    reached through the failed-source, duplicate-mint, orphan-mint and
+    started-source reports, and once for a contradictory sight edge), as do
+    the two once-per-chat "already told" flags, `sight_contradictions_told`
+    and `layout_lint_told`. Those are outside the turn's transaction, so each
+    is its own commit.
+
+    Keeping the derivation out of the transaction lets the top-level commit
+    prepare memory embeddings and other slow derived work before SQLite's
+    outer write transaction begins.  It also gives every later commit domain
+    one stable post-diff scene instead of independently reconstructing it.
     """
     chat = ctx.chat
     cid = chat.id

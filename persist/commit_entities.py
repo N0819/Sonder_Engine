@@ -213,7 +213,15 @@ def _inherit_known_to(cursor, chat_id, written_id, superseded_rows):
 
 
 def commit_world_entities(ctx, nonce, *, prepared=None):
-    """Commit world entities, conditions (and legacy placement cleanup).
+    """Commit world entities and conditions, and sweep decommissioned rows.
+
+    The sweep is `world_placements`, and it is cleanup of old data rather
+    than upkeep of a live ledger: no beat writes that table any more --
+    `tests/test_world_authority_consolidation.py` pins it empty after a full
+    commit (`test_world_placements_have_no_runtime_writer`), and only
+    checkpoint restore and archive import still put rows back -- so the
+    DELETE beside each `remove_entities` row clears what a pre-decommission
+    file carries and nothing else.
 
     The normalized world_entities rows are a DERIVED projection of the
     scene commit: when the caller passes prepare_scene_commit's result

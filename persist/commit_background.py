@@ -1692,13 +1692,17 @@ def track_background_presences(ctx, nonce, *, prepared=None):
         for eid, edef in (_scene_now.get("entities") or {}).items()
         if isinstance(edef, dict) and str((edef or {}).get("name") or "").strip()
     }
-    # An entity MINTED THIS BEAT is not in the stored scene yet (the merge
-    # commits later in this same turn), so fold its id from the beat's own
-    # entity defs too -- otherwise a positions key naming a just-minted body
-    # escapes the fold on exactly its first appearance, which is when the
-    # duplicate is created. Chat 80 turn 0: the establish placed every body
-    # by entity id, and each id became a second presence beside the
-    # display-name record harvested from the same entity defs.
+    # Fold the beat's own entity defs into the same map, so it does not depend
+    # on WHERE in the transaction this domain runs. `_scene_now` above is
+    # already the beat's MERGED scene -- the scene domain (`commit_scene`)
+    # commits before background presences in `_commit_all_locked`, and a read
+    # on this connection sees it -- so an entity minted this beat is normally
+    # in it already; the defs are the map's second source, and they still
+    # carry an id the merge did not keep. Chat 80 turn 0 is what the fold is
+    # for: the establish placed every body by entity id, and each id became a
+    # second presence beside the display-name record harvested from those same
+    # entity defs -- which is what a positions key naming a just-minted body
+    # does whenever the fold misses it.
     _beat_entity_maps = [((res.get("state_diff") or {}).get("entities") or {})]
     if is_opening:
         _beat_entity_maps.append(res.get("entities") or {})

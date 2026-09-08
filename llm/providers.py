@@ -75,9 +75,11 @@ call_ledger_sink = contextvars.ContextVar("call_ledger_sink", default=None)
 # reasoning trace is a model talking to itself and has not been through any of
 # the checks the answer has.
 #
-# A ContextVar rather than a global: perception fans out across a thread pool
-# with contextvars.copy_context(), so a plain global would hand one observer's
-# reasoning to another.
+# A ContextVar rather than a global: the pipeline fans out across thread pools
+# with contextvars.copy_context() -- the parallel character steps, the
+# Director's specialists, the extra-player narrators -- so a plain global would
+# hand one mind's reasoning to another. Perception is not one of them; it is
+# deterministic and calls no model at all (review 2026-09-07 E6).
 last_reasoning = contextvars.ContextVar("last_reasoning", default=None)
 
 # WHY the model stopped, per context. Every provider says so on the response --
@@ -217,12 +219,19 @@ HTTPX_TIMEOUT = httpx.Timeout(
 )
 
 # Read timeout for model requests made inside a `request_timeout(...)` block;
-# None means "use the 300s default above". The default is sized for pipeline
+# None means "whichever default the transport picks". There are two, and
+# `_request_timeout` chooses between them: `REQUEST_TIMEOUT`'s 90s
+# INTER-CHUNK read above on a streamed call, `BLOCKING_READ_TIMEOUT`'s 300s
+# WHOLE-GENERATION read below on a plain POST. (Finding E7, 2026-09-07: this
+# comment still said "the 300s default above" from before the 90s half landed
+# on 2026-08-29, and 300s was never above it.) Both are sized for pipeline
 # turns, which must not hang a player mid-scene -- but a long authoring call
 # (a lorebook-tree structure pass, or a batch of entries on a slow local
-# model) can legitimately still be producing tokens at 300s, and severing it
-# there fails a response that was on its way. Callers that know they are doing
-# long work raise it for themselves rather than everyone paying for it.
+# model) can legitimately go quiet for longer than 90s between chunks, or
+# still be producing tokens at 300s, and severing it there fails a response
+# that was on its way. An override replaces whichever default would have
+# applied, on either transport; callers that know they are doing long work
+# raise it for themselves rather than everyone paying for it.
 read_timeout_override = contextvars.ContextVar(
     "read_timeout_override",
     default=None,
@@ -562,9 +571,11 @@ def _check_cancel():
 # all for the one the user actually hits: a connection that has stopped
 # sending. `iter_lines` is then blocked inside a socket read, no chunk
 # arrives, the poll never runs, and the flag the abort sets is invisible until
-# `REQUEST_TIMEOUT`'s read deadline expires -- 300 seconds. A turn cancelled
-# in the first second still holds the pipeline for five minutes, which is why
-# killing the server is faster than waiting.
+# the read deadline expires -- `REQUEST_TIMEOUT`'s 90s between chunks on a
+# stream, `BLOCKING_READ_TIMEOUT`'s 300s on a plain POST, and 300 seconds on
+# both when this was written. A turn cancelled in the first second still holds
+# the pipeline until that deadline, which is why killing the server was faster
+# than waiting.
 #
 # So the abort closes the socket. A response registered here is closed by
 # `abort_live_requests` from whichever thread called it, and the blocked read

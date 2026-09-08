@@ -531,7 +531,7 @@ done. `story/carriers.py` reads `world_events` directly
 (`SELECT * FROM world_events WHERE chat_id=? AND frame_id IS ?`), so a
 charter that MINTS `world_events` rows is witnessed, carried, gossiped and
 told by machinery that already exists and never learns the charter is there.
-The engine solved this once already: the Director, its six specialists and the
+The engine solved this once already: the Director, its five specialists and the
 player's own declaration all emit the same `state_diff`, and commit applies it
 uniformly.
 

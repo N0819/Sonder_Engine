@@ -623,13 +623,17 @@ def add_engine_notice(ctx, cid, message):
     carried `engine_notices: []` on turns 6 and 12, so it never relit a lamp it
     was never told had failed. The whole mechanism was inert for the run.
 
-    So no writer touches the key. A notice is STAGED on the turn's context
-    (`ctx.tell_director`, which already dedupes), which is what the sweep
-    composes its rewrite from, so a notice filed before the rewrite survives
-    it by construction. A notice filed AFTER the rewrite -- the destruction
-    domain runs later in the same transaction -- is appended to the key as
-    well, because the beat's one rewrite is already behind it; the sweep's
-    composition dedupes, so filing on both sides of it can never double a
+    So no writer reaches the key ON ITS OWN: every notice comes through here,
+    and this one function does BOTH things on every call. It STAGES the text
+    on the turn's context (`ctx.tell_director`, which already dedupes), which
+    is what the sweep composes its rewrite from, so a notice filed before the
+    rewrite survives it by construction; and it appends the text to the key
+    itself whenever a `cid` was given -- unconditionally, not only after the
+    rewrite. That append is what carries a notice filed AFTER the rewrite (the
+    destruction domain runs later in the same transaction, and the beat's one
+    rewrite is already behind it) and one filed with no turn context at all.
+    Every step of that dedupes -- the staging, the append, and the sweep's
+    composition -- so filing on both sides of the rewrite can never double a
     message.
 
     A rule that has to be remembered by four callers is a rule that will be

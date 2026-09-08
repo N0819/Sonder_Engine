@@ -564,7 +564,7 @@ def export_turn_debug(turn_id: int, *, include_content: bool = True) -> dict:
                                e.get("capture_id", 0)))
 
     # `seq` on a row is its position in THIS timeline, renumbered after the
-    # sort. The stored counter is assigned at insert, and the Director's six
+    # sort. The stored counter is assigned at insert, and the Director's five
     # specialists run concurrently and land in completion order -- so printing
     # it raw put numbers on the rows that contradicted the ordering they sat
     # in. The database's own counter survives as `capture_id` for anyone who

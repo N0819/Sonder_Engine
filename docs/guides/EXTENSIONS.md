@@ -322,7 +322,7 @@ cannot leave a stale file executing.
 | `api.provenance(chat_id)` | what you recorded when you provisioned it |
 | `api.generate_lived_location(chat_id, request)` | add an inhabited place — people, duties, goods, a prehistory (§7.6) |
 | `api.living_world_job(chat_id)` | whether a previous generation was interrupted (§7.6) |
-| `api.add_director_specialist(name, channels=..., prompt=...)` | a seventh Director family |
+| `api.add_director_specialist(name, channels=..., prompt=...)` | a sixth Director family |
 | `api.add_route(path, fn, methods=...)` | serve your own HTTP route |
 | `api.llm_json(system, payload, role=...)` / `api.llm_text(...)` | a model call on a configured role |
 | `api.add_model_lane(name, *, label=..., description=...)` | a model lane of your own in the host's settings; returns the role string |
@@ -538,9 +538,9 @@ Four edges, each deliberate:
 
 ### Adding a Director specialist
 
-The Director is not one mind: each stage fans out to a prose author plus six
+The Director is not one mind: each stage fans out to a prose author plus five
 scoped specialists, each owning a subset of `state_diff`'s channels. You can add
-a seventh.
+a sixth.
 
 ```python
 api.add_director_specialist(
@@ -554,7 +554,7 @@ api.add_director_specialist(
 It joins the real fan-out: same parallelism, same fail-open (a failed
 specialist leaves the stage author's channels standing and never kills a beat),
 same canonical merge order. One difference in how it is DISPATCHED: the
-engine's own six hands run only when the Director's ruling reaches them — a
+engine's own five hands run only when the Director's ruling reaches them — a
 `ledger_notes` line or a `changes_asserted` entry naming the hand or one of
 its channels — and a ruling cannot name a family the author's sheet does not
 know. So your family runs on its `gate` alone, read from the same scene facts
@@ -646,11 +646,13 @@ perception-filtered view. A hook that colours only one of them hands two people
 at the same table different stories, and it surfaces as a continuity complaint
 from one seat only.
 
-Both run **once per beat**, not once per attempt: the narrator re-enters
-generation for a fidelity correction and up to twice more for craft rewrites,
-and all of those reuse the hooked payload. A hook re-run per attempt could hand
-each attempt different context, and the retry loop would then look like the
-defect.
+Both run **once per beat**, not once per attempt. The narrator re-entered
+generation for a fidelity correction and up to twice more for craft rewrites
+until 2026-09-06; those passes are gone (the stage blocks on being parseable
+JSON and on nothing else), so what is left is one generation plus whatever
+JSON retry the provider seam does inside it -- and all of it reuses the hooked
+payload. A hook re-run per attempt could hand each attempt different context,
+and the retry would then look like the defect.
 
 Two things to get right, neither of them the firewall:
 

@@ -1,10 +1,12 @@
 """The world-context compiler: lore routing and retrieval, deterministic.
 
 `compile_world_context` is what the two mapping model stages used to be. It
-assembles, with no model call, what they assembled -- the beat's relevant
-lore from the story's own rows, the books that lore came from, the owed
-history a place has accrued, the plan's brief for a room the beat named,
-and the movement classification the cached-recall stage did cheaply -- and
+assembles, with no model role of its own -- one provider round trip, the lore
+query's embedding, is the whole of what it spends -- what they assembled: the
+beat's relevant lore from the story's own rows, the books that lore came
+from, the owed history a place has accrued, the plan's brief for a room the
+beat named, and the movement classification the cached-recall stage did
+cheaply -- and
 it refuses the one thing they also did: inventing. Where `mapping_stage`
 staged a room for a door the plan had not drawn, the compiler emits a typed
 PLANNING NEED (`world/planning_needs.py`) and the Director renders the

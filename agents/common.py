@@ -4387,8 +4387,10 @@ def observer_name_scrub(chat, observer_name, cast):
     `observer_label_fn` above gates a field that holds ONE name. This gates a
     field that holds a paragraph, and it exists because `world_knowledge` did
     not have either: lore entries are objective world record, they are written
-    during play by the mapping stage, and that stage writes canonical names
-    into their prose. Any character whose lore filter admitted the entry then
+    with canonical names in their prose, and some of them are written DURING
+    PLAY -- by the mapping stage when this was measured, and since its
+    retirement (2026-09-04) by the authoring package that files a Writers'
+    Room change. Any character whose lore filter admitted the entry then
     read the name, met or not.
 
     Observed live (chat 38, t140): Tamamo had met the Doctor for the first
@@ -8531,8 +8533,11 @@ def _check_pronoun_fidelity(prose, cast_pronouns):
     for sentence in split_sentences(scan, _SENTENCE_SPLIT):
         for clause in _ling("_CLAUSE_SPLIT").split(sentence):
             # MEASURED BEFORE ENFORCING, because this warning's prefix is in
-            # `_ENFORCEABLE_PREFIXES` and a false positive buys a full narrator
-            # rewrite. Replayed over every stored narrator variant in the live
+            # `_ENFORCEABLE_PREFIXES` -- which since 2026-09-06 buys no rewrite
+            # at all: narration blocks on being parseable JSON and on nothing
+            # else, so a false positive costs a note on the step and the list
+            # is a partition of the warnings, not a price (E12). Replayed over
+            # every stored narrator variant in the live
             # database (2,350 with prose, 69,589 clauses): 0 clauses tokenise
             # differently. `_NAME_TOKEN_RE` opens with the same `[A-Za-z']+`,
             # so the English answer is unchanged by construction and the whole
@@ -8765,9 +8770,12 @@ def _check_narration_tense_match(prose, narration_tense):
 
     The same shape as `_check_narration_person_match` above, and the same
     verdict about what to do with the answer: it is a WARNING and it is
-    deliberately NOT in `_ENFORCEABLE_PREFIXES`. A rewrite costs a whole
-    narrator call, and tense -- like person -- is a whole-draft property that a
-    correction note cannot patch locally.
+    deliberately NOT in `_ENFORCEABLE_PREFIXES`. That list bought a second
+    narrator call when this was written; since 2026-09-06 it buys none (E12),
+    so the two dispositions have converged and every reading of the prose is a
+    note. The reason to keep this one out of the list stands either way: tense
+    -- like person -- is a whole-draft property that a correction note cannot
+    patch locally.
 
     It differs from the person check in what it may read. Person has a value on
     every turn because it is DETECTED; tense is AUTHORED, so `""` is the
@@ -9049,8 +9057,10 @@ def _spoken_line_regions(spoken, span):
     of the span.
 
     The length floor was there for a real reason: a short body can sit inside
-    a longer one by coincidence, and this warning is ENFORCEABLE, so a false
-    positive costs a rewrite. But a floor alone exempted exactly the lines
+    a longer one by coincidence, and this warning's prefix is enforceable, so
+    a false positive cost a rewrite when this was written and costs a false
+    record on the step now (E12; nothing rewrites since 2026-09-06). But a
+    floor alone exempted exactly the lines
     that get absorbed -- short replies. Live, chat 84 turn 13: Sarah Moon's
     two lines and a guard's "Yes ma'am." (ten characters) were welded into a
     single quoted span, the guard never entered the comparison at all, and
@@ -9080,7 +9090,8 @@ def _merged_span_actors(span, speech_events):
     tell that from absorption: Tamamo's "Go on." sits, correctly punctuated
     and correctly bounded, at the front of the Doctor's "Go on. I will wait
     here by the gate." Prose carrying only the Doctor's line is not a merge,
-    and calling it one costs a rewrite.
+    and calling it one files a false finding against a correct page (it cost a
+    rewrite until 2026-09-06, E12).
 
     So a claim whose text is entirely accounted for by a LONGER line from a
     different speaker is coincidence and drops out. What survives is a line
@@ -9757,8 +9768,10 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
     warnings.extend(_check_narration_tense_match(prose, narration_tense))
 
     # F1-F4 world/ordering fidelity (all deterministic; each has its own
-    # enforceable prefix in agents/narration.py so a violation buys exactly
-    # one correction rewrite).
+    # prefix in `agents/narration._ENFORCEABLE_PREFIXES`, which named the
+    # findings that bought one correction rewrite until the correction pass
+    # was removed 2026-09-06 -- a violation is now recorded on the step and
+    # the page stands, E12).
     warnings.extend(_check_event_order(prose, event_order))
     warnings.extend(_check_quote_attribution(
         prose, event_order, actor_pronouns=cast_pronouns))
@@ -9768,7 +9781,8 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
     warnings.extend(_check_action_direction(prose, event_order))
 
     # F5-F6: the page against the two records it was written from. Neither is
-    # in `_ENFORCEABLE_PREFIXES` -- promotion is a measurement, not an edit.
+    # in `_ENFORCEABLE_PREFIXES`, which no longer decides anything the reader
+    # sees (E12): every finding here is a measurement, and none is an edit.
     warnings.extend(_check_speech_marking(prose, view_quotes, excluded_bodies))
     warnings.extend(_check_attire_fidelity(prose, attire_facts))
 

@@ -160,11 +160,15 @@ def _room_of_player(scene, player_name):
 
 
 # The style-guide fields an image prompt is allowed to see, and therefore the
-# only ones that may appear in the cache key. `genre` and `tone` are written
-# into `compose_prompt`; `avoid` into both it and `compose_revision`.
+# only ones that may appear in the cache key. `tone` is written into
+# `compose_prompt`; `avoid` into both it and `compose_revision`.
 #
-# `director_notes` and `mapping_notes` are instructions to OTHER AGENTS and
-# never touch a pixel. Hashing the whole guide meant editing a Director note
+# The rule outlived the fields it was written against: `genre`,
+# `director_notes` and `mapping_notes` left STYLE_GUIDE_FIELDS on 2026-09-04
+# (E39, review of 2026-09-07 -- this note still had `genre` reaching the
+# prompt), and a guide that carries one of them now is a stored row from
+# before that. They were instructions to OTHER READERS and never touched a
+# pixel. Hashing the whole guide meant editing a Director note
 # invalidated every backdrop in the story at once, which is what happened live:
 # chat 67 ("Lagunica adventure") gained a style guide after its rooms were
 # drawn, every signature moved, and the engine reported every existing image
@@ -180,7 +184,7 @@ def visual_style(style):
     """The part of a house style that changes how a room is DRAWN.
 
     Empty values are dropped rather than stored, so "field absent" and "field
-    present but blank" hash identically -- clearing a genre must return a story
+    present but blank" hash identically -- clearing a field must return a story
     to the images it already has, not strand them behind a third key.
     """
     style = style or {}

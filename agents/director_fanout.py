@@ -59,7 +59,7 @@ def _normalized_ledger_notes(out):
     """The Director's rulings, blank lines dropped.
 
     Shared by BOTH beat views on purpose. `director_interpret` is a structural
-    mirror of `director_resolve` -- same fan-out, same six hands -- and the
+    mirror of `director_resolve` -- same fan-out, same five hands -- and the
     ruling channel was added to the resolve half only, so the interpret half
     ran its specialists with nothing to transcribe. A copy of this dict
     comprehension in each view is how that happens again.

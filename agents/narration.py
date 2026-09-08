@@ -276,22 +276,23 @@ def _resolve_narration_tense(chat_id, recent_prose=()):
         return ""
     return lead
 
-# Only dropped/altered dialogue is worth the cost of an automatic rewrite --
-# it's an ABSOLUTE-tier violation (a player-visible line silently vanishing
-# or changing), and forcing a second full narrator call on every occurrence
-# doubles that stage's latency. Content-reuse is a softer quality issue (the
-# model recycled prior prose instead of describing this turn) that doesn't
-# warrant paying that cost automatically; it stays visible via
-# fidelity_warnings for manual review instead. Missing-proper-noun warnings
-# were never in this list -- that check has real false positives (e.g. a
-# location's own name appearing in scenario/lore text the player would never
-# actually say aloud).
+# WHAT THIS LIST IS NOW (E13): a partition of the fidelity warnings, and
+# nothing more. It named the findings that bought an automatic second narrator
+# call -- dropped or altered dialogue, an ABSOLUTE-tier violation -- while
+# content-reuse and missing-proper-noun findings stayed out of it because
+# their false positives were not worth a doubled stage. The correction pass
+# that spent the call was removed 2026-09-06: narration blocks on being
+# parseable JSON and on nothing else, every check reports, and the only live
+# reader of the list is `tools/narrator_sheet_bench.py`, which uses it to
+# score arms.
 
 # Deterministic craft screen: AI-tell phrases the PROSE CRAFT prompt bans. A
-# draft containing any triggers ONE rewrite naming them (reusing the correction
-# loop). Conservative -- only clear tells, to avoid false positives on ordinary
-# prose. Dialogue is exempt (quotes are fixed); we scan the whole draft but the
-# patterns don't match normal speech.
+# draft containing any is REPORTED, one warning per tell, and published as
+# written -- the rewrite this screen used to buy was removed 2026-09-06 for
+# the reason `narrator` states at the removal site (E13). Conservative --
+# only clear tells, to avoid false positives on ordinary prose. Dialogue is
+# exempt (quotes are fixed); we scan the whole draft but the patterns don't
+# match normal speech.
 
 
 def _craft_tells(prose: str) -> list:
@@ -1273,7 +1274,15 @@ def _render_observed_events(observations, player_acts=()):
 
 
 def _render_current_events(events, player_name=""):
-    """`event_order` as the plain chronological package written from.
+    """`event_order` as a plain chronological package.
+
+    NOT WHAT THE NARRATOR IS WRITTEN FROM ANY MORE (E14). `narrator` builds
+    `current_events` from `_render_observed_events` -- perception's own record
+    -- and keeps `event_order` on `_fidelity_facts` for the deterministic
+    checks alone, so the model is handed what a mind was admitted rather than
+    what happened. This renderer survives for `tools/narrator_package_bench.py`
+    and the tests that score the two shapes against each other; a change here
+    reaches no played beat.
 
     The structured list stays the record the deterministic checks read; this
     is the same record as text, because the thing being asked of the model is
@@ -1995,11 +2004,14 @@ def narrator(ctx, nonce):
         "current_events": current_events,
         "variant_seed": nonce,
     }
-    # Once, here, rather than inside `_generate_narration`: that function is
-    # re-entered for the fidelity correction and up to twice more for craft
-    # rewrites, and a hook re-run per attempt could hand each attempt different
-    # context -- so a correction pass would be narrating against a frame the
-    # first pass never saw, and the retry loop would look like the defect.
+    # Once, here, rather than inside `_generate_narration`: a hook re-run per
+    # attempt could hand each attempt different context, so a second pass would
+    # be narrating against a frame the first never saw and the retry would look
+    # like the defect. The passes that re-entered it -- one fidelity correction
+    # and up to two craft rewrites -- are gone (2026-09-06, below), which
+    # leaves one generation per beat and whatever JSON retry `_agent_json`
+    # does inside it; the placement stays because it is what makes that true
+    # of any pass added later (E13).
     payload = _extension_narration_payload(ctx, payload, scope="narrator")
     out, warnings, fidelity_warnings = _generate_narration(
         payload, view, prev, p_lines, fidelity_facts=_fidelity_facts,

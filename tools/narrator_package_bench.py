@@ -175,7 +175,15 @@ def legacy_payload():
 
 
 def shipped_payload():
-    """The three packages, in the order agents/narration.narrator sends."""
+    """The three packages, in the order agents/narration.narrator sends them.
+
+    `current_events` is the `event_order` rendering (`_render_current_events`),
+    which is what the narrator sent when this harness was written; the shipped
+    stage has built that package from perception's own observations
+    (`_render_observed_events`) since 2026-08-23, so this arm measures the
+    older shape deliberately (E14). `tools/narrator_sheet_bench.py` calls the
+    shipped function.
+    """
     from agents.narration import _render_current_events
     past = "\n\n".join([PAST_INPUT_PRIOR, PAST_TAIL_PROSE, CURRENT_INPUT])
     p = {k: COMMON[k] for k in (
