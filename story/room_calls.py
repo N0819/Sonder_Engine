@@ -128,3 +128,104 @@ def _reasoning():
         return last_reasoning.get() or ""
     except Exception:
         return ""
+
+
+# ---------------------------------------------------------------------------
+# What a reply re-derives, and how often
+# ---------------------------------------------------------------------------
+
+class ReplyMemo:
+    """The derived half of a Room agent's per-step payload, held for one
+    reply and dropped the moment that reply writes.
+
+    A Room reply is a LOOP of model calls -- up to
+    `story_planner.PLANNER_STEPS_PER_REPLY` for the Planner,
+    `dramaturge.DRAMATURGE_STEPS` for the Dramaturge -- and each step used
+    to rebuild the same payload out of the database: the story row, the
+    clock, the cast's minds, the thread, the mandates, the status row, the
+    frontier, the packages, the standing proposals. Measured on the bench
+    copies (review 2026-09-07, C21, `tools/bench/room_payload.py`): one
+    Planner payload costs 17.3 ms on chat 114 (the 307-body charter town),
+    most of it the cast summary and the frontier, and a forty-step reply
+    spent 0.69 s rebuilding it against 0.02 s held -- 14.0 ms a payload and
+    0.56 s against 0.02 s on chat 117's 123-beat descent. 97% off both.
+
+    TWO THINGS MOVE THE DERIVED HALF, AND THE MEMO IS DROPPED BY BOTH.
+    The first is the reply's own writes -- a tool that is not a pure read,
+    a granted mandate, a rewritten status row, a filed proposal -- and each
+    calls `wrote()`, which drops the whole memo so the next step re-derives
+    all of it. The second is a BEAT LANDING UNDER THE REPLY: the room is
+    not alone in the database, `room_conversation.converse_stream` runs the
+    Planner in a daemon thread against no lock, and `story_planner`'s own
+    `story_rewound_past` guard exists because the turn index moves
+    mid-reply. So every step hands the memo `core.db.data_version()`
+    through `at_version`, and a version that is not the one the memo was
+    built at drops it exactly as a write does.
+
+    WHY THE DATABASE'S OWN VERSION AND NOT THE TURN INDEX (the second C21
+    skeptic, 2026-09-08, measured it): `web/app.py` inserts the turns row
+    BEFORE `run_pipeline` and the scene commits at the END of that same
+    index, so a turn-index key fires when the beat STARTS -- rebuilding
+    from pre-commit data -- and is silent when the beat COMMITS, which is
+    the mutation that matters. `data_version` moves on any OTHER
+    connection's commit and never on this connection's own (connections are
+    thread-local), so the beat's commit, a reroll recommitting the scene at
+    the same index, a host edit in the world browser, an archive import and
+    the Dramaturge filing a proposal all move it, and the reply's own writes
+    do not -- which is why the explicit `wrote()` calls stay. A false
+    positive costs one re-derivation. It is also cheaper than the turn
+    index it replaces: 0.013 ms median on the bench copy of chat 114
+    against 0.019 ms.
+
+    Measured before this was held (review 2026-09-07, C21): a turn
+    committed between step 1 and step 2 of a reply of pure reads left the
+    next payload's `player_room` at "quay" while the scene said "shed", and
+    its `clock.turn_idx` a beat behind, for the rest of the reply
+    (`tests/test_room_payload_memo.py` holds it, and holds the same rule at
+    the Dramaturge's loop).
+
+    WIDEN THE MEMO, NEVER THE KEY. A caller that is unsure whether
+    something wrote calls `wrote()`: a spurious drop costs one re-derivation,
+    a missed one serves a stale world for the rest of the reply. That is why
+    `room_tools.tool_only_reads` answers False for a tool it does not
+    recognise.
+
+    Per reply, never a module global: a memo that outlived its reply would
+    serve one story's frontier to another's, and one turn's clock to the
+    next. What it holds is SHARED AND READ-ONLY -- the payload is
+    serialized, not mutated (the same contract `charter_runtime`'s registry
+    cache states).
+    """
+
+    def __init__(self):
+        self.writes = 0
+        self._at = -1
+        self._version = None
+        self._parts = {}
+
+    def wrote(self):
+        """The reply changed the database; every part is re-derived next."""
+        self.writes += 1
+
+    def at_version(self, version):
+        """The step's live `core.db.data_version()`. A writer on another
+        connection -- the beat's commit above all -- moves the derived half
+        through none of the reply's own writes, so a version that is not the
+        one the memo was built at drops it (C21)."""
+        if self._version is not None and version != self._version:
+            self.wrote()
+        self._version = version
+
+    def part(self, key, build):
+        if self._at != self.writes:
+            self._parts = {}
+            self._at = self.writes
+        if key not in self._parts:
+            self._parts[key] = build()
+        return self._parts[key]
+
+
+def memo_part(memo, key, build):
+    """``build()`` once per reply through ``memo``, or straight through when
+    there is none -- a direct caller, a single-shot pass, a test."""
+    return build() if memo is None else memo.part(key, build)

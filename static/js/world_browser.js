@@ -150,6 +150,52 @@ function wbText(value, save, { multiline = false, placeholder = "", title = null
 // One write, one outcome the host can see. On success the card re-renders
 // from the server's fresh answer; on failure the refusal is the toast and the
 // card re-renders from what the server still holds. Nothing reverts silently.
+// A re-read asked for by a burst of writes runs ONCE PER BURST, not once per
+// write (review 2026-09-07, C22).
+//
+// THE CLASS is the render coalescer's, one layer out: a read whose answer the
+// next read throws away was never worth issuing. Every field commit in the
+// inspector re-reads the world -- the room index, the positions, the selected
+// room's grid -- and holding an arrow key to nudge a mark writes on every key
+// repeat, so the burst is the ordinary case rather than the odd one. Measured
+// on the owner's 307-body town (chat 114): the index costs 52 ms, positions
+// 10 ms, the room slice 31 ms and the grid 26 ms, so five nudges spent 15
+// requests and ~440 ms of server work arriving at the view one trailing pass
+// of 3 requests and 88 ms draws.
+//
+// A call that lands while a pass is running does not queue behind it: it
+// marks the pass dirty and ONE more pass follows, reading whatever the last
+// write left. Every caller still awaits the settled view, so the error path
+// and Undo's ordering are unchanged.
+//
+// What it does change, and the only thing it does: a pass that THROWS drops
+// the trailing pass with it, so a re-read that fails mid-burst leaves the
+// view stale until the next gesture, where one read per write would have
+// tried again on the following write. Nothing is silent about it -- both
+// awaiting callers see the rejection and `wbWrite` toasts it -- and letting
+// the trailing pass run anyway would have to choose which of two rejections
+// the caller is handed, which is a worse answer than a stale view one
+// keystroke old.
+function wbCoalesced(run) {
+  let running = null;
+  let again = false;
+  const pump = async () => {
+    try {
+      do {
+        again = false;
+        await run();
+      } while (again);
+    } finally {
+      running = null;
+    }
+  };
+  return () => {
+    if (running) { again = true; return running; }
+    running = pump();
+    return running;
+  };
+}
+
 async function wbWrite(ctx, call, { quiet = false } = {}) {
   try {
     const result = await call();
@@ -2758,6 +2804,21 @@ async function openWorldBrowser(opts = {}) {
     const browse = el("div", {}, location, el("div", { class: "wb" }, map.pane, card));
     const bodies = el("div", { class: "wb-bodies" });
 
+    // The two passes a write asks for, each run once per burst (wbCoalesced).
+    const replaceReads = wbCoalesced(() =>
+      Promise.all([refreshIndex(), loadGrid(state.selected)]));
+    const refreshReads = wbCoalesced(async () => {
+      delete state.cache.raw;
+      await refreshIndex();
+      if (!alive() || S.chatId !== chatId) return;
+      if (state.tab === "rooms") {
+        if (state.zoom === "map") await Promise.all([showStructure(), loadCard(state.selected)]);
+        else await loadRoom(state.selected);
+      } else if (state.tab === "bodies") {
+        wbRenderBodies(bodies, ctx);
+      }
+    });
+
     const ctx = {
       chatId,
       index: state.index,
@@ -2780,19 +2841,9 @@ async function openWorldBrowser(opts = {}) {
           state.slice = fresh;
           wbRenderCard(card, fresh, ctx);
         }
-        await Promise.all([refreshIndex(), loadGrid(state.selected)]);
+        await replaceReads();
       },
-      refresh: async () => {
-        delete state.cache.raw;
-        await refreshIndex();
-        if (!alive() || S.chatId !== chatId) return;
-        if (state.tab === "rooms") {
-          if (state.zoom === "map") await Promise.all([showStructure(), loadCard(state.selected)]);
-          else await loadRoom(state.selected);
-        } else if (state.tab === "bodies") {
-          wbRenderBodies(bodies, ctx);
-        }
-      },
+      refresh: () => refreshReads(),
       // What the map needs of the card and the routes: the slice it edits
       // from, the row a click lands on, and the writes a drop makes -- each
       // ONE commit gesture: drop = write, a toast naming what was written

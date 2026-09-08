@@ -363,19 +363,29 @@ def fingerprint_similarity(a, b):
     return len(left & right) / float(len(left | right))
 
 
-def acoustic_signature(scene, room_id, style=None, pin=None):
+def acoustic_signature(scene, room_id, style=None, pin=None, fingerprint=None):
     """A stable hash of everything that changes how `room_id` SOUNDS.
 
     A pinned room collapses to the pin itself: the host has said what this
     place sounds like, so weather and hour must not send the engine looking for
     something else, and two rooms pinned to the same file share one cache
     entry.
+
+    `fingerprint` is the caller's already-derived one. The signature IS the
+    hash of it, so a caller that keeps the fingerprint (every
+    `build_ambience_request` does -- a miss asks whether a near-enough bed is
+    already resolved) was deriving it twice per read: 0.16 ms each on chat
+    117 at review 2026-09-07, C22b. Handing it in cannot move the cache key,
+    because the caller derives it from the same three arguments this function
+    would have used -- pinned by `bench_poll_paths.py`, which re-derives the
+    signature the old way and compares.
     """
     if pin:
         blob = json.dumps({"pin": pin}, sort_keys=True, ensure_ascii=False)
         return "pin" + hashlib.sha256(blob.encode("utf-8")).hexdigest()[:21]
-    blob = json.dumps(acoustic_fingerprint(scene, room_id, style),
-                      sort_keys=True, ensure_ascii=False)
+    if fingerprint is None:
+        fingerprint = acoustic_fingerprint(scene, room_id, style)
+    blob = json.dumps(fingerprint, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:24]
 
 
@@ -1430,34 +1440,49 @@ def search_candidates(query, source=None, limit=8, avoid="", rank_query=""):
 
 # --- resolution ------------------------------------------------------------
 
-def build_ambience_request(chat_id, turn_idx, player_name=None, style=None):
+def build_ambience_request(chat_id, turn_idx, player_name=None, style=None,
+                           *, for_prompt=False):
     """Everything needed to resolve (or serve from cache) one room's ambience.
 
     Returns None when there is no room to sound -- an opening beat before
     anyone has been placed, say. Not an error: there is simply nothing to play.
+
+    `for_prompt` adds `place`, the room's soundscape, which is what a query is
+    written from. Off by default, and for the backdrop twin's reason
+    (`build_backdrop_request`): only `resolve_ambience` reads it, while
+    `GET /api/turns/{id}/ambience` and `request_ambience`'s cache check --
+    both polled -- carry none of it. That plus the fingerprint derived once
+    instead of twice took this function from 1.23 ms to 0.90 ms on chat 117
+    and 0.86 to 0.50 ms on chat 114 (review 2026-09-07, C22b,
+    `tools/bench/bench_poll_paths.py`).
     """
     scene = scene_after_turn(chat_id, turn_idx)
     room_id = _room_of_player(scene, player_name)
     if not room_id:
         return None
     pin = ambience_pin_for(chat_id, room_id)
-    signature = acoustic_signature(scene, room_id, style, pin)
+    # Derived ONCE and handed to the signature, which is its hash. Carried
+    # too, so a miss can ask whether some ALREADY-resolved state of this room
+    # is near enough to answer for it -- see `reusable_manifest`.
+    fingerprint = acoustic_fingerprint(scene, room_id, style)
+    signature = acoustic_signature(scene, room_id, style, pin,
+                                   fingerprint=fingerprint)
     room = ((scene.get("rooms") or {}).get(room_id) or {})
-    return {
+    out = {
         "room": room_id,
         "room_name": room.get("name") or room_id,
         "signature": signature,
         "pin": pin,
-        # Carried so a miss can ask whether some ALREADY-resolved state of this
-        # room is near enough to answer for it -- see `reusable_manifest`.
-        "fingerprint": acoustic_fingerprint(scene, room_id, style),
+        "fingerprint": fingerprint,
         "cached": cached_ambience(chat_id, signature),
-        "place": room_soundscape(scene, room_id),
         # The sky's own attenuation for this room, which becomes the WEATHER
         # LAYER's gain rather than the whole bed's: two rooms deep, rain is a
         # quiet layer over an undiminished room tone. See compose_layers.
         "weather": weather_for_room(scene, room_id),
     }
+    if for_prompt:
+        out["place"] = room_soundscape(scene, room_id)
+    return out
 
 
 # The parts of a manifest that describe the SOUND rather than where it was
@@ -1676,7 +1701,8 @@ def resolve_ambience(chat_id, turn_idx, player_name=None, style=None,
     every direct blocking caller. Returns None when it was cancelled: a room
     nobody is standing in any more gets no bed, and none was promised.
     """
-    req = build_ambience_request(chat_id, turn_idx, player_name, style)
+    req = build_ambience_request(chat_id, turn_idx, player_name, style,
+                                 for_prompt=True)
     if not req:
         return None
     if req["cached"] and not (force or reroll):
@@ -2042,12 +2068,17 @@ def cancel_ambience(chat_id):
 
 
 def request_ambience(chat_id, turn_idx, player_name=None, style=None,
-                     force=False, reroll=False, reroll_layer=None):
+                     force=False, reroll=False, reroll_layer=None, req=None):
     """Ensure this turn's ambience exists, resolving in the background.
 
     Returns {signature, status, room} and NEVER blocks on the network.
+
+    `req` is the caller's already-built request, for the reason
+    `request_backdrop` states: the POST route answers with the same dict, and
+    building it twice per press cost the route twice over.
     """
-    req = build_ambience_request(chat_id, turn_idx, player_name, style)
+    if req is None:
+        req = build_ambience_request(chat_id, turn_idx, player_name, style)
     if not req:
         return None
     signature = req["signature"]

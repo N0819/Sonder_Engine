@@ -80,7 +80,7 @@ def put_memory_vector(vkey, embedding, cue_embedding, model, dim):
     return True
 
 
-def file_memory_vector(embedding, cue_embedding, model, dim):
+def file_memory_vector(embedding, cue_embedding, model, dim, *, memory_id=None):
     """File a memory's vector pair in the content-addressed store AT MINT
     TIME, from whichever writer produced it.
 
@@ -92,29 +92,49 @@ def file_memory_vector(embedding, cue_embedding, model, dim):
     is written, makes the checkpoint the read it claims to be. Idempotent
     like `put_memory_vector`; a fallback vector is filed too, because the
     checkpoint that references it must resolve whatever quality it had.
+
+    `memory_id` files the address on the ROW as well, which is the half v37
+    left behind: the checkpoint stopped writing the store but still read both
+    20 KB blobs off every memory and hashed them to learn the address it
+    files by (65ms of the 81ms chat 117's 401-memory dump cost, every beat).
+    Pass it from every writer that has a row id -- the hash is already
+    computed here, so the column costs one UPDATE on a primary key and saves
+    the whole bank's worth of blob traffic per checkpoint. Review 2026-09-07
+    C2.
     """
     if embedding is None or cue_embedding is None:
         return False
-    return put_memory_vector(vector_address(embedding, cue_embedding),
-                             embedding, cue_embedding, model, dim)
+    vkey = vector_address(embedding, cue_embedding)
+    filed = put_memory_vector(vkey, embedding, cue_embedding, model, dim)
+    if memory_id is not None:
+        # After the row's own write, never before: the `memories_vkey_stale`
+        # trigger clears the column on any blob write that does not restamp
+        # it, so a stamp that ran first would be wiped by its own writer.
+        qi("UPDATE memories SET vkey=? WHERE id=?", (vkey, memory_id))
+    return filed
 
 
 def backfill_memory_vectors(c):
-    """One-shot, on a file crossing schema v37 (`core.db.init`): file every
-    existing memory vector so the checkpoint can stop doing it per turn. Runs
-    on the raw connection the migration chain holds; idempotent."""
+    """One-shot, on a file crossing schema v37 or v38 (`core.db.init`): file
+    every existing memory vector so the checkpoint can stop doing it per turn,
+    and stamp each row with the address so the checkpoint can stop hashing for
+    it either (review 2026-09-07 C2). Runs on the raw connection the migration
+    chain holds; idempotent -- the store insert ignores a key it already has
+    and the stamp rewrites the same string."""
     rows = c.execute(
-        "SELECT embedding, cue_embedding, embedding_model, embedding_dim "
+        "SELECT id, embedding, cue_embedding, embedding_model, embedding_dim "
         "FROM memories WHERE embedding IS NOT NULL "
         "AND cue_embedding IS NOT NULL").fetchall()
     now = time.time()
     for row in rows:
-        full, cue, model, dim = row[0], row[1], row[2], row[3]
+        mid, full, cue, model, dim = row[0], row[1], row[2], row[3], row[4]
+        vkey = vector_address(full, cue)
         c.execute(
             "INSERT OR IGNORE INTO memory_vectors"
             "(vkey,embedding,cue_embedding,embedding_model,embedding_dim,created) "
             "VALUES(?,?,?,?,?,?)",
-            (vector_address(full, cue), full, cue, model or "", dim, now))
+            (vkey, full, cue, model or "", dim, now))
+        c.execute("UPDATE memories SET vkey=? WHERE id=?", (vkey, mid))
     return len(rows)
 
 
@@ -202,6 +222,58 @@ def restore_memory_vectors(entries):
     return n
 
 
+# Every column of `memories` EXCEPT the two vector blobs, which a checkpoint
+# dump never reads -- it reads the address `vkey` carries. A column added to
+# the table and to the dump's dict below has to be added here too, or the dump
+# raises on it immediately; that is the intended failure, and it is why this
+# list is written out rather than approximated.
+_DUMP_COLUMNS = (
+    "id, char_id, turn_id, turn_idx, frame_id, kind, category, provenance, "
+    "salience, content, gist, key_phrases, entities, location, "
+    "emotional_context, valence, arousal, confidence, encoding_valence, "
+    "encoding_arousal, archived, event_key, importance, disputed, "
+    "encoded_at_seconds, access_count, last_accessed, last_accessed_turn, "
+    "vkey, embedding_model, embedding_dim"
+)
+
+
+def _dump_vector_addresses(chat_id, rows):
+    """{memory id: content address} for a checkpoint dump.
+
+    Read off the row where the writer filed it, and computed from the blobs
+    only for the rows that carry none -- a bank written before schema v38, or
+    a row whose vectors were rewritten without a restamp (the
+    `memories_vkey_stale` trigger clears the column for exactly that case).
+    The fallback is the whole of the old behaviour, so an unstamped row's
+    address is the same string it always was, including the one a row with no
+    vectors at all gets: `vector_address(None, None)`, which resolves to
+    nothing in the store and sends the restore down its re-embed path.
+    """
+    out = {}
+    missing = []
+    for r in rows:
+        key = r["vkey"] or ""
+        if key:
+            out[r["id"]] = key
+        else:
+            missing.append(r["id"])
+    if missing:
+        # One query for all of them, not one per row: a legacy bank is the
+        # case this branch exists for and it is the whole bank. Addressed by
+        # the IDS that came back unstamped, never by re-filtering on the
+        # predicate: `_upsert_memory`'s INSERT and its vkey stamp are two
+        # statements, so the out-of-band consolidation job publishes a
+        # NULL-vkey row for a moment, and a row stamped between the caller's
+        # read and this one would then match neither query and fall out of
+        # the map -- a KeyError out of `dump_chat_memories` in the middle of
+        # `turn_new`'s checkpoint (the second C2 skeptic reproduced it).
+        marks = ",".join("?" * len(missing))
+        for r in q("SELECT id, embedding, cue_embedding FROM memories "
+                   f"WHERE id IN ({marks})", tuple(missing)):
+            out[r["id"]] = vector_address(r["embedding"], r["cue_embedding"])
+    return out
+
+
 def dump_chat_memories(chat_id, *, inline_vectors=True):
     """The chat's memory bank, for a checkpoint or a portable archive.
 
@@ -224,7 +296,22 @@ def dump_chat_memories(chat_id, *, inline_vectors=True):
     # rows of a file that predates that were filed once at schema v37, so a
     # checkpoint references vectors by address and inserts nothing -- the
     # read the two callers document it as.
-    rows = q("SELECT * FROM memories WHERE chat_id=? ORDER BY CASE WHEN turn_idx IS NULL THEN 1 ELSE 0 END, turn_idx, id", (chat_id,))
+    #
+    # And no blobs either, when nobody wants them: the checkpoint wants the
+    # ADDRESS, which v38 files on the row (`vkey`), so the 20 KB pair per
+    # memory stays in the database instead of crossing into Python to be
+    # hashed and dropped. Measured on the bench copy of chat 117, 401
+    # memories, 8.2 MB of vectors: 81.5ms to fetch + 13.1ms to hash becomes
+    # 16.9ms to fetch and nothing to hash (review 2026-09-07 C2).
+    order = ("ORDER BY CASE WHEN turn_idx IS NULL THEN 1 ELSE 0 END, "
+             "turn_idx, id")
+    if inline_vectors:
+        rows = q(f"SELECT * FROM memories WHERE chat_id=? {order}", (chat_id,))
+        vkeys = {}
+    else:
+        rows = q(f"SELECT {_DUMP_COLUMNS} FROM memories WHERE chat_id=? {order}",
+                 (chat_id,))
+        vkeys = _dump_vector_addresses(chat_id, rows)
     return [
         {"char_id": r["char_id"], "turn_id": r["turn_id"], "turn_idx": r["turn_idx"],
          "frame_id": r["frame_id"],
@@ -268,7 +355,7 @@ def dump_chat_memories(chat_id, *, inline_vectors=True):
          **({"embedding": _blob_to_b64(r["embedding"]),
              "cue_embedding": _blob_to_b64(r["cue_embedding"])}
             if inline_vectors else
-            {"vkey": vector_address(r["embedding"], r["cue_embedding"])}),
+            {"vkey": vkeys[r["id"]]}),
          "embedding_model": r["embedding_model"],
          "embedding_dim": r["embedding_dim"]}
         for r in rows

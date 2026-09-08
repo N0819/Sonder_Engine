@@ -546,7 +546,8 @@ def repair_pending_embeddings(batch=32):
                            (full, cue, got.model_key, got.dimensions,
                             mem["id"]))
                         file_memory_vector(full, cue, got.model_key,
-                                           got.dimensions)
+                                           got.dimensions,
+                                           memory_id=mem["id"])
                 fixed["memories"] += len(rows)
             else:
                 texts = [_summary_retrieval_text(
@@ -642,7 +643,7 @@ def _upsert_memory(data: dict, full_vec, cue_vec, embedded):
     # checkpoint no longer writes the store, so the writer must.
     from mind.memory_snapshot import file_memory_vector
     file_memory_vector(_blob(full_vec), _blob(cue_vec),
-                       embedded.model_key, embedded.dimensions)
+                       embedded.model_key, embedded.dimensions, memory_id=mid)
     if getattr(embedded, "fallback", False):
         note_failed_embedding_write("memories", [mid])
     return mid

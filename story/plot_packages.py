@@ -2868,7 +2868,22 @@ def preview_package(cid, uid, *, frame_id=None):
 
 def validate_package(cid, uid, *, frame_id=None):
     """Run the preview and record the verdict on the package at its current
-    revision. Status passes through `validating` and returns to `draft`."""
+    revision. Status passes through `validating` and returns to `draft`.
+
+    THE THIRD WRITE STAYS, AND IT IS NOT AN OVERSIGHT (review 2026-09-07,
+    C21). The store is saved whole three times -- `validating` for the panel
+    to poll while the preview runs, then the status put back, then the
+    verdict -- and the last two are separated by nothing that could fail, so
+    the duplicate looks free to drop. It is not: whatever the middle write
+    does not restore, the LAST write has to, and a last write that raises
+    (`normalize_packages` refusing the store, a failed `wset`) then leaves
+    the package at `validating` for good, because `EDITABLE == ("draft",)`
+    and nothing at that status can be edited, validated, prepared or
+    published again. Measured on a store the size of the bench copy of chat
+    114's (4 packages, 12,725 bytes): 0.407 ms median for the write, against
+    a preview that dry-runs every operation. A stranded package is not worth
+    0.4 ms.
+    """
     stored = packages(cid, frame_id)
     pkg = stored.get(str(uid))
     if pkg is None:

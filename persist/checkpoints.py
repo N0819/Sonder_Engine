@@ -13,40 +13,110 @@ from mind.memory import (
     dump_lore_overlays, restore_lore_overlays,
 )
 
+def _world_rows(chat_id):
+    """The chat's world table as (key, stored JSON text, is-it-JSON) triples.
+
+    Two callers with two needs: `snapshot_state` parses the text into objects,
+    `snapshot_blob` splices it into the checkpoint document verbatim. Both read
+    the same rows through here so neither can drift from the other's idea of
+    what a snapshot's world section contains.
+
+    SQLite is asked whether each value parses, because the caller that does
+    NOT parse still has to fail on a row that cannot (see `snapshot_blob`).
+    `json_valid` is decided inside the b-tree scan on text already being read:
+    about 3ms over chat 114's 40 rows / 937KB (2.9 and 3.15 in two
+    measurements) and 0.7-0.8ms over chat 117's 30 rows / 234KB, against
+    20.9ms and 5.0ms for the parse it replaces (review 2026-09-07 C2). The
+    object-spelling caller pays that column without reading it: 30.7 -> 34.6ms
+    for `json.dumps(snapshot_state(cid))` on chat 114, the one cost of the
+    split. It is NULL, not 0, for a NULL value -- both are falsy,
+    which is the only property the caller uses.
+    """
+    return [(w["key"], w["value"], w["ok"])
+            for w in q("SELECT key, value, json_valid(value) AS ok "
+                       "FROM world WHERE chat_id=?", (chat_id,))]
+
+
 def snapshot_state(chat_id):
-    chat = q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True)
-    world = {
-        w["key"]: json.loads(w["value"])
-        for w in q("SELECT * FROM world WHERE chat_id=?", (chat_id,))
-    }
-    chars = {
-        str(c["char_id"]): {"state": json.loads(c["state"] or "{}"), "status": c["status"]}
-        for c in q("SELECT * FROM chat_chars WHERE chat_id=?", (chat_id,))
-    }
-    char_frames = [
-        {"char_id": r["char_id"], "frame_id": r["frame_id"],
-         "status": r["status"], "state": json.loads(r["state"] or "{}")}
-        for r in q("SELECT * FROM chat_char_frames WHERE chat_id=?", (chat_id,))
-    ]
-    # frames rows and persona stations are durably mutated by spatial
-    # split/merge commits (spatial_frames.perform_split/perform_merge:
-    # new frame rows, chat_personas.frame_id restationing, frames.
-    # merged_turn_idx) -- without them in the snapshot, rerolling such a
-    # turn leaves stranded personas and permanently-merged frames.
-    frames = [
-        {"id": r["id"], "label": r["label"], "ordinal": r["ordinal"],
-         "kind": r["kind"], "travelers": r["travelers"],
-         "nonexistent_cast": r["nonexistent_cast"], "created": r["created"],
-         "parent_frame_id": r["parent_frame_id"],
-         "split_turn_idx": r["split_turn_idx"],
-         "merged_turn_idx": r["merged_turn_idx"]}
-        for r in q("SELECT * FROM frames WHERE chat_id=? ORDER BY id", (chat_id,))
-    ]
-    chat_personas = [
-        {"persona_id": r["persona_id"], "status": r["status"],
-         "frame_id": r["frame_id"]}
-        for r in q("SELECT * FROM chat_personas WHERE chat_id=?", (chat_id,))
-    ]
+    """The pre-turn snapshot as OBJECTS, for the readers that walk it.
+
+    `snapshot_blob` is the same snapshot as the TEXT a checkpoint stores; a
+    caller that only wants to save it should use that one and skip the parse.
+    """
+    return {"world": {k: json.loads(v) for k, v, _ in _world_rows(chat_id)},
+            **_snapshot_without_world(chat_id)}
+
+
+def snapshot_blob(chat_id):
+    """The pre-turn snapshot as the JSON TEXT a checkpoint row stores.
+
+    A world value is ALREADY JSON text in the database (`db.wset` is the only
+    writer and serialises it there), and the checkpoint is ALSO JSON text, so
+    parsing every row into Python objects only to re-emit them is an identity
+    transform paid for twice. This splices the stored text straight into the
+    document instead. Review 2026-09-07 C2; measured on the sanitized bench
+    copy of chat 114 (40 world rows, 916KB of them, `charters` 867KB of that):
+    57.1ms to parse and re-emit becomes 2.2ms to splice, and the owner's live
+    charters row is 41MB rather than 867KB. The saving lands twice per turn
+    (route and pipeline both checkpoint) and again on a `data_version` race.
+
+    The text is byte-identical to `json.dumps(snapshot_state(chat_id))`
+    wherever the stored row is itself `json.dumps` output, which is every one
+    of the 70 world rows across the two bench stories; where a row was written
+    with different spacing or unescaped non-ASCII the document differs by that
+    whitespace alone and parses to the same object, which is all any reader of
+    a checkpoint blob does with it.
+
+    A row that does not parse still stops the turn, exactly as the parse it
+    replaces did -- splicing text that is not JSON would write a checkpoint
+    nothing can read back. That is what `_world_rows` asks `json_valid` for,
+    and it is why this is a faster spelling of the old answer rather than a
+    weaker one.
+    """
+    parts = []
+    for key, value, ok in _world_rows(chat_id):
+        if not ok:
+            # A row SQLite cannot parse -- blank, truncated, hand-edited --
+            # must fail HERE, where the old parse raised and the turn stops
+            # with no checkpoint written, and not at the RESTORE that reads
+            # the blob back, by which time the checkpoint is written and
+            # unreadable. `wset` cannot write such a row; a hand edit can.
+            #
+            # Python's parser is a shade wider than SQLite's: it accepts the
+            # `NaN`/`Infinity` literals that `json.dumps` itself emits and
+            # `json_valid` rejects. So a row that fails the SQL check gets the
+            # old parse-and-re-emit rather than the raise -- the same answer
+            # wherever the old code had one, a ValueError only where the old
+            # code raised too. It costs nothing on the common path: zero of
+            # the 70 world rows across the two bench stories fail json_valid
+            # (review 2026-09-07 C2).
+            try:
+                value = json.dumps(json.loads(value))
+            except (TypeError, ValueError):
+                raise ValueError(
+                    "world row %r of chat %s holds no JSON" % (key, chat_id))
+        parts.append("%s: %s" % (json.dumps(key), value))
+    world = "{%s}" % ", ".join(parts)
+    rest = json.dumps(_snapshot_without_world(chat_id))
+    # `rest` is never "{}" -- `chars` and the rest of the sections are always
+    # present -- so dropping its opening brace splices cleanly.
+    return '{"world": %s, %s' % (world, rest[1:])
+
+
+def _snapshot_lore(chat_id):
+    """The four book-shaped sections of a snapshot: the canon book, every
+    book the story owns or reads, the links between them, and the story's
+    overlays on library entries.
+
+    Its own function because `refresh_checkpoint` wants ONLY these four: an
+    attach/detach changes the book set and nothing else, and building the
+    whole snapshot to read four keys off it re-derived the world, the frames,
+    the entity tables and the entire memory bank to throw them away (review
+    2026-09-07 C2; measured on the bench copies, the source a refresh builds
+    went from 28.1ms to 0.8ms on chat 114 and from 32.7ms to 0.1ms on chat
+    117, whose 401-memory bank was almost all of it).
+    """
+    chat = q("SELECT lorebook_id FROM chats WHERE id=?", (chat_id,), one=True)
     canon = chat["lorebook_id"] if chat else None
     # Snapshot durable ownership, not only retrieval reachability. Isolated
     # descendants intentionally do not inherit/retrieve through their parent,
@@ -114,6 +184,40 @@ def snapshot_state(chat_id):
     links = dump_lorebook_links(book_ids)
     # The story's deviations from its library, portable by entry uid.
     overlays = dump_lore_overlays(chat_id)
+    return {"lore": lore, "lorebooks": books,
+            "lorebook_links": links, "lore_overlays": overlays}
+
+
+def _snapshot_without_world(chat_id):
+    chars = {
+        str(c["char_id"]): {"state": json.loads(c["state"] or "{}"), "status": c["status"]}
+        for c in q("SELECT * FROM chat_chars WHERE chat_id=?", (chat_id,))
+    }
+    char_frames = [
+        {"char_id": r["char_id"], "frame_id": r["frame_id"],
+         "status": r["status"], "state": json.loads(r["state"] or "{}")}
+        for r in q("SELECT * FROM chat_char_frames WHERE chat_id=?", (chat_id,))
+    ]
+    # frames rows and persona stations are durably mutated by spatial
+    # split/merge commits (spatial_frames.perform_split/perform_merge:
+    # new frame rows, chat_personas.frame_id restationing, frames.
+    # merged_turn_idx) -- without them in the snapshot, rerolling such a
+    # turn leaves stranded personas and permanently-merged frames.
+    frames = [
+        {"id": r["id"], "label": r["label"], "ordinal": r["ordinal"],
+         "kind": r["kind"], "travelers": r["travelers"],
+         "nonexistent_cast": r["nonexistent_cast"], "created": r["created"],
+         "parent_frame_id": r["parent_frame_id"],
+         "split_turn_idx": r["split_turn_idx"],
+         "merged_turn_idx": r["merged_turn_idx"]}
+        for r in q("SELECT * FROM frames WHERE chat_id=? ORDER BY id", (chat_id,))
+    ]
+    chat_personas = [
+        {"persona_id": r["persona_id"], "status": r["status"],
+         "frame_id": r["frame_id"]}
+        for r in q("SELECT * FROM chat_personas WHERE chat_id=?", (chat_id,))
+    ]
+    lore_sections = _snapshot_lore(chat_id)
 
     world_entities = [
         {"entity_id": r["entity_id"], "kind": r["kind"], "subtype": r["subtype"],
@@ -182,7 +286,7 @@ def snapshot_state(chat_id):
     ]
 
     return {
-        "world": world, "chars": chars, "char_frames": char_frames,
+        "chars": chars, "char_frames": char_frames,
         "frames": frames, "chat_personas": chat_personas,
         # Vectors by content address, not inline: they are 96.9% of a
         # checkpoint and identical in every checkpoint that contains the
@@ -190,9 +294,7 @@ def snapshot_state(chat_id):
         # is imported into a database with no vector store.
         "memories": dump_chat_memories(chat_id, inline_vectors=False),
         "memory_summaries": dump_memory_summaries(chat_id),
-        "lore": lore, "lorebooks": books,
-        "lorebook_links": links,
-        "lore_overlays": overlays,
+        **lore_sections,
         "world_entities": world_entities,
         "world_placements": world_placements,
         "world_conditions": world_conditions,
@@ -1336,12 +1438,12 @@ def ensure_checkpoint(chat_id, turn_idx, blob=None):
     )
     if existing:
         return existing["id"]
-    # Snapshot outside the transaction: snapshot_state makes many
+    # Snapshot outside the transaction: snapshot_blob makes many
     # read-only q() calls and does no writes, so it needs no lock.
     # Holding the write lock for the duration of a snapshot would
     # needlessly block other writers.
     if blob is None:
-        blob = json.dumps(snapshot_state(chat_id))
+        blob = snapshot_blob(chat_id)
     # Check-then-insert inside a transaction so two concurrent calls
     # for the same (chat_id, turn_idx) can't both pass the existence
     # check and race on the UNIQUE(chat_id, turn_idx) insert.
@@ -1428,10 +1530,25 @@ def refresh_checkpoint(chat_id, turn_idx):
     only changes the book set, so only the book sections are refreshed;
     everything else in the existing blob is left untouched.
     """
-    # Snapshot outside the transaction: snapshot_state is read-only and
-    # may take time; holding the write lock for its duration would
-    # needlessly block other writers.
-    fresh = snapshot_state(chat_id)
+    # Snapshot outside the transaction: it is read-only and may take time;
+    # holding the write lock for its duration would needlessly block other
+    # writers. Only the four book sections are read below, so only those are
+    # built -- re-deriving the world, the frames, the entity tables and the
+    # whole memory bank to copy four keys off them was 88ms per attach on the
+    # bench copy of chat 117, 77ms of it the memory dump (review 2026-09-07 C2).
+    fresh = _snapshot_lore(chat_id)
+    # The one branch that still needs the whole snapshot is the one with no
+    # checkpoint to patch, and it needs it outside the lock for the same
+    # reason. A fast path, not the guard: the authoritative check is the one
+    # inside the transaction. The one interleaving it does not cover -- a
+    # concurrent writer DELETING the checkpoint between this read and the
+    # transaction -- builds the snapshot inside the lock (~15ms on the
+    # bench copies), one held-lock build rather than an unconditional one on
+    # every attach.
+    full = None
+    if not q("SELECT id FROM checkpoints WHERE chat_id=? AND turn_idx=?",
+             (chat_id, turn_idx), one=True):
+        full = snapshot_blob(chat_id)
     # Read-modify-write inside a transaction so a concurrent
     # ensure_checkpoint or refresh_checkpoint can't interleave.
     with transaction():
@@ -1449,7 +1566,9 @@ def refresh_checkpoint(chat_id, turn_idx):
             return qi(
                 "INSERT INTO checkpoints(chat_id, turn_idx, blob, created) "
                 "VALUES(?,?,?,?)",
-                (chat_id, turn_idx, json.dumps(fresh), time.time()),
+                (chat_id, turn_idx,
+                 full if full is not None else snapshot_blob(chat_id),
+                 time.time()),
             )
         blob = json.loads(row["blob"])
         for key in ("lore", "lorebooks", "lorebook_links", "lore_overlays"):

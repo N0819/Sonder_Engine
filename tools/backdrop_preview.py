@@ -74,7 +74,10 @@ def main(argv=None):
         return "could not resolve the player's room — pass --player NAME"
 
     for room, first_turn in seen.items():
-        req = build_backdrop_request(args.chat_id, first_turn, player_name=player)
+        # `for_prompt`: this tool prints the image-prompt source, which is the
+        # one thing the read path no longer derives (review 2026-09-07, C22b).
+        req = build_backdrop_request(args.chat_id, first_turn,
+                                     player_name=player, for_prompt=True)
         if not req:
             continue
         print("=" * 72)
@@ -85,7 +88,10 @@ def main(argv=None):
         for key, value in req["place"].items():
             text = value if isinstance(value, str) else json.dumps(value)
             print("   %-10s %s" % (key + ":", text[:300]))
-        if req["flavour"]:
+        # `.get`: `flavour` left the request dict when it moved to
+        # `arrival_flavour`, and this line has raised KeyError since. Not part
+        # of C22b -- noticed while adding `for_prompt` two lines up.
+        if req.get("flavour"):
             print("   %-10s %s" % ("flavour:", req["flavour"][:200]))
         print()
 

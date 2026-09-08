@@ -272,7 +272,8 @@ def rebuild_embeddings(chat_id=None, char_id=None, *, batch=_REBUILD_BATCH,
                     qi("UPDATE memories SET embedding=?,cue_embedding=?,"
                        "embedding_model=?,embedding_dim=? WHERE id=?",
                        (full, cue, got.model_key, got.dimensions, mem["id"]))
-                    file_memory_vector(full, cue, got.model_key, got.dimensions)
+                    file_memory_vector(full, cue, got.model_key, got.dimensions,
+                                       memory_id=mem["id"])
             done += len(rows)
             report["memories"] += len(rows)
             report["batches"] += 1
@@ -684,7 +685,8 @@ def repair_memory_cues(chat_id=None, char_id=None, *, dry_run=True,
                        (json.dumps(mem["key_phrases"], ensure_ascii=False),
                         json.dumps(mem["entities"], ensure_ascii=False),
                         full, cue, got.model_key, got.dimensions, mem["id"]))
-                    file_memory_vector(full, cue, got.model_key, got.dimensions)
+                    file_memory_vector(full, cue, got.model_key, got.dimensions,
+                                       memory_id=mem["id"])
                     _replace_memory_fts(mem["id"], mem)
             report["batches"] += 1
             if progress:

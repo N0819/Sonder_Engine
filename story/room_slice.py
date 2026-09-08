@@ -229,7 +229,7 @@ def _statuses(scene, registry):
     return out
 
 
-def room_graph(cid, scene, extra_edges=None):
+def room_graph(cid, scene, extra_edges=None, contained=None, planned=None):
     """``{room_id: {room_id}}``: the graph `hops` are counted over, and the
     ONE answer to "what can the story walk between". The edges a body could
     cross (`_ROUTE_MEMORY_BARRIERS` -- passable, plus a closed door, which a
@@ -241,6 +241,14 @@ def room_graph(cid, scene, extra_edges=None):
 
     EVERY NODE IS AN ID. `planned_context` renders the plan's edges by NAME
     for a reader, and a walk over names reached nothing planned.
+
+    ``contained`` and ``planned`` are the two derivations this walk reads --
+    `containment` and `structure.planned_topology` -- handed in by a caller
+    that has already made them, so one report makes each once (review
+    2026-09-07, C21: `room_frontier.frontier_report` made both twice, the
+    plan's topology being 1.1 ms of the 13.7 ms report on the bench copy of
+    chat 114). They are the same objects this would have built; passing
+    something else is passing a different world.
 
     ``extra_edges`` is an iterable of ``(a, b)`` pairs a caller holds that
     the world does not yet: the adjacency a draft package's own `plan_rooms`
@@ -261,7 +269,8 @@ def room_graph(cid, scene, extra_edges=None):
     from world.spatial import _ROUTE_MEMORY_BARRIERS, neighbor_map
     from world.structure import planned_topology
 
-    contained = containment(scene)
+    contained = containment(scene) if contained is None else contained
+    planned = planned_topology(cid) if planned is None else planned
     graph = {}
     for k, vs in neighbor_map(scene, _ROUTE_MEMORY_BARRIERS,
                               directional=True).items():
@@ -269,7 +278,7 @@ def room_graph(cid, scene, extra_edges=None):
             continue
         graph.setdefault(str(k), set()).update(
             str(v) for v in vs if str(v) not in contained)
-    for rid, others in planned_topology(cid).items():
+    for rid, others in planned.items():
         if rid in contained:
             continue
         for other in others:
