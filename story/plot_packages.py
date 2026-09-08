@@ -492,10 +492,88 @@ def remove_operation(cid, uid, index, *, frame_id=None):
 # `world` is the snapshot `_world_snapshot` takes once per validation so the
 # validators agree with each other about what exists.
 
+def reserved_identities(cid, frame_id=None):
+    """WHO THE WORLD ALREADY HOLDS -- the registered cast, the bodies of
+    every charter, and every authored plan with its aliases -- in one
+    answer, with the provenance a reader needs and the case-folded set the
+    validators compare against.
+
+    B19 (review 2026-09-07): the question was answered twice and
+    differently. `_world_snapshot` counted all four kinds; the Room's
+    `inspect_contradictions` counted the registered cast alone, so a
+    package naming a charter body or a planned person as a participant
+    validated clean and was then reported `participant_nobody_holds` by the
+    tool reading the same package.
+
+    An unnamed charter body reserves nothing: the body key stands in its
+    place for a reader, but a key is not a name somebody could be given.
+    """
+    from core.db import q
+    from world.planned_entities import planned_entities
+
+    cast, names = [], set()
+    for row in q("SELECT c.id, c.name, cc.status FROM chat_chars cc "
+                 "JOIN characters c ON c.id=cc.char_id WHERE cc.chat_id=?", (cid,)):
+        cast.append({"id": row["id"], "name": row["name"],
+                     "status": row["status"]})
+        if row["name"]:
+            names.add(str(row["name"]).casefold())
+    bodies, charter_error = {}, ""
+    try:
+        from world.charter_runtime import registry_for
+        registry = registry_for(cid, frame_id)
+        for key, item in sorted((registry.get("items") or {}).items()):
+            under = []
+            for bkey, body in sorted(
+                    ((item.get("state") or {}).get("bodies") or {}).items()):
+                named = str(body.get("name") or "").strip()
+                under.append(named or str(bkey))
+                if named:
+                    names.add(named.casefold())
+            if under:
+                bodies[key] = under
+    except Exception as exc:
+        registry, charter_error = {"items": {}}, str(exc)
+    plans = planned_entities(cid, frame_id)
+    for plan in plans.values():
+        names.add(plan["name"].casefold())
+        for alias in plan.get("aliases") or ():
+            names.add(alias.casefold())
+    return {"cast": cast, "charter_bodies": bodies, "plans": plans,
+            "registry": registry, "charter_error": charter_error,
+            "names": names}
+
+
+def reserved_names(cid, frame_id=None):
+    """Every name the world holds, case-folded (`reserved_identities`)."""
+    return reserved_identities(cid, frame_id)["names"]
+
+
+def unheld_participants(pkg, reserved):
+    """The package's participants nobody holds.
+
+    An operation of the PACKAGE that plans the person is the world holding
+    them: the plan lands when the package does. Both the publish-time check
+    and the Room's contradiction lint ask this, and before B19 only the
+    first honoured the exemption -- so a package that planned its own
+    stranger was reported as naming a stranger for as long as it stood.
+    """
+    out = []
+    for part in pkg.get("participants") or ():
+        name = _text(part.get("name") or part.get("text"), 120)
+        if not name or name.casefold() in reserved:
+            continue
+        if any(op.get("op") == "plan_entity"
+               and str(op.get("name") or "").casefold() == name.casefold()
+               for op in pkg.get("operations") or ()):
+            continue
+        out.append(name)
+    return out
+
+
 def _world_snapshot(cid, frame_id=None):
     from core.db import q
     from story.scene import get_scene
-    from world.planned_entities import planned_entities
     from world.planning_needs import open_planning_needs
     from world.structure import planned_room_ids
 
@@ -504,13 +582,11 @@ def _world_snapshot(cid, frame_id=None):
     scene = read_scene(cid, frame_id) or {}
     rooms = scene.get("rooms") or {}
     specs = planned_room_ids(cid)
-    names = set()
-    cast_names = []
-    for row in q("SELECT c.name FROM chat_chars cc JOIN characters c "
-                 "ON c.id=cc.char_id WHERE cc.chat_id=?", (cid,)):
-        if row["name"]:
-            names.add(str(row["name"]).casefold())
-            cast_names.append(str(row["name"]))
+    identities = reserved_identities(cid, frame_id)
+    names = identities["names"]
+    registry = identities["registry"]
+    plans = identities["plans"]
+    cast_names = [str(c["name"]) for c in identities["cast"] if c["name"]]
     try:
         from story.character_schema import persona_name
         from story.scene import persona_of
@@ -519,20 +595,6 @@ def _world_snapshot(cid, frame_id=None):
         player = ""
     if player:
         cast_names.append(str(player))
-    try:
-        from world.charter_runtime import registry_for
-        registry = registry_for(cid, frame_id)
-        for item in (registry.get("items") or {}).values():
-            for body in ((item.get("state") or {}).get("bodies") or {}).values():
-                if body.get("name"):
-                    names.add(str(body["name"]).casefold())
-    except Exception:
-        registry = {"items": {}}
-    plans = planned_entities(cid, frame_id)
-    for plan in plans.values():
-        names.add(plan["name"].casefold())
-        for alias in plan.get("aliases") or ():
-            names.add(alias.casefold())
     return {
         "chat": dict(chat) if chat else {},
         "scene": scene,
@@ -2407,6 +2469,70 @@ OPERATION_FIELDS = {
 }
 
 
+#: WHICH FIELDS OF AN OPERATION HOLD A ROOM ID -- the one declaration, read
+#: by everything that asks "what rooms does this operation name". Two sites
+#: asked it and answered differently, each over its own hand-written key
+#: list: the reach warning (`_reach_warning`) read `room|where|to|place`, the
+#: Room's per-room slice (`room_slice._plan_here`, over a since-deleted
+#: `_op_rooms` of its own) read `room|where|place`, so
+#: an errand named a room to one and no room to the other -- and NEITHER read
+#: `plan_creature.lair`/`hunts`, so a package whose rooms were a creature's
+#: lair and range read as naming no room at all, and the room it lairs in
+#: listed no operation (REVIEW_2026-09-07 B20).
+#:
+#: A key is a field of `OPERATION_FIELDS`; a dotted path walks into the dict
+#: under it, and a segment walked over a list maps across the list. The value
+#: at the end may be a room id, a list of them, or a mapping keyed by them.
+#:
+#: NOT declared, deliberately. `file_lore.subject_id` is a room id OR a plan
+#: uid OR a charter key OR a slug, so reading it as a room would name rooms
+#: that do not exist. The sub-ops of `charter_ops` are a second closed set
+#: (`world.charter_ops.CHARTER_OPS`) where `to` is a room in `errand` and a
+#: LEVEL in `upkeep_fails`; declaring those belongs beside that set, not
+#: guessed at from here.
+ROOM_FIELDS = {
+    "plan_creature": ("lair", "hunts"),
+    "plan_rooms": ("rooms",),
+    "plan_entity": ("brief.where",),
+    "post_artifact": ("room",),
+    "file_lore": ("knowledge_locations",),
+    "arrival": ("room",),
+    "errand": ("to",),
+    "incident": ("room",),
+    "summons": ("place",),
+    "scheduled_consequence": ("room",),
+    "director_note": ("rooms",),
+    "move_body": ("room",),
+    "plant_claim": ("place",),
+    "region_event": ("footprint.rooms", "footprint.epicentre"),
+}
+
+
+def _at_path(node, parts):
+    """Every value a dotted path reaches, mapping across a list on the way."""
+    if isinstance(node, (list, tuple)):
+        for item in node:
+            yield from _at_path(item, parts)
+    elif not parts:
+        if node is not None:
+            yield node
+    elif isinstance(node, dict):
+        yield from _at_path(node.get(parts[0]), parts[1:])
+
+
+def operation_rooms(op):
+    """Every room id one package operation names, over `ROOM_FIELDS`: the
+    rooms a `plan_rooms` plants, a creature's lair and the range it hunts, a
+    consequence's `room`, an errand's `to`, a summons' `place`, a plan's
+    `brief.where`, a region event's footprint. Ids, never names."""
+    out = set()
+    for path in ROOM_FIELDS.get(_text(op.get("op"), 40), ()):
+        for value in _at_path(op, path.split(".")):
+            values = value.keys() if isinstance(value, dict) else (value,)
+            out.update(rid for rid in (_text(v, 120) for v in values) if rid)
+    return out
+
+
 def operation_shape_text():
     """One line per kind for a tool description: `op` names the kind, the
     other keys are its fields (`?` marks an optional one)."""
@@ -2604,14 +2730,9 @@ def _package_checks(pkg, world):
                 errors.append("the package's authority does not permit "
                               "scheduling harm, and op %d (%s) can hurt a body"
                               % (i, op["op"]))
-    for part in pkg["participants"]:
-        name = _text(part.get("name") or part.get("text"), 120)
-        if name and name.casefold() not in world["reserved_names"]:
-            planned = any(op["op"] == "plan_entity" and op["name"].casefold()
-                          == name.casefold() for op in pkg["operations"])
-            if not planned:
-                warnings.append("participant %r is nobody the world holds and "
-                                "no operation plans them" % name)
+    for name in unheld_participants(pkg, world["reserved_names"]):
+        warnings.append("participant %r is nobody the world holds and "
+                        "no operation plans them" % name)
     if pkg["spoiler_policy"] == "sealed" and not pkg["constraints"]:
         warnings.append("a sealed package states its envelope as constraints "
                         "(forbidden content, protected characters, permitted "
@@ -2628,27 +2749,6 @@ def _package_checks(pkg, world):
                 errors.append("the package's authority does not permit authoring "
                               "prehistory, and presimulate does")
     return errors, warnings
-
-
-def _rooms_named_by(op):
-    """Every room an operation places something in or at: the rooms a
-    `plan_rooms` plants and the room-valued fields of the other kinds (a
-    consequence's `room`, an errand's `to`, a summons' `place`, a plan's
-    `brief.where`, a region event's footprint). Ids, never names."""
-    out = set()
-    if op.get("op") == "plan_rooms":
-        out.update(str(r) for r in (op.get("rooms") or {}))
-    for key in ("room", "where", "to", "place"):
-        if _text(op.get(key), 120):
-            out.add(_text(op.get(key), 120))
-    brief = op.get("brief") if isinstance(op.get("brief"), dict) else {}
-    if _text(brief.get("where"), 120):
-        out.add(_text(brief.get("where"), 120))
-    footprint = op.get("footprint") if isinstance(op.get("footprint"), dict) else {}
-    out.update(str(r) for r in footprint.get("rooms") or () if str(r or ""))
-    if _text(footprint.get("epicentre"), 120):
-        out.add(_text(footprint.get("epicentre"), 120))
-    return out
 
 
 def _reach_warning(cid, world, pkg):
@@ -2668,6 +2768,15 @@ def _reach_warning(cid, world, pkg):
     (PX15, masque run, 2026-09-05). The question here is what the story can
     REACH, and the engine already owns the set for that question.
 
+    ONE GRAPH. The walk is `room_slice.room_graph` -- the same one the room
+    index counts hops over and `inspect_route` walks -- with the package's
+    own planted adjacency handed to it as ``extra_edges``, the only edge
+    this reader holds that the world does not. Built here it answered
+    differently twice: it undirected a one-way passage, so a chute a body can
+    only fall down read as a way back up, and it left the inside of a body in
+    the graph as an ordinary room, so a package naming a room read as
+    reachable THROUGH a lift car or a stomach (B21, review 2026-09-07).
+
     Measured on chat 115 (2026-09-04): the cast stood in
     `room_elevator_interior`, whose one exit is `corridor_sublevel_f`, which
     exits to the planned `auxiliary_lift_car` -- 2 hops, exactly the
@@ -2675,39 +2784,27 @@ def _reach_warning(cid, world, pkg):
     warned; the `condemned_shelter_lobby` the same package posted a bill in
     stands 4 hops out over the plan's topology and would have been."""
     from story.room_frontier import FRONTIER_DEPTH_HOPS
-    from world.spatial import _ROUTE_MEMORY_BARRIERS, neighbor_map
-    from world.structure import planned_topology
+    from story.room_slice import room_graph
 
     occupied = {str(r) for r in world.get("occupied") or () if str(r or "")}
     named = set()
-    graph = {}
-
-    def join(a, b):
-        graph.setdefault(a, set()).add(b)
-        graph.setdefault(b, set()).add(a)
+    planted = []
 
     for op in pkg.get("operations") or ():
-        named |= _rooms_named_by(op)
+        named |= operation_rooms(op)
         if op.get("op") == "plan_rooms":
             for rid, room in (op.get("rooms") or {}).items():
                 for edge in room.get("adjacent") or ():
                     if isinstance(edge, dict) and edge.get("to"):
-                        join(str(rid), str(edge["to"]))
+                        planted.append((str(rid), str(edge["to"])))
                 # A claim IS an adjacency: the space hangs off the holder
                 # room, so a claiming room is exactly as reachable as it.
                 claims = room.get("claims")
                 if isinstance(claims, dict) and claims.get("room"):
-                    join(str(rid), str(claims["room"]))
+                    planted.append((str(rid), str(claims["room"])))
     if not named or not occupied:
         return None
-    for rid, others in neighbor_map(world.get("scene") or {},
-                                    _ROUTE_MEMORY_BARRIERS,
-                                    directional=True).items():
-        for other in others:
-            join(str(rid), str(other))
-    for rid, others in planned_topology(cid).items():
-        for other in others:
-            join(str(rid), str(other))
+    graph = room_graph(cid, world.get("scene") or {}, extra_edges=planted)
     # Multi-source walk from every occupied room, remembering which one
     # each node was reached from.
     dist = {r: (0, r) for r in occupied}

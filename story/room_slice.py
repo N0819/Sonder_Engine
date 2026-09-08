@@ -76,9 +76,9 @@ whole of one room (None when no room of that id is known)::
 * ``plan_here`` is the author layer's claims on the room: the planned
   entities whose brief puts them here, the open planning needs whose
   identity or surface names the room, and every operation in an unsealed,
-  unretired package that names the room (`room`, `where`, `place`, a
-  brief's `where`, a footprint's rooms or epicentre -- the closed field set
-  of `plot_packages.OPERATION_FIELDS`). Sealed packages are what
+  unretired package that names the room (`plot_packages.operation_rooms`
+  over `plot_packages.ROOM_FIELDS`, the one declaration of which fields of
+  an operation hold a room id). Sealed packages are what
   `read_package reveal` is for and contribute nothing here; ids and
   one-line names only.
 
@@ -227,13 +227,28 @@ def _statuses(scene, registry):
     return out
 
 
-def room_graph(cid, scene):
-    """``{room_id: {room_id}}``: the graph `hops` are counted over. The edges
-    a body could cross (`_ROUTE_MEMORY_BARRIERS` -- passable, plus a closed
-    door, which a body simply opens; directional where an edge says so)
-    UNION the plan's topology (undirected). A contained room is joined to its
-    holder's room in both directions and has no other edge in either
-    direction -- it is where the world put a body, not a way anywhere.
+def room_graph(cid, scene, extra_edges=None):
+    """``{room_id: {room_id}}``: the graph `hops` are counted over, and the
+    ONE answer to "what can the story walk between". The edges a body could
+    cross (`_ROUTE_MEMORY_BARRIERS` -- passable, plus a closed door, which a
+    body simply opens; directional where an edge says so) UNION the plan's
+    topology (undirected: a planned stub is a room the Director furnishes on
+    entry). A contained room is joined to its holder's room in both
+    directions and has no other edge in either direction -- it is where the
+    world put a body, not a way anywhere.
+
+    EVERY NODE IS AN ID. `planned_context` renders the plan's edges by NAME
+    for a reader, and a walk over names reached nothing planned.
+
+    ``extra_edges`` is an iterable of ``(a, b)`` pairs a caller holds that
+    the world does not yet: the adjacency a draft package's own `plan_rooms`
+    declares, joined undirected like the plan's. It is the only thing a
+    second reader ever needed of its own, which is why there is no second
+    reader: `room_tools._t_inspect_route` and `plot_packages._reach_warning`
+    each rebuilt this walk and each answered differently -- the route graph
+    left a contained room out of the world's edges but kept it in the plan's,
+    and the reach check undirected a one-way chute and joined an inside to
+    every room its holder's edges name (B21, review 2026-09-07).
 
     A CLOSED DOOR IS NOT A WALL. This counted over `passable_neighbors`,
     which means "passable THIS BEAT", so a house whose rooms are joined by
@@ -260,6 +275,12 @@ def room_graph(cid, scene):
                 continue
             graph.setdefault(rid, set()).add(other)
             graph.setdefault(other, set()).add(rid)
+    for a, b in (extra_edges or ()):
+        a, b = str(a), str(b)
+        if a in contained or b in contained or not a or not b:
+            continue
+        graph.setdefault(a, set()).add(b)
+        graph.setdefault(b, set()).add(a)
     anchored = _anchored(scene)
     for rid, holder in contained.items():
         graph.setdefault(rid, set())
@@ -368,27 +389,9 @@ def _things_by_room(scene, occupants):
     return out
 
 
-def _op_rooms(op):
-    """The room ids one package operation names, over the closed field set
-    of `plot_packages.OPERATION_FIELDS`."""
-    out = set()
-    for key in ("room", "where", "place"):
-        if str(op.get(key) or "").strip():
-            out.add(str(op[key]).strip())
-    brief = op.get("brief")
-    if isinstance(brief, dict) and str(brief.get("where") or "").strip():
-        out.add(str(brief["where"]).strip())
-    footprint = op.get("footprint")
-    if isinstance(footprint, dict):
-        out.update(str(r) for r in (footprint.get("rooms") or ()) if str(r or ""))
-        if str(footprint.get("epicentre") or "").strip():
-            out.add(str(footprint["epicentre"]).strip())
-    return out
-
-
 def _plan_here(cid, frame_id, room_ids):
     """``{room_id: plan_here}`` for the rooms asked about, each read once."""
-    from story.plot_packages import packages
+    from story.plot_packages import operation_rooms, packages
     from world.planned_entities import planned_entities
     from world.planning_needs import need_identity, open_planning_needs
 
@@ -426,7 +429,10 @@ def _plan_here(cid, frame_id, room_ids):
         if pkg["status"] == "retired" or pkg["spoiler_policy"] == "sealed":
             continue
         for index, op in enumerate(pkg["operations"]):
-            for rid in _op_rooms(op) & wanted:
+            # THE ROOMS AN OPERATION NAMES ARE THE PACKAGE MODULE'S ANSWER,
+            # never a key list of this module's own: the two disagreed, and
+            # neither read a creature's lair (REVIEW_2026-09-07 B20).
+            for rid in operation_rooms(op) & wanted:
                 out[rid]["package_ops"].append({
                     "package": pkg["uid"], "title": _text(pkg["title"], 80),
                     "status": pkg["status"], "index": index, "op": op["op"]})
