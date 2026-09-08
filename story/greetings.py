@@ -16,6 +16,7 @@ import json
 import re
 import time
 import traceback
+import contextlib
 
 from core import db
 from core.db import QUICK_START_FAILURE_KEY
@@ -656,10 +657,58 @@ def claim_greeting_mind(chat_id, char_id, name, sheet):
     return entry
 
 
+#: How much of a setup's model traffic the failed-setup record keeps. A quick
+#: start makes five or six calls and the biggest -- the town plan and its
+#: history -- run to tens of thousands of characters each, so the whole of it
+#: is a megabyte-scale blob on a `world` row. NAMED because it is a cap and
+#: the author is entitled to know what an export leaves out: the record keeps
+#: every exchange, and TRIMS the system prompt and response of each to this,
+#: which is enough to see what was asked and where an answer went wrong.
+SETUP_EXCHANGE_CHARS = 20000
+
+
+@contextlib.contextmanager
+def _recording_exchanges():
+    """Collect every provider exchange of this start, for the export.
+
+    `current_exchange_sink` is the same funnel a pipeline STEP arms
+    (`runtime._run_step`), and `note_provider_exchange` is what every rung of
+    the quality ladder reports through -- so arming it here needs no second
+    mechanism and captures what was sent and what came back, on failed rungs
+    as well as accepted ones. A quick start runs outside any step, which is
+    why its traffic was invisible before (2026-09-08).
+    """
+    from core.pipeline_context import current_exchange_sink
+
+    collected = []
+    token = current_exchange_sink.set(collected.append)
+    try:
+        yield collected
+    finally:
+        current_exchange_sink.reset(token)
+
+
+def _trimmed_exchanges(collected):
+    """The collected traffic, bounded, oldest first."""
+    out = []
+    for entry in collected or ():
+        if not isinstance(entry, dict):
+            continue
+        row = dict(entry)
+        for field in ("system", "response"):
+            value = row.get(field)
+            if isinstance(value, str) and len(value) > SETUP_EXCHANGE_CHARS:
+                row[field] = (value[:SETUP_EXCHANGE_CHARS]
+                              + "\n...[trimmed to %d characters]"
+                              % SETUP_EXCHANGE_CHARS)
+        out.append(row)
+    return out
+
+
 def _mark_failed_setup(cid, exc, *, char_id, persona_id, greeting_index,
                        lorebook_id, already_known, language, lived_location,
                        character_name="", persona_name="", stage="",
-                       plan_request=None):
+                       plan_request=None, exchanges=None):
     """Keep this attempt as a failed SETUP, with everything a retry needs.
 
     One writer, because the library, the retry and the export all read one
@@ -681,7 +730,7 @@ def _mark_failed_setup(cid, exc, *, char_id, persona_id, greeting_index,
                             lived_location=lived_location,
                             character_name=character_name,
                             persona_name=persona_name, stage=stage,
-                            plan_request=plan_request)
+                            plan_request=plan_request, exchanges=exchanges)
     except Exception:                       # noqa: BLE001 -- see above
         logger.exception(
             "quick start: could not record the failed setup for chat %s", cid)
@@ -689,7 +738,8 @@ def _mark_failed_setup(cid, exc, *, char_id, persona_id, greeting_index,
 
 def _write_failed_setup(cid, exc, *, char_id, persona_id, greeting_index,
                         lorebook_id, already_known, language, lived_location,
-                        character_name, persona_name, stage, plan_request):
+                        character_name, persona_name, stage, plan_request,
+                        exchanges=None):
     from world.charter_runtime import lived_location_job, salvage_plan
 
     job = lived_location_job(cid) or {}
@@ -716,6 +766,12 @@ def _write_failed_setup(cid, exc, *, char_id, persona_id, greeting_index,
         },
         "character_name": character_name,
         "persona_name": persona_name,
+        # EVERYTHING SENT AND EVERYTHING THAT CAME BACK, so the export is a
+        # report and not a headline (owner, 2026-09-08). Every rung of the
+        # quality ladder and every generation call reports through
+        # `note_provider_exchange`, so this is what the attempt actually did,
+        # failed rungs included.
+        "exchanges": _trimmed_exchanges(exchanges),
     })
 
 
@@ -723,7 +779,8 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
                 lorebook_id: int | None = None,
                 already_known: bool = True,
                 language: str | None = None,
-                lived_location: dict | None = None) -> tuple[int, int]:
+                lived_location: dict | None = None,
+                resume_chat_id: int | None = None) -> tuple[int, int]:
     """'Start story now': create a chat seeded from a character's greeting.
     The greeting is shown verbatim; its private knowledge routes to the
     character. An optional lorebook is attached before turn 0 runs, so the
@@ -789,9 +846,27 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
                 "greeting %s, language %s",
                 char_id, c_name, persona_id, p_name, greeting_index,
                 language or DEFAULT_LANGUAGE)
-    cid = db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
-                (f"{c_name} — {p_name}", prose_final, time.time()))
-    logger.info("quick start: chat %s created for character %s", cid, char_id)
+    # RESUMED, NOT RESTARTED. A retry takes the chat the failed attempt left
+    # and re-runs from where it stopped, so what already succeeded is kept --
+    # the planted town above all, which is three model calls and most of the
+    # minute a start takes -- and so a story that fails five times has ONE
+    # entry in the library rather than five (owner, 2026-09-08). Every stage
+    # below asks the CHAT whether its own work is already there, rather than
+    # trusting a recorded stage name: a resume that believes a marker is a
+    # resume that repeats a write the marker was wrong about.
+    if resume_chat_id:
+        cid = int(resume_chat_id)
+        if not db.q("SELECT id FROM chats WHERE id=?", (cid,), one=True):
+            raise ValueError(f"story {cid} not found")
+        db.qi("UPDATE chats SET name=?, scenario=? WHERE id=?",
+              (f"{c_name} — {p_name}", prose_final, cid))
+        logger.info("quick start: resuming chat %s for character %s",
+                    cid, char_id)
+    else:
+        cid = db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                    (f"{c_name} — {p_name}", prose_final, time.time()))
+        logger.info("quick start: chat %s created for character %s",
+                    cid, char_id)
     # The request the location plan was built from, so a failure anywhere
     # after it can keep that plan against what was ASKED for -- a retry starts
     # a new chat and cannot see this one's job.
@@ -804,11 +879,15 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
     # of what happens after the chat exists is inside the guard now, because
     # the author's position is the same whichever stage raised.
     try:
+      with _recording_exchanges() as exchanges:
         # Recorded before anything is seeded, because turn 0 runs below and every
         # stage of it -- establishment, perception, the narrator -- reads this.
         set_story_language(cid, language or DEFAULT_LANGUAGE)
         db.qi("UPDATE chats SET persona_id=? WHERE id=?", (persona_id, cid))
-        db.qi("INSERT INTO chat_chars(chat_id,char_id,status) VALUES(?,?, 'active')", (cid, char_id))
+        # OR IGNORE, because a resume re-runs this line against a chat that
+        # already carries the cast row it wrote the first time.
+        db.qi("INSERT OR IGNORE INTO chat_chars(chat_id,char_id,status) "
+              "VALUES(?,?, 'active')", (cid, char_id))
         if already_known:
             # Through the one writer, not by hand: recognition established when a
             # cast membership is created belongs to `seed_mutual_recognition`, so
@@ -889,9 +968,24 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
                 # rooms in a book the story owns.
                 request["lorebook_id"] = lb["id"]
                 request["owning_lorebook_id"] = generation_book_id
-            logger.info("quick start: generating a lived location for chat %s", cid)
+            # ALREADY THERE IS ALREADY DONE. A resume asks the CHAT whether
+            # the town is planted rather than whether a marker says so: the
+            # registry rows are the fact, a recorded stage name is a claim
+            # about it, and this is three model calls and most of the minute
+            # a start takes.
+            from world.structure import registry_rows
+
+            planted = bool(resume_chat_id) and bool(registry_rows(cid))
+            if planted:
+                logger.info(
+                    "quick start: chat %s already holds a planted location, "
+                    "resuming after it", cid)
             try:
-                generated_location = generate_lived_location(cid, request)
+                if not planted:
+                    logger.info(
+                        "quick start: generating a lived location for chat %s",
+                        cid)
+                    generated_location = generate_lived_location(cid, request)
             except Exception as exc:
                 # Logged here because this is the one stage that can say WHERE
                 # in itself it failed; the guard at the end of this function
@@ -1004,7 +1098,10 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
         with story_language_scope(cid):
             list(_run_pipeline(cid, tid))
         _override_narrator(tid, prose_final)
-        return cid, tid
+        # IT IS A STORY NOW. The mark is what makes a row a failed setup, so
+        # a start that finishes clears it -- otherwise a resumed attempt that
+        # succeeded would keep its warning triangle for good.
+        db.wset(cid, QUICK_START_FAILURE_KEY, {})
         return cid, tid
     except Exception as exc:
         _mark_failed_setup(
@@ -1014,7 +1111,7 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
             language=language or DEFAULT_LANGUAGE,
             lived_location=lived_location,
             character_name=c_name, persona_name=p_name,
-            plan_request=plan_request)
+            plan_request=plan_request, exchanges=exchanges)
         raise
 
 

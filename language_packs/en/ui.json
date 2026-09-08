@@ -2183,6 +2183,7 @@
   "Stored memory vectors": "Stored memory vectors",
   "Stories": "Stories",
   "Stories may promote an extra into a full character on their own.": "Stories may promote an extra into a full character on their own.",
+  "story ${cid} not found": "story ${cid} not found",
   "story ${state.selected.chat_id}": "story ${state.selected.chat_id}",
   "Story branch created.": "Story branch created.",
   "story card": "story card",
