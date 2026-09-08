@@ -2293,6 +2293,30 @@ def registry_warnings(registry, scene=None, *, cid=None, frame_id=None):
             for place in sorted(places - known_rooms):
                 warnings.append(
                     f"{key}: place {place!r} is not a room in this frame")
+        # AN HOUR THE CYCLE CANNOT READ IS AN HOUR THAT NEVER ARRIVES (D19,
+        # and its rework). Every authored phase set is matched against the
+        # phase `day_cycle.charter_phase` returns, so a name outside
+        # `PHASE_NAMES` is not an error and not a rewrite -- it is a rule
+        # that quietly never fires, which is the empty-field failure
+        # `CLAUDE.md` records. The author hears about it here, on the day
+        # they write it.
+        #
+        # ALL THREE, because the class is "an authored hour", not "the two
+        # fields this review added": `creature.active_phases` is read the
+        # same way by `charter_creature.is_active` and had no warning at all
+        # -- a creature told it hunts at 'midnight' hunts never, and said so
+        # nowhere.
+        from world.day_cycle import PHASE_NAMES
+        for field, names in (
+                ("resting_phases", state.get("resting_phases")),
+                ("social_phases", state.get("social_phases")),
+                ("creature.active_phases",
+                 (state.get("creature") or {}).get("active_phases"))):
+            for name in names or ():
+                if name not in PHASE_NAMES:
+                    warnings.append(
+                        f"{key}: {field} names {name!r}, which is not a phase "
+                        "of this world's day; it will never match")
         # AN INSTITUTION THAT ONLY WORKS WHERE IT GOES. `posts` and `upkeeps`
         # say where the work is; `commons` says where a body may go for its own
         # sake, and with none named the whole off-duty population can only be

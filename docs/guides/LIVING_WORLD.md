@@ -105,7 +105,7 @@ the same `max_offscreen_actors` number (`world/offscreen.py`: `advance_epoch`,
 | Approach | What its floor does | Ceiling built? | Floor needs | Ceiling needs |
 |---|---|---|---|---|
 | `routine_residue` | the world's default motion; payload-side only, persists nothing | no | `deterministic` | `stochastic` |
-| `scheduled_consequence` | mints consequence fuses onto the clock | no | `deterministic` | `stochastic` |
+| `scheduled_consequence` | surfaces a fired consequence fuse (the walk-in notice, the re-entry residue read). Minting and firing are ungated since 2026-09-07 — see below | no | `deterministic` | `stochastic` |
 | `place_obligations` | surfaces a place's accrued owed history | no | `deterministic` | `stochastic` |
 | `antagonist_ladder` | fires authored plan stages on typed triggers | **yes** | `reactive` | `character_agent` |
 
@@ -128,9 +128,9 @@ The payload. Each row is a conjunction: **every** requirement must hold.
 
 | Goal | Requirements |
 |---|---|
-| Nothing at all off screen | `offscreen_life = inert` **and** all four approaches `off`. Note `inert` alone is not enough — see §7. |
+| Nothing at all off screen | `offscreen_life = inert` **and** all four approaches `off`. Note `inert` alone is not enough — see §7. No off-screen NOTICE reaches the page; a declared consequence is still recorded and still fires on its clock, as accrued truth nobody is told about — with the one exception §7's asymmetry paragraph names, a body physically standing where a fuse lands, which the carrier rail may still hand what it saw. |
 | Scheduled effects only (arrivals, expiry, news latency) | `offscreen_life = deterministic` |
-| A consequence fired later from an adjudicated declaration | `offscreen_life ≥ deterministic` **and** `scheduled_consequence = floor` |
+| A consequence fired later from an adjudicated declaration | nothing — every declared fuse is minted and fires on its clock (2026-09-07). What the settings decide is whether anyone MEETS it: the walk-in notice and the re-entry residue read need `offscreen_life ≥ deterministic` **and** `scheduled_consequence = floor` |
 | A place carrying its owed history into a scene | `offscreen_life ≥ deterministic` **and** `place_obligations = floor` |
 | An authored antagonist advancing a plan unwatched | `offscreen_life ≥ reactive` **and** `antagonist_ladder ≥ floor` |
 | A named absent character advancing their **own** plans | `offscreen_life = character_agent` **and** `antagonist_ladder = ceiling` **and** the card's `simulation.offscreen_agent = true` **and** `max_offscreen_actors > 0` **and** that character's `chat_chars` status is `dormant` **and** the beat minted an epoch **and** that mind has a *private reason* |
@@ -432,12 +432,30 @@ letters makes the world incoherent (`world/living_world.py`,
 artifact wording on `offscreen_life ≥ stochastic`.)
 
 **Turning an approach off is equally asymmetric.** Setting
-`scheduled_consequence = off` stops new fuses being minted; it does not stop
-minted fuses firing, and it does not stop `record_obligations` accruing
-history — that function is ungated by the `place_obligations` setting entirely
-(`world/living_world.py`). The principle is *settings gate surfaces, never
-truth*; grep for a setting to find where a ledger is controlled and you will
-find the surface, not the accrual.
+`scheduled_consequence = off` stops neither the minting nor the firing of a
+fuse: it withholds the two places a fired one's CONTENT reaches a reader —
+the walk-in notice (`world/mechanics.py`, `_fire_due_events`'s
+`surface_consequences`, read once per sweep from this chat's own depth) and
+the re-entry residue read (`world/routines.py`, `residue_for`). What stays
+ungated either way is the truth spine and the physics on top of it: a fired
+row is promoted to `world_events` like any other kind, so the gap skeleton
+can report that something of kind `consequence` happened at a place during
+an absence (the kind and the place, never the `what`), and the carrier rail
+may hand its `witnessed` surface to a body physically standing there —
+rumour transport left the ladder deliberately (above). Nor does it stop
+`record_obligations`
+accruing history — that function is ungated by the `place_obligations`
+setting entirely (`world/living_world.py`). The principle is *settings gate
+surfaces, never truth*; grep for a setting to find where a ledger is
+controlled and you will find the surface, not the accrual.
+
+Until 2026-09-07 the mint itself was gated here, which inverted that
+principle for approach B alone: the prose author is asked for
+`state_diff.consequences` on every beat, its chunk carries no gate key, and
+the default chat (`scheduled_consequence = off`) threw every declared fuse
+away with a warning. A fuse is Director-adjudicated causality, so it is
+recorded whatever the menu says, and a story that switches the mechanism on
+later finds the causes it already had (review 2026-09-07, A82).
 
 **`offscreen_life = character_agent` alone fires nothing.** Both the `reactive`
 and `character_agent` rungs are additionally gated through

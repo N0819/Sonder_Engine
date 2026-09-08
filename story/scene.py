@@ -371,6 +371,34 @@ def all_cast_name_to_id(chat_id):
         )
     }
 
+def cast_state(row):
+    """A cast row's committed per-chat state, parsed.
+
+    ONE SPELLING OF THE COLUMN. `active_cast` projects `chat_chars.state`
+    (or the frame override) as **cstate** -- `state` is not a column any cast
+    row carries -- and a reader that spells it the other way gets
+    `IndexError` from `sqlite3.Row`, which is indistinguishable from "this
+    mind has never been committed" once it is caught. Review 2026-09-07 A43:
+    `loops._standing_pressure` read `row["state"]`, so the opening speaker of
+    every untargeted beat in every live story was decided by pure jitter,
+    while the test fixtures -- plain dicts carrying `state` -- agreed with it.
+
+    A row with no committed state is not an error; it has no state. A row
+    with no such column at all is the same answer for the same reason: the
+    caller is asking what this mind is carrying, and the honest answer when
+    nothing carries it is nothing.
+    """
+    try:
+        raw = row["cstate"]
+    except (IndexError, KeyError, TypeError):
+        return {}
+    try:
+        state = json.loads(raw or "{}")
+    except (TypeError, ValueError):
+        return {}
+    return state if isinstance(state, dict) else {}
+
+
 def sheet_state(row):
     """One cast row as `(card as stored, active state, stance)`.
 
@@ -385,6 +413,13 @@ def sheet_state(row):
     every one of those answers diffed byte for byte. The two defaults below
     are the same saving: a row whose stored state carries no stance paid a
     whole normalization here too, 5.09 ms per call on chat 117's card.
+
+    The state below is read from `row["cstate"]` directly rather than
+    through `cast_state`: this reader also parses the sheet, and a row
+    carrying no `cstate` column at all is not a cast row --
+    `agents/common._present_cast_bodies` says so at its own site.
+    `cast_state` is the tolerant accessor for the callers that ask only what
+    a mind is carrying.
     """
     sheet = stored_card_from_text(row["sheet"])
     state = json.loads(row["cstate"] or "{}")
@@ -2782,17 +2817,58 @@ def simulation_clock(chat_id):
         "time_scale": "scene",
     }
 
-def dialogue_budget(chat, turn, cid, nonce):
+#: How talkative a character was AUTHORED to be, as a position inside the
+#: author's own line band -- the low quarter, the middle, the high quarter.
+#: A closed set the card editor owns (`static/js/editors.js`), so it is a
+#: schema rather than a guess at how English says "terse".
+_VERBOSITY_PLACE = {"terse": 0.25, "natural": 0.5, "chatty": 0.75}
+
+
+def dialogue_budget(chat, turn, cid, nonce, *, verbosity="",
+                    awaiting_answer=False, withholding=False):
+    """How much talking there is room for this beat, for THIS character.
+
+    `suggested_lines` was a seeded coin toss over the author's band (review
+    D23): the same number for a laconic bodyguard and a barfly, and the same
+    number whether a question was hanging in the air or not. Three facts the
+    engine already holds decide it instead, and the author's band still
+    bounds every one of them:
+
+      * `voice.verbosity` -- the card's own answer to how much this person
+        talks, and until now read by nothing at all. It places the target in
+        the band rather than replacing it, so an author who set a floor of
+        two still gets at least two out of the most laconic character they
+        wrote.
+      * `awaiting_answer` -- somebody asked this character something and they
+        have not spoken since (`_unanswered_question_note`). A question in
+        the air is a line owed.
+      * `withholding` -- they are sitting on a want that conflicts with the
+        one they are enacting (`affect.normalize_wants` marks exactly one).
+        What a person withholds shapes what they say, and it makes them say
+        LESS: the measured failure was a character who never once declined to
+        answer something she knew.
+
+    The author's `variance` dial survives as what it says it is -- how much
+    the count wanders -- applied as a step either side of the derived target
+    instead of as the whole answer. Still seeded on the same key, so a reroll
+    of the same beat is the same beat.
+    """
     cfg = dialogue_config(chat["id"])
     lo = max(0, int(cfg.get("min_lines", 0)))
     hi = max(lo, int(cfg.get("max_lines", 4)))
     var = min(max(float(cfg.get("variance", 0.6)), 0.0), 1.0)
     style = cfg.get("style", "natural")
+    place = _VERBOSITY_PLACE.get(
+        str(verbosity or "").strip().casefold(), _VERBOSITY_PLACE["natural"])
+    target = int(lo + (hi - lo) * place + 0.5)
+    if awaiting_answer:
+        target += 1
+    if withholding:
+        target -= 1
     rng = random.Random(f"dlg:{chat['id']}:{turn['idx']}:{cid}:{nonce}")
     if rng.random() < var:
-        target = rng.randint(lo, hi)
-    else:
-        target = min(max(1, round((lo + hi) / 2)), hi)
+        target += rng.choice((-1, 1))
+    target = min(max(target, lo), hi)
     # `min_lines` rides along as itself. It used to be consumed here and
     # discarded: the only thing derived from it was `may_stay_silent`, a boolean
     # that a SINGLE line already satisfies, so an author setting min_lines 2

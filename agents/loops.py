@@ -15,6 +15,7 @@ from story.scene import (
     NON_AWAKE_GATED,
     awareness_map,
     awareness_of,
+    cast_state,
     dialogue_config,
     get_scene,
     reaction_config,
@@ -548,18 +549,14 @@ def _standing_pressure(ctx, char_id):
     row = _character_by_id(ctx, char_id)
     if row is None:
         return 0.0
-    # sqlite3.Row raises IndexError for a column it does not have, and cast
-    # rows reach this from several queries with different projections. A row
-    # carrying no committed state is not an error; it has no standing wants.
-    try:
-        raw = row["state"]
-    except (IndexError, KeyError, TypeError):
-        return 0.0
-    try:
-        state = json.loads(raw or "{}")
-    except (TypeError, ValueError):
-        return 0.0
-    wants = ((state.get("active_state") or {}).get("wants")) or []
+    # THROUGH `cast_state`, which spells the column the way `active_cast`
+    # projects it. This read was `row["state"]` (review 2026-09-07 A43) --
+    # a column no cast row has -- so `sqlite3.Row` raised `IndexError`, the
+    # except returned 0.0 for every character, and the opening speaker of
+    # every untargeted beat in every live story was decided by the jitter
+    # alone. It was invisible because the fixtures beside it were plain
+    # dicts carrying `state`, so the unit test and the defect agreed.
+    wants = ((cast_state(row).get("active_state") or {}).get("wants")) or []
     best = 0.0
     for want in wants:
         if not isinstance(want, dict):

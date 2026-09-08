@@ -9,7 +9,7 @@ import contextvars
 from concurrent.futures import ThreadPoolExecutor
 from core.db import qi, transaction, wget, wset, wset_if_changed
 from mind.memory import (add_memories_batch, delete_turn_memories,
-                    record_dispute, raise_importance,
+                    record_dispute, raise_importance, record_memory_access,
                     apply_relationship_updates,
                     update_relationships_from_inference,
                     maybe_consolidate_character_memory,
@@ -313,6 +313,21 @@ def commit_memories(ctx, nonce, *, prepared=None, consolidate=True):
                                  only_unrevised=True)
             except Exception as exc:
                 ctx.add_warning(f"memory importance not updated: {exc}")
+        # Every row this beat's recall REACHED, counted once here (A78). The
+        # character stage proposed them and made no write of its own, so a
+        # rerolled or resumed character step no longer moves `access_count`
+        # -- only the beat that is actually committed does. The list keeps
+        # its duplicates: a row reached twice in one beat (two micro-rounds,
+        # or the ponder lane over the ordinary one) moved the counter twice
+        # while `search_memories` made the write itself, and
+        # `record_memory_access` peels that multiplicity off rather than
+        # collapsing it.
+        if prepared.get("recall_accesses"):
+            try:
+                record_memory_access(prepared["recall_accesses"],
+                                     current_turn_idx=turn.idx)
+            except Exception as exc:
+                ctx.add_warning(f"memory access not recorded: {exc}")
         qi(
             """INSERT INTO events(chat_id,turn_id,content) VALUES(?,?,?)
             ON CONFLICT(chat_id,turn_id) WHERE turn_id IS NOT NULL

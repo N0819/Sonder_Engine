@@ -744,8 +744,11 @@ def test_the_commit_records_a_failed_source_out_and_tells_the_director(temp_db):
     merged = prepared["scene"]
     assert merged["entities"]["lamp"]["state"]["lit"] is False
     assert merged[BEAT_KEY] == out + 1
-    notices = temp_db.wget(chat_id, "engine_notices", [])
+    # Staged on the context for commit's transaction: prepare writes nothing
+    # durable (A66), and `commit_scene` files the list under the write lock.
+    notices = list(ctx.engine_feedback)
     assert any("has gone out" in n and "the lamp" in n for n in notices), notices
+    assert temp_db.wget(chat_id, "engine_notices", []) == []
     assert any("has gone out" in w for w in ctx.warnings)
     # The beat it does NOT fail: nothing is said, nothing is switched.
     on = next(b for b in range(200) if not fails_on(b, "lamp"))
@@ -753,9 +756,10 @@ def test_the_commit_records_a_failed_source_out_and_tells_the_director(temp_db):
     temp_db.wset(chat_id, "engine_notices", [])
     ctx.turn.idx = on
     ctx.warnings.clear()
+    ctx.engine_feedback.clear()
     prepared = commit.prepare_scene_commit(ctx)
     assert prepared["scene"]["entities"]["lamp"].get("state", {}).get("lit", True) is True
-    assert temp_db.wget(chat_id, "engine_notices", []) == []
+    assert ctx.engine_feedback == []
 
 
 # ---------------------------------------------------------------------------

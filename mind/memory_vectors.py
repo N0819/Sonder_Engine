@@ -11,7 +11,9 @@ from core.db import q, qi, transaction
 from llm.providers import embed_texts_meta, embedding_model_key
 from core.logging_utils import logger
 
-from mind.memory_common import _blob, _blob_to_b64, _summary_retrieval_text
+from mind.memory_common import (
+    _blob, _blob_to_b64, _lore_document, _summary_retrieval_text,
+)
 from mind.memory_write import (
     _json_list, _memory_cues, _memory_document, _row_memory,
 )
@@ -364,11 +366,13 @@ def rebuild_embeddings(chat_id=None, char_id=None, *, batch=_REBUILD_BATCH,
                                        target_dim * 4, batch))
                 if not rows:
                     break
-                # EXACTLY the document `update_lore` builds. A vector made from
-                # different text is not comparable with one made from the same
-                # text, and a rebuild that quietly changed the recipe would be a
-                # subtler version of the bug it fixes.
-                texts = [(r["keys"] or "") + " " + (r["content"] or "")
+                # EXACTLY the document `update_lore` builds -- one function
+                # (`_lore_document`) rather than the same concatenation spelled
+                # out again, because a vector made from different text is not
+                # comparable with one made from the same text, and a rebuild
+                # that quietly changed the recipe would be a subtler version of
+                # the bug it fixes.
+                texts = [_lore_document(r["keys"], r["content"])
                          for r in rows]
                 got = _embed(texts)
                 with transaction():

@@ -3982,7 +3982,8 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None,
     # wins: an opinion earned by evidence outranks the baseline familiarity
     # gives.
     if handoff.get("acquaintances"):
-        from mind.memory import get_relationships, save_relationships
+        from mind.memory import (get_relationships, record_relationship_event,
+                                 save_relationships)
 
         graph = get_relationships(cid, char_id, frame_id=frame_id)
         social_names = (charter_bundle or {}).get("social_names") or {}
@@ -4004,11 +4005,38 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None,
             # secondhand, because knowing OF a person is not knowing them.
             standing = float(row.get("regard") or 1.0) - 1.0
             firsthand = bool(row.get("firsthand"))
+            before = graph.get(target)
+            # Snapshot BEFORE the update: `graph.get` hands back the live
+            # Relationship (D22, second skeptic), so read the priors here.
+            prior_trust = float(getattr(before, "trust", 0.0) or 0.0)
+            prior_warmth = float(getattr(before, "emotional_valence", 0.0) or 0.0)
+            trust = round(familiarity * (1.0 if firsthand else 0.4), 4)
+            warmth = round(standing, 4)
             graph.update(
-                target,
-                trust=round(familiarity * (1.0 if firsthand else 0.4), 4),
-                emotional_valence=round(standing, 4),
+                target, trust=trust, emotional_valence=warmth,
                 last_interaction_turn=int(promoted_turn or 0))
+            # AND THE REASON IS WRITTEN DOWN (D22 rework, review 2026-09-07).
+            # The judgment block ten lines above records one row per axis it
+            # moves and this one recorded nothing, so the largest population a
+            # charter story hands a promoted mind -- plain acquaintance, which
+            # every body has, where a judgment is rare -- arrived as numbers
+            # with no beat behind them. Since D22 the payload's `because`
+            # reads this ledger, so an unrecorded movement is a stance the
+            # mind holds and cannot account for.
+            #
+            # The delta is the MOVEMENT rather than the value: an edge the
+            # graph already carries has not travelled the whole distance, and
+            # the ledger's meaning is how far a stance moved.
+            note = ("known firsthand, from the hours actually shared"
+                    if firsthand
+                    else "known of at second hand, never met")
+            for axis, value, prior in (("trust", trust, prior_trust),
+                                       ("warmth", warmth, prior_warmth)):
+                record_relationship_event(
+                    cid, char_id, target, axis,
+                    value - float(prior or 0.0), note=note,
+                    provenance="charter", turn_idx=int(promoted_turn or 0),
+                    frame_id=frame_id)
         save_relationships(cid, char_id, graph, frame_id=frame_id)
 
     chat_row = dict(q("SELECT * FROM chats WHERE id=?", (cid,), one=True))

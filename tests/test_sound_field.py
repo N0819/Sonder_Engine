@@ -602,7 +602,8 @@ def test_the_commit_switches_a_failed_source_off_in_every_sense_it_has_and_files
             cast=[], input="")
         ctx.director_resolve = {"state_diff": {"time": "a moment later"}}
         merged = commit.prepare_scene_commit(ctx)["scene"]
-        return merged, temp_db.wget(chat_id, "engine_notices", []), ctx
+        # Staged for commit's transaction; prepare writes nothing durable (A66).
+        return merged, list(ctx.engine_feedback), ctx
 
     out = next(t for t in range(600) if fails_on(t, "gen"))
     on = next(t for t in range(600) if not fails_on(t, "gen"))

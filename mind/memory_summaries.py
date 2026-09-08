@@ -400,6 +400,44 @@ def _substantive(memories):
             if not _is_empty_view(m.get("content") or m.get("gist") or "")]
 
 
+def _consolidator_row(memory):
+    """One memory as the consolidator is shown it.
+
+    `now_reads` is the character's own later RE-READING of this memory, and it
+    was the one thing about the row the consolidator could not see (review
+    2026-09-07 A86). `record_dispute` deliberately leaves the event alone --
+    "I saw this" stays true, and `content`, `gist`, `provenance` and
+    `salience` are untouched -- because that is what deception, disguise and
+    plain misidentification actually do to a mind: they change what the moment
+    MEANT, not that it happened. The summary is what the character carries
+    forward once the individual rows age out, so a window summarised from the
+    abandoned reading is how a corrected belief comes back: the mind un-learns
+    what it worked out, and there is nothing left to correct it against.
+
+    Absent, not empty, on a memory nobody has re-read -- a key that is there
+    and blank on every row teaches the reader to skip it.
+
+    HALF DONE, AND SAYING SO. A86 is a payload change plus one sentence on the
+    consolidator card telling the model what to do with the field, and the
+    sentence is the owner's to write (it pairs with D24). Until it lands this
+    key reaches the model unannounced by any prompt, which is a field a
+    reader may or may not honour rather than an instruction -- so the
+    behaviour this was written for is not yet proven, only made possible.
+    """
+    row = {"id": memory["id"], "turn_idx": memory["turn_idx"],
+           "category": memory["category"], "provenance": memory["provenance"],
+           "salience": memory["salience"], "confidence": memory["confidence"],
+           "gist": memory["gist"], "details": memory["content"],
+           "key_phrases": memory["key_phrases"], "entities": memory["entities"],
+           "location": memory["location"],
+           "emotional_context": memory["emotional_context"]}
+    dispute = memory.get("disputed") if isinstance(memory, dict) else None
+    reading = str((dispute or {}).get("reading") or "").strip()
+    if reading:
+        row["now_reads"] = reading
+    return row
+
+
 def _write_consolidated_window(chat_id, char_id, char_name, memories, previous_summary):
     """The consolidator call and the rows it produces, for ONE window.
 
@@ -415,11 +453,7 @@ def _write_consolidated_window(chat_id, char_id, char_name, memories, previous_s
         "character": char_name,
         "previous_summary": previous_summary,
         "memories_chronological": [
-            {"id": m["id"], "turn_idx": m["turn_idx"], "category": m["category"],
-             "provenance": m["provenance"], "salience": m["salience"], "confidence": m["confidence"],
-             "gist": m["gist"], "details": m["content"], "key_phrases": m["key_phrases"],
-             "entities": m["entities"], "location": m["location"], "emotional_context": m["emotional_context"]}
-            for m in memories
+            _consolidator_row(m) for m in memories
         ],
     }
     raw = chat_complete("utility", get_prompt("memory_consolidate"),

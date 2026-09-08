@@ -101,9 +101,9 @@ import re
 from collections import deque
 
 from world.comfort import SOFT_SUPPORT_TOKENS, WARMTH_TOKENS
-from world.comfort import _is_body as _body_guard
 from world.comfort import rest_affording
-from world.spatial import _LIGHT_SIGHT, effective_light, hiding_holders_of, room_of
+from world.spatial import (_LIGHT_SIGHT, effective_light, hiding_holders_of,
+                           room_of, scene_names_body)
 from world.survival import vitals_of
 from mind.theory_of_mind import belief_credence
 
@@ -265,7 +265,13 @@ def here_affords(scene, name):
         label = str(ent.get("name") or eid)
         if room_of(scene, label) != rid and room_of(scene, str(eid)) != rid:
             continue
-        if _body_guard(scene, eid, ent, label):
+        # A PERSON IS NOT AN AFFORDANCE, asked of the one body predicate
+        # (`spatial.scene_names_body`, review 2026-09-07 A56 rework) rather
+        # than of `comfort._is_body`, which was one of the four spellings of
+        # this question the rework folded into one. Asked under the entity's
+        # id, which is unambiguous: the predicate reads the wardrobe and the
+        # rest of the body ledgers under every spelling that id answers to.
+        if scene_names_body(scene, str(eid)):
             continue
         if hiding_holders_of(scene, label) or hiding_holders_of(scene, str(eid)):
             continue

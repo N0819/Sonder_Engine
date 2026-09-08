@@ -152,7 +152,7 @@ def parse_scoped_world_key(key):
 #: runs from the root. `or` rather than a default argument, so an empty
 #: `ENGINE_DB=` falls through to the anchored path instead of naming the cwd.
 DB = os.environ.get("ENGINE_DB") or os.path.join(INSTALL_ROOT, "engine.db")
-SCHEMA_VERSION = 38
+SCHEMA_VERSION = 39
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -336,7 +336,16 @@ CREATE TRIGGER IF NOT EXISTS lore_ad AFTER DELETE ON lore_entries BEGIN
     INSERT INTO lore_fts(lore_fts, rowid, content, keys)
     VALUES ('delete', old.id, old.content, old.keys);
 END;
-CREATE TRIGGER IF NOT EXISTS lore_au AFTER UPDATE ON lore_entries BEGIN
+-- `OF content, keys`, not a bare UPDATE. An external-content FTS5 sync
+-- trigger should fire on the columns its index holds; one that fires on a
+-- column the index does not hold re-runs its delete+insert pair for a write
+-- that changed nothing it indexes, and a second trigger writing the same row
+-- is one ordering away from an unbalanced pair. `memories_au` is where that
+-- second trigger exists and where the failure was reproduced (see it, and
+-- `tests/test_fts_sync_triggers_watch_one_column.py`); here it is the same
+-- rule stated where it is still only a redundancy, so the next trigger added
+-- to `lore_entries` cannot make it a fault.
+CREATE TRIGGER IF NOT EXISTS lore_au AFTER UPDATE OF content, keys ON lore_entries BEGIN
     INSERT INTO lore_fts(lore_fts, rowid, content, keys)
     VALUES ('delete', old.id, old.content, old.keys);
     INSERT INTO lore_fts(rowid, content, keys)
@@ -760,7 +769,30 @@ CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
     INSERT INTO memories_fts(memories_fts, rowid, content)
     VALUES ('delete', old.id, old.content);
 END;
-CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+-- `OF content`, and the reason is a reproduced failure, not tidiness. An FTS
+-- sync trigger should fire on the columns its index holds; `memories_fts`
+-- holds `content` alone and this fired on EVERY update of a memory row. That
+-- is one ordering away from an unbalanced delete/insert pair, and the
+-- ordering is already here: `memories_vkey_stale` (LATE_SCHEMA, review
+-- 2026-09-07 C2) answers an embedding write with a second `UPDATE memories`,
+-- so one `update_memory` call ran this pair TWICE -- delete(old text) +
+-- insert(new text), then delete(new text) + insert(new text).
+--
+-- MEASURED 2026-09-08, against this schema through `core.db.init()`:
+-- `UPDATE memories SET content=?, embedding=? WHERE id=?` -- the single
+-- statement `update_memory` issues -- raises `database disk image is
+-- malformed` from inside the UPDATE, so the host's own Memories-tab edit
+-- fails outright. Three conditions, all of them ordinary: the two triggers
+-- are created in THIS order (`memories_au` in SCHEMA, `memories_vkey_stale`
+-- in LATE_SCHEMA -- with the order reversed the pairs balance and nothing
+-- raises), the embedding blob actually changes so the vkey trigger's WHEN
+-- holds, and the replacement text shares a token with the text it replaces
+-- (a rewrite sharing no token succeeds). `PRAGMA recursive_triggers` makes no
+-- difference: reproduced at 0 and at 1. The statement is rolled back and the
+-- index is left consistent, so this loses the edit and never the file.
+-- Narrowed rather than reordered: the index holds one column, so only that
+-- column's writes concern it.
+CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE OF content ON memories BEGIN
     INSERT INTO memories_fts(memories_fts, rowid, content)
     VALUES ('delete', old.id, old.content);
     INSERT INTO memories_fts(rowid, content)
@@ -1855,6 +1887,58 @@ MIGRATIONS = [
         # wrong.
         "ALTER TABLE memories ADD COLUMN vkey TEXT",
     ],
+    # v38 -> v39
+    [
+        # No DDL. The bump exists to GATE `_migrate_chat_copies_to_overlays`,
+        # which had no gate at all (review 2026-09-07 A85): it ran on every
+        # single `init()`, i.e. every server start, and its `kept_own` branch
+        # -- a chat-owned book whose origin is gone, is another STORY's book,
+        # or is the chat's own canon -- cleared `origin_id` to stop itself
+        # re-examining the row. But `origin_id` is live data four paths still
+        # mint: `copy_lorebook_tree` (a fork of another story's book),
+        # `turn_branch`, archive import and checkpoint restore. Two readers
+        # key by it -- `attach_lore`'s already-attached check and
+        # `_restore_lorebooks`' `by_origin` index -- and both lost the key on
+        # the next start. A one-shot pass needs a version crossing, not a
+        # column it destroys to remember it has run; the conversion half was
+        # idempotent all along ("a copy converted is a copy gone").
+        #
+        # And the two FTS sync triggers are REPLACED, narrowed to the columns
+        # their indexes actually hold -- see their definitions in SCHEMA. The
+        # memories one is a reproduced failure: paired with
+        # `memories_vkey_stale` a single `UPDATE memories SET content=?,
+        # embedding=?` runs its delete/insert pair twice and SQLite raises
+        # `database disk image is malformed` from inside the UPDATE, so
+        # `update_memory` -- the host's Memories-tab edit -- fails. Fresh files
+        # take the narrowed definition from SCHEMA; every existing file carries
+        # the wide one and needs this. DROP-then-CREATE because CREATE TRIGGER
+        # has no REPLACE.
+        #
+        # NO `VALUES('rebuild')` HERE, deliberately. An earlier draft rebuilt
+        # both indexes on every existing file, on the theory that a
+        # double-insert that got through left a duplicate behind. Measured
+        # 2026-09-08 against this schema, it does not: the failing shape (the
+        # replacement text sharing a token with the old) raises and SQLite
+        # rolls the statement back with the index still passing
+        # `integrity-check`, and the shape that does NOT raise (a rewrite
+        # sharing no token) leaves the index holding the new text exactly once.
+        # So there is no duplicate to repair, and rebuilding two full-text
+        # indexes on every file at startup would be work justified by nothing.
+        "DROP TRIGGER IF EXISTS memories_au",
+        """CREATE TRIGGER memories_au AFTER UPDATE OF content ON memories BEGIN
+    INSERT INTO memories_fts(memories_fts, rowid, content)
+    VALUES ('delete', old.id, old.content);
+    INSERT INTO memories_fts(rowid, content)
+    VALUES (new.id, new.content);
+END""",
+        "DROP TRIGGER IF EXISTS lore_au",
+        """CREATE TRIGGER lore_au AFTER UPDATE OF content, keys ON lore_entries BEGIN
+    INSERT INTO lore_fts(lore_fts, rowid, content, keys)
+    VALUES ('delete', old.id, old.content, old.keys);
+    INSERT INTO lore_fts(rowid, content, keys)
+    VALUES (new.id, new.content, new.keys);
+END""",
+    ],
 ]
 
 # DDL that must run AFTER the migration chain, on every path -- init()
@@ -2185,8 +2269,17 @@ def _migrate_chat_copies_to_overlays(c):
 
     A copy whose origin no longer exists, or whose origin is another chat's
     book, or which IS the chat's canon (bind_lore used to duplicate a library
-    book as canon), stays a chat-owned book: `origin_id` is cleared so it is
-    never read as a copy again. Returns the counts, for the caller's log.
+    book as canon), stays a chat-owned book. `origin_id` is cleared for the
+    first and third of those -- there it really is a leftover -- and KEPT for
+    the second (A85): a fork of another story's book is a live shape
+    `attach_lore` still mints and two readers still key by, and clearing it
+    made a re-attach mint a second fork.
+
+    RUN ONCE, on the file that crosses schema v39. It is `init()`'s gate that
+    makes that true, not anything here; the conversion half is idempotent
+    either way, because a copy converted is a copy gone.
+
+    Returns the counts, for the caller's log.
     """
     rows = c.execute(
         "SELECT id, chat_id, origin_id, name FROM lorebooks "
@@ -2204,7 +2297,21 @@ def _migrate_chat_copies_to_overlays(c):
                          (copy["chat_id"],)).fetchone()
         if (origin is None or origin["chat_id"] is not None or chat is None
                 or chat["lorebook_id"] == copy["id"]):
-            c.execute("UPDATE lorebooks SET origin_id=NULL WHERE id=?", (copy["id"],))
+            # A FORK OF ANOTHER STORY'S BOOK KEEPS ITS ORIGIN (A85). That
+            # shape is not a stale pre-2026-09 copy at all: `attach_lore` still
+            # MINTS it (`duplicate_lorebook_for_chat` -> `copy_lorebook_tree`,
+            # `origin_id` = the source book), `attach_lore`'s own
+            # already-attached check and `_restore_lorebooks`' `by_origin`
+            # index both key by it, and clearing it made a re-attach mint a
+            # second fork and a restore fail to recognise the one it had.
+            # The clear survives for the two shapes where `origin_id` really
+            # is a leftover: an origin that no longer exists, and a copy that
+            # IS the chat's canon (`bind_lore` used to duplicate a library
+            # book as canon, and a restore reading that origin would re-point
+            # the canon at the library book).
+            if origin is None or origin["chat_id"] is None:
+                c.execute("UPDATE lorebooks SET origin_id=NULL WHERE id=?",
+                          (copy["id"],))
             report["kept_own"] += 1
             continue
         cid, oid = copy["chat_id"], origin["id"]
@@ -2563,10 +2670,12 @@ def init():
     c.executescript(LATE_SCHEMA)
 
     _backfill_resource_uids(c)
-    # Chat copies of library books become references plus overlays. Idempotent
-    # (a copy converted is a copy gone) and gated on the copies' existence, so
-    # a fresh file and a converted one both do nothing here.
-    _migrate_chat_copies_to_overlays(c)
+    # Chat copies of library books become references plus overlays, ONCE, on
+    # the file that crosses v39 (A85). It used to run on every start, and its
+    # `kept_own` branch cleared the `origin_id` that four minting paths still
+    # write and two readers still key by -- see the v38 -> v39 migration note.
+    if not is_fresh_db and current < 39:
+        _migrate_chat_copies_to_overlays(c)
     # After the chain and on both paths, like the backfill above: a fresh file
     # has no scenes to repair, and an existing one is repaired exactly once
     # (see the function -- the key's presence is the gate).

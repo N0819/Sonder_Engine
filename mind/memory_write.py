@@ -15,7 +15,8 @@ from core.db import active_frame_id as _active_frame_id
 
 from mind.memory_common import (
     MEMORY_CATEGORIES, MEMORY_KIND_ALIASES, MEMORY_KINDS, MEMORY_PROVENANCE,
-    _UNSET, _blob, _ling, _storage_json, _summary_retrieval_text,
+    _UNSET, _blob, _ling, _lore_document, _storage_json,
+    _summary_retrieval_text,
 )
 
 # ---- Memory normalization and storage helpers ----
@@ -432,7 +433,29 @@ def _embed_memory(data: dict):
 # memories that way with every retry and pacing fix already running. Waiting
 # and trying again a moment later costs four requests and fixes it.
 _REPAIR_LOCK = threading.Lock()
-_REPAIR_PENDING: dict[str, set[int]] = {"memories": set(), "memory_summaries": set()}
+#: The tables whose embedding writes this lane can finish, and how a row of
+#: each is scoped to one story.
+#:
+#: LORE IS HERE BECAUSE IT IS EMBEDDED THE SAME WAY AND WAS DROPPED THE SAME
+#: WAY (review 2026-09-07 A60). `_embed_lore_document` threw `got.fallback`
+#: away, so a lore write made while the embeddings provider was rate-limited
+#: stored a crc32 hash and NOBODY was ever coming back for it -- the entry
+#: ranked on the 0.35 keyword term alone until a host chose a whole-corpus
+#: rebuild. The queue had two tables and lore was neither.
+#:
+#: An entry has no `chat_id`: it belongs to a BOOK, and a book reaches a story
+#: through the attachment table or by being that story's canon. A library book
+#: attached to no story is reachable only by the unscoped sweep, which is
+#: correct -- it is nobody's to adopt on open.
+_REPAIR_CHAT_SCOPE = {
+    "memories": ("chat_id=?", 1),
+    "memory_summaries": ("chat_id=?", 1),
+    "lore_overlays": ("chat_id=?", 1),
+    "lore_entries": (
+        "(lorebook_id IN (SELECT lorebook_id FROM chat_lorebooks WHERE chat_id=?)"
+        " OR lorebook_id IN (SELECT lorebook_id FROM chats WHERE id=?))", 2),
+}
+_REPAIR_PENDING: dict[str, set[int]] = {t: set() for t in _REPAIR_CHAT_SCOPE}
 _REPAIR_THREAD = None
 # Long enough for a rate-limit window to refill, and far enough from the beat
 # that the repair is not competing with the next turn's own embedding calls.
@@ -512,7 +535,7 @@ def repair_pending_embeddings(batch=32):
     Split from the thread so a test can run it synchronously, and so the
     decision to run one is separable from the decision to wait 30 seconds.
     """
-    fixed = {"memories": 0, "memory_summaries": 0}
+    fixed = {table: 0 for table in _REPAIR_PENDING}
     with _REPAIR_LOCK:
         pending = {t: sorted(ids)[:batch] for t, ids in _REPAIR_PENDING.items()}
     if not any(pending.values()):
@@ -524,8 +547,27 @@ def repair_pending_embeddings(batch=32):
         # Only rows STILL on the fallback: a rebuild, a restore or a later
         # rewrite may have fixed them already, and re-embedding a good row
         # spends a request to change nothing.
-        rows = q(f"SELECT * FROM {table} WHERE id IN ({holes}) "
-                 "AND embedding_model='cheap:crc32:256'", tuple(ids))
+        if table == "lore_overlays":
+            # AN OVERLAY'S DOCUMENT IS THE MERGED ONE (review 2026-09-07 A60).
+            # `set_lore_overlay` embeds `values["keys"] if not None else
+            # entry["keys"]`, and the same for content; both overlay columns
+            # are nullable (`core/db.py`), so an overlay that overrides only
+            # the content stores keys=NULL. Re-embedding the overlay row alone
+            # would file a vector for a text the writer never embedded and no
+            # reader ever sees -- one fact stored twice and free to disagree,
+            # which is the class the repair lane exists to close rather than
+            # to open. Safe as a JOIN: `entry_id` is NOT NULL REFERENCES
+            # lore_entries(id) ON DELETE CASCADE, so a surviving overlay
+            # always has its parent.
+            rows = q("SELECT o.*, COALESCE(o.keys, e.keys) AS merged_keys, "
+                     "COALESCE(o.content, e.content) AS merged_content "
+                     "FROM lore_overlays o "
+                     "JOIN lore_entries e ON e.id=o.entry_id "
+                     f"WHERE o.id IN ({holes}) "
+                     "AND o.embedding_model='cheap:crc32:256'", tuple(ids))
+        else:
+            rows = q(f"SELECT * FROM {table} WHERE id IN ({holes}) "
+                     "AND embedding_model='cheap:crc32:256'", tuple(ids))
         if rows:
             if table == "memories":
                 mems = [_row_memory(r) for r in rows]
@@ -550,25 +592,34 @@ def repair_pending_embeddings(batch=32):
                                            memory_id=mem["id"])
                 fixed["memories"] += len(rows)
             else:
-                texts = [_summary_retrieval_text(
-                    r["summary"], _json_list(r["key_phrases"]),
-                    _json_list(r["unresolved_threads"])) for r in rows]
+                if table == "memory_summaries":
+                    texts = [_summary_retrieval_text(
+                        r["summary"], _json_list(r["key_phrases"]),
+                        _json_list(r["unresolved_threads"])) for r in rows]
+                elif table == "lore_overlays":
+                    texts = [_lore_document(r["merged_keys"],
+                                            r["merged_content"])
+                             for r in rows]
+                else:
+                    texts = [_lore_document(r["keys"], r["content"])
+                             for r in rows]
                 got = embed_texts_meta(texts)
                 if got.fallback:
                     return fixed
                 with transaction():
                     for index, row in enumerate(rows):
-                        qi("UPDATE memory_summaries SET embedding=?,"
+                        qi(f"UPDATE {table} SET embedding=?,"
                            "embedding_model=?,embedding_dim=? WHERE id=?",
                            (_blob(got.vectors[index]), got.model_key,
                             got.dimensions, row["id"]))
-                fixed["memory_summaries"] += len(rows)
+                fixed[table] += len(rows)
         with _REPAIR_LOCK:
             _REPAIR_PENDING[table].difference_update(ids)
     if any(fixed.values()):
-        logger.info("memory: finished %d memory and %d summary embedding "
-                    "write(s) that had fallen back to the hash",
-                    fixed["memories"], fixed["memory_summaries"])
+        logger.info("memory: finished %s embedding write(s) that had fallen "
+                    "back to the hash",
+                    ", ".join("%d %s" % (n, t)
+                              for t, n in sorted(fixed.items()) if n))
     return fixed
 
 
@@ -587,13 +638,13 @@ def queue_fallback_rows_for_repair(chat_id=None, limit=_REPAIR_MAX_PENDING):
     re-embedding that is a migration nobody asked this code to start.
     """
     if embedding_model_key() == "cheap:crc32:256":
-        return {"memories": 0, "memory_summaries": 0}
+        return {table: 0 for table in _REPAIR_PENDING}
     found = {}
-    for table in ("memories", "memory_summaries"):
+    for table, (scope_sql, scope_args) in _REPAIR_CHAT_SCOPE.items():
         where, args = ["embedding_model='cheap:crc32:256'"], []
         if chat_id is not None:
-            where.append("chat_id=?")
-            args.append(chat_id)
+            where.append(scope_sql)
+            args += [chat_id] * scope_args
         rows = q(f"SELECT id FROM {table} WHERE {' AND '.join(where)} "
                  "ORDER BY id DESC LIMIT ?", tuple(args) + (limit,)) or []
         found[table] = len(rows)

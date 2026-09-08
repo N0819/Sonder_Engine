@@ -71,8 +71,17 @@ class TestExtraPlayerLoading:
         assert extras[0]["input"] == "I raise an eyebrow."
         assert extras[0]["idle"] is False
 
-        # A different turn index: still included (attached), but idle --
-        # inputs are per-beat, not carried forward automatically.
+        # A LATER beat, once the beat that line was for has run: still
+        # included (attached), but idle -- a declaration a beat of this
+        # player's own frame has already passed is spent. The turn row is
+        # what makes that true and is why it is here: a declaration stays
+        # pending until this frame's next beat takes it, so that a co-player
+        # playing an era of their own does not lose the line to an index
+        # another era spent (review 2026-09-07 A71,
+        # tests/test_extra_player_frame_folding.py).
+        temp_db.qi(
+            "INSERT INTO turns(chat_id,idx,player_input,created,frame_id) "
+            "VALUES(?,?,?,?,?)", (chat_id, 3, "", time.time(), None))
         other_beat = _load_extra_players(chat_id, 4)
         assert len(other_beat) == 1
         assert other_beat[0]["idle"] is True

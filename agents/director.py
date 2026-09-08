@@ -1535,7 +1535,7 @@ def director_interpret(ctx, nonce):
 
     # Interpret's own scope backstop, on the FINAL interpretation -- the
     # same single check resolve runs, pointed at this stage's containers.
-    _orchestration_scope_backstop(ctx, out, "interpret")
+    _orchestration_scope_backstop(ctx, out, "interpret", sc)
 
     return out
 
@@ -2112,7 +2112,7 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
         ctx.add_warning(warning)
 
     # ---- Tier 1: the same-call manifest, checked deterministically -------
-    manifest = _manifest_items(out)
+    manifest = _manifest_items(out, ctx.cast, sc)
     manifest_omissions = []
     for item in manifest:
         forms = _subject_match_forms(item["subject"], ctx.cast, sc)
@@ -4184,7 +4184,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     # movement backstop, the restraint floor and the reconciliation manifest
     # all judge the MERGED diff exactly as they judge a monolithic one.
     _orch_view = _resolve_beat_view(out, decls, char_actions, dice,
-                                    p_name, interp)
+                                    p_name, interp, ctx.cast, sc)
     # Dispatch from the FINAL ruling: which hands the author's ledger_notes
     # and changes_asserted addressed, scoped by the facts computed above.
     _orch_dispatch = _dispatch_specialists(ctx, sc, _orch_facts, _orch_view)
@@ -5139,7 +5139,7 @@ def director_resolve(ctx, nonce, _corrections=None):
             ((interp.get("other_players") or {}).get(
                 str(_extra.get("persona_id"))) or {}).get("sequence") or [])
     out["sequence_dispositions"] = settle_sequence_dispositions(
-        _phase_sequence, out, _phase_scene)
+        _phase_sequence, out, _phase_scene, ctx.cast, p_name)
     for _channel, _event_id in prune_blocked_phase_changes(
             out.get("state_diff") or {}, out["sequence_dispositions"]):
         ctx.add_warning(
@@ -5151,7 +5151,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     # change the prose asserted -- so a wrongly-skipped specialist or a
     # wrongly-omitted chunk is reported against what actually ships, never
     # against a draft.
-    _orchestration_scope_backstop(ctx, out, "resolve")
+    _orchestration_scope_backstop(ctx, out, "resolve", sc)
 
     # EXTENSION RESULT VALIDATION, last of all and deliberately so. A validator
     # judges the merged result AFTER every deterministic floor this engine owns

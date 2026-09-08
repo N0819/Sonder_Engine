@@ -88,7 +88,8 @@ from persist.commit_common import (_keys_str, _stable_event_key, _clamp,
     charter_recognition_projection,
     _GENERIC_ID_TOKENS, _canonical_token_key, _entity_alias_map,
     _canonical_anchor, _room_of, _normalized_fact,
-    ENGINE_NOTICES_KEY, add_engine_notice, compose_engine_notices)
+    ENGINE_NOTICES_KEY, ENGINE_NOTICES_REWRITTEN, add_engine_notice,
+    compose_engine_notices, mark_engine_notices_rewritten)
 from persist.commit_place_graph import (VISITED_ROOMS_CAP, ROUTE_CREDIT_WINDOW,
     ROUTE_CREDIT_CAP, PLACE_GRAPH_NODE_CAP, update_place_graph,
     record_spatial_experience)

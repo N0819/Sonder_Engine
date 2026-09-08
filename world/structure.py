@@ -178,6 +178,39 @@ def registry_rows_for_update(cid):
     return _read_registry_rows(cid)
 
 
+def retired_room_spellings(cid):
+    """Every spelling a RETIRED registry row still answers to, normalized.
+
+    A RETIREMENT IS SPENT IDENTITY (review 2026-09-07, Section I residual on
+    B8/A55). The registry is the authority for a room being over, and a ruin
+    stays in the scene on purpose -- a ruin is still a place. But every
+    `planned_*` reader filters `retired_turn_id IS NULL`, so the ruin is
+    invisible to the frontier mint, which reserves only what it can see: an
+    axis leaving a live room toward the dead one drew a stub under the ruin's
+    own uid, and the upsert that wrote it carried `retired_turn_id=NULL`, so
+    the building came back live as a nameless planned stub.
+
+    Uids, names and aliases alike, folded with `normalize_room_id` because
+    that is what `mint_frontier` checks its candidates against. Not cached:
+    the one caller is the reader that already pays for its own parse.
+    """
+    from core.db import q
+
+    out = set()
+    for row in q(
+            "SELECT room_uid,name,aliases FROM room_registry WHERE chat_id=? "
+            "AND retired_turn_id IS NOT NULL", (cid,)):
+        try:
+            aliases = json.loads(row["aliases"] or "[]")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            aliases = []
+        for spelling in (row["room_uid"], row["name"], *aliases):
+            slug = normalize_room_id(str(spelling or ""))
+            if slug:
+                out.add(slug)
+    return out
+
+
 def skeleton_rooms(cid, structure_key, frame_id=None):
     """Read one planned skeleton in ordinary spatial scene shape."""
     rooms = {}
@@ -452,6 +485,49 @@ def plant_structure(cid, structure, rooms, *, owning_book_id=None,
         }
     if len(normalized) > structure["max_planned"]:
         raise ValueError("planned rooms exceed structure.max_planned")
+    # A PLAN DOES NOT RE-MINT A SPENT IDENTITY EITHER (review 2026-09-07,
+    # Section I residual on B8/A55, rework). The registry's own rule is that a
+    # projection revives a retired row only where the room's live existence
+    # BEGINS this beat (`persist.commit_room_registry._prepare_room_registry`
+    # carries that as `revive`); planting is not that -- a planned row is a
+    # reservation of identity, not a room anybody is standing in. The mint was
+    # shut by reserving every retired spelling (`prepare_frontier_expansion`),
+    # and this is the same door: `story.plot_packages._apply_plan_rooms` calls
+    # this mid-story, so a package planting a room whose uid folds onto a ruin
+    # walked straight through the upserts below, which carried
+    # `retired_turn_id=NULL`.
+    #
+    # Re-keyed rather than refused, because the alternatives are both silent:
+    # leaving the revive off with the uid intact writes the plan's room into a
+    # retired row, and every `planned_*` reader filters retired rows, so the
+    # plan would lose a room and say nothing. A rebuilt chapel is a new room
+    # beside the ruin of the old one, which is what the story means anyway.
+    spent = retired_room_spellings(cid)
+    renamed = {}
+    if spent:
+        live = set(registry_rows(cid))    # live rows only; retired are filtered
+        taken = set(normalized) | live | spent
+        # A uid a LIVE row already owns is never re-keyed: writing a live row
+        # revives nothing, and re-keying it minted a second registry row for
+        # one place while the live row's payload went stale -- a retired row
+        # aliased "Ferry Crossing" re-keyed a replant of the live room
+        # `ferry_crossing` to `ferry_crossing_2` (A55 rework, second skeptic).
+        for uid in [u for u in normalized
+                    if normalize_room_id(u) in spent and u not in live]:
+            base, fresh, suffix = uid, uid, 2
+            while fresh in taken or normalize_room_id(fresh) in spent:
+                fresh, suffix = "%s_%d" % (base, suffix), suffix + 1
+            taken.add(fresh)
+            renamed[uid] = fresh
+        for uid, fresh in renamed.items():
+            normalized[fresh] = normalized.pop(uid)
+        for spec in normalized.values():
+            for edge in spec.get("adjacent") or ():
+                if isinstance(edge, dict) and str(edge.get("to")) in renamed:
+                    edge["to"] = renamed[str(edge["to"])]
+            held = spec.get("frontier_of")
+            if isinstance(held, dict) and str(held.get("room")) in renamed:
+                held["room"] = renamed[str(held["room"])]
     claimed = (claims or {}).get("rows") or {}
     holders = (claims or {}).get("holders") or {}
     with transaction():
@@ -470,7 +546,10 @@ def plant_structure(cid, structure, rooms, *, owning_book_id=None,
                     "VALUES(?,?,?,?,?,?,?,?,NULL) "
                     "ON CONFLICT(chat_id,room_uid) DO UPDATE SET "
                     "name=excluded.name,aliases=excluded.aliases,"
-                    "payload=excluded.payload,retired_turn_id=NULL",
+                    # No `retired_turn_id=NULL`: planting does not un-retire
+                    # (see the reservation above). A claim targets a LIVE
+                    # planned row, so this half never had a ruin to revive.
+                    "payload=excluded.payload",
                     (cid, uid, owning_book_id, None, row["name"],
                      json.dumps(row.get("aliases") or [], ensure_ascii=False),
                      payload, created_turn_id),
@@ -481,7 +560,10 @@ def plant_structure(cid, structure, rooms, *, owning_book_id=None,
                 "(chat_id,room_uid,owning_book_id,parent_entity,name,aliases,"
                 "payload,created_turn_id,retired_turn_id) VALUES(?,?,?,?,?,?,?,?,NULL) "
                 "ON CONFLICT(chat_id,room_uid) DO UPDATE SET "
-                "name=excluded.name,payload=excluded.payload,retired_turn_id=NULL",
+                # Same rule, and the half a plot package reaches: the uid
+                # here can no longer fold onto a retired spelling, and if a
+                # caller hands one in by hand the retirement still stands.
+                "name=excluded.name,payload=excluded.payload",
                 (cid, uid, owning_book_id, None, planned["name"],
                  json.dumps([planned["name"], uid.replace("_", " ")]),
                  payload, created_turn_id),
@@ -1062,7 +1144,13 @@ def prepare_frontier_expansion(cid, scene):
         for alias in entry["aliases"] or ():
             by_name.setdefault(normalize_room_id(str(alias or "")), row_uid)
     by_name.pop("", None)
-    existing = set(by_uid) | set(by_name)
+    # A RETIRED ROOM'S IDENTITY IS STILL SPENT. The parse above is live rows
+    # only, so without this the reservation forgot every ruin and the mint
+    # could name a stub after one -- and reviving it was one upsert away
+    # (`retired_room_spellings`). Reserved, never resolved: a retired row is
+    # not an edge target either, so an axis spelled like a ruin opens a new
+    # space beside it instead of a door into closed history.
+    existing = set(by_uid) | set(by_name) | retired_room_spellings(cid)
     rooms = scene.setdefault("rooms", {})
     for uid in sorted(occupied):
         if uid not in specs:
@@ -1265,6 +1353,15 @@ def claim_frontier_spaces(cid, rooms, *, scene=None):
     """
     from core.db import wget
 
+    # LIVE ROWS ONLY, ON PURPOSE (review 2026-09-07, Section I residual on
+    # B8/A55, rework). Both tables below come from `registry_rows`, which
+    # filters `retired_turn_id IS NULL`, and a claim resolves a HOLDER and an
+    # AXIS: a retired room holds no frontier and is nobody's neighbour, so a
+    # ruin must not be claimable -- claiming it would rename a spent identity
+    # into a live plan, which is the revive this residual closed one door
+    # further on. The other half, a plan whose own uid folds onto a ruin's
+    # spelling, is not a claim at all and is settled where the write happens:
+    # `plant_structure` reserves every retired spelling before it upserts.
     specs = _planned_specs(cid)
     aliases_by_uid = _registry_aliases(cid)
     if scene is None:
@@ -1417,7 +1514,17 @@ def claim_frontier_spaces(cid, rooms, *, scene=None):
 
 
 def apply_frontier_mutations(cid, turn_id, mutations):
-    """Write prepared frontier rows; call only inside the scene transaction."""
+    """Write prepared frontier rows; call only inside the scene transaction.
+
+    A MINT DOES NOT UN-RETIRE (review 2026-09-07, Section I residual on
+    B8/A55). This upsert used to set `retired_turn_id=NULL` on conflict, so
+    the two rows it writes -- the new stub and the holder whose spent axis it
+    is recording -- could each revive a retirement the registry is the
+    authority for. `prepare_frontier_expansion` now reserves every retired
+    spelling so the stub cannot land on one; leaving the revive in place
+    would keep a second way to the same defect, and the holder is a live room
+    whose row was never retired anyway.
+    """
     from core.db import qtx
 
     for row in mutations or ():
@@ -1428,7 +1535,7 @@ def apply_frontier_mutations(cid, turn_id, mutations):
             "ON CONFLICT(chat_id,room_uid) DO UPDATE SET "
             "owning_book_id=excluded.owning_book_id,"
             "parent_entity=excluded.parent_entity,name=excluded.name,"
-            "aliases=excluded.aliases,payload=excluded.payload,retired_turn_id=NULL",
+            "aliases=excluded.aliases,payload=excluded.payload",
             (cid, row["room_uid"], row.get("owning_book_id"),
              row.get("parent_entity"), row["name"],
              json.dumps(row.get("aliases") or []),
@@ -1507,6 +1614,6 @@ __all__ = [
     "materialize_planned_fringe", "prepare_frontier_expansion",
     "mint_frontier", "normalize_structure", "normalize_structures",
     "planned_context",
-    "registry_rows", "registry_rows_for_update",
+    "registry_rows", "registry_rows_for_update", "retired_room_spellings",
     "plant_structure", "skeleton_rooms", "structure_warnings",
 ]

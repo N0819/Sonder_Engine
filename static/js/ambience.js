@@ -186,6 +186,47 @@ function toggleAmbienceMute() {
   updateAmbienceBtn();
 }
 
+// A FADE HAS TO FINISH WHETHER OR NOT THE TAB IS ON SCREEN.
+//
+// `requestAnimationFrame` does not fire in a hidden tab. Audio does not stop
+// there, and neither does `timeupdate`, which is what STARTS a loop handover.
+// So a reader who switched tabs mid-file left a layer half-swapped: the
+// outgoing element played on to its end under a ramp nobody was running, the
+// incoming one played to ITS end at volume zero, and the frame that was going
+// to promote it finally ran on tab return and promoted an element that had
+// already ended. The layer stayed silent until the room changed the token
+// (A75, review 2026-09-07).
+//
+// So the ramp rides a timer, which a hidden tab throttles to about a second
+// rather than stopping. A second is coarse for a 900 ms seam and exactly right
+// for the thing that matters: the fade ENDS, in the state it was going to end
+// in, while nobody is listening. `AMB_FADE_TICK_MS` is the interval asked for,
+// not a limit on anything -- a visible tab gets it, a hidden one gets whatever
+// the browser gives.
+const AMB_FADE_TICK_MS = 16;
+
+function ambienceFadeClock(step) {
+  const tick = () => {
+    if (step(performance.now())) setTimeout(tick, AMB_FADE_TICK_MS);
+  };
+  tick();
+}
+
+// Whatever a handover missed -- a stall, a tab asleep across the seam, an
+// element that ended while it was the silent half of a fade -- the layer must
+// be sounding once the fade is over. The twin of the `ended` listener in
+// `armSeamlessLoop`, which only ever fires for the element that is currently
+// leading.
+function ambienceEnsureSounding(entry) {
+  if (!entry || entry.retired) return;
+  const audio = entry.audio;
+  if (!audio || (!audio.paused && !audio.ended)) return;
+  try { audio.currentTime = 0; } catch (e) { /* not seekable */ }
+  audio.volume = ambienceLevel(entry.index);
+  const again = audio.play();
+  if (again && again.catch) again.catch(() => { });
+}
+
 // Crossfades a whole MIX at once: every incoming layer up to its own target,
 // every outgoing one down to nothing, on one clock. Web Audio would give a
 // smoother curve, but it also needs an AudioContext that must itself be
@@ -195,7 +236,7 @@ function ambienceFadeMix(incoming, outgoing) {
   const start = performance.now();
   const from = incoming.map(entry => entry.audio.volume);
   const fromOut = outgoing.map(audio => audio.volume);
-  const step = now => {
+  ambienceFadeClock(now => {
     const t = Math.min(1, (now - start) / AMB_FADE_MS);
     incoming.forEach((entry, i) => {
       entry.audio.volume = Math.min(1, Math.max(0,
@@ -204,11 +245,12 @@ function ambienceFadeMix(incoming, outgoing) {
     outgoing.forEach((audio, i) => {
       audio.volume = Math.min(1, Math.max(0, fromOut[i] * (1 - t)));
     });
-    if (t < 1) return requestAnimationFrame(step);
+    if (t < 1) return true;
     for (const audio of outgoing) { audio.pause(); audio.removeAttribute("src"); }
     AMB.retiring = AMB.retiring.filter(a => !outgoing.includes(a));
-  };
-  requestAnimationFrame(step);
+    for (const entry of incoming) ambienceEnsureSounding(entry);
+    return false;
+  });
 }
 
 // ---- seamless looping ----
@@ -259,8 +301,8 @@ function crossLoop(entry) {
   const started = next.play();
   if (started && started.catch) started.catch(() => { });
   const begin = performance.now();
-  const step = now => {
-    if (entry.retired) return;
+  ambienceFadeClock(now => {
+    if (entry.retired) return false;
     const t = Math.min(1, (now - begin) / AMB_LOOP_FADE_MS);
     // Read live, so dragging the level slider mid-handover still works.
     const target = ambienceLevel(entry.index);
@@ -269,7 +311,7 @@ function crossLoop(entry) {
     // very hole this exists to remove.
     lead.volume = Math.max(0, Math.min(1, target * Math.cos(t * Math.PI / 2)));
     next.volume = Math.max(0, Math.min(1, target * Math.sin(t * Math.PI / 2)));
-    if (t < 1) return requestAnimationFrame(step);
+    if (t < 1) return true;
     lead.pause();
     try { lead.currentTime = 0; } catch (e) { /* not seekable */ }
     // The pair swaps roles rather than being rebuilt: no new fetch, no decode,
@@ -277,8 +319,12 @@ function crossLoop(entry) {
     entry.audio = next;
     entry.spare = lead;
     entry.crossing = false;
-  };
-  requestAnimationFrame(step);
+    // The promoted element may have run out underneath a slow handover, and a
+    // promoted-but-ended element is exactly the silence this whole seam exists
+    // to prevent.
+    ambienceEnsureSounding(entry);
+    return false;
+  });
 }
 
 // Takes a set of layers out of service and returns every element they own, so

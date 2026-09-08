@@ -133,6 +133,52 @@ def test_pruning_a_chat_keeps_blobs_other_turns_still_reference(temp_db):
     assert llm_capture.get_blob(llm_capture.blob_hash(shared)) == shared
 
 
+def test_the_collector_keeps_payload_blobs_a_live_row_still_references(
+        temp_db):
+    """The reference the collector could not see (review 2026-09-07 A68).
+
+    `_payload_hashes` files one blob per TOP-LEVEL PAYLOAD KEY and records the
+    map as JSON in `payload_hashes` -- which is the larger half of a beat and
+    the whole reason the store is small. The `NOT IN` predicate unioned the
+    three hash COLUMNS only, so every payload blob of every captured call
+    looked unreferenced and was collected on the first vacuum; the debug
+    reader then handed back `None` for each of them.
+    """
+    from core import db
+    _enable(db)
+    _chat, turn_id = _turn(db)
+    llm_capture.record_exchange(
+        turn_id=turn_id, step_key="director_resolve", role="director",
+        system="SHEET", payload={"scene": {"room": "hall"},
+                                 "events": ["a door opened"]},
+        response={"ok": True}, reasoning="because")
+
+    assert llm_capture.vacuum_blobs() == 0
+
+    body = llm_capture.exchanges_for_turn(turn_id, include_bodies=True)[0]
+    assert body["payload"]["scene"] == json.dumps({"room": "hall"},
+                                                  ensure_ascii=False,
+                                                  sort_keys=True)
+    assert body["payload"]["events"] == json.dumps(["a door opened"],
+                                                   ensure_ascii=False,
+                                                   sort_keys=True)
+    assert body["system"] == "SHEET" and body["reasoning"] == "because"
+
+
+def test_the_collector_still_takes_a_blob_nothing_references(temp_db):
+    """The collector's own job, unchanged: a body whose row is gone goes."""
+    from core import db
+    _enable(db)
+    _chat, turn_id = _turn(db)
+    llm_capture.record_exchange(
+        turn_id=turn_id, step_key="a", role="r",
+        system="ORPHANED SHEET", payload={"only": "here"}, response={})
+    db.qi("DELETE FROM llm_capture WHERE turn_id=?", (turn_id,))
+
+    assert llm_capture.vacuum_blobs() >= 3
+    assert llm_capture.get_blob(llm_capture.blob_hash("ORPHANED SHEET")) is None
+
+
 def test_the_turn_debug_reads_in_wall_clock_order_across_steps_and_subcalls(
         temp_db):
     """The artifact the feature exists for: one turn, in the order it happened.

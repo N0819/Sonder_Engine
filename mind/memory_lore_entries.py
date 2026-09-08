@@ -11,12 +11,13 @@ from llm.providers import embed_texts, embed_texts_meta
 from core.logging_utils import logger
 
 from mind.memory_common import (
-    LORE_CATEGORIES, _blob, _cos, _ids, _kw_scores, _storage_json, _vec,
+    LORE_CATEGORIES, _blob, _cos, _ids, _kw_scores, _lore_document,
+    _storage_json, _vec,
 )
 from mind.memory_lorebooks import (
     dump_lorebook_links, lorebook_descendants, restore_lorebook_links,
 )
-from mind.memory_write import _json_list
+from mind.memory_write import _json_list, note_failed_embedding_write
 
 # ---- Lorebook Entries ----
 
@@ -60,12 +61,20 @@ def _embed_lore_document(keys, content):
     semantically meaningless, and nothing recorded it because there was
     nowhere to record it and nothing asking.
 
-    Returns `(vector, model_key, dimensions)`. The caller stores all three, so
-    the question "what embedded this row" is answered at the moment of writing
-    rather than reconstructed by hashing every entry in the table afterwards.
+    Returns `(vector, model_key, dimensions, fell_back)`. The caller stores
+    the first three, so the question "what embedded this row" is answered at
+    the moment of writing rather than reconstructed by hashing every entry in
+    the table afterwards -- and ACTS ON THE FOURTH (review 2026-09-07 A60).
+    `fell_back` was computed by `embed_texts_meta` and dropped on the floor
+    here, so a lore write made while the provider was rate-limited stored a
+    crc32 hash and nothing was ever coming back for it: the repair lane
+    (`memory_write.note_failed_embedding_write`) knew about memories and
+    summaries and not about lore, and the entry stayed keyword-only until a
+    host chose a whole-corpus rebuild.
     """
-    got = embed_texts_meta([(keys or "") + " " + (content or "")])
-    return got.vectors[0], got.model_key, got.dimensions
+    got = embed_texts_meta([_lore_document(keys, content)])
+    return (got.vectors[0], got.model_key, got.dimensions,
+            bool(getattr(got, "fallback", False)))
 
 
 def _carried_stamp(vec, embedding_model, embedding_dim):
@@ -117,12 +126,12 @@ def add_lore(lorebook_id, keys, content, turn_added=None, locked=0, category="ot
     import uuid
     entry_uid = entry_uid or f"entry_{uuid.uuid4().hex}"
     vec = embedding
-    model_key, dims = None, None
+    model_key, dims, fell_back = None, None, False
     if vec is None:
-        vec, model_key, dims = _embed_lore_document(keys, content)
+        vec, model_key, dims, fell_back = _embed_lore_document(keys, content)
     else:
         model_key, dims = _carried_stamp(vec, embedding_model, embedding_dim)
-    return qi("""INSERT INTO lore_entries(
+    entry_id = qi("""INSERT INTO lore_entries(
             lorebook_id, keys, content, category, canon_locked, turn_added,
             embedding, title, knowledge_tag, knowledge_range,
             knowledge_locations, entry_uid, importance, aliases, scope,
@@ -142,6 +151,9 @@ def add_lore(lorebook_id, keys, content, turn_added=None, locked=0, category="ot
          # "public". Passing a default here would silently make every new
          # entry a deliberate exception to its own book.
          None if circles is None else _storage_json(circles)))
+    if fell_back:
+        note_failed_embedding_write("lore_entries", [entry_id])
+    return entry_id
 
 def update_lore(entry_id, keys, content, category=None, title=None,
                 knowledge_tag=None, knowledge_range=None, knowledge_locations=None,
@@ -149,9 +161,9 @@ def update_lore(entry_id, keys, content, category=None, title=None,
                 source_notes=None, embedding=None, embedding_model=None,
                 embedding_dim=None, circles=None):
     vec = embedding
-    model_key, dims = None, None
+    model_key, dims, fell_back = None, None, False
     if vec is None:
-        vec, model_key, dims = _embed_lore_document(keys, content)
+        vec, model_key, dims, fell_back = _embed_lore_document(keys, content)
     else:
         model_key, dims = _carried_stamp(vec, embedding_model, embedding_dim)
     fields = ["keys=?", "content=?", "embedding=?", "title=?",
@@ -187,6 +199,8 @@ def update_lore(entry_id, keys, content, category=None, title=None,
     
     values.append(entry_id)
     qi(f"UPDATE lore_entries SET {','.join(fields)} WHERE id=?", tuple(values))
+    if fell_back:
+        note_failed_embedding_write("lore_entries", [entry_id])
 
 def duplicate_lorebook_tree_for_chat(root_id, chat_id, include_links=True):
     """Duplicate a lorebook subtree for a chat, preserving hierarchy and links.
@@ -381,6 +395,7 @@ def set_lore_overlay(chat_id, entry_id, *, frame_id=None, turn_idx=None,
             value = int(bool(value))
         values[key] = value
     text_changed = ("keys" in fields or "content" in fields)
+    fell_back = False
     vec, model_key, dims = existing.get("embedding"), existing.get("embedding_model"), existing.get("embedding_dim")
     if embedding is not None:
         model_key, dims = _carried_stamp(embedding, embedding_model, embedding_dim)
@@ -388,7 +403,8 @@ def set_lore_overlay(chat_id, entry_id, *, frame_id=None, turn_idx=None,
     elif text_changed and (values.get("keys") is not None or values.get("content") is not None):
         merged_keys = values["keys"] if values.get("keys") is not None else entry["keys"]
         merged_content = values["content"] if values.get("content") is not None else entry["content"]
-        v, model_key, dims = _embed_lore_document(merged_keys, merged_content)
+        v, model_key, dims, fell_back = _embed_lore_document(
+            merged_keys, merged_content)
         vec = _blob(v)
     elif text_changed:
         vec, model_key, dims = None, None, None
@@ -406,6 +422,11 @@ def set_lore_overlay(chat_id, entry_id, *, frame_id=None, turn_idx=None,
             values["knowledge_range"], values["knowledge_locations"],
             values["circles"], values["canon_locked"], vec, model_key, dims,
             disposition, source_notes or "", turn_idx, time.time()))
+    if fell_back:
+        row = q("SELECT id FROM lore_overlays WHERE chat_id=? AND entry_id=? "
+                "AND frame_id IS ?", (chat_id, entry_id, frame_id), one=True)
+        if row:
+            note_failed_embedding_write("lore_overlays", [row["id"]])
     return lore_overlay(chat_id, entry_id, frame_id)
 
 
@@ -447,7 +468,18 @@ def search_lore(lorebook_ids, query, k=6, exclude_categories=None, *,
         return []
     _batch = embed_texts_meta([query or ""])
     qv = _batch.vectors[0] if _batch.vectors else None
-    kw = _kw_scores("lore_fts", query)
+    # SCOPED TO THE BOOKS THIS CALLER MAY READ (review 2026-09-07 A59).
+    # `lore_fts` indexes every lorebook in the library and carries no book
+    # column, so an unscoped MATCH spent its window -- and computed its
+    # normaliser -- on entries from other people's stories, and every in-scope
+    # entry took 0.0 for the 0.35 keyword term. The predicate is the one
+    # `_lexical_memory_ranking` already uses, expressed the only way this
+    # index allows: by row id.
+    _holes = ",".join("?" * len(ids))
+    kw = _kw_scores(
+        "lore_fts", query,
+        scope=(f"rowid IN (SELECT id FROM lore_entries "
+               f"WHERE lorebook_id IN ({_holes}))", ids))
     scored = []
     # HOW MANY ROWS AM I SCORING BLIND? `_cos` returns 0.0 when the vectors
     # are incomparable -- it cannot raise, because it is called in a ranking
@@ -560,7 +592,7 @@ def backfill_lore_embedding_stamps(batch=500):
                        ("none:unembedded", None, row["id"]))
                     report["unembedded"] += 1
                     continue
-                text = (row["keys"] or "") + " " + (row["content"] or "")
+                text = _lore_document(row["keys"], row["content"])
                 is_fallback = False
                 if len(vec) == 256:
                     try:

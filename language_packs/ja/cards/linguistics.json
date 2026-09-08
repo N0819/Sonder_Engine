@@ -1,5 +1,52 @@
 {
   "agents.common": {
+    "_PARTICIPANT_SELF_FORMS": {
+      "$type": "frozenset",
+      "items": [
+        "self",
+        "player",
+        "the player",
+        "you",
+        "me",
+        "him",
+        "her",
+        "them",
+        "it",
+        "\u81ea\u5206",
+        "\u81ea\u5206\u81ea\u8eab",
+        "\u3042\u306a\u305f",
+        "\u541b",
+        "\u304d\u307f",
+        "\u79c1",
+        "\u308f\u305f\u3057",
+        "\u50d5",
+        "\u4ffa",
+        "\u5f7c",
+        "\u5f7c\u5973",
+        "\u5f7c\u3089",
+        "\u305d\u308c",
+        "\u30d7\u30ec\u30a4\u30e4\u30fc"
+      ]
+    },
+    "_PLAYER_ADDRESS_FORMS": {
+      "$type": "frozenset",
+      "items": [
+        "player",
+        "the player",
+        "you",
+        "\u30d7\u30ec\u30a4\u30e4\u30fc",
+        "\u3042\u306a\u305f",
+        "\u541b",
+        "\u304d\u307f"
+      ]
+    },
+    "_QUESTION_MARKS": {
+      "$type": "frozenset",
+      "items": [
+        "?",
+        "\uff1f"
+      ]
+    },
     "_REACTIVE_VERBS": {
       "$type": "set",
       "items": [
@@ -356,6 +403,16 @@
         {
           "$type": "regex",
           "pattern": "\"([^\"]+)\"",
+          "flags": 32
+        },
+        {
+          "$type": "regex",
+          "pattern": "\u300c([^\u300d]+)\u300d",
+          "flags": 32
+        },
+        {
+          "$type": "regex",
+          "pattern": "\u300e([^\u300f]+)\u300f",
           "flags": 32
         },
         {

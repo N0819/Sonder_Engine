@@ -787,13 +787,18 @@ def _roll(seed, step, salt):
     return int(hashlib.sha256(blob.encode("utf-8")).hexdigest()[:8], 16)
 
 
-def advance_weather(weather, elapsed_seconds, seed, cold=False, severity=None):
+def advance_weather(weather, elapsed_seconds, seed, severity=None):
     """The sky after `elapsed_seconds`, drifted deterministically.
 
-    `cold` swaps rain for snow, which is the one place temperature actually
-    changes what falls rather than merely how it feels. Returns the input
-    unchanged inside one drift window, so an ordinary conversational beat does
-    not move the weather at all.
+    A freezing sky swaps rain for snow, which is the one place temperature
+    actually changes what falls rather than merely how it feels -- read off
+    the record's own `temperature`, which is the only store of it. This took a
+    `cold` argument as well until the review of 2026-09-07 (A88), and its one
+    production caller computed that argument as
+    `normalize_weather(sc["weather"])["temperature"] == "freezing"` -- the
+    same question this function then asked again, one `or` apart. Returns the
+    input unchanged inside one drift window, so an ordinary conversational
+    beat does not move the weather at all.
 
     `severity` is the story's authored ceiling (see `severity_intensity_cap`).
     A caller that does not know it passes nothing and gets an uncapped drift,
@@ -828,7 +833,7 @@ def advance_weather(weather, elapsed_seconds, seed, cold=False, severity=None):
     falls = _SKY_FALL.get(sky, _SKY_FALL["fair"])
     precipitation, intensity = falls[_roll(seed, step, "fall") % len(falls)]
     intensity = _capped_intensity(intensity, severity)
-    if cold or weather["temperature"] == "freezing":
+    if weather["temperature"] == "freezing":
         precipitation = {"rain": "snow", "drizzle": "snow",
                          "hail": "sleet"}.get(precipitation, precipitation)
     winds = _SKY_WIND.get(sky, ("still", "breeze"))

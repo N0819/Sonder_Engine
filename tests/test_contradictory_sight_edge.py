@@ -63,6 +63,16 @@ def _ctx(temp_db, scene, diff):
     return chat_id, ctx
 
 
+def _land(temp_db, chat_id, prepared):
+    """What `commit_scene` does with the flags preparation decided, inside the
+    turn's transaction (review 2026-09-07 A66). `prepare_scene_commit` writes
+    nothing durable any more: the once-per-chat "already told" flags ride the
+    prepared bundle and the notices are staged on the context, so a turn that
+    rolls back leaves neither behind."""
+    for key, value in (prepared.get("world_flags") or {}).items():
+        temp_db.wset(chat_id, key, value)
+
+
 def _mirrored_walls():
     """The same suite written correctly: one declaration, `wall` behind it."""
     import copy
@@ -79,8 +89,11 @@ def test_the_beat_it_appears_it_warns_and_tells_the_director(temp_db):
 
     assert any("one_way_window into the other" in w for w in ctx.warnings), \
         ctx.warnings
-    notices = temp_db.wget(chat_id, "engine_notices", [])
-    assert any("`wall` on the blind side" in n for n in notices), notices
+    # STAGED, not written: the sweep composes the beat's one rewrite of the
+    # notice key from this list, inside the transaction (A66).
+    assert any("`wall` on the blind side" in n for n in ctx.engine_feedback), \
+        ctx.engine_feedback
+    assert temp_db.wget(chat_id, "engine_notices", []) == []
 
 
 def test_a_scene_already_contradictory_is_told_once(temp_db):
@@ -90,9 +103,11 @@ def test_a_scene_already_contradictory_is_told_once(temp_db):
     nothing anywhere saying why two rooms stopped seeing each other."""
     chat_id, ctx = _ctx(temp_db, MIRRORED, {"time": "a moment later"})
 
-    commit.prepare_scene_commit(ctx)
+    prepared = commit.prepare_scene_commit(ctx)
 
     assert [w for w in ctx.warnings if "one_way_window into the other" in w]
+    assert prepared["world_flags"]["sight_contradictions_told"] is True
+    _land(temp_db, chat_id, prepared)
     assert temp_db.wget(chat_id, "sight_contradictions_told", False) is True
 
 
@@ -100,7 +115,7 @@ def test_it_does_not_repeat_once_the_chat_has_heard_it(temp_db):
     """A standing condition reported every beat is one the reader learns to
     skip, which is the failure the warning exists to avoid."""
     chat_id, ctx = _ctx(temp_db, MIRRORED, {"time": "a moment later"})
-    commit.prepare_scene_commit(ctx)
+    _land(temp_db, chat_id, commit.prepare_scene_commit(ctx))
 
     ctx.warnings.clear()
     commit.prepare_scene_commit(ctx)

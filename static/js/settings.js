@@ -1366,31 +1366,26 @@ function renderLorebooksTab(d, b, chatId) {
     lbPanel.append(el("h4", {}, "Lorebooks"));
 
     const refreshBooks = async () => {
-      const dd = await api("GET", "/api/chats/" + chatId);
-      const attached = dd.lorebooks || [];
+      // OWNERSHIP, NOT REACHABILITY. `GET /api/chats/{cid}` answers the
+      // RETRIEVAL question -- which books may this story draw lore from --
+      // by walking outward from canon and the attachments through parents,
+      // children and links, so a book the story owns that hangs off nothing
+      // is not in it at all. The lorebook workspace moved off that payload
+      // for exactly this reason; this panel, which is the other place a host
+      // manages the same books, was still reading it (A77, review
+      // 2026-09-07). `attached`, `enabled`, `canon` and `retrievable` all
+      // ride the owned route, so nothing here has to infer them.
+      const dd = await api("GET", `/api/chats/${chatId}/lorebooks`);
+      const books = (dd.lorebooks || []).map(normalizeLoreBook);
       lbPanel.innerHTML = "";
       lbPanel.append(el("h4", {}, "Lorebooks"));
 
-      if (!attached.length) {
+      if (!books.length) {
         lbPanel.append(el("div", { class: "dim small" },
           "No lorebooks attached."));
       }
 
-      // Build parent→children map for attached books
-      const byParent = new Map();
-      for (const lb of attached) {
-        const key = lb.parent_id == null
-          ? "root"
-          : String(lb.parent_id);
-        if (!byParent.has(key))
-          byParent.set(key, []);
-        byParent.get(key).push(lb);
-      }
-      for (const kids of byParent.values())
-        kids.sort((a, b) =>
-          (a.sort_order || 0) - (b.sort_order || 0)
-          || a.name.localeCompare(b.name)
-        );
+      const byParent = loreBooksByParent(books);
 
       const treeEl = el("div", { class: "lore-side-tree" });
 
@@ -1418,6 +1413,17 @@ function renderLorebooksTab(d, b, chatId) {
                   style: "margin-left:4px"
                 }, "canon")
               : null,
+            // A book this story owns can sit outside the retrieval walk
+            // entirely. Now that the panel shows it rather than dropping it,
+            // it has to say so: a book nothing will ever draw lore from looks
+            // identical to one that will (A77).
+            lb.retrievable === false
+              ? el("span", {
+                  class: "badge",
+                  style: "margin-left:4px",
+                  title: "Present, but outside this story's retrieval reach"
+                }, "not retrieved")
+              : null,
             el("button", {
               title: "Open in workspace",
               onclick: () => {
@@ -1441,7 +1447,11 @@ function renderLorebooksTab(d, b, chatId) {
             // payloads, and written by nothing -- so a host could only
             // remove a body of lore, never set it aside. Detaching a
             // story-owned book deletes its entries; this leaves them.
-            !isCanon
+            // Only for a book that is ATTACHED: silencing writes
+            // `chat_lorebooks.enabled`, and a book the story owns outright has
+            // no such row -- the route answers 404, which is the right answer
+            // to a control that should not have been offered.
+            !isCanon && lb.attached === true
               ? el("button", {
                   title: lb.enabled === false
                     ? "Let this book be retrieved again"
@@ -1454,15 +1464,42 @@ function renderLorebooksTab(d, b, chatId) {
                   }
                 }, lb.enabled === false ? "🔇" : "🔊")
               : null,
+            // DETACHING AND DELETING ARE ONE ROUTE AND TWO ACTS, and which
+            // one it is depends on who OWNS the book, not on how it got here:
+            // `DELETE /api/chats/{cid}/lorebooks/{lid}` drops the attachment
+            // row, and then, for a book whose `chat_id` is this story, calls
+            // `_delete_book` -- the book and every entry in it, gone. One
+            // label for both was survivable while the panel only ever drew
+            // books the retrieval walk reached; this panel now draws the
+            // story's own unattached books too (A77), for which "detach" is
+            // not merely imprecise, it names the half that does not happen.
+            // So the control says which act it is, and the destructive one
+            // asks first.
             !isCanon
-              ? el("button", {
-                  title: "Detach from story",
-                  onclick: async () => {
-                    await api("DELETE",
-                      `/api/chats/${chatId}/lorebooks/${lb.id}`);
-                    refreshBooks();
-                  }
-                }, "✕")
+              ? (lb.chat_id != null && Number(lb.chat_id) === Number(chatId)
+                ? el("button", {
+                    class: "danger",
+                    title: "Delete this book and its entries",
+                    onclick: async () => {
+                      if (!await confirmModal(
+                        `Delete "${lb.name}"? This story owns this book, so `
+                        + `removing it here is not a detach -- it deletes the `
+                        + `book and every entry in it `
+                        + `(${lb.entry_count || 0}). This cannot be undone.`,
+                        { danger: true, confirmLabel: "Delete book" })) return;
+                      await api("DELETE",
+                        `/api/chats/${chatId}/lorebooks/${lb.id}`);
+                      refreshBooks();
+                    }
+                  }, "🗑")
+                : el("button", {
+                    title: "Detach from story (the library keeps the book)",
+                    onclick: async () => {
+                      await api("DELETE",
+                        `/api/chats/${chatId}/lorebooks/${lb.id}`);
+                      refreshBooks();
+                    }
+                  }, "✕"))
               : null
           )
         );
@@ -1478,28 +1515,20 @@ function renderLorebooksTab(d, b, chatId) {
         return node;
       }
 
-      const roots = byParent.get("root") || [];
-      for (const root of roots) {
+      // A book whose parent is not here is drawn as a root, by the same rule
+      // the library sidebar and the workspace tree use. What stood here
+      // instead was a loop with an empty body: it found every such book and
+      // did nothing with it, so the book was never appended anywhere and its
+      // silence, detach and open controls could not be reached at all (A77).
+      for (const root of loreRootBooks(books)) {
         treeEl.append(renderBookNode(root, 0));
-      }
-
-      // Orphans (parent not in this chat)
-      const rendered = new Set(attached.map(lb => lb.id));
-      for (const lb of attached) {
-        if (
-          lb.parent_id != null
-          && !rendered.has(lb.parent_id)
-          && !roots.includes(lb)
-        ) {
-          // Skip — already rendered as descendant
-        }
       }
 
       lbPanel.append(treeEl);
 
       // Attach dropdown
       const attachedIds = new Set(
-        attached.map(lb => lb.id)
+        books.map(lb => lb.id)
       );
       const addOpts = S.boot.lorebooks
         .filter(lb => !attachedIds.has(lb.id))

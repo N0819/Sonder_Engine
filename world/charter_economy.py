@@ -373,7 +373,17 @@ def take_stock(economy, *, holder, good, amount, at_hours=0.0, place="",
 
 
 def caravan_exchange(economy, freight, room, *, at_hours=0.0):
-    """Trade a caravan's freight with every authored market at one stop."""
+    """Trade a caravan's freight with every authored market at one stop.
+
+    THE WAGON IS A VISITOR TO THESE BOOKS, NOT A HOLDER IN THEM. Only the
+    goods this economy defines are lent to the wagon's holder row; the rest
+    of the freight never enters the economy and is handed back untouched.
+    `normalize_economy` keeps a holder's stocks to goods in `goods` -- which
+    is right for a town, whose books are its own vocabulary -- and `trade`
+    normalizes on entry, so a single call, refused or not, wiped every lot
+    the local market had no word for: salt loaded at the coast vanished on
+    arrival at the first grain-and-wool town the caravan sold into.
+    """
     out = normalize_economy(economy)
     freight = freight if isinstance(freight, dict) else {}
     stock = {str(k): _amount(v) for k, v in
@@ -381,7 +391,8 @@ def caravan_exchange(economy, freight, room, *, at_hours=0.0):
     wants = {str(k): _amount(v) for k, v in
              (freight.get("wants") or {}).items() if _amount(v) > 0.0}
     wagon = "caravan"
-    out["stocks"][wagon] = stock
+    out["stocks"][wagon] = {good: amount for good, amount in stock.items()
+                            if good in out["goods"]}
     out["targets"].setdefault(wagon, {})
     for good, desired in wants.items():
         out["targets"][wagon][good] = {
@@ -416,7 +427,13 @@ def caravan_exchange(economy, freight, room, *, at_hours=0.0):
             if event:
                 events.append(event)
     freight = dict(freight)
-    freight["stock"] = dict(out["stocks"].pop(wagon, {}))
+    # Rebuilt, not read off the books: what the economy traded is settled by
+    # the wagon's holder row, and what it has no word for is still on the
+    # wagon at the amount it arrived with.
+    carried = {good: amount for good, amount in stock.items()
+               if good not in out["goods"]}
+    carried.update(out["stocks"].pop(wagon, {}))
+    freight["stock"] = {good: carried[good] for good in sorted(carried)}
     out["targets"].pop(wagon, None)
     return normalize_economy(out), freight, events
 

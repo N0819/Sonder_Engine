@@ -183,7 +183,7 @@ def _fts_query(text):
     toks = re.findall(r"[A-Za-z0-9]{3,}", text or "")[:12]
     return " OR ".join(f'"{t}"' for t in toks) if toks else None
 
-def _kw_scores(fts_table, query, limit=50):
+def _kw_scores(fts_table, query, limit=50, *, scope=None):
     """Keyword MAGNITUDES: normalized BM25, not a positional decay.
 
     The old body ordered by rank -- which IS bm25() -- and then threw the
@@ -199,13 +199,31 @@ def _kw_scores(fts_table, query, limit=50):
     SQLite's bm25() returns more-negative-is-better, so the magnitude is
     -bm25, normalized by the best match so the blend's 0.35 weight keeps the
     scale it was tuned on.
+
+    `scope` IS NOT OPTIONAL FOR A CALLER THAT READS PART OF A TABLE, and
+    `search_lore` was such a caller with no way to say so (review 2026-09-07
+    A59). `lore_fts` is one index over EVERY lorebook in the library, and the
+    query ran across all of it: on a multi-story library the `limit` slots and
+    -- worse -- the `best` normaliser came from books the calling chat cannot
+    read, so an in-scope entry that matched perfectly could score a fraction
+    of 1.0 or fall out of the window entirely and take 0.0 for the blend's
+    0.35 term. `_lexical_memory_ranking` had the predicate all along, because
+    its FTS carries `chat_id`/`char_id` columns to filter on and this one
+    carries nothing but the text. Passed as `(sql, params)` so the caller
+    names the rows in its own vocabulary -- for lore, the entry ids of the
+    books it is allowed to read.
     """
     fq = _fts_query(query)
     if not fq: return {}
+    where, args = f"{fts_table} MATCH ?", [fq]
+    if scope:
+        scope_sql, scope_args = scope
+        where += f" AND {scope_sql}"
+        args += list(scope_args)
     try:
         rows = q(f"SELECT rowid, bm25({fts_table}) AS s FROM {fts_table} "
-                 f"WHERE {fts_table} MATCH ? ORDER BY rank LIMIT ?",
-                 (fq, limit))
+                 f"WHERE {where} ORDER BY rank LIMIT ?",
+                 tuple(args) + (limit,))
         if not rows:
             return {}
         best = max(-r["s"] for r in rows)
@@ -231,6 +249,26 @@ def _cos(a, b):
     """
     if a is None or b is None or len(a) != len(b): return 0.0
     return float(np.dot(a, b))
+
+def _lore_document(keys, content):
+    """What a lore vector is a vector OF -- keys then content, in that order.
+
+    Here rather than beside any one writer because five places in `mind/`
+    build this string and a vector made from a different string is not
+    comparable with one made from the same string: `_embed_lore_document`
+    (every lore write), `repair_pending_embeddings` (the row whose provider
+    call fell back), `rebuild_embeddings`' lore pass, the stamp backfill's
+    is-this-the-crc32-hash test, and the snapshot restore's legacy entries.
+    The rebuild's own comment already said "EXACTLY the document `update_lore`
+    builds" -- said, rather than made true, which is the shape a change to one
+    side silently breaks.
+
+    Found because the repair lane spelled it out a second time (review
+    2026-09-07 A60) and got it WRONG for `lore_overlays`, whose text is the
+    merged one; one fact stored twice and free to disagree.
+    """
+    return (keys or "") + " " + (content or "")
+
 
 def _summary_retrieval_text(summary, key_phrases, unresolved_threads):
     return "\n".join([summary or "", ", ".join(key_phrases or []),

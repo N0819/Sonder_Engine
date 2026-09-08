@@ -228,7 +228,8 @@ def test_every_rung_that_rebuilds_the_object_carries_its_grammar(monkeypatch):
     monkeypatch.setattr(
         llm_quality, "escalated_max_tokens", lambda cap: 20000)
     monkeypatch.setattr(
-        llm_quality, "_targeted_field_patch", lambda parsed, errors: None)
+        llm_quality, "_targeted_field_patch",
+        lambda parsed, errors, **_kw: None)
 
     llm_quality.complete_validated_json(
         role="character", step_key="character", system="s", payload={})

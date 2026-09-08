@@ -291,6 +291,123 @@ def _unique_entity_keyed(scene: dict, name: str):
     return None, {}
 
 
+#: The scene ledgers only a BODY has a row in: what it wears, how big it is
+#: against its own baseline, its air and injury, and what is drawn on it. The
+#: other subject-keyed tables are deliberately NOT here -- a lamp has a
+#: `position`, a pry bar has a `station`, a crate is `contained` and a cart
+#: `following` -- which is the whole distinction `scene_names_body` exists to
+#: draw. `poses` is not here either, by the composer's measured ruling (A POSE
+#: IS NOT EVIDENCE OF A BODY, tests/test_composer_poses.py): a Director
+#: legitimately gives a staff, a canteen or a desk a posture, and a ledger
+#: that read one as proof of a person told a woman alone in a dead town she
+#: was leaning on "someone" on fourteen of twenty beats.
+#:
+#: `spatial_transit._is_body_entity` reads two of these and is NOT a fifth
+#: spelling of the question below: it asks whether an ENTITY RECORD in hand is
+#: a body rather than a vehicle or a container, for the dock-edge split, and
+#: the wardrobe-and-scale pair was measured exact for that against every scene
+#: on disk. It is a tier of this ladder, not a rival to it.
+_BODY_LEDGERS = ("attire", "scales", "vitals", "overlays")
+
+
+def _keyed_body_ledger(scene: dict, keys) -> bool:
+    """Does any spelling in `keys` hold a row in a body ledger?"""
+    for source in _BODY_LEDGERS:
+        table = (scene or {}).get(source)
+        if not isinstance(table, dict):
+            continue
+        for key in keys:
+            folded = str(key or "").strip().casefold()
+            if folded and any(str(k).strip().casefold() == folded
+                              for k in table):
+                return True
+    return False
+
+
+#: An entity record whose `kind` is one of these is the scene naming a body
+#: (tier 2 of `scene_names_body`). Two words the engine itself writes, not a
+#: guess at English: `person` is how background people are placed and
+#: `creature` is how a hunting animal or a warden is minted.
+_BODY_KINDS = frozenset({"person", "creature"})
+
+
+def scene_names_body(scene: dict, name: str) -> bool:
+    """Is `name` a BODY of this scene, or a thing that merely stands in it?
+
+    THE ONE BODY PREDICATE (review 2026-09-07 A56 and its rework). Four
+    readers asked this question in four spellings and two of them gave
+    OPPOSITE answers for the same subject, which is the
+    two-representations-free-to-disagree class this review keeps closing:
+    `spatial_contacts._endpoint_is_body` (the identity floor that decides
+    between "someone" and "something"), `comfort._is_body` (is the thing I am
+    leaning on a person), `mechanics._room_occupants` /
+    `unanswered_hazard_subjects` (who a standing condition acts on), and
+    `charter_predation._scene_figures_at` (who a creature may hunt), which
+    answered it by SUBTRACTING entity membership.
+
+    The ladder, in order, and every tier is AFFIRMATIVE -- it reads what the
+    scene says rather than what it omits:
+
+      1. A row in a body ledger (`_BODY_LEDGERS`), under the subject's own
+         spelling or any spelling its entity record answers to. A body is the
+         thing that wears something, has a size against its own baseline,
+         carries air and injury, or is marked. Not a pose: a thing may be
+         given one (see the tuple's note).
+      2. Otherwise, an ENTITY RECORD is the scene saying what this is. One
+         whose `kind` names a person or a creature is the scene naming a
+         body -- background people are placed exactly so, "as entities with
+         kind 'person'" (director_establish) -- and any other kind (a lamp,
+         a lift car, a pry bar) is not a body. A creature counts because a
+         condition standing over its room acts on it and a body leaning on
+         it is leaning on someone; the warden `world/paradox.py` mints is
+         one. Measured on 138 stored blobs: all 14 person-kind records
+         already carried a body-ledger row, so no answer changed.
+      3. Otherwise, a subject the scene STANDS SOMEWHERE and records nothing
+         else about is a body. A registered mind routinely has no entity
+         record at all, and on the beat before it is dressed it has no ledger
+         row either.
+
+    WHICH WAY TIER 3 FALLS IS A DECISION, and it is the reportable direction.
+    Measured on the bench copies (2026-09-08): chat 117's live scene holds 22
+    position keys, 2 bodies and 20 things, and one of those things
+    (`iron_bung`) carries no entity record, so tier 3 calls it a body -- the
+    cost is the vitals sweep saying out loud, every beat a condition ticks,
+    that no body of that name is in the ledger. The other direction costs
+    silence: a person the scene records nothing of but where they stand would
+    be dropped from a fire with no notice, which is the failure history
+    `mechanics._tick_conditions` was written against ("a mechanism that
+    silently never fires is this table's whole failure history"). A thing
+    wrongly counted as a body is loud and repairable -- name it as an entity
+    and the tier stops firing; a body wrongly counted as a thing is silent.
+
+    A56's own measured cases are all tier 2 and all fixed by it: docked
+    vehicles, the zones `spatial_frames.infer_vehicle_zones` derives, carts,
+    boats, fixtures and tools carry entity records -- 19 of chat 117's 20
+    non-bodies, and a condition standing over every room of that scene went
+    from 22 subjects to 3.
+    """
+    if not isinstance(scene, dict):
+        return False
+    label = str(name or "").strip()
+    if not label:
+        return False
+    eid, ent = _unique_entity_keyed(scene, label)
+    keys = [label, eid]
+    if isinstance(ent, dict):
+        keys.append(ent.get("name"))
+        keys.extend(ent.get("aliases") or [])
+    if _keyed_body_ledger(scene, keys):
+        return True
+    if eid:
+        kind = str((ent or {}).get("kind") or "").strip().casefold() \
+            if isinstance(ent, dict) else ""
+        return kind in _BODY_KINDS
+    positions = scene.get("positions")
+    if not isinstance(positions, dict):
+        return False
+    return _positions_lookup(positions, label) is not None
+
+
 # Every scene ledger keyed by WHO rather than by what. `stations[x]["at"]` is
 # deliberately absent: it names an anchor, which is a place in a room, not a
 # subject. `positions` VALUES are rooms for the same reason.
@@ -302,7 +419,19 @@ _SUBJECT_KEYED = ("positions", "scales", "attire", "stations", "poses",
                   # and `entity_side` (which read it through `_ci_get`, case
                   # tolerant and nothing more) answered None for the observer
                   # under their own sheet name.
-                  "orientation")
+                  "orientation",
+                  # The body ledgers, missed the same way until the review of
+                  # 2026-09-07 (Section H residual on B4). `spatial_frames`
+                  # has always partitioned a frame on these two BESIDE this
+                  # tuple -- "`_SUBJECT_KEYED` plus the body ledgers keyed the
+                  # same way" -- which is two lists of one thing, and the
+                  # shorter one is the one the fold reads. So a woman held as
+                  # `positions["Dr. Sarah Moon"]` and `vitals["Sarah Moon"]`
+                  # folded everywhere except where her air and injury are
+                  # written, and `survival.vitals_entry_key` was left picking
+                  # between two rows for one body downstream of the fold that
+                  # exists to leave one.
+                  "vitals", "overlays")
 
 
 def _live_subject_spellings(scene: dict) -> set:

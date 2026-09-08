@@ -56,7 +56,48 @@ const WFX = {
   flashTimer: null,
   boltEl: null,          // the SVG host for a full-render strike
   boltTimer: null,
+  // EVERY pending timeout this file started. The two named above are the ones
+  // that get cancelled individually; this is what makes a teardown able to
+  // take the rest with it -- thunder above all, which is scheduled up to six
+  // and a half seconds after the flash that earned it, and the reader can walk
+  // indoors, turn effects off or leave the story inside that gap (A76,
+  // review 2026-09-07).
+  timers: new Set(),
 };
+
+function weatherFxLater(fn, ms) {
+  const id = setTimeout(() => { WFX.timers.delete(id); fn(); }, ms);
+  WFX.timers.add(id);
+  return id;
+}
+
+function weatherFxCancel(id) {
+  if (id == null) return;
+  clearTimeout(id);
+  WFX.timers.delete(id);
+}
+
+function weatherFxClearTimers() {
+  for (const id of WFX.timers) clearTimeout(id);
+  WFX.timers.clear();
+  WFX.flashTimer = null;
+  // The bolt timer is the only one whose CANCELLATION loses work: what it was
+  // about to run is the strike's own teardown, so cancelling it inside the
+  // 800 ms window would leave the generated SVG in the document for good --
+  // the exact cost `weatherFxBolt` names two lines above its own cancel
+  // (review 2026-09-07, A76). Cancelling that timer and doing its job are the
+  // same act, so they live in the same place.
+  WFX.boltTimer = null;
+  weatherFxClearBolt();
+}
+
+// The strike, taken out of the document. Idempotent, and safe before anything
+// is built -- `weatherFxStop` can run before the first `weatherFxBuild`.
+function weatherFxClearBolt() {
+  if (!WFX.boltEl) return;
+  WFX.boltEl.classList.remove("flash");
+  WFX.boltEl.innerHTML = "";
+}
 
 // Marks per tile, tuned against the text they pass over rather than against
 // realism: enough to read as weather at a glance, few enough that the words
@@ -319,6 +360,7 @@ function weatherFxBuild(kind, weather) {
   }
   host.classList.add("on");
   document.body.classList.add("has-weather-fx");
+  weatherFxSetPlayState();
 }
 
 function weatherFxClearLayers() {
@@ -326,13 +368,37 @@ function weatherFxClearLayers() {
   WFX.layers = [];
 }
 
+// Whether the composited animations are running, which is a question about the
+// TAB and not about the weather. Applied to whatever layers exist right now,
+// so a room whose weather arrives while the tab is hidden is born paused --
+// building it running was three infinite composited animations behind a tab
+// nobody was looking at, the exact cost this file exists to avoid (A76).
+//
+// Snow animates on TWO nodes: `wfx-sway` on the drift wrapper, which is what
+// `WFX.layers` holds, and `wfx-fall` on the tile layer inside it. Pausing only
+// the entry stopped the sideways drift and left the falling running. Rain has
+// no wrapper and no descendants, so the inner loop is empty for it.
+function weatherFxSetPlayState() {
+  const state = document.hidden ? "paused" : "running";
+  for (const layer of WFX.layers) {
+    layer.style.animationPlayState = state;
+    for (const inner of layer.querySelectorAll(".wfx-layer")) {
+      inner.style.animationPlayState = state;
+    }
+  }
+}
+
 // --- lifecycle -------------------------------------------------------------
 
 function weatherFxStop() {
   WFX.kind = "";
   weatherFxClearLayers();
-  clearTimeout(WFX.flashTimer);
-  WFX.flashTimer = null;
+  // Not just the flash: the bolt teardown and every thunderclap still owed to
+  // a flash already drawn (A76). `weatherFxClearTimers` PERFORMS the teardown
+  // the bolt timer was holding rather than merely cancelling it, so leaving
+  // weather really does leave nothing behind -- the file's own invariant two
+  // paragraphs up ("tears them down rather than pausing them").
+  weatherFxClearTimers();
   if (WFX.host) WFX.host.classList.remove("on");
   document.body.classList.remove("has-weather-fx");
 }
@@ -403,11 +469,15 @@ function weatherFxStormy(weather) {
 }
 
 function weatherFxScheduleFlash(storm) {
-  clearTimeout(WFX.flashTimer);
+  weatherFxCancel(WFX.flashTimer);
   WFX.flashTimer = null;
-  if (!storm) return;
+  // A timer keeps running in a hidden tab, and a flash nobody can see still
+  // fires its thunder. Whatever arrives while hidden -- a room change, a turn
+  // -- schedules nothing; the visibility handler re-enters through
+  // `weatherFxApply` on return.
+  if (!storm || document.hidden) return;
   const gap = WFX_FLASH_GAP[0] + Math.random() * (WFX_FLASH_GAP[1] - WFX_FLASH_GAP[0]);
-  WFX.flashTimer = setTimeout(() => {
+  WFX.flashTimer = weatherFxLater(() => {
     weatherFxFlash();
     // Lightning lights up an awning as readily as an open square.
     weatherFxScheduleFlash(weatherFxStormy(WFX.weather)
@@ -484,11 +554,8 @@ function weatherFxBolt() {
   WFX.boltEl.classList.add("flash");
   // Torn down after the animation: an SVG left in the document is a layer the
   // compositor keeps considering forever.
-  clearTimeout(WFX.boltTimer);
-  WFX.boltTimer = setTimeout(() => {
-    WFX.boltEl.classList.remove("flash");
-    WFX.boltEl.innerHTML = "";
-  }, 800);
+  weatherFxCancel(WFX.boltTimer);
+  WFX.boltTimer = weatherFxLater(weatherFxClearBolt, 800);
 }
 
 // Thunder follows the flash by a delay standing in for distance. The audio
@@ -501,8 +568,8 @@ function weatherFxThunder() {
   const delay = near
     ? WFX_THUNDER_DELAY[0]
     : WFX_THUNDER_DELAY[0] + Math.random() * (WFX_THUNDER_DELAY[1] - WFX_THUNDER_DELAY[0]);
-  setTimeout(() => playAmbienceOneshot(near ? "thunder_close" : "thunder",
-                                       near ? 0.9 : 0.55), delay);
+  weatherFxLater(() => playAmbienceOneshot(near ? "thunder_close" : "thunder",
+                                          near ? 0.9 : 0.55), delay);
 }
 
 // Called by backdrops.js on every turn it resolves, since that is where the
@@ -516,27 +583,19 @@ function weatherFxForTurn(state) {
 // weather costs nothing it does not have to. Pausing outright is one line, and
 // it also stops the lightning timer firing thunder at an empty room.
 document.addEventListener("visibilitychange", () => {
-  const paused = document.hidden;
-  const state = paused ? "paused" : "running";
-  for (const layer of WFX.layers) {
-    layer.style.animationPlayState = state;
-    // Snow animates on TWO nodes: `wfx-sway` on the drift wrapper, which is
-    // what `WFX.layers` holds, and `wfx-fall` on the tile layer inside it.
-    // Pausing only the entry stopped the sideways drift and left the falling
-    // running, so a hidden tab still ran three infinite composited animations
-    // -- the exact cost this file exists to avoid. Rain has no wrapper and no
-    // descendants, so this loop is empty for it.
-    for (const inner of layer.querySelectorAll(".wfx-layer")) {
-      inner.style.animationPlayState = state;
-    }
-  }
-  if (paused) {
-    clearTimeout(WFX.flashTimer);
+  weatherFxSetPlayState();
+  if (document.hidden) {
+    weatherFxCancel(WFX.flashTimer);
     WFX.flashTimer = null;
-  } else {
-    weatherFxScheduleFlash(weatherFxStormy(WFX.weather)
-      && weatherFxVisible(WFX.weather));
+    return;
   }
+  // Back through the SINGLE GATE, never straight to the scheduler. Returning
+  // to a tab is not news about the effects level, reduced motion or whether
+  // the browser supports any of this -- and `weatherFxApply` is where all
+  // three are asked. Re-arming below it meant effects switched off while the
+  // tab was hidden came back to a flashing, thundering sky that nothing else
+  // on screen was drawing (A76).
+  weatherFxApply(WFX.weather);
 });
 
 // Re-apply when the effects level changes, so the menu takes effect on the

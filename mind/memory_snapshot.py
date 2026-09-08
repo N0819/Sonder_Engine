@@ -13,8 +13,8 @@ from llm.providers import embed_texts, embed_texts_meta, embedding_model_key
 from dataclasses import dataclass
 
 from mind.memory_common import (
-    _b64_to_blob, _blob, _blob_to_b64, _storage_json, _summary_retrieval_text,
-    _vec, surviving_character_ids,
+    _b64_to_blob, _blob, _blob_to_b64, _lore_document, _storage_json,
+    _summary_retrieval_text, _vec, surviving_character_ids,
 )
 from mind.memory_write import (
     _delete_memory_fts, _json_list, _upsert_memory, add_memories_batch,
@@ -886,7 +886,8 @@ def restore_lorebook(lb_id, entries):
         entry_stamps[id(entry)] = (
             entry.get("embedding_model") if vec is not None else None)
     if legacy_entries:
-        texts = [(e.get("keys") or "") + " " + (e.get("content") or "") for e in legacy_entries]
+        texts = [_lore_document(e.get("keys"), e.get("content"))
+                 for e in legacy_entries]
         for e, vec in zip(legacy_entries, embed_texts(texts)):
             entry_vecs[id(e)] = vec
             # NOT stamped with the live model key: `embed_texts` returns bare

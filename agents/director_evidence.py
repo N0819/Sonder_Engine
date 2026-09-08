@@ -1223,9 +1223,13 @@ def _evidence_present(sd, omission, forms=None, *, scene=None):
 _RECONCILE_MAX_MANIFEST_ITEMS = 8
 
 
-def _manifest_items(out):
+def _manifest_items(out, cast=None, scene=None):
     """director_resolve's own changes_asserted manifest, normalized to the
     seam's omission shape (source 'manifest').
+
+    `cast`/`scene` are the beat's own register of WHO IS A BODY, read only by
+    the fold below (A41): without them it cannot tell a wearer from a
+    garment, so it drops no handle and folds exactly as it did before.
 
     Numbered here, by the ENGINE, in the order the resolve emitted them --
     which is the order it narrated them, so the ids are the beat's own
@@ -1258,7 +1262,7 @@ def _manifest_items(out):
             if value:
                 normalized[field] = value
         items.append(normalized)
-    items = _fold_derived_manifest_events(items)
+    items = _fold_derived_manifest_events(items, cast, scene)
     # NO CLAMP. Until 2026-09-07 this returned the first eight: items 9+
     # were dispatched to no hand, sliced into no specialist view and
     # checked against no evidence, so a busy beat's later changes were the
@@ -1275,7 +1279,47 @@ def _manifest_items(out):
 _DERIVED_OF_ATTIRE = frozenset({"entities", "inventory"})
 
 
-def _fold_derived_manifest_events(items):
+def _subject_is_registered_body(subject, cast, scene):
+    """Does this manifest subject name a BODY the engine already has on file?
+
+    The engine's own vocabulary for a body, in the two registers a beat keeps
+    bodies in, because a registered character and a named background presence
+    are both wearers:
+
+      * a registered cast member, matched over the same
+        `character_scene_keys` set `_subject_match_forms` resolves an
+        omission subject through -- so a uid or an alias answers here
+        too (a `character:<row id>` spelling is not in that set and folds
+        exactly as head folded it);
+      * a scene key carrying one of the three ledgers only a body carries.
+        That test is `world.spatial`'s `_is_body_entity` and
+        `world.comfort._is_body`, both measured across every scene on disk:
+        a lift car, a ship and a crate have no attire, no scales and no
+        vitals, and every body scored true on attire.
+
+    Written for the fold below (review 2026-09-07 A41), where "does this
+    handle name the wearer or the garment" is the entire question and string
+    identity with the sibling entry had been standing in for the answer.
+    """
+    key = _norm_subject(subject)
+    if not key:
+        return False
+    for row in cast or []:
+        sheet = normalized_character_of_row(row)
+        if sheet is None:
+            continue
+        if any(_norm_subject(k) == key for k in character_scene_keys(sheet)):
+            return True
+    for ledger in ("attire", "scales", "vitals"):
+        table = (scene or {}).get(ledger)
+        if not isinstance(table, dict):
+            continue
+        if any(_norm_subject(k) == key for k in table):
+            return True
+    return False
+
+
+def _fold_derived_manifest_events(items, cast=None, scene=None):
     """One real-world change is ONE numbered event.
 
     The manifest may truthfully describe a single change twice -- "the sash
@@ -1311,15 +1355,48 @@ def _fold_derived_manifest_events(items):
         handles = [h for h in handles if h.strip()]
         parent = None
         for candidate in attire_items:
-            names = [str(candidate.get("subject") or ""),
-                     str(candidate.get("change") or "")]
-            if any(resolve_garment(h, [names[0]]) for h in handles if h):
+            subject = str(candidate.get("subject") or "")
+            change = str(candidate.get("change") or "")
+            # A BODY IS NOT A GARMENT (review 2026-09-07 A41). An attire
+            # manifest entry is usually keyed by the WEARER -- that is the
+            # key `_evidence_present` looks `state_diff.attire` up under --
+            # so a handle that merely repeats such an entry's subject names
+            # the body, and proves nothing about which garment moved.
+            # Dropping it is what stops "Hinami picks up the brass lantern"
+            # from folding into "Hinami removes her cloak": the lantern was
+            # losing its event id, so it reached no hand, was checked
+            # against no evidence, and left the manifest entirely.
+            #
+            # ONLY WHERE THE SUBJECT IS A BODY, and that is a question for
+            # the register, never for string identity with the sibling
+            # entry. The model also files an attire entry keyed by the
+            # GARMENT ("silk robe / unbelted and drawn off Hinami"), and
+            # there the subject is the very thing the entities entry
+            # describes: measured, dropping a handle by string identity
+            # alone turned {attire 'utility sash' removed from Hinami} +
+            # {entities 'utility sash' created on the floor} back into two
+            # events -- the duplication this fold exists to end.
+            if _subject_is_registered_body(subject, cast, scene):
+                subject_key = _norm_subject(subject)
+                garment_handles = [h for h in handles
+                                   if _norm_subject(h) != subject_key]
+            else:
+                garment_handles = list(handles)
+            if not garment_handles:
+                continue
+            if any(resolve_garment(h, [subject]) for h in garment_handles):
                 parent = candidate
                 break
-            # The attire entry often names the WEARER as subject and the
-            # garment inside `change` ("utility sash removed"), which is
-            # the shape the live beat produced.
-            if any(h and h.casefold() in names[1].casefold() for h in handles):
+            # The attire entry usually names the wearer as subject and the
+            # garment inside `change` ("utility sash removed"), which is the
+            # shape the live beat produced. THE PROOF IS STILL THE RESOLVER:
+            # this branch was `handle in change` prose containment, which any
+            # shared substring satisfied. The head-noun tier is off because
+            # it resolves any word standing alone in the phrase, which is a
+            # second way a body's own name qualified as a garment.
+            if change and any(
+                    resolve_garment(h, [change], allow_head_noun=False)
+                    for h in garment_handles):
                 parent = candidate
                 break
         if parent is None:

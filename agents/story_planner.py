@@ -1013,6 +1013,7 @@ def planner_reply(cid, frame_id, text, *, on_event=None):
     envelope's `dramaturge` stays None and the panel's watch shows them."""
     from core import jobs
     from persist.llm_capture import room_capture
+    from story import room_conversation as room
     from story.mandates import surprise_dial
     from story.room_bible import schedule_fold
     out = run_planner(cid, frame_id, text=text, regime="reply",
@@ -1021,7 +1022,17 @@ def planner_reply(cid, frame_id, text, *, on_event=None):
         dial = surprise_dial(cid, frame_id)
         if dial is not None:
             brief = out["ask_dramaturge"]
-            base = None
+            # EVERY JOB CARRIES ITS BASE TURN (review 2026-09-07 A33). Both
+            # rewind guards -- `run_planner`'s per-write check and
+            # `run_dramaturge_pass`'s own -- open with `if base_turn is not
+            # None`, so a None here is not a missing number, it is the guard
+            # switched off: a pass launched from the panel could land its
+            # proposals, judgements and revisions onto a story the player had
+            # meanwhile rewound underneath it. The commit tail already passes
+            # `turn_idx` for exactly this reason; the panel is the same act
+            # from the other door, and reads the number the same way
+            # `run_planner` does.
+            base = room.current_turn_idx(cid)
 
             def _run(job):
                 # The reply's own scope does not reach here: the pass runs

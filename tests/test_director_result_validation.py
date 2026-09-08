@@ -222,7 +222,7 @@ class TestTheWiring:
         import agents.director as director
 
         source = inspect.getsource(director.director_resolve)
-        backstop = source.index('_orchestration_scope_backstop(ctx, out, "resolve")')
+        backstop = source.index('_orchestration_scope_backstop(ctx, out, "resolve"')
         validate = source.index("_validate_campaign_result(ctx, out)")
 
         assert validate > backstop

@@ -229,13 +229,30 @@ def _scene_figures_at(state, place):
     voice, because `_prey_here` returned "" for a room holding two people it
     was written to hunt.
 
-    An entity is not a person: `positions` carries lamps and doors beside
-    bodies, and `entities` is what tells them apart -- the scene's own
-    discriminator, the one every other reader uses.
+    An entity is not a person, and this asked that by SUBTRACTION -- "not in
+    `entities`" -- until the rework of review 2026-09-07 A56, where the
+    docstring's own claim to be "the one every other reader uses" was the
+    finding. `spatial.scene_names_body` is that one reader now, shared with
+    the contact identity floor, the comfort derivation and the standing
+    condition sweep.
+
+    Subtraction is an accident of SPELLING, which is why it cannot be the
+    rule: it drops a body whose `positions` key happens to equal an entity
+    id, and keeps a thing the scene never recorded. Measured on the bench
+    copies 2026-09-08, the two answers agree today -- 3 figures on chat 117,
+    2 on chat 114 -- because 117 spells its cast by display name and its
+    fixtures by id, and 114 does the same (`positions["The Doctor"]` beside
+    `entities["the_doctor"]`, which the subtraction missed by luck). So this
+    is four spellings of one question becoming one, not a behaviour change on
+    either chat. The bung stays prey for as long as the scene records nothing
+    about it but where it stands (the predicate's third tier, and the loud
+    direction: a person the scene has not dressed yet is never invisible to
+    the thing hunting them).
     """
+    from world.spatial import scene_names_body
+
     scene = state.get("scene") if isinstance(state.get("scene"), dict) else {}
     positions = scene.get("positions") or {}
-    entities = scene.get("entities") or {}
     if not isinstance(positions, dict) or not place:
         return []
     own_bodies = set((state.get("bodies") or {}).keys())
@@ -244,7 +261,7 @@ def _scene_figures_at(state, place):
         if str(room or "") != str(place):
             continue
         key = str(name)
-        if key in entities or key in own_bodies:
+        if key in own_bodies or not scene_names_body(scene, key):
             continue
         out.append(key)
     return out
@@ -662,8 +679,23 @@ def predation_round(states, at_hours, *, seed=0, hours=4.0):
         # this module is pure and owns no scene. The list is REPLACED every
         # round, like `engine_notices`: a noise is a thing that happened in
         # this window and never a standing fact.
+        #
+        # NOISE FOLLOWS A PLACE THAT CHANGED, never an entry in `moves`.
+        # A `moves` entry is a REQUEST, and three kinds of request move
+        # nothing: `hunt_moves` says "stay" by naming the body's own room
+        # (a predator standing on its prey), `walk` holds a body at a shut
+        # door, and a body that cannot yet afford the next doorway banks
+        # its credit where it stands. Each was heard walking, every window,
+        # and the `moving` row then suppressed the `idle` one, so a
+        # creature crouched over a kill sounded exactly like one crossing
+        # the room and never sounded like a thing standing still. The room
+        # is the one it stands in NOW rather than the route's target, which
+        # for a walk longer than a window is several rooms ahead of it.
         heard = []
+        moved = set()
         if moves:
+            was = {key: str((body or {}).get("place") or "")
+                   for key, body in (state.get("bodies") or {}).items()}
             bodies, travelled, walked = walk(
                 state["bodies"], moves, scene, state.get("travelled"),
                 hours=hours, neighbors=neighbors or None,
@@ -671,13 +703,18 @@ def predation_round(states, at_hours, *, seed=0, hours=4.0):
             state["bodies"], state["travelled"], state["walked"] = \
                 bodies, travelled, walked
             bodies_at, stock_at = _company(states)
-            for body_key, room in sorted(moves.items()):
+            for body_key in sorted(moves):
+                room = str((bodies.get(body_key) or {}).get("place") or "")
+                if not room or room == was.get(body_key, room):
+                    continue
+                moved.add(body_key)
                 _noise(heard, creature, "moving", room, own)
         # 2. Encounters, by place.
         hunger = hunger_of(state)
         odds = attack_odds(creature, hunger)
         ceiling = int(creature.get("kill_ceiling") or 0)
         landed = 0
+        acted = set()
         spoor = []
         by_place = {}
         for body_key, body in sorted((state.get("bodies") or {}).items()):
@@ -702,6 +739,10 @@ def predation_round(states, at_hours, *, seed=0, hours=4.0):
             if landed > before:
                 _noise(heard, creature, "attacking", place, own)
                 _noise(heard, creature, "feeding", place, own)
+                # A51: the bodies that pulled this kill down reached what
+                # they wanted here, so they are not standing still either
+                # -- see the idle gate below.
+                acted.update(body_keys)
             index += 1
             bodies_at, stock_at = _company(states)
         if spoor:
@@ -709,12 +750,21 @@ def predation_round(states, at_hours, *, seed=0, hours=4.0):
                 list(state.get("spoor") or ()) + spoor)
         # Standing where it stands, wanting nothing it can reach. Only a
         # creature authored with an `idle` voice makes any sound doing it.
+        # The complement of the rule above, and asked of the BODY rather
+        # than of the room: A BODY THAT MOVED OR REACHED WHAT IT WANTED IS
+        # NOT STANDING STILL, whatever it was asked to do -- and a room
+        # another body happened to walk into does not make the one sitting
+        # in it move. "Did not move" alone is the wrong complement: a
+        # predator that kills where it stands never moves, and on the
+        # A51 fixture (a pack on `north_2` with its prey underfoot) that
+        # read it as idle in the same window it was heard attacking and
+        # feeding -- one creature, one room, two contradictory rows.
         if (creature.get("voice") or {}).get("idle"):
-            for _body_key, body in sorted((state.get("bodies") or {}).items()):
+            for body_key, body in sorted((state.get("bodies") or {}).items()):
                 if not body.get("available", True) or is_gone(body):
                     continue
                 place = str(body.get("place") or "")
-                if place and place not in moves.values():
+                if place and body_key not in moved and body_key not in acted:
                     _noise(heard, creature, "idle", place, own)
         state["heard"] = heard
     read_spoor(states, at)

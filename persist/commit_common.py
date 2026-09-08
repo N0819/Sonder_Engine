@@ -606,6 +606,30 @@ def _normalized_fact(value):
 #: retires the last beat's list.
 ENGINE_NOTICES_KEY = "engine_notices"
 
+#: Attribute stamped on the turn's context once the beat's ONE rewrite of the
+#: notice key has happened (`commit_mechanics.commit_transit_sweep`). Before
+#: it, a notice with a context is staged and nothing else; after it, the
+#: staged list is already spent and the durable append is the only channel
+#: left. Carried on the context rather than in a module global because a
+#: module global outlives the turn, and two turns of two chats share it.
+ENGINE_NOTICES_REWRITTEN = "_engine_notices_rewritten"
+
+
+def mark_engine_notices_rewritten(ctx):
+    """Record that this beat's notice key has been written whole.
+
+    Called by the sweep, immediately after its `wset`. Anything filed from
+    here on is filed behind the rewrite and has to reach the key itself.
+    """
+    if ctx is None:
+        return
+    try:
+        setattr(ctx, ENGINE_NOTICES_REWRITTEN, True)
+    except Exception:
+        # A context that refuses the stamp (a stand-in in a test, a slotted
+        # object) keeps the pre-2026-09-07 behaviour for its own notices.
+        pass
+
 
 def add_engine_notice(ctx, cid, message):
     """File one engine notice for the next beat. The ONLY way to write one.
@@ -642,12 +666,28 @@ def add_engine_notice(ctx, cid, message):
     A rule that has to be remembered by four callers is a rule that will be
     forgotten by a fifth: `ctx` may be None only for a caller that has no
     turn context at all, and then the key is the only channel there is.
+
+    AND THE TWO PATHS ARE EXCLUSIVE, not both (review 2026-09-07 A66). Six of
+    the seven callers with a `ctx` run in `prepare_scene_commit`, which is
+    OUTSIDE the turn's transaction: every `wset` there was its own autocommit,
+    so a beat whose commit then rolled back left its notices standing in the
+    `world` table as durable residue of a turn that never happened -- and the
+    sweep rewrote the key from `ctx.engine_feedback` a moment later anyway, so
+    the write bought nothing it did not already have. Staging is therefore the
+    whole of it while the beat's one rewrite is still ahead; the durable
+    append is what a caller with no turn context has, and what a caller that
+    files AFTER the rewrite has (`commit_destruction`, which the sweep has
+    already passed). `mark_engine_notices_rewritten` is what tells the two
+    apart, so the rule is the helper's to know rather than a caller's to
+    remember.
     """
     text = str(message or "").strip()
     if not text:
         return
     if ctx is not None and hasattr(ctx, "tell_director"):
         ctx.tell_director(text)
+        if not getattr(ctx, ENGINE_NOTICES_REWRITTEN, False):
+            return
     if cid is None:
         return
     notices = list(wget(cid, ENGINE_NOTICES_KEY, []) or [])

@@ -876,13 +876,18 @@ def detect_split(chat_id, frame_id, turn_idx):
 
 
 #: The ledgers a frame split partitions and a merge reunites, by SHAPE.
-#: Subject-keyed tables (`_SUBJECT_KEYED` plus the body ledgers keyed the same
-#: way): a row belongs to the frame its subject stands in. Record lists whose
-#: rows name their parties: a record belongs to the frame the parties stand
-#: in. Room-anchored tables: a record belongs to the frame whose rooms it
-#: touches. Rooms and positions are the partition itself.
-_FRAME_SUBJECT_LEDGERS = tuple(dict.fromkeys(
-    tuple(_SUBJECT_KEYED) + ("attire", "vitals", "overlays")))
+#: Subject-keyed tables: a row belongs to the frame its subject stands in.
+#: Record lists whose rows name their parties: a record belongs to the frame
+#: the parties stand in. Room-anchored tables: a record belongs to the frame
+#: whose rooms it touches. Rooms and positions are the partition itself.
+#:
+#: ONE LIST, NOT TWO. This used to read `_SUBJECT_KEYED` plus `("attire",
+#: "vitals", "overlays")` -- one of which was already in it and two of which
+#: were not, so the split partitioned a body's vitals while the SPELLING fold
+#: that runs at every merge did not touch them (review 2026-09-07, Section H
+#: residual on B4). Two lists of one thing disagree; `_SUBJECT_KEYED` now
+#: names all of them and this reads it.
+_FRAME_SUBJECT_LEDGERS = tuple(_SUBJECT_KEYED)
 _FRAME_RECORD_LEDGERS = ("contacts", "substances")
 _FRAME_ROOM_TABLES = ("entities", "passages", "comms", "scents")
 

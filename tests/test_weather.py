@@ -291,11 +291,16 @@ def test_drift_stays_inside_the_vocabulary():
 
 
 def test_freezing_turns_rain_to_snow():
-    """The one place temperature changes what falls rather than how it feels."""
+    """The one place temperature changes what falls rather than how it feels.
+
+    Off the record's own `temperature` and nothing else: the `cold=` argument
+    this used to pass was the same question asked twice, and its one
+    production caller computed it from this very field (review 2026-09-07
+    A88)."""
     seen = set()
     for hour in range(1, 40):
         out = advance_weather({"sky": "storm", "temperature": "freezing"},
-                              hour * 3600, seed="chat:9", cold=True)
+                              hour * 3600, seed="chat:9")
         seen.add(out["precipitation"])
     assert "rain" not in seen
     assert seen & {"snow", "sleet"}

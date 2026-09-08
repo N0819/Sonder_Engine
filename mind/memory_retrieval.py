@@ -5,7 +5,7 @@ congruence and rank-normalised importance."""
 
 import re
 import time
-from collections import defaultdict
+from collections import Counter, defaultdict
 from core.db import q, qi
 from llm.providers import embed_texts_meta
 from core.logging_utils import logger
@@ -838,26 +838,61 @@ def search_memories(chat_id, char_id, query, k=8, *, include_archived=True,
     # `visible_memory_rows` takes with its required arguments, and for the
     # same reason: the caller who forgets is the one who gets it wrong.
     if result and record_access:
-        now = time.time()
-        ids = [m["id"] for m in result]
-        ph = ",".join("?" for _ in ids)
-        # `last_accessed_turn` beside the wall clock, because the wall clock
-        # cannot answer the question that decides how much memory is worth
-        # delivering. Depth of reach is `last_accessed_turn - turn_idx`: a row
-        # recalled while it was fresh and one recalled three hundred beats
-        # later are indistinguishable afterwards without it, so "does a
-        # character ever reach past rank 16, or past a hundred beats" has been
-        # unanswerable from ordinary play and had to be bought with synthetic
-        # benchmarks instead.
-        #
-        # NULL when the caller has no turn -- a preview endpoint, a tool -- so
-        # the column means "reached during play at turn N" and never "reached,
-        # turn unknown". A guessed turn would be worse than a missing one here.
+        record_memory_access([m["id"] for m in result],
+                             current_turn_idx=current_turn_idx)
+    return result
+
+
+def record_memory_access(ids, current_turn_idx=None):
+    """Mark these memory rows as having come BACK to a mind: one durable
+    write, the only one this module makes.
+
+    A NAMED WRITE, because it is now made from two places and only one of
+    them is a read. `search_memories(record_access=True)` still calls it for
+    the callers that both read and are minds; the character stage does not,
+    because that stage is read-only and a reroll of it must not move a
+    counter (review 2026-09-07 A78 -- it proposes the ids on its step output
+    and `commit_memory` makes the write, exactly like the unbidden ledger).
+
+    `last_accessed_turn` sits beside the wall clock because the wall clock
+    cannot answer the question that decides how much memory is worth
+    delivering. Depth of reach is `last_accessed_turn - turn_idx`: a row
+    recalled while it was fresh and one recalled three hundred beats later
+    are indistinguishable afterwards without it, so "does a character ever
+    reach past rank 16, or past a hundred beats" has been unanswerable from
+    ordinary play and had to be bought with synthetic benchmarks instead.
+
+    NULL when the caller has no turn, so the column means "reached during
+    play at turn N" and never "reached, turn unknown". A guessed turn would be
+    worse than a missing one here. No caller passes NULL any more: since A78
+    the one production write is `commit_memory_write`'s, which carries
+    `ctx.turn.idx`, and the author-facing memory panel and the memory-context
+    preview endpoint read with `record_access=False` -- they move no counter
+    at all rather than moving one with no turn behind it.
+    """
+    ids = [i for i in (ids or []) if i is not None]
+    if not ids:
+        return 0
+    # A REPEATED ID IS A SECOND REACH, and the count has always said so: two
+    # retrieval lanes in one beat returning the same row made two UPDATE
+    # statements and moved `access_count` by two. `WHERE id IN (...)` moves
+    # each matching row once however many times it is listed, so the
+    # multiplicity is peeled off a layer at a time rather than collapsed --
+    # otherwise routing this through one call (A78) would quietly redefine
+    # the number every replay tool reads.
+    now = time.time()
+    remaining = Counter(ids)
+    written = 0
+    while remaining:
+        batch = sorted(remaining)
+        ph = ",".join("?" for _ in batch)
         qi(f"UPDATE memories SET access_count=access_count+1, last_accessed=?, "
            f"last_accessed_turn=COALESCE(?, last_accessed_turn) "
            f"WHERE id IN ({ph})",
-           (now, current_turn_idx, *ids))
-    return result
+           (now, current_turn_idx, *batch))
+        written += len(batch)
+        remaining = Counter({i: n - 1 for i, n in remaining.items() if n > 1})
+    return written
 
 # ---- Recall confidence (the "nothing convincing" floor) ----
 #

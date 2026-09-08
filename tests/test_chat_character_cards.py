@@ -178,6 +178,60 @@ def test_story_card_rejects_identity_rekey_and_cross_chat_target(
     )["sheet"] == outsider_before
 
 
+def test_renaming_the_library_card_cannot_rekey_a_story_already_played(
+        client, temp_db, stories):
+    """A19 (review 2026-09-07), closed by ad260f1d and pinned here.
+
+    The reusable card is a TEMPLATE. `chat_character_sheet` resolves
+    `COALESCE(cc.sheet, ch.sheet)` and attaching writes no `chat_chars.sheet`,
+    so a story with no per-story card reads the library sheet live -- and the
+    in-story identity is keyed by NAME (positions, `known`, memories, the
+    dialogue log). Renaming the library card therefore rekeyed every one of
+    those stories at once: the exact rekey the per-story card route above
+    refuses with a 400. Measured at review time: 103 of 116 attachments had no
+    card of their own.
+
+    So an identity change hands every such attachment the card it has been
+    playing under, before the library row moves. An edit that keeps the name
+    and the uid must NOT do that -- freezing a copy onto every story would
+    make the library card stop being a template.
+    """
+    renamed = json.loads(json.dumps(stories["base"]))
+    renamed["identity"]["name"] = "Mara Vell"
+    response = client.put(
+        f"/api/characters/{stories['char_id']}", json={"sheet": renamed})
+    assert response.status_code == 200, response.text
+
+    assert temp_db.q(
+        "SELECT name FROM characters WHERE id=?",
+        (stories["char_id"],), one=True,
+    )["name"] == "Mara Vell"
+    for chat_id in (stories["chat_a"], stories["chat_b"]):
+        cast = active_cast(chat_id)
+        assert json.loads(cast[0]["sheet"])["identity"]["name"] == "Mara"
+
+
+def test_an_edit_that_keeps_the_identity_leaves_the_card_a_template(
+        client, temp_db, stories):
+    """A19's other half. Nothing is snapshotted unless the identity moves, so
+    an ordinary library edit still reaches every story that has no card of its
+    own -- which is what makes it a library."""
+    edited = json.loads(json.dumps(stories["base"]))
+    edited["psychology"]["drive"]["essence"] = "Keep the archive honest"
+    response = client.put(
+        f"/api/characters/{stories['char_id']}", json={"sheet": edited})
+    assert response.status_code == 200, response.text
+
+    assert not temp_db.q(
+        "SELECT 1 FROM chat_chars WHERE char_id=? "
+        "AND sheet IS NOT NULL AND TRIM(sheet)!=''",
+        (stories["char_id"],),
+    )
+    for chat_id in (stories["chat_a"], stories["chat_b"]):
+        assert json.loads(active_cast(chat_id)[0]["sheet"])[
+            "psychology"]["drive"]["essence"] == "Keep the archive honest"
+
+
 def test_story_card_refuses_to_race_a_running_pipeline(client, stories):
     participant = _participant(client, stories["chat_a"])
     key = (stories["chat_a"], None)

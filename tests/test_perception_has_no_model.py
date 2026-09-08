@@ -134,6 +134,11 @@ def test_every_stage_ends_in_the_composer(stage):
         f"{stage} has {len(returns)} returns; perception has one path")
     call = returns[0].value
     assert isinstance(call, ast.Call)
+    # A31 wraps the hand-off to stamp the player's room onto the step for the
+    # resume path; the composer call is still the stage's one return, inside.
+    if call.func.id == "_stage_player_room":
+        call = call.args[0]
+        assert isinstance(call, ast.Call)
     assert call.func.id == f"_composer_{stage.split('_', 1)[1]}"
 
 
