@@ -550,13 +550,27 @@ SALVAGED_PLAN_KEY = "lived_location_salvage"
 SALVAGED_PLANS_KEPT = 1
 
 
+#: Request keys the ENGINE fills in for the story it is building, not the
+#: author. `owning_lorebook_id` is the chat's own canon book, minted by
+#: `ensure_chat_canon_book(cid)` for that chat and never seen again -- so a
+#: fingerprint that counted it would differ on every attempt and no salvaged
+#: plan would ever be adopted, which is what made the first cut of this inert
+#: (caught 2026-09-08: "you can't retry a quickstart as the story receives no
+#: entry" -- and the retry that would have paid nothing was paying twice).
+#: `lorebook_id` is NOT here: it names the lore the plan was built FROM, and a
+#: plan built from different lore is a different plan.
+_PER_CHAT_REQUEST_KEYS = ("owning_lorebook_id",)
+
+
 def _plan_fingerprint(request, frame_id):
     """`_request_digest` without the chat: what was ASKED FOR, so a plan can
     be recognised as answering the same question in a story that did not
     exist when it was made."""
+    asked = {key: value
+             for key, value in (request if isinstance(request, dict) else {}).items()
+             if key not in _PER_CHAT_REQUEST_KEYS}
     payload = json.dumps(
-        {"frame": frame_id,
-         "request": request if isinstance(request, dict) else {}},
+        {"frame": frame_id, "request": asked},
         sort_keys=True, ensure_ascii=False, default=str)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
