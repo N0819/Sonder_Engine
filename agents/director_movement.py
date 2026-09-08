@@ -32,18 +32,65 @@ from world.spatial import (
 
 from .director_lingua import _ling
 
-def route_scene_for(ctx, scene, state_diff):
-    """The scene as this beat's diff leaves it, for a ROUTE question --
-    memoised on the turn.
+#: The ctx side channel the turn's merged route scenes live in.
+#:
+#: One entry per SCENE OBJECT, holding that scene's latest merge. Not a cap:
+#: a resolve asks its route questions of at most two scenes -- the beat's own
+#: and the charter view (`common.charter_view_for_rooms`), which stands the
+#: town's unpromoted bodies at their cells -- so the table is as large as the
+#: number of distinct scenes asked about and the turn's `ctx` takes it away
+#: with it. One entry PER SCENE rather than one entry overall is what lets
+#: the charter check and the beat's own checks coexist instead of evicting
+#: each other every beat (review 2026-09-07 C6).
+_ROUTE_MEMO = "_route_scene_memo"
 
-    Six route checks inside one resolve each deep-copied the whole scene and
+
+def _route_positions_stamp(scene):
+    """`carriers._positions_stamp`'s twin, and for its reason.
+
+    Identity is conservative for a NEW dict and OPTIMISTIC for one mutated
+    IN PLACE, which keeps the same `id()`. Positions are the one part of a
+    scene this engine has actually been measured moving in place between two
+    reads (review 2026-09-07 C9, bench chat 114: `positions["Mora"]` "square"
+    -> "road" inside one ctx), and they are what every route answer turns
+    on. The stamp costs 0.0085 ms against the 11.1 ms merge it guards, so
+    the assumption is bought out rather than argued for.
+
+    A `positions` this cannot order -- a non-string key, which JSON storage
+    does not produce -- yields a fresh object equal to nothing, so the memo
+    rebuilds. That is the safe direction.
+    """
+    try:
+        return tuple(sorted(((scene or {}).get("positions") or {}).items()))
+    except (AttributeError, TypeError):
+        return object()
+
+
+def route_scene_for(ctx, scene, state_diff):
+    """The scene as this beat's diff leaves it, for a ROUTE or PLACEMENT
+    question -- merged once per turn, per scene, per diff content.
+
+    Eight checks inside one resolve each deep-copied the whole scene and
     re-ran every derivation pass (`merge_scene_with_diff`) to ask the same
-    question of the same inputs; between them only the diff's positions
-    moved, if that. The memo is keyed by the scene object and the diff's
-    CONTENT, so a diff that changed between two checks is merged again and
-    one that did not is not. Callers READ the result (`known_rooms`, a
-    route, a relation); none writes to it, which is what makes one shared
-    copy safe.
+    question of the same inputs; between them mostly only the diff's
+    positions moved, if that. Measured by replaying every stored resolve
+    beat of both bench stories (`tools/bench/route_scene_merges.py`): the
+    descent's 123 beats, 38 rooms at their widest, ran 4.06 merges a beat
+    and 43.6 ms of merging; the charter town's 13 ran 2.85 and 9.4 ms.
+    Answering them from one merge per distinct (scene, diff) leaves 1.80
+    and 22.5 ms, and 1.38 and 5.3 ms, with every beat's route decisions
+    byte-identical (review 2026-09-07 C6).
+
+    THE KEY IS THE SCENE AND THE DIFF'S WHOLE CONTENT. Narrowing it to the
+    channels a route reads would be the unsafe direction -- the merge
+    applies every channel, and a route is judged on rooms, doorways, portals
+    and carriers that any of them can move -- and it would buy almost
+    nothing: fingerprinting the whole diff costs 0.17 ms against the 11.1
+    ms a single merge of that scene takes, 1.4% of what it guards.
+
+    Callers READ the result (`known_rooms`, a route, a relation, whether a
+    mint landed in a room); none writes to it, which is what makes one
+    shared copy safe. A caller that will mutate must merge its own.
     """
     if ctx is None:
         return merge_scene_with_diff(scene, state_diff)
@@ -53,13 +100,23 @@ def route_scene_for(ctx, scene, state_diff):
             ensure_ascii=False).encode("utf-8")).hexdigest()
     except Exception:
         return merge_scene_with_diff(scene, state_diff)
-    key = (id(scene), fingerprint)
-    memo = ctx.get("_route_scene_memo")
-    if isinstance(memo, tuple) and memo[0] == key:
-        return memo[1]
+    stamp = _route_positions_stamp(scene)
+    memo = ctx.get(_ROUTE_MEMO)
+    if not isinstance(memo, dict):
+        memo = {}
+    held = memo.get(id(scene))
+    if isinstance(held, tuple) and len(held) == 4:
+        held_scene, held_stamp, held_print, merged = held
+        # The scene is checked by IDENTITY as well as by `id()`, because a
+        # freed dict's address is reused; holding it here is also what keeps
+        # that from happening mid-turn.
+        if held_scene is scene and held_stamp == stamp \
+                and held_print == fingerprint:
+            return merged
     merged = merge_scene_with_diff(scene, state_diff)
+    memo[id(scene)] = (scene, stamp, fingerprint, merged)
     try:
-        ctx["_route_scene_memo"] = (key, merged)
+        ctx[_ROUTE_MEMO] = memo
     except (TypeError, AttributeError):
         pass                      # a context that keeps no side channels
     return merged
@@ -630,6 +687,16 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name):
     from world.spatial import apply_following_ops
 
     ops = list(state_diff.get("following_ops") or [])
+    # NOBODY IS FOLLOWING ANYBODY, AND THE MERGE CANNOT MAKE IT SO. The
+    # ledger below is `apply_following_ops` run over the scene's own
+    # `following`, and that function only ADDS on an op -- so an empty ledger
+    # and no ops is an empty ledger, and the deep copy that discovered it was
+    # the whole cost of the discovery. Measured (review 2026-09-07 C6): a
+    # merge of the descent's 38-room scene is 11.1 ms median, and 120 of its
+    # 123 stored beats and 13 of 13 of the charter town's carried neither a
+    # ledger nor an op. The three that do merge exactly as before.
+    if not (scene.get("following") or ops):
+        return False
     relation_scene = merge_scene_with_diff(scene, {"following_ops": ops})
     following = relation_scene.get("following") or {}
     if not following:

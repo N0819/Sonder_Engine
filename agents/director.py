@@ -4661,8 +4661,13 @@ def director_resolve(ctx, nonce, _corrections=None):
         _bodies.extend(_charter_keys)
     except Exception:
         _route_sc = sc
+    # The turn's merge of THAT scene with THIS diff, built once (review
+    # 2026-09-07 C6). A story with no charter gets `sc` itself back from the
+    # view, so this is the same merge the movement backstops above already
+    # asked for; a charter town gets its own entry, and the two do not evict
+    # each other. `_unreachable_position_writes` only reads it.
     for _body, _from, _to in _unreachable_position_writes(
-            _route_sc, merge_scene_with_diff(_route_sc, sd), sd["positions"],
+            _route_sc, route_scene_for(ctx, _route_sc, sd), sd["positions"],
             _bodies, exempt=_spared):
         sd["positions"].pop(_body, None)
         ctx.add_warning(
@@ -4719,7 +4724,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     # reported beyond perception and committed into riser 13 in one beat).
     # Same rule, same room, written where all four readers see it. The commit
     # keeps its pass as the backstop for a diff that never met this floor.
-    _placed = place_unplaced_mints(sc, sd, _mint_room)
+    _placed = place_unplaced_mints(sc, sd, _mint_room, ctx=ctx)
     for _eid in _placed:
         _note = (
             "%r was minted with no room, so the beat stood it where the beat "
@@ -4731,7 +4736,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     # What no room could be found for: the fallback declines where the beat
     # names no single room the player is in, and a body is placed by the
     # machinery that walks it rather than by this floor.
-    _unplaced = _unplaced_minted_entities(sc, sd)
+    _unplaced = _unplaced_minted_entities(sc, sd, ctx=ctx)
     if _unplaced:
         ctx.add_warning(
             "Unplaced entities: this diff mints %s and says where none of "
