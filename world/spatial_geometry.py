@@ -5,6 +5,8 @@ proximity, sides and arcs, poses, room size, and the egocentric frame."""
 import re
 from typing import Optional
 
+from story.character_schema import fold_identity_key
+
 from world.spatial_orientation import (
     _LEFT_SECTORS,
     _RIGHT_SECTORS,
@@ -1904,7 +1906,7 @@ def _anchor_for_entity(scene: dict, room_id: str, name: str):
     anchors = ((scene.get("rooms") or {}).get(room_id) or {}).get("anchors") or {}
     if not isinstance(anchors, dict) or not anchors:
         return None
-    slugs = {re.sub(r"[^a-z0-9]", "", str(a).casefold()): a for a in anchors}
+    slugs = {fold_identity_key(a): a for a in anchors}
     labels = [name]
     for eid, entity in (scene.get("entities") or {}).items():
         if not isinstance(entity, dict):
@@ -1915,7 +1917,7 @@ def _anchor_for_entity(scene: dict, room_id: str, name: str):
             labels.extend(n for n in names if n)
             break
     for label in labels:
-        hit = slugs.get(re.sub(r"[^a-z0-9]", "", str(label).casefold()))
+        hit = slugs.get(fold_identity_key(label))
         if hit:
             return hit
     return None

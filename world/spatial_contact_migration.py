@@ -4,6 +4,7 @@ contact records."""
 
 import re
 
+from story.character_schema import fold_identity_key
 from world.spatial_contacts import (_MAX_CONTACT_DETAIL, _MAX_CONTACT_PART,
                               _part_identity, _same_appendage,
                               apply_contact_ops, contacts_of)
@@ -98,12 +99,12 @@ def contacts_from_entity_state(scene: dict) -> dict:
     # "Tamamo". A value may also carry the part it touches: "tamamo_side" is
     # Tamamo's side, an observed shape. Returns (partner, target_part).
     normalized_positions = [
-        (name, re.sub(r"[^a-z0-9]", "", str(name).casefold()))
+        (name, fold_identity_key(name))
         for name in positions
     ]
 
     def _resolve(value):
-        text = re.sub(r"[^a-z0-9]", "", str(value or "").casefold())
+        text = fold_identity_key(value)
         if not text:
             return None, ""
         for name, slug in normalized_positions:
@@ -244,7 +245,7 @@ def _lift_valued_contact(actor, key, value, positions):
     words = re.split(r"[^a-z0-9]+", text.casefold())
     partner = None
     for name in positions:
-        slug = re.sub(r"[^a-z0-9]", "", str(name).casefold())
+        slug = fold_identity_key(name)
         if slug and slug in [w for w in words if w]:
             partner = str(name)
             break

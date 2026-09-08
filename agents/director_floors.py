@@ -13,7 +13,7 @@ Import direction: nothing outside `agents/director*.py` may import an
 
 import re
 
-from story.character_schema import name_boundary_pattern
+from story.character_schema import fold_identity_key, name_boundary_pattern
 from story.scene import (
     NON_AWAKE_GATED,
     active_condition_rows,
@@ -193,7 +193,7 @@ def _unsupported_player_awareness(conditions, player_name, player_input,
     if _awareness_support_in_beat(player_input, resolved_event, dialogue_log):
         return []
 
-    target = re.sub(r"[^a-z0-9]", "", str(player_name).casefold())
+    target = fold_identity_key(player_name)
     if not target:
         return []
 
@@ -211,10 +211,7 @@ def _unsupported_player_awareness(conditions, player_name, player_input,
                     continue  # waking -- always allowed
             except (TypeError, ValueError):
                 pass
-            subject = re.sub(
-                r"[^a-z0-9]", "",
-                str(cond.get("subject_id") or "").casefold(),
-            )
+            subject = fold_identity_key(cond.get("subject_id"))
             if subject != target:
                 continue
             if level in NON_AWAKE_GATED:
@@ -301,11 +298,13 @@ def _sentence_cooccurrent_names(text_units, cue_re, subject_names):
 
 
 def _norm_subject(value):
-    """A subject_id and a cast name, made comparable: casefolded, with
-    punctuation, spacing and underscores removed. `\\W`-based rather than
-    `[^a-z0-9]` so a kana name survives its own normalization instead of
-    vanishing into an empty string."""
-    return re.sub(r"[\W_]+", "", str(value or "").casefold())
+    """A subject_id and a cast name, made comparable.
+
+    `character_schema.fold_identity_key` is the engine's one name-comparison
+    fold; this file used to carry a `\\W`-based spelling of it beside four
+    ASCII `[^a-z0-9]` squashes, which is three answers to one question (B34).
+    """
+    return fold_identity_key(value)
 
 
 def _unsupported_character_awareness(conditions, cast_names, player_name,
@@ -765,7 +764,7 @@ def _awareness_exits(chat_id, conditions, player_name, player_input,
     if not conditions:
         return endings, warnings
 
-    target = re.sub(r"[^a-z0-9]", "", str(player_name or "").casefold())
+    target = fold_identity_key(player_name)
     gated = [r for r in conditions if r["level"] in NON_AWAKE_GATED]
     if not gated:
         return endings, warnings
@@ -775,7 +774,7 @@ def _awareness_exits(chat_id, conditions, player_name, player_input,
     player_acts = bool(declared) and not _ling("_STAY_UNDER_CUE").search(declared.casefold())
     if target and player_acts:
         for record in gated:
-            subject = re.sub(r"[^a-z0-9]", "", record["subject"].casefold())
+            subject = fold_identity_key(record["subject"])
             if subject != target:
                 continue
             endings[record["condition_id"]] = [

@@ -895,6 +895,67 @@ def check_specialist_prompt_chunks(errors: list[str]) -> None:
                     "will drop every one the model sends")
 
 
+def check_nsfw_overlay_roster(errors: list[str]) -> None:
+    """`nsfw_prompt_ids` is the ONE roster of sheets the adult overlay joins.
+
+    Review finding B11: the same question was answered three ways -- a
+    per-hand `specialists.<name>.nsfw` flag read by `specialist_prompt`, an
+    unconditional append inside `prose_author_prompt`, and this roster read
+    by `get_prompt_body`. The three agreed on the shipped packs, which is
+    exactly why nothing would have said so when they stopped agreeing: a pack
+    naming `director_body` in the roster while clearing its flag has two
+    right answers and no way to tell which one a sheet was built from. So no
+    card may carry a second spelling of the decision, and
+    `llm.prompts.nsfw_overlay` stays the only code that reads either key.
+    """
+    sys.path.insert(0, str(ROOT))
+    try:
+        from language_runtime.card_source import read_card_source
+    except Exception as exc:  # pragma: no cover - import failure is its own error
+        errors.append(f"could not check the nsfw overlay roster: {exc}")
+        return
+
+    for pack_dir in sorted(
+            path for path in (ROOT / "language_packs").iterdir()
+            if path.is_dir()):
+        try:
+            card = read_card_source(pack_dir, "system_prompts")
+        except Exception as exc:
+            errors.append(
+                f"could not read {pack_dir.name}/system_prompts: {exc}")
+            continue
+        if "nsfw_prompt_ids" not in card or "nsfw_overlay" not in card:
+            errors.append(
+                f"language pack {pack_dir.name!r} has no nsfw_prompt_ids or "
+                "no nsfw_overlay -- the roster and the text it names are how "
+                "every sheet decides whether the overlay applies")
+        for name, spec in sorted((card.get("specialists") or {}).items()):
+            second = sorted(key for key in spec if "nsfw" in str(key))
+            if second:
+                errors.append(
+                    f"language pack {pack_dir.name!r} specialist {name!r} "
+                    f"carries {second} beside nsfw_prompt_ids -- one fact in "
+                    "two spellings, free to disagree; the roster names this "
+                    f"sheet by its prompt id (director_{name})")
+
+    for path in engine_python_paths():
+        if path == ROOT / "llm" / "prompts.py":
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError):
+            continue
+        named = sorted({node.value for node in ast.walk(tree)
+                        if isinstance(node, ast.Constant)
+                        and node.value in ("nsfw_overlay", "nsfw_prompt_ids")})
+        if named:
+            errors.append(
+                f"{path.relative_to(ROOT).as_posix()} names {named} -- the "
+                "overlay decision is llm/prompts.py's `nsfw_overlay(pid, "
+                "card)` and nowhere else, or a second site starts answering "
+                "it differently")
+
+
 #: Blocks of the orchestrated prose author's sheet that must NEVER be
 #: gateable: every-beat authority/firewall contract material. Each marker
 #: must appear in the CORE (the segments that load on every scope,
@@ -2929,6 +2990,63 @@ def check_memory_identity_writers(errors: list[str]) -> None:
             "used to do is worse than no registry, because it is believed.")
 
 
+#: The one module allowed to spell a name-comparison fold. Everything else
+#: calls `fold_identity_key`.
+IDENTITY_FOLD_OWNER = "story/character_schema.py"
+
+
+def check_identity_fold_is_owned(errors: list[str]) -> None:
+    """One fold answers "is this name that name" (review 2026-09-07, B34).
+
+    `character_schema.fold_identity_key` keeps letters in every script. The
+    `re.sub(r"[^a-z0-9]", "", name)` squash it was written to retire deletes
+    them, so every non-Latin name folds to the EMPTY STRING: a caller that
+    guards with `if norm:` merely stops matching, and one that does not
+    treats distinct people as one. Fifteen live sites still carried the
+    squash on 2026-09-07 -- among them `story.scene.is_player_speaker`,
+    which decides whether a line of dialogue belongs to the player.
+
+    Only the fold form is refused -- `re.sub` on that class with an EMPTY
+    replacement. `re.split` on the same class is a tokenizer pulling English
+    words out of model prose, and a `"_"` replacement mints an ASCII id;
+    those are different questions with different right answers.
+
+    `tests/` is exempt: a regression test for this class has to be able to
+    spell the shape it is refusing.
+    """
+    import ast as _ast
+
+    folds = {"[^a-z0-9]", "[^a-z0-9]+"}
+    for root in ENGINE_SOURCE_ROOTS:
+        for path in _python_files(root):
+            rel = path.relative_to(ROOT).as_posix()
+            if rel == IDENTITY_FOLD_OWNER or rel.startswith("tests/"):
+                continue
+            try:
+                tree = _ast.parse(path.read_text(encoding="utf-8"))
+            except (OSError, SyntaxError):
+                continue
+            for node in _ast.walk(tree):
+                if not isinstance(node, _ast.Call) or len(node.args) < 2:
+                    continue
+                func = node.func
+                if not (isinstance(func, _ast.Attribute) and func.attr == "sub"):
+                    continue
+                pattern, repl = node.args[0], node.args[1]
+                if not (isinstance(pattern, _ast.Constant)
+                        and pattern.value in folds):
+                    continue
+                if not (isinstance(repl, _ast.Constant) and repl.value == ""):
+                    continue
+                errors.append(
+                    f"{rel}:{node.lineno} folds a name with "
+                    "`re.sub(r\"[^a-z0-9]\", \"\", ...)`, which deletes every "
+                    "non-Latin letter -- so a Japanese name folds to the empty "
+                    "string and compares equal to every other. Call "
+                    "`story.character_schema.fold_identity_key`, the one "
+                    "name-comparison fold (review 2026-09-07, B34).")
+
+
 def check_character_payload_names(errors: list[str]) -> None:
     """The projected payload names, the gate, and the prompt say one thing.
 
@@ -3021,6 +3139,7 @@ def main() -> int:
     check_prompt_card_parts(errors)
     check_specialist_prompt_chunks(errors)
     check_prose_author_chunks(errors)
+    check_nsfw_overlay_roster(errors)
     check_language_pack_surfaces(errors)
     check_python_version_agreement(errors)
     check_no_machine_paths_in_scripts(errors)
@@ -3031,6 +3150,7 @@ def main() -> int:
     check_package_edge_budget(errors)
     check_memory_identity_writers(errors)
     check_character_payload_names(errors)
+    check_identity_fold_is_owned(errors)
     check_generated_map(errors)
 
     if errors:

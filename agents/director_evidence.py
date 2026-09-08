@@ -17,6 +17,7 @@ import json
 import re
 
 from llm import schemas
+from story.character_schema import fold_identity_key
 from world.spatial import (_merge_entity, _merge_room, resolve_placement_target,
                            room_of)
 
@@ -614,7 +615,9 @@ def _merge_repair_into_diff(sd, patch):
     return sd
 
 def _norm_subject(value):
-    return re.sub(r"[^a-z0-9]", "", str(value or "").casefold())
+    """Casefolded comparison key for a claim subject -- the engine's one name
+    fold (B34), so a non-Latin subject does not squash to the empty string."""
+    return fold_identity_key(value)
 
 def _claim_subject_in_world(subject, forms, sc):
     """Does the WORLD already know this claim's subject?
