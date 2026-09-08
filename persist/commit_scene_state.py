@@ -143,10 +143,10 @@ def _advance_day_cycle(ctx, sc, clock, prev_clock, *, declared, opening,
                         declared))
                 anchor = anchor_from_hour(hour, elapsed, length)
     elif advance and anchor is not None:
-        reading = clock_reading_hour(advance)
+        reading = clock_reading_hour(advance, length)
         named = label_phase(advance, length)
         target = None
-        if reading is not None and reading < float(length):
+        if reading is not None:
             target = reading
         elif named:
             target = phase_bounds_hours(named, length)[0] % float(length)

@@ -309,7 +309,11 @@ class TestTheReadersMoved:
         assert time_bucket("1430 hours") == "day"
         assert time_bucket("0830") == "morning"
         assert time_bucket("23:47") == "night"
-        assert time_bucket("09:42 PM") == "night"
+        # 21:42 is evening on the day cycle's table, and this bucket now cuts
+        # the day where that table does (review 2026-09-07 B9): it read
+        # "night" here while the same moment written as the word "evening"
+        # read "evening".
+        assert time_bucket("09:42 PM") == "evening"
 
         assert time_bucket("Cycle-End -01:45:00") == ""
         assert time_bucket("Spring 1830") == ""

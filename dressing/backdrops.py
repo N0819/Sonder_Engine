@@ -50,7 +50,9 @@ from world.spatial import (
 )
 from core.paths import INSTALL_ROOT
 from world.weather import room_exposure, weather_for_room, weather_words
-from world.day_cycle import CLOCK_READING, PM_MARKER, clock_reading_hour
+from world.day_cycle import (CLOCK_READING, DAY_LENGTH_HOURS_DEFAULT,
+                            PHASE_NAMES, PM_MARKER, clock_reading_hour,
+                            phase_of_hour)
 
 # Where generated images live. Deliberately NOT the database: engine.db is
 # already ~400MB of text, and a few hundred backdrops would dwarf it while
@@ -107,15 +109,22 @@ _CLOCK_READING = CLOCK_READING
 _PM_MARKER = PM_MARKER
 
 
-def _hour_bucket(hour):
-    """Which coarse bucket an hour of the day falls in."""
-    if 5 <= hour < 11:
-        return "morning"
-    if 11 <= hour < 17:
-        return "day"
-    if 17 <= hour < 21:
-        return "evening"
-    return "night"
+# WHICH BUCKET EACH PHASE OF THE DAY FALLS IN, read off the table above
+# rather than restated as a second set of hour boundaries. How the day is cut
+# is `world/day_cycle`'s to say; how COARSELY the scenery caches key it is
+# this file's, and that is all this map adds. (Review 2026-09-07 B9: the
+# hour boundaries here were 5/11/17/21 against the cycle's 4.5/7/11/13.5/18/
+# 19.5/22, so a story that said "09:42 PM" got a night backdrop while the
+# same moment written "evening" got an evening one.)
+_PHASE_BUCKETS = {phase: bucket
+                  for bucket, words in reversed(_TIME_BUCKETS)
+                  for phase in PHASE_NAMES if phase in words}
+
+
+def _hour_bucket(hour, day_length=DAY_LENGTH_HOURS_DEFAULT):
+    """Which coarse bucket an hour of the day falls in, by way of the phase
+    the day cycle puts that hour in."""
+    return _PHASE_BUCKETS.get(phase_of_hour(hour, day_length), "night")
 
 
 def time_bucket(value):
@@ -127,7 +136,7 @@ def time_bucket(value):
             return bucket
     hour = clock_reading_hour(text)
     if hour is not None:
-        return _hour_bucket(int(hour))
+        return _hour_bucket(hour)
     return ""
 
 

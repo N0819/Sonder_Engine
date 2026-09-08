@@ -255,8 +255,8 @@ def rulebook_rows(cid, scene, frame_id=None):
     # The day. `simulation_clock` is the day cycle's ledger
     # (`persist/commit_scene_state._advance_day_cycle`).
     try:
-        from world.day_cycle import (DAY_LENGTH_HOURS_DEFAULT, DIMMING_SKIES,
-                                     SUN_LIGHT, phase_of_hour)
+        from world.day_cycle import (DAY_LENGTH_HOURS_DEFAULT, SUN_LIGHT,
+                                     phase_of_hour, sun_light)
         clock = wget_for_frame(cid, "simulation_clock", frame_id, {}) or {}
         hour = clock.get("hour_of_day")
         length = float(clock.get("day_length_hours") or DAY_LENGTH_HOURS_DEFAULT)
@@ -264,9 +264,12 @@ def rulebook_rows(cid, scene, frame_id=None):
             phase_of_hour(float(hour), length) if hour is not None else None)
         if phase:
             sky = str(((scene or {}).get("weather") or {}).get("sky") or "")
-            light = SUN_LIGHT.get(phase, "")
-            if light == "lit" and sky in DIMMING_SKIES:
-                light = "dim"
+            # What the sun gives a room is `day_cycle.sun_light`'s answer, not
+            # a second copy of its table plus its dimming rule (review
+            # 2026-09-07 B9). A phase this cycle does not name still says
+            # nothing about the light, which is why the membership test
+            # stays here rather than becoming a default of "lit" inside it.
+            light = sun_light(phase, sky) if phase in SUN_LIGHT else ""
             text = "The day here runs %g hours; it is %s%s." % (
                 length, phase,
                 (" (about hour %g)" % round(float(hour), 1)) if hour is not None else "")

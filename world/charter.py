@@ -184,7 +184,6 @@ from .charter_news import (
 from .charter_plan import criticality, plan_watch, tended_upkeeps
 from .charter_practice import (
     ASKED_RETENTION,
-    FAMILIAR_SATURATION,
     GRIEVANCE_KINDS,
     HISTORY_WEIGHT,
     IDLE_CLOSE_HOURS,
@@ -387,7 +386,6 @@ __all__ = [
     "ASKED_RETENTION",
     "HISTORY_WEIGHT",
     "PAIR_TAIL",
-    "FAMILIAR_SATURATION",
     "GRIEVANCE_KINDS",
     "PLACE_FAILURE_KINDS",
     "grievance_against",
