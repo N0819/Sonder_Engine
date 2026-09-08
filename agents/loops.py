@@ -6,7 +6,9 @@ import json
 import random
 
 from story.character_schema import (character_appearance, character_name,
-                              character_name_from_text, character_senses)
+                              character_name_from_text, character_senses,
+                              normalized_character_from_text,
+                              normalized_character_of_row)
 from core.db import wget
 from language_runtime import compositor_text
 from story.scene import (
@@ -203,9 +205,11 @@ def _micro_body_forms(ctx, scene, observer_name):
     with no sheet answers to its own spelling."""
     forms = {}
     for row in (ctx.cast or []):
-        try:
-            sheet = json.loads(row["sheet"])
-        except Exception:
+        # This runs per action event per observer of the micro round, and each
+        # row was paying two full normalizations (name, then scene keys).
+        # Keyed on the sheet TEXT, it is one per distinct card (C14).
+        sheet = normalized_character_of_row(row)
+        if sheet is None:
             continue
         name = character_name(sheet)
         if name:
@@ -235,7 +239,9 @@ def _micro_seen_bodies(scene, observer_name, senses=None):
 
 def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
     actor_row = _character_by_id(ctx, actor_id)
-    actor_sheet = json.loads(actor_row["sheet"])
+    # Four normalizations of the one card (name, appearance, room, scene keys)
+    # became one memoised read (C14).
+    actor_sheet = normalized_character_from_text(actor_row["sheet"])
     actor_name = character_name(actor_sheet)
     actor_appearance = character_appearance(actor_sheet)
     # uid/alias-tolerant: a position keyed by identity.uid rather than the
@@ -259,7 +265,7 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
         observer_id = int(row["id"])
         if observer_id == actor_id:
             continue
-        observer_sheet = json.loads(row["sheet"])
+        observer_sheet = normalized_character_from_text(row["sheet"])
         observer_name = character_name(observer_sheet)
         # THE SAME PREDICATE AS EVERY OTHER LABEL SITE (`_recognizes`): bare
         # membership is string equality, so a rank or title variant of a
@@ -660,10 +666,10 @@ def _isolated_wave(ctx, scene, queue_ids, enabled):
         row = _character_by_id(ctx, char_id)
         if row is None:
             continue
-        try:
-            names[char_id] = character_name(json.loads(row["sheet"]))
-        except Exception:
+        sheet = normalized_character_of_row(row)
+        if sheet is None:
             continue
+        names[char_id] = character_name(sheet)
     for char_id in queue_ids[1:]:
         candidate = names.get(char_id)
         if not candidate:
@@ -744,10 +750,10 @@ def interaction_loop(ctx, nonce):
         row = _character_by_id(ctx, char_id)
         if row is None:
             continue
-        try:
-            name = character_name(json.loads(row["sheet"]))
-        except Exception:
+        sheet = normalized_character_of_row(row)
+        if sheet is None:
             continue
+        name = character_name(sheet)
         shared = ctx._extra.setdefault("character_turn_snapshot", {})
         debt = (_unanswered_question_note(
             ctx.chat.id, name, char_id, ctx.turn.idx, ctx.turn.frame_id,

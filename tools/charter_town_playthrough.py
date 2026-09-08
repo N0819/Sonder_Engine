@@ -675,6 +675,12 @@ def play_one(db, cid, turn_number, player_input):
     narrator = _active_content(db, tid, "narrator")
     background = _active_content(db, tid, "background_react")
     commit = _active_content(db, tid, "commit")
+    # `promoted` is what this beat's tail actually PROMOTED, and only that.
+    # Since review 2026-09-07's C10 the sheet is drafted out of band and
+    # applied on the next beat's tail, so a presence queued here shows up in
+    # the NEXT turn's row -- and the `scheduled` record beside it is a draft
+    # that may still file `skipped` or an error, which is not a promotion and
+    # is not reported as one.
     promotions = (((commit.get("results") or {}).get("promotions") or {})
                   .get("promoted") or [])
     return {

@@ -20,17 +20,21 @@ tests/test_tavern_story.py.
 from __future__ import annotations
 
 import json
+import threading
 import time
 import copy
 
 import pytest
 
+from core import jobs
 from story import importers
 from persist.commit import (
+    AUTO_PROMOTION_JOB_KEY,
     auto_promote_background_characters,
     pick_background_reactor,
     pick_background_reactors,
     promote_background_character,
+    schedule_auto_promotion,
 )
 from core.pipeline_context import ChatData, PipelineContext, TurnData
 from llm.schemas import validate_llm_output
@@ -624,3 +628,399 @@ class TestPromotionNameCollision:
         with pytest.raises(ValueError):
             promote_background_character(cid, "Data", sheet=dict(_SHEET),
                                          memory_seeds=[])
+
+
+
+class _FakeJob:
+    """A Job stand-in for calling a captured producer directly."""
+
+    def __init__(self):
+        self.cancelled = threading.Event()
+
+
+def _capture_job(monkeypatch):
+    """Hold the producer `schedule_auto_promotion` submits instead of running
+    it, so the job body's own refusals can be asked directly."""
+    held = []
+
+    def fake_submit(chat_id, key, fn, base_turn=None):
+        held.append(fn)
+        return jobs.Job(chat_id, key, base_turn)
+
+    monkeypatch.setattr(jobs, "submit", fake_submit)
+    return held
+
+
+class TestAutoPromotionDraftsOutOfBandAndLandsInTheTurn:
+    """C10 (review 2026-09-07, reworked): minting a sheet is two
+    `utility`-role model calls, and the sweep made them in the commit tail,
+    inside the per-turn commit lock. Measured on a twelve-presence fixture
+    with the draft stubbed at consolidation's own measured `utility` latency
+    (27.4s per call): the tail blocked 54.81s, of which 0.02s was the
+    deterministic gate and the writes. It now blocks 0.002s on the beat that
+    queues the draft and 0.020s on the beat that lands it.
+
+    The SPEND moves and the WRITE does not, which is the whole shape of the
+    rework. `promote_background_character` writes `scene`,
+    `background_presences` and `known` -- the three blobs the turn pipeline
+    reads once and rewrites wholesale -- so a background thread writing them
+    loses the update (`test_the_next_beats_scene_write_cannot_erase_it`
+    below is that probe). The job therefore drafts and writes NOTHING; the
+    next beat's tail applies the sheet in the turn thread.
+
+    THE BEHAVIOUR CHANGE: the promotion lands a beat later. The gate, the
+    thresholds and the opt-in are untouched, and every row the promotion
+    writes is the same.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _clean_jobs(self):
+        jobs.reset()
+        yield
+        jobs.reset()
+
+    def _seeded(self, db, turn_idx=5):
+        cid = _make_chat(db)
+        db.set_setting("auto_promote", "1")
+        db.wset(cid, "dialogue_config", {"promote_after_addressed": 3})
+        db.wset(cid, "scene", {
+            "location": "Bridge", "rooms": {"bridge": {"name": "Bridge"}},
+            "positions": {"The Stranger": "bridge"},
+        })
+        db.wset(cid, "background_presences", {
+            "Data": dict(_presence(1, turn_idx, dialogue_turns=[1, 2, 4]),
+                         addressed_turns=[1, 2, 4]),
+        })
+        # The rewind guard reads the chat's own turn ledger; the live tail
+        # always has this beat's row by commit time.
+        db.qi("INSERT INTO turns(chat_id,idx,player_input,created) "
+              "VALUES(?,?,?,?)", (cid, turn_idx, "Data, report.", time.time()))
+        return cid
+
+    def _join(self, cid, timeout=5.0):
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            state = jobs.status(cid, AUTO_PROMOTION_JOB_KEY)
+            if state not in ("pending", "running"):
+                return state
+            time.sleep(0.01)
+        raise AssertionError("auto-promotion job never finished")
+
+    def _next_turn(self, db, cid, idx):
+        db.qi("INSERT INTO turns(chat_id,idx,player_input,created) "
+              "VALUES(?,?,?,?)", (cid, idx, "We hold station.", time.time()))
+        return _ctx(cid, idx, "We hold station.")
+
+    def test_the_tail_drafts_out_of_band_and_lands_on_the_next_beat(
+            self, temp_db, monkeypatch):
+        """The tail returns while the model call is still outstanding, and
+        names who it queued. Nothing is in the cast until the NEXT beat's
+        tail applies the sheet."""
+        cid = self._seeded(temp_db)
+        started, release = threading.Event(), threading.Event()
+
+        def slow_draft(chat_id, presence_name):
+            started.set()
+            release.wait(timeout=5)
+            return {"sheet": copy.deepcopy(_SHEET),
+                    "memory_seeds": ["Analyzed the Kelvan core log."],
+                    "evidence_turns": [4]}
+
+        monkeypatch.setattr(importers, "draft_promoted_character", slow_draft)
+
+        t0 = time.time()
+        result = schedule_auto_promotion(_ctx(cid, 5, "Data, report."))
+        elapsed = time.time() - t0
+
+        assert elapsed < 1.0
+        assert result["promoted"] == []
+        assert result["scheduled"]["name"] == "Data"
+        assert started.wait(timeout=5)
+        # Still unminted while the call is outstanding.
+        assert temp_db.q("SELECT id FROM characters WHERE name='Data'",
+                         one=True) is None
+        release.set()
+        assert self._join(cid) == "done"
+        # And still unminted when the job has FILED: the draft waits on the
+        # job record, and only a turn thread writes the world.
+        assert temp_db.q("SELECT id FROM characters WHERE name='Data'",
+                         one=True) is None
+        assert "Data" in temp_db.wget(cid, "background_presences", {})
+
+        landed = schedule_auto_promotion(self._next_turn(temp_db, cid, 6))
+
+        assert [p["name"] for p in landed["promoted"]] == ["Data"]
+        assert temp_db.q("SELECT id FROM characters WHERE name='Data'",
+                         one=True)
+        assert "Data" not in temp_db.wget(cid, "background_presences", {})
+
+    def test_the_draft_job_writes_nothing(self, temp_db, monkeypatch):
+        """The reason the write stayed in the turn: this job must not touch
+        the blobs the turn rewrites wholesale. Every world key the promotion
+        eventually writes is byte-identical across the job's whole life."""
+        cid = self._seeded(temp_db)
+        _stub_draft(monkeypatch)
+        before = {key: json.dumps(temp_db.wget(cid, key, {}), sort_keys=True)
+                  for key in ("scene", "background_presences", "known")}
+
+        schedule_auto_promotion(_ctx(cid, 5, "Data, report."))
+        assert self._join(cid) == "done"
+
+        after = {key: json.dumps(temp_db.wget(cid, key, {}), sort_keys=True)
+                 for key in ("scene", "background_presences", "known")}
+        assert after == before
+        assert temp_db.q("SELECT id FROM characters", one=True) is None
+
+    def test_the_next_beats_scene_write_cannot_erase_it(self, temp_db,
+                                                        monkeypatch):
+        """The probe that sent the first cut of C10 back. The next turn's
+        commit reads the scene ONCE (`prepare_scene_commit`'s wget), does its
+        slow preparation -- which is where the job files -- and then writes
+        the scene back WHOLESALE (`commit_scene`'s wset), last-writer-wins
+        with no merge. A promotion written from the job thread inside that
+        window loses the promoted body's `positions` entry and leaves a cast
+        member who is nowhere. Landing on the tail, after the scene write,
+        is what makes that impossible."""
+        cid = self._seeded(temp_db)
+        _stub_draft(monkeypatch)
+
+        schedule_auto_promotion(_ctx(cid, 5, "Data, report."))
+        # -- the next turn's commit, in its real order ----------------------
+        scene = temp_db.wget(cid, "scene", {}) or {}      # prepare_scene_commit
+        assert self._join(cid) == "done"                  # slow prep window
+        scene["positions"]["The Stranger"] = "bridge"
+        temp_db.wset(cid, "scene", scene)                 # commit_scene
+        schedule_auto_promotion(self._next_turn(temp_db, cid, 6))  # the tail
+
+        assert temp_db.wget(cid, "scene")["positions"]["Data"] == "bridge"
+
+    def test_the_landed_promotion_writes_what_the_blocking_form_wrote(
+            self, temp_db, monkeypatch):
+        """Same answer, a beat later. Two chats seeded identically, one
+        promoted through the blocking twin and one drafted out of band and
+        landed on the next beat's tail: every row the promotion writes
+        agrees."""
+        _stub_draft(monkeypatch)
+        blocking_cid = self._seeded(temp_db)
+        queued_cid = self._seeded(temp_db)
+
+        auto_promote_background_characters(
+            _ctx(blocking_cid, 5, "Data, report."))
+        schedule_auto_promotion(_ctx(queued_cid, 5, "Data, report."))
+        assert self._join(queued_cid) == "done"
+        schedule_auto_promotion(self._next_turn(temp_db, queued_cid, 6))
+
+        def _rows(cid):
+            chars = [dict(r) for r in temp_db.q(
+                "SELECT ch.name, ch.source, ch.sheet, cc.status "
+                "FROM chat_chars cc JOIN characters ch ON ch.id=cc.char_id "
+                "WHERE cc.chat_id=?", (cid,))]
+            for row in chars:
+                # `source` carries the chat id; the FORMAT is the shared part.
+                row["source"] = json.loads(row["source"])["format"]
+                sheet = json.loads(row["sheet"])
+                # `normalize_character_data` mints identity.uid randomly, so
+                # it differs between two runs of the SAME code.
+                sheet.get("identity", {}).pop("uid", None)
+                row["sheet"] = json.dumps(sheet, sort_keys=True)
+            mems = [dict(r) for r in temp_db.q(
+                "SELECT kind, provenance, salience, content FROM memories "
+                "WHERE chat_id=? ORDER BY content", (cid,))]
+            return (chars, mems, temp_db.wget(cid, "known", {}),
+                    temp_db.wget(cid, "background_presences", {}),
+                    temp_db.wget(cid, "scene", {}))
+
+        assert _rows(queued_cid) == _rows(blocking_cid)
+
+    def test_a_second_beat_joins_the_job_instead_of_drafting_twice(
+            self, temp_db, monkeypatch):
+        """Idempotence, first way: `jobs.submit` dedupes on (chat, key), so
+        the next beat's sweep -- which still sees the presence, because
+        nothing has landed yet -- joins rather than paying again."""
+        cid = self._seeded(temp_db)
+        release = threading.Event()
+        calls = []
+
+        def slow_draft(chat_id, presence_name):
+            calls.append(presence_name)
+            release.wait(timeout=5)
+            return {"sheet": copy.deepcopy(_SHEET), "memory_seeds": [],
+                    "evidence_turns": [4]}
+
+        monkeypatch.setattr(importers, "draft_promoted_character", slow_draft)
+
+        first = schedule_auto_promotion(_ctx(cid, 5, "Data, report."))
+        second = schedule_auto_promotion(_ctx(cid, 5, "Data, report."))
+        assert first["scheduled"]["job"]["key"] == AUTO_PROMOTION_JOB_KEY
+        assert second["scheduled"]["job"]["key"] == AUTO_PROMOTION_JOB_KEY
+        release.set()
+        assert self._join(cid) == "done"
+        assert calls == ["Data"]
+        schedule_auto_promotion(self._next_turn(temp_db, cid, 6))
+        assert len(temp_db.q(
+            "SELECT id FROM characters WHERE name='Data'")) == 1
+
+    def test_one_draft_lands_once_however_many_beats_look(self, temp_db,
+                                                          monkeypatch):
+        """Idempotence, and the reason the stash is POPPED rather than read:
+        the beat after the landing finds nothing waiting."""
+        _stub_draft(monkeypatch)
+        cid = self._seeded(temp_db)
+
+        schedule_auto_promotion(_ctx(cid, 5, "Data, report."))
+        assert self._join(cid) == "done"
+        first = schedule_auto_promotion(self._next_turn(temp_db, cid, 6))
+        second = schedule_auto_promotion(self._next_turn(temp_db, cid, 7))
+
+        assert [p["name"] for p in first["promoted"]] == ["Data"]
+        assert second["promoted"] == []
+        assert len(temp_db.q(
+            "SELECT id FROM characters WHERE name='Data'")) == 1
+
+    def test_a_presence_already_gone_is_skipped_before_the_model_call(
+            self, temp_db, monkeypatch):
+        """Idempotence, second way: the ledger is re-read inside the job, so
+        a presence promoted by hand through the UI, folded away by a rename,
+        or removed by a restore costs nothing."""
+        cid = self._seeded(temp_db)
+        calls = _stub_draft(monkeypatch)
+        producer = _capture_job(monkeypatch)
+
+        schedule_auto_promotion(_ctx(cid, 5, "Data, report."))
+        temp_db.wset(cid, "background_presences", {})
+
+        assert producer[0](_FakeJob()) == {"skipped": "gone"}
+        assert calls == []
+
+    def test_a_presence_gone_by_landing_time_is_dropped(self, temp_db,
+                                                        monkeypatch):
+        """Idempotence, third way: the LANDING re-reads the same ledger. A
+        draft whose presence was promoted by hand, or folded away, between
+        the mint and the tail that would apply it is dropped rather than
+        minting a second identity for the same person."""
+        cid = self._seeded(temp_db)
+        _stub_draft(monkeypatch)
+
+        schedule_auto_promotion(_ctx(cid, 5, "Data, report."))
+        assert self._join(cid) == "done"
+        temp_db.wset(cid, "background_presences", {})
+
+        landed = schedule_auto_promotion(self._next_turn(temp_db, cid, 6))
+
+        assert landed["promoted"] == []
+        assert temp_db.q("SELECT id FROM characters WHERE name='Data'",
+                         one=True) is None
+
+    def test_a_rewound_story_refuses_the_draft(self, temp_db, monkeypatch):
+        """A sheet drafted from a beat the timeline has left is evidence of
+        a future that did not happen, so the job asks
+        `jobs.story_rewound_past` before it spends anything."""
+        cid = self._seeded(temp_db)
+        calls = _stub_draft(monkeypatch)
+        producer = _capture_job(monkeypatch)
+
+        schedule_auto_promotion(_ctx(cid, 5, "Data, report."))
+        temp_db.qi("DELETE FROM turns WHERE chat_id=? AND idx=?", (cid, 5))
+
+        assert producer[0](_FakeJob()) == {"skipped": "rewound"}
+        assert calls == []
+
+    def test_a_rewound_story_refuses_the_landing_too(self, temp_db,
+                                                     monkeypatch):
+        """And if the rewind arrives after the draft is in hand, the tail
+        that would apply it refuses on the same question."""
+        cid = self._seeded(temp_db)
+        _stub_draft(monkeypatch)
+
+        schedule_auto_promotion(_ctx(cid, 5, "Data, report."))
+        assert self._join(cid) == "done"
+
+        landed = schedule_auto_promotion(_ctx(cid, 3, "We back up."))
+
+        assert landed["promoted"] == []
+        assert temp_db.q("SELECT id FROM characters WHERE name='Data'",
+                         one=True) is None
+
+    def test_a_failed_draft_becomes_the_next_turns_warning(self, temp_db,
+                                                           monkeypatch):
+        """Background work cannot break a beat, and it cannot vanish either:
+        PIPELINE.md's rule for this tail is 'a warning, never a rollback and
+        never silence'. The failure happens in a thread with no turn to warn,
+        so it rides the job record and the first tail that looks turns it
+        into that turn's warning -- once, and the presence is re-offered on
+        the next beat she is active in."""
+        cid = self._seeded(temp_db)
+
+        def boom(chat_id, presence_name):
+            raise RuntimeError("promotion generator returned nothing usable")
+
+        monkeypatch.setattr(importers, "draft_promoted_character", boom)
+
+        result = schedule_auto_promotion(_ctx(cid, 5, "Data, report."))
+        assert result["promoted"] == []
+        assert self._join(cid) == "done"
+        assert "Data" in temp_db.wget(cid, "background_presences", {})
+
+        later = self._next_turn(temp_db, cid, 6)
+        schedule_auto_promotion(later)
+        assert [w for w in later.warnings
+                if "promotion generator returned nothing usable" in w]
+
+        # Reported once: the beat after it is clean.
+        after = self._next_turn(temp_db, cid, 7)
+        schedule_auto_promotion(after)
+        assert [w for w in after.warnings if "auto-promotion" in w] == []
+
+    def test_a_landing_that_refuses_is_a_warning_not_a_rollback(
+            self, temp_db, monkeypatch):
+        """The write half keeps head's own surfacing, because it is back in
+        the turn thread: a promotion that will not apply (here a name already
+        taken -- `_refuse_name_collision`) is this turn's warning."""
+        cid = self._seeded(temp_db)
+        _stub_draft(monkeypatch)
+
+        schedule_auto_promotion(_ctx(cid, 5, "Data, report."))
+        assert self._join(cid) == "done"
+        rival = temp_db.qi(
+            "INSERT INTO characters(name,sheet,source,created) VALUES(?,?,?,?)",
+            ("Data", json.dumps(_SHEET), json.dumps({}), time.time()))
+        temp_db.qi("INSERT INTO chat_chars(chat_id,char_id,status) "
+                   "VALUES(?,?,'active')", (cid, rival))
+
+        later = self._next_turn(temp_db, cid, 6)
+        landed = schedule_auto_promotion(later)
+
+        assert landed["promoted"] == []
+        assert [w for w in later.warnings if "auto-promotion failed" in w]
+
+    def test_the_switch_turned_off_drops_a_draft_in_hand(self, temp_db,
+                                                          monkeypatch):
+        """The opt-in is about what a story ACQUIRES, so it gates the
+        landing as well as the sweep: a host who turns it off between the
+        mint and the tail that would apply it gets no new cast member. The
+        spend is already gone; the presence goes back to being an extra."""
+        cid = self._seeded(temp_db)
+        _stub_draft(monkeypatch)
+
+        schedule_auto_promotion(_ctx(cid, 5, "Data, report."))
+        assert self._join(cid) == "done"
+        temp_db.set_setting("auto_promote", "0")
+
+        landed = schedule_auto_promotion(self._next_turn(temp_db, cid, 6))
+
+        assert landed == {"promoted": [], "scheduled": None}
+        assert temp_db.q("SELECT id FROM characters WHERE name='Data'",
+                         one=True) is None
+        assert "Data" in temp_db.wget(cid, "background_presences", {})
+
+    def test_the_switch_still_gates_it(self, temp_db, monkeypatch):
+        """The opt-in is unchanged by the move: off means no job at all."""
+        cid = self._seeded(temp_db)
+        temp_db.set_setting("auto_promote", "0")
+        calls = _stub_draft(monkeypatch)
+
+        result = schedule_auto_promotion(_ctx(cid, 5, "Data, report."))
+
+        assert result == {"promoted": [], "scheduled": None}
+        assert jobs.status(cid, AUTO_PROMOTION_JOB_KEY) == "absent"
+        assert calls == []

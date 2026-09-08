@@ -19,6 +19,7 @@ from story.character_schema import (
     _UNSPACED_SCRIPT,
     character_appearance,
     character_name,
+    normalized_character_from_text,
     persona_appearance,
 )
 from story.scene import persona_of
@@ -46,7 +47,7 @@ def _cast_match_forms(cast):
     by_id, by_name = {}, {}
     for row in cast or []:
         try:
-            sheet = json.loads(row["sheet"])
+            sheet = normalized_character_from_text(row["sheet"])
         except Exception:
             continue
         name = character_name(sheet)
@@ -266,7 +267,9 @@ def _report_observer_epithets(ctx, out, sc, p_name):
     bodies = []
     for row in (ctx.cast or []):
         try:
-            sheet = json.loads(row["sheet"])
+            # One memoised normalization per distinct sheet TEXT (C14): the
+            # reads below were each rebuilding the whole card.
+            sheet = normalized_character_from_text(row["sheet"])
         except Exception:
             continue
         name = character_name(sheet)
@@ -388,7 +391,9 @@ def _report_unowned_address_forms(ctx, out, p_name):
     cards = {}
     for row in (ctx.cast or []):
         try:
-            sheet = json.loads(row["sheet"])
+            # One memoised normalization per distinct sheet TEXT (C14): the
+            # reads below were each rebuilding the whole card.
+            sheet = normalized_character_from_text(row["sheet"])
         except Exception:
             continue
         name = character_name(sheet)
@@ -649,8 +654,53 @@ def _carried_reports_view(ctx):
     one walk; this is the last, because it is not a spelling.
     """
     from story.carriers import carried_reports_view
-    from story.scene import get_scene
 
     return carried_reports_view(
-        ctx.chat.id, ctx.turn.frame_id,
-        get_scene(ctx.chat.id, ctx.chat), chat=ctx.chat)
+        ctx.chat.id, ctx.turn.frame_id, _objective_scene(ctx),
+        chat=ctx.chat, ctx=ctx)
+
+
+#: The ctx side channel this module's own objective scene read lives in.
+_SCENE_MEMO = "_director_view_scene"
+
+
+def _objective_scene(ctx):
+    """The committed scene, read once per turn per scene write (C9).
+
+    OBJECTIVE truth, never an observer's slice: nothing perception scrubbed
+    or gated goes near this, so there is no observer to key it by. Kept
+    private to this module and handed only to read-only view builders --
+    a caller that mutates a scene must fetch its own.
+
+    The token is `core.db.world_read_token` on the scene row, the same
+    invalidation `charter_runtime.cached_registry` uses: it compares equal to
+    a later call's only if no tracked write has landed on that row between
+    them. Frame-scoped through the ambient `active_frame_id`, so the key
+    carries the frame it read under. Why it earns its keep: `_carried_reports_view`
+    runs at interpret and again at resolve, and each read built a second
+    scene dict and, through it, a second carrier index -- 45 ms a rebuild on
+    chat 114's 307-body town (review 2026-09-07, C9). Sharing the OBJECT is
+    what lets `story.carriers` memoise across the two stages at all; that
+    memo keys the scene by identity AND by its `positions` (C9's rework).
+    """
+    from core.db import world_read_token
+    from story.scene import get_scene
+
+    cid = ctx.chat.id
+    try:
+        token = (cid, world_read_token(cid, "scene"))
+    except Exception:
+        return get_scene(cid, ctx.chat)
+    slot = None
+    try:
+        slot = ctx.get(_SCENE_MEMO)
+    except (TypeError, AttributeError):
+        slot = None
+    if isinstance(slot, tuple) and len(slot) == 2 and slot[0] == token:
+        return slot[1]
+    scene = get_scene(cid, ctx.chat)
+    try:
+        ctx[_SCENE_MEMO] = (token, scene)
+    except (TypeError, AttributeError):
+        pass                       # a context that keeps no side channels
+    return scene

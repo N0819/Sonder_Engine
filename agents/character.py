@@ -33,6 +33,8 @@ from story.character_schema import (
     character_temperature,
     character_tier,
     character_voice,
+    normalize_character_data,
+    normalized_character_of_row,
     senses_as_text,
 )
 from core.frames import is_recognized_in_frame
@@ -468,10 +470,11 @@ def _body_address_keys(chat_id, char_id, char_name):
             "WHERE cc.chat_id=? AND cc.char_id=?",
             (chat_id, char_id), one=True) if char_id is not None else None
     if row:
-        try:
-            keys.extend(character_scene_keys(json.loads(row["sheet"])))
-        except Exception:
-            pass
+        # Memoised on the row's sheet TEXT (C14); None is the same "no card to
+        # read" answer the parse failure gave.
+        sheet = normalized_character_of_row(row)
+        if sheet is not None:
+            keys.extend(character_scene_keys(sheet))
     return [k for k in keys if str(k or "").strip()]
 
 
@@ -3202,6 +3205,25 @@ def character_step(ctx, cid, nonce):
         # StopIteration.
         return None
     sh, active, stance = sheet_state(row)
+    # THE TWO READS THAT NEED THE CARD AS AUTHORED, taken before the sheet is
+    # normalized below (review 2026-09-07 C14). Normalization MINTS a
+    # `char_<hex>` uid for a card that authors none, so both of these would
+    # answer with a minted id instead of the stable fallback each is built on:
+    # `cast_entity_id` must keep agreeing with `scene.cast_scene_context`
+    # every turn, and `identity_key` keys this mind's knowledge circles, which
+    # no card edit and no reader may rekey.
+    raw_sheet = sh
+    _entity_id = cast_entity_id(sh, row["id"])
+    # ONE normalization for the fifty-nine card reads this step makes (C14).
+    # Each of `character_name` (38 of them), `character_senses`,
+    # `character_psychology` and the rest was rebuilding the whole default
+    # tree and merging the card over it. `normalize_character_data` marks its
+    # own product, so every read below now short-circuits: the burst measured
+    # 153.8 -> 3.4 ms on chat 117's stored card and 209.9 -> 4.3 ms on chat
+    # 114's, per character per beat. Note this one is NOT the text memo --
+    # `sheet_state` hands back a raw parse because the stored state comes with
+    # it, so the single normalization is paid in full every beat.
+    sh = normalize_character_data(sh)
     # The body as it IS, not as it was authored. Everything below reads the
     # card -- senses, abilities, embodiment capabilities, extra parts -- so a
     # transformation that stopped at the observer's view would leave this mind
@@ -3214,6 +3236,10 @@ def character_step(ctx, cid, nonce):
     sh = transformed_sheet(
         sh,
         transformations.get(str(character_name(sh) or "").casefold()))
+    # A transformed card is a NEW shape -- `transformed_sheet` hands back a
+    # plain dict, dropping the mark -- so it is normalized once here rather
+    # than once per read. Untransformed, this is the short-circuit.
+    sh = normalize_character_data(sh)
     sc = shared.get("scene")
     if sc is None:
         sc = get_scene(chat["id"], chat)
@@ -3455,7 +3481,7 @@ def character_step(ctx, cid, nonce):
     try:
         from mind.knowledge_circles import effective_circles, identity_key
         circles = effective_circles(
-            circles, chat.id, identity_key(sh),
+            circles, chat.id, identity_key(raw_sheet),
             getattr(ctx.turn, "frame_id", None))
     except Exception as exc:
         ctx.add_warning(f"story circles not read for {character_name(sh)}: {exc}")
@@ -4079,7 +4105,7 @@ def character_step(ctx, cid, nonce):
     # payload-tax "nothing happened", so this line costs tokens only when
     # there is an interval worth having.
     _interim = interim_for(chat["id"], sc, "character",
-                           cast_entity_id(sh, row["id"]), ctx.turn.idx,
+                           _entity_id, ctx.turn.idx,
                            frame_id=ctx.turn.frame_id)
     if _interim:
         # The gap is prose somebody else wrote -- offscreen ticks and the

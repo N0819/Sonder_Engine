@@ -34,6 +34,7 @@ where telling it twice would -- so nothing is lost by storing the fainter text.
 
 from __future__ import annotations
 
+import copy
 import json
 
 from world import crowds as crowds_model
@@ -48,6 +49,20 @@ STATE_KEY = "carried_reports"
 REPORT_CAP = 16
 ROUTE_CAP = 12
 PAYLOAD_CAP = 4
+
+#: How many carrier ledgers have been written, ever, in this process.
+#:
+#: NOT a cache and not state: it holds no answer, only a number that can
+#: INVALIDATE one, so a module global is safe here where a memo would not be.
+#: A stale read of it can only cost a recomputation; it can never hand one
+#: turn's carriers to another turn or one chat's to another chat, because the
+#: memo it guards lives on the turn's `PipelineContext` and is additionally
+#: keyed by the chat, the frame and the scene object it was built from.
+#: `save_state` bumps it, which is the one place all three storage homes meet.
+_LEDGER_WRITES = 0
+
+#: The ctx side channel the turn's carrier index lives in.
+_CARRIER_MEMO = "_carrier_index_memo"
 
 #: Where the PLAYER's carrier state lives.
 #:
@@ -177,7 +192,7 @@ def advance_carriers(ctx, scene, world_event_result):
     # `_carriers` for why the list is extant cast plus persona rather than the
     # active cast this loop started out reading.
     for entry in _carriers(cid, ctx.turn.frame_id, scene,
-                           chat=getattr(ctx, "chat", None)):
+                           chat=getattr(ctx, "chat", None), ctx=ctx):
         current_room = entry["room"]
         state = entry["state"]
         reports = [dict(r) for r in state.get(STATE_KEY) or []
@@ -367,21 +382,41 @@ def save_state(cid, entry, state, *, frame_id=None):
     every writer had to remember, and this project's history is unambiguous
     about what happens to those.
     """
-    if entry.get("charter"):
-        from world.charter_runtime import save_carrier_state
+    # Every ledger write invalidates the turn's carrier index (`_carriers`).
+    # Counted HERE because this is the one place all three homes meet, so no
+    # writer has to remember to say it -- the same argument the function's
+    # own docstring makes about the branch. The three early returns are why
+    # this is a `finally` rather than a line at the top.
+    global _LEDGER_WRITES
+    try:
+        if entry.get("charter"):
+            from world.charter_runtime import save_carrier_state
 
-        save_carrier_state(cid, entry, state, frame_id=frame_id)
-        return
-    if entry.get("persona"):
-        from core.db import wset, wset_for_frame
+            save_carrier_state(cid, entry, state, frame_id=frame_id)
+            return
+        if entry.get("persona"):
+            from core.db import wset, wset_for_frame
 
-        if frame_id is not None:
-            wset_for_frame(cid, PERSONA_STATE_KEY, state, frame_id)
-        else:
-            wset(cid, PERSONA_STATE_KEY, state)
-        return
-    set_char_state(cid, entry["row"]["id"],
-                   json.dumps(state, ensure_ascii=False), frame_id=frame_id)
+            if frame_id is not None:
+                wset_for_frame(cid, PERSONA_STATE_KEY, state, frame_id)
+            else:
+                wset(cid, PERSONA_STATE_KEY, state)
+            return
+        set_char_state(cid, entry["row"]["id"],
+                       json.dumps(state, ensure_ascii=False),
+                       frame_id=frame_id)
+    finally:
+        # AFTER the write, not before. `core/db.py:2668` (`_wset_encoded`)
+        # made this exact choice for the world-row read tokens and states the
+        # reason: a reader landing between the bump and the write would
+        # otherwise cache the OLD value under the NEW token and keep serving
+        # it, where bumping after means the worst interleaving costs its
+        # successor a re-fetch. This counter cites that mechanism, so it
+        # matches its ordering. Unreachable today -- every ledger write runs
+        # inside commit under the per-turn lock, sequentially -- and the
+        # `finally` also bumps when the write RAISED, which is the same safe
+        # direction: a rebuild nobody needed (review 2026-09-07, C9).
+        _LEDGER_WRITES += 1
 
 
 def _keys_of(entry):
@@ -391,7 +426,101 @@ def _keys_of(entry):
                         *(entry.get("aliases") or [])] if key]
 
 
-def _carriers(cid, frame_id, scene, chat=None):
+def _private_entries(entries):
+    """A caller's own copy of the index.
+
+    Every consumer of `_carriers` mutates the `state` it was handed --
+    `advance_carriers` appends an acquisition, `apply_tellings` appends a
+    copy, `run_couriers` and `run_artifacts` both do -- and then saves it.
+    Before the memo each call built its own entries, so no consumer could see
+    another's half-finished mutation; handing every caller a private copy is
+    what keeps that true. The `row` is a read-only sqlite row shared by
+    reference (only `row["id"]` is ever read from it); only the mutable
+    ledger is deepcopied.
+    """
+    return [{**entry, "state": copy.deepcopy(entry.get("state"))}
+            for entry in entries]
+
+
+def _positions_stamp(scene):
+    """What `_build_carriers` reads out of the scene, cheap enough to compare.
+
+    Every room in the index comes from `room_of(scene, name)` -- through
+    `_character_room` for a cast row and `persona_entry` for the player --
+    and `room_of` answers from `scene["positions"]`. So two scenes whose
+    positions agree place every carrier in the same room.
+
+    Why the memo carries this as well as the scene's identity: identity is
+    conservative for a NEW dict and OPTIMISTIC for one mutated IN PLACE, which
+    has the same id. Demonstrated on bench chat 114 -- one ctx, one scene
+    object, `positions["Mora"]` "square" -> "road" with no ledger write
+    between two reads -- where the memo answered room "square" and a fresh
+    walk answered "road". It costs 0.0007 ms where the walk it guards costs
+    15.7 ms on that same scene -- 45 ms under the load the headline below was
+    taken at (review 2026-09-07, C9) -- so the assumption is bought out
+    rather than argued for.
+
+    A `positions` this cannot order -- a non-string key, which JSON storage
+    does not produce -- yields a fresh object equal to nothing, so the memo
+    rebuilds. That is the safe direction.
+    """
+    try:
+        return tuple(sorted(((scene or {}).get("positions") or {}).items()))
+    except (AttributeError, TypeError):
+        return object()
+
+
+def _carriers(cid, frame_id, scene, chat=None, ctx=None):
+    """The turn's carrier index, memoised on `ctx` (review 2026-09-07, C9).
+
+    Six rebuilds per turn of one enumeration: the Director's carried-report
+    view at interpret and at resolve, then `advance_carriers`, `apply_tellings`,
+    `run_couriers` and `run_artifacts`, all four of them consecutive inside
+    `commit_information_carriers` and all four handed the SAME scene object.
+    Measured on chat 114 (the 307-body charter town, 63 charter carriers in
+    reach): 45 ms a rebuild, of which 30 ms is `charter_runtime.carrier_entries`
+    walking the registry -- 270 ms a turn to answer the same question six times.
+
+    The key is what the derivation READS: the chat, the frame, the scene it
+    resolves rooms against, and `_LEDGER_WRITES` -- so a write to any
+    carrier's ledger, in any of the three homes, rebuilds. A caller that
+    passes no ctx (or a context with no side channels) rebuilds, exactly as
+    before.
+
+    THE SCENE IS KEYED TWICE, by identity and by `_positions_stamp`, because
+    identity alone answers only half the question. A fresh `get_scene` dict is
+    a different object and rebuilds -- conservative. A dict mutated IN PLACE
+    is the SAME object, and keying by identity alone would have served the old
+    rooms: bench chat 114, one ctx, `positions["Mora"]` "square" -> "road"
+    between two reads with no ledger write, memo "square" against a fresh walk
+    "road". No pipeline caller does that today, but the one test that mutates
+    a scene in place between two carrier reads
+    (tests/test_carriers.py::test_carrier_floor_has_no_model_or_provider_call)
+    survived only by the accident of an intervening acquisition write
+    bumping the counter. The fingerprint costs 0.0007 ms against that walk,
+    so the memo does not rest on that accident.
+    """
+    slot = None
+    if ctx is not None:
+        try:
+            slot = ctx.get(_CARRIER_MEMO)
+        except (TypeError, AttributeError):
+            slot = None
+    stamp = (cid, frame_id, _LEDGER_WRITES, _positions_stamp(scene))
+    if isinstance(slot, tuple) and len(slot) == 4:
+        held_stamp, held_scene, held_chat, entries = slot
+        if held_stamp == stamp and held_scene is scene and held_chat is chat:
+            return _private_entries(entries)
+    entries = _build_carriers(cid, frame_id, scene, chat=chat)
+    if ctx is not None:
+        try:
+            ctx[_CARRIER_MEMO] = (stamp, scene, chat, entries)
+        except (TypeError, AttributeError):
+            pass                   # a context that keeps no side channels
+    return _private_entries(entries)
+
+
+def _build_carriers(cid, frame_id, scene, chat=None):
     """Every body that can hold a report this beat, in one list.
 
     Two storage homes, one enumeration. A cast member's reports live in a
@@ -470,7 +599,8 @@ def _carriers(cid, frame_id, scene, chat=None):
     return entries
 
 
-def carried_reports_view(cid, frame_id, scene, chat=None, cap=PAYLOAD_CAP):
+def carried_reports_view(cid, frame_id, scene, chat=None, cap=PAYLOAD_CAP,
+                         ctx=None):
     """Who is carrying what, as [{who, world_event_id, gist, retellings}].
 
     THE one enumeration of held reports for anything that has to name a
@@ -492,7 +622,7 @@ def carried_reports_view(cid, frame_id, scene, chat=None, cap=PAYLOAD_CAP):
     minds.
     """
     out = []
-    for entry in _carriers(cid, frame_id, scene, chat=chat):
+    for entry in _carriers(cid, frame_id, scene, chat=chat, ctx=ctx):
         state = entry.get("state")
         if not isinstance(state, dict):
             continue
@@ -508,7 +638,7 @@ def carried_reports_view(cid, frame_id, scene, chat=None, cap=PAYLOAD_CAP):
     return out
 
 
-def _cast_index(cid, frame_id, scene, chat=None):
+def _cast_index(cid, frame_id, scene, chat=None, ctx=None):
     """Carriers this beat, by every name each answers to.
 
     Reading only the active cast made a dormant body in the room
@@ -521,7 +651,7 @@ def _cast_index(cid, frame_id, scene, chat=None):
     not run said nothing for it to record.
     """
     index = {}
-    for entry in _carriers(cid, frame_id, scene, chat=chat):
+    for entry in _carriers(cid, frame_id, scene, chat=chat, ctx=ctx):
         for key in _keys_of(entry):
             index.setdefault(key, entry)
     return index
@@ -624,7 +754,8 @@ def apply_tellings(ctx, scene, ops, *, names=(), places=()):
 
     cid = ctx.chat.id
     frame_id = ctx.turn.frame_id
-    index = _cast_index(cid, frame_id, scene, chat=getattr(ctx, "chat", None))
+    index = _cast_index(cid, frame_id, scene,
+                        chat=getattr(ctx, "chat", None), ctx=ctx)
     crowd_index = _crowd_index(cid, frame_id)
     crowds_dirty = {}
 

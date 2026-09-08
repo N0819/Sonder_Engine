@@ -18,6 +18,8 @@ from story.character_schema import (
     character_senses,
     character_visible_body,
     name_boundary_regex,
+    normalized_character_from_text,
+    normalized_character_of_row,
     persona_appearance,
     persona_name,
     persona_senses,
@@ -26,6 +28,7 @@ from story.character_schema import (
 from core.db import q, wget
 from core.pipeline_context import note_step_decision
 from world.mechanics import clock_elapsed
+from world.scene_memo import scene_read_pass
 from story import attire as attire_model
 from story.scene import (
     NON_AWAKE_GATED,
@@ -706,9 +709,12 @@ def _outcome_event_stream(ctx, scene, interp, res, player_name,
 
     cast_names = {}
     for row in ctx.cast:
+        sheet = normalized_character_of_row(row)
+        if sheet is None:
+            continue
         try:
-            cast_names[int(row["id"])] = character_name(json.loads(row["sheet"]))
-        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+            cast_names[int(row["id"])] = character_name(sheet)
+        except (KeyError, TypeError, ValueError):
             continue
 
     represented_ids = set()
@@ -2896,7 +2902,8 @@ def perception_outcome(ctx, nonce):
         sources.append({"name": _b["name"], "room": _b["room"]})
     for c in ctx.cast:
         d = _settled_character_result(ctx, c["id"])
-        sh = json.loads(c["sheet"])
+        # One memoised normalization for the name and the room lookup (C14).
+        sh = normalized_character_from_text(c["sheet"])
         if d and (d.get("sequence") or d.get("speech") or d.get("action")):
             sources.append({"name": character_name(sh),
                             "room": character_room(sc, sh)})
@@ -3388,9 +3395,10 @@ def _composer_identity_space(ctx, p_name, p_appearance):
         (ctx.chat.id,),
     )
     for row in rows:
-        try:
-            sheet = json.loads(row["sheet"])
-        except (TypeError, ValueError):
+        # Name, scene keys and appearance were three normalizations of the
+        # same card; the memo makes them one per distinct sheet text (C14).
+        sheet = normalized_character_of_row(row)
+        if sheet is None:
             continue
         name = character_name(sheet)
         if not name or name.casefold() in seen:
@@ -4508,8 +4516,35 @@ def _composer_finish_observer(ctx, stage, pid, name, rendered, known, roster,
     }
 
 
-def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
-                        entity_states, sensory_events, presence_bodies=()):
+#: The three composer regions below each build EVERY observer's view off one
+#: finished scene, and each was re-deriving the same objective spatial facts
+#: for every builder that asked: sight 5-9x per (observer, body), stations
+#: from fifteen callers, anchors from twenty-one, and a light or sound field
+#: lookup that serialised the whole scene into its cache key on every hit
+#: (review C12). One read pass per region is the "one sight map per observer
+#: per stage" that finding asked for, generalised: inside it each objective
+#: derivation runs once per distinct question and the answer is handed to
+#: every builder. `world/scene_memo.py` holds the contract -- a pass is
+#: opened only around a region that derives and does not write, and it
+#: re-fingerprints the scene on close to say so if that was ever untrue.
+#:
+#: Opened INSIDE each region rather than around its call, because the
+#: argument list is not part of the read-only region: `_presence_bodies`
+#: places the room's other people on `sc`, and it is evaluated as an
+#: argument at two of the three call sites.
+#:
+#: Measured 2026-09-07 on chat 117's 38-room, 22-body scene: composing every
+#: observer's presence, pose and environment percepts took 0.514 s and takes
+#: 0.087 s, with all 24 composed views byte-identical.
+def _composer_establish(ctx, sc, *args, **kwargs):
+    """Every observer's opening view, built inside one scene read pass."""
+    with scene_read_pass(sc):
+        return _composer_establish_views(ctx, sc, *args, **kwargs)
+
+
+def _composer_establish_views(ctx, sc, perceivers, known, p_name,
+                              p_appearance, entity_states, sensory_events,
+                              presence_bodies=()):
     bodies = []
     p_visible, _, p_known_to, _ci = _subject_disguise_context(
         ctx, p_name, p_appearance, known)
@@ -4628,9 +4663,17 @@ def _composer_establish(ctx, sc, perceivers, known, p_name, p_appearance,
     }
 
 
-def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
-                  p_disguise_known, p_disguise_conceals, p_disguise_terms,
-                  co_present, amap, speech_elems, action, onset_legs=()):
+def _composer_act(ctx, sc, *args, **kwargs):
+    """Every observer's pass-1 view, built inside one scene read pass (C12
+    -- see the note above `_composer_establish`)."""
+    with scene_read_pass(sc):
+        return _composer_act_views(ctx, sc, *args, **kwargs)
+
+
+def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
+                        p_disguise_known, p_disguise_conceals,
+                        p_disguise_terms, co_present, amap, speech_elems,
+                        action, onset_legs=()):
     onset_sequence = sequence_onset_elements(interp.get("sequence") or [])
     if speech_elems and not any(
             isinstance(e, dict) and e.get("type") == "speech"
@@ -4639,7 +4682,7 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
 
     self_forms_by_name = {}
     for c in ctx.cast:
-        sh = json.loads(c["sheet"])
+        sh = normalized_character_from_text(c["sheet"])
         self_forms_by_name[character_name(sh)] = self_name_forms(
             character_name(sh), character_scene_keys(sh))
 
@@ -5071,17 +5114,25 @@ def _appearance_ledger_changed(prev_scene, scene, field, subject):
             != _appearance_ledger_value(scene, field, subject))
 
 
-def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
-                      p_appearance, p_disguise, p_disguise_known,
-                      p_disguise_conceals, p_disguise_terms, perceivers,
-                      appearances, sources, enriched_dlog, substance_events,
-                      amap, presence_bodies=()):
+def _composer_outcome(ctx, sc, *args, **kwargs):
+    """Every observer's pass-2 view, built inside one scene read pass (C12
+    -- see the note above `_composer_establish`)."""
+    with scene_read_pass(sc):
+        return _composer_outcome_views(ctx, sc, *args, **kwargs)
+
+
+def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
+                            p_name, p_appearance, p_disguise,
+                            p_disguise_known, p_disguise_conceals,
+                            p_disguise_terms, perceivers, appearances,
+                            sources, enriched_dlog, substance_events,
+                            amap, presence_bodies=()):
     chat = ctx.chat
     pers = persona_of(chat)
 
     cast_aliases = {}
     for c in ctx.cast:
-        sh = json.loads(c["sheet"])
+        sh = normalized_character_from_text(c["sheet"])
         cast_aliases[character_name(sh)] = character_scene_keys(sh)[1:]
     self_forms_by_name = {
         nm: self_name_forms(nm, [nm, *(cast_aliases.get(nm) or [])])

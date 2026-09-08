@@ -418,14 +418,24 @@ def restore_checkpoint(chat_id, idx):
     # Consolidation moved out of band (commit.schedule_memory_consolidation),
     # so an in-flight job can now overlap a restore -- and a summary computed
     # from rows this restore is about to roll back must not land afterward.
-    # Cooperative and NARROW: only the consolidation job is asked to stop.
-    # The offscreen ticks beside it are deliberately left running (a turn
-    # starting must never cancel them -- see commit.py's tail), and their
-    # writes are provisional at landing, which consolidation's are not.
+    # Cooperative and NARROW: only the jobs whose result outlives the beat
+    # they were computed from are asked to stop. The offscreen ticks beside
+    # them are deliberately left running (a turn starting must never cancel
+    # them -- see commit.py's tail), and their writes are provisional at
+    # landing, which consolidation's are not.
+    # Auto-promotion joined the list with review 2026-09-07's C10, which moved
+    # the sheet MINT out of band. That job writes nothing (the promotion is
+    # applied on the next beat's tail, in the turn thread), so this is about
+    # the spend, not a rollback: a sheet drafted from a beat this restore is
+    # discarding would be paid for and then refused at landing. It re-reads
+    # the presence ledger before spending, so a cancel that arrives before the
+    # model call costs nothing at all.
     try:
         from core import jobs
-        from persist.commit import MEMORY_CONSOLIDATION_JOB_KEY
+        from persist.commit import (AUTO_PROMOTION_JOB_KEY,
+                                    MEMORY_CONSOLIDATION_JOB_KEY)
         jobs.cancel(chat_id, MEMORY_CONSOLIDATION_JOB_KEY)
+        jobs.cancel(chat_id, AUTO_PROMOTION_JOB_KEY)
     except Exception:
         pass
     # Checkpoint blobs store fully-resolved storage keys already (see

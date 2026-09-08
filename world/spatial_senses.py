@@ -17,6 +17,7 @@ from world.spatial_barriers import (_SCENT_BARRIER_LEVELS, _SIGHT_BARRIERS,
                                     neighbor_map, normalize_barrier)
 from world.spatial_containment import (_body_interior_holder, _shares_enclosure,
                                  containment_conceals)
+from world.scene_memo import scene_memo
 from world.spatial_contacts import contacts_of
 from world.spatial_geometry import (
     _anchor_dir,
@@ -791,6 +792,28 @@ def _opening_view_cap(scene: dict, room_id, body: str, other_room) -> str:
 
 
 def visual_level_between(scene: dict, observer: str, target: str) -> str:
+    """Graded sight from one BODY to another -- once per read pass, per pair.
+
+    The most-asked derivation in the engine: nine call sites ask it 5-9x per
+    (observer, body) per stage (review C12), and each ask runs `room_of`
+    twice, `spatial_rel`, `crossing_visible_from`, `containment_conceals`,
+    `light_at`, the glare test and the line-of-sight test. It is a pure
+    function of the scene and returns a word, so inside a `scene_read_pass`
+    the memo hands the same immutable answer to every asker; with no pass
+    open it derives every time (`world/scene_memo.py`).
+
+    FIREWALL: the key names BOTH bodies. This is the objective sight
+    derivation, not a per-observer view -- nothing scrubbed for one observer
+    can reach another through it.
+
+    The full derivation follows.
+    """
+    return scene_memo(
+        scene, ("visual_level_between", str(observer), str(target)),
+        lambda: _visual_level_between(scene, observer, target))
+
+
+def _visual_level_between(scene: dict, observer: str, target: str) -> str:
     """Graded sight from one BODY to another, accounting for local light.
 
     The room-level form cannot know that the target is standing in a torch's

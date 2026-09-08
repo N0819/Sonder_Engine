@@ -17,7 +17,8 @@ import json
 import re
 
 from llm import schemas
-from story.character_schema import fold_identity_key
+from story.character_schema import (fold_identity_key,
+                                    normalized_character_of_row)
 from world.spatial import (_merge_entity, _merge_room, resolve_placement_target,
                            room_of)
 
@@ -691,10 +692,12 @@ def _subject_match_forms(subject, cast, sc):
     if not subject_cf:
         return []
     for row in cast or []:
-        try:
-            keys = character_scene_keys(json.loads(row["sheet"]))
-        except Exception:
+        # C14: memoised on the row's sheet TEXT; None is the same "no card to
+        # read" answer the parse failure gave.
+        sheet = normalized_character_of_row(row)
+        if sheet is None:
             continue
+        keys = character_scene_keys(sheet)
         if subject_cf in {k.casefold() for k in keys}:
             forms.update(keys)
     for eid, ent in ((sc or {}).get("entities") or {}).items():

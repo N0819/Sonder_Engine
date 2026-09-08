@@ -1240,7 +1240,199 @@ def repair_character_shape(value: dict) -> dict:
     return value
 
 
+class NormalizedCharacterSheet(dict):
+    """What `normalize_character_data` hands back, marked as its own product.
+
+    A plain `dict` in every way that matters -- `json.dumps` writes it as an
+    object, `isinstance(x, dict)` is true, `dict(x)` and `{**x}` drop the mark
+    -- so nothing about it reaches storage or a payload. It exists so that
+    normalization can recognise a sheet it has already normalized and hand it
+    straight back.
+
+    Review 2026-09-07 C14. Normalization is the engine's most re-run
+    derivation: 39 accessors call it, each rebuilding the whole default tree
+    and recursively merging the card over it to read one field.
+    `scene.cast_scene_context` pays it EIGHT times per cast row, twice a turn;
+    `common.cast_spelling_policy` at least seven times a turn. Re-measured for
+    the rework against both benches, min of five in matching processes: one
+    normalization is 3.0 ms on chat 117's 26 KB card and 4.0 ms on chat 114's
+    19 KB one, and `cast_scene_context` over a single-row cast was 23.4 ms
+    (117) and 31.6 ms (114) of pure re-derivation, now 1.3 ms and 0.8 ms.
+    Recognising the product is not a shortcut past any repair:
+    a second normalization of a normalized card returns that card, so the
+    second and later calls are doing nothing, faster.
+
+    THAT REQUIRES NORMALIZATION TO BE A FIXED POINT, AND HALF OF IT WAS NOT.
+    `normalize(normalize(x)) == normalize(x)` was verified on all 65 stored
+    cards of the descent bench and all 67 of the charter-town bench, and the
+    sample flattered the claim: every stored card is NATIVE, and the check
+    proved the native branch alone. The LEGACY branch returned a hand-written
+    literal missing five slots the default tree carries, so a second pass
+    extended it -- see `_normalize_native_shape`, which the conversion now
+    ends in. With that, the property holds for both branches.
+
+    THE ONE CONTRACT: a caller that MUTATES a normalized sheet into a shape
+    normalization would have to repair must hand back a plain dict --
+    `normalize_character_data(dict(sheet))` -- because the mark says "already
+    normalized" and is not revalidated. `promote_background_character` is the
+    one caller in that position (it merges a charter handoff into the sheet
+    the promotion draft came back with) and it says so at the call.
+    """
+
+    __slots__ = ()
+
+
+#: How many distinct sheet TEXTS `normalized_character_from_text` holds. The
+#: same bargain, and the same number, as `IDENTITY_CACHE_SIZE`: a chat's cast
+#: is a handful of rows whose text is byte-identical for the whole turn. It is
+#: not a cap on anything an answer depends on -- an evicted entry is
+#: recomputed on the next ask, never dropped.
+#:
+#: IT DOES COST MEMORY, WHICH `IDENTITY_CACHE_SIZE` DOES NOT: that one holds a
+#: four-field identity dict, this one holds a whole normalized card. Measured
+#: with tracemalloc over real stored cards, 34.0 KB retained per entry across
+#: the descent bench's 65 and 34.3 KB across the charter town's 67 -- about
+#: 34 MB if all 1024 slots were ever occupied, which needs 1024 distinct cards
+#: alive in one process. The cache is per PROCESS, shared by every open story,
+#: not per story. Sized at twice `IDENTITY_CACHE_SIZE` by the owner's ruling of
+#: 2026-09-08 ("double it for wiggle room"), the one cap in this module that
+#: was set by hand rather than inherited.
+NORMALIZED_SHEET_CACHE_SIZE = 1024
+
+
+@functools.lru_cache(maxsize=NORMALIZED_SHEET_CACHE_SIZE)
+def _normalized_from_text(sheet_text: str | None):
+    data = json.loads(sheet_text or "{}")
+    if not isinstance(data, dict):
+        data = {}
+    first = normalize_character_data(data)
+    # Normalization MINTS a `char_<hex>` uid for a card that authors none, and
+    # mints a different one on every call -- `cast_entity_id`'s docstring is
+    # built on exactly that, and a memo that froze it would give two cards
+    # created from one blank template the same identity. Whether THIS text is
+    # such a card is the one thing a single result cannot say, so the second
+    # call asks. It is paid once per distinct sheet text and never on a hit.
+    minted = ((normalize_character_data(data).get("identity") or {}).get("uid")
+              != (first.get("identity") or {}).get("uid"))
+    return first, minted
+
+
+def normalized_character_from_text(sheet_text: str | None) -> dict:
+    """`normalize_character_data` keyed on the raw stored sheet TEXT.
+
+    The `character_name_from_text` / `character_identity_from_text` bargain,
+    widened from one field to the whole sheet (review 2026-09-07 C14): the
+    readers that need several fields of a cast row sit inside per-cast loops
+    that run repeatedly a beat, and every one of them was paying a fresh
+    parse plus a fresh normalization per FIELD. The sheet text a row carries
+    is byte-identical for the whole turn, so the derivation is a pure function
+    of it; an edited sheet is a different string and therefore a different
+    entry, which is the whole of the invalidation.
+
+    Byte-identical to `normalize_character_data(json.loads(text))`, minted uid
+    included: the copy is deep because callers own what they receive, and the
+    uid is re-minted on the way out for exactly the cards that had none. It
+    RAISES what `json.loads` raises, for the same reason -- a reader that
+    treats an unreadable row as not-cast rather than as an Unnamed body wants
+    `normalized_character_of_row`, and the two must not be the same answer.
+
+    Firewall: this memoises the OBJECTIVE parse of an authored card. Nothing
+    observer-scoped -- no scrubbed label, no gated view -- may be cached here,
+    because the key names a sheet and not who is reading it.
+    """
+    cached, minted = _normalized_from_text(sheet_text)
+    out = copy.deepcopy(cached)
+    if minted:
+        out["identity"]["uid"] = new_uid("char")
+    return out
+
+
+def normalized_character_of_row(row) -> dict | None:
+    """The normalized card a cast ROW carries, or None when it carries none.
+
+    Nine readers wrote this as `try: json.loads(row["sheet"]) except:
+    continue`, and the try was covering two answers at once: a row with no
+    `sheet` at all is not cast (four suites build reactor rows of `{id}`
+    alone, and one caller is handed rows whose sheet is already a dict), and a
+    sheet that will not parse is not cast either. Both are None here, which is
+    what keeps "this row is not cast" from collapsing into "this row is an
+    Unnamed body" -- the answer a memo that swallowed the parse error would
+    have given instead.
+    """
+    try:
+        return normalized_character_from_text(row["sheet"])
+    except Exception:
+        return None
+
+
+def _normalize_native_shape(value: dict) -> dict:
+    """Fill the default tree over a NATIVE-shaped card and coerce its slots.
+
+    Split out of `normalize_character_data` (review 2026-09-07 C14) so the
+    LEGACY conversion below can end here too, which is what makes
+    normalization a fixed point. The conversion used to return a hand-written
+    native literal directly, and that literal was missing every slot added to
+    `default_character_data` after it was written -- `simulation.curiosity`,
+    `knowledge.circles`, `embodiment.scent`, `psychology.capacity` and
+    `embodiment.interoception.responsive_regions`. So `normalize(normalize(x))`
+    EXTENDED `normalize(x)` for any legacy card (1893 bytes then 1965 on
+    `{"name": "X", "appearance": "a woman"}`), and the answer a caller got
+    depended on how many times the card had been through: the promotion write
+    and the transformation path normalized twice and saw the fuller sheet,
+    every single-pass reader saw the thinner one. Running the conversion
+    through the same repair every native card gets collapses the two into the
+    one answer, and is what lets `NormalizedCharacterSheet` be trusted.
+    """
+    value = repair_character_shape(value)
+    value = _with_normalized_pronouns(value)
+    name = (value.get("identity") or {}).get("name") or value.get("name") or "Unnamed"
+    result = _deep_defaults(default_character_data(name), value)
+    _coerce_latent(result)
+    _coerce_appearance(result)
+    result["initial_outfit"] = _normalize_initial_outfit(
+        result.get("initial_outfit"))
+    result["psychology"] = _normalize_psychology(result.get("psychology"))
+    interoception = result["embodiment"].get("interoception")
+    if not isinstance(interoception, dict):
+        interoception = {}
+    interoception = _deep_defaults(
+        default_character_data(name)["embodiment"]["interoception"],
+        interoception,
+    )
+    for key in (
+        "acuity", "pain_sensitivity", "fatigue_sensitivity",
+        "pleasure_sensitivity",
+    ):
+        interoception[key] = _profile_float(interoception.get(key))
+    result["embodiment"]["interoception"] = interoception
+    result["embodiment"]["extra_parts"] = _normalize_extra_parts(
+        result["embodiment"].get("extra_parts"))
+    result["embodiment"]["interior"] = _normalize_interior(
+        result["embodiment"].get("interior"))
+    stress = result["initial_state"].get("stress")
+    if not isinstance(stress, dict):
+        stress = {}
+    stress = _deep_defaults(
+        {"activation": 0.0, "load": 0.0, "coping_mode": ""}, stress)
+    stress["activation"] = _profile_float(stress.get("activation"), 0.0)
+    stress["load"] = _profile_float(stress.get("load"), 0.0)
+    result["initial_state"]["stress"] = stress
+    hedonic = result["initial_state"].get("hedonic")
+    if not isinstance(hedonic, dict):
+        hedonic = {}
+    hedonic = _deep_defaults(
+        {"pain": 0.0, "pleasure": 0.0, "source": ""}, hedonic)
+    hedonic["pain"] = _profile_float(hedonic.get("pain"), 0.0)
+    hedonic["pleasure"] = _profile_float(hedonic.get("pleasure"), 0.0)
+    result["initial_state"]["hedonic"] = hedonic
+    result["knowledge"]["private_history"] = _legacy_private_history(
+        result["knowledge"].get("private_history"))
+    return result
+
+
 def normalize_character_data(value: dict) -> dict:
+    if isinstance(value, NormalizedCharacterSheet):
+        return value
     if not isinstance(value, dict):
         value = {}
     if value.get("schema") == CHARACTER_SCHEMA:
@@ -1251,55 +1443,11 @@ def normalize_character_data(value: dict) -> dict:
         "identity", "simulation", "embodiment", "psychology",
         "social", "competence", "initial_state",
     )):
-        # Only NATIVE sheets are repaired. A legacy sheet keeps `name` at top
-        # level legitimately, and folding that into a synthesized `identity`
-        # would make it look native to the branch test above and route it
-        # away from the legacy conversion below.
-        value = repair_character_shape(value)
-        value = _with_normalized_pronouns(value)
-        name = (value.get("identity") or {}).get("name") or value.get("name") or "Unnamed"
-        result = _deep_defaults(default_character_data(name), value)
-        _coerce_latent(result)
-        _coerce_appearance(result)
-        result["initial_outfit"] = _normalize_initial_outfit(
-            result.get("initial_outfit"))
-        result["psychology"] = _normalize_psychology(result.get("psychology"))
-        interoception = result["embodiment"].get("interoception")
-        if not isinstance(interoception, dict):
-            interoception = {}
-        interoception = _deep_defaults(
-            default_character_data(name)["embodiment"]["interoception"],
-            interoception,
-        )
-        for key in (
-            "acuity", "pain_sensitivity", "fatigue_sensitivity",
-            "pleasure_sensitivity",
-        ):
-            interoception[key] = _profile_float(interoception.get(key))
-        result["embodiment"]["interoception"] = interoception
-        result["embodiment"]["extra_parts"] = _normalize_extra_parts(
-            result["embodiment"].get("extra_parts"))
-        result["embodiment"]["interior"] = _normalize_interior(
-            result["embodiment"].get("interior"))
-        stress = result["initial_state"].get("stress")
-        if not isinstance(stress, dict):
-            stress = {}
-        stress = _deep_defaults(
-            {"activation": 0.0, "load": 0.0, "coping_mode": ""}, stress)
-        stress["activation"] = _profile_float(stress.get("activation"), 0.0)
-        stress["load"] = _profile_float(stress.get("load"), 0.0)
-        result["initial_state"]["stress"] = stress
-        hedonic = result["initial_state"].get("hedonic")
-        if not isinstance(hedonic, dict):
-            hedonic = {}
-        hedonic = _deep_defaults(
-            {"pain": 0.0, "pleasure": 0.0, "source": ""}, hedonic)
-        hedonic["pain"] = _profile_float(hedonic.get("pain"), 0.0)
-        hedonic["pleasure"] = _profile_float(hedonic.get("pleasure"), 0.0)
-        result["initial_state"]["hedonic"] = hedonic
-        result["knowledge"]["private_history"] = _legacy_private_history(
-            result["knowledge"].get("private_history"))
-        return result
+        # Only NATIVE sheets are repaired here. A legacy sheet keeps `name` at
+        # top level legitimately, and folding that into a synthesized
+        # `identity` would make it look native to the branch test above and
+        # route it away from the legacy conversion below.
+        return NormalizedCharacterSheet(_normalize_native_shape(value))
     name = str(value.get("name") or "Unnamed")
     core = value.get("core") if isinstance(value.get("core"), dict) else {}
     active = value.get("active_state") if isinstance(value.get("active_state"), dict) else {}
@@ -1406,7 +1554,11 @@ def normalize_character_data(value: dict) -> dict:
         "opening": {"first_message": str(value.get("first_message") or "")},
     }
     result["psychology"] = _normalize_psychology(result["psychology"])
-    return result
+    # THE LEGACY CONVERSION IS A SHAPE CHANGE, NOT A NORMALIZATION. What it
+    # builds above is a native card, so it ends where every native card ends
+    # -- otherwise a legacy sheet normalized once and a legacy sheet
+    # normalized twice are two different answers (C14 rework).
+    return NormalizedCharacterSheet(_normalize_native_shape(result))
 
 def normalize_persona_data(value: dict) -> dict:
     if not isinstance(value, dict):

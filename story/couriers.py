@@ -846,7 +846,8 @@ def run_couriers(ctx, scene, ops, *, names=(), places=()):
     couriers = [dict(c) for c in wget(cid, COURIERS_WORLD_KEY, []) or []
                 if isinstance(c, dict)]
     before = json.dumps(couriers, sort_keys=True, ensure_ascii=False)
-    index = _cast_index(cid, frame_id, scene, chat=getattr(ctx, "chat", None))
+    index = _cast_index(cid, frame_id, scene,
+                        chat=getattr(ctx, "chat", None), ctx=ctx)
     by_uid = {str(c.get("uid") or ""): c for c in couriers}
     rejected = []
     metrics = {"couriers_offered": 0, "dispatched": 0, "courier_moves": 0,

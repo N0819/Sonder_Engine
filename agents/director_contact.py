@@ -14,7 +14,8 @@ import copy
 import json
 import re
 
-from story.character_schema import character_name, character_name_from_text
+from story.character_schema import (character_name, character_name_from_text,
+                                    normalized_character_from_text)
 from world.spatial import (
     _anchor_room_of,
     contact_is_momentary,
@@ -304,7 +305,7 @@ def _validated_character_contact_endings(ctx, sc, report=None):
     for row in ctx.cast:
         try:
             cid = int(row["id"])
-            sheet = json.loads(row["sheet"])
+            sheet = normalized_character_from_text(row["sheet"])
         except (TypeError, ValueError, KeyError, json.JSONDecodeError):
             continue
         result = (ctx.character_results.get(cid)

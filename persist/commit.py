@@ -160,7 +160,8 @@ from persist.commit_background import (BACKGROUND_PROMOTION_DIALOGUE_THRESHOLD,
     promotable_background_presences, _refuse_name_collision,
     promote_background_character, AUTO_PROMOTE_DIALOGUE_THRESHOLD,
     _promote_after_addressed, _auto_promote_enabled,
-    auto_promote_background_characters)
+    auto_promote_background_characters, select_auto_promotion,
+    schedule_auto_promotion, AUTO_PROMOTION_JOB_KEY)
 from persist.commit_scene_state import (_anchor_current_room, sync_anchored_books,
     _guard_occupied_mover_removal, _advance_ground, prepare_scene_commit,
     commit_scene, _record_subject_last_seen, _dedupe_overlay_entries,
@@ -684,12 +685,23 @@ def _commit_all_locked(ctx, nonce):
         results["plot_packages"] = {"error": str(exc)}
     # -- end plot package store ----------------------------------------------
 
-    # Autonomous background->cast promotion likewise runs after the primary
-    # transaction: it mints a sheet with an LLM call and is additive and
-    # forward-only (the new character becomes step-eligible next turn), so a
-    # failure is a warning, never a turn rollback.
+    # Autonomous background->cast promotion, split in two by review
+    # 2026-09-07's C10: the MINT is out of band, the WRITE is not. Minting a
+    # sheet is two `utility`-role model calls, and they used to be made here
+    # -- inside the per-turn commit lock, in the player's wait: measured at
+    # 54.81s of a twelve-presence beat with the draft stubbed at
+    # consolidation's own measured `utility` latency (27.4s a call), against
+    # 0.02s for the gate and the writes. Now: 0.002s on the beat that queues
+    # the draft and 0.020s on the beat that lands it. So the gate runs here
+    # (it reads ctx, and ctx does not outlive the turn), the draft is queued
+    # on `core.jobs`, and the sheet it brings back is APPLIED on the next
+    # beat's tail, in the turn thread -- because the promotion writes `scene`,
+    # `background_presences` and `known`, which this pipeline reads once and
+    # rewrites wholesale, so a background thread writing them loses the
+    # update. The new cast member therefore becomes step-eligible a beat
+    # later than before. A failure is a warning, never a turn rollback.
     try:
-        results["promotions"] = auto_promote_background_characters(ctx)
+        results["promotions"] = schedule_auto_promotion(ctx)
     except Exception as exc:
         ctx.add_warning(f"auto-promotion failed: {exc}")
         results["promotions"] = {"promoted": [], "error": str(exc)}

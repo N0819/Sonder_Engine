@@ -79,6 +79,7 @@ from story.character_schema import (
     character_appearance,
     character_identity_from_text,
     character_name,
+    normalized_character_of_row,
     persona_appearance,
     persona_voice_setting,
 )
@@ -1839,9 +1840,9 @@ def narrator(ctx, nonce):
     recognized = set(known_map.get(player_name) or [])
     cast_info = {}
     for _row in ctx.cast:
-        try:
-            _sh = json.loads(_row["sheet"])
-        except Exception:
+        # Three normalizations of one card became one (C14).
+        _sh = normalized_character_of_row(_row)
+        if _sh is None:
             continue
         cast_info[character_name(_sh)] = {
             "appearance": character_appearance(_sh),
@@ -2224,9 +2225,9 @@ def _extra_view_label(chat_id, extra, cast):
         (wget(chat_id, "known", {}) or {}).get(extra.get("name")) or [])
     info = {}
     for row in (cast or []):
-        try:
-            sheet = json.loads(row["sheet"])
-        except Exception:
+        # Three normalizations of one card became one (C14).
+        sheet = normalized_character_of_row(row)
+        if sheet is None:
             continue
         info[character_name(sheet)] = (
             character_appearance(sheet), character_scene_keys(sheet)[1:])

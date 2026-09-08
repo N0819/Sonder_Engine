@@ -30,6 +30,7 @@ from story.character_schema import (
     character_scent,
     character_senses,
     normalize_persona_data,
+    normalized_character_from_text,
     persona_abilities,
     persona_appearance,
     persona_initial_outfit,
@@ -1760,6 +1761,15 @@ def condition_exit_owner(kind, payload):
     return None
 
 
+# THE FOUR KIND DISPATCHERS BELOW READ THE CARD AS STORED. Each asks which
+# kind of card it holds by looking for a section only that kind has, so a
+# NORMALIZED sheet is not the same input: normalization gives every card a
+# `psychology` section, which routes a minimal legacy card into the character
+# branch it was falling past. Measured while wiring review 2026-09-07 C14: a
+# stored `{"name": "X", "senses": "keen hearing", "scent": "smoke"}` answers
+# "keen hearing" / "smoke" raw and "ordinary general, ordinary range (keen
+# hearing)" / "" normalized. So a caller that normalizes a sheet once to share
+# it across reads must still hand THESE the sheet it read off the row.
 def senses_of(sheet):
     if "psychology" in sheet or "core" in sheet:
         return senses_as_text(character_senses(sheet))
@@ -2762,12 +2772,21 @@ def cast_scene_context(cast_rows):
     """
     result = []
     for row in cast_rows:
-        sheet = json.loads(row["sheet"])
+        # ONE normalization per row, not one per field (review 2026-09-07
+        # C14). Eight of the reads below run the full default-tree build and
+        # recursive merge, which measured 5.3 ms apiece on chat 117's stored
+        # card -- 41.3 ms for a single-row cast, twice a turn. The normalized
+        # sheet is marked as such, so every accessor here now short-circuits.
+        raw = json.loads(row["sheet"])
+        sheet = normalized_character_from_text(row["sheet"])
         identity = character_identity_from_text(row["sheet"])
         extra_parts = character_extra_parts(sheet)
         result.append({
             "id": int(row["id"]),
-            "entity_id": cast_entity_id(sheet, row["id"]),
+            # The RAW sheet, never the normalized one: normalization mints a
+            # fresh uid for a card that authors none, and this id must be the
+            # same string every turn (`cast_entity_id`'s docstring).
+            "entity_id": cast_entity_id(raw, row["id"]),
             "name": character_name(sheet),
             "aliases": identity["aliases"],
             "appearance": character_appearance(sheet),
@@ -2796,7 +2815,8 @@ def private_knowledge_for(chat, viewer_name, frame_id=None):
         (frame_id, chat["id"]),
     )
     for r in rows:
-        sh = json.loads(r["sheet"])
+        # One normalization per row for the two accessors below (C14).
+        sh = normalized_character_from_text(r["sheet"])
         st = json.loads(r["state"] or "{}")
         entries = st.get("private_history")
         if entries is None:
