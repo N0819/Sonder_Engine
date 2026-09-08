@@ -3111,6 +3111,47 @@ def _voice_register_for(ctx, speaker):
     return ""
 
 
+def _manifest_percepts(sc, manifest, observer, display_map, recognized,
+                       unknown, order):
+    """Tells and surface demeanor as percepts, from the manifest
+    `_delivered_manifest` already gated for THIS observer (D1; review A36:
+    computed per observer for 101 beats and read by nothing).
+
+    What crosses is exactly what that gate let through -- the cue text and
+    the demeanor -- named through the same display map every other percept
+    uses, so a stranger's tell is a stranger's, and scrubbed through the
+    same identity scrub an act surface gets. A body this observer was not
+    shown (no display label, not recognised) names nothing and its tells
+    are dropped: a tell is a thing SEEN OR HEARD on a body, and there is no
+    body here to see it on. Returns (percepts, next order key)."""
+    out = []
+    for sname, entry in (manifest or {}).items():
+        if not isinstance(entry, dict) or same_subject(sc, sname, observer):
+            continue
+        label = display_map.get(sname)
+        if label is None and _recognizes(sname, recognized):
+            label = sname
+        if not label:
+            continue
+        can_see = visual_level_between(sc, observer, sname) != "none"
+        demeanor = _composer_scrub_surface(
+            str(entry.get("surface_demeanor") or ""), observer, recognized,
+            unknown)
+        percept = composer.demeanor_percept(sname, label, demeanor) \
+            if demeanor and can_see else None
+        if percept:
+            out.append(percept)
+        for cue in entry.get("cues") or []:
+            text = _composer_scrub_surface(str(cue or ""), observer,
+                                           recognized, unknown)
+            percept = composer.cue_percept(sname, label, text, order_key=order,
+                                           can_see=can_see)
+            if percept:
+                out.append(percept)
+                order += 1
+    return out, order
+
+
 def _composer_prev_state(ledger, pid):
     entry = (ledger or {}).get(str(pid)) or {}
     return (frozenset(entry.get("standing") or []),
@@ -5507,6 +5548,10 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                 if percept:
                     percepts.append(percept)
                     order += 1
+            minted, order = _manifest_percepts(
+                sc, p.get("source_manifest"), name, display_map, recognized,
+                unknown, order)
+            percepts.extend(minted)
             company[pid] = _composer_company(others, display_map, percepts)
         for additions in micro_by_pid.get(pid) or []:
             # `additions` is the round's LIST of delivered lines. See

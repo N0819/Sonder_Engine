@@ -433,6 +433,13 @@ class JapaneseRenderer:
                 sentence = self._text("speech_via",
                                       sentence=sentence.rstrip("。"), via=via)
             return sentence
+        if p.kind == "cue":
+            cue = str(data.get("cue") or "").strip()
+            return self._text(prefix + "cue", label=label, cue=cue) if cue else ""
+        if p.kind == "demeanor":
+            demeanor = str(data.get("demeanor") or "").strip()
+            return self._text(prefix + "demeanor", label=label,
+                              demeanor=demeanor) if demeanor else ""
         if p.kind == "crossing":
             direction = "arrived" if data.get("direction") == "arrived" else "departed"
             return self._text(prefix + direction, label=label)
