@@ -2510,10 +2510,24 @@ def fiction_model(chat_id):
 # fiction_model, which the engine derives for itself: this is the author's
 # standing instruction, and nothing infers or overwrites it.
 #
-# The free-text fields reach the Director and the mapping agent only.
+# The free-text fields reach the Director at the two stages that MINT prose
+# and world detail -- `director_establish` and `director_resolve`, each handed
+# the whole guide; `director_interpret` is excluded on purpose, since a style
+# note there would bias the reading of the player's own words. They also reach
+# a background presence's block (`agents/background.py` hands it `tone` and
+# `avoid`) and the dressing that renders a room (the backdrop prompt, its
+# cache key and the acoustic fingerprint, all on `tone`), and the Writers'
+# Room is shown them as host dials it may read and must not set
+# (`story/room_tools.py`). THERE IS NO MAPPING AGENT to reach:
+# `compile_world_context` is deterministic, and the field named for it went
+# with it (E39, review of 2026-09-07 -- this note still routed the guide
+# there).
 # Character agents are deliberately excluded -- a character's manner comes from
 # their own authored voice and psychology, and piping a house style into their
-# heads would make every mind in the world sound like the same narrator.
+# heads would make every mind in the world sound like the same narrator. A
+# background presence is the other case and not an exception to that one: it
+# has no authored voice to drown, which is what "anything the engine
+# GENERATES" means.
 # Perception is excluded for the same reason it is excluded from everything
 # else: it is a filter, not an author.
 #
@@ -2580,12 +2594,13 @@ DEFAULT_WEATHER_SEVERITY = "seasonal"
 # deliberate past-tense register. None of those read this field.
 NARRATION_TENSES = ("present", "past")
 
-# Explicit "work it out yourself" values for genre. Pinning a genre is the new
-# capability, but self-determination is the DEFAULT and stays first-class: the
-# engine already infers a fiction_model from the scenario and lore, and an
-# author who has not decided on a genre should not be forced to invent one.
-# Normalizing these to an absent key means the payload simply carries no genre,
-# which is exactly the pre-existing behaviour.
+# Explicit "work it out yourself" values, from when `genre` was a style-guide
+# field a host could pin. `genre` was removed from STYLE_GUIDE_FIELDS on
+# 2026-09-04, so nothing reads this set any more and the branch below that
+# consults it is unreachable (E39, review of 2026-09-07 -- the note here still
+# called pinning a genre the new capability). Self-determination is now the
+# only behaviour: the engine infers a fiction_model from the scenario and lore
+# and the payload carries no authored genre at all.
 STYLE_GUIDE_AUTO = {"auto", "self determine", "self-determine", "selfdetermine",
                     "engine", "unspecified", "any", "default"}
 
@@ -2626,9 +2641,9 @@ def normalize_style_guide(raw):
     # The second closed vocabulary, normalized the same way -- but with no
     # default to fall back to, so an unreadable value DROPS to unset rather
     # than becoming an opinion the author did not express. Every "no opinion"
-    # spelling the genre field already accepts (`auto`, `self-determine`,
-    # `unspecified`, ...) lands here as unset too, because none of them is in
-    # NARRATION_TENSES.
+    # spelling the retired genre field used to accept (`auto`,
+    # `self-determine`, `unspecified`, ... -- STYLE_GUIDE_AUTO) lands here as
+    # unset too, because none of them is in NARRATION_TENSES.
     tense = str(raw.get("narration_tense") or "").strip().casefold()
     if tense in NARRATION_TENSES:
         out["narration_tense"] = tense

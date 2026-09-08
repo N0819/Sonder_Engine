@@ -1051,8 +1051,8 @@ def check_language_pack_surfaces(errors: list[str]) -> None:
     if english is None:
         errors.append("built-in English language pack is missing")
         return
-    # The card STORES a body for most prompts and assembles seven of them --
-    # the six specialist sheets and the prose author's -- from
+    # The card STORES a body for most prompts and assembles six of them --
+    # the five specialist sheets and the prose author's -- from
     # `specialists`/`prose_author_sheet` instead. Storing an assembled sheet
     # as well is what let the published `director_spatial` drift 1,518
     # characters short of the one the engine actually sends, so the absence is

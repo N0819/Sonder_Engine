@@ -23,7 +23,7 @@ role's reasoning effort, same JSON mode -- because a bench that quietly leaves
 reasoning on measures a regime production never runs, and does it worst for
 the thinking models it is meant to rank.
 
-The six Director specialists are benchable steps in their own right. They are
+The five Director specialists are benchable steps in their own right. They are
 scoped structural tasks and are where a smaller, cheaper model most plausibly
 belongs (design note 19), so they are the stages worth measuring before tiering
 anything down.
@@ -147,7 +147,7 @@ PAYLOADS = {
 }
 
 
-# THE SIX SPECIALISTS, which had no payloads here at all -- so the stages that
+# THE FIVE SPECIALISTS, which had no payloads here at all -- so the stages that
 # actually decide whether a smaller model can be tiered in were the only ones
 # that could not be measured. Each gets the shared beat view (design note 19:
 # the beat, the declared acts, the final dice, the roster) plus its OWN

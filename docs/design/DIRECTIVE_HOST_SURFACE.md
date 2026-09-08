@@ -278,9 +278,9 @@ sha256 recorded; enable/disable/remove live on the server and hot in the browser
 update via `ls-remote` without downloading; per-item load isolation so one bad
 extension cannot fail `import app`; computed trust classes with a consent dialog;
 pipeline stages at named anchors; `on_step`, `on_turn_committed`, in-transaction
-commit domains; a seventh Director specialist with namespaced channels; four
-state homes that ride checkpoints, archives and branches for free; extension-owned
-HTTP routes; full CSS replacement; three-strikes containment.
+commit domains; an extension-owned Director specialist with namespaced
+channels; four state homes that ride checkpoints, archives and branches for
+free; extension-owned HTTP routes; full CSS replacement; three-strikes containment.
 
 That is a real extension system. The gaps above are a surface being two mount
 points and one seam short of a total conversion, not a system that needs

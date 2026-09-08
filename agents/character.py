@@ -3399,12 +3399,16 @@ def character_step(ctx, cid, nonce):
                 f"{', '.join(sorted(_declared))} -- they receive only public "
                 "knowledge. Add the circle to the sheet if they are inside it.")
     # Lore is objective world record and its prose names people by name --
-    # including entries the mapping stage writes DURING PLAY, from a beat the
-    # reader was standing in. Which entries reach a mind is already gated by
-    # knowledge_tag/range; who those entries are allowed to NAME was not, so a
-    # character met one beat ago arrived pre-identified in a paragraph about
-    # somewhere else entirely. Same identity floor as `ahead_entity` below and
-    # as perception's own prose, from the same `known` map.
+    # including entries written DURING PLAY, from a beat the reader was
+    # standing in. (The mapping stage wrote them when this was measured; it
+    # was retired 2026-09-04 and no turn stage files lore now, so the live
+    # in-play writer is the authoring package -- `persist/commit_mapping.py`'s
+    # routing for a Writers' Room change. The floor is about the prose, not
+    # about which hand wrote it.) Which entries reach a mind is already gated
+    # by knowledge_tag/range; who those entries are allowed to NAME was not,
+    # so a character met one beat ago arrived pre-identified in a paragraph
+    # about somewhere else entirely. Same identity floor as `ahead_entity`
+    # below and as perception's own prose, from the same `known` map.
     _name_scrub = observer_name_scrub(chat, character_name(sh), ctx.cast)
     _gated_knowledge = scrub_names_deep(knowledge, _name_scrub)
     if _gated_knowledge != knowledge:

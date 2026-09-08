@@ -35,7 +35,7 @@ commit
 
 ### `compile_world_context`
 
-Deterministic (`agents/mapping.py`; no model role). Routes attached lorebooks, retrieves the relevant canon as the engine's own rows, attaches owed history, resolves the plan's brief for any room the opening names, and records a planning need for anything the opening reaches for that no plan holds. It stages nothing: the scene is the Director's to establish, the plan the Writers' Room's to write.
+Deterministic (`agents/mapping.py`; no model role, and one provider round trip -- the lore query's embedding). Routes attached lorebooks, retrieves the relevant canon as the engine's own rows, attaches owed history, resolves the plan's brief for any room the opening names, and records a planning need for anything the opening reaches for that no plan holds. It stages nothing: the scene is the Director's to establish, the plan the Writers' Room's to write.
 
 ### `director_establish`
 
@@ -357,7 +357,7 @@ perceived this" and "who may act on it" — is not fixed: `docs/UNBUILT.md`.
 
 One deterministic step on every beat (since 2026-09-04; it replaced `mapping_stage` and `mapping_quick`, the two model stages the plan chose between on `flow.needs_mapping`). It assembles the beat's relevant lore from the story's own rows merged with the last cache (`WORLD_CONTEXT_LORE_CAP` = 12 entries on the step), the books they came from, the owed history a place has accrued, the plan's brief for a room the beat named, and a movement classification -- `known` (a scene room), `planned` (the plan holds it; the Director furnishes it on entry), `unplanned` (a planning need). It invents nothing: `staged_lore` is always empty and `scene_patch` always the empty containers. What the mapping model used to stage for an unplanned door is now a typed PLANNING NEED on the step (`world/planning_needs.py`), recorded at commit and answered by the Writers' Room (or, until it exists, by a deterministic fill); the Director renders the surface a body perceives and no more.
 
-The step never decides what a character perceives. It runs before `perception_act` in plan order; there is no provider latency left to overlap.
+The step never decides what a character perceives. It is before `perception_act` in plan order and RUNS BESIDE IT: the compiler is deterministic but not free -- `search_lore` embeds the beat's query (`embed_texts_meta`), one provider round trip -- and action-onset perception makes no model call and never reads the compiler's output, so `agents/runtime.py` pairs the two in one concurrent group and keeps that round trip off the turn's critical path.
 
 ### `perception_act`
 
@@ -851,19 +851,27 @@ target.
 
 ### `narrator`
 
-Renders the player-facing prose. Fidelity checks and player-echo stripping are
-applied before the output is saved. Dialogue fidelity is bidirectional: every
-quote delivered in the player view must survive verbatim, and every quote in
-the narrator draft must already exist in that view. An extra invented line is
-an enforceable correction, even when all required lines also survived.
-Standing sensations remain available as bodily evidence, but the composer's
-plain "X registers Y" wording is a sensor ledger rather than story voice. If a
-draft copies that construction in any ordinary inflection (`registers`,
-`registered`, `registering`), or copies the `steady pressure / shared warmth`
-list around it, the bounded craft screen asks for one direct, integrated
-rendering instead; unchanged sensation may also remain implicit. Dialogue
-chronology is scored by complete quoted spans: an echo-stripped short player
-line cannot be mistaken for the prefix of a longer NPC line.
+Renders the player-facing prose. **The stage blocks on being parseable JSON
+and on nothing else** (2026-09-06): the fidelity correction pass, the craft
+rewrite and the four deterministic prose strips are all gone, so every reading
+of the draft below DETECTS and REPORTS -- warnings on the step's own saved
+output (`fidelity_warnings`) -- and none rejects, rerolls, rewrites or edits
+the page. `_ENFORCEABLE_PREFIXES` survives as a partition of those warnings
+for `tools/narrator_sheet_bench.py`, not as a price.
+
+Fidelity checks and the player-echo reading run before the output is saved,
+and what the echo strips WOULD have removed is reported rather than removed
+(`_report_prose_guards`). Dialogue fidelity is bidirectional: every quote
+delivered in the player view must survive verbatim, and every quote in the
+narrator draft must already exist in that view. An extra invented line is
+reported, even when all required lines also survived. Standing sensations
+remain available as bodily evidence, but the composer's plain "X registers Y"
+wording is a sensor ledger rather than story voice. A draft copying that
+construction in an ordinary inflection, or the `steady pressure / shared
+warmth` list around it, is named by the bounded craft screen as a warning; the
+sheet is where the direct rendering is asked for, and unchanged sensation may
+also remain implicit. Dialogue chronology is scored by complete quoted spans:
+a short player line cannot be mistaken for the prefix of a longer NPC line.
 
 ### `narrator_extra`
 

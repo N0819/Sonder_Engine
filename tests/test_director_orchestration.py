@@ -3105,9 +3105,10 @@ def test_a_ledger_this_story_does_not_keep_is_not_a_gate_mispredict(temp_db,
 def test_dialogue_reaches_only_the_hands_a_speech_act_can_write(temp_db):
     """Saying a thing is not a physical action.
 
-    The beat's dialogue rode in the COMMON payload, so all six hands got it
+    The beat's dialogue rode in the COMMON payload, so every hand got it
     whether or not any channel they own could be written by somebody talking.
-    Three cannot -- `body`, `contact` and `objects` own physical ledgers, and
+    Three of the five cannot -- `body`, `contact` and `objects` own physical
+    ledgers, and
     a transcript is material they can only echo, which is this fan-out's
     measured failure mode rather than a hypothetical one. Measured over chat
     78: 27% of the beat text every hand received.
@@ -3160,7 +3161,7 @@ def test_no_sheet_promises_a_dialogue_field_its_hand_may_not_receive():
     compact attire line and it read across the `=` delimiter -- emitting
     coverage for "modern open-front jacket", the first 58 characters of
     another garment's description. The shared stage clause made the same
-    promise about `dialogue_log` to all six hands, and now only three receive
+    promise about `dialogue_log` to every hand, and now only three receive
     it, so the clause states the condition instead of asserting the field.
     """
     from llm.prompts import specialist_prompt

@@ -129,8 +129,9 @@ def test_pronoun_fidelity_fires_for_a_name_not_written_in_latin_letters():
     empty and the guard returned [] before consulting a pronoun at all -- the
     guard was still dead in the language it was revived for.
 
-    MEASURED BEFORE ENFORCING, because this warning's prefix is enforceable
-    and a false positive buys a full narrator rewrite: replayed over every
+    MEASURED BEFORE ENFORCING, because this warning's prefix is in
+    `_ENFORCEABLE_PREFIXES` -- which bought a full narrator rewrite when this
+    was measured and buys none since 2026-09-06 (E12): replayed over every
     stored narrator variant in the owner's live database (2,350 with prose,
     69,589 clauses), 0 clauses tokenise differently under `_name_tokens`.
     English is unchanged by construction; the whole of the new exposure is in

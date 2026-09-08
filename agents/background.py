@@ -1401,7 +1401,9 @@ def _presence_recognizes(ctx, *presence_names):
 
     The `known` world key is the engine's only per-mind recognition ledger,
     keyed by the recognizing mind's own name (commit seeds it on promotion;
-    mapping's validated_introductions grows it). An unregistered presence
+    the Director's typed `introductions` and a name heard said in a mind's own
+    delivered view grow it, both at commit -- the mapping stage that once
+    validated introductions was retired 2026-09-04). An unregistered presence
     normally has no entry, so this normally returns the empty set -- that is
     the intended answer, not a degradation: a bystander with no memory has no
     basis for anybody's name.

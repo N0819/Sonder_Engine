@@ -104,7 +104,9 @@ class TestItDoesNotOverfire:
 
     def test_a_short_line_inside_a_longer_one_is_ignored(self):
         """A brief line can sit inside another by coincidence, and being wrong
-        here costs a rewrite — so bodies under 15 characters do not count."""
+        here files a false finding against a correct page — a rewrite before
+        2026-09-06, a note since (E12) — so bodies under 15 characters do not
+        count."""
         events = _events(("Tamamo", '"Go on."'),
                          ("The Doctor", '"Go on. I will wait here by the gate."'))
         prose = '"Go on. I will wait here by the gate."'

@@ -454,10 +454,12 @@ def complete_validated_json(
         serialised for the wire, the accepted output, and the reasoning the
         provider returned for it. It is also the single funnel every stage AND
         every Director specialist sub-call passes through, which is what makes
-        a chronological reading of a whole turn possible -- the six
+        a chronological reading of a whole turn possible -- the five
         specialists have no step rows, so nothing else sees them.
 
-        No-op when debug capture is off, which is the default.
+        No-op outside a step. The sink it hands to is armed on every step, so
+        the debug-capture setting gates the WRITE
+        (`llm_capture.record_exchange`) and not this funnel.
         """
         try:
             from core.pipeline_context import note_step_exchange

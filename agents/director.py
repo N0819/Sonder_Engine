@@ -1331,7 +1331,11 @@ def director_interpret(ctx, nonce):
     _reconcile_interpretation(ctx, out, sc)
 
     # Any generation request (model-authored, repaired, or synthesized by
-    # the seam) needs the full mapping stage to elaborate it.
+    # the seam) names something no plan holds. NOTHING ELABORATES IT NOW: the
+    # mapping stage was retired 2026-09-04 and `needs_mapping` is read by no
+    # reader (E9); the world-context compiler files each request as a typed
+    # planning need instead. The flag stays because the interpret sheet still
+    # asks for it and the step's saved output is the record of what was asked.
     if fl.get("generation_requests"):
         fl["needs_mapping"] = True
 

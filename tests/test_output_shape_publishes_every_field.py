@@ -20,7 +20,7 @@ rule over both would be dishonest:
     list -- not the surrounding prose -- is what a model fills in. Naming a
     field only in the prose is exactly the defect above, so prose does not
     count here.
-  * THE SHEET BAR, for the six specialists. Their sheets have no single
+  * THE SHEET BAR, for the five specialists. Their sheets have no single
     template: each granted chunk states its own channel and `Shape:` line, so
     the assembled sheet as a whole IS the publication, and a field named
     anywhere in it has been published to the hand that must write it.

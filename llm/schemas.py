@@ -2395,7 +2395,7 @@ class DirectorResolve(LenientModel):
     # THE RULING, in the bookkeeper's own terms. Specialists exist to take
     # the ledger work off the Director, not to adjudicate: they receive the
     # finished prose and must each re-read it to decide what their channels
-    # now say, so six hands can reach six readings and nothing reconciles
+    # now say, so five hands can reach five readings and nothing reconciles
     # them. This is the Director keeping the authority the split was never
     # meant to hand over -- one short natural-language ruling per specialist
     # whose channels the beat touched, in that channel's terms.
@@ -4893,10 +4893,11 @@ OUTPUT_EXAMPLES = {
     },
     # This is the PROSE AUTHOR's example -- `director_resolve` is the step
     # key its call runs under. It owns the beat's prose, its dialogue, the
-    # manifest and six `state_diff` channels; the other twenty-nine belong to
-    # the five specialists, whose own examples are below. So it shows those five
-    # and nothing else: a channel in this example that the author no longer
-    # owns is an instruction to spend the beat encoding something a specialist
+    # manifest and the eight `state_diff` channels no specialist owns; the
+    # other thirty-one belong to the five specialists, whose own examples are
+    # below. So it shows only channels out of that eight and nothing else:
+    # a channel in this example that the author no longer owns is an
+    # instruction to spend the beat encoding something a specialist
     # is being asked for in the same fan-out, and whatever it writes there is
     # replaced by the owner anyway.
     "director_resolve": {

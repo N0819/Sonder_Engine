@@ -1,30 +1,30 @@
-"""The six specialist core sheets are one text with six headers.
+"""The specialist core sheets are one text with one header per hand.
 
 `language_packs/<id>/cards/system_prompts/specialists/<hand>/core.txt` is
-maintained as six files. Only the first two paragraphs (three for spatial,
-which carries the movement backstop note) are about the hand that reads them;
-everything after that is the shared contract every specialist answers under --
-how to read payload.source, what a referent may be, how to answer numbered
-events, where to forward one that is not yours.
+maintained as five files, one per registered hand. Only the first two
+paragraphs (three for spatial, which carries the movement backstop note) are
+about the hand that reads them; everything after that is the shared contract
+every specialist answers under -- how to read payload.source, what a referent
+may be, how to answer numbered events, where to forward one that is not yours.
 
-Six copies of one text is a copy-paste surface, and it has already failed as
-one. Both defects repaired on 2026-09-01 were present IDENTICALLY in all six
-sheets, in both packs: the WHEN AN EVENT IS NOT YOURS block spliced into the
-middle of the sentence that closes ANSWER THE NUMBERED EVENTS (leaving the
-word "events." orphaned at the head of the next paragraph), and body's own
-three channels -- overlays, conditions, vitals -- handed to five hands that
-have no block for any of them as the only illustration of what "the closest
-channel you own" means. Neither was a divergence between the sheets; both were
-an edit made once and pasted six times, which is exactly what no existing test
-could see.
+One copy of one text per hand is a copy-paste surface, and it has already
+failed as one. Both defects repaired on 2026-09-01 were present IDENTICALLY in
+all six sheets of the time, in both packs: the WHEN AN EVENT IS NOT YOURS block
+spliced into the middle of the sentence that closes ANSWER THE NUMBERED EVENTS
+(leaving the word "events." orphaned at the head of the next paragraph), and
+body's own three channels -- overlays, conditions, vitals -- handed to every
+other hand of the time, none of which has a block for any of them, as the only
+illustration of what "the closest channel you own" means. Neither was a
+divergence between the sheets; both were an edit made once and pasted into
+every sheet, which is exactly what no existing test could see.
 
 These tests pin the shared text so the NEXT such edit costs one failure
-instead of six pastes. They deliberately do not merge the files: the en
+instead of one paste per hand. They deliberately do not merge the files: the en
 paragraphs are byte-identical and a `{{fragment:...}}` would collapse them,
-but the ja renderings of those same paragraphs are six independent
-translations (pairwise similarity 0.70-0.93, never 1.0), so one fragment would
-impose one hand's Japanese on the other five. So en is pinned by equality and
-ja by the structure equality cannot reach.
+but the ja renderings of those same paragraphs are one independent
+translation per hand (pairwise similarity 0.70-0.93, never 1.0), so one
+fragment would impose one hand's Japanese on all the others. So en is pinned
+by equality and ja by the structure equality cannot reach.
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ def _paragraphs(text: str) -> list[str]:
 
 
 def test_the_roster_this_file_pins_is_the_engines_roster():
-    """If a seventh hand is registered, these tests must be told about it."""
+    """If a sixth hand is registered, these tests must be told about it."""
     assert set(HANDS) == set(SPECIALISTS)
 
 

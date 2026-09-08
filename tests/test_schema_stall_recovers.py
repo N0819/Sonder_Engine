@@ -340,7 +340,7 @@ class _Ctx:
 class TestBothHalvesOfTheDirectorCarryTheRuling:
     """`director_interpret` is a structural mirror of `director_resolve`.
 
-    Both fan out to the same six specialists through
+    Both fan out to the same five specialists through
     `director._run_specialists`. The ruling channel was built into the resolve
     half only, so for a release the interpret half ran its hands with nothing
     to transcribe -- the exact gap `ledger_notes` exists to close, on half the

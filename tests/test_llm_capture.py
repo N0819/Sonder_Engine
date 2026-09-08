@@ -2,7 +2,7 @@
 
 The engine already persists what each call COST (PipelineContext.llm_calls)
 and what each STEP answered (variants). Neither records what a stage was
-ASKED, and neither sees the Director's six specialist sub-calls at all --
+ASKED, and neither sees the Director's five specialist sub-calls at all --
 they have no step rows. This module is that missing half.
 
 The property that makes it affordable is dedup: a beat sends ~104KB of sheet
@@ -139,7 +139,7 @@ def test_the_turn_debug_reads_in_wall_clock_order_across_steps_and_subcalls(
 
     The Director's specialists are sub-calls with no steps, so they appear
     ONLY as capture rows -- an export that read steps alone would show a
-    single `director_resolve` and none of the six hands that produced it.
+    single `director_resolve` and none of the five hands that produced it.
     """
     import json as _json
     from core import db
@@ -275,7 +275,7 @@ def test_seq_agrees_with_the_order_the_calls_started(temp_db):
     timeline is sorted by wall clock. If seq is assigned in COMPLETION order
     the two disagree -- the reading order is right and the numbers beside it
     are wrong, which is the sort of label that costs an hour. The Director's
-    six specialists run concurrently, so completion order is the default.
+    five specialists run concurrently, so completion order is the default.
     """
     from core import db
     from persist.pipeline_trace import export_turn_debug

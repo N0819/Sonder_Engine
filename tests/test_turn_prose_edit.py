@@ -35,7 +35,7 @@ def test_edit_prose_updates_only_prose_field(temp_db):
         "prose": "The original line.",
         "new_specifics": ["a lantern on the table"],
     })
-    save_step(turn_id, "commit", "Mapping & memory · commit-up", 7, {"ok": True})
+    save_step(turn_id, "commit", "Mapping & memory · commit", 7, {"ok": True})
 
     result = app.edit_prose(turn_id, {"prose": "The corrected line."})
 
@@ -60,7 +60,7 @@ def test_edit_prose_does_not_mark_downstream_steps_stale(temp_db):
     chat_id = _make_chat(temp_db)
     turn_id = _make_turn(temp_db, chat_id)
     save_step(turn_id, "narrator", "Narrator · render", 6, {"prose": "Before."})
-    save_step(turn_id, "commit", "Mapping & memory · commit-up", 7, {"ok": True})
+    save_step(turn_id, "commit", "Mapping & memory · commit", 7, {"ok": True})
 
     app.edit_prose(turn_id, {"prose": "After."})
 

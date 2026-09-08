@@ -744,11 +744,12 @@ class TestSingleCallResponses:
 
 
 class TestReadTimeout:
-    """The 300s default is sized for pipeline turns, not for a slow local model
-    grinding through a batch of lore entries -- and a read timeout surfaces as
-    exactly the kind of interruption this all exists to recover from, so the
-    retry has to be able to give the model longer than the attempt that ran
-    out of it."""
+    """The default read timeout -- 90s between chunks on this streamed path,
+    300s on a plain POST -- is sized for pipeline turns, not for a slow local
+    model grinding through a batch of lore entries; and a read timeout
+    surfaces as exactly the kind of interruption this all exists to recover
+    from, so the retry has to be able to give the model longer than the
+    attempt that ran out of it."""
 
     def _observed_timeouts(self, monkeypatch):
         seen = []

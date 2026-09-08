@@ -2700,9 +2700,11 @@ def generate_lorebook_plan(lorebook_id, brief, mode="expand_tree", depth=2,
     generation job under `_job`. Raises LoreGenError -- naming a job that can
     be resumed -- only when the run produced no usable plan at all.
 
-    `timeout` raises the per-call read timeout above the 300s default, for slow
-    local models that are still producing tokens when it expires. It is stored
-    with the request, so a resume runs under the same allowance.
+    `timeout` raises the per-call read timeout above whichever default the
+    transport picks -- this path streams, so that is `REQUEST_TIMEOUT`'s 90s
+    between chunks, not `BLOCKING_READ_TIMEOUT`'s 300s -- for slow local
+    models still working when it expires. It is stored with the request, so a
+    resume runs under the same allowance.
     """
     if not q("SELECT id FROM lorebooks WHERE id=?", (lorebook_id,), one=True):
         raise ValueError("Lorebook not found")

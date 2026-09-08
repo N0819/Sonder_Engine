@@ -1812,8 +1812,8 @@ class SonderExtensionAPI:
         """Add a Director specialist family of your own.
 
         The Director is no longer one mind: each stage fans out to a prose
-        author plus six scoped specialists, each owning a subset of
-        `state_diff`'s channels. This adds a seventh, on the same fan-out, with
+        author plus five scoped specialists, each owning a subset of
+        `state_diff`'s channels. This adds a sixth, on the same fan-out, with
         the same scope gating, the same fail-open (your specialist failing
         leaves the stage author's channels standing and never kills a beat) and
         the same canonical merge order.

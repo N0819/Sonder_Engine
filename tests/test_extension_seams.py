@@ -531,7 +531,7 @@ class TestHotLoadableAssets:
 
 
 class TestDirectorSpecialists:
-    """A seventh Director family, authored outside this tree.
+    """A sixth Director family, authored outside this tree.
 
     The reason this needed an API rather than a documented monkeypatch: the
     six registries a specialist lives in are not independent. `SPECIALISTS` is

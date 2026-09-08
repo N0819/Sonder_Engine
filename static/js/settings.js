@@ -2403,7 +2403,7 @@ function renderFullApiSettings(b) {
       levelSel.value = S.boot.log_level || "INFO";
       b.append(el("h4", {}, "Debug capture"),
         el("div", { class: "small dim" },
-          "Records what was sent to each provider and what came back, including reasoning, so a turn can be exported and read in order from the pipeline drawer. Without it an export still lists the steps and what the engine decided, but every provider call is missing — including the Director's six specialists, which have no step of their own."),
+          "Records what was sent to each provider and what came back, including reasoning, so a turn can be exported and read in order from the pipeline drawer. Without it an export still lists the steps and what the engine decided, but every provider call is missing — including the Director's five specialists, which have no step of their own."),
         el("div", { class: "row", style: "margin:6px 0" },
           el("label", {}, capBox, " Capture provider calls"),
           bodiesSel, levelSel,
@@ -2703,10 +2703,10 @@ function renderFullApiSettings(b) {
       b.append(el("h4", {}, "Director specialists"),
         el("div", { class: "small dim" },
           "The Director works as a writer plus specialists: one call writes "
-          + "the beat's account, and the six roles below encode only the "
+          + "the beat's account, and the five roles below encode only the "
           + "kinds of change the beat actually contains — a scene with no "
           + "clothing change never loads the clothing rules at all. Most "
-          + "beats need about two of the six."),
+          + "beats need about two of the five."),
         el("div", { class: "small dim", style: "margin-top:4px" },
           "They are handed separate parts of the same finished beat and have "
           + "nothing to say to each other, so by default they run at once and "
@@ -2827,7 +2827,7 @@ function renderFullApiSettings(b) {
     // continues looking fine while memory quietly stops working by meaning.
     // Everything else announces itself in the prose.
     // `embeddings` first, then Default, then the Director and — DIRECTLY
-    // BENEATH IT — its six specialists, which are the roles whose meaning
+    // BENEATH IT — its five specialists, which are the roles whose meaning
     // depends on it: each is inert unless the orchestrated Director is on,
     // and each falls back to the `director` model rather than to Default.
     // Sorting them next to the stage they serve is the difference between a

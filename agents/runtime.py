@@ -264,7 +264,11 @@ STEP_LABELS = {
     "perception_outcome": "Perception · pass 2 — the outcome",
     "narrator": "Narrator · render",
     "narrator_extra": "Narrator · render (other players)",
-    "commit": "Mapping & memory · commit-up",
+    # E8 (2026-09-07 review): "commit-up" named a run-up to the write, and
+    # the lore write-up that ran there was retired 2026-09-03 --
+    # `persist/commit_mapping.py` files typed needs at this step and no
+    # lore at all. What the reader is watching is the commit.
+    "commit": "Mapping & memory · commit",
     "director_establish": "Director · establish scene",
     "perception_establish": "Perception · opening player view",
     "narrator.establish": "Narrator · opening",
@@ -413,7 +417,7 @@ def _with_engine_notes(content, ctx, key, parallel_with=()):
     if decisions:
         notes["decisions"] = decisions
     # Content capture goes to its own table rather than into the notes: it is
-    # large, it is deduplicated across turns by hash, and the Director's six
+    # large, it is deduplicated across turns by hash, and the Director's five
     # specialists have no step of their own to hang it on. No-op when debug
     # capture is off, which is the default.
     exchanges = (ctx.exchanges_for_step(key)
@@ -422,7 +426,7 @@ def _with_engine_notes(content, ctx, key, parallel_with=()):
         try:
             from persist.llm_capture import record_exchange
             # Insert in START order, because `seq` is assigned at insert and
-            # is what the artifact prints on each row. The Director's six
+            # is what the artifact prints on each row. The Director's five
             # specialists run concurrently and finish out of order, so the
             # order they land in `ctx.exchanges` is completion order: the
             # export sorted by wall clock and read correctly while the seq
@@ -582,10 +586,13 @@ def _evt(key, label, sid, vid, n, content):
 def _run_parallel_group(bus, turn_id, group, keys, ctx):
     """Run one concurrent group of steps, stream it, and persist the group.
 
-    The three overlapping pairings (character siblings, mapping beside
-    action-onset perception, narrator beside narrator_extra) were three
-    copies of this body; the copies are why concurrency was invisible
-    downstream, since making it visible meant editing it three times.
+    The three overlapping pairings (character siblings,
+    `compile_world_context` beside action-onset perception, narrator beside
+    narrator_extra) were three copies of this body; the copies are why
+    concurrency was invisible downstream, since making it visible meant
+    editing it three times. There is no `mapping` stage to pair any more --
+    the compiler replaced it (E9) -- and the pairing is with the compiler,
+    which pays the beat's lore-query embedding.
 
     Concurrency is stated twice because it is asked twice. The `group` on
     each `step_start` is for the LIVE log, which otherwise renders a
@@ -781,9 +788,12 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
     if not isinstance(fl, dict):
         fl = {}
         
-    # One deterministic step where two model stages were chosen between:
-    # the compiler runs on every beat, and `flow.needs_mapping` is now a
-    # fact the compiler reads rather than a branch the plan takes.
+    # One deterministic step where two model stages were chosen between: the
+    # compiler runs on every beat, unconditionally. `flow.needs_mapping` is
+    # still declared by the Director and READ BY NOBODY (E9) -- what the
+    # compiler reads is what the beat reached for (`movement`,
+    # `location_query`, `mapping_request`, `generation_requests`), not the
+    # branch flag the retired plan took.
     plan.append(("compile_world_context", step_label("compile_world_context")))
     plan.append(("perception_act", step_label("perception_act")))
 
@@ -1384,7 +1394,8 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
             # -- never the current turn's sibling. Confirmed via direct
             # grep: narration.py never reads ctx.narrator from within
             # narrator_extra, or vice versa. Same independent-work pattern
-            # as the mapping/perception_act pairing above.
+            # as the compile_world_context/perception_act pairing above (the
+            # mapping stage that comment named was retired 2026-09-04).
             yield from _run_parallel_group(
                 bus, turn_id, [(key, label), plan[i + 1]], keys, ctx)
             i += 2

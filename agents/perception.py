@@ -1152,14 +1152,17 @@ def _source_channels(sc, perceiver_name, perceiver_room, sources,
         },
         # DELIVERED NOWHERE, and kept deliberately. `composer.CHANNELS`
         # declares "smell" and `ambient_percepts` can mint one from an
-        # authored sensory event, so the channel is reachable -- but nothing
-        # gives a BODY a smell, so this per-source grade has no content to
-        # grade and reaches no percept builder. Building body-scent perception
-        # needs a scent to perceive: a card field or a `state_diff` channel
-        # that says what something smells of. That is a feature, not a repair,
-        # and until it exists this is a gate with nothing behind it.
-        # `tests/test_masked_floor_leaks.py` reads it as the visible proof
-        # that `spatial_rel_between` stamps both enclosure directions.
+        # authored sensory event, so the channel is reachable. THE SCENT IT
+        # WOULD GRADE NOW EXISTS AND ARRIVES BY ANOTHER ROUTE (E15): a body's
+        # standing smell is a card field (`story.scene.scent_of` ->
+        # `_body_scents`), and `_scent_sources_for` grades every smell reaching
+        # an observer -- body, entity and deposited substance -- each by the
+        # relation its own ledger already uses, out through
+        # `composer.scent_percepts`. So this per-source map is not a gate with
+        # nothing behind it; it is a second grading of what that path grades,
+        # and no percept builder reads it. `tests/test_masked_floor_leaks.py`
+        # reads it as the visible proof that `spatial_rel_between` stamps both
+        # enclosure directions.
         "scent_channel_to_sources": {
             n: composer._sense_graded(scent_level(r), "scent", senses)
             for n, r in rels.items()},
@@ -2283,12 +2286,17 @@ def perception_act(ctx, nonce):
     # The declared walk's legs, on the same rule the outcome pass applies.
     onset_legs = _multi_room_legs(
         sc, [(p_name, p_room_at_start, p_room)]).get(p_name) or ()
-    # A `failing` sound source that goes quiet this beat is heard as silence
-    # where there was noise (DESIGN_SOUND_FIELD.md section 5). The notice the
-    # Director answers is filed ONCE, at commit, beside the light field's --
-    # `persist/commit_scene_state.py`'s failed-source block writes the
-    # switch and the notice for both senses -- so a thing that both lights
-    # and hums is reported once, not twice. Perception only hears the beat.
+    # A `failing` sound source that goes quiet this beat is TOLD TO THE
+    # DIRECTOR, not delivered to an ear: the notice is filed ONCE,
+    # at commit, beside the light field's -- `persist/commit_scene_state.py`'s
+    # failed-source block writes the switch and the notice for both senses --
+    # so a thing that both lights and hums is reported once, not twice, and
+    # the Director answers it on the next beat. DESIGN_SOUND_FIELD.md § 5's
+    # "silence where there was noise is heard" is the design's claim and not
+    # yet the engine's (E16): no percept is minted for a sound that stops,
+    # and the standing ledger has no verdict for a percept that simply stops
+    # arriving, so the absence reaches the page only through what the Director
+    # does with the notice. Perception only hears the beat.
     p_appearance = _appearance_as_prose(appearance_of(
         p_name, pers.get("appearance") or persona_appearance(pers), sc))
     # A physical disguise conceals the actor's real appearance from observers:
