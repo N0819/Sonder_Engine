@@ -446,7 +446,7 @@ def _outfit_items(value: Any) -> list[str]:
     return result
 
 
-def _normalize_initial_outfit(value: Any) -> dict:
+def _normalize_initial_outfit(value: Any, parts: Any = None) -> dict:
     """Normalize authored starting clothes into the live attire shape.
 
     `regions` is the authoring surface: which body part each garment occupies,
@@ -464,6 +464,10 @@ def _normalize_initial_outfit(value: Any) -> dict:
     about the same body. `state` is retired outright: what has happened to a
     garment now belongs to the garment (`condition`), not to a free-text list
     beside the person. Existing values are preserved, never extended.
+
+    `parts` is the card's own `embodiment.extra_parts`, so a region key that
+    names a declared body part ("tail") re-homes onto the region that part
+    emerges from instead of being dropped with its clothing (A89).
     """
     if isinstance(value, dict):
         wearing = value.get("wearing")
@@ -473,7 +477,7 @@ def _normalize_initial_outfit(value: Any) -> dict:
         regions = attire.normalize_regions({
             "regions": value.get("regions"),
             "wearing": _outfit_items(wearing),
-        })
+        }, parts=extra_part_regions(parts))
     else:
         wearing, state, regions = value, [], {}
     return {
@@ -595,6 +599,30 @@ def _normalize_extra_parts(value: Any) -> list[dict]:
             "description": " ".join(
                 str(item.get("description") or "").split())[:400],
         })
+    return out
+
+
+def extra_part_regions(parts: Any) -> dict:
+    """`{part noun: region}` for whatever extra body parts a card declares.
+
+    The one bridge between the extra-parts vocabulary and the attire region
+    vocabulary they already share: `attire.normalize_regions` uses it to
+    re-home an authored outfit region that names a body part rather than a
+    region (A89, review 2026-09-07 -- `regions: {"tail": ...}` was dropped,
+    garment and all). Plural and singular both answer, because an author who
+    declared "wings" writes the garment under either.
+    """
+    out = {}
+    for part in _normalize_extra_parts(parts):
+        kind = str(part.get("kind") or "").strip().casefold()
+        at = str(part.get("at") or "").strip().casefold()
+        if not kind or at not in attire.REGIONS:
+            continue
+        out.setdefault(kind, at)
+        if kind.endswith("s"):
+            out.setdefault(kind[:-1], at)
+        else:
+            out.setdefault(kind + "s", at)
     return out
 
 
@@ -1075,7 +1103,10 @@ def _coerce_appearance(target_dict: dict) -> dict:
     # Move them into authored starting attire before constructing appearance;
     # clothing is mutable story state, not anatomy.
     outfit_value = target_dict.get("initial_outfit")
-    if not any(_normalize_initial_outfit(outfit_value).values()):
+    # The card's own body parts, so an outfit region naming one is re-homed
+    # onto the region it emerges from rather than dropped (A89).
+    parts = embodiment.get("extra_parts")
+    if not any(_normalize_initial_outfit(outfit_value, parts).values()):
         outfit_value = None
     for key in ("outfit", "clothing", "attire"):
         top_level = target_dict.pop(key, None)
@@ -1086,7 +1117,8 @@ def _coerce_appearance(target_dict: dict) -> dict:
                 if top_level not in (None, "", [], {})
                 else nested
             )
-    target_dict["initial_outfit"] = _normalize_initial_outfit(outfit_value)
+    target_dict["initial_outfit"] = _normalize_initial_outfit(
+        outfit_value, parts)
     summary = str(visible.get("summary", "")).strip()
     is_default = not summary or summary == "A person of unremarkable appearance."
     extra_visual = []
@@ -1282,6 +1314,45 @@ class NormalizedCharacterSheet(dict):
     __slots__ = ()
 
 
+class CardWithNormalization(dict):
+    """A card AS STORED that carries the normalization derived from it.
+
+    The other half of `NormalizedCharacterSheet`'s bargain, and the half the
+    per-cast loops needed. It IS the raw card -- the shape the sheet was
+    stored in, the uid the author wrote, `"psychology" in card` answering
+    exactly what it answered before -- so every reader that must see the card
+    as stored still does: the four kind dispatchers in `story/scene.py`
+    (`senses_of` and its siblings), which route on a section only one kind of
+    card has, and `cast_entity_id`, which must never read a minted uid. What
+    it adds is that `normalize_character_data` recognises it and hands back
+    the normalization already computed for this text instead of rebuilding
+    the default tree and merging the card over it.
+
+    Section I residual (C14). Measured on the review's bench copies, min of
+    twenty in matching processes: parsing one cast row's card and asking it
+    the ten questions a perception site asks (name, appearance, scene keys,
+    identity, visible body, senses, scent, kind-dispatched name, senses and
+    scent again) cost 78.3 ms on chat 114's 19 KB card and 43.8 ms on chat
+    117's 26 KB one -- and `agents/perception.py` has eleven such sites per
+    stage, each holding the raw parse `sheet_state` handed it. Through this
+    the same work is 1.4 ms and 0.9 ms, and every one of those ten answers
+    was diffed byte for byte against the old ones on both stored cards: it is
+    the same normalization, computed once instead of nine times.
+
+    The normalization is this instance's OWN -- `normalized_character_from_text`
+    copies on the way out -- so a caller that mutates what it receives affects
+    nothing another call holds. The `NormalizedCharacterSheet` contract still
+    applies to the product: mutate it into a shape normalization would have
+    to repair, and hand back a plain dict.
+    """
+
+    __slots__ = ("normalized",)
+
+    def __init__(self, raw, normalized):
+        super().__init__(raw)
+        self.normalized = normalized
+
+
 #: How many distinct sheet TEXTS `normalized_character_from_text` holds. The
 #: same bargain, and the same number, as `IDENTITY_CACHE_SIZE`: a chat's cast
 #: is a handful of rows whose text is byte-identical for the whole turn. It is
@@ -1347,6 +1418,20 @@ def normalized_character_from_text(sheet_text: str | None) -> dict:
     return out
 
 
+def stored_card_from_text(sheet_text: str | None) -> CardWithNormalization:
+    """The card as stored, carrying its normalization -- see
+    `CardWithNormalization`.
+
+    Byte-identical to `json.loads(sheet_text)` as a mapping, and it RAISES
+    what `json.loads` raises, so a caller that treats an unreadable row as
+    not-cast keeps that answer.
+    """
+    raw = json.loads(sheet_text or "{}")
+    if not isinstance(raw, dict):
+        raw = {}
+    return CardWithNormalization(raw, normalized_character_from_text(sheet_text))
+
+
 def normalized_character_of_row(row) -> dict | None:
     """The normalized card a cast ROW carries, or None when it carries none.
 
@@ -1390,7 +1475,8 @@ def _normalize_native_shape(value: dict) -> dict:
     _coerce_latent(result)
     _coerce_appearance(result)
     result["initial_outfit"] = _normalize_initial_outfit(
-        result.get("initial_outfit"))
+        result.get("initial_outfit"),
+        (result.get("embodiment") or {}).get("extra_parts"))
     result["psychology"] = _normalize_psychology(result.get("psychology"))
     interoception = result["embodiment"].get("interoception")
     if not isinstance(interoception, dict):
@@ -1433,6 +1519,8 @@ def _normalize_native_shape(value: dict) -> dict:
 def normalize_character_data(value: dict) -> dict:
     if isinstance(value, NormalizedCharacterSheet):
         return value
+    if isinstance(value, CardWithNormalization):
+        return value.normalized
     if not isinstance(value, dict):
         value = {}
     if value.get("schema") == CHARACTER_SCHEMA:
@@ -1471,7 +1559,8 @@ def normalize_character_data(value: dict) -> dict:
             value.get("initial_outfit")
             or value.get("outfit")
             or value.get("clothing")
-            or value.get("attire")
+            or value.get("attire"),
+            value.get("extra_parts"),
         ),
         "simulation": {
             "tier": str(value.get("tier") or "mid"),
@@ -1574,7 +1663,8 @@ def normalize_persona_data(value: dict) -> dict:
         _coerce_latent(result)
         _coerce_appearance(result)
         result["initial_outfit"] = _normalize_initial_outfit(
-            result.get("initial_outfit"))
+            result.get("initial_outfit"),
+            (result.get("embodiment") or {}).get("extra_parts"))
         result["embodiment"]["extra_parts"] = _normalize_extra_parts(
             result["embodiment"].get("extra_parts"))
         result["knowledge"]["private_history"] = _legacy_private_history(
@@ -1591,7 +1681,8 @@ def normalize_persona_data(value: dict) -> dict:
             value.get("initial_outfit")
             or value.get("outfit")
             or value.get("clothing")
-            or value.get("attire")
+            or value.get("attire"),
+            value.get("extra_parts"),
         ),
         "embodiment": {
             "senses": _legacy_senses(value.get("senses")),
@@ -1723,6 +1814,31 @@ def character_name_from_text(sheet_text: str | None) -> str:
     return character_name(data if isinstance(data, dict) else {})
 
 
+def authored_uid(sheet: dict) -> str:
+    """The uid a card ACTUALLY authored, wherever it put it, or "".
+
+    NEVER the minted one. `normalize_character_data` mints a fresh
+    `char_<hex>` for a sheet that has none, on every call, so a normalized uid
+    is a different answer each time anything asks -- which is why both readers
+    of this field read the stored blob.
+
+    Wherever it put it, because `repair_character_shape` rescues a top-level
+    `uid` into `identity` exactly as it does a top-level name or alias: the
+    flattened card that rescue exists for is precisely the card whose uid a
+    block-only read drops.
+
+    Section H residual (B12): `cast_entity_id` read `identity.uid` alone while
+    `character_identity` read the block and then the top level, so one
+    flattened card was `char_deadbeef` to one reader and `character:<row id>`
+    to the other -- two spellings of one being, in the two payloads that name
+    the same person to the same beat. One rule, one answer, one place.
+    """
+    data = sheet if isinstance(sheet, dict) else {}
+    ident = data.get("identity")
+    ident = ident if isinstance(ident, dict) else {}
+    return str(ident.get("uid") or data.get("uid") or "")
+
+
 def character_identity(sheet: dict) -> dict:
     """Who a sheet says this character is: ``{uid, name, aliases, pronouns}``.
 
@@ -1758,14 +1874,12 @@ def character_identity(sheet: dict) -> dict:
     """
     data = sheet if isinstance(sheet, dict) else {}
     ident = normalize_character_data(data).get("identity") or {}
-    raw = data.get("identity")
-    raw = raw if isinstance(raw, dict) else {}
     aliases = ident.get("aliases")
     if not isinstance(aliases, list):
         aliases = [aliases] if aliases not in (None, "") else []
     pronouns = ident.get("pronouns")
     return {
-        "uid": str(raw.get("uid") or data.get("uid") or ""),
+        "uid": authored_uid(data),
         "name": str(ident.get("name") or "Unnamed"),
         "aliases": [str(a).strip() for a in aliases if str(a or "").strip()],
         "pronouns": dict(pronouns) if isinstance(pronouns, dict) else {},
@@ -1854,9 +1968,13 @@ def cast_entity_id(sheet: dict, char_id) -> str:
     sheet with no authored uid, normalization mints a FRESH `char_<hex>` per
     call, which would give one being a new name every time anything asked.
     The `character:<char_id>` fallback is stable because the row id is.
+
+    THROUGH `authored_uid`, which is the same rule `character_identity` reads
+    the field by -- including the top-level spelling a flattened card uses
+    (Section H residual, B12). Reading the identity block alone made this one
+    id disagree with the identity beside it in the same payload.
     """
-    identity = (sheet or {}).get("identity") or {}
-    return str(identity.get("uid") or f"character:{int(char_id)}")
+    return authored_uid(sheet) or f"character:{int(char_id)}"
 
 def character_curiosity(sheet: dict) -> float:
     """How readily this character leaves something that works to look for
@@ -2467,6 +2585,31 @@ def character_card_warnings(sheet):
                 "are built. Put the rest of the topology in the story's rooms "
                 "rather than on the card."
                 % (len(authored_interior), INTERIOR_STATIONS_MAX))
+    # AUTHORED ONTO A BODY PART THE CARD NEVER DECLARED. An outfit region
+    # outside `attire.REGIONS` used to lose its garments outright; it now
+    # re-homes onto the region a DECLARED part emerges from, and onto the
+    # torso when nothing declares it (A89). The torso case is the one worth
+    # saying out loud, because the clothes are somewhere the author did not
+    # put them. Read off the authored keys, so it answers on the raw card the
+    # import and editor surfaces hand in -- the same best effort
+    # `embodiment.interior`'s warnings above make.
+    authored_outfit = sheet.get("initial_outfit")
+    authored_regions = (authored_outfit or {}).get("regions") \
+        if isinstance(authored_outfit, dict) else None
+    if isinstance(authored_regions, dict):
+        known = extra_part_regions((sheet.get("embodiment") or {})
+                                   .get("extra_parts"))
+        stray = [str(key) for key in authored_regions
+                 if str(key or "").strip().casefold() not in attire.REGIONS
+                 and str(key or "").strip().casefold() not in known]
+        if stray:
+            warnings.append(
+                "initial_outfit places clothing at %s, which is neither a "
+                "body region the engine dresses nor a part this card "
+                "declares under embodiment.extra_parts. Those garments are "
+                "worn on the torso instead — declare the part, or move "
+                "them to the region they belong on."
+                % ", ".join(sorted(stray)))
     if _prose_names_a_part(sheet) and not (
             (sheet.get("embodiment") or {}).get("extra_parts")):
         warnings.append(

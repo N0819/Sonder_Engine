@@ -484,6 +484,41 @@ def _clean_beneath_zones(region, value):
     return out
 
 
+#: The one place a region record is BUILT. Every rebuild that reconstructs a
+#: region -- authoring, the fork heal, reconciliation, the licence rebuild --
+#: comes through here, so a flag that is a fact about the BODY rather than
+#: about a garment cannot be carried by three of them and dropped by the
+#: fourth. A61 (review 2026-09-07) is exactly that: `dedupe_regions` wrote
+#: `{garments, beneath}` plus `beneath_zones` and lost `uncovered`, and
+#: `rederive_entry` runs `normalize_regions` on EVERY read -- so any body
+#: carrying two spellings of one garment had its shed-record erased on read
+#: while the store still held it, and `beneath` was withheld from every
+#: description afterwards.
+def region_record(region, garments, entry=None, previous=None, beneath=None):
+    """One region entry, carrying every region-level flag it is owed.
+
+    `entry` is what this rebuild was handed for the region; `previous` is the
+    region as it stood before, for the paths that merge onto it. `beneath`
+    overrides the derived text where the caller has already cleaned it.
+    """
+    entry = entry if isinstance(entry, dict) else {}
+    previous = previous if isinstance(previous, dict) else {}
+    record = {"garments": list(garments or []),
+              "beneath": (beneath if beneath is not None
+                          else (entry.get("beneath")
+                                or previous.get("beneath") or ""))}
+    # `uncovered` is durable history about the body, not transient garment
+    # state: a later rebuild carries it even if something covers the region
+    # again, and the covering gate still hides `beneath`.
+    if entry.get("uncovered") or previous.get("uncovered"):
+        record["uncovered"] = True
+    zones = _clean_beneath_zones(
+        region, entry.get("beneath_zones") or previous.get("beneath_zones"))
+    if zones:
+        record["beneath_zones"] = zones
+    return record
+
+
 def _clean_covered_zones(value):
     """Canonical garment coverage overrides: {region: [zones still covered]}.
 
@@ -531,7 +566,33 @@ def covered_zones_for(garment, region):
     return tuple(zone for zone in zones if zone in selected)
 
 
-def normalize_regions(outfit):
+def rehome_region(region, parts=None):
+    """Where an authored region key actually lands, and whether it attaches.
+
+    Returns `(region, attaches)`. A key already in `REGIONS` is itself and
+    decides nothing about attachment. A key naming a body part the card
+    DECLARED (`embodiment.extra_parts`) lands on the region that part emerges
+    from, worn AT it -- `attaches` at the part's `at` region is the
+    representation clothing on an extra part already has, and it is what
+    keeps a tail-wrap from silently claiming to cover the waist. Anything
+    else lands on `DEFAULT_REGION`, which is the same answer `region_of`
+    gives a garment name it cannot place: a garment in the wrong place is
+    recoverable and a dropped one is not.
+
+    A89 (review 2026-09-07): the region loop used to `continue` past a key
+    outside the vocabulary, so an extra-parts card writing
+    `regions: {"tail": {...}}` lost the garment with no warning anywhere.
+    """
+    region = str(region or "").strip().casefold()
+    if region in REGIONS:
+        return region, None
+    at = str((parts or {}).get(region) or "").strip().casefold()
+    if at in REGIONS:
+        return at, True
+    return DEFAULT_REGION, None
+
+
+def normalize_regions(outfit, parts=None):
     """Any outfit shape -- old flat list or new regions -- as regions.
 
     Backwards compatibility is not optional here: every card and every live
@@ -539,16 +600,26 @@ def normalize_regions(outfit):
     would be worse than no feature at all. A flat `wearing` list is sorted into
     regions by name; anything unrecognisable lands on the torso rather than
     being dropped.
+
+    `parts` is `{part noun: region}` for the extra body parts a card declares
+    -- see `rehome_region`. Callers without a card in reach pass nothing and
+    an unreadable region key still keeps its clothing, on the torso.
     """
     outfit = outfit if isinstance(outfit, dict) else {}
     out = {}
     spanning = {}
     authored = outfit.get("regions")
     if isinstance(authored, dict):
-        for region, entry in authored.items():
-            region = str(region or "").strip().casefold()
-            if region not in REGIONS or not isinstance(entry, dict):
-                continue
+        # Canonical keys first, re-homed ones after, so a key that lands on a
+        # region the card also wrote by name is ADDED to it rather than
+        # racing it for the seat -- and the order does not depend on how the
+        # authored dict happened to be written.
+        pairs = [(region, entry) for region, entry in authored.items()
+                 if isinstance(entry, dict)]
+        pairs.sort(key=lambda pair: str(pair[0] or "").strip().casefold()
+                   not in REGIONS)
+        for authored_region, entry in pairs:
+            region, attaches_at = rehome_region(authored_region, parts)
             garments = []
             for item in entry.get("garments") or []:
                 if isinstance(item, str):
@@ -576,7 +647,12 @@ def normalize_regions(outfit):
                     "name": name,
                     # Worn AT this region rather than over it -- see
                     # _ATTACH_CUES. Authored wins; the cue table is the guess.
-                    "attaches": (bool(attaches) if attaches is not None
+                    # A garment re-homed off a declared body part is worn AT
+                    # the region that part emerges from whatever the card
+                    # said, because "covers the waist" is a claim about the
+                    # waist that a tail-wrap was never making (A89).
+                    "attaches": (True if attaches_at else
+                                 bool(attaches) if attaches is not None
                                  else attaches_only(name)),
                     # What it LOOKS like. Separate from the name because the
                     # name is a matching key -- see split_garment_name.
@@ -606,21 +682,34 @@ def normalize_regions(outfit):
                     extra = str(extra or "").strip().casefold()
                     if extra in REGIONS and extra != region:
                         spanning.setdefault(extra, []).append(dict(garment))
-            beneath = _clean(entry.get("beneath"))
-            beneath_zones = _clean_beneath_zones(
-                region, entry.get("beneath_zones"))
-            if garments or beneath or beneath_zones:
-                out[region] = {"garments": garments, "beneath": beneath}
-                if beneath_zones:
-                    out[region]["beneath_zones"] = beneath_zones
-                # A FACT ABOUT THE REGION, not about the garment that left.
-                # `beneath` surfaces only where something came off, and that
-                # used to be read off a `removed` garment still sitting in the
-                # region -- which is precisely the seat a removed garment no
-                # longer keeps (`release_removed_garments`). The body records
-                # that it was uncovered; the garment carries nothing.
-                if entry.get("uncovered"):
-                    out[region]["uncovered"] = True
+            # A FACT ABOUT THE REGION, not about the garment that left.
+            # `beneath` surfaces only where something came off, and that used
+            # to be read off a `removed` garment still sitting in the region
+            # -- which is precisely the seat a removed garment no longer keeps
+            # (`release_removed_garments`). The body records that it was
+            # uncovered; the garment carries nothing. `region_record` is what
+            # keeps that flag on every rebuild rather than this one.
+            standing = out.get(region)
+            if standing is None:
+                record = region_record(region, garments, entry,
+                                       beneath=_clean(entry.get("beneath")))
+                if garments or record["beneath"] or record.get("beneath_zones"):
+                    out[region] = record
+                continue
+            # A re-homed key landing on a region the card also wrote by name.
+            # ADDITIVE, in the same spirit as the flat list below: the
+            # region's own record of itself stands, and the arriving garments
+            # join it. `beneath` describes the PART the author named, so it
+            # only fills a silence -- it never overrules what the region
+            # itself said was under its clothes.
+            held = {g["name"].casefold() for g in standing["garments"]}
+            standing["garments"].extend(
+                g for g in garments if g["name"].casefold() not in held)
+            arriving = region_record(region, [], entry,
+                                     beneath=_clean(entry.get("beneath")))
+            for key, value in arriving.items():
+                if key != "garments" and value and not standing.get(key):
+                    standing[key] = value
     # The legacy list, folded in under whatever the authored regions did not
     # already say. Additive: an author who wrote regions is not overruled by
     # the flat list their card also carries.
@@ -1402,12 +1491,7 @@ def dedupe_regions(regions):
                                  CONDITION_LIMIT),
                 description=record.get("description") or garment.get("description", ""),
             ))
-        out[region] = {"garments": garments,
-                       "beneath": entry.get("beneath") or ""}
-        beneath_zones = _clean_beneath_zones(
-            region, entry.get("beneath_zones"))
-        if beneath_zones:
-            out[region]["beneath_zones"] = beneath_zones
+        out[region] = region_record(region, garments, entry)
     return out
 
 
@@ -2590,20 +2674,8 @@ def advance(previous, proposed, decisive=False, process=False):
             if covered_zones and state != "removed":
                 record["covered_zones"] = covered_zones
             garments.append(record)
-        out[region] = {"garments": garments,
-                       "beneath": entry.get("beneath")
-                       or (previous.get(region) or {}).get("beneath") or ""}
-        # ``uncovered`` is durable history about the body, not transient
-        # garment state. A later reconciliation carries it even if something
-        # covers the region again; the covering gate still hides beneath.
-        if (entry.get("uncovered")
-                or (previous.get(region) or {}).get("uncovered")):
-            out[region]["uncovered"] = True
-        beneath_zones = _clean_beneath_zones(
-            region, entry.get("beneath_zones")
-            or (previous.get(region) or {}).get("beneath_zones"))
-        if beneath_zones:
-            out[region]["beneath_zones"] = beneath_zones
+        out[region] = region_record(region, garments, entry,
+                                    previous.get(region))
     # A region the proposal simply did not mention is unchanged, not undressed.
     for region, entry in previous.items():
         out.setdefault(region, entry)
@@ -3039,17 +3111,10 @@ def apply_flat_change(previous, wanted, decisive=False, conditions=None,
                 garments.append(dict(garment))
             else:
                 garments.append(dict(garment, state="removed"))
-        proposed[region] = {"garments": garments,
-                            "beneath": entry.get("beneath") or ""}
         # A region remembers that its authored beneath-surface has entered
         # play. Rebuilding the wardrobe for an unrelated later change used to
         # erase this bit on every region except the one changed that beat.
-        if entry.get("uncovered"):
-            proposed[region]["uncovered"] = True
-        beneath_zones = _clean_beneath_zones(
-            region, entry.get("beneath_zones"))
-        if beneath_zones:
-            proposed[region]["beneath_zones"] = beneath_zones
+        proposed[region] = region_record(region, garments, entry)
     for key, name in wanted_keys.items():
         if key in seen:
             continue

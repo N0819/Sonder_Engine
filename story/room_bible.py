@@ -191,14 +191,16 @@ def _evict(section_entries):
         section_entries.remove(victim)
 
 
-def add_entry(cid, frame_id, section, text, sources, *, since_turn=0,
-              supersedes=None, paid=False):
-    """One particular sentence into one section, with its sources. Refuses
-    an unknown section, an empty sentence, no source, or a source the story
-    does not hold (an entry nobody can trace is an entry nobody can trust).
-    The same sentence in the same section is one entry. ``supersedes``
-    marks an earlier entry of the section superseded and KEEPS it (a
-    reversal keeps both lines). Returns ``(entry, fresh)``."""
+def _validated(cid, frame_id, section, text, sources):
+    """Every check an entry must pass, as `(text, refs)` -- BEFORE any write.
+
+    Split out of `add_entry` so a caller can find out whether the line it is
+    about to file is fileable while the bible is still untouched. A65 (review
+    2026-09-07): `mark_paid` marked the setup paid, saved, and only THEN built
+    the payoff line -- so a payoff whose sources did not exist left the setup
+    flagged paid with no `paid` line anywhere, and out of the eviction
+    protection that keeps an unpaid setup forever.
+    """
     if section not in BIBLE_SECTIONS:
         raise ValueError("no such bible section %r; the sections are %s"
                          % (section, ", ".join(BIBLE_SECTIONS)))
@@ -213,6 +215,18 @@ def add_entry(cid, frame_id, section, text, sources, *, since_turn=0,
     if missing:
         raise ValueError("a bible entry's source must exist; %s does not"
                          % ", ".join(missing[:3]))
+    return text, refs
+
+
+def add_entry(cid, frame_id, section, text, sources, *, since_turn=0,
+              supersedes=None, paid=False):
+    """One particular sentence into one section, with its sources. Refuses
+    an unknown section, an empty sentence, no source, or a source the story
+    does not hold (an entry nobody can trace is an entry nobody can trust).
+    The same sentence in the same section is one entry. ``supersedes``
+    marks an earlier entry of the section superseded and KEEPS it (a
+    reversal keeps both lines). Returns ``(entry, fresh)``."""
+    text, refs = _validated(cid, frame_id, section, text, sources)
     row = _row(cid, frame_id)
     bucket = row["sections"][section]
     uid = _entry_uid(section, text)
@@ -236,7 +250,14 @@ def add_entry(cid, frame_id, section, text, sources, *, since_turn=0,
 def mark_paid(cid, frame_id, setup_uid, text, sources, *, turn_idx=0):
     """A planted setup paid off: the setup is marked, and one `paid` line is
     added with the payoff's sources. Returns the paid entry, or None for an
-    unknown setup."""
+    unknown setup.
+
+    THE PAYOFF IS VALIDATED FIRST (A65). A setup marked paid with no payoff
+    line beside it is worse than an unpaid one: it reads as a promise kept,
+    and it drops out of the eviction protection that keeps an unpaid setup
+    in the bible forever. So nothing is written until the line that justifies
+    it is known to be fileable."""
+    _validated(cid, frame_id, "paid", text, sources)
     row = _row(cid, frame_id)
     found = None
     for e in row["sections"]["setups"]:

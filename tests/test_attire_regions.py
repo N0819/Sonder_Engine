@@ -84,12 +84,18 @@ def test_authored_regions_are_not_overruled_by_the_flat_list():
 
 
 def test_junk_is_discarded_without_taking_the_outfit_with_it():
+    """A garment that is not a garment goes; a garment in an unreadable
+    place STAYS, on the default region (A89, review 2026-09-07). The key
+    itself is still not a region -- what changed is that its clothing is no
+    longer dropped with it."""
     regions = attire.normalize_regions({"regions": {
         "torso": {"garments": ["a shirt", None, {"state": "worn"}, 7]},
         "nonsense": {"garments": ["a hat"]},
     }})
-    assert [g["name"] for g in regions["torso"]["garments"]] == ["a shirt"]
     assert "nonsense" not in regions
+    assert attire.DEFAULT_REGION == "torso"
+    assert [g["name"] for g in regions["torso"]["garments"]] \
+        == ["a shirt", "a hat"]
 
 
 # --- undressing takes time --------------------------------------------------

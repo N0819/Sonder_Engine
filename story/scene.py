@@ -41,6 +41,7 @@ from story.character_schema import (
     persona_senses,
     persona_voice_setting,
     senses_as_text,
+    stored_card_from_text,
 )
 
 import re as _re
@@ -308,6 +309,38 @@ def set_char_status(chat_id, char_id, status, frame_id=None):
         (chat_id, char_id, frame_id, status, chat_id, char_id),
     )
 
+def char_state(chat_id, char_id, frame_id=None):
+    """One character's live per-story state in one era, or None if unattached.
+
+    THE READ HALF OF `set_char_state`, and it has to exist for the same
+    reason `active_cast` prefers the override: a frame that has committed a
+    turn HAS a `chat_char_frames` row, and from then on the base
+    `chat_chars.state` is not what any mind reads. A host surface that read
+    the base row saw one thing and the story ran on another.
+
+    A80 (review 2026-09-07): the private-history editor read and wrote the
+    base row while `private_knowledge_for` read the frame override, so in any
+    story with an era the host edited a channel nobody would ever be told.
+    """
+    if frame_id is None:
+        row = q("SELECT state FROM chat_chars WHERE chat_id=? AND char_id=?",
+                (chat_id, char_id), one=True)
+    else:
+        row = q(
+            "SELECT COALESCE(ccf.state, cc.state) AS state FROM chat_chars cc "
+            "LEFT JOIN chat_char_frames ccf "
+            "  ON ccf.chat_id=cc.chat_id AND ccf.char_id=cc.char_id "
+            "  AND ccf.frame_id=? "
+            "WHERE cc.chat_id=? AND cc.char_id=?",
+            (frame_id, chat_id, char_id), one=True)
+    if not row:
+        return None
+    try:
+        return json.loads(row["state"] or "{}")
+    except (TypeError, ValueError):
+        return {}
+
+
 def set_char_state(chat_id, char_id, state_json, frame_id=None):
     if frame_id is None:
         qi("UPDATE chat_chars SET state=? WHERE chat_id=? AND char_id=?",
@@ -339,7 +372,21 @@ def all_cast_name_to_id(chat_id):
     }
 
 def sheet_state(row):
-    sheet = json.loads(row["sheet"])
+    """One cast row as `(card as stored, active state, stance)`.
+
+    The card is `CardWithNormalization`: the RAW card, so the four kind
+    dispatchers below and `cast_entity_id` read exactly what they read
+    before, carrying the normalization for every accessor that would
+    otherwise rebuild it (Section I residual, C14). Thirteen call sites hold
+    this, eleven of them in `agents/perception.py`, and each was paying a
+    fresh normalization per FIELD -- measured on the review's benches, the
+    parse plus one site's ten card reads cost 78.3 ms (chat 114's 19 KB card)
+    and 43.8 ms (chat 117's 26 KB one), and now cost 1.4 ms and 0.9 ms, with
+    every one of those answers diffed byte for byte. The two defaults below
+    are the same saving: a row whose stored state carries no stance paid a
+    whole normalization here too, 5.09 ms per call on chat 117's card.
+    """
+    sheet = stored_card_from_text(row["sheet"])
     state = json.loads(row["cstate"] or "{}")
     active = state.get("active_state") or character_initial_active_state(sheet)
     if not isinstance(active, dict):
@@ -1769,7 +1816,9 @@ def condition_exit_owner(kind, payload):
 # stored `{"name": "X", "senses": "keen hearing", "scent": "smoke"}` answers
 # "keen hearing" / "smoke" raw and "ordinary general, ordinary range (keen
 # hearing)" / "" normalized. So a caller that normalizes a sheet once to share
-# it across reads must still hand THESE the sheet it read off the row.
+# it across reads must still hand THESE the sheet it read off the row --
+# which is exactly what `character_schema.CardWithNormalization` is for, and
+# why `sheet_state` hands back the stored card rather than the product.
 def senses_of(sheet):
     if "psychology" in sheet or "core" in sheet:
         return senses_as_text(character_senses(sheet))
