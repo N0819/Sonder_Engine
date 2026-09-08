@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <title>Sonder Engine — Sign In</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- The localization rules, shared with the SPA (utils.js reads the same
+     file); i18n.js is only this page's catalog fetch. Deferred, so the
+     core is evaluated first. -->
+<script src="/static/js/i18n-core.js" defer></script>
 <script src="/static/js/i18n.js" defer></script>
 <script src="/static/js/theme-init.js"></script>
 <!-- Shares the host app's actual stylesheet, same rationale as guest.html:

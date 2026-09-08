@@ -1,4 +1,8 @@
-"""A batch refused for being too large must be split, not hashed (UNBUILT 1.75).
+"""A batch refused for being too large must be split, not hashed.
+
+Covers `mind/memory_write._embed_in_request_sized_chunks` and the import-path
+refusal in `mind/memory_snapshot.py`. (E-mind-1 sibling, 2026-09-07: this
+docstring pointed at UNBUILT §1.75, a heading deleted when both landed.)
 
 `_embed_with_retry` sends whatever list it is handed and, on any exception,
 replaces the WHOLE batch with crc32 hashes stamped `cheap:crc32:256` -- which

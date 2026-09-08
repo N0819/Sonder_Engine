@@ -197,13 +197,28 @@ def test_character_payload_pronouns_exclude_the_speaker():
 
 
 def test_cast_pronouns_builder_reads_sheets():
+    """A sheet that is not a sheet contributes nothing; a card contributes
+    what NORMALIZATION says its pronouns are.
+
+    The second row used to assert no entry at all, which was only ever true of
+    a hand-built fixture: every card the engine stores has been through
+    `normalize_character_data`, so `identity.pronouns` already holds the
+    they/them default when the author expressed none. Since review 2026-09-07
+    B12 this builder reads through that same normalization -- which is the
+    point of the change, because a card whose pronouns the shape repair had to
+    lift out of top level used to arrive here with NONE, and W6 (the narrator
+    guessing a pronoun from a name) is what this map exists to prevent.
+    """
     cast = [
         {"sheet": '{"identity": {"name": "Vorne", "pronouns": '
                   '{"subject": "he", "object": "him", "possessive": "his"}}}'},
         {"sheet": '{"identity": {"name": "Nameless"}}'},
         {"sheet": "not json"},
     ]
-    assert _cast_pronouns(cast) == {"Vorne": HE}
+    built = _cast_pronouns(cast)
+    assert built["Vorne"] == HE
+    assert built["Nameless"] == {"subject": "they", "object": "them",
+                                 "possessive": "their"}
     assert _cast_pronouns([]) == {}
     assert _cast_pronouns(None) == {}
 

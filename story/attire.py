@@ -3251,25 +3251,50 @@ def release_removed_garments(entry):
     return rederive_entry(entry)
 
 
+def key_for(ledger, name):
+    """The ledger's OWN spelling of this body's key, or None when absent.
+
+    The one place the attire ledger's key-matching rule is stated. Every
+    reader that asks the wardrobe about a named body asks through this or
+    through `entry_for`, so "does the wardrobe know this body" and "what is
+    this body wearing" cannot answer differently about the same person.
+    """
+    if not isinstance(ledger, dict):
+        return None
+    if name in ledger:
+        return name
+    folded = str(name or "").strip().casefold()
+    if not folded:
+        return None
+    return next((key for key in ledger
+                 if str(key).strip().casefold() == folded), None)
+
+
 def entry_for(ledger, name):
     """One body's ledger entry, tolerating a case-variant identity key.
 
-    The attire ledger is keyed on the identity name, and three separate
-    readers in `agents/common.py` already carry a casefold fallback because
-    the key is NOT reliably canonical -- `persist.commit_attire`'s
-    `_heal_attire_identity_keys` exists precisely to repair it, and nothing
-    heals on the read path. A reader that does a bare `.get(name)` therefore
-    finds no garment for a body that is dressed, and a gate built on that
-    lookup fails OPEN: it delivers what a covering conceals.
+    THE ONLY WAY TO READ ONE BODY'S WARDROBE. The attire ledger is keyed on
+    the identity name, and the key is NOT reliably canonical --
+    `persist.commit_attire`'s `_heal_attire_identity_keys` exists precisely
+    to repair it, and nothing heals on the read path. A reader that does a
+    bare `.get(name)` therefore finds no garment for a body that is dressed,
+    and a gate built on that lookup fails OPEN: it delivers what a covering
+    conceals.
+
+    Review 2026-09-07 B5: `scene.appearance_of` did the bare `.get` eleven
+    lines below `visible_body_text`, which did not -- two readers of one
+    ledger, on one body, disagreeing about whether she was dressed. Every
+    per-name reader now routes here, including the two casefold fallbacks
+    that had been open-coded in `agents/common.py`. (`world.spatial`'s
+    `_worn_garment_names` was already case-tolerant, through the shared
+    spatial `_ci_get`; routing it here consolidates the wardrobe's key rule
+    in one place rather than fixing a miss.)
 
     Returns {} when the body has no entry under any spelling.
     """
     ledger = ledger if isinstance(ledger, dict) else {}
-    entry = ledger.get(name)
-    if entry is None:
-        folded = str(name or "").strip().casefold()
-        entry = next((value for key, value in ledger.items()
-                      if str(key).strip().casefold() == folded), None)
+    key = key_for(ledger, name)
+    entry = ledger.get(key) if key is not None else None
     return entry if isinstance(entry, dict) else {}
 
 

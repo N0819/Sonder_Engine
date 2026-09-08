@@ -380,7 +380,8 @@ def _warn_stranded_embeddings(chat_id, char_id, stranded, total, model_key):
 
     Retrieval still WORKS -- BM25 and exact-match are unaffected, so this
     degrades rather than breaks, which is exactly why it needs announcing.
-    The fix when it fires is a re-embed pass; see docs/UNBUILT.md §1.15.
+    The fix when it fires is a re-embed pass (`rebuild_embeddings`); see
+    `Design.md` § Changing the embedding model is safe.
     """
     if not stranded or not total:
         return
@@ -392,7 +393,7 @@ def _warn_stranded_embeddings(chat_id, char_id, stranded, total, model_key):
         "memory: %d of %d stored memories for chat %s char %s were embedded by "
         "a different model than the live one (%s); their semantic and "
         "cue-vector rankings score 0 and only keyword/exact matching reaches "
-        "them. Re-embed to restore semantic recall (docs/UNBUILT.md 1.15).",
+        "them. Re-embed to restore semantic recall (rebuild_embeddings).",
         stranded, total, chat_id, char_id, model_key,
     )
 

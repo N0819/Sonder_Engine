@@ -1521,8 +1521,9 @@ function renderLorebooksTab(d, b, chatId) {
       },
         "Attached books are story-local duplicates; "
         + "updating them changes this story's world, "
-        + "not the global library. The canon book is "
-        + "updated by the mapping agent."));
+        + "not the global library. The canon book is the "
+        + "story's own: the engine writes into it as play "
+        + "settles what is true."));
 }
 
 function renderMultiplayerTab(d, b, chatId) {
@@ -1967,17 +1968,17 @@ function renderPromiseLedgerPanel(chatId) {
 // permanence. Keyed by the same provider `kind` strings used in
 // provider_presets, so it lines up with the dropdown when adding a provider.
 const MODEL_RECOMMENDATIONS = {
-  anthropic: "Pick the current flagship Claude (Opus or Sonnet) for narrator/character_major; a smaller Claude (Haiku) is fine for mapping/utility.",
-  openai: "Pick the current flagship GPT for narrator/character_major; a 'mini'/'nano'-tier variant is fine for mapping/utility.",
-  gemini: "Pick the current flagship Gemini Pro for narrator/character_major; Gemini Flash is fine for mapping/utility.",
+  anthropic: "Pick the current flagship Claude (Opus or Sonnet) for narrator/character_major; a smaller Claude (Haiku) is fine for repair/utility.",
+  openai: "Pick the current flagship GPT for narrator/character_major; a 'mini'/'nano'-tier variant is fine for repair/utility.",
+  gemini: "Pick the current flagship Gemini Pro for narrator/character_major; Gemini Flash is fine for repair/utility.",
   deepseek: "DeepSeek's main chat/reasoning model works well for narrator/character_major; it's inexpensive enough that lightening other roles matters less.",
-  xai: "Pick the current flagship Grok for narrator/character_major; a smaller/faster Grok variant for mapping/utility.",
-  mistral: "Pick a 'large' Mistral model for narrator/character_major; a 'small'/'nemo' variant for mapping/utility.",
+  xai: "Pick the current flagship Grok for narrator/character_major; a smaller/faster Grok variant for repair/utility.",
+  mistral: "Pick a 'large' Mistral model for narrator/character_major; a 'small'/'nemo' variant for repair/utility.",
   groq: "Groq hosts other labs' open-weight models at very high speed -- pick the largest Llama/Qwen/Mixtral-family model it serves for narrator/character_major, a smaller one for the rest.",
-  together: "Together hosts many open-weight models -- prefer a 70B+ Llama/Qwen/DeepSeek-family model for narrator/character_major, a smaller one for mapping/utility.",
+  together: "Together hosts many open-weight models -- prefer a 70B+ Llama/Qwen/DeepSeek-family model for narrator/character_major, a smaller one for repair/utility.",
   openrouter: "Aggregates most providers above under one key -- the same per-role sizing logic applies; OpenRouter's model list shows context length and price per model to help compare.",
   nanogpt: "Also an aggregator with a large open-weight catalog -- prefer a well-known, large instruction-tuned model for narrator/character_major. Use '↻ models' to see what's actually included in your plan before picking.",
-  ollama: "Whatever you've pulled locally -- larger/more recent (e.g. current Llama, Qwen, or Mistral family) for narrator/character_major, a smaller quantized model for mapping/utility so it stays responsive on your hardware.",
+  ollama: "Whatever you've pulled locally -- larger/more recent (e.g. current Llama, Qwen, or Mistral family) for narrator/character_major, a smaller quantized model for repair/utility so it stays responsive on your hardware.",
   koboldcpp: "Whatever GGUF model you've loaded -- same sizing logic as Ollama above.",
   lmstudio: "Whatever model you've downloaded in LM Studio -- same sizing logic as Ollama above.",
   llamacpp: "Whatever GGUF model your llama.cpp server is serving -- same sizing logic as Ollama above.",
@@ -2096,7 +2097,7 @@ function embeddingBankBlock() {
 
 function modelRecommendationsBlock() {
   return el("div", { class: "small dim", style: "margin-top:6px" },
-    el("div", {}, "The rule that matters most: ", el("b", {}, "bigger/newer for narrator and character_major"), " (this is the writing you actually read), ", el("b", {}, "smaller/cheaper for mapping and utility"), " (mechanical, rarely visible). Specific model names below are current examples, not a permanent list -- providers update their lineups often."),
+    el("div", {}, "The rule that matters most: ", el("b", {}, "bigger/newer for narrator and character_major"), " (this is the writing you actually read), ", el("b", {}, "smaller/cheaper for repair and utility"), " (mechanical, rarely visible). Specific model names below are current examples, not a permanent list -- providers update their lineups often."),
     ...Object.entries(MODEL_RECOMMENDATIONS).map(([kind, text]) =>
       el("div", { style: "margin-top:6px" }, el("b", {}, kind), " — ", text)));
 }
@@ -2249,9 +2250,11 @@ function renderFullApiSettings(b) {
     renderProv();
     b.append(el("div", { class: "small", style: "margin:2px 0 8px" },
       el("b", {}, "cache"), " marks the repeated system prompt so the provider can "
-      + "read it back instead of reprocessing it — much cheaper per call, and it only "
-      + "applies to Claude models (the caching is Anthropic's). Untick it if you suspect "
-      + "caching is costing you latency rather than saving it."));
+      + "read it back instead of reprocessing it — much cheaper per call. The caching "
+      + "is Anthropic's, so it pays where the provider either is Anthropic or forwards "
+      + "the marker on to it: the box is ticked by default wherever that is known to "
+      + "hold, and any other connection can be opted in by ticking it. Untick it if you "
+      + "suspect caching is costing you latency rather than saving it."));
     const nk = el("select", {}, Object.keys(S.boot.provider_presets).map(k => el("option", { value: k }, k)));
     b.append(el("div", { class: "row", style: "margin:6px 0" }, nk,
       el("button", { onclick: async () => { await api("POST", "/api/providers", { kind: nk.value }); await boot(); closeModal(); $("#b-api").click(); } }, "+ Provider")));
@@ -2782,12 +2785,12 @@ function renderFullApiSettings(b) {
         el("div", { class: "small dim", style: "margin-top:6px" },
           el("div", {}, el("b", {}, "Setting only Default is enough to start playing"), " — every other role falls back to it automatically, with one exception: embeddings, which needs a model of a different KIND and so is never inherited. The rest let you assign a faster or cheaper model to a specific stage of each turn without touching quality where it matters most."),
           el("div", { style: "margin-top:8px" }, el("b", {}, "director"), " — reads what you typed and decides what actually happens: whether an action succeeds, what an NPC's action resolves to. Gets this wrong and the story stops making sense, so keep it on a strong model."),
-          el("div", {}, el("b", {}, "director_body / _social / _contact / _objects / _spatial"), " — scoped specialists that encode bodies (clothing, wounds, vitals, overlays), the scene roster, physical contact and matter, the object world, the room graph and positions, and the world's traffic (crowds, couriers, hearsay) from the beat the Director authored. An exception to the Default fallback: left unset each follows the ", el("b", {}, "director"), " model, so the engine's most failure-prone stage never silently downgrades."),
+          el("div", {}, el("b", {}, "director_body / _social / _contact / _objects / _spatial"), " — scoped specialists that encode bodies (clothing, wounds, vitals, overlays), the scene roster, physical contact and matter, the object world, the room graph and positions, and the world's traffic (crowds, couriers, hearsay) from the beat the Director authored. Left unset each follows ", el("b", {}, "Default"), " like every other role — so where Default is a cheap model, set these rows too rather than leaving the engine's most failure-prone stage on it."),
           el("div", { class: "small dim" }, "There is no ", el("b", {}, "perception"), " role any more, and that is not an omission: what each character can see, hear and know is now worked out in code rather than asked of a model, so it costs nothing, cannot be got wrong by a cheap model, and has no setting to tune."),
           el("div", {}, el("b", {}, "character_bg / character_mid / character_major"), " — generate what a character does and says, tiered by how central that character is to the scene. Quality shows up directly in dialogue, so keep major characters on a strong model even if you lighten background ones."),
           el("div", {}, el("b", {}, "narrator"), " — turns everything into the prose you actually read. This is the model whose writing style you'll notice most."),
-          el("div", {}, el("b", {}, "repair"), " — shape, never content. When a stage's output fails validation, this model is asked about the failed fields ALONE and its answer is spliced back at exactly those paths; everything else is byte-identical, so it cannot touch the beat. Its whole job is \u201cthis fragment is the wrong shape, fix the shape, keep every fact\u201d, which a fast cheap model does well \u2014 and every success here saves a full re-author of the response on the stage's own model (measured: 4.2s on the Director for one malformed field, 36.3s on a character decision review). Left unset it follows ", el("b", {}, "utility"), ".") ,
-          el("div", {}, el("b", {}, "utility"), " — background helper tasks: the autobiographical memory summaries written between turns, notice wording, off-screen activity sketches, importer fills. Never player-facing prose, so speed matters more than polish — not worth spending a premium model on. The other exception to the Default fallback: left unset it follows the ", el("b", {}, "mapping"), " model, so background summarisation lands on the fast mechanical model you already picked rather than on your most expensive one."),
+          el("div", {}, el("b", {}, "repair"), " — shape, never content. When a stage's output fails validation, this model is asked about the failed fields ALONE and its answer is spliced back at exactly those paths; everything else is byte-identical, so it cannot touch the beat. Its whole job is \u201cthis fragment is the wrong shape, fix the shape, keep every fact\u201d, which a fast cheap model does well \u2014 and every success here saves a full re-author of the response on the stage's own model (measured: 4.2s on the Director for one malformed field, 36.3s on a character decision review). Left unset it follows ", el("b", {}, "Default"), " like every other role, so a host who wants the cheap patcher has to say so on this row.") ,
+          el("div", {}, el("b", {}, "utility"), " — background helper tasks: the autobiographical memory summaries written between turns, notice wording, off-screen activity sketches, importer fills. Never player-facing prose, so speed matters more than polish — not worth spending a premium model on. Left unset it follows ", el("b", {}, "Default"), " like every other role, so setting a cheap model on this row is what keeps the between-turn work off your most expensive one."),
           el("div", { style: "margin-top:8px" }, el("b", {}, "embeddings"), " — turns each memory into a vector so a character can recall something relevant that was worded differently 300 turns ago. Cheap per call and it is what makes memory work by MEANING rather than by keyword; leave it unset and the engine falls back to a local hash that only matches shared words."),
           el("div", { class: "warn-note", style: "margin-top:4px" }, el("b", {}, "Changing this one has a consequence the others do not."), " A memory can only be compared against a vector from the same model, so everything already stored has to be re-read through the new one. Nothing is lost and nothing breaks — until it is rebuilt, older memories are found by keyword only. The engine offers to rebuild when you next open a story, or use the button below."))),
       el("details", { style: "margin-top:6px" },

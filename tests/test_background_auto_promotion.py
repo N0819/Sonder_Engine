@@ -36,6 +36,7 @@ from core.pipeline_context import ChatData, PipelineContext, TurnData
 from llm.schemas import validate_llm_output
 from world.charter import normalize_charter, seed_needs, seed_roster
 from world.charter_runtime import registry_for, save_registry
+from world.survival import default_vitals, vitals_of
 
 
 def _make_chat(db, name="Enterprise-D"):
@@ -349,6 +350,52 @@ class TestPromoteBackgroundCharacter:
         assert "ops_7" not in charter["needs"]
         assert "ops_7" not in charter["feel"]
         assert json.loads(row["source"])["charter_body"] == "ops_7"
+
+    def test_promotion_carries_depletion_into_the_row_the_body_already_has(
+            self, temp_db):
+        """ONE BODY IS ONE ROW, through promotion too (review 2026-09-07, B4).
+
+        The Director opens a vitals row under its own spelling of a named
+        presence (`ysra vale` against the card's `Ysra Vale`); promotion used
+        to write the handed-off depletion under the card name, leaving two
+        rows for one body that every reader then resolved to the wrong one.
+        """
+        cid = _make_chat(temp_db)
+        state = normalize_charter({
+            "key": "watch", "upkeeps": {}, "posts": {},
+            "bodies": {"ysra": {"name": "Ysra Vale", "place": "gate"}},
+        })
+        state["roster"] = seed_roster(state["bodies"])
+        state["needs"] = seed_needs(state["bodies"])
+        state["needs"]["ysra"]["rest"]["level"] = 0.34
+        state["needs"]["ysra"]["sustenance"]["level"] = 0.6
+        state["needs"]["ysra"]["health"]["level"] = 0.9
+        save_registry(cid, {"watch": state})
+        temp_db.wset(cid, "scene", {
+            "rooms": {"gate": {"name": "Gate"}},
+            "positions": {"Ysra Vale": "gate"}, "entities": {},
+            # The row the Director already opened, under its own spelling.
+            "vitals": {"ysra vale": default_vitals()}, "attire": {},
+        })
+        temp_db.wset(cid, "background_presences", {
+            "Ysra Vale": {
+                **_presence(1, 4, dialogue_turns=[1, 2, 4]),
+                "nature": "person",
+                "charter_refs": [{"charter": "watch", "body": "ysra"}],
+            },
+        })
+
+        promote_background_character(
+            cid, "Ysra Vale", sheet={"identity": {"name": "Ysra Vale"}},
+            memory_seeds=[], promoted_turn=5)
+
+        table = temp_db.wget(cid, "scene")["vitals"]
+        assert list(table) == ["ysra vale"]
+        assert table["ysra vale"]["stamina"] == 0.34
+        assert table["ysra vale"]["nourishment"] == 0.6
+        assert table["ysra vale"]["injury"] == pytest.approx(0.1)
+        assert vitals_of(temp_db.wget(cid, "scene"),
+                         "Ysra Vale")["stamina"] == 0.34
 
     def test_charter_derived_colour_survives_promotion_without_an_override(
             self, temp_db):

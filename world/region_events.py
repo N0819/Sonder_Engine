@@ -12,8 +12,11 @@ class with three parts, each closed onto the engine's own vocabulary:
   ``decay`` that revisits the whole footprint at falling intensity -- as a
   list of WAVES with a due story-second each;
 * PER-ROOM EFFECTS, each landing through a seam that already exists: a
-  hazard state on the room short of ruin, ruin itself (the room retired in
-  the registry and kept as a ruin in the scene, never deleted), a shock to
+  hazard state on the room short of ruin (a `world_conditions` row, subject
+  the room -- where every standing condition of a place lives), ruin itself
+  (the room retired in `room_registry` and kept as a ruin in the scene,
+  never deleted -- the registry is the sole answer to whether a room is
+  retired, and the scene carries no second flag), a shock to
   every upkeep served there (`charter_intervene`), harm to bodies standing
   there by the harm model (`charter_harm`), displacement of bodies whose
   berth is gone, artifacts left as evidence (`story/artifacts`), and news
@@ -286,23 +289,28 @@ def apply_wave(cid, frame_id, event, wave, *, turn_idx, turn_id, elapsed,
               "artifacts": [], "news": 0}
 
     # 1. The rooms: a hazard state short of ruin, or ruin kept as a ruin.
+    #
+    # ONE STORE PER QUESTION (review 2026-09-07 B8). This used to write both
+    # halves into the scene beside the stores that already owned them, and
+    # the two answers were free to drift: a `ruined` flag next to
+    # `room_registry.retired_turn_id`, a `hazard` block next to
+    # `world_conditions`. The drift was not hypothetical -- a ruin stays in
+    # the scene by design (a ruin is still a place), so the next commit saw a
+    # live room and cleared the registry's retirement again.
+    #
+    # Whether a room is retired is the REGISTRY's answer and only the
+    # registry's; whether a place stands under a hazard is a
+    # `world_conditions` row and only that -- the same table the burning
+    # tenement's fires already stood in.
     scene = wget_for_frame(cid, "scene", frame_id, {}) or {}
     live = scene.get("rooms") or {}
     for rid in rooms:
-        room = live.get(rid)
-        if not isinstance(room, dict):
+        if not isinstance(live.get(rid), dict):
             continue
         state = "ruined" if destroy else effects["damage"]
-        room["hazard"] = {"state": state, "cause": label,
-                          "intensity": round(intensity, 3),
-                          "since_elapsed": float(elapsed or 0.0), "by": by}
-        if destroy:
-            room["ruined"] = True
-            report["ruined"].append(rid)
-        else:
-            report["damaged"].append(rid)
-    if report["damaged"] or report["ruined"]:
-        wset_for_frame(cid, "scene", scene, frame_id)
+        _stand_hazard(cid, rid, label=label, state=state, intensity=intensity,
+                      elapsed=elapsed, by=by)
+        (report["ruined"] if destroy else report["damaged"]).append(rid)
     if destroy and turn_id is not None:
         for rid in report["ruined"]:
             qi("UPDATE room_registry SET retired_turn_id=? WHERE chat_id=? "
@@ -408,6 +416,39 @@ def apply_wave(cid, frame_id, event, wave, *, turn_idx, turn_id, elapsed,
                       len(report["harmed"])))
     wset(cid, "engine_notices", notices)
     return report
+
+
+def _stand_hazard(cid, rid, *, label, state, intensity, elapsed, by):
+    """State a standing hazard of a PLACE where the engine keeps them:
+    `world_conditions`, subject the room (review 2026-09-07 B8).
+
+    One row per (event, room), restated rather than stacked, so a decay's
+    later wave moves the severity the first wave set instead of leaving a
+    second answer behind it. `severity` is the field
+    `world.mechanics._condition_states_harm` reads to know a row is dangerous
+    without reading a word of prose; `started_at` is the hour the hazard
+    began, and a restatement does not move it. No end is authored, because
+    the event authors none -- an effect says how bad, never how long.
+    """
+    import json
+    from core.db import q, qi
+    condition_id = "region:%s:%s" % (_slug(label), rid)
+    payload = json.dumps({
+        "subject_id": rid, "kind": label, "state": state, "cause": label,
+        "severity": round(float(intensity), 3),
+        "since_elapsed": float(elapsed or 0.0), "by": by,
+    }, ensure_ascii=False)
+    existing = q("SELECT condition_id FROM world_conditions WHERE chat_id=? "
+                 "AND condition_id=?", (cid, condition_id), one=True)
+    if existing:
+        qi("UPDATE world_conditions SET subject_id=?,kind=?,payload=?,active=1 "
+           "WHERE chat_id=? AND condition_id=?",
+           (rid, label, payload, cid, condition_id))
+        return
+    qi("INSERT INTO world_conditions(condition_id,chat_id,subject_id,kind,"
+       "started_at,expires_at,next_tick,payload,active) "
+       "VALUES(?,?,?,?,?,NULL,NULL,?,1)",
+       (condition_id, cid, rid, label, float(elapsed or 0.0), payload))
 
 
 def _room_name(rooms, rid):

@@ -1251,7 +1251,7 @@ function renderLoreBookEditor(state, container) {
     loreField("Name", nameInput),
     loreField("Book type", typeSelect),
     loreField(
-      "Summary for mapping and retrieval",
+      "Summary of what this book covers",
       summaryInput,
       "full"
     ),
@@ -1387,9 +1387,18 @@ function renderLoreBookEditor(state, container) {
         { onclick: () => exportLorebook(book.id) },
         "⤓ Export"
       ),
-      // Canon. `chats.lorebook_id` is the book the mapping stage treats as
-      // this story's settled truth (agents/mapping.py reads it as `canon`),
-      // and the tree has shown a "canon" badge for it all along -- with no
+      // Canon. `chats.lorebook_id` is the book this story treats as its
+      // settled truth: the book the engine's own writers file into as play
+      // establishes something (`background_claims.write_canon`, the charter,
+      // the greeting, the Writers' Room's authoring change, and -- every
+      // beat -- the deterministic filing of what the Director's committed
+      // diff established, `persist/commit_mapping`, which is what replaced
+      // the mapping agent this comment used to name: it mints the book when
+      // the chat has none and settles what play wrote into it), all of them
+      // through `memory.ensure_chat_canon_book`. No model stage picks it --
+      // there is no mapping agent (E48; `providers.ROLES` has no `mapping`
+      // role and `agents/mapping.compile_world_context` is deterministic).
+      // The tree has shown a "canon" badge for it all along -- with no
       // way to set or clear it once the story had started, since it was only
       // ever chosen on the greeting screen. `POST` and `DELETE
       // /api/chats/{cid}/lorebook` do exactly that and had no caller

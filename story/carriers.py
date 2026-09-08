@@ -38,7 +38,7 @@ import json
 
 from world import crowds as crowds_model
 from world import degradation
-from story.character_schema import normalize_character_data
+from story.character_schema import character_identity
 from core.db import q
 from story.scene import extant_cast, set_char_state
 from world.spatial import room_of
@@ -87,9 +87,8 @@ TELL_FANOUT_CAP = 3
 
 
 def _character_room(scene, sheet):
-    identity = normalize_character_data(sheet or {}).get("identity") or {}
-    keys = [identity.get("name"), identity.get("uid"),
-            *(identity.get("aliases") or [])]
+    identity = character_identity(sheet or {})
+    keys = [identity["name"], identity["uid"], *identity["aliases"]]
     for key in keys:
         if key:
             room = room_of(scene, str(key))
@@ -431,7 +430,11 @@ def _carriers(cid, frame_id, scene, chat=None):
             sheet = json.loads(row["sheet"] or "{}")
         except (TypeError, ValueError):
             sheet = {}
-        identity = normalize_character_data(sheet or {}).get("identity") or {}
+        # One identity reader for every name a carrier answers to (review
+        # 2026-09-07 B12), shared with `scene.cast_scene_context` so the
+        # dossier the director reads and the ledger a report lands in cannot
+        # hold two different alias lists for one body.
+        identity = character_identity(sheet or {})
         try:
             state = json.loads(row["cstate"] or "{}")
         except (TypeError, ValueError):
@@ -439,9 +442,9 @@ def _carriers(cid, frame_id, scene, chat=None):
         entry = {
             "row": row,
             "state": state if isinstance(state, dict) else {},
-            "name": str(identity.get("name") or ""),
-            "uid": str(identity.get("uid") or ""),
-            "aliases": [a for a in (identity.get("aliases") or []) if a],
+            "name": identity["name"],
+            "uid": identity["uid"],
+            "aliases": identity["aliases"],
             "room": _character_room(scene, sheet),
         }
         entries.append(entry)

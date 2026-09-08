@@ -76,7 +76,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 # Same ceiling and the same reason as tools/longmemeval_to_bank.py: the
 # provider caps a request by tokens AND by input count, and a refusal is not
-# retried into success, it is replaced by hash vectors (UNBUILT 1.75).
+# retried into success, it is replaced by hash vectors. The production answer
+# is the pre-split in `mind/memory_write.py`
+# (`_embed_in_request_sized_chunks`); this file budgets its own requests the
+# same way. (E-mind-1 sibling, 2026-09-07: this pointed at UNBUILT §1.75, a
+# heading deleted when that split landed.)
 EMBED_TOKEN_BUDGET = 60_000
 EMBED_COUNT_BUDGET = 64
 CHARS_PER_TOKEN = 4
@@ -119,7 +123,8 @@ def _refuse_fallback_embeddings():
     if batch.fallback:
         raise SystemExit(
             "embeddings resolved to the crc32 fallback, which measures 49 "
-            "probes WORSE than no vectors at all (UNBUILT 2.21). Configure "
+            "probes WORSE than no vectors at all "
+            "(docs/experiments/CRC32_CONTROL.md). Configure "
             "the embeddings role before generating a bank.")
     return batch.model_key, batch.dimensions
 
@@ -256,7 +261,12 @@ def negatives_for_plan(plan, role, n):
 
 
 def _embed_chunks(texts):
-    """Token- AND count-budgeted grouping; see UNBUILT 1.75."""
+    """Token- AND count-budgeted grouping, for the reason
+    `mind/memory_write._embed_in_request_sized_chunks` records: a request
+    refused for being too large is not retried into success, it is replaced by
+    hash vectors. (E-mind-1 sibling, 2026-09-07: this pointed at UNBUILT
+    §1.75, a heading deleted when that split landed.)
+    """
     groups, cur, tok = [], [], 0
     for t in texts:
         cost = len(t) // CHARS_PER_TOKEN
@@ -286,7 +296,11 @@ def _write_rows(rows, chat_id, char_id):
 
     Returns row ids in the order given. Refuses a fallback batch rather than
     storing hash vectors -- a bank built on crc32 measures a retrieval nobody
-    runs, and would do so silently (UNBUILT 1.75, 2.21).
+    runs, and would do so silently
+    (`mind/memory_write._embed_in_request_sized_chunks`,
+    `docs/experiments/CRC32_CONTROL.md` -- E-mind-1 sibling, 2026-09-07: this
+    pointed at UNBUILT §1.75 and §2.21, both headings deleted when the split
+    and the fallback refusal landed).
     """
     from mind.memory_write import add_memories_batch, prepare_memories_batch
 

@@ -15,6 +15,7 @@ from story.character_schema import (character_name, character_initial_outfit,
                               normalize_character_data, persona_name)
 from story.scene import seed_initial_attire
 from world.spatial import room_of, spatial_rel, hear_level, _is_body_entity
+from world.survival import vitals_entry_key
 from persist.commit_common import (_player_name_or_none,
                                    _registered_name_roster, _room_of,
                                    recognition_roster, seed_mutual_recognition)
@@ -4019,7 +4020,15 @@ def promote_background_character(cid, name, sheet=None, memory_seeds=None,
                 if key in handoff["body_state"]
             }
             if vitals:
-                sc["vitals"].setdefault(character_name(sheet), {}).update(vitals)
+                # ONE BODY IS ONE ROW. The promoted body already has a vitals
+                # row whenever the Director opened one under its own spelling
+                # of the presence (`mirela` against the card's `Mirela`);
+                # writing under the card name would open a second row that
+                # every reader then misses (review 2026-09-07, B4).
+                row_key = (
+                    vitals_entry_key(sc["vitals"], character_name(sheet))
+                    or character_name(sheet))
+                sc["vitals"].setdefault(row_key, {}).update(vitals)
         seed_initial_attire(
             sc, character_name(sheet), character_initial_outfit(sheet))
         if frame_id is None:

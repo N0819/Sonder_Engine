@@ -675,7 +675,12 @@ def _worn_garment_names(scene, subject=None) -> list:
     if not isinstance(attire, dict):
         return []
     if subject is not None:
-        entries = [_ci_get(attire, str(subject or "").strip())]
+        # Consolidation, not a fix: `_ci_get` is the shared spatial key
+        # helper and was already case-tolerant here. The wardrobe's key rule
+        # belongs to the wardrobe's own reader, so this asks it there (review
+        # 2026-09-07 B5).
+        from story.attire import entry_for
+        entries = [entry_for(attire, str(subject or "").strip())]
     else:
         entries = list(attire.values())
     out = []

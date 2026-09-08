@@ -121,7 +121,7 @@ def test_narrator_manifest_keeps_the_standing_effect_on_touch():
     _add_effect(scene)
     manifest = _sensory_channels_manifest(
         scene, "Bex", "", [], set(), {}, "workshop")
-    standing = manifest["touch"]["standing"]
+    standing = [row["clause"] for row in manifest["touch"]["standing"]]
     assert any("light steady pressure" in clause for clause in standing)
 
 

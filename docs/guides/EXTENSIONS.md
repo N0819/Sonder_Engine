@@ -1480,7 +1480,7 @@ down every extension after it. **Wrap your file in an IIFE and guard on
 | `registerSettingsSection({id, label, render})` | a config panel inside your own card in the 🧩 menu |
 | `registerStepRenderer(key, fn)` | claim a step in the pipeline drawer; `fn(content, container, step)` |
 | `on(event, fn)` / `off(event, fn)` | subscribe to the live turn stream |
-| `state()` | a **copy** of `{boot, chat, chatId}` — you cannot write to `S` through it |
+| `state()` | a fresh `{boot, chat, chatId}` object over the host's **live** `boot`/`chat` — rebinding a key here cannot reach `S`, but the two objects are not clones; treat them as read-only |
 | `api(method, path, body)` | the host's fetch helper, late-bound |
 | `call(extId, method, path, body)` | same, rooted at `/api/extensions/<extId>` — your own routes live at `/x/…` |
 | `extState(extId)` | your per-story state for the open chat; `null` when no chat is open |

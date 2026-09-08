@@ -1570,6 +1570,84 @@ def character_name_from_text(sheet_text: str | None) -> str:
         data = {}
     return character_name(data if isinstance(data, dict) else {})
 
+
+def character_identity(sheet: dict) -> dict:
+    """Who a sheet says this character is: ``{uid, name, aliases, pronouns}``.
+
+    ONE reader, because a sheet is only repaired for whoever normalizes it.
+    `repair_character_shape` lifts a name, aliases or a pronoun set that a
+    model parked at top level (or inside another section) back into
+    `identity`, and the legacy branch synthesizes the whole block from a
+    legacy card -- so a reader that reaches into the stored blob and reads
+    `sheet["identity"]["aliases"]` sees the HOLLOW sheet while every reader
+    that normalizes sees the repaired one. Review 2026-09-07 B12: the
+    director/mapping dossier (`scene.cast_scene_context`) handed those
+    payloads an empty alias list for exactly the cards `character_scene_keys`
+    and `carriers._carriers` were resolving BY alias, so one turn's two
+    representations of "what is this person called" disagreed.
+
+    The uid is the one field read AS AUTHORED, and it is not an exception to
+    the rule so much as the reason the rule needs stating: normalization MINTS
+    a `char_<hex>` for a sheet that has none, freshly on every call, so a
+    normalized uid is a different answer each time anything asks. As authored
+    means wherever the card authored it -- `repair_character_shape` rescues a
+    top-level `uid` into `identity` exactly like a top-level name or alias, so
+    reading the identity block alone would DROP the uid of the same flattened
+    card this reader exists to rescue (measured in review: `carriers._carriers`
+    normalized and recovered `char_deadbeef` where the block-only read gave
+    ""). Empty here means the card authored no uid anywhere --
+    `cast_entity_id` owns the stable fallback (`character:<row id>`), and its
+    docstring carries the argument.
+
+    Aliases come back as stripped, non-empty strings: normalization keeps a
+    native sheet's `aliases` verbatim, so a card that wrote a bare string or a
+    number still arrives here as one, and every caller was folding/iterating
+    it as a list.
+    """
+    data = sheet if isinstance(sheet, dict) else {}
+    ident = normalize_character_data(data).get("identity") or {}
+    raw = data.get("identity")
+    raw = raw if isinstance(raw, dict) else {}
+    aliases = ident.get("aliases")
+    if not isinstance(aliases, list):
+        aliases = [aliases] if aliases not in (None, "") else []
+    pronouns = ident.get("pronouns")
+    return {
+        "uid": str(raw.get("uid") or data.get("uid") or ""),
+        "name": str(ident.get("name") or "Unnamed"),
+        "aliases": [str(a).strip() for a in aliases if str(a or "").strip()],
+        "pronouns": dict(pronouns) if isinstance(pronouns, dict) else {},
+    }
+
+
+#: How many distinct sheet TEXTS the identity memo holds. Mirrors
+#: `character_name_from_text`: a chat's cast is a handful of rows whose text is
+#: byte-identical for the whole turn, and an edited sheet is simply a different
+#: key.
+IDENTITY_CACHE_SIZE = 512
+
+
+@functools.lru_cache(maxsize=IDENTITY_CACHE_SIZE)
+def _identity_from_text(sheet_text: str | None) -> dict:
+    try:
+        data = json.loads(sheet_text or "{}")
+    except Exception:
+        data = {}
+    return character_identity(data if isinstance(data, dict) else {})
+
+
+def character_identity_from_text(sheet_text: str | None) -> dict:
+    """`character_identity` keyed on the raw stored sheet TEXT.
+
+    The same bargain `character_name_from_text` makes, for the same reason:
+    the readers that need every spelling a body answers to sit inside per-cast
+    loops that run several times a beat, and full normalization costs
+    milliseconds where a dict copy costs microseconds. Copied on the way out
+    because the cached value is mutable and callers own what they receive.
+    """
+    return copy.deepcopy(_identity_from_text(sheet_text))
+
+
 def character_tier(sheet: dict) -> str:
     return str(normalize_character_data(sheet).get("simulation", {}).get("tier", "mid"))
 

@@ -11,6 +11,7 @@ from language_runtime import (
     LanguagePackError, compositor_text, compositor_value,
     english_linguistic, installed_language_packs, linguistic)
 from llm.prompts import get_prompt, prompt_fragment
+from story import attire as attire_model
 from story.scene import (
     NON_AWAKE_GATED,
     apply_awareness_diff,
@@ -75,6 +76,7 @@ from llm.schemas import validate_llm_output
 
 from story.character_schema import (
     character_appearance,
+    character_identity_from_text,
     character_name,
     persona_appearance,
     persona_voice_setting,
@@ -113,6 +115,7 @@ from .common import (
     communication_surface,
     observable_action_text,
     observable_action_onset_text,
+    player_room_in,
     player_speech_lines,
     resolve_action_referents,
     sequence_event_allowed,
@@ -375,7 +378,11 @@ def _cast_pronouns(cast, label=None):
     out, collided = {}, set()
     for row in (cast or []):
         try:
-            ident = (json.loads(row["sheet"]).get("identity") or {})
+            # The one identity reader, never the stored blob (review
+            # 2026-09-07 B12): read raw, a card whose pronouns the shape repair
+            # had to lift back into `identity` contributed nothing here, and
+            # the page then referred to that body however the view had guessed.
+            ident = character_identity_from_text(row["sheet"])
         except Exception:
             continue
         name = str(ident.get("name") or "").strip()
@@ -462,8 +469,30 @@ def _standing_substance_clauses(scene, you):
 _MANIFEST_CHANNELS = tuple(c for c in composer.CHANNELS if c != "mixed")
 
 
+def _player_standing_verdicts(ctx):
+    """The player's own composer ledger verdicts, or {} (B28).
+
+    A NAMED READ BECAUSE IT IS ONE HALF OF A JOIN. The other half is
+    `perception._composer_finish_observer`, which files the key -- and the
+    two are bound by nothing but four matching string literals
+    (`perception_outcome`, `composer_ledger`, `player`, `verdicts`). Inline in
+    `narrator`, either side could be renamed and every test still pass while
+    the manifest quietly went back to shipping standing facts as news, which
+    is exactly the "passing tests and a wrong page" this class hides behind.
+    Named, `tests/test_standing_verdict_one_ledger.py` can compare the two.
+
+    Read from the STORED perception_outcome step rather than turn state, so a
+    narrator rerun sees the verdicts the first run did. Absent reads as "not
+    computed" -- see `_sensory_channels_manifest` -- never as `unchanged`.
+    """
+    outcome = ctx.get("perception_outcome", {}) or {}
+    ledger = outcome.get("composer_ledger") or {}
+    return (ledger.get("player") or {}).get("verdicts") or {}
+
+
 def _sensory_channels_manifest(scene, player_name, view, observations,
-                               recognized, cast_info, p_room):
+                               recognized, cast_info, p_room,
+                               standing_verdicts=None):
     """Per-sense delivery manifest for the narrator payload, or {}.
 
     THE DEFECT: percepts carry a real channel from every builder through
@@ -492,6 +521,25 @@ def _sensory_channels_manifest(scene, player_name, view, observations,
       * a player sealed inside an enclosure gets no manifest at all -- the
         room's air, light and weather are not theirs, and perception already
         owns that view.
+
+    A STANDING FACT IS NOT NEWS TWICE, AND ONE LEDGER SAYS SO. `standing`
+    entries are `{clause, verdict}`, where the verdict is this observer's own
+    composer ledger's (`composer.STANDING_VERDICTS`, shipped by
+    `perception_outcome`) and is ABSENT where that ledger has no answer --
+    weather, light, a substance, or a chat stored before the field existed --
+    which reads as "not computed", never as "new". Without it this manifest
+    was the second representation of a fact the view had already settled and
+    the two disagreed on every beat after the first: `render_view` suppresses
+    a standing contact this observer's ledger already carried, while this
+    function re-derived the same contact from the scene and shipped its full
+    sensation sentence again (B28). Measured chat 117: a hand that never left
+    a belt, re-delivered on 40 of 70 beats under a template that ends
+    "continuous while the contact holds" -- the engine saying the fact is
+    unchanged in the breath it re-delivers it. Nothing is dropped, because a
+    standing fact the narrator must not contradict is still a fact: what
+    changes is that an `unchanged` one now arrives labelled as one, which is
+    what the sheet's AMBIENT RESTRAINT has always been asking about and never
+    had an answer to.
     """
     if not isinstance(scene, dict) or not p_room:
         return {}
@@ -531,32 +579,57 @@ def _sensory_channels_manifest(scene, player_name, view, observations,
                 or ("someone" if contact_endpoint_is_body(scene, other)
                     else "something"))
 
+    verdicts = {str(k): str(v) for k, v in (standing_verdicts or {}).items()}
+
+    def _entry(clause, key=None):
+        """One standing entry: the clause, plus the ledger's verdict on it
+        when the ledger has one. `key` is the composer's own dedupe key, so
+        the join between the two representations is the composer's, not a
+        second spelling of it here."""
+        out = {"clause": clause}
+        verdict = verdicts.get(key or "")
+        if verdict:
+            out["verdict"] = verdict
+        return out
+
     touch_standing = []
-    for contact in (scene.get("contacts") or []):
-        if not isinstance(contact, dict):
-            continue
-        clause = contact_sensation(contact, you=player_name, scene=scene,
-                                   label_for=_partner_label)
-        if clause:
-            touch_standing.append(clause)
-    for record in contact_actions_for_observer(scene, player_name):
-        clause = contact_action_clause(
+    # Built through the composer's OWN percept builders rather than by
+    # collecting clauses: they mint the dedupe key the observer's ledger is
+    # filed under, and a key spelled a second time here is the disagreement
+    # this entry shape exists to end.
+    contact_percepts = composer.contact_percepts([
+        (contact, contact_sensation(contact, you=player_name, scene=scene,
+                                    label_for=_partner_label))
+        for contact in (scene.get("contacts") or [])
+        if isinstance(contact, dict)
+    ])
+    contact_percepts.extend(composer.contact_action_percepts([
+        (record, contact_action_clause(
             record, observer=player_name, scene=scene,
-            label_for=_partner_label)
-        if clause:
-            touch_standing.append(clause)
-    touch_standing.extend(_standing_substance_clauses(scene, player_name))
+            label_for=_partner_label))
+        for record in contact_actions_for_observer(scene, player_name)
+    ]))
+    for percept in contact_percepts:
+        touch_standing.append(
+            _entry(percept.data["clause"], percept.dedupe_key))
+    # A standing substance has no composer percept and therefore no ledger
+    # key: it ships with no verdict, which says "not computed" rather than
+    # "new". Give it one the day perception files one.
+    touch_standing.extend(
+        _entry(clause)
+        for clause in _standing_substance_clauses(scene, player_name))
 
     try:
         scoped = weather_for_room(scene, p_room) or {}
     except Exception:
         scoped = {}
-    hearing_standing = list(weather_words(scoped, "sound"))
+    hearing_standing = [_entry(word) for word in weather_words(scoped, "sound")]
     if scoped.get("falls_on_you"):
-        touch_standing.append("%s %s falling on you"
-                              % (scoped["intensity"], scoped["precipitation"]))
+        touch_standing.append(_entry(
+            "%s %s falling on you"
+            % (scoped["intensity"], scoped["precipitation"])))
     if scoped.get("wind_reaches"):
-        touch_standing.append("%s on your skin" % scoped["wind"])
+        touch_standing.append(_entry("%s on your skin" % scoped["wind"]))
 
     # THE STATUS DECIDES, AND IT IS DECIDED FIRST. This was built the other way
     # round: `sight_standing` was filled from the weather and then
@@ -566,7 +639,9 @@ def _sensory_channels_manifest(scene, player_name, view, observations,
     # gates on room EXPOSURE (sky_visible / falls_on_you / wind_reaches),
     # never on light, so an exposed room at night handed the narrator
     # {"status": "silent", "why": "no light reaches this room",
-    #  "standing": ["storm sky", "heavy rain", "light: dark"]}.
+    #  "standing": ["storm sky", "heavy rain", "light: dark"]}
+    # -- bare strings, the shape standing entries had before B28 gave each
+    # one the ledger's verdict; the defect is the contradiction, not the row.
     #
     # Not a firewall breach -- the weather is legitimately the player's, and
     # they can hear it and feel it on the other two channels. But the payload
@@ -589,7 +664,8 @@ def _sensory_channels_manifest(scene, player_name, view, observations,
     # cannot see is already in `why`, so `light: dark` beside it would be the
     # same fact a second time and the only copy shaped like content.
     sight_standing = [] if sight_status[0] == "silent" else [
-        *weather_words(scoped, "sight"), f"light: {light}"]
+        _entry(word)
+        for word in (*weather_words(scoped, "sight"), f"light: {light}")]
 
     touch_live = bool(touch_standing or by_channel.get("touch"))
     statuses = {
@@ -1808,7 +1884,12 @@ def narrator(ctx, nonce):
     current_events = ""
     _world_fields, _fidelity_facts = {}, {}
     if not est and player_awareness not in NON_AWAKE_GATED:
-        p_room = ctx.get("_player_room") or room_of(_scene_for_frame, player_name)
+        # The scene this page is written from outranks the cached answer,
+        # not the other way round (`common.player_room_in`, finding B36):
+        # `perception_outcome` refreshes the cache from this same scene, and
+        # where it could not, the scene is still the fresher of the two.
+        p_room = player_room_in(_scene_for_frame, ctx, pers=pers,
+                                player_name=player_name, resolve=False)
         # Everything that means "the player" in engine-written prose: their
         # own name forms, and the epithets minted for the minds that have not
         # recognized them. `avoid` is every OTHER body's display in this
@@ -1890,8 +1971,12 @@ def narrator(ctx, nonce):
         # narrator writes the player-facing slice. Every OTHER body's dress
         # keeps reaching it the only way it may -- through the composed view,
         # behind perception's own gate -- and is deliberately not here.
-        _worn = compact_attire(
-            ((_scene_for_frame or {}).get("attire") or {}).get(player_name))
+        # Through `entry_for` like every other reader of this ledger: a
+        # case-variant key here silently dropped `player_attire` from the
+        # payload, which is the absence this block exists to fix (review
+        # 2026-09-07 B5).
+        _worn = compact_attire(attire_model.entry_for(
+            (_scene_for_frame or {}).get("attire"), player_name))
         if _worn:
             _world_fields["player_attire"] = _worn
         if pos_payload:
@@ -1903,9 +1988,14 @@ def narrator(ctx, nonce):
         # and reroll/replay stay safe). Built from the outcome observations'
         # own IR-derived channels plus the standing substrate; every
         # admission subtracts -- see _sensory_channels_manifest.
+        # The player's own composer ledger decides whether a standing fact is
+        # news (B28); read from the STORED perception step, not from turn
+        # state, so a narrator rerun sees the same verdicts the first run did.
+        _verdicts = _player_standing_verdicts(ctx)
         _senses = _sensory_channels_manifest(
             _scene_for_frame, player_name, view,
-            _obs_map.get("player") or [], recognized, cast_info, p_room)
+            _obs_map.get("player") or [], recognized, cast_info, p_room,
+            standing_verdicts=_verdicts)
         if _senses:
             _world_fields["sensory_channels"] = _senses
         _fidelity_facts = {

@@ -171,6 +171,32 @@ def _stored_vitals(record) -> dict:
     return out
 
 
+def vitals_entry_key(table, name):
+    """The key `name`'s record is stored under in this vitals table, or None.
+
+    ONE BODY IS ONE ROW. The table is keyed by display name and every reader
+    matches it case- and whitespace-insensitively, so the answer to "which row
+    is this body's" belongs here rather than at each reader. It was derived
+    twice: `world/mechanics._vitals_entry_key` (now this function) resolved a
+    tick's subject this way while `apply_vitals_diff` wrote under the exact
+    spelling the Director sent -- so a diff naming `mirela` where the row said
+    `Mirela` created a SECOND row, `vitals_of` kept answering from the first,
+    and both ticked (review 2026-09-07, B4/A57).
+
+    The existing row's key wins: a caller that means to write resolves through
+    here first and falls back to its own label only when no row exists yet.
+    """
+    if not isinstance(table, dict):
+        return None
+    target = str(name or "").strip().casefold()
+    if not target:
+        return None
+    for key, record in table.items():
+        if str(key).strip().casefold() == target and isinstance(record, dict):
+            return key
+    return None
+
+
 def seed_vitals(scene: dict, names) -> dict:
     """Give every named body a baseline record, creating the table if needed.
 
@@ -189,8 +215,7 @@ def seed_vitals(scene: dict, names) -> dict:
         table = {}
     for name in names or []:
         label = str(name or "").strip()
-        if label and not any(str(k).strip().casefold() == label.casefold()
-                             for k in table):
+        if label and vitals_entry_key(table, label) is None:
             table[label] = default_vitals()
     scene["vitals"] = table
     return scene
@@ -199,13 +224,10 @@ def seed_vitals(scene: dict, names) -> dict:
 def vitals_of(scene: dict, name: str) -> dict:
     """`name`'s vitals, or defaults. Empty when survival is off."""
     table = (scene or {}).get("vitals")
-    if not isinstance(table, dict):
+    key = vitals_entry_key(table, name)
+    if key is None:
         return {}
-    target = str(name or "").strip().casefold()
-    for key, record in table.items():
-        if str(key).strip().casefold() == target and isinstance(record, dict):
-            return _stored_vitals(record)
-    return {}
+    return _stored_vitals(table[key])
 
 
 def vital_label(vital: str, value) -> str:
@@ -411,12 +433,16 @@ def apply_vitals_diff(scene: dict, incoming) -> dict:
         label = str(name or "").strip()
         if not label:
             continue
+        # THE EXISTING ROW'S KEY WINS (`vitals_entry_key`): a diff spelling a
+        # body differently from its row must move that row, not open a second
+        # one every other reader would then miss.
+        key = vitals_entry_key(table, label) or label
         if patch is None:
-            table.pop(label, None)
+            table.pop(key, None)
             continue
         if not isinstance(patch, dict):
             continue
-        current = _stored_vitals(table.get(label))
+        current = _stored_vitals(table.get(key))
         before_air = current["air"]
         for vital, value in patch.items():
             if vital not in VITALS:
@@ -434,7 +460,7 @@ def apply_vitals_diff(scene: dict, incoming) -> dict:
             # back; what happens NEXT beat is the world's to say, through a
             # standing condition, which is what replaces this record at commit.
             add_air_denied(scene, label)
-        table[label] = {k: round(v, 4) for k, v in current.items()}
+        table[key] = {k: round(v, 4) for k, v in current.items()}
     return scene
 
 

@@ -38,6 +38,16 @@ def _harness(page: Page) -> None:
     # product defect, only a harness that had fallen a feature behind. It went
     # unseen because the browser job was being SKIPPED whenever a sibling job
     # failed, which is fixed in the same wave as this.
+    #
+    # The same reason, one layer down, and it is the general form of it: a
+    # harness that injects a caller must inject what that caller CALLS. `t()`
+    # is no longer self-contained -- since B25 (review 2026-09-07) it reaches
+    # for `i18nCompileTemplates`/`i18nTranslate` in `i18n-core.js`, which
+    # `index.html` loads ahead of `utils.js` for exactly this reason -- so the
+    # slice alone throws `ReferenceError: i18nCompileTemplates is not defined`
+    # on the first element `el()` builds.
+    core = (JS / "i18n-core.js").read_text(encoding="utf-8")
+
     utils = (JS / "utils.js").read_text(encoding="utf-8")
     s_start = utils.index("const S = {")
     t_end = utils.index("function initTheme(") if "function initTheme(" in utils \
@@ -52,6 +62,10 @@ def _harness(page: Page) -> None:
     end = chat.index("function proseEl(")
 
     page.set_content("<!doctype html><body><div id='out'></div></body>")
+    # `i18n-core.js` as its own tag, in the page order `index.html` uses: its
+    # `"use strict"` is a whole-script directive, and concatenating it ahead of
+    # the slices would put code under a mode the browser never runs it under.
+    page.add_script_tag(content=core)
     page.add_script_tag(content=utils[s_start:t_end] + "\n"
                         + components[el_start:el_end] + "\n" + chat[start:end])
 

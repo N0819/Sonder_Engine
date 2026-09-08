@@ -944,7 +944,7 @@ function importModal(kind) {
   };
   const re = el("input", { type: "checkbox", checked: true });
   const typeSel = kind === "lorebook" ? el("select", {}, S.boot.lorebook_types.map(t => el("option", { value: t }, t))) : null;
-  const sumIn = kind === "lorebook" ? el("input", { placeholder: "Brief summary for the mapping agent", style: "width:100%" }) : null;
+  const sumIn = kind === "lorebook" ? el("input", { placeholder: "Brief summary of what this book covers", style: "width:100%" }) : null;
 
   modal(`Import ${kind}`, b => {
     b.append(drop, fileIn, status,

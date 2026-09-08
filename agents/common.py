@@ -1297,9 +1297,13 @@ def attire_exposure_facts(sc, bodies):
     """
     out, ledger = [], (sc or {}).get("attire") or {}
     for key, refs in bodies or ():
-        entry = ledger.get(key)
+        # `entry_for`, not a bare `.get`: the caller passes whatever spelling
+        # it holds, and a miss here means no covered region is reported --
+        # the screen then stops objecting to a covered region narrated bare
+        # (review 2026-09-07 B5).
+        entry = attire_model.entry_for(ledger, key)
         refs = [str(r).strip() for r in (refs or ()) if str(r).strip()]
-        if not isinstance(entry, dict) or not refs:
+        if not entry or not refs:
             continue
         regions = (attire_model.rederive_entry(entry) or {}).get("regions") or {}
         partial = set(attire_model.partially_exposed_regions(regions))
@@ -1500,12 +1504,13 @@ def region_visibility(sc, observer, body, entry=None):
     """
     sc = sc if isinstance(sc, dict) else {}
     if entry is None:
+        # The ledger's own reader owns the key tolerance -- this was one of
+        # four open-coded copies of it (review 2026-09-07 B5). Read back
+        # through the key so a present-but-empty entry stays distinct from
+        # an absent one, which is the distinction this `is None` turns on.
         ledger = sc.get("attire") or {}
-        entry = ledger.get(body)
-        if entry is None:
-            key = str(body or "").strip().casefold()
-            entry = next((value for name, value in ledger.items()
-                          if str(name).strip().casefold() == key), None)
+        key = attire_model.key_for(ledger, body)
+        entry = ledger.get(key) if key is not None else None
     regions = {}
     if isinstance(entry, dict):
         regions = (attire_model.rederive_entry(entry) or {}).get("regions") or {}
@@ -1580,10 +1585,11 @@ def observer_body_regions(sc, observer, body_labels=None, extra_parts=None):
     results = []
     for body, label in labels.items():
         folded = str(body or "").strip().casefold()
-        entry = ledger.get(body)
-        if entry is None:
-            entry = next((value for key, value in ledger.items()
-                          if str(key).strip().casefold() == folded), None)
+        # Key tolerance through the ledger's own reader (review 2026-09-07
+        # B5); read back through the key so an authored-but-empty entry is
+        # still an entry, as the `not isinstance(...)` below reads it.
+        key = attire_model.key_for(ledger, body)
+        entry = ledger.get(key) if key is not None else None
         parts = parts_map.get(body)
         if parts is None:
             # One being, one name: the map is keyed by display name and the
@@ -9869,6 +9875,66 @@ def _resolve_player_room(sc, pers, interp, cast, player_input=None):
         if llm_room:
             return llm_room
     return None
+
+
+def player_room_in(sc, ctx, pers=None, interp=None, player_name=None,
+                   resolve=True):
+    """The player's room IN THE SCENE THIS STAGE BUILDS ITS VIEWS FROM.
+
+    THE ONE ORDERING, and it lives here because every stage that asks the
+    question has to get the same answer: the scene, then the cached answer,
+    then the resolver.
+
+    The scene wins whenever it places the body, because presence and channel
+    have to be two readings of one world. `perception_act` resolved the room
+    against the scene as stored and then merged the player's own asserted
+    state onto a copy fourteen lines later, so every
+    `spatial_rel_between(..., target_room=p_room)` after that graded the
+    player from the room she had left while the same scene said she was
+    somewhere else -- one observer's view carrying her presence in the new
+    room and her lines delivered as co-present in the old one, which is a
+    channel nobody had.
+
+    The cached `ctx["_player_room"]` is a fallback rather than the first
+    answer, for the same reason: it was written before this beat's assertions
+    reached the scene. It still stands in where the scene tracks no position
+    for the player at all, and the resolver -- which may cost a model call --
+    is asked only when neither has an answer. The cache is refreshed on the
+    way out, so the stages after this one read the same room these views were
+    built from.
+
+    Review 2026-09-07 finding B36 is why the ladder is a function rather than
+    a habit: five readers spelled it five ways -- `background_react` read the
+    scene by spelling and then a `scene["player_room"]` key nothing in the
+    engine writes; `dressing/backdrops._room_of_player` did the same for the
+    image and sound routes, so the room a player stood in under her entity id
+    was neither drawn nor sounded; `director_interpret` read the cache and
+    then the resolver with no scene read at all; the narrator read the cache
+    and then the scene (the exact inversion this docstring argues against);
+    and `perception_establish` named the resolver directly -- the mildest of
+    the five, since the resolver's own first rung is the scene, so what that
+    stage ANSWERS did not change, only where it is spelled.
+    `resolve=False` truncates the ladder for a stage that may not spend a
+    model call, or that has no cache to reach at all; it never reorders it.
+
+    One reader stays off the ladder on purpose: `director_resolve` reads
+    `ctx["_player_room"]` directly, because it is the stage that DECIDES the
+    room and needs the answer the beat arrived with. Its reasoning is written
+    where it reads it (`director._reconcile_resolution`).
+    """
+    if pers is None:
+        pers = persona_of(ctx.chat)
+    name = player_name or (pers.get("name") or persona_name(pers)
+                           if isinstance(pers, dict) else None)
+    room = room_of(sc, name) if name else None
+    if not room:
+        room = ctx.get("_player_room")
+    if not room and resolve:
+        room = _resolve_player_room(sc, pers, interp, ctx.cast,
+                                    ctx.get("input"))
+    if room:
+        ctx["_player_room"] = room
+    return room
 
 
 # ---- What the player asserts is true before anyone reacts to it ----

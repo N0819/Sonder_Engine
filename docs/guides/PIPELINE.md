@@ -954,7 +954,7 @@ are: parallel `character:<id>` steps require `autonomy == 0` on an uncontested
 beat and `narrator_extra` requires extra players — so a typical story runs
 strictly sequentially and correctly shows no groups at all.
 
-`_engine_notes` is a reserved key on a step's saved content (`agents/storage.py`),
+`_engine_notes` is a reserved key on a step's saved content (`persist/steps.py`),
 carrying what the deterministic layer did to that step's output: the warnings
 raised while it ran, tagged by `pipeline_context.current_step_key`, and which
 steps it ran beside. It is stripped by `active_content`, so a rerun rehydrating

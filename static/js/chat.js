@@ -910,8 +910,11 @@ function handleEvt(ev) {
 // The narrator's prose is finished, and it is already on the wire: `_evt` puts
 // the whole step output in the `step` event and this handler used only its
 // label. So the reader sat through everything AFTER the words existed --
-// commit's mapping call, three embedding batches, the sixteen-domain write
-// transaction, periodic consolidation -- and then got the beat all at once
+// commit's memory preparation, its embedding batches and the twenty-one-domain
+// write transaction (E48/E49: no mapping call is in that tail any more -- the
+// mapping model was retired 2026-09-04 and `persist/commit_mapping` is a
+// deterministic filing domain; autobiographical consolidation left the turn's
+// wall clock for `jobs.py`) -- and then got the beat all at once
 // from `openChat`'s re-render at the end of `runStream`.
 //
 // Measured: commit alone is ~3.4% of a turn, and the whole tail behind it is

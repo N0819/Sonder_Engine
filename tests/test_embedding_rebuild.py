@@ -85,9 +85,10 @@ def _rebuild_one_checkpoint(temp_db, chat_id, memories, extra=None):
 # on crc32 hashes until 2026-08-20, because `search_memories` ranked on them.
 # It no longer does: the hash correlates with real similarity at r = 0.028 and
 # measured 49 probes WORSE than no vector channel at all
-# (`docs/experiments/CRC32_CONTROL.md`, UNBUILT 2.21), so it is refused as a
-# relevance signal. Which means those three tests had been passing on noise
-# that happened to be shaped like an answer.
+# (`docs/experiments/CRC32_CONTROL.md` -- E-mind-1 sibling, 2026-09-07: this
+# also named UNBUILT §2.21, a heading deleted when the refusal landed), so it
+# is refused as a relevance signal. Which means those three tests had been
+# passing on noise that happened to be shaped like an answer.
 #
 # The property each one asserts is real and worth keeping; it just needs a
 # provider to be true. This stub is the smallest thing that IS one: a bag of

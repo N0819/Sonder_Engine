@@ -1018,7 +1018,7 @@ def test_a_lit_room_still_lists_its_standing_sight():
         scene, "Hinami", "", [], set(), {}, "yard")["sight"]
 
     assert sight["status"] == "live"
-    assert "light: lit" in sight["standing"]
+    assert "light: lit" in [row["clause"] for row in sight["standing"]]
 
 
 def test_player_quote_in_event_order_is_not_a_reproduction_requirement():

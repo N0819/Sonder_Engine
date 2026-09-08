@@ -18,6 +18,7 @@ from story.character_schema import (
     character_abilities,
     character_appearance,
     character_extra_parts,
+    character_identity_from_text,
     character_initial_outfit,
     character_initial_active_state,
     character_initial_stance,
@@ -531,7 +532,12 @@ def visible_body_text(body, name, scene):
 
 def appearance_of(name, base, scene):
     ov = (scene.get("overlays") or {}).get(name) or []
-    att = (scene.get("attire") or {}).get(name) or {}
+    # Through `entry_for`, the same reader `visible_body_text` uses eleven
+    # lines above: a bare `.get` here answered "wearing nothing" for a body
+    # whose ledger key is a case variant, while its neighbour found the
+    # garments -- one wardrobe, two answers about one person (review
+    # 2026-09-07 B5).
+    att = attire_model.entry_for(scene.get("attire"), name)
     # Same reason as `agents.common.attire_view`: read the ledger through its
     # own normalisation rather than off the stored dict, or a stale or
     # malformed flat list reaches every observer of this body verbatim. This
@@ -2739,17 +2745,31 @@ def dialogue_budget(chat, turn, cid, nonce):
             "hard_max": hi, "may_stay_silent": lo == 0}
 
 def cast_scene_context(cast_rows):
-    """Build scene-relevant character dossiers for mapping and director."""
+    """Build scene-relevant character dossiers for mapping and director.
+
+    IDENTITY THROUGH THE ONE READER (review 2026-09-07 B12). The aliases used
+    to be read straight out of the stored blob -- `sheet["identity"]["aliases"]`
+    -- while `character_scene_keys` and `carriers._carriers` read the same list
+    through `normalize_character_data`. A card whose aliases the shape repair
+    has to lift back into `identity`, or a legacy card that keeps them at top
+    level, therefore reached the director and mapping payloads with NO aliases
+    while the rest of the turn was resolving that same body BY them: one turn,
+    two answers to what a person is called.
+
+    `cast_entity_id` keeps the RAW sheet on purpose: normalization mints a
+    fresh uid for a sheet that has none, and this id must be the same string
+    every turn. Its docstring carries that argument.
+    """
     result = []
     for row in cast_rows:
         sheet = json.loads(row["sheet"])
-        identity = sheet.get("identity") or {}
+        identity = character_identity_from_text(row["sheet"])
         extra_parts = character_extra_parts(sheet)
         result.append({
             "id": int(row["id"]),
             "entity_id": cast_entity_id(sheet, row["id"]),
             "name": character_name(sheet),
-            "aliases": identity.get("aliases") or [],
+            "aliases": identity["aliases"],
             "appearance": character_appearance(sheet),
             # Authored structured extra body parts. Key absent for the
             # ordinary body so existing payloads are byte-identical.

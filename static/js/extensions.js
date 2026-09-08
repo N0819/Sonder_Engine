@@ -255,8 +255,9 @@ const Sonder = {
   },
 
   notices() {
-    // A copy, so a reader of the list cannot mutate the registry through it --
-    // the same rule `state()` follows.
+    // A real copy, field by field: every value here is a scalar, so a reader
+    // of the list cannot mutate the registry through it. `state()` is the
+    // weaker promise (E50) -- fresh container, live objects inside.
     return Sonder._notices.map(notice => ({
       id: notice.id, owner: notice.owner, title: notice.title,
       body: notice.body, level: notice.level
@@ -332,7 +333,8 @@ const Sonder = {
   },
 
   // Every section belonging to one extension, for the host's menu to render.
-  // A copy, so the menu cannot mutate the registry through it.
+  // A copy of the LIST, so the menu cannot add to or remove from the registry
+  // through it; the entries are the live registrations (E50).
   _settingsFor(extId) {
     return Sonder._settings.filter(item => item.owner === extId);
   },
@@ -366,8 +368,10 @@ const Sonder = {
   },
 
   // ---- Host services ----
-  // Read-only view of what the app currently has open. A copy, so an
-  // extension cannot write to `S` through it.
+  // Read-only view of what the app currently has open. The object handed
+  // back is fresh, but `boot` and `chat` are the host's LIVE objects, not
+  // clones (E50) -- rebinding a key on this object cannot reach `S`, writing
+  // through `state().chat` can. Treat both as read-only; the host owns them.
   state() {
     return {
       boot: typeof S === "object" && S ? S.boot : null,

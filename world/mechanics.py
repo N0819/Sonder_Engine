@@ -781,18 +781,6 @@ def _tick_subjects(scene, cond):
     return [subject]
 
 
-def _vitals_entry_key(table, name):
-    """The key under which `name`'s vitals are stored, or None. Casefolded,
-    matching `survival.vitals_of` -- the table is keyed by display name."""
-    target = str(name or "").strip().casefold()
-    if not target:
-        return None
-    for key, record in table.items():
-        if str(key).strip().casefold() == target and isinstance(record, dict):
-            return key
-    return None
-
-
 def inert_condition_ids(conditions):
     """Active conditions that SPELL a cadence and fill it with a non-cadence.
 
@@ -844,7 +832,7 @@ def _tick_conditions(scene, conditions, elapsed):
     One op shape: ("tick_condition", condition_id, new_next_tick), applied by
     the commit domain as the `next_tick` column write the table was built for.
     """
-    from world.survival import _stored_vitals
+    from world.survival import _stored_vitals, vitals_entry_key
 
     event_ops, notices, unnamed, air_taken = [], [], [], []
     for cond in conditions or []:
@@ -909,7 +897,9 @@ def _tick_conditions(scene, conditions, elapsed):
                 # a hunger clock in every story that never enabled survival.
                 # Dropped in silence: the setting being off is not a failure.
                 break
-            key = _vitals_entry_key(table, subject)
+            # One body is one row, and `world.survival.vitals_entry_key` is
+            # the single answer to which row that is (review 2026-09-07, B4).
+            key = vitals_entry_key(table, subject)
             if key is None:
                 # The ledger EXISTS and this subject is not in it -- a real
                 # miss worth saying, not a setting. Condition subjects are
@@ -1001,21 +991,17 @@ def _condition_states_harm(cond):
 
 
 def _hazard_rooms(scene, conditions):
-    """Room ids this scene states are dangerous to stand in, by cause.
+    """Room ids this world states are dangerous to stand in, by cause.
 
-    Two sources, both facts the ENGINE already owns and neither of them prose:
-    a room carrying a `hazard` block (`world.region_events.apply_wave` writes
-    it), and an active `world_conditions` row whose subject resolves to a
-    room. Nothing here reads a description, a name or a severity word.
+    ONE SOURCE: an active `world_conditions` row whose subject resolves to a
+    room of this scene. It used to read a second one -- a `hazard` block on
+    the scene's room dict -- and a question with two stores is a question
+    with two answers (review 2026-09-07 B8); `world.region_events.apply_wave`
+    now states its hazard in the table every other standing condition of a
+    place is already in. Nothing here reads a description, a name or a
+    severity word.
     """
     out = {}
-    rooms = (scene or {}).get("rooms")
-    if isinstance(rooms, dict):
-        for rid, room in rooms.items():
-            hazard = room.get("hazard") if isinstance(room, dict) else None
-            if isinstance(hazard, dict) and str(hazard.get("state") or "").strip():
-                out.setdefault(str(rid), []).append(
-                    str(hazard.get("cause") or hazard.get("state")))
     for cond in conditions or []:
         rid = condition_subject_room(scene, cond.get("subject_id"))
         if not rid or not _condition_states_harm(cond):

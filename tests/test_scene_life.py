@@ -50,8 +50,11 @@ def _scene():
         },
         # Positions are keyed by opaque entity id, NOT display name -- the
         # exact mismatch that made co-presence lookups miss nearly every
-        # presence in the first live run.
-        "player_room": COMMON,
+        # presence in the first live run. The player is placed under her
+        # persona name like any body; the `player_room` key this fixture
+        # used to carry is one nothing in the engine writes, and review
+        # 2026-09-07 B36 put every reader on the one ladder (scene, cache,
+        # resolver), so a fixture that leans on the dead key places nobody.
         "positions": {"Kessa Vane": COMMON, "barkeep": COMMON,
                       "local_1": COMMON, "cellarman": CELLAR},
         "entities": {
@@ -84,6 +87,10 @@ def _make_ctx(temp_db, presences=None, scene=None):
          time.time(), "char_bran"))
     temp_db.qi("INSERT INTO chat_chars(chat_id,char_id,status,state) "
                "VALUES(?,?,?,?)", (chat_id, char_id, "active", "{}"))
+    persona_id = temp_db.qi(
+        "INSERT INTO personas(name,sheet) VALUES(?,?)",
+        ("Kessa Vane", json.dumps({"name": "Kessa Vane"})))
+    temp_db.q("UPDATE chats SET persona_id=? WHERE id=?", (persona_id, chat_id))
     cast = temp_db.q(
         "SELECT ch.*,cc.state AS cstate,cc.status FROM chat_chars cc "
         "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?", (chat_id,))
@@ -94,7 +101,7 @@ def _make_ctx(temp_db, presences=None, scene=None):
         "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
         (chat_id, 5, "", time.time()))
     return PipelineContext(
-        chat=ChatData(id=chat_id, name="Tavern", persona_id=None,
+        chat=ChatData(id=chat_id, name="Tavern", persona_id=persona_id,
                       lorebook_id=None, scenario="", created=time.time()),
         turn=TurnData(id=turn_id, chat_id=chat_id, idx=5, player_input="",
                       created=time.time()),

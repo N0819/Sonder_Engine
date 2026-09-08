@@ -92,6 +92,8 @@ from __future__ import annotations
 
 import json
 
+from story.attire import entry_for as attire_entry_for
+
 #: Characters of a room's description a slice carries. A browser opening a
 #: room wants the prose; a neighbourhood of a dozen rooms wants it bounded.
 DESCRIPTION_CHARS = 600
@@ -499,8 +501,12 @@ def room_slices(cid, frame_id, room_ids, scene=None):
             "description": _text(room.get("desc") or room.get("description"),
                                  DESCRIPTION_CHARS),
             "exits": list(exits.values()),
+            # `entry_for`: the occupant's name comes off `positions`, whose
+            # spelling of a body need not match the wardrobe's -- a bare
+            # `.get` blanked the attire column for a dressed body (2026-09-07
+            # B5).
             "occupants": [{"name": who, "station": stations.get(who),
-                           "attire": attire.get(who)}
+                           "attire": attire_entry_for(attire, who) or None}
                           for who in occupants.get(rid, [])],
             "things": things.get(rid, []),
             "planned_stub": briefs.get(rid),

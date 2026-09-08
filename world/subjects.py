@@ -122,7 +122,8 @@ def _cast_matches(cid, spelling, frame_id=None):
     """Cast rows answering to `spelling` by name, alias, authored uid or the
     ``character:<id>`` fallback -- the id spellings included so an id already
     in hand round-trips through resolution unchanged."""
-    from story.character_schema import cast_entity_id, character_name_from_text
+    from story.character_schema import (
+        cast_entity_id, character_identity_from_text, character_name_from_text)
     from story.scene import extant_cast
 
     target = _fold(spelling)
@@ -132,10 +133,14 @@ def _cast_matches(cid, spelling, frame_id=None):
             sheet = json.loads(row["sheet"] or "{}")
         except Exception:
             sheet = {}
-        identity = (sheet or {}).get("identity") or {}
+        # Aliases through the one identity reader (review 2026-09-07 B12).
+        # Read off the stored blob they went missing for exactly the cards the
+        # shape repair had to rescue -- and a subject spelling that resolves to
+        # nobody is a diff channel dropped.
+        identity = character_identity_from_text(row["sheet"])
         eid = cast_entity_id(sheet, row["id"])
         labels = {_fold(character_name_from_text(row["sheet"])), _fold(eid)}
-        labels.update(_fold(a) for a in (identity.get("aliases") or []))
+        labels.update(_fold(a) for a in identity["aliases"])
         labels.discard("")
         if target in labels:
             hits.append((eid, character_name_from_text(row["sheet"])))

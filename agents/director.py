@@ -15,6 +15,7 @@ from story.character_schema import (
     character_abilities,
     character_appearance,
     character_extra_parts,
+    character_identity,
     character_initial_outfit,
     character_name,
     character_name_from_text,
@@ -113,7 +114,7 @@ from .common import (
     _quote_body,
     _unknown_actor_label,
     _requires_reaction_phase,
-    _resolve_player_room,
+    player_room_in,
     _sync_sequence_mirrors,
     assign_event_ids,
     authored_other_subject,
@@ -200,6 +201,8 @@ from .director_floors import (
     resolve_concealment_refs,
     strip_addressee_concealment,
     _unplaced_minted_entities,
+    unplaced_mints_needing_a_room,
+    place_unplaced_mints,
     _bind_minted_entities_to_present_figures,
     _mint_fallback_room,
     _untracked_restraint_subjects,
@@ -498,6 +501,22 @@ def director_establish(ctx, nonce):
     # gate the town's own watch stands). Same floor, same figures source,
     # pooled by the rooms the opening places anybody in.
     _establish_identity_floor(ctx, out, player_name)
+    # AND IT IS PLACED LIKE ANY OTHER BEAT'S MINT. The opening places most of
+    # what it mints and the schema refuses an unplaced agent outright, but the
+    # rest reached the commit's orphan pass with nothing between -- so the
+    # opening's own merge, and everything composed from it, read a thing as
+    # nowhere that the commit then stood in the player's room (review
+    # 2026-09-07 B15). The opening has no scene before it, so its own diff is
+    # the whole world the placement can read.
+    _opening_room = _mint_fallback_room(out["state_diff"], player_name, None)
+    for _eid in place_unplaced_mints({}, out["state_diff"], _opening_room):
+        _note = (
+            "%r was minted with no room, so the opening stood it where the "
+            "opening is (%s). A thing in no room can be seen, reached and "
+            "acted on by nobody; write `positions` for anything you mint."
+            % (_eid, _opening_room))
+        ctx.add_warning(_note)
+        ctx.tell_director(_note)
     return out
 
 
@@ -812,10 +831,11 @@ def director_interpret(ctx, nonce):
     chat = ctx.chat
     sc = get_scene(chat["id"], chat)
     pers = persona_of(chat)
-    p_room = ctx.get("_player_room")
-    if p_room is None:
-        p_room = _resolve_player_room(sc, pers, None, ctx.cast, ctx.get("input"))
-        ctx["_player_room"] = p_room
+    # The scene before the cache before the resolver -- one ordering for the
+    # whole pipeline (`common.player_room_in`, review finding B36). This
+    # stage used to read the cache FIRST, so a rerun carrying last beat's
+    # answer outranked the committed scene it was interpreting against.
+    p_room = player_room_in(sc, ctx, pers=pers)
 
     cast_info = []
     for c in ctx.cast:
@@ -2182,6 +2202,18 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
     audit_omissions = []
     if run_deep:
         recon["audited"] = True
+        # WHERE THE BEAT FOUND THE PLAYER, not where it leaves her. Every
+        # `ctx["_player_room"]` read in this stage -- this slice, the payload's
+        # room/plan/note scoping, and the mint floor's fallback -- deliberately
+        # stays off `common.player_room_in`'s ladder (review finding B36), and
+        # the reason is that resolve is the stage that DECIDES the room: a
+        # scene rung ahead of the cache would answer with the pre-turn
+        # committed scene and outrank the reading this beat has already made
+        # (interpret's, refreshed by `perception_act` from the previewed
+        # declaration). Where resolve's own answer exists it supersedes this
+        # one in code rather than in the ladder -- `_mint_fallback_room` reads
+        # the merged diff's position first and falls back to the cache only
+        # when the beat moved nobody.
         scene_slice = _reconcile_scene_slice(
             sc, ctx.cast, ctx.get("_player_room"), sd)
         audit_omissions = _deep_audit_omissions(
@@ -3922,9 +3954,15 @@ def director_resolve(ctx, nonce, _corrections=None):
             _cs = json.loads(_c["sheet"])
         except Exception:
             continue
-        _cn = character_name(_cs)
-        _cp = ((_cs.get("identity") or {}).get("pronouns") or {})
-        if _cn and isinstance(_cp, dict):
+        # Through the ONE identity reader (review 2026-09-07 B12): a card
+        # whose pronouns a model parked at top level is repaired only for
+        # whoever normalizes, so the raw read gave this roster nothing for
+        # exactly such a body -- and an absent paradigm is how the pronoun
+        # crossed the room in the first place.
+        _ident = character_identity(_cs)
+        _cn = _ident["name"]
+        _cp = _ident["pronouns"]
+        if _cn:
             _body_pronouns[_cn] = _cp
     if _player_name and isinstance(pers, dict):
         _pp = ((pers.get("identity") or {}).get("pronouns")
@@ -4614,36 +4652,6 @@ def director_resolve(ctx, nonce, _corrections=None):
             f"there is no passable route from '{_from}' to '{_to}'; "
             "position unchanged.")
 
-    # A THING THAT EXISTS AND IS NOWHERE. `entities` carries no location, and
-    # the hand that owns it cannot write `positions` -- so a mint plus a
-    # transfer op whose destination resolves to nothing leaves a noun the
-    # fiction is holding and the world cannot place. Measured after the
-    # placement derivation lands, on the merged diff, so it reports only what
-    # is still unplaced once every deterministic pass has had its say.
-    #
-    # SAYS WHAT IT KNOWS, AND NOT WHAT HAPPENS NEXT. This used to end "so
-    # nothing can perceive or act on them", which is a claim about the END of
-    # the beat that this stage cannot make: `commit_scene_state.
-    # _place_orphan_mints` runs afterwards and stands a minted orphan in the
-    # room the beat resolved the player into -- it was BUILT to answer this
-    # very warning (its docstring: "a warning nothing acts on"). Measured
-    # live, chat 117 turn 78: `conduit_joints` was reported here as beyond
-    # perception and committed into riser 13 in the same beat, and the
-    # warning sent a reader hunting a defect that had already been handled.
-    # The diff really is silent about where these go, and the fallback really
-    # can decline (no player room, or two of them), so the report stays --
-    # narrowed to the fact it owns.
-    _unplaced = _unplaced_minted_entities(sc, sd)
-    if _unplaced:
-        ctx.add_warning(
-            "Unplaced entities: this diff mints %s and says where none of "
-            "them go. Commit will stand each in the room the beat resolved "
-            "the player into; where the beat names no single such room, they "
-            "are left nowhere and nothing can perceive or act on them. Put "
-            "each one in state_diff.positions, or move it with a "
-            "state_diff.inventory_ops entry whose to_id names a room or a "
-            "body the scene already knows." % ", ".join(_unplaced[:6]))
-
     # A MINTED ROLE A PRESENT BODY ALREADY HOLDS IS THAT BODY. The payload
     # showed the prose author and the objects hand who is standing here
     # (`present_figures`); this is the floor under it, for the beat where
@@ -4658,9 +4666,10 @@ def director_resolve(ctx, nonce, _corrections=None):
     # (`identity_bindings` null on all forty turns). The merged diff's own
     # position for the player, written by the movement backstop above, is
     # the answer; the pre-move room only when the beat did not move them.
+    _mint_room = _mint_fallback_room(sd, p_name, ctx.get("_player_room"))
     _bound = _bind_minted_entities_to_present_figures(
         sc, sd, list(_present_figures) + list(_reserved_figures),
-        fallback_room=_mint_fallback_room(sd, p_name, ctx.get("_player_room")),
+        fallback_room=_mint_room,
         dialogue_log=out.get("dialogue_log"),
         dialogue_order=out.get("dialogue_order"))
     for _b in _bound:
@@ -4674,6 +4683,45 @@ def director_resolve(ctx, nonce, _corrections=None):
                 "by name)" if _b["ambiguous"] else ""))
     if _bound:
         out["identity_bindings"] = _bound
+
+    # A THING THAT EXISTS AND IS NOWHERE. `entities` carries no location, and
+    # the hand that owns it cannot write `positions` -- so a mint plus a
+    # transfer op whose destination resolves to nothing leaves a noun the
+    # fiction is holding and the world cannot place. Answered here, on the
+    # merged diff, after every other placement pass has had its say (the
+    # binding above included: a bound mint may take the room its PLAN
+    # authored, and that write is guarded on the mint not being placed yet).
+    #
+    # THE BEAT'S OWN ANSWER, NOT THE COMMIT'S. This used to be a warning
+    # alone, and `commit_scene_state._place_orphan_mints` stood the orphan in
+    # the room the beat resolved the player into once the beat was over -- so
+    # the omission audit, the warning and the mid-turn merge every later stage
+    # is composed from all read "nowhere" while the commit read a room
+    # (review 2026-09-07 B15; chat 117 turn 78, where `conduit_joints` was
+    # reported beyond perception and committed into riser 13 in one beat).
+    # Same rule, same room, written where all four readers see it. The commit
+    # keeps its pass as the backstop for a diff that never met this floor.
+    _placed = place_unplaced_mints(sc, sd, _mint_room)
+    for _eid in _placed:
+        _note = (
+            "%r was minted with no room, so the beat stood it where the beat "
+            "is (%s). A thing in no room can be seen, reached and acted on by "
+            "nobody; write `state_diff.positions` for anything you mint."
+            % (_eid, _mint_room))
+        ctx.add_warning(_note)
+        ctx.tell_director(_note)
+    # What no room could be found for: the fallback declines where the beat
+    # names no single room the player is in, and a body is placed by the
+    # machinery that walks it rather than by this floor.
+    _unplaced = _unplaced_minted_entities(sc, sd)
+    if _unplaced:
+        ctx.add_warning(
+            "Unplaced entities: this diff mints %s and says where none of "
+            "them go, and the beat could not say where to stand them, so they "
+            "are nowhere and nothing can perceive or act on them. Put each "
+            "one in state_diff.positions, or move it with a "
+            "state_diff.inventory_ops entry whose to_id names a room or a "
+            "body the scene already knows." % ", ".join(_unplaced[:6]))
 
     # `_guard_approach_is_not_arrival` used to run HERE and was undone on every
     # beat it fired. It now runs at the END of this function; see the call site

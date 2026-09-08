@@ -88,7 +88,7 @@ from story.scene import persona_of
 from .common import (_agent_json, _recognizes, _unknown_actor_label,
                      character_room, character_scene_keys,
                      communication_surface, observable_action_text,
-                     scene_figures)
+                     player_room_in, scene_figures)
 
 _log = logging.getLogger(__name__)
 
@@ -679,17 +679,24 @@ def _place_block(ctx, room_id):
 
 
 def _player_room(ctx, sc):
+    """The player's room in THIS beat's scene, on the pipeline's one ordering.
+
+    `common.player_room_in`: the scene (here `_beat_scene`, the freshest room
+    this stage legitimately has), then the cached answer every perception
+    stage refreshes, then the resolver -- which this stage does not ask,
+    because the rung that may cost a model call belongs to the stages that
+    build views and `perception_act` has already spent it this beat.
+
+    Review finding B36: this used to be its own ladder -- a spelling-only
+    position lookup and then `scene["player_room"]`, a key nothing in the
+    engine writes -- so a player the scene held under an entity id or alias
+    had no room here at all, and every hearing test in this module then
+    failed closed on a body that was standing right there.
+    """
     try:
-        from story.scene import persona_of, persona_name
-        pers = persona_of(ctx.chat)
-        pname = pers.get("name") or persona_name(pers) if isinstance(pers, dict) else None
-        if pname:
-            r = _room_of(sc, pname)
-            if r:
-                return r
+        return player_room_in(sc, ctx, resolve=False)
     except Exception:
-        pass
-    return sc.get("player_room") or None
+        return None
 
 
 def managed_presences(ctx, cap):

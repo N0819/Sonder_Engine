@@ -227,13 +227,16 @@ roll back a valid turn.
 called once per character per beat from `agents/character.py`. It returns:
 
 ```
-unresolved_from_past:      remembered concerns/threads only (≤6)
+unresolved_from_past:      the ONE list of what is still open -- live
+                           concerns and dangling summary threads, interleaved
+                           so neither source's length crowds out the other,
+                           deduped (≤6)
 recent_episodes:           first-hand chronological episodes, last 4 turns
 recent_received_information: durable heard/told/read side records, if any
 recent_conclusions:        inferred side records, if any
 recalled_old_memories:     search_memories, k=16, minus anything already recent
 autobiographical_summary:  first-hand only — the LATEST window (§8)
-summary_key_phrases, unresolved_threads
+summary_key_phrases
 summary_citations:         typed past ids/when/epistemic origin for summaries
 earlier_in_my_life:        ≤2 earlier first-hand windows the beat ranks up,
                            oldest first, dated relatively; absent when none
@@ -521,7 +524,7 @@ its own ranking:
 ```python
 aspects = [("what you are trying to do", active_state["goal"]),
            ("how you are feeling",       active_state["mood"]),
-           ("what is still unsettled",   " ".join(unresolved_threads))]
+           ("what is still unsettled",   " ".join(unresolved_items))]
 ```
 
 Concatenating them onto the query did nothing, and this is the measurement that
