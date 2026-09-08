@@ -23,6 +23,13 @@ active_frame_id = contextvars.ContextVar("active_frame_id", default=None)
 # are deliberately NOT in this set: they're cross-frame contracts, not
 # per-era state, and must resolve to the same row regardless of which
 # frame is currently executing.
+#: A quick start that failed before it had a turn. NOT frame-scoped: it
+#: describes the whole attempt, and the chat it sits on has no story in it yet
+#: -- its presence is what tells every reader (the story library above all)
+#: that this row is a setup that did not finish rather than a story with no
+#: beats (owner, 2026-09-08).
+QUICK_START_FAILURE_KEY = "quick_start_failure"
+
 FRAME_SCOPED_WORLD_KEYS = {
     "scene", "known", "simulation_clock", "pending", "background_presences",
     "offscreen_log", "offscreen_epoch", "offscreen_plans",

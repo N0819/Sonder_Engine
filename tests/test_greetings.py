@@ -355,8 +355,18 @@ class TestQuickStartLorebook:
             str(cid_char)]
         assert route["handoff"]["journey_events"] == 1
 
-    def test_failed_lived_location_leaves_no_half_created_story(
+    def test_a_failed_lived_location_leaves_a_failed_setup_not_a_story(
             self, temp_db, monkeypatch):
+        """OWNER RULING 2026-09-08, overturning "leaves nothing at all".
+
+        The chat used to be deleted so that a failed start could not appear
+        as an invisible half-story. It appeared as nothing instead, which is
+        worse: "you can\'t retry a quickstart as the story receives no
+        entry", and the two model calls the attempt had already paid for went
+        with it. The row is KEPT and MARKED -- the marker is what stops it
+        being read as a story -- so the library can offer a retry that reuses
+        the salvaged plan, a discard, and an export of what happened.
+        """
         from core.db import q
         from llm.providers import ReasoningBudgetExhausted
         from story import greetings
@@ -376,10 +386,29 @@ class TestQuickStartLorebook:
                 cid_char, pid, lorebook_id=lb,
                 lived_location={"enabled": True, "brief": "the port"})
 
-        assert q("SELECT COUNT(*) AS n FROM chats", one=True)["n"] == 0
-        assert q(
-            "SELECT COUNT(*) AS n FROM lorebooks WHERE chat_id IS NOT NULL",
-            one=True)["n"] == 0
+        from core.db import QUICK_START_FAILURE_KEY, wget
+
+        rows = q("SELECT id FROM chats")
+        assert len(rows) == 1, "the attempt is kept, once"
+        chat_id = rows[0]["id"]
+
+        # ...and it is marked, which is the whole of what makes it not a story.
+        record = wget(chat_id, QUICK_START_FAILURE_KEY, None)
+        assert isinstance(record, dict)
+        assert record["error_type"] == "ReasoningBudgetExhausted"
+        assert record["stage"]
+        assert record["traceback"]
+
+        # Everything a retry needs to ask the same question again.
+        retry = record["retry"]
+        assert retry["char_id"] == cid_char and retry["persona_id"] == pid
+        assert retry["lorebook_id"] == lb
+        assert retry["lived_location"] == {"enabled": True,
+                                           "brief": "the port"}
+
+        # And it has no story in it: no turn, so nothing can be read from it.
+        assert q("SELECT COUNT(*) AS n FROM turns WHERE chat_id=?",
+                 (chat_id,), one=True)["n"] == 0
 
     def test_already_known_default_seeds_mutual_recognition(self, temp_db, monkeypatch):
         from core.db import wget

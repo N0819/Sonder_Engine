@@ -192,6 +192,12 @@ white-space:normal;overflow-wrap:anywhere}
 .item-actions{display:flex;flex:0 0 auto;align-items:center;justify-content:flex-end;gap:3px;white-space:nowrap;margin-left:auto}
 .icon-button{display:inline-flex;align-items:center;justify-content:center;min-width:30px;padding-inline:7px}
 .story-action{width:30px;min-width:30px;padding:0;opacity:.62}
+/* A failed setup is not a story: it does not respond to a click, its actions
+   are always visible because they are the only thing to do with it, and it is
+   tinted so the library reads at a glance (2026-09-08). */
+.failed-setup{cursor:default;opacity:.85;border-left:2px solid var(--danger,#c0392b)}
+.failed-setup .story-action{opacity:1}
+.failed-setup .item-label{font-style:italic}
 .story-item:hover .story-action,.story-item:focus-within .story-action,.story-item.on .story-action,.library-item:hover .story-action,.library-item:focus-within .story-action{opacity:1}
 .item.on{background:linear-gradient(90deg,color-mix(in srgb,var(--acc) 32%,transparent),rgba(34,43,61,.8));
 outline:none;border-color:color-mix(in srgb,var(--acc) 55%,var(--bd))}
