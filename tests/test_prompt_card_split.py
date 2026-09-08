@@ -48,7 +48,7 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 114   # -2 (2026-09-07, review E45): narrator_fidelity_correction
+PART_COUNT = 115   # -2 (2026-09-07, review E45): narrator_fidelity_correction
                    # and narrator_craft_correction, the two rewrite-pass
                    # fragments left behind when the second narrator call was
                    # deleted -- `agents/narration.py` says "THE FIDELITY
@@ -59,6 +59,10 @@ PART_COUNT = 114   # -2 (2026-09-07, review E45): narrator_fidelity_correction
                    # is written in (PB13: the Planner could dispatch an errand
                    # and the Director, which had just narrated the order,
                    # could not);
+                   # +1 (2026-09-08, review A87): `senses_note`, the shared
+                   # statement of what a sense entry's `needs_light` and
+                   # `equivalent` fields mean, referenced by the five
+                   # card-authoring prompts that carry the sense skeleton;
                    # +1 (2026-09-05): the objects hand's sensory_events chunk,
                    # the channel a one-beat signal is written in;
                    # +1 (2026-09-04): 27_author_notes.txt, the prose author's

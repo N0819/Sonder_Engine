@@ -2249,8 +2249,13 @@ class StateDiff(LenientModel):
     # authority tools/project_check.check_time_channel_vocabulary folds the
     # prompts and examples against.
     time: Optional[dict] = None
-    # One sky over the whole scene: {sky, precipitation, intensity, wind,
-    # temperature}, normalized to a closed vocabulary by weather.py. Emitted
+    # One sky over the whole scene. TWO HALVES since review 2026-09-07 A88:
+    # `sky` and `precipitation` are NAMES, authored free text this engine
+    # matches against nothing, and air/cloud/electrical/precipitation_kind/
+    # intensity/wind/temperature are what that weather DOES -- closed axes
+    # `weather.normalize_weather` validates, and the only thing any reader
+    # acts on. A record written before the axes existed has them recovered
+    # from its name at read. Emitted
     # only when a beat actually changes it -- absent means "unchanged", and
     # between Director edits the sky drifts deterministically on the
     # simulation clock (weather.advance_weather). How much of it any given
@@ -4962,7 +4967,9 @@ OUTPUT_EXAMPLES = {
         # example, because the scene above is fog off the water and an
         # opening that names weather in its prose and not in its channels
         # opens under the engine's fair-and-still default (A30).
-        "weather": {"sky": "fog", "precipitation": "none",
+        "weather": {"sky": "fog", "air": "thick", "cloud": "covered",
+                    "electrical": False, "precipitation": "none",
+                    "precipitation_kind": "none",
                     "intensity": "none", "wind": "breeze",
                     "temperature": "cold"},
         # Asked for by the sheet, so shown: a place too full to name person
@@ -5022,7 +5029,10 @@ OUTPUT_EXAMPLES = {
                      "explicit": False, "display_advance": ""},
             # Written OVER the sky already blowing, so a beat reports what it
             # noticed rather than restating the whole sky.
-            "weather": {"sky": "fog", "precipitation": "none",
+            "weather": {"sky": "fog", "air": "thick",
+                        "cloud": "covered", "electrical": False,
+                        "precipitation": "none",
+                        "precipitation_kind": "none",
                         "intensity": "none", "wind": "breeze",
                         "temperature": "cold"},
             "claim_dispositions": [],

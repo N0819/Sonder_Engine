@@ -2393,6 +2393,93 @@ def distant_sounds(scene: dict, listener: str, *, room=None, turn_idx=None,
 # The shape of the sound, for the composer (DESIGN_SOUND_FIELD.md § 4b)
 # ---------------------------------------------------------------------------
 
+#: The source kinds that STAND in a room, as against the ones that belong to
+#: the beat. An `entity` running, a `crowd` at rest and the `room`'s own floor
+#: are its tone -- they were there before the beat and are there after it; an
+#: `event` is a one-beat sound and a `speech` is a line, and `sound_shape`
+#: already refuses to name either as the room's shape for that reason (D3
+#: rework, 2026-09-08: a one-beat crash minted a soundscape key and the next
+#: quiet beat was then heard as that sound STOPPING).
+STANDING_SOURCE_KINDS = frozenset({"entity", "crowd", "room"})
+
+
+def room_holds_a_standing_source(scene: dict, room) -> bool:
+    """Does this room hold a thing that makes a STANDING sound -- running or
+    not?
+
+    The question the `ceased` verdict is really asking, and it is about the
+    room rather than about this beat: a generator switched off is still a
+    generator standing in the room, so its silence is news; a one-beat crash
+    leaves nothing behind, so there was never a sound of this room's to
+    stop. Declared `sound_source` on an entity placed here, or a crowd at
+    rest here -- the two kinds that were sounding before the beat and can go
+    on sounding after it.
+    """
+    from world.spatial_identity import room_of_record
+
+    rid = str(room or "")
+    if not rid or not isinstance(scene, dict):
+        return False
+    for eid, entity in (scene.get("entities") or {}).items():
+        if not isinstance(entity, dict) or not entity.get("sound_source"):
+            continue
+        if room_of_record(scene, eid, entity) == rid:
+            return True
+    for crowd in (scene.get("crowds") or ()):
+        if isinstance(crowd, dict) and str(crowd.get("room") or "") == rid:
+            return True
+    return False
+
+
+def _cell_noise(field, room, cell) -> float:
+    """The noise floor at one CELL of `room` on this field: the room's
+    ambient floor plus every placed source's intensity there.
+    `SoundField.noise_at` is the same sum for a BODY -- it locates the
+    body's cell first -- and this is the cell asked directly, which is what
+    a room-wide sweep needs. One arithmetic, so `sound_shape`'s grading and
+    `room_noise_word`'s sweep cannot disagree."""
+    total = field.ambient.get(room, AMBIENT["enclosed"])
+    for source in field.sources:
+        total += field.intensity_at(source, cell)
+    return total
+
+
+def room_noise_word(scene: dict, room: str, *, sound=None) -> Optional[str]:
+    """The ONE noise word the whole ROOM carries, or None when its cells do
+    not agree on one -- an UNEVEN room, which is `sound_shape` rule (a)
+    read from the other side -- and None as well when no field reaches the
+    room (no geometry, no cells of its own, a field laid on another room).
+
+    NOT AN OBSERVER'S QUESTION, deliberately (review 2026-09-07 D3, and its
+    rework). An even room has nothing to say about WHERE the sound is, so
+    `sound_shape` answers None and the shape's own `self` word goes with it
+    -- but the question an even room does answer, whether it went even by
+    falling quiet or by filling up, is a property of the room's cells and of
+    nothing else. Asking a body instead gets a different answer for a body
+    the scene cannot place: `SoundField.locate` stands an unmeasured body at
+    the room's CENTRE, so a huge dark hall with a generator running at one
+    wall grades `quiet` at the middle while the shape refuses to speak for
+    want of anything to grade, and "the noise has stopped" reaches a page
+    the generator is still running on (measured: a huge hall, a `loud`
+    source at the shelf, an unstationed observer). The room's own cells
+    cannot say that, and they hold for a measured and an unmeasured
+    observer alike.
+    """
+    if not room:
+        return None
+    # `sound_field` reads its listener only to resolve a room, and the room
+    # is the argument here -- there is no body in this question at all.
+    field = sound if sound is not None else sound_field(scene, room,
+                                                        room=room)
+    if field is None or field.room != room:
+        return None
+    cells = [c for c, r in field.grid.inside.items() if r == room]
+    if not cells:
+        return None
+    words = {noise_word(_cell_noise(field, room, c)) for c in cells}
+    return words.pop() if len(words) == 1 else None
+
+
 def sound_shape(scene: dict, observer: str, *, sound=None, room=None,
                 sweep=False) -> Optional[dict]:
     """Where the sound is, as the composer's closed-vocabulary input, or None
@@ -2437,10 +2524,7 @@ def sound_shape(scene: dict, observer: str, *, sound=None, room=None,
         return None
 
     def noise_at_cell(cell):
-        total = field.ambient.get(room, AMBIENT["enclosed"])
-        for source in field.sources:
-            total += field.intensity_at(source, cell)
-        return total
+        return _cell_noise(field, room, cell)
 
     words = {noise_word(noise_at_cell(c)) for c in own_cells}
     if len(words) <= 1:

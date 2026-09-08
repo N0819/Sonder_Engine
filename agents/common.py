@@ -60,7 +60,7 @@ from world.spatial import (
     room_of,
     same_subject,
     sense_adjusted,
-    sight_level,
+    sight_verdict,
     visual_level_between,
 )
 from mind.theory_of_mind import _TOM_CONFIDENCE_CAPS, cap_mind_model_updates
@@ -5043,9 +5043,16 @@ def _delivery_ok(relation, scene, observer_name, source_name, channel,
         return False
     if entity_arc(scene, observer_name, source_name) == "rear":
         return False
-    level = sight_level(relation)
-    if senses is not None:
-        level = sense_adjusted(level, "sight", senses)
+    # `sight_verdict` is the grade the LIGHT allowed plus what the place did
+    # to it (A87), in one derivation: passing both is what lets an authored
+    # sight that does not need light answer here -- the dark lifts for that
+    # perceiver and a glare in the eyes never dazzles it, while a wall and a
+    # shut container do exactly what they do to an eye. `sense_adjusted`
+    # spends the glare cap for every perceiver the light feeds, senses=None
+    # included, so this reads the same for an ordinary card as
+    # `sight_level(relation)` always did.
+    level, block = sight_verdict(relation)
+    level = sense_adjusted(level, "sight", senses, blocked_by=block)
     return level != "none"
 
 def _strip_identity_tokens(text, forms):

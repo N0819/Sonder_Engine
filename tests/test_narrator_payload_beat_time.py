@@ -8,9 +8,9 @@ carries `mode` ('action' | 'time_skip') and `duration_seconds`, and
 so the writer had nothing to distinguish a beat to SUMMARISE from a beat to
 play as a scene.
 
-`beat_time` is the bounded data half of the item, and only that: the sheet
-paragraph telling the narrator what to do with a `time_skip` is the owner's
-and is deliberately not here. The field is read verbatim from the resolve
+`beat_time` is the data half; the sheet paragraph telling the narrator what
+to do with a `time_skip` landed 2026-09-08 and is pinned at the foot of this
+file, in both packs. The field is read verbatim from the resolve
 and is ABSENT rather than guessed -- no time block, no `beat_time`; a
 malformed one (the shape is a dict by schema and a scalar in the wild) is
 not read at all; a block that declares its span only by endpoints carries
@@ -23,7 +23,10 @@ from __future__ import annotations
 
 import time
 
+import pytest
+
 from core.pipeline_context import ChatData, PipelineContext, TurnData
+from language_runtime import raw_card
 
 
 def _payload(temp_db, monkeypatch, resolve):
@@ -125,3 +128,18 @@ def test_a_span_with_no_duration_carries_only_its_mode(temp_db, monkeypatch):
         "resolved_event": "", "state_diff": {
             "time": {"display_advance": "a while later"}}})
     assert "beat_time" not in payload
+
+
+@pytest.mark.parametrize("lang", ["en", "ja"])
+def test_the_sheet_says_what_a_skipped_span_is(lang):
+    """The other half of D9, landed 2026-09-08: the field is announced.
+
+    A payload key no sentence explains is a field a reader may or may not
+    honour. The paragraph states the distinction rather than the beats it was
+    written for -- a skipped span is summary, an acted beat is a scene, and
+    neither licenses an event the numbered deliveries do not carry.
+    """
+    text = raw_card(lang)["prompts"]["narrator"]
+    assert "beat_time" in text
+    assert "time_skip" in text and "duration_seconds" in text
+    assert ("SUMMARY" in text) if lang == "en" else ("要約" in text)

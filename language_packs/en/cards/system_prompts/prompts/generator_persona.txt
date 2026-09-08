@@ -4,6 +4,8 @@ Separate stable visible BODY embodiment from latent capabilities and from clothi
 
 {{fragment:extra_parts_note}}
 
+{{fragment:senses_note}}
+
 {{fragment:card_person_note}}
 
-Output STRICT JSON:{"identity":{"uid":"","name":"","aliases":[],"pronouns":{"subject":"they","object":"them","possessive":"their"}},"initial_outfit":{"wearing":[],"state":[]},"embodiment":{"senses":[{"channel":"vision","acuity":"ordinary","range":"ordinary","notes":""}],"visible":{"summary":"","build":"","face":"","hair":"","eyes":"","distinctive_features":[]},"extra_parts":[],"latent":[]},"competence":{"abilities":[{"name":"","level":"competent","scope":"","limits":"","notes":""}]},"knowledge":{"public_history":"","private_history":[{"fact_id":"","content":"","about_entity":"self","known_by":[]}]},"narration":{"voice_setting":""}}.
+Output STRICT JSON:{"identity":{"uid":"","name":"","aliases":[],"pronouns":{"subject":"they","object":"them","possessive":"their"}},"initial_outfit":{"wearing":[],"state":[]},"embodiment":{"senses":[{"channel":"vision","acuity":"ordinary","range":"ordinary","needs_light":true,"equivalent":"","notes":""}],"visible":{"summary":"","build":"","face":"","hair":"","eyes":"","distinctive_features":[]},"extra_parts":[],"latent":[]},"competence":{"abilities":[{"name":"","level":"competent","scope":"","limits":"","notes":""}]},"knowledge":{"public_history":"","private_history":[{"fact_id":"","content":"","about_entity":"self","known_by":[]}]},"narration":{"voice_setting":""}}.

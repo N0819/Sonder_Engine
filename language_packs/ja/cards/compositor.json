@@ -251,6 +251,7 @@
     "sound_distant_plain": "{where}、{character}が響いてくる。",
     "sound_distant_overwhelming": "{where}、{character}が何もかもをかき消すほどの大音量で響いてくる。",
     "sound_distant_character_none": "何かの音",
+    "sound_ceased": "騒音が止んだ。",
     "loop_faint_sound": "どこかでかすかな音がするが、内容までは聞き取れない。",
     "loop_faint_sound_placed": "{where}からかすかな音がするが、内容までは聞き取れない。",
     "loop_muffled": "{label}の方から、くぐもった断片が聞こえる。「……{fragment}……」",

@@ -900,7 +900,8 @@ def _player_silence_note(sc, chat, sh, spoke, quiet_beats=0, label=None):
     # observer's own card grades it, as the composed view's does.
     if sense_adjusted(
             visual_level_between(sc, _positions_key(sc, character_scene_keys(sh)),
-                                 _positions_key(sc, [player])),
+                                 _positions_key(sc, [player]),
+                                 character_senses(sh)),
             "sight", character_senses(sh)) == "none":
         return {}
     # THE NAME PASSES THE SAME GATE THE VIEW DID. `observer_label_fn` exists

@@ -248,6 +248,15 @@ def own_state_of(held_needs, feel_entry):
     stress records `charter_feel` persists, only when they carry anything.
     No third affect model: `mood()` reaches the planner only through the
     `mood_weight` dial, which ships at 0.0 (E31, 2026-09-07).
+
+    EVERY NEED COUNTS HERE, `company` included, and that is deliberate
+    (D18 skeptic, 2026-09-08). This is the body describing ITSELF, not the
+    institution deciding anything about it, so the decision/report line in
+    `charter_needs.bears_on_duty` puts it on the report side: a lonely body
+    is short of company whether or not the watch bill may hear about it, and
+    a voice that could not say so is the silence D18 was written against.
+    `pressed` is the exception it already handles, since `pressure` reads
+    only what the bill may spend.
     """
     held = held_needs or {}
     worst = ""

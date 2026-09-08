@@ -124,7 +124,8 @@ from mind.memory_snapshot import (  # noqa: F401
 )
 from mind.memory_relationships import (  # noqa: F401
     RELATIONSHIP_AXES, Relationship, RelationshipGraph, _TRUST_INFERENCE_STEP,
-    apply_relationship_updates, get_relationships, record_relationship_event,
+    WITNESSED_PROVENANCE, apply_relationship_updates, apply_witnessed_signals,
+    get_relationships, record_relationship_event,
     relationship_history, relationships_for_payload, save_relationships,
     update_relationships_from_inference,
 )

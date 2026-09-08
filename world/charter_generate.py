@@ -18,7 +18,8 @@ from world.charter_surface import (deal_surface, default_looks,
                                    normalize_looks_profile, post_dress)
 from world.charter_model import (
     integer as _integer, normalize_charter, number as _number)
-from world.charter_needs import needs_template, seed_needs
+from world.charter_needs import (feeding_upkeep, needs_template,
+                                 seed_needs, unfed_notice)
 from world.charter_roster import seed_roster
 
 
@@ -62,8 +63,9 @@ priority,commons,upkeeps:{id:{place,floor,level,fails_untended,one_body_restores
 requires,depends_on}},posts:{id:{place,serves,requires,reports_to,authority}},
 populations:[{post,count,competence,berth,rank}],economy:{goods,stocks,targets,
 flows,markets},needs OPTIONAL:{rest|sustenance|health:{fed_by:upkeep id}} (the
-upkeep each bodily need draws on; sustenance is derived from the economy's
-consumed goods when omitted, health has no derivation and needs naming),
+upkeep each bodily need draws on; sustenance is derived when some institution
+in this location PRODUCES a good this one consumes and must be named otherwise,
+health has no derivation and needs naming),
 decisions:{policies}}]}. Use qualitative timescales only; never
 write drift_per_hour or service_per_hour. Planned rooms contain no prose.
 Match the naming STYLE of the setting; never copy a name the lore gives to an
@@ -1024,10 +1026,34 @@ def close_plan(plan, *, history=None, featured_residents=None,
                 f"{len(record['rooms'])} {record['mode']} minted "
                 f"({', '.join(record['rooms'])})")
     heads = {}
+    # THE SEARCH FOR WHAT FEEDS A BODY IS THE TOWN'S, NOT THE INSTITUTION'S
+    # (A25, owner's ruling 2026-09-08). A guesthouse buys its groceries and
+    # the farm that grows them is another charter's upkeep, so asking only
+    # this charter's own flows misses the chain the ruling names. Every
+    # charter is closed by now, so the whole town is in hand here and
+    # nowhere later. It stays a PRODUCED-and-consumed chain either way:
+    # measured on bench.db chat 114 the widened search still derives 0 of 4,
+    # because that town produces meals, linens and iced_fish and consumes
+    # none of them -- and all four charters warn, which is the ruling's
+    # outcome rather than a shortfall in it.
+    town = [(ckey, state.get("upkeeps"), state.get("economy"))
+            for ckey, state, _places in pending]
     for ckey, state, _places in pending:
+        others = [row for row in town if row[0] != ckey]
+        authored_needs = state.pop("needs_authored", None)
         state["needs"] = seed_needs(state["bodies"], needs_template(
-            state.pop("needs_authored", None), state.get("upkeeps"),
-            state.get("economy")))
+            authored_needs, state.get("upkeeps"), state.get("economy"),
+            others))
+        # A NEED THE TOWN CANNOT FEED IS A LORE FACT, NOT A DEFAULT. Left
+        # unsaid it is serviced at supply 1.0 forever and the economy has no
+        # body at the end of it, which is the silence A25 was filed against.
+        feeder = feeding_upkeep(state.get("upkeeps"), state.get("economy"),
+                                others)
+        authored_fed = str(((authored_needs or {}).get("sustenance")
+                            or {}).get("fed_by") or "") \
+            if isinstance(authored_needs, dict) else ""
+        if not authored_fed and (feeder is None or feeder["charter"]):
+            closure_warnings.append(unfed_notice(ckey, feeder))
         charter = normalize_charter(state, reservation)
         charter["roster"] = seed_roster(charter["bodies"])
         charters[ckey] = charter

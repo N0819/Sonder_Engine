@@ -465,6 +465,8 @@ class JapaneseRenderer:
             return self._pose(p, data, label, prefix)
         if p.kind == "scent":
             return self._scent(data, label, prefix)
+        if p.kind == "ambient" and data.get("ceased") and not prefix:
+            return self._text("sound_ceased")
         if p.kind == "ambient" and data.get("soundscape") and not prefix:
             return self._sound_shape(data.get("soundscape"))
         if p.kind in ("sensation", "substance", "ambient"):
@@ -561,6 +563,11 @@ class JapaneseRenderer:
                 continue
             seen.add(p.dedupe_key)
             verdict = verdicts.get(p.dedupe_key, "first")
+            # The verdict is shared and so is this: whether a sound that
+            # stopped is news to THIS observer is an information decision
+            # (D3), and the pack only spells the sentence.
+            if composer.unheard_ceasing(p, verdict):
+                continue
             brief = False
             if player and p.order_key is None and not full_render:
                 if p.kind == "appearance":

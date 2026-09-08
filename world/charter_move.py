@@ -53,6 +53,7 @@ from __future__ import annotations
 
 import zlib
 
+from .charter_needs import wants_company
 from .charter_space import walk_route
 
 #: Chance per HOUR that an off-duty body goes somewhere — per hour, not per
@@ -349,6 +350,23 @@ def relocate(bodies, watch, posts, scene, travelled=None, hours=4.0,
                 neighbors=neighbors, walked=walked)
 
 
+def _occupied(places, bodies, mover):
+    """Which of ``places`` somebody other than ``mover`` is standing in.
+
+    THE ANSWER TO A COMPANY NEED IS A PERSON, NOT A ROOM (D18). Everybody
+    counts, on watch or off: a body posted at the desk in the lounge is
+    company for whoever walks in, and reading only the off-duty would send
+    the lonely to the one empty room in a busy institution.
+    """
+    here = {}
+    for key, body in (bodies or {}).items():
+        if key == mover:
+            continue
+        here.setdefault(str((body or {}).get("place") or ""), 0)
+        here[str((body or {}).get("place") or "")] += 1
+    return [place for place in (places or ()) if here.get(str(place))]
+
+
 def _nearest(reach, key, places, seed):
     """The closest of ``places`` this body can reach, or ``None``.
 
@@ -410,12 +428,21 @@ def errands(bodies, needs, upkeeps, watch, places, reach, seed=0,
     An errand is the cheapest honest version of a life's traffic: a body
     visits the place its own needs are fed from — the condition its
     ``fed_by`` names, which is the supply chain saying WHERE the bread is —
-    or, lacking one, the nearest place it may go FOR ITS OWN SAKE
+    or, short of people, the nearest commons somebody is ALREADY IN, or,
+    lacking either, the nearest place it may go FOR ITS OWN SAKE
     (``commons``, from `charter_space.commons_places`), and only failing
     that its nearest charter place. Seeded rotation, off-duty and able
     bodies only, and it moves them through the same machinery the watch
     bill uses: real positions, real distance, no state but the position
     everything else already carries.
+
+    THE PULL TOWARD PEOPLE IS THE THIRD ONE (D18), and it is ahead of the
+    plain commons fallback rather than instead of it: a body under its
+    `company` floor is not looking for a room, it is looking for somebody,
+    so an empty lounge is no answer and an occupied one is. Where no
+    commons has anybody in it the ordinary fallback runs and the body goes
+    somewhere anyway -- which is how a town that has emptied its commons
+    starts filling one again.
 
     THE ORDER IS THE RULE, and it is what the commons is for: a body off the
     watch is not going to work, so a room that answers to no post outranks
@@ -447,12 +474,16 @@ def errands(bodies, needs, upkeeps, watch, places, reach, seed=0,
         if _roll(key, seed) >= chance:
             continue
         target = None
+        held = (needs or {}).get(key) or {}
+        short_of_people = wants_company(held)
         if social:
-            target = _nearest(reach, key, commons or (), seed)
+            if short_of_people:
+                target = _nearest(reach, key, _occupied(
+                    commons, bodies, key), seed)
+            target = target or _nearest(reach, key, commons or (), seed)
             if target is not None:
                 out[key] = target
             continue
-        held = (needs or {}).get(key) or {}
         fed = [(float(n.get("level", 1.0)), str(n.get("fed_by")))
                for n in held.values() if n.get("fed_by")]
         for _level, upkeep_key in sorted(fed):
@@ -461,6 +492,9 @@ def errands(bodies, needs, upkeeps, watch, places, reach, seed=0,
             if place and (key, place) in (reach or {}):
                 target = place
                 break
+        if target is None and short_of_people:
+            target = _nearest(reach, key, _occupied(commons, bodies, key),
+                              seed)
         if target is None:
             target = _nearest(reach, key, commons or (), seed) \
                 or _nearest(reach, key, places or (), seed)

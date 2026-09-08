@@ -993,17 +993,31 @@ function fGoals(label, goals) {
   }, () => ({ goal: "", priority: 0.5 }));
 }
 
+// A87: `equivalent` and `needs_light` are what make a sense the engine does
+// not model deliver anything at all -- which channel it arrives on, and
+// whether the dark blinds it. Both are READ BACK here as well as shown,
+// because a row that displayed them and returned four keys would erase an
+// authored night sense on the next hand edit.
 function fSenses(label, senses) {
   return fList(label, senses, "+ sense", s => {
     const ch = el("input", { value: s.channel || "", placeholder: "channel (vision, hearing…)", style: "flex:1" });
     const ac = el("input", { value: s.acuity || "", placeholder: "acuity (ordinary, keen…)", style: "flex:1" });
     const rg = el("input", { value: s.range || "", placeholder: "range (ordinary, long…)", style: "flex:1" });
+    const eq = el("input", { value: s.equivalent || "", placeholder: "delivered on (sight, hearing, scent)", title: "The engine channel this sense delivers on. Leave empty when the channel already is one of the three; a sense only this story knows delivers nothing until this says what it carries.", style: "flex:1" });
+    const lit = el("label", { class: "small", title: "This sense depends on the light where the thing being sensed stands. Unchecked: it works in a dark room — and is stopped by a wall or a shut container exactly as an eye is." },
+      el("input", { type: "checkbox" }), " needs light");
+    lit.querySelector("input").checked = s.needs_light !== false;
     const no = el("input", { value: s.notes || "", placeholder: "notes", style: "flex:2" });
     return {
-      node: [ch, ac, rg, no],
-      read: () => ({ channel: ch.value, acuity: ac.value, range: rg.value, notes: no.value }),
+      node: [ch, ac, rg, eq, lit, no],
+      read: () => ({
+        channel: ch.value, acuity: ac.value, range: rg.value,
+        equivalent: eq.value,
+        needs_light: lit.querySelector("input").checked,
+        notes: no.value,
+      }),
     };
-  }, () => ({ channel: "", acuity: "ordinary", range: "ordinary", notes: "" }));
+  }, () => ({ channel: "", acuity: "ordinary", range: "ordinary", equivalent: "", needs_light: true, notes: "" }));
 }
 
 function fLatent(label, latent) {

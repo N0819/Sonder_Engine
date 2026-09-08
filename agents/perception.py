@@ -74,6 +74,8 @@ from world.spatial import (
     has_visual,
     effective_light,
     room_has_geometry,
+    sense_adjusted,
+    sight_verdict,
     visual_level_between,
     hear_level,
     heard_events,
@@ -98,6 +100,9 @@ from world.spatial import (
     spatial_rel_between,
     sound_field,
     sound_shape,
+    room_holds_a_standing_source,
+    room_noise_word,
+    NOISE_WORDS,
     substance_event_clause,
     visible_adjacent_rooms,
 )
@@ -979,11 +984,11 @@ def _saw_across_beat(sc, prev_sc, perceiver_name, source_name, rel,
             return False
         if room_of(scene, perceiver_name) is not None:
             return composer._sense_graded(
-                visual_level_between(scene, perceiver_name, source_name),
+                visual_level_between(scene, perceiver_name, source_name,
+                                     senses),
                 "sight", senses) != "none"
-        if not has_visual(rel):
-            return False
-        return composer._sense_graded("full", "sight", senses) != "none"
+        return _sight_reaches(scene, perceiver_name, source_name, senses,
+                              rel=rel)
     return _at(sc) or _at(prev_sc)
 
 
@@ -1064,6 +1069,23 @@ def _body_relocated(prev_sc, sc, name, fallback_room=None):
         return True
     return ({str(h).strip().casefold() for h in hiding_holders_of(prev_sc, name)}
             != {str(h).strip().casefold() for h in hiding_holders_of(sc, name)})
+
+
+def _sight_reaches(scene, observer, target, card, rel=None):
+    """Can THIS perceiver see that body at all, card and all (A87)?
+
+    ONE composition, so the six gates that decide whether a demeanor, a tell,
+    a visual channel or a sweep reaches an observer answer what the composed
+    view answers. Each of them used to ask `has_visual(rel)` and grade a bare
+    `"full"` with no perceiver, which is card-blind: an authored sight that
+    does not need light was graded `none` by the gate and `full` by the view
+    on the same beat. Answer-identical for every stored card (proved over
+    1,024 relations x 118 stored sense lists, 0 differences).
+    """
+    if rel is None:
+        return visual_level_between(scene, observer, target, card) != "none"
+    level, block = sight_verdict(rel)
+    return sense_adjusted(level, "sight", card, blocked_by=block) != "none"
 
 
 def _sense_card(sheet):
@@ -1436,8 +1458,7 @@ def _channel_to_every_leg(sc, prev_sc, observer_name, observer_room, legs,
                 seen = True
                 break
             rel = spatial_rel(scene, here, leg)
-            if has_visual(rel) and composer._sense_graded(
-                    "full", "sight", senses) != "none":
+            if _sight_reaches(scene, here, leg, senses, rel=rel):
                 seen = True
                 break
         if not seen:
@@ -2013,7 +2034,8 @@ def _delivered_manifest(ctx, scene, observer, sources, known, cast_by_name,
                                   target_room=s.get("room"))
         # Per-BODY, so a source standing in a torch's pool is visible while the
         # rest of the dark room is not -- the room-level answer cannot see that.
-        visible = (visual_level_between(scene, observer, sname) != "none"
+        visible = (visual_level_between(scene, observer, sname,
+                                        _sense_card(observer_sheet)) != "none"
                    and sname not in behind)
         # A voice/breath tell needs clean hearing, not mere co-location: an
         # enclosed body's position derives to its carrier's room, so bare
@@ -2597,8 +2619,9 @@ def perception_act(ctx, nonce):
             "senses": senses_of(sh), "sense_card": _sense_card(sh),
             "attention": act.get("goal") or "ambient",
             "spatial_to_actor": rel,
-            "visual_channel_to_actor": has_visual(rel) and composer._sense_graded(
-                "full", "sight", _sense_card(sh)) != "none",
+            "visual_channel_to_actor": _sight_reaches(
+                sc, character_name(sh), act.get("actor") or "",
+                _sense_card(sh), rel=rel),
             # ONE LINE, ONE FLOOR (PR5). This key feeds `speech_percept` and
             # `communication_percept` and nothing else, and
             # `composer.line_hear_level` states the contract in its own
@@ -3285,7 +3308,7 @@ def _voice_register_for(ctx, speaker):
 
 
 def _manifest_percepts(sc, manifest, observer, display_map, recognized,
-                       unknown, order):
+                       unknown, order, sense_card=None):
     """Tells and surface demeanor as percepts, from the manifest
     `_delivered_manifest` already gated for THIS observer (D1; review A36:
     computed per observer for 101 beats and read by nothing).
@@ -3306,7 +3329,8 @@ def _manifest_percepts(sc, manifest, observer, display_map, recognized,
             label = sname
         if not label:
             continue
-        can_see = visual_level_between(sc, observer, sname) != "none"
+        can_see = visual_level_between(sc, observer, sname,
+                                       sense_card) != "none"
         demeanor = _composer_scrub_surface(
             str(entry.get("surface_demeanor") or ""), observer, recognized,
             unknown)
@@ -4078,7 +4102,8 @@ def _scent_sources_for(sc, observer, observer_room, others, display_map,
 
     def sees(subject):
         return (composer._sense_graded(
-            visual_level_between(sc, observer, subject), "sight", senses)
+            visual_level_between(sc, observer, subject, senses),
+            "sight", senses)
             == "full" and entity_arc(sc, observer, subject) != "rear")
 
     def rel_to(subject, room=None):
@@ -4322,6 +4347,22 @@ def _visible_openings(sc, name, room, *, sweep=False, gate=None):
     return out
 
 
+def _was_hearing_this_room(prev_standing, room):
+    """Was this observer already being delivered THIS room's sound (D3).
+
+    The soundscape key hashes the room as its subject and the shape as its
+    content (`composer.standing_key`), so the subject is the whole question:
+    a shape that moved, a shape that stayed, an upgraded chat's single-hash
+    key that answers None -- all of them fall out of one comparison. Empty
+    ledger, no record, no claim; the same degradation rule
+    `standing_verdicts` states at length.
+    """
+    if not prev_standing or not room:
+        return False
+    want = composer.standing_key("soundscape", (room,), ("",)).rsplit(":", 1)[0]
+    return any(composer._subject_prefix(key) == want for key in prev_standing)
+
+
 def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
                                 entity_state=None, appearance_changed=(),
                                 appearance_deltas=None, prev_seen=None,
@@ -4330,7 +4371,7 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
                                 body_scents=None, body_descriptions=None,
                                 prune_appearance=False,
                                 self_forms=(), self_pronouns=None,
-                                sound=None):
+                                sound=None, prev_standing=frozenset()):
     """The standing-state half of one observer's IR: environment, presence,
     first-mention/changed appearances, own body state, standing contact
     sensations, bare body regions. Every admission is a subtraction --
@@ -4344,7 +4385,13 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
 
     `sound` is this observer's sound field for the beat (`_sound_field_for`:
     crowds and the turn index included); it is what the soundscape sentence
-    is read from, so the sentence and the hearing grades cannot disagree."""
+    is read from, so the sentence and the hearing grades cannot disagree.
+
+    `prev_standing` is this observer's OWN standing ledger from the last
+    beat, and the one thing read from it here is whether they were already
+    being delivered this room's sound (D3) -- empty on the opening beat and
+    on any caller that has no ledger, which reads as "no record" and mints
+    nothing, never as "the room was silent"."""
     percepts = []
     room = p.get("room")
     room_notes = p.get("room_notes")
@@ -4370,6 +4417,44 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
             sound_shape(sc, name, sound=sound, room=room, sweep=sweep), room)
         if soundscape:
             percepts.append(soundscape)
+        elif (_was_hearing_this_room(prev_standing, room)
+              and room_noise_word(sc, room, sound=sound) == NOISE_WORDS[0]
+              and room_holds_a_standing_source(sc, room)):
+            # AND WHEN THE ROOM'S SOUND STOPS, SAY SO (review 2026-09-07 D3).
+            # `sound_shape` answers None for THREE reasons and only one of
+            # them is a silence: the room is even (rule (a)); it has no
+            # cells; or there was nothing to grade -- no visible anchor and
+            # no measured cell. So the trigger is not "no shape", it is the
+            # room's own cells agreeing on the quietest word: a room goes
+            # even two ways, its one source stopping or its noise filling
+            # every cell, and only the word separates them.
+            #
+            # THE ROOM'S CELLS AND NOT THE OBSERVER'S, because the sound
+            # stopping is a fact about the room. Asked of a body instead,
+            # an unplaced one is graded at the room's centre
+            # (`SoundField.locate`), which said "the noise has stopped" in a
+            # huge dark hall with the generator still running at the wall --
+            # the D3 rework's measured false positive.
+            #
+            # AND ONLY A SOUND WITH A SOURCE STANDING IN THE ROOM CAN BE
+            # HEARD TO STOP (D3 rework, second skeptic). A generator switched
+            # off is still a generator standing there, so its silence is
+            # news; a one-beat crash leaves nothing behind, so there was
+            # never a sound of this ROOM'S to stop -- and `sound_shape`
+            # already refuses to name a beat's own sounds as the room's
+            # shape, for the same reason. Measured on chat 117: every one of
+            # the five stranded soundscape keys was an event, so the true
+            # count of standing-sound strandings in that corpus is ZERO and
+            # every `ceased` percept it would have minted was false.
+            #
+            # THE OTHER HALF IS WHOSE EAR IT IS, and it is a subtraction:
+            # this observer's OWN previous ledger has to hold the sound of
+            # THIS room, or there is no silence for them to notice and no
+            # percept at all. That keeps an ordinary quiet beat free of a
+            # percept nobody renders, and it is what makes "in the same
+            # room" exact -- a body that walked somewhere else carries the
+            # old room's key, which is not this room's subject.
+            percepts.append(composer.sound_ceased_percept(room))
     # Crowds, couriers and posted notices: three built subsystems whose whole
     # perception seam is these three keys, and until now nothing read them.
     # Already room-scoped and already reduced to what a bystander takes in by
@@ -4408,7 +4493,7 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
         if not b_name:
             continue
         if composer._sense_graded(
-                visual_level_between(sc, name, b_name),
+                visual_level_between(sc, name, b_name, senses),
                 "sight", senses) != "full":
             continue
         if entity_arc(sc, name, b_name) == "rear":
@@ -4996,7 +5081,8 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                 body_descriptions=body_descriptions,
                 self_forms=self_forms,
                 self_pronouns=p.get("pronouns"),
-                sound=_sound_field_for(ctx, sc, name, p.get("room")))
+                sound=_sound_field_for(ctx, sc, name, p.get("room")),
+                prev_standing=prev_standing)
             rel = p.get("spatial_to_actor") or {}
             vis = p.get("visual_channel_to_actor", False)
             can_see = _in_plain_view(rel, vis)
@@ -5022,8 +5108,8 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                         target_room=room,
                         sound=_sound_field_for(ctx, sc, _name,
                                                _p.get("room")))
-                    alt_vis = has_visual(alt) and composer._sense_graded(
-                        "full", "sight", _p.get("sense_card")) != "none"
+                    alt_vis = _sight_reaches(sc, _name, p_name,
+                                             _p.get("sense_card"), rel=alt)
                     cached = (alt, _in_plain_view(alt, alt_vis))
                     arrival_rels[(_name, room)] = cached
                 return cached
@@ -5706,7 +5792,7 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                                   and not full_player_render),
                 self_forms=self_forms,
                 self_pronouns=p.get("pronouns"),
-                sound=field)
+                sound=field, prev_standing=prev_standing)
             if beat_sounds:
                 # WHERE IT HAPPENED, and then everywhere else it reached.
                 # A signal is received whole only in its own room, so that
@@ -5945,7 +6031,8 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                 if p.get("room") not in (from_room, to_room):
                     continue
                 _graded = (lambda scene: composer._sense_graded(
-                    visual_level_between(scene, name, mover),
+                    visual_level_between(scene, name, mover,
+                                         p.get("sense_card")),
                     "sight", p.get("sense_card")))
                 seen = _graded(sc) != "none" or (
                     prev_scene and _graded(prev_scene) != "none")
@@ -5971,7 +6058,7 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                     order += 1
             minted, order = _manifest_percepts(
                 sc, p.get("source_manifest"), name, display_map, recognized,
-                unknown, order)
+                unknown, order, sense_card=p.get("sense_card"))
             percepts.extend(minted)
             company[pid] = _composer_company(others, display_map, percepts)
         for additions in micro_by_pid.get(pid) or []:

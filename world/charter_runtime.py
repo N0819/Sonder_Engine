@@ -25,8 +25,8 @@ from contextlib import contextmanager
 from core import jobs
 from core.logging_utils import logger
 from world.day_cycle import hour_of_day
-from world.charter import (normalize_charter, run, trigger_view,
-                          trigger_warnings)
+from world.charter import (feeding_upkeep, normalize_charter, run,
+                          trigger_view, trigger_warnings, unfed_notice)
 from world.charter_news import WITNESSABLE
 from world.mechanics import stable_event_key
 from world.charter_surface import (appearance_text, surface_has_content,
@@ -398,7 +398,51 @@ def normalize_registry(stored, reservation=None):
     # they are the only reason a read carries `people` at all.
     people = {str(key): person for key, person in incoming_people.items()
               if str(key) not in employed}
+    _derive_sustenance_feeds(items)
     return {"version": REGISTRY_VERSION, "items": items, "people": people}
+
+
+def _derive_sustenance_feeds(items):
+    """Point a stored need at the hand that feeds it (A25).
+
+    MIGRATION, IN THE ONE PLACE THIS PACKAGE MIGRATES, and it has to be here
+    rather than in the generator alone: no generator ever wrote `fed_by`, so
+    every body seeded before 2026-09-08 -- all 66 in bench.db chat 114 --
+    eats at full supply whatever the stocks say, and a rule that only
+    reaches towns written after it is a rule that reaches almost nobody. It
+    is also the only reader that holds every institution at once, which is
+    what the town-wide search needs.
+
+    IT DERIVES ONLY WHERE THE CHAIN EXISTS. Chat 114 gains nothing from it
+    (that town produces meals, linens and iced_fish and consumes none of
+    them), and gains four warnings instead -- which is the owner's ruling
+    working, not failing: a town where the bread comes from nowhere is a
+    lore fact to author.
+
+    Fills a need that names NOTHING and never overwrites one that does, so
+    an authored hand and a generated hand both survive the read; idempotent,
+    which is what `normalize_registry` promises about every migration in it.
+    """
+    town = [(key, item["state"].get("upkeeps"), item["state"].get("economy"))
+            for key, item in items.items()]
+    for key, item in items.items():
+        state = item["state"]
+        blank = [held for held in (state.get("needs") or {}).values()
+                 if isinstance((held or {}).get("sustenance"), dict)
+                 and not str(held["sustenance"].get("fed_by") or "")]
+        if not blank:
+            continue
+        feeder = feeding_upkeep(state.get("upkeeps"), state.get("economy"),
+                                [row for row in town if row[0] != key])
+        # A foreign hand is left unwritten on purpose: a window resolves an
+        # upkeep key against its own charter's upkeeps, so writing one would
+        # read as level 0.0 and starve the town it was meant to feed.
+        # `registry_warnings` tells the author about it instead.
+        if not feeder or feeder["charter"]:
+            continue
+        for held in blank:
+            held["sustenance"] = dict(held["sustenance"],
+                                      fed_by=feeder["upkeep"])
 
 
 # ---------------------------------------------------------------- job store
@@ -2141,6 +2185,12 @@ def registry_warnings(registry, scene=None, *, cid=None, frame_id=None):
     index = identity_index(registry)
     rooms = set((scene or {}).get("rooms") or {})
     warnings = []
+    # WHAT THE TOWN LIVES ON IS A TOWN-WIDE QUESTION (A25). Built once here
+    # because every institution's answer may name another's flows, and this
+    # is the only reader that holds them all at the same moment.
+    town = [(other_key, other["state"].get("upkeeps"),
+             other["state"].get("economy"))
+            for other_key, other in registry["items"].items()]
     for key, item in registry["items"].items():
         state = item["state"]
         known_rooms = set(rooms)
@@ -2181,6 +2231,30 @@ def registry_warnings(registry, scene=None, *, cid=None, frame_id=None):
                     f"{key}: display name {display!r} belongs to multiple "
                     f"bodies {bodies}; scene presence is withheld until "
                     "the author distinguishes them")
+        # A NEED NOTHING FEEDS IS SERVICED AT FULL SUPPLY IN SILENCE, which
+        # is the defect A25 was filed against: all 66 stored needs in
+        # bench.db chat 114 carried `fed_by: ""` and every one of them ate
+        # perfectly whatever the stocks said. Said here as well as at
+        # generation because an economy edited afterwards can take the hand
+        # away -- and, measured on that chat, this is the surface the
+        # author actually gets: four charters, four notices.
+        fed_by = {str(need.get("fed_by") or "")
+                  for held in (state.get("needs") or {}).values()
+                  for name, need in (held or {}).items()
+                  if name == "sustenance" and isinstance(need, dict)}
+        fed_by.discard("")
+        unresolved = sorted(fed_by - set(state["upkeeps"]))
+        for upkeep in unresolved:
+            warnings.append(
+                f"{key}: sustenance draws on upkeep {upkeep!r}, which this "
+                "institution does not hold, so it is serviced at nothing at "
+                "all; a window resolves an upkeep against its own charter")
+        if state["bodies"] and not fed_by:
+            feeder = feeding_upkeep(
+                state["upkeeps"], state.get("economy"),
+                [row for row in town if row[0] != key])
+            if feeder is None or feeder["charter"]:
+                warnings.append(unfed_notice(key, feeder))
         served = {upkeep for post in state["posts"].values()
                   for upkeep in post.get("serves") or ()}
         for upkeep in sorted(set(state["upkeeps"]) - served):

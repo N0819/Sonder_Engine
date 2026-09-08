@@ -734,9 +734,19 @@ def default_character_data(name: str = "Unnamed") -> dict:
         "simulation": {"tier": "mid", "temperature": 0.8, "sampler": {},
                        "curiosity": 0.5, "offscreen_agent": False},
         "embodiment": {
+            # `needs_light` and `equivalent` are the two fields that make
+            # sight AUTHORABLE (A87): a sense that says it does not need
+            # light sees in a dark room (and is not dazzled by glare), and a
+            # sense the engine does not model says which engine channel it
+            # DELIVERS on. Both are optional everywhere they are read -- an
+            # absent field is ordinary eyes -- and both are written into the
+            # default templates so that every sheet, editor row and generated
+            # card carries the same shape.
             "senses": [
-                {"channel": "vision", "acuity": "ordinary", "range": "ordinary", "notes": ""},
-                {"channel": "hearing", "acuity": "ordinary", "range": "ordinary", "notes": ""},
+                {"channel": "vision", "acuity": "ordinary", "range": "ordinary",
+                 "needs_light": True, "equivalent": "", "notes": ""},
+                {"channel": "hearing", "acuity": "ordinary", "range": "ordinary",
+                 "needs_light": True, "equivalent": "", "notes": ""},
             ],
             "visible": {
                 "summary": "A person of unremarkable appearance.",
@@ -858,9 +868,19 @@ def default_persona_data(name: str = "Player") -> dict:
         },
         "initial_outfit": {"wearing": [], "state": [], "regions": {}},
         "embodiment": {
+            # `needs_light` and `equivalent` are the two fields that make
+            # sight AUTHORABLE (A87): a sense that says it does not need
+            # light sees in a dark room (and is not dazzled by glare), and a
+            # sense the engine does not model says which engine channel it
+            # DELIVERS on. Both are optional everywhere they are read -- an
+            # absent field is ordinary eyes -- and both are written into the
+            # default templates so that every sheet, editor row and generated
+            # card carries the same shape.
             "senses": [
-                {"channel": "vision", "acuity": "ordinary", "range": "ordinary", "notes": ""},
-                {"channel": "hearing", "acuity": "ordinary", "range": "ordinary", "notes": ""},
+                {"channel": "vision", "acuity": "ordinary", "range": "ordinary",
+                 "needs_light": True, "equivalent": "", "notes": ""},
+                {"channel": "hearing", "acuity": "ordinary", "range": "ordinary",
+                 "needs_light": True, "equivalent": "", "notes": ""},
             ],
             "visible": {
                 "summary": "A person of unremarkable appearance.",
@@ -927,6 +947,9 @@ def _list(value: Any) -> list:
     return [value]
 
 def _legacy_senses(value: Any) -> list[dict]:
+    # An authored dict passes through untouched, `needs_light`/`equivalent`
+    # included: every reader treats an absent field as ordinary (A87), so a
+    # sheet written before they existed normalizes to exactly what it did.
     if isinstance(value, list):
         result = []
         for item in value:
@@ -934,11 +957,12 @@ def _legacy_senses(value: Any) -> list[dict]:
                 result.append(copy.deepcopy(item))
             elif item:
                 result.append({"channel": "other", "acuity": "ordinary",
-                               "range": "ordinary", "notes": str(item)})
+                               "range": "ordinary", "needs_light": True,
+                               "equivalent": "", "notes": str(item)})
         return result
     text = str(value or "ordinary human senses")
-    return [{"channel": "general", "acuity": "ordinary",
-             "range": "ordinary", "notes": text}]
+    return [{"channel": "general", "acuity": "ordinary", "range": "ordinary",
+             "needs_light": True, "equivalent": "", "notes": text}]
 
 def _legacy_voice(value: Any) -> dict:
     if isinstance(value, dict):

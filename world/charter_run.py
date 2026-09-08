@@ -70,7 +70,8 @@ from .charter_news import (check_reports, decay_news, news_keys_in,
                           witness)
 from .charter_practice import (
     COARSE_PRACTICES, close_stale, enact, normalize_practices, opportunities)
-from .charter_needs import advance_needs, mood, pressure, unmet
+from .charter_needs import (advance_needs, ensure_needs, mood, pressure,
+                            unmet)
 from .charter_talk import converse, report_to_superiors, report_up
 from .charter_commitment import advance_commitments
 from .charter_decide import (advance_decisions, deliver_orders,
@@ -504,7 +505,13 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     # as scarce rather than as a special case. It never becomes unpostable
     # that way; it becomes expensive, and a short-handed charter still posts
     # it because it must.
-    needs = charter.get("needs") or {}
+    # EVERY BODY CARRIES EVERY NEED THE MODEL HAS. A charter seeded before a
+    # need existed holds bodies that cannot feel it -- `company` (D18) landed
+    # after bench.db chat 114's bodies were seeded -- and a need nobody has
+    # is a need that changes nothing, which is the silent-empty-field failure
+    # `CLAUDE.md` records. Filled at full, never overwriting a level lived or
+    # a rate authored.
+    needs = ensure_needs(charter.get("needs"), charter["bodies"])
     mood_weight = float(charter.get("mood_weight") or 0.0)
     blame = (politics.get("blame") or {})
     regard_of = {}
@@ -761,6 +768,28 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     # control arm still.
     toll = charter.get("strain_toll")
     toll = STRAIN_REST_TOLL if toll is None else float(toll)
+    # AND COMPANY IS WHOEVER SPOKE TO YOU (D18). The deposited record of the
+    # last window's talk, read the same way and for the same reason last
+    # window's strain is: `enact` runs at the tail of this function, so the
+    # acts of THIS window do not exist yet at the point a window of living is
+    # advanced. One window of lag, uniformly, which is the lag every other
+    # cross-window read in this function already carries.
+    #
+    # An act names an actor and, where it was directed at somebody, an
+    # `other`. Both ends of it had company; an act directed at nobody is not
+    # somebody's company, and that is the only case the rule excludes.
+    #
+    # 1.0 OR NOTHING, and `advance_needs` says so in its own docstring: an
+    # act row records who did what to whom and not for how long, so this is
+    # "was anybody with you at all" rather than a share of the window. One
+    # greeting buys the window. Anything finer would be a number invented
+    # here rather than read from the record.
+    kept_company = {}
+    for row in charter.get("window_acts") or ():
+        for end in (str((row or {}).get("actor") or ""),
+                    str((row or {}).get("other") or "")):
+            if end:
+                kept_company[end] = 1.0
     owned_needs = (needs if not external else
                    {key: held for key, held in needs.items()
                     if key not in external})
@@ -769,7 +798,8 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
                      if key not in external})
     needs_after, unable, recovered = advance_needs(
         owned_needs, owned_bodies, movable_watch, upkeeps, hours,
-        strain=strain_of(charter.get("feel")), toll=toll)
+        strain=strain_of(charter.get("feel")), toll=toll,
+        company=kept_company)
     for key in unable:
         bodies[key] = dict(bodies[key], available=False, stood_down=True)
         # A needs-driven stand-down is not a private change in ground truth:
@@ -778,9 +808,16 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
         # register is allowed to learn.  Without this write the roster keeps
         # assigning a body it believes able until the claim decays.
         roster = observe(roster, bodies[key], at + hours)
+        # `duty_only`, because this number is the size of the breach that
+        # STOOD THE BODY DOWN, not everything the body is short of (D18
+        # skeptic, 2026-09-08): `company`'s floor is the highest of the four
+        # and cannot stand anybody down, so a starving body's event reported
+        # its loneliness as the worst of it. `charter_needs.bears_on_duty`
+        # has the decision/report line.
         events.append(_event("body_unable", at + hours,
                              bodies[key].get("place", ""), body=key,
-                             worst=unmet(needs_after.get(key) or {})))
+                             worst=unmet(needs_after.get(key) or {},
+                                         duty_only=True)))
     for key in recovered:
         bodies[key] = dict(bodies[key], available=True, stood_down=False)
         # Recovery has the reciprocal channel: returning fit for duty is a

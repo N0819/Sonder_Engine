@@ -124,6 +124,20 @@ _COMFORT_HABITUATION_HALF_LIFE = 4.0
 _COMFORT_HABITUATED_FLOOR = 0.05
 _COMFORT_RELIEF_GAIN = 0.8
 
+# Ambient discomfort: comfort's negative twin (world/exposure.py derives it,
+# review 2026-09-07 D20). What the weather costs a body standing in it,
+# arriving here exactly as comfort does -- as a floor, on the LEVEL, never on
+# `charge`. Being cold is a resolved state a body is in, not an unresolved
+# drive demanding release, so rule 1 above holds unchanged on this side.
+#
+# Rule 2 does NOT have a twin yet, and that is deliberate. Comfort habituates;
+# whether cold does is a design question rather than a constant, because a
+# body that stops noticing the cold is a body in trouble. Until it is
+# answered this floor is flat, which is safe only because it is capped -- the
+# ceiling is the same 0.3 comfort's is, and it means the sky alone can never
+# carry a body past a pain level of 0.3 however long it stands out in it.
+_AMBIENT_DISCOMFORT_CEILING = 0.3
+
 
 def _clamp(value, low=0.0, high=1.0, default=0.0):
     return max(low, min(high, _float(value, default)))
@@ -162,6 +176,7 @@ def elapsed_psych_units(previous_seconds, current_seconds, fallback_turns=1):
 def resolve_hedonic(previous, appraisal, interoception, body_state,
                     elapsed_units, released=False,
                     ambient_comfort=0.0, comfort_source="",
+                    ambient_discomfort=0.0, discomfort_source="",
                     stimulation=None):
     """Resolve transient pain/pleasure from this beat's grounded appraisal,
     plus the sustained charge those levels leave behind.
@@ -178,6 +193,13 @@ def resolve_hedonic(previous, appraisal, interoception, body_state,
     and a sybarite do not feel the same bench. It raises the pleasure LEVEL
     only and never the charge (see the _AMBIENT_COMFORT_* comment above), and
     it habituates on a sustained source.
+
+    `ambient_discomfort` is its negative twin (`exposure.discomfort_level`,
+    D20): what the WEATHER costs a body standing in it, scaled by what the
+    body has bare and by how spent it is. It joins injury and bad air as a
+    floor on the pain LEVEL -- so a character bare-armed in freezing rain no
+    longer feels what the one at the hearth feels unless a model happens to
+    say so. It does NOT habituate; see the _AMBIENT_DISCOMFORT_* comment.
 
     `pain`/`pleasure` are LEVELS: peak-held and fast-decaying, they say what
     the body registers right now. A level alone cannot represent a stimulus
@@ -217,6 +239,23 @@ def resolve_hedonic(previous, appraisal, interoception, body_state,
     air = _clamp(body_state.get("air"), default=1.0)
     proposed_pain = max(proposed_pain, injury * 0.8, (1.0 - air) * 0.75)
 
+    # The weather, as a floor on the pain LEVEL (D20). Through the character's
+    # own pain_sensitivity, exactly as comfort passes through
+    # pleasure_sensitivity: a stoic and a thin-skinned body do not feel the
+    # same sleet.
+    #
+    # DELIBERATELY NOT FOLDED INTO `proposed_pain`, which is what injury and
+    # bad air do. `drive` reads that value, so folding it in would let
+    # standing in the rain accumulate `charge` -- the exact mistake Rule 1
+    # forbids on comfort's side, and the reason this is applied to `pain`
+    # below beside `ambient` rather than above beside the vitals floors.
+    discomfort_key = str(discomfort_source or "").strip()[:120]
+    exposure_pain = 0.0
+    if discomfort_key:
+        exposure_pain = min(
+            _clamp(ambient_discomfort, 0.0, _AMBIENT_DISCOMFORT_CEILING)
+            * (0.5 + pain_sensitivity), _AMBIENT_DISCOMFORT_CEILING)
+
     elapsed = max(0.0, _float(elapsed_units))
 
     # Ambient comfort -> a floor on the pleasure LEVEL. Never on `drive`.
@@ -245,11 +284,19 @@ def resolve_hedonic(previous, appraisal, interoception, body_state,
     decay = 0.5 ** (elapsed / 2.0) if elapsed else 1.0
     old_pain = _clamp(previous.get("pain"))
     old_pleasure = _clamp(previous.get("pleasure"))
-    pain = max(old_pain * decay, proposed_pain)
+    pain = max(old_pain * decay, proposed_pain, exposure_pain)
     pleasure = max(old_pleasure * decay, proposed_pleasure, ambient)
     if proposed_pain or proposed_pleasure:
         # A grounded appraisal outranks background ease as the named cause.
         source = why
+    elif exposure_pain and exposure_pain >= max(
+            ambient, old_pain * decay, old_pleasure * decay):
+        # Failing an appraisal, the world-side floor that actually SET the
+        # level names itself -- so "standing out in freezing, heavy rain"
+        # reaches the character's own state instead of an unattributed
+        # number, the way comfort's source already does on the other side.
+        # Injury and bad air still name nothing, which is unchanged.
+        source = discomfort_key
     elif ambient and ambient >= max(old_pain, old_pleasure) * decay:
         source = comfort_key
     else:
