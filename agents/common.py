@@ -41,6 +41,7 @@ from story.scene import (get_scene, persona_of, sheet_state, NON_AWAKE_GATED,
 from llm.schemas import normalize_speech_volume
 from world.spatial import (
     _body_interior_holder,
+    derived_room_name,
     ambient_scope,
     containment_conceals,
     detail_resolves_between,
@@ -9888,7 +9889,7 @@ def validated_player_state_assertions(sc, raw, player_name, report=None):
                 continue
             origin = ((sc or {}).get("positions") or {}).get(who)
             minted[room] = {
-                "name": str(room).replace("_", " ").title(),
+                "name": derived_room_name(room),
                 "desc": "",
                 "adjacent": ([{"to": origin, "barrier": "open",
                                "distance": "near"}]

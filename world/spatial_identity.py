@@ -485,13 +485,37 @@ def normalize_scene_subjects(scene: dict) -> list:
     return folded
 
 
+def derived_room_name(room_id) -> str:
+    """The placeholder a room wears until someone names it: its id spelled
+    out. ONE PRODUCER. Five sites each spelled `replace("_", " ").title()`
+    for themselves (the staged-lore materializers in `commit_scene_state`,
+    `director` and `common`, the narrator's room table, and the predicate
+    below), and the six places perception falls back from a missing name
+    applied no placeholder at all and handed the view the raw id -- measured
+    on the descent copy (chat 117 beat 118): the spatial hand minted
+    `sub_level_three_utility_core` with `name: ""`, and the player's view
+    read "You are in sub_level_three_utility_core." An id is a handle the
+    engine holds, never a word of the story; where the engine must show a
+    room nobody has named, this is the one spelling it shows."""
+    return str(room_id or "").replace("_", " ").title()
+
+
+def room_display_name(room, room_id) -> str:
+    """A room's authored name, else its placeholder; "" only when there is
+    no room at all. The reader-side floor for every "You are in {room}"."""
+    name = ""
+    if isinstance(room, dict):
+        name = str(room.get("name") or "").strip()
+    return name or derived_room_name(room_id)
+
+
 def is_derived_room_name(room_id, name) -> bool:
-    """Is `name` just the room id spelled out -- the placeholder the
-    staged-lore materializers in commit.py and agents/director.py use when a
-    room has to exist before anyone has named it? Such a name must never
-    displace an authored one (see _merge_room)."""
+    """Is `name` just the room id spelled out -- the placeholder
+    `derived_room_name` gives a room that has to exist before anyone has
+    named it? Such a name must never displace an authored one (see
+    _merge_room)."""
     text = str(name or "").strip()
-    return bool(text) and text == str(room_id or "").replace("_", " ").title()
+    return bool(text) and text == derived_room_name(room_id)
 
 
 def normalize_room_id(name: str) -> str:

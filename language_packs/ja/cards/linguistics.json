@@ -2285,7 +2285,8 @@
         "撃つ",
         "砕ける"
       ]
-    }
+    },
+    "_SENTENCE_ENDS": ".!?。！？"
   },
   "agents.perception": {
     "_CHANNEL_CUES": {

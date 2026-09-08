@@ -16,6 +16,7 @@ import re
 
 from story.character_schema import character_name, character_name_from_text
 from world.spatial import (
+    _anchor_room_of,
     contact_is_momentary,
     contact_motion,
     contacts_of,
@@ -85,7 +86,25 @@ def _validated_player_contact_assertions(
             if report:
                 report("discarded a contact assertion that did not involve the player")
             continue
-        if room_of(sc, actor) != room_of(sc, target) or room_of(sc, actor) is None:
+        actor_room = room_of(sc, actor)
+        target_room = room_of(sc, target)
+        # A ROOM'S OWN FIXTURE IS WHERE THE ROOM IS. `positions` places
+        # bodies and the things the scene mints; a door, a counter, a rail is
+        # an ANCHOR of its room with no position of its own, so a player's
+        # hand on one failed this membership test and was dropped -- and the
+        # contact came back only through the resolve manifest, a beat late,
+        # or not at all. `spatial_contacts.normalize_scene_contacts` already
+        # resolves an unplaced endpoint through the room that declares it as
+        # an anchor (caravanserai turns 3-5); this is the same rule at the
+        # player-authority site, which had kept the narrower test. Measured
+        # on the descent copy (chat 117, beats 115 and 117): a palm on the
+        # access door plate and a shoulder against its leaf, both discarded
+        # here while both bodies stood STATIONED at that very anchor.
+        if actor_room is None and target_room is not None:
+            actor_room = _anchor_room_of(sc, actor, prefer=target_room)
+        elif target_room is None and actor_room is not None:
+            target_room = _anchor_room_of(sc, target, prefer=actor_room)
+        if actor_room is None or actor_room != target_room:
             if report:
                 report("discarded a contact assertion between non-co-located bodies")
             continue

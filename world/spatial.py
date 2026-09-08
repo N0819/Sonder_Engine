@@ -57,8 +57,8 @@ from world.spatial_identity import (
     _ci_get, _entities_named, _entity_named, _live_subject_spellings,
     _unique_entity_keyed,
     _SUBJECT_KEYED, canonical_subject, canonical_subject_map,
-    is_derived_room_name, normalize_room_id, normalize_scene_subjects,
-    room_of, same_subject,
+    derived_room_name, is_derived_room_name, normalize_room_id,
+    normalize_scene_subjects, room_display_name, room_of, same_subject,
 )
 
 
@@ -119,7 +119,7 @@ from world.spatial_contacts import (
     _contact_ops_are_evidence, _CONTACT_RESIDUE_VERB, _CONTACT_STALE_BEATS,
     _CONTACT_STATE_VERBS, _contact_text, _contained_inversion, _displaces,
     _ENCLOSING_PART_CAVITY, _endpoint_is_worn_clothing,
-    _ENVELOPMENT_MANNERS, _flip,
+    _ENVELOPMENT_MANNERS, _flip, _anchor_room_of,
     _INTERIOR_MOVING_MANNERS, _is_anatomical_part, _LATERAL_QUALIFIERS,
     _MAX_CONTACT_DETAIL, _MAX_CONTACT_PART, _MAX_CONTACTS, _mirror_key,
     _MOMENTARY_SET, _NON_ANATOMICAL_PART_WORDS,

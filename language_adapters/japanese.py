@@ -274,7 +274,16 @@ class JapaneseRenderer:
         """
         posture = str(data.get("posture") or data.get("detail") or "").strip()
         parts = []
-        other = str(data.get("relative_to") or "").strip()
+        # The composer stamps `SELF_SOURCE_LABEL` into a pose's referents
+        # exactly as it stamps it on the percept's own label, and `_label`
+        # above translates only the latter -- so another body arranged
+        # against the reader rendered "youの向かってに" (chat 122 on a copy,
+        # 2026-09-07). One token, one word for it, at every field.
+        def _ref(field):
+            text = str(data.get(field) or "").strip()
+            return str(self._value("self_label")) \
+                if text == SELF_SOURCE_LABEL else text
+        other = _ref("relative_to")
         if other:
             relation = str(data.get("relation") or "").strip()
             # A relation is FREE PROSE from the beat that wrote it, so the
@@ -285,7 +294,7 @@ class JapaneseRenderer:
             parts.append(self._text("pose_relation_at", other=other,
                                     relation=relation) if relation
                          else self._text("pose_relation", other=other))
-        support = str(data.get("support") or "").strip()
+        support = _ref("support")
         if support:
             parts.append(self._text("pose_support", support=support))
         constraint = str(data.get("constraint") or "").strip()

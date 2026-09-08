@@ -25,6 +25,7 @@ import re
 
 from world.spatial import (
     containment_conceals,
+    room_display_name,
     contact_sensation,
     effective_light,
     entity_arc,
@@ -916,7 +917,7 @@ def _position_delta_payload(ctx, chat, p_name, p_room, recognized, cast_info):
     sc = ctx.get("outcome_scene") or prev_sc
     rooms = sc.get("rooms") or {}
     room_names = {
-        rid: str((r or {}).get("name") or rid.replace("_", " ").title())
+        rid: room_display_name(r, rid)
         for rid, r in rooms.items() if isinstance(r, dict) or r is None
     }
     payload, facts = {}, []

@@ -57,6 +57,7 @@ import dataclasses
 import hashlib
 import logging
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from core.pipeline_context import note_step_decision
@@ -72,6 +73,7 @@ from world.spatial import (
     _clean_pose,
     _entities_named,
     _entity_named,
+    _anchor_room_of,
     _is_body_entity,
     body_visibility,
     contact_thing_label,
@@ -145,6 +147,47 @@ def _ling(name):
 
 def _en(key, **values):
     return str(_EN_TEMPLATES[key]).format(**values)
+
+
+def _t(key, **values):
+    """One template from the ACTIVE story pack, English where the pack has
+    no entry. For the text the composer builds BEFORE the language adapter
+    sees it -- a pose referent, a spliced noun -- because that text is data
+    the adapter renders verbatim, so an English article minted here reaches
+    a Japanese page as "the 砂浜" (chat 122 on a copy, 2026-09-07)."""
+    try:
+        templates = _compositor("templates")
+    except Exception:
+        templates = _EN_TEMPLATES
+    # `compositor_value` hands back a read-only mapping proxy, not a dict.
+    template = templates.get(key) if isinstance(templates, Mapping) else None
+    if template is None:
+        template = _EN_TEMPLATES[key]
+    return str(template).format(**values)
+
+
+def _pack_words(name):
+    """A determiner table from the ACTIVE pack, empty where it has none, so a
+    language that takes no article leaves every branch a no-op in fact and
+    not only in the docstring."""
+    try:
+        return frozenset(str(w).casefold() for w in (_compositor(name) or ()))
+    except Exception:
+        return frozenset()
+
+
+def _strip_sentence_ends(text):
+    """Take the terminal stops off a phrase about to be spliced into a
+    sentence -- the pack's stops, not the ASCII full stop alone. A Japanese
+    presented appearance ends in 。 and was rendered inside its own label:
+    "見知らぬごく普通の人間の若い女性。は手の届く距離にいる" (chat 122 on a
+    copy, 2026-09-07)."""
+    text = str(text or "").strip()
+    try:
+        ends = str(_ling("_SENTENCE_ENDS") or ".!?")
+    except Exception:
+        ends = ".!?"
+    return text.rstrip(ends + ";:,、；：").rstrip()
 
 
 @dataclass(frozen=True)
@@ -294,7 +337,7 @@ def _label_core(text):
     first of a group and the rest of it. The article list is language DATA
     (the compositor card), so a pack whose language takes no article
     compares the bare nouns."""
-    text = str(text or "").strip().rstrip(".;:,")
+    text = _strip_sentence_ends(text)
     if not text:
         return ""
     articles = frozenset(str(a).casefold() for a in _compositor("articles"))
@@ -332,7 +375,8 @@ def _label_from_words(words, cap):
         take = take[:-1]
     if not take:
         return ""
-    return "the " + " ".join(take).rstrip(".;:").lower()
+    return _t("unknown_actor",
+              description=_strip_sentence_ends(" ".join(take)).lower())
 
 
 #: Ordinal words for the last-resort distinguisher below. Stops at twelve
@@ -1412,14 +1456,12 @@ def _noun_phrase(text):
     English wording, like the rest of the reference renderer: a pack with no
     articles and no determiners (`ja`) leaves every branch a no-op.
     """
-    text = " ".join(str(text or "").split())
-    while text.endswith("."):
-        text = text[:-1].rstrip()
+    text = _strip_sentence_ends(" ".join(str(text or "").split()))
     if not text:
         return ""
     words = text.split()
     first = words[0].casefold().strip(",.;:")
-    if first in _ARTICLES:
+    if first in _pack_words("articles"):
         words[0] = words[0][:1].lower() + words[0][1:]
         return " ".join(words)
     # A support is authored free-text and often arrives with its own
@@ -1427,10 +1469,10 @@ def _noun_phrase(text):
     # and declines to add a second one. Prefixing a determiner here would
     # slip underneath that check and produce "on the on the sill".
     if (words[0][:1].isupper()
-            or first in _POSE_BARE_DETERMINERS
-            or first in _POSE_PREPOSITIONS):
+            or first in _pack_words("pose_bare_determiners")
+            or first in _pack_words("pose_prepositions")):
         return " ".join(words)
-    return _en("pose_entity", name=" ".join(words))
+    return _t("pose_entity", name=" ".join(words))
 
 
 def _sound_bearing_phrase(scene, observer, source) -> str:
@@ -1485,10 +1527,23 @@ def _pose_referent(scene, observer_name, display_map, co_present, other,
          and the identity stays unearned.
       4. a scene entity -> its own name, through the pack's own template so a
          language that takes no article does not get one.
-      5. an id-shaped token matching no record -> DROPPED. `anchor_device`
+      5. a room's own FIXTURE -> the noun its anchor id was minted from,
+         through the same splice as a bare noun ("the access door"). A
+         station, a pose and a contact all name fixtures by anchor id, and
+         the id is the Director's own noun with underscores in it; the desc
+         beside it is a whole authored sentence and reads wrong as a
+         possessive ("You feel A heavy steel door seated in a reinforced
+         frame's lever handle"). Resolved through `_anchor_room_of`, the
+         one resolver the contact ledger already trusts for the question
+         "which room is this fixture in". Measured on the descent copy
+         (chat 117, beats 115-117): "You feel something's steel plate
+         against your right palm", "something's lever handle" -- three beats
+         of a player touching a door the room declared, delivered as an
+         unnameable thing because step 6 below dropped the id first.
+      6. an id-shaped token matching no record -> DROPPED. `anchor_device`
          (the entity's id is `scranton_anchor`) names nothing, and putting it
          on the page shows the reader engine plumbing.
-      6. anything else -> the bare noun as written. It matches no record in
+      7. anything else -> the bare noun as written. It matches no record in
          the scene, so it can disclose nothing the Director's own phrasing
          did not already carry.
     """
@@ -1508,8 +1563,8 @@ def _pose_referent(scene, observer_name, display_map, co_present, other,
             # body does.
             return None
         if whose == "you":
-            return _en("pose_part_self", part=part)
-        return _en("pose_part_other", label=whose, part=part)
+            return _t("pose_part_self", part=part)
+        return _t("pose_part_other", label=whose, part=part)
     if same_subject(scene, text, observer_name):
         return "you"
     for name, label in (display_map or {}).items():
@@ -1527,9 +1582,11 @@ def _pose_referent(scene, observer_name, display_map, co_present, other,
         # below consults decides it: a name that already opens with one is
         # rendered as it is written.
         first = named.split()[0].casefold().strip(",.")
-        if first in _POSE_BARE_DETERMINERS:
+        if first in _pack_words("pose_bare_determiners"):
             return named
-        return _en("pose_entity", name=named)
+        return _t("pose_entity", name=named)
+    if _anchor_room_of(scene, text, prefer=room_of(scene, observer_name)):
+        return _noun_phrase(text.replace("_", " "))
     if "_" in text and not text.strip().count(" "):
         return None
     # A bare noun the Director wrote. It still reads better with the article
@@ -3338,11 +3395,10 @@ def _render_pose(p, *, past=False):
 
 
 _POSE_PREPOSITIONS = frozenset(_ENGLISH_COMPOSITOR["pose_prepositions"])
-_POSE_BARE_DETERMINERS = frozenset(
-    _ENGLISH_COMPOSITOR.get("pose_bare_determiners") or ())
-#: The determiners a leading capital is sentence case on, rather than a name.
-_ARTICLES = frozenset(
-    str(a).casefold() for a in (_ENGLISH_COMPOSITOR.get("articles") or ()))
+# The article and bare-determiner tables are read from the ACTIVE pack at use
+# time (`_pack_words`), because the text they shape is data the language
+# adapter renders verbatim; only the English renderer's own clause assembly
+# above still reads the English card.
 
 
 def _feature_items(rows, *, placed=True):

@@ -50,6 +50,7 @@ from story.scene import (
 from mind import affect
 from world.spatial import (
     apply_contact_ops,
+    room_display_name,
     hiding_holders_of,
     ambient_scope,
     contact_sensation,
@@ -2167,7 +2168,7 @@ def perception_establish(ctx, nonce):
     perceivers = [{
         "id": "player", "name": p_name, "room": p_room,
         "pronouns": (pers.get("identity") or {}).get("pronouns") or {},
-        "room_name": (p_rdata or {}).get("name") or p_room or "an unspecified area",
+        "room_name": room_display_name(p_rdata, p_room) or "an unspecified area",
         "room_notes": _room_notes_for_view(p_rdata, p_room, ctx, sc),
         "ambient_location": _ambient_location_for(sc, p_room),
         "crowds": crowds_for_room(ctx.chat.id, sc, p_room, chatter),
@@ -2196,7 +2197,7 @@ def perception_establish(ctx, nonce):
         perceivers.append({
             "id": c["id"], "name": character_name(sh), "room": r,
             "pronouns": (sh.get("identity") or {}).get("pronouns") or {},
-            "room_name": (rdata or {}).get("name") or r or "an unspecified area",
+            "room_name": room_display_name(rdata, r) or "an unspecified area",
             "room_notes": _room_notes_for_view(rdata, r, ctx, sc),
             "ambient_location": _ambient_location_for(sc, r),
             "crowds": crowds_for_room(ctx.chat.id, sc, r, chatter),
@@ -2385,7 +2386,7 @@ def perception_act(ctx, nonce):
         perceivers.append({
             "id": c["id"], "name": character_name(sh), "room": r,
             "pronouns": (sh.get("identity") or {}).get("pronouns") or {},
-            "room_name": (rdata or {}).get("name") or r or "an unspecified area",
+            "room_name": room_display_name(rdata, r) or "an unspecified area",
             "room_notes": _room_notes_for_view(rdata, r, ctx, sc),
             "ambient_location": _ambient_location_for(sc, r),
             "crowds": crowds_for_room(ctx.chat.id, sc, r, chatter),
@@ -2880,7 +2881,7 @@ def perception_outcome(ctx, nonce):
     perceivers = [{
         "id": "player", "name": p_name, "room": p_room,
         "pronouns": (pers.get("identity") or {}).get("pronouns") or {},
-        "room_name": (p_rdata or {}).get("name") or p_room or "an unspecified area",
+        "room_name": room_display_name(p_rdata, p_room) or "an unspecified area",
         "room_notes": _room_notes_for_view(p_rdata, p_room, ctx, sc),
         "ambient_location": _ambient_location_for(sc, p_room),
         "crowds": crowds_for_room(ctx.chat.id, sc, p_room, chatter),
@@ -2907,7 +2908,7 @@ def perception_outcome(ctx, nonce):
         perceivers.append({
             "id": f"extra:{pid_key}", "name": e_name, "room": e_room,
             "pronouns": (extra.get("identity") or {}).get("pronouns") or {},
-            "room_name": (e_rdata or {}).get("name") or e_room or "an unspecified area",
+            "room_name": room_display_name(e_rdata, e_room) or "an unspecified area",
             "room_notes": _room_notes_for_view(e_rdata, e_room, ctx, sc),
             "ambient_location": _ambient_location_for(sc, e_room),
             "crowds": crowds_for_room(ctx.chat.id, sc, e_room, chatter),
@@ -2938,7 +2939,7 @@ def perception_outcome(ctx, nonce):
         perceivers.append({
             "id": c["id"], "name": character_name(sh), "room": r,
             "pronouns": (sh.get("identity") or {}).get("pronouns") or {},
-            "room_name": (rdata or {}).get("name") or r or "an unspecified area",
+            "room_name": room_display_name(rdata, r) or "an unspecified area",
             "room_notes": _room_notes_for_view(rdata, r, ctx, sc),
             "ambient_location": _ambient_location_for(sc, r),
             "crowds": crowds_for_room(ctx.chat.id, sc, r, chatter),
