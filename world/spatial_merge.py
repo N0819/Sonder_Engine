@@ -49,7 +49,8 @@ from world.spatial_geometry import (apply_pose_diff, derive_scene_stations,
                               normalize_scene_anchor_cells,
                               normalize_scene_poses, normalize_scene_stations)
 from world.spatial_identity import (_ci_get, _entity_named, room_of,
-                              is_derived_room_name, normalize_scene_subjects,
+                              derived_room_name, is_derived_room_name,
+                              normalize_scene_subjects,
                               same_subject)
 from world.spatial_senses import apply_comms_ops, normalize_scene_comms
 from world.spatial_substance import apply_substance_ops, apply_contact_action_ops
@@ -149,6 +150,24 @@ def prune_bodiless_positions(scene: dict) -> list:
     for key in dropped:
         positions.pop(key, None)
     return dropped
+
+
+def _name_nameless_new_rooms(prior_rooms, incoming_rooms):
+    """A room minted this beat with no name takes its placeholder NOW, at
+    the one point every new room passes, so no reader downstream has to
+    choose between an empty string and the id. `is_derived_room_name` lets
+    an authored name displace the placeholder on any later beat, so nothing
+    is fixed by this that a specialist could not still improve. An EXISTING
+    room is left alone: its name is its own record's business, and the
+    reader floor (`room_display_name`) covers a stored blank."""
+    out = {}
+    for rid, room in (incoming_rooms or {}).items():
+        if (isinstance(room, dict) and rid not in (prior_rooms or {})
+                and not str(room.get("name") or "").strip()):
+            room = dict(room)
+            room["name"] = derived_room_name(rid)
+        out[rid] = room
+    return out
 
 
 def _merge_room(existing: dict, incoming: dict, room_id=None) -> dict:
@@ -1532,6 +1551,7 @@ def merge_scene_with_diff(
         _prior_rooms, incoming_rooms)
     incoming_rooms = _mirror_symmetric_barriers(
         _prior_rooms, incoming_rooms)
+    incoming_rooms = _name_nameless_new_rooms(_prior_rooms, incoming_rooms)
     incoming_entities = diff.get("entities") or {}
     incoming_positions = diff.get("positions") or {}
     # Where everyone stood BEFORE this beat's placements landed -- the

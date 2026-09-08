@@ -66,6 +66,7 @@ from llm.schemas import validate_llm_output
 from world.survival import survival_enabled, vitals_of
 from world.spatial import (
     apply_contact_ops,
+    derived_room_name,
     contact_motion,
     contacts_of,
     contact_relation,
@@ -4258,7 +4259,7 @@ def director_resolve(ctx, nonce, _corrections=None):
                 if prev_room:
                     adj.append({"to": prev_room, "barrier": "open", "distance": "near"})
                 sd["rooms"][room_id] = {
-                    "name": room_id.replace("_", " ").title(),
+                    "name": derived_room_name(room_id),
                     "desc": entry["content"], "adjacent": adj,
                     "notes": entry["content"][:500],
                 }

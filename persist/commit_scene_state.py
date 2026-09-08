@@ -14,7 +14,8 @@ from mind.memory import add_lorebook_link
 from story.character_schema import character_name_from_text, persona_name
 from story.provenance_text import strip_engine_provenance
 from world.weather import advance_weather, normalize_weather
-from world.spatial import (contradictory_sight_edges, guessed_room_sizes,
+from world.spatial import (contradictory_sight_edges, derived_room_name,
+                           guessed_room_sizes,
                            layout_warning, merge_scene_with_diff,
                            room_layout_lint)
 from world.spatial_frames import (_cast_changes_leaving, infer_companion_carry,
@@ -1581,7 +1582,7 @@ def prepare_scene_commit(ctx):
                     _counts[_room] = _counts.get(_room, 0) + 1
             _origin = max(_counts, key=_counts.get) if _counts else None
         sc.setdefault("rooms", {})[target_room] = {
-            "name": target_room.replace("_", " ").title(),
+            "name": derived_room_name(target_room),
             "desc": _desc,
             "adjacent": ([{"to": _origin, "barrier": "open",
                            "distance": "near"}]
