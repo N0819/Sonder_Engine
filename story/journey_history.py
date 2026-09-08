@@ -158,7 +158,9 @@ def _model_value(payload, model_call=None):
             "utility", _SYSTEM, json.dumps(payload, ensure_ascii=False),
             temperature=.55 if payload["mode"] == "generated" else .3,
             max_tokens=min(14000, 2000 + 600 * count), json_mode=True)
-        value = json.loads(raw)
+        # One reader for a model's JSON, fences and all (2026-09-08).
+        from llm.llm_quality import strict_json_parse
+        value = strict_json_parse(raw)
     else:
         value = model_call(copy.deepcopy(payload))
     from llm.schemas import PrestoryJourneyHistory

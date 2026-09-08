@@ -63,7 +63,7 @@
 | `mind/memory_relationships.py` | 457 | The relationship graph: axis deltas from conduct and from inference, and the history behind them. | `core.db`, `mind.memory_common`, `mind.memory_write` |
 | `mind/memory_retrieval.py` | 1242 | Hybrid retrieval: lexical and vector rankings fused by RRF, tilted by mood and importance, plus unbidden recall. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_write` |
 | `mind/memory_snapshot.py` | 947 | Checkpoint and archive: vector addressing, the prepare/apply restore split, memory and lorebook dump/restore. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_lore_entries`, `mind.memory_summaries`, `mind.memory_write` |
-| `mind/memory_summaries.py` | 764 | Autobiographical, hearsay and surmise summaries: search, support sets, windowed consolidation and backfill. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_retrieval`, `mind.memory_write` |
+| `mind/memory_summaries.py` | 765 | Autobiographical, hearsay and surmise summaries: search, support sets, windowed consolidation and backfill. | `core.db`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_read`, `mind.memory_retrieval`, `mind.memory_write` |
 | `mind/memory_time.py` | 332 |  | `core.db` |
 | `mind/memory_vectors.py` | 789 | Rebuilding vectors after the embedding model changes: bank status, the rebuild, and its background run. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common`, `mind.memory_retrieval`, `mind.memory_write` |
 | `mind/memory_write.py` | 892 | How a memory becomes a row: normalisation, extraction, FTS mirror, the upsert, and the embedding-repair thread. | `core.db`, `core.logging_utils`, `llm.providers`, `mind.memory_common` |
@@ -101,7 +101,7 @@
 | `story/greetings.py` | 1046 |  | `agents.runtime`, `core`, `core.logging_utils`, `llm.llm_quality`, `llm.prompts`, `mind.memory`, `mind.theory_of_mind`, `persist.steps`, `story.character_schema`, `story.importers`, `world.charter_runtime` |
 | `story/history_routing.py` | 215 |  | — |
 | `story/importers.py` | 3155 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema`, `story.scene` |
-| `story/journey_history.py` | 459 |  | — |
+| `story/journey_history.py` | 461 |  | — |
 | `story/lore_structure.py` | 248 |  | — |
 | `story/mandates.py` | 594 |  | `core.db` |
 | `story/naming.py` | 555 |  | `core.db`, `world.charter_identity` |
@@ -138,9 +138,9 @@
 | `world/charter_enrol.py` | 431 |  | `world.charter_generate`, `world.charter_model`, `world.charter_needs`, `world.charter_roster`, `world.charter_surface` |
 | `world/charter_feel.py` | 469 |  | `mind.psychology_runtime`, `world.charter_mark`, `world.charter_needs`, `world.charter_temper` |
 | `world/charter_figure.py` | 140 |  | — |
-| `world/charter_generate.py` | 1453 |  | `world.charter_identity`, `world.charter_model`, `world.charter_needs`, `world.charter_roster`, `world.charter_surface` |
+| `world/charter_generate.py` | 1462 |  | `world.charter_identity`, `world.charter_model`, `world.charter_needs`, `world.charter_roster`, `world.charter_surface` |
 | `world/charter_harm.py` | 264 |  | — |
-| `world/charter_history.py` | 881 |  | — |
+| `world/charter_history.py` | 883 |  | — |
 | `world/charter_identity.py` | 1167 |  | — |
 | `world/charter_intervene.py` | 344 |  | `world.charter_model` |
 | `world/charter_log.py` | 521 |  | `world.charter_commitment`, `world.charter_decide`, `world.charter_economy`, `world.charter_feel`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_needs`, `world.charter_news`, `world.charter_politics`, `world.charter_social`, `world.charter_temper` |
@@ -829,10 +829,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `backfill_memory_summary_windows()` | 566 | 89 lines |
+| `backfill_memory_summary_windows()` | 567 | 89 lines |
 | `search_memory_summaries()` | 69 | 88 lines |
-| `_write_consolidated_window()` | 448 | 77 lines |
-| `consolidate_character_memory()` | 657 | 75 lines |
+| `_write_consolidated_window()` | 448 | 78 lines |
+| `consolidate_character_memory()` | 658 | 75 lines |
 | `derive_summary_support()` | 176 | 59 lines |
 | `_consolidator_row()` | 403 | 43 lines |
 | `save_memory_summary()` | 258 | 39 lines |
@@ -1262,11 +1262,11 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `compile_journey_history()` | 288 | 165 lines |
-| `ground_journey_history()` | 169 | 92 lines |
+| `compile_journey_history()` | 290 | 165 lines |
+| `ground_journey_history()` | 171 | 92 lines |
 | `_source_rows()` | 120 | 28 lines |
-| `companion_of()` | 263 | 23 lines |
-| `_model_value()` | 150 | 17 lines |
+| `companion_of()` | 265 | 23 lines |
+| `_model_value()` | 150 | 19 lines |
 | `journey_event_count()` | 95 | 12 lines |
 | `_content_key()` | 113 | 5 lines |
 | `_text()` | 109 | 2 lines |
@@ -1687,14 +1687,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `close_plan()` | 735 | 353 lines |
-| `_spread_berths()` | 548 | 84 lines |
-| `_ensure_shift_crews()` | 354 | 62 lines |
-| `ensure_required_rooms()` | 1118 | 60 lines |
-| `narrate_actual_history()` | 1287 | 58 lines |
-| `_scale_populations()` | 470 | 51 lines |
-| `normalize_featured_residents()` | 639 | 47 lines |
-| `resident_service_chronicle()` | 1190 | 47 lines |
+| `close_plan()` | 744 | 353 lines |
+| `_spread_berths()` | 557 | 84 lines |
+| `_ensure_shift_crews()` | 363 | 62 lines |
+| `ensure_required_rooms()` | 1127 | 60 lines |
+| `narrate_actual_history()` | 1296 | 58 lines |
+| `_scale_populations()` | 479 | 51 lines |
+| `normalize_featured_residents()` | 648 | 47 lines |
+| `resident_service_chronicle()` | 1199 | 47 lines |
 
 ### `world/charter_harm.py`
 
@@ -1712,14 +1712,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `integrate_featured_resident()` | 741 | 129 lines |
+| `integrate_featured_resident()` | 743 | 129 lines |
 | `ground_recent_history()` | 532 | 122 lines |
 | `_recent_life_context()` | 260 | 87 lines |
 | `ground_personal_history()` | 452 | 78 lines |
 | `resident_history_packet()` | 349 | 73 lines |
 | `_record_shared_recent_history()` | 656 | 48 lines |
 | `featured_resident_private_habits()` | 148 | 47 lines |
-| `featured_resident_seed()` | 112 | 34 lines |
+| `flesh_resident_history()` | 706 | 35 lines |
 
 ### `world/charter_identity.py`
 

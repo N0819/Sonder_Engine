@@ -224,6 +224,7 @@ def historian_budget(resident_count):
 
 def _json_call(system, payload, *, max_tokens=PLAN_MAX_TOKENS,
                temperature=0.5):
+    from llm.llm_quality import strict_json_parse
     from llm.providers import chat_complete
     # REASONING OFF, EXPLICITLY. Every OpenAI-style seam counts private
     # reasoning against `max_tokens`, so a thinking model spends the plan's
@@ -237,8 +238,16 @@ def _json_call(system, payload, *, max_tokens=PLAN_MAX_TOKENS,
         temperature=temperature, max_tokens=max_tokens, json_mode=True,
         reasoning_effort="off")
     try:
-        value = json.loads(raw)
-    except json.JSONDecodeError as exc:
+        # THE ONE READER OF A MODEL'S JSON (2026-09-08). This parsed with a
+        # bare `json.loads`, so a response wrapped in a ```json fence -- which
+        # a provider returns even under `json_mode` -- failed at character 0
+        # with "Expecting value", and the diagnosis below then reported a
+        # malformed object and discarded a start that had just paid for two
+        # calls. `strict_json_parse` is what every pipeline stage already
+        # reads model output with: it strips the fence, and failing that
+        # takes the first balanced object out of the prose around it.
+        value = strict_json_parse(raw)
+    except Exception as exc:
         # SAY WHICH FAILURE THIS IS, and let the ONE reader of that question
         # answer it. This spelled the diagnosis by hand and always named the
         # budget, so a plan that came back as the model's own reasoning told
@@ -248,7 +257,7 @@ def _json_call(system, payload, *, max_tokens=PLAN_MAX_TOKENS,
         raise ValueError(
             "the location generator returned %d characters of unparseable "
             "JSON (%s). %s Tail: ...%s"
-            % (len(raw or ""), exc.msg,
+            % (len(raw or ""), exc,
                json_failure_diagnosis(raw, max_tokens=max_tokens),
                (raw or "")[-160:].replace("\n", " "))) from exc
     if not isinstance(value, dict):
