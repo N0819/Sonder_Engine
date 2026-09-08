@@ -3132,12 +3132,20 @@ def character_start_story(cid: int, body: dict = Body(default={})):
         _pipeline_logger.exception(
             "quick start LLM failure for character %s: %s", cid, exc)
         raise HTTPException(502, _lived_location_llm_detail(exc)) from exc
+    except RuntimeError as exc:
+        # A MODEL THAT RETURNS UNREADABLE JSON IS NOT A SERVER FAULT. This is
+        # what `strict_json_parse` raises when it can neither parse nor repair
+        # a response, and it reached the client as a 500 with an ASGI
+        # traceback (2026-09-08, the journey history at position 8118). It is
+        # the same class as the ValueError above: the request cannot be
+        # carried out, and the failed setup in the library is where the author
+        # picks it up.
+        _pipeline_logger.exception(
+            "quick start failed for character %s: %s", cid, exc)
+        raise HTTPException(422, str(exc)) from exc
     except Exception as exc:
-        # The rest of the graph raises plenty that is not a ValueError (a
-        # RuntimeError from the consolidator's own repair path, a KeyError
-        # from a half-written artifact). Those became a 500 with a traceback
-        # only in the terminal's default handler; this names the request they
-        # belong to before letting the handler have it.
+        # Everything else keeps its 500, but names the request it belongs to
+        # before the default handler has it.
         _pipeline_logger.exception(
             "quick start failed for character %s: %s", cid, exc)
         raise

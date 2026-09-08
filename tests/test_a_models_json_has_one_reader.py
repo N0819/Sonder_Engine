@@ -132,3 +132,30 @@ def test_no_model_response_is_parsed_with_a_bare_json_loads():
     assert not offenders, (
         "a model response parsed with a bare json.loads (use "
         "llm.llm_quality.strict_json_parse): %s" % offenders)
+
+
+TRAILING_COMMA = '{"town": {"name": "Saltmarrow",}, "posts": [1, 2,],}'
+
+
+def test_the_shared_reader_repairs_a_trailing_comma():
+    """The commonest malformation there is, and the one the reader could not
+    do until 2026-09-08: a journey history was lost at position 8118 to a
+    comma after a list's last member. Two call sites had carried this repair
+    as a regex; it belongs in the one reader, where everybody gets it."""
+    value = strict_json_parse(TRAILING_COMMA)
+    assert value["town"]["name"] == "Saltmarrow"
+    assert value["posts"] == [1, 2]
+
+
+def test_the_repair_does_not_edit_the_inside_of_a_sentence():
+    """Why it is not the regex the two call sites used: `,\\s*[}\\]]` cannot
+    see quoting, so a line of prose ending `, }` was edited mid-sentence."""
+    value = strict_json_parse('{"line": "he paused, } and left", "n": 1,}')
+    assert value["line"] == "he paused, } and left"
+    assert value["n"] == 1
+
+
+def test_a_fenced_object_with_a_trailing_comma_is_read():
+    """The two repairs compose, which is the shape a real response has."""
+    value = strict_json_parse('```json\n{"a": [1,],}\n```')
+    assert value == {"a": [1]}
