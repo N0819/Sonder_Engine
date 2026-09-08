@@ -62,6 +62,25 @@ def _json_digest(value: Any) -> str:
     return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
 
 
+def _variant_digest(content: Any) -> str:
+    """The digest of one persisted variant: what the row HOLDS, notes included.
+
+    B22: the two exports in this module both hash a variant, and used to
+    disagree. `export_pipeline_trace` hashed the decoded row whole;
+    `export_turn_debug` hashed it after popping `_engine_notes`, so the
+    natural join between the two artifacts -- `steps[].variants[]
+    .content_sha256` against `timeline[].output_sha256` for one variant --
+    mismatched on every step the deterministic layer had annotated, which is
+    every step that repaired output or ran in a parallel group.
+
+    A variant has ONE digest, and it covers the persisted content, because
+    the persisted content is the thing being identified. A projection of it
+    is a view, not a second variant: the debug artifact lifts the notes out
+    of `output` into sibling fields, and a view does not get its own hash.
+    """
+    return _json_digest(content)
+
+
 def _trace_digest(trace: dict) -> str:
     unsigned = {key: value for key, value in trace.items()
                 if key != "trace_sha256"}
@@ -136,7 +155,7 @@ def export_pipeline_trace(
                 "source_variant_id": int(variant["id"]),
                 "active": bool(variant["active"]),
                 "created": float(variant["created"]),
-                "content_sha256": _json_digest(content),
+                "content_sha256": _variant_digest(content),
             }
             if include_content:
                 record["content"] = content
@@ -283,7 +302,7 @@ def validate_pipeline_trace(
                 errors.append(f"{variant_prefix}.content_sha256 is missing")
             if "content" in variant and isinstance(content_hash, str):
                 try:
-                    actual = _json_digest(variant["content"])
+                    actual = _variant_digest(variant["content"])
                 except PipelineTraceError as exc:
                     errors.append(f"{variant_prefix}: {exc}")
                 else:
@@ -457,6 +476,7 @@ def export_turn_debug(turn_id: int, *, include_content: bool = True) -> dict:
 
     events: list[dict] = []
 
+    from agents.storage import ENGINE_NOTES_KEY
     from persist.llm_capture import (exchanges_for_turn, is_room_step,
                                      room_phase)
     for row in exchanges_for_turn(turn_id, include_bodies=include_content):
@@ -514,7 +534,17 @@ def export_turn_debug(turn_id: int, *, include_content: bool = True) -> dict:
             continue
         content = _decode_variant_content(variant["content"],
                                           variant_id=int(variant["id"]))
-        notes = content.pop("_engine_notes", {}) if isinstance(content, dict) else {}
+        # Digest the ROW, before the notes are lifted out of it, so one
+        # variant carries one digest across both exports (B22). The removal
+        # itself is the reserved-key removal `agents.storage.active_content`
+        # does -- spelled by its own name rather than by a literal, and
+        # without mutating the decoded dict the digest was just taken from.
+        digest = _variant_digest(content)
+        notes = {}
+        if isinstance(content, dict) and ENGINE_NOTES_KEY in content:
+            notes = content.get(ENGINE_NOTES_KEY) or {}
+            content = {k: v for k, v in content.items()
+                       if k != ENGINE_NOTES_KEY}
         events.append({
             "at": float(variant["created"] or 0.0),
             "kind": "step",
@@ -522,7 +552,7 @@ def export_turn_debug(turn_id: int, *, include_content: bool = True) -> dict:
             "label": step["label"],
             "ord": int(step["ord"] or 0),
             "output": content if include_content else None,
-            "output_sha256": _json_digest(content),
+            "output_sha256": digest,
             "warnings": (notes or {}).get("warnings") or [],
             "decisions": (notes or {}).get("decisions") or [],
             "llm_calls": (notes or {}).get("llm_calls") or [],

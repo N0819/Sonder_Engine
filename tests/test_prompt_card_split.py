@@ -401,7 +401,7 @@ def test_canonical_part_path_covers_exactly_the_five_prose_shapes():
 
     # Structure does not move.
     assert not is_part_leaf(("specialists", "body", "order", 0))
-    assert not is_part_leaf(("specialists", "body", "nsfw"))
+    assert not is_part_leaf(("specialists", "body", "chunks"))
     assert not is_part_leaf(("nsfw_prompt_ids", 0))
     assert not is_part_leaf(("prose_author_sheet", 0, 0))
     assert not is_part_leaf(("character_block_keys", 0, 0))
