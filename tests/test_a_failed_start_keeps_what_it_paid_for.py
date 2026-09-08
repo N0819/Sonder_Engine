@@ -140,3 +140,36 @@ def test_the_stored_record_says_why_it_was_kept(temp_db):
     stored = json.loads(get_setting(cr.SALVAGED_PLAN_KEY, "{}"))
     assert "Unterminated string" in stored["reason"]
     assert stored["stage"] == "planned"
+
+
+def test_the_fingerprint_ignores_the_book_the_engine_minted_for_the_chat(temp_db):
+    """The flaw the owner caught in the first cut of this: a quick start puts
+    `owning_lorebook_id` in the request, and that is the chat's own canon
+    book, minted fresh for each attempt. A fingerprint counting it differs
+    every time, so no salvaged plan is ever adopted and the mechanism is
+    inert -- exactly the case it exists for."""
+    first = dict(REQUEST, owning_lorebook_id=41, lorebook_id=7)
+    second = dict(REQUEST, owning_lorebook_id=42, lorebook_id=7)
+    assert cr._plan_fingerprint(first, None) == cr._plan_fingerprint(second, None)
+
+
+def test_a_plan_built_from_other_lore_is_a_different_plan(temp_db):
+    """The complement, so the exclusion above does not become "ignore every
+    book": `lorebook_id` names the lore the town was generated FROM."""
+    here = dict(REQUEST, lorebook_id=7)
+    elsewhere = dict(REQUEST, lorebook_id=9)
+    assert cr._plan_fingerprint(here, None) != cr._plan_fingerprint(elsewhere, None)
+
+
+def test_a_second_attempt_adopts_the_first_attempts_plan(temp_db):
+    """End to end, in the shape a retry actually has: the first start builds
+    the plan and is discarded, the second start is a NEW chat with a NEW
+    canon book, and it adopts the plan rather than paying for it again."""
+    first_chat, second_chat = _chat(temp_db, "a"), _chat(temp_db, "b")
+    first_request = dict(REQUEST, owning_lorebook_id=101)
+    _job_with_plan(temp_db, first_chat, town={"name": "Ashfall"})
+    assert cr.salvage_plan(first_chat, first_request) is True
+
+    second_request = dict(REQUEST, owning_lorebook_id=102)
+    adopted = cr.take_salvaged_plan(second_request)
+    assert adopted is not None and adopted["town"]["name"] == "Ashfall"
