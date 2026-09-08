@@ -286,13 +286,24 @@ def _resolve_narration_tense(chat_id, recent_prose=()):
 # reader of the list is `tools/narrator_sheet_bench.py`, which uses it to
 # score arms.
 
-# Deterministic craft screen: AI-tell phrases the PROSE CRAFT prompt bans. A
-# draft containing any is REPORTED, one warning per tell, and published as
-# written -- the rewrite this screen used to buy was removed 2026-09-06 for
-# the reason `narrator` states at the removal site (E13). Conservative --
-# only clear tells, to avoid false positives on ordinary prose. Dialogue is
-# exempt (quotes are fixed); we scan the whole draft but the patterns don't
-# match normal speech.
+# Deterministic craft screen. The pack's `_CRAFT_TELLS` table is the AUTHORITY
+# on which phrasings are tells; the PROSE CRAFT sheet states the class (a
+# phrasing that would sit unchanged in any other scene) and illustrates it,
+# and its illustrations are not this table. Review 2026-09-07 B29 measured the
+# drift the other way round: until that day narrator.txt carried two
+# enumerations ("Banned: deliberate, unhurried, casually, pointedly, slow and
+# steady" and "BANNED AI TELLS: shifts her weight; eyes flick; ...") that were
+# a strict SUBSET of what is screened here -- the table also held
+# 'deliberately'/'unhurriedly', the sensor-ledger 'registers' diction and
+# 'continuous while' -- so a draft could obey the sheet word for word and
+# still be flagged. When a new tell is caught, widen the TABLE; never re-sync
+# the sheet into an enumeration (CLAUDE.md: no word lists in prompts). A draft
+# containing any is REPORTED, one warning per tell, and published as written
+# -- the rewrite this screen used to buy was removed 2026-09-06 for the reason
+# `narrator` states at the removal site (E13). Conservative -- only clear
+# tells, to avoid false positives on ordinary prose. Dialogue is exempt
+# (quotes are fixed); we scan the whole draft but the patterns don't match
+# normal speech.
 
 
 def _craft_tells(prose: str) -> list:

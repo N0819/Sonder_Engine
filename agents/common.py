@@ -3107,7 +3107,20 @@ def _requires_director_resolution(result):
     return False
 
 def _classify_action_commitment(raw_text):
-    """Classify an action as asserted or contestable."""
+    """Classify an action as asserted or contestable.
+
+    The pack's `ATTEMPT_CUES` table is the AUTHORITY on what marks an
+    unfinished attempt; the director_interpret sheet states the class and
+    illustrates it, and its illustrations are not this table. This function is
+    a BACKSTOP only -- `_extract_claims` calls it just where the Director
+    omitted `commitment` outright, so a mislabelled `asserted` never reaches
+    it. Review 2026-09-07 B29 measured the gap that leaves: the sheet named
+    six cues ('try', 'attempt', 'aim', 'rush', 'lunge', 'swing at') against
+    sixteen here, so a Director reading the sheet as an enumeration can call
+    "I reach for the pistol" a completed assertion and nothing downstream
+    disagrees. Widen the TABLE when a new cue is caught; the sheet's job is
+    the class, not the list.
+    """
     text = (raw_text or "").casefold().strip()
     if not text:
         return "contestable"

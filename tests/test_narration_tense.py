@@ -350,12 +350,24 @@ class TestProseRulesLiveInThePrompt:
     """
 
     def test_the_rules_are_in_the_prompt(self):
+        """The sheet states the CLASS and the pack table holds the instances.
+
+        Until review 2026-09-07 B29 this asserted the three phrases were in
+        the prompt text itself, which was the enumeration the review found
+        narrower than `_CRAFT_TELLS`; the sheet now says what a stock tell
+        IS (a phrasing that would sit unchanged in any other scene) and the
+        table is where a caught instance is recorded.
+        """
+        from agents.narration import _craft_tells
         from llm.prompts import get_prompt
 
-        prompt = get_prompt("narrator")
+        prompt = get_prompt("narrator").casefold()
 
+        assert "no stock tells" in prompt
+        assert "unchanged in any other scene" in prompt
         for rule in ("eyes flick", "middle distance", "hangs in the air"):
-            assert rule in prompt.casefold(), rule
+            assert rule not in prompt, rule
+            assert _craft_tells(f"Her gaze went to the {rule} again."), rule
 
     def test_no_craft_rewrite_survives_in_the_narrator(self):
         """A second narrator call is the thing being removed, so the loop that
