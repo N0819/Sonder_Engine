@@ -4530,8 +4530,11 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
             ]
 
     if step_key in SPECIALIST_CHANNELS:
-        # A specialist's instruction blocks are shared verbatim with the
-        # full Director sheet, which says "state_diff.<channel>" -- so a
+        # A specialist's instruction blocks still name each channel
+        # "state_diff.<channel>" -- the spelling they carried when one
+        # unsplit Director sheet held them all, which no longer exists
+        # (there is no `DEFAULT_PROMPTS["director_resolve"]`; the sheets are
+        # assembled per hand in llm/prompts._assembled_sheets) -- so a
         # model will sometimes wrap its channels in a state_diff (or, on
         # the interpret side, state_assertions) envelope despite the core
         # saying not to. Deterministic unwrap, then the same coercions the

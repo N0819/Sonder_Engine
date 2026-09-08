@@ -22,9 +22,19 @@ module has none, so `room_exposure` falls back to a deliberately small keyword
 pass over the room's own name and description -- and defaults to `enclosed`
 when it sees nothing it recognises. That default is the conservative direction:
 an unrecognised room quietly gets no weather, rather than rain appearing
-indoors. This derivation is a convenience, never an authority: it must not be
-used for anything a mind could act on, only for what a place looks and sounds
-like.
+indoors.
+
+AND THE FALLBACK IS READ BY A RULE A MIND ACTS ON, which this paragraph denied
+until E28 (2026-09-07). `world/spatial_light.room_light` asks `room_exposure`
+whether the sky is a room's ceiling, and the light word it returns gates SIGHT
+(`_LIGHT_SIGHT`): a room the word lists cannot place is a room a character can
+be in the dark in. That use is the owner's, recorded in `docs/UNBUILT.md`
+§ 2.28, and what makes it safe is the DEFAULT rather than the coverage -- an
+unrecognised room reads `enclosed`, and an `enclosed` room keeps its declared
+light untouched, so the failure direction is "a square that should have gone
+dark stayed lit" and never a room darkened by a keyword. Widen the lists with
+that direction in mind, and read `docs/UNBUILT.md` § 1.18 first: `exposure` is
+authored on 13.6% of live rooms, so the fallback is not the fallback.
 
 **3. Weather drifts deterministically, or it never moves.** A field only the
 Director writes is a field that changes about once a story: it has no reason to
@@ -34,10 +44,12 @@ a seeded, idempotent progression on the simulation clock, in the same spirit as
 resumed turn cannot produce a different sky. The Director still overrides it
 outright whenever a beat says the storm breaks.
 
-The consumers are presentational (`backdrops.py`, `ambience.py`), and one
-future one is not: thunder, rain on a window and a lit horizon are all things a
-character can legitimately perceive. Anything that crosses into perception must
-go through the ordinary channels rather than reading this module directly.
+Most consumers are presentational (`backdrops.py`, `ambience.py`); one is not,
+and it is `room_exposure` rather than the sky that crossed over -- see rule 2.
+Thunder, rain on a window and a lit horizon are all things a character can
+legitimately perceive, and a WEATHER fact that crosses into perception still
+goes through the ordinary channels rather than being read out of this module
+at the delivery site.
 """
 
 from __future__ import annotations

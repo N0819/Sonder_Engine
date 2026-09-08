@@ -22,14 +22,19 @@ WHO MAY LEARN WHAT, AND BY WHAT ROUTE (enforced structurally):
     were in is their own gap record's business (``gaps.interim_for``), on
     their own sightings, not the player's.
   * Facts are relative or entropic — "quieter than when last seen", "the
-    hearth stands cold" — never absolute clock claims. Which hour of the
-    day it is has exactly one owner (``world/day_cycle``, off the clock's
-    anchor), and it is not this module: a fact like "it is midday" written
-    here would be a second answer to a question already answered. A
-    relative diff asserts only the passage the clock actually measured,
-    which is why it cannot contradict the story's own sense of time. How
-    LONG a day is comes from the same owner, because the watches a routine
-    turns on are the world's day and not a Terran one.
+    hearth stands cold" — never absolute clock claims. Since 2026-09-03 the
+    story clock CAN carry a day anchor (``world/day_cycle.clock_anchor``:
+    a stored ``anchor_hour``, else a readable ``display`` label, else the
+    author's ``opening_hour``) — but it is optional, a story that has never
+    said what time it is has none, and NOTHING HERE IS HANDED ONE: a
+    routine is a pure function of ELAPSED seconds, so "it is midday" would
+    assert an hour this module cannot read and would be a guess in the
+    stories that anchored nothing. A relative diff asserts only the passage
+    the clock actually measured, which is why it cannot contradict the
+    story's own sense of time. How LONG a day is comes from the same owner,
+    because the watches a routine turns on are the world's day and not a
+    Terran one. (E27, 2026-09-07: this used to say the engine's clock has
+    no day anchor at all, which the cycle ended.)
   * Fired consequence fuses at the entered room outrank texture: they are
     layer-1 fact (see ``living_world``), the texture is plausible motion.
     Both arrive as state; the Director stages, the narrator renders — the
@@ -44,8 +49,9 @@ import hashlib
 from world.day_cycle import DAY_LENGTH_HOURS_DEFAULT
 
 #: One in-story day on a world that never said otherwise, for cycles and
-#: entropy thresholds. A DAY here is a period, not a date: the clock is
-#: elapsed seconds and this module still asserts nothing about the hour.
+#: entropy thresholds. What this module reads is elapsed seconds and nothing
+#: else -- it takes no anchor, whatever hour `world/day_cycle` has the story
+#: standing on -- so a DAY here is a period and never a date.
 #: HOW LONG THAT PERIOD IS BELONGS TO `world/day_cycle`, though -- a story
 #: whose author set `day_length_hours` has a longer or shorter day, and
 #: every function below takes it rather than assuming this one (review

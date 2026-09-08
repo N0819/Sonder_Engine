@@ -889,11 +889,15 @@ fidelity payload ([`UNBUILT.md`](../UNBUILT.md) §3.4, S3-A6).
 
 ### `commit`
 
-`commit_all` first prepares the exact post-turn scene plus all lore and memory embeddings without holding SQLite's write lock. It then invokes every durable domain inside one outer transaction under a per-turn idempotency lock:
+`commit_all` first prepares the exact post-turn scene, the beat's typed records, its memory mutations (embeddings included) and its background claims without holding SQLite's write lock (`_prepare_turn_commit`). No LORE is prepared or embedded here: the mapping domain has filed none since 2026-09-03 (`persist/commit_mapping.py`). It then invokes twenty-one durable domains inside one outer transaction under a per-turn idempotency lock, in this order:
 
 1. transit sweep — first, because it mutates the prepared scene (timed
    arrivals, engine notices) that the scene domain then persists
-2. scene and simulation clock — the clock's `elapsed_seconds` is charged
+2. the world-event spine — fired mechanics rows promoted into checkpointed
+   objective history (`scheduled_events` answers what is still due,
+   `world_events` what objectively happened). It runs on the transit result,
+   before the scene it describes is written
+3. scene and simulation clock — the clock's `elapsed_seconds` is charged
    by `beat_end_elapsed`, and `_advance_day_cycle` then derives the hour
    of the day and the phase from it (`world/day_cycle.py`): `scene.
    day_phase` and `simulation_clock.{anchor_hour, day_length_hours,
@@ -902,34 +906,53 @@ fidelity payload ([`UNBUILT.md`](../UNBUILT.md) §3.4, S3-A6).
    last label named, and a declared label the clock is not in re-anchors
    it with a warning. A story whose opening named no readable time has no
    anchor and none of this runs
-3. world entities and conditions (a derived projection built from the same
+4. world entities and conditions (a derived projection built from the same
    prepared post-dedup diff as the scene) — an entity state blob referencing a
    concealed actor raises a `"possible stale clause (S3-A8)"` warning and is
    still committed; an earlier skip-the-update fix was reverted as durable
    corruption, so this is a signal, not a guard
-4. cast status/state
-5. paradox checks
-6. spatial-frame reconciliation
-7. typed records: the Director's typed introductions; the beat's planning needs onto the frame's ledger with the committed surface attached, a containment room's need dropped; the Director's `world_facts` as `setting_fact` needs. No lore is filed here since 2026-09-03 -- the room `layout` filing is retired and the fallback fact writer with it (`persist/commit_mapping.py`, no model)
-8. character active psychology, beliefs/associations, memories, relationships,
-   and event row — dialogue memories store appearance labels for unrecognized
-   speakers (F2/P1); a character deciding turn N never retrieves memories from
-   turn N or later, via the `current_turn_idx` hard cutoff in
-   `search_memories` (F1); pending private ponder queries are consumed here and
-   any newly chosen query is staged for that character's next turn
-9. background-presence tracking — co-located character names pass through the
-   presence's own recognition ledger (F3)
-10. narration person
-11. obligations
-12. world pressure
-13. authored events
-14. pending-state clear
+5. cast status/state
+6. paradox checks
+7. spatial-frame reconciliation
+8. typed records: the Director's typed introductions; the beat's planning needs onto the frame's ledger with the committed surface attached, a containment room's need dropped; the Director's `world_facts` as `setting_fact` needs. No lore is filed here since 2026-09-03 -- the room `layout` filing is retired and the fallback fact writer with it (`persist/commit_mapping.py`, no model)
+9. off-screen plan ops — Director-adjudicated, character-grounded reactive plans
+10. crowd ops, then every crowd that has somewhere to be. After the scene
+    domain, so a crowd op naming a room this beat created finds it in the
+    projected world rather than the one the turn started in
+11. the shared off-screen epoch — deterministic, world-KV only; the
+    model-priced ticks that ride this epoch are in the tail below
+12. character active psychology, beliefs/associations, memories, relationships,
+    and event row — dialogue memories store appearance labels for unrecognized
+    speakers (F2/P1); a character deciding turn N never retrieves memories from
+    turn N or later, via the `current_turn_idx` hard cutoff in
+    `search_memories` (F1); pending private ponder queries are consumed here and
+    any newly chosen query is staged for that character's next turn
+13. information carriers — body-owned public reports acquired and moved after
+    memory state lands, then any passed on this beat, in one domain so a
+    telling can never outlive the acquisition it copied from
+14. charter observations — the beat's observer-scoped player/major-character
+    evidence, written as unpromoted bodies' private claims. After the ordinary
+    carrier writes so neither can overwrite the other's registry copy
+15. background-presence tracking — co-located character names pass through the
+    presence's own recognition ledger (F3)
+16. narration person
+17. obligations
+18. world pressure
+19. world facts — what the beat established about the world, from the establish's
+    diff as readily as the resolve's
+20. authored events
+21. pending-state clear
 
-Domains 5 and 6 run deliberately after the scene/entity/cast writes so they
+Then, still inside the transaction: the charter registry lands ONCE
+(`flush_registry_session` — every domain above mutated one shared private
+copy), and extension commit domains run LAST, after every engine domain, so an
+extension computing from the turn's own durable writes can read them.
+
+Domains 6 and 7 run deliberately after the scene/entity/cast writes so they
 inspect this turn's projected world, while staying inside the same rollback
 boundary.
 
-A failure in any domain aborts immediately and rolls back all earlier writes from that turn. Two things run *after* the primary transaction, both because they may call an LLM and neither can corrupt a committed fact: character autobiographical consolidation (a reconstructible derived cache) and autonomous background-to-cast promotion (additive and forward-only — the new character becomes step-eligible next turn). A failure in either is a warning. Consolidation is additionally OUT OF BAND (`commit.schedule_memory_consolidation` → `core/jobs.py`, beside the offscreen ticks): measured live, the first consolidation of a chat spent 29.5s of a 45.8s commit stage on one `utility`-role LLM call inside the player's wait. The job is deduped per chat, abandonable between characters, silent-per-character on failure, and cooperatively cancelled by `restore_checkpoint` so a rolled-back turn does not land a summary computed from rows that no longer exist. Planning needs the commit could not answer drain on the same terms (`world.planning_needs.schedule_planning_needs`, keyed `planning_needs` per chat): a person the deterministic fill could not enrol is tried again; a dwelling owed or a thing with no plan stays open for the Writers' Room. The room's own work follows on the same terms (`agents/story_planner.schedule_room_work`, keyed `story_planner_fill` per chat): the prepared frontier is measured (`story/room_frontier.py`) and, when a need is open or the frontier is short AND the player has granted identity fills, one bounded Story Planner job is queued under the hour's budget; with no grant the status row asks and nothing runs. The same tail queues the Dramaturge (`dramaturge_pass`, `agents/story_planner.run_dramaturge_pass`) when a grant carries the surprise dial and the pacing budget's beats have passed, and the story-bible fold (`room_bible`, `story/room_bible.schedule_fold`) when a batch of thread lines has aged past the Planner's window. A background job has no wall of its own: each pass is bounded (600s) and the task resumes in the next pass under the same mandate until the granted spend stops it.
+A failure in any domain aborts immediately and rolls back all earlier writes from that turn. A TAIL of out-of-band work runs *after* the primary transaction — everything that may call an LLM or cost wall-clock the player is not being asked to wait for, and none of it can corrupt a committed fact. Eleven schedulers live there today, in order: memory consolidation, the memory tension/contradiction pass, planning needs, the Writers' Room's room work, plot-package activation and due clocks, autonomous background-to-cast promotion (additive and forward-only — the new character becomes step-eligible next turn), charter/upkeep ticks, off-screen profile ticks, the paid off-screen `character_agent` rung, artifact wording, and the extension turn hooks. Every one of them reports a failure as a warning, never a rollback and never silence. Consolidation is additionally OUT OF BAND (`commit.schedule_memory_consolidation` → `core/jobs.py`, beside the offscreen ticks): measured live, the first consolidation of a chat spent 29.5s of a 45.8s commit stage on one `utility`-role LLM call inside the player's wait. The job is deduped per chat, abandonable between characters, silent-per-character on failure, and cooperatively cancelled by `restore_checkpoint` so a rolled-back turn does not land a summary computed from rows that no longer exist. Planning needs the commit could not answer drain on the same terms (`world.planning_needs.schedule_planning_needs`, keyed `planning_needs` per chat): a person the deterministic fill could not enrol is tried again; a dwelling owed or a thing with no plan stays open for the Writers' Room. The room's own work follows on the same terms (`agents/story_planner.schedule_room_work`, keyed `story_planner_fill` per chat): the prepared frontier is measured (`story/room_frontier.py`) and, when a need is open or the frontier is short AND the player has granted identity fills, one bounded Story Planner job is queued under the hour's budget; with no grant the status row asks and nothing runs. The same tail queues the Dramaturge (`dramaturge_pass`, `agents/story_planner.run_dramaturge_pass`) when a grant carries the surprise dial and the pacing budget's beats have passed, and the story-bible fold (`room_bible`, `story/room_bible.schedule_fold`) when a batch of thread lines has aged past the Planner's window. A background job has no wall of its own: each pass is bounded (600s) and the task resumes in the next pass under the same mandate until the granted spend stops it.
 
 ## Streaming
 

@@ -1,6 +1,13 @@
 "use strict";
 
-const LORE_INHERITANCE_MODES = [
+// `mind/memory.py`'s LORE_INHERITANCE_MODES, READ FROM THE ENGINE: the
+// bootstrap carries `lorebook_inheritance_modes`, and `PUT /api/lorebooks`
+// raises 400 against that same constant, so the menu and the validator quote
+// one source. The literal below survives only as the fallback for a tab whose
+// cached JavaScript is running ahead of its first bootstrap response
+// (review 2026-09-07, B24 -- the same shape as the attire regions the card
+// editor had retyped).
+const LORE_INHERITANCE_MODES_FALLBACK = [
   "inherit",
   "isolated",
   "reference_only"
@@ -54,6 +61,35 @@ function loreBookTypeIcon(type) {
     characters: "👥",
     events: "⏳"
   }[type] || "📖";
+}
+
+function inheritanceModes() {
+  const shipped = S.boot && S.boot.lorebook_inheritance_modes;
+  return Array.isArray(shipped) && shipped.length
+    ? shipped
+    : LORE_INHERITANCE_MODES_FALLBACK;
+}
+
+// `mind/memory.py`'s KNOWLEDGE_TAGS and KNOWLEDGE_RANGES, read the same way
+// (B24, second rework): the entry editor typed both into its selects at the
+// point of use, and its copy of the ranges ran the opposite way to the
+// engine's. The fallbacks hold the engine's order; the default is picked by
+// value, not by position.
+const KNOWLEDGE_TAGS_FALLBACK = ["common", "scholarly", "esoteric"];
+const KNOWLEDGE_RANGES_FALLBACK = ["local", "global"];
+
+function knowledgeTags() {
+  const shipped = S.boot && S.boot.knowledge_tags;
+  return Array.isArray(shipped) && shipped.length
+    ? shipped
+    : KNOWLEDGE_TAGS_FALLBACK;
+}
+
+function knowledgeRanges() {
+  const shipped = S.boot && S.boot.knowledge_ranges;
+  return Array.isArray(shipped) && shipped.length
+    ? shipped
+    : KNOWLEDGE_RANGES_FALLBACK;
 }
 
 function loreLinkTypes() {
@@ -1216,7 +1252,7 @@ function renderLoreBookEditor(state, container) {
   );
 
   const inheritanceSelect = loreSelect(
-    LORE_INHERITANCE_MODES,
+    inheritanceModes(),
     book.inheritance_mode
   );
 
@@ -1610,7 +1646,7 @@ function createLoreBookDialog(
   );
 
   const inheritanceSelect = loreSelect(
-    LORE_INHERITANCE_MODES,
+    inheritanceModes(),
     "inherit"
   );
 
@@ -1930,12 +1966,12 @@ function buildLoreEntryCard(state, entry) {
   );
 
   const knowledgeTagSelect = loreSelect(
-    ["common", "scholarly", "esoteric"],
+    knowledgeTags(),
     entry.knowledge_tag || "common"
   );
 
   const knowledgeRangeSelect = loreSelect(
-    ["global", "local"],
+    knowledgeRanges(),
     entry.knowledge_range || "global"
   );
 

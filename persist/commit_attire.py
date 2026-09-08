@@ -16,6 +16,7 @@ from story import attire as attire_model
 from story.attire import (_NAME_FUNCTION_WORDS, _NON_ATTIRE_TERMS,
                           sanitize_attire_items)
 from persist.commit_common import _player_name_or_none
+from world.spatial import room_of_record
 
 def _unstated(value):
     """Nothing said, as opposed to something said that is falsey.
@@ -905,7 +906,11 @@ def _reclaim_worn_shed_garments(sc, diff, ctx, gained):
             if str(state.get("worn_by") or "").strip().casefold() \
                     != str(owner).strip().casefold():
                 continue
-            spot = positions.get(eid)
+            # The record is in hand, so ask where the garment IS (review
+            # 2026-09-07, B18): `positions.get(eid)` read a shed coat filed
+            # under its display name as lying nowhere, which passes the
+            # reach test by accident rather than by fact.
+            spot = room_of_record(sc, eid, entity)
             if spot and where and spot != where:
                 continue          # not within reach of the body wearing it
             ledger = str(state.get("garment") or entity.get("name")

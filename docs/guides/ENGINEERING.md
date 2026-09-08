@@ -43,9 +43,16 @@ the Director's event; it is never sent it.
 
 Six consequences run through everything below:
 
-1. **Stages are separate model calls.** Not sections of one prompt.
-2. **Perception is per observer.** Two characters in a room get two calls,
-   because one call producing two views can leak between them.
+1. **Stages are separate contexts.** Not sections of one prompt. Most are a
+   model call; the ones that need no model are deterministic code
+   (`compile_world_context`, all three perception stages, `commit`), and the
+   isolation is the same either way — it is the CONTEXT that is separate, not
+   the provider bill.
+2. **Perception is per observer, and it is deterministic.** There is no
+   `perception` role in `providers.ROLES`; each observer's view is composed on
+   its own from that observer's own admitted percepts (`agents/composer.py`).
+   One pass producing two views is what could leak between them, so no pass
+   ever produces two.
 3. **Model output is provisional.** `persist/commit.py` decides what becomes true.
 4. **Structured output is re-derived, not trusted.** Perception's observation
    objects are rebuilt from its own scrubbed prose, so the second
@@ -107,17 +114,18 @@ partially-written transaction.
 
 ## 3. The turn pipeline
 
-A turn is a sequence of **stages**, each a model call plus deterministic pre-
-and post-processing, executed by `agents/runtime.py` over a `PipelineContext`
+A turn is a sequence of **stages**, each a unit of work — a model call with
+deterministic pre- and post-processing, or deterministic code with no model at
+all — executed by `agents/runtime.py` over a `PipelineContext`
 (`core/pipeline_context.py`).
 
 `STEP_HANDLERS` maps a stage key to its handler:
 
 ```
-interaction_loop   director_establish   mapping_stage    perception_establish
-reaction_loop      director_interpret   mapping_quick    perception_act
-                   director_resolve     background_react perception_outcome
-                                        narrator         narrator_extra    commit
+interaction_loop   director_establish   compile_world_context   perception_establish
+reaction_loop      director_interpret   background_react        perception_act
+                   director_resolve     narrator                perception_outcome
+                                        narrator_extra          commit
 ```
 
 plus a dynamic `character:<id>` namespace owned by `character_step`.
@@ -127,10 +135,16 @@ construction stays deliberately separate — a new stage must also be placed in
 decision, not a registration detail.
 
 **The plan is built per turn, not fixed.** `build_plan` reads
-`director_interpret.flow` and decides what the beat needs: whether mapping runs
-full or cached, whether contested physical reactions require a reaction loop,
-whether characters run in parallel or through a turn-taking interaction loop,
-whether a background presence reacts at all.
+`director_interpret.flow` and decides what the beat needs: whether contested
+physical reactions require a reaction loop, whether characters run in parallel
+or through a turn-taking interaction loop, whether a background presence reacts
+at all. `compile_world_context` is not one of those decisions — it runs
+unconditionally, on every beat (`agents/runtime.py`'s `build_plan`).
+`flow.needs_mapping` survives only as a field the Director still declares and
+NOBODY reads: it was the switch between the two retired model stages, and no
+consumer replaced them. What the compiler actually reads is what the beat
+reached for — `movement`, `location_query`, `mapping_request`,
+`generation_requests` (`agents/mapping.py`).
 
 **Every stage's output is persisted** as a `steps` row plus a `variants` row,
 with exactly one active variant per step (`agents/storage.py`). This is not
@@ -147,7 +161,7 @@ materialised standalone `character:<id>` steps.
 
 ```mermaid
 flowchart LR
-    DI["director_interpret<br/><i>interpret + plan</i>"] --> MAP["mapping<br/><i>full or cached</i>"]
+    DI["director_interpret<br/><i>interpret + plan</i>"] --> MAP["compile_world_context<br/><i>deterministic, every beat</i>"]
     MAP --> PA["perception_act<br/><i>onset, per observer</i>"]
     PA -.->|"contested physical"| RL["reaction_loop"]
     PA --> CH{{"character agents"}}
@@ -178,11 +192,11 @@ so the world is *established* rather than resolved — and no character acts.
 flowchart LR
     subgraph O["OPENING TURN — turn.idx == 0"]
         direction LR
-        O1["mapping_stage"] --> O2["director_establish"] --> O3["perception_establish"] --> O4["narrator"] --> O5["commit"]
+        O1["compile_world_context"] --> O2["director_establish"] --> O3["perception_establish"] --> O4["narrator"] --> O5["commit"]
     end
     subgraph N["NORMAL TURN"]
         direction LR
-        N1["director_interpret"] --> N2["mapping"] --> N3["perception_act"] --> N4["characters"] --> N5["director_resolve"] --> N6["perception_outcome"] --> N7["narrator"] --> N8["commit"]
+        N1["director_interpret"] --> N2["compile_world_context"] --> N3["perception_act"] --> N4["characters"] --> N5["director_resolve"] --> N6["perception_outcome"] --> N7["narrator"] --> N8["commit"]
     end
     O -.->|"every turn after"| N
 
@@ -207,11 +221,12 @@ equivalents are `_check_character_act_authority`,
 `_check_character_speech_authority` and `_check_prose_quote_authority`, all
 folded into the same one-retry loop.
 
-**Perception** (`agents/perception.py`) — a stateless filter deciding what each
-observer legitimately receives. Runs twice per beat: once on the action *onset*
-and once on the resolved *outcome*, because perceiving an attempt and
-perceiving its result are different events. Its structured observations are
-re-derived from the final scrubbed prose.
+**Perception** (`agents/perception.py`) — a stateless, DETERMINISTIC filter
+deciding what each observer legitimately receives; it imports no model seam.
+Runs twice per beat: once on the action *onset* and once on the resolved
+*outcome*, because perceiving an attempt and perceiving its result are
+different events. Its structured observations are re-derived from the final
+scrubbed view.
 
 **Character agents** (`agents/character.py`, `agents/loops.py`) — behaviour
 declared from private perception, memory, relationships and own-body state.
@@ -256,9 +271,13 @@ becomes true.
 
 Instruction is not enforcement. The mechanisms:
 
-**Per-observer model calls.** `_per_observer_model_views` issues one call per
-perceiver with one payload. Two observers cannot leak into each other because
-they were never in the same context.
+**One composition per observer.** Each perceiver's view is built on its own,
+from that perceiver's own admitted percepts, by `agents/composer.py`'s
+`render_view`. Two observers cannot leak into each other because they were
+never in the same context — and since the composition takes no model, there is
+no context for them to have shared. This was a per-observer model call
+(`_per_observer_model_views`) until perception became deterministic; the
+property is the same and now it is arithmetic rather than a prompt.
 
 **Input-side hygiene.** Where no perceiver in a call recognises the actor, the
 actor's canonical name is not placed in the payload at all — handing it over

@@ -40,8 +40,9 @@ from story.scene import (CAST_STATUS_ABSENT, active_cast, cast_change_status,
                          persona_of, set_char_state, set_char_status)
 from world.spatial import (THRESHOLD_CROSSING_BEATS, _SUBJECT_KEYED, _anchor_dir, _hiding_holders,
                      anchor_bearing_of, effective_anchors, has_visual,
-                     hear_level, is_alarming, room_of, rooms_adjacent,
-                     sound_path, sound_walk_level, spatial_rel, travel_bearing)
+                     hear_level, is_alarming, room_of, room_of_record,
+                     rooms_adjacent, sound_path, sound_walk_level, spatial_rel,
+                     travel_bearing)
 
 NOT_A_ZONE = None
 
@@ -66,12 +67,15 @@ def _effective_zone(scene, name):
     if zone:
         return zone
     rooms = scene.get("rooms") or {}
-    positions = scene.get("positions") or {}
     parent_entity = (rooms.get(room_name) or {}).get("parent_entity")
     seen = set()
     while parent_entity and parent_entity not in seen:
         seen.add(parent_entity)
-        ext_room = positions.get(parent_entity)
+        # `room_of`, not a raw `positions` read: where a holder stands is one
+        # question with one resolver (review 2026-09-07, B18), and a vehicle
+        # whose position row is filed under its display name or an alias was
+        # read here as nowhere -- so a party riding it arrived in no zone.
+        ext_room = room_of(scene, parent_entity)
         zone = _room_zone(scene, ext_room)
         if zone:
             return zone
@@ -174,7 +178,6 @@ def infer_vehicle_zones(chat_id, frame_id, prev_scene, new_scene):
     """
     prev_rooms = prev_scene.get("rooms") or {}
     new_rooms = new_scene.get("rooms") or {}
-    prev_positions = prev_scene.get("positions") or {}
     new_positions = new_scene.get("positions") or {}
     entities = new_scene.get("entities") or {}
 
@@ -184,8 +187,12 @@ def infer_vehicle_zones(chat_id, frame_id, prev_scene, new_scene):
     for eid, ent in entities.items():
         if not isinstance(ent, dict) or ent.get("kind") != "vehicle":
             continue
-        prev_room = prev_positions.get(eid)
-        new_room = new_positions.get(eid)
+        # The record is in hand, so ask where it IS, not where its id is
+        # filed (review 2026-09-07, B18): a ferry whose `positions` row is
+        # under "The Ferry" against the id `Ferry_01` crossed the gap
+        # unnoticed and stamped no zone on the far side.
+        prev_room = room_of_record(prev_scene, eid, ent)
+        new_room = room_of_record(new_scene, eid, ent)
         if not new_room or prev_room == new_room:
             continue
 

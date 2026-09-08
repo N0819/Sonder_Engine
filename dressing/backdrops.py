@@ -47,7 +47,7 @@ from world.spatial import (
     effective_facing, effective_light, effective_room_size, light_at,
     normalize_barrier, normalize_bearing, normalize_footprint,
     normalize_height, normalize_light, normalize_vertical, opposite_bearing,
-    room_grid, room_of,
+    room_grid, room_of, room_of_record, PositionsIndex,
 )
 from core.paths import INSTALL_ROOT
 from world.weather import room_exposure, weather_for_room, weather_words
@@ -580,9 +580,15 @@ def _light_sources_in(scene, room_id):
     A picture of a cave lit by a campfire and a picture of a cave lit by a
     ceiling strip are different pictures, and the difference is the source.
     Occupant-free by construction: only entities, never people's positions.
+
+    Where a source IS is `room_of_record`'s answer, the same one the light
+    field reads (review 2026-09-07 B18, second rework): this sweep walked
+    `positions` by exact id and then exact name, so a fixture filed under an
+    alias or another case lit the room in `spatial_light` and lit nothing in
+    its picture -- one fact stored twice and free to disagree.
     """
     out = []
-    positions = (scene or {}).get("positions") or {}
+    index = PositionsIndex((scene or {}).get("positions") or {})
     for eid, entity in ((scene or {}).get("entities") or {}).items():
         if not isinstance(entity, dict) or not entity.get("light_source"):
             continue
@@ -590,7 +596,7 @@ def _light_sources_in(scene, room_id):
         if state.get("lit", True) in (False, 0, "off", "false", "no", "doused", "out"):
             continue
         name = str(entity.get("name") or eid)
-        where = positions.get(eid, positions.get(name))
+        where = room_of_record(scene, eid, entity, index=index)
         if where == room_id and not any(o["name"] == name for o in out):
             out.append({
                 "name": name,

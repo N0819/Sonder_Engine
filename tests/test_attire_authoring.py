@@ -680,7 +680,11 @@ def test_both_card_editors_offer_regions_and_the_generator():
     assert "ATTIRE_COVERAGE" in components
     assert "kimono, toga, jumpsuit" in components
     assert "auto — work it out from the garment's name" in components
-    assert 'const ATTIRE_REGION_ZONES = { torso: ["chest", "midriff"] }' in components
+    # The zone map rides the bootstrap now (review 2026-09-07, B24); the
+    # literal survives only as the pre-bootstrap fallback.
+    assert ('const ATTIRE_REGION_ZONES_FALLBACK = { torso: ["chest", "midriff"] }'
+            in components)
+    assert "S.boot.attire_region_zones" in components
     assert "covered_zones" in components
     assert "beneath_zones" in components
     # The one warning an author most needs where they are authoring.

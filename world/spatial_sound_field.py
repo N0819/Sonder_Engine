@@ -67,7 +67,7 @@ from world.spatial_fov import (
     room_has_geometry,
 )
 from world.spatial_geometry import door_anchor_id
-from world.spatial_identity import _ci_get, room_of
+from world.spatial_identity import PositionsIndex, room_of, room_of_record
 from world.spatial_light_field import (
     _beat_hash, FAIL_RATE, FLICKER_RATE, normalize_steadiness, STEADINESS)
 from world.spatial_senses import _material_shifted_barrier, _SOUND_WALK_BARRIERS
@@ -1105,10 +1105,11 @@ def sound_sources(scene: dict, *, turn_idx=None, crowds=None, events=None,
     heard" is heard on the page only if the Director answers the notice."""
     out = []
     notices = []
-    positions = scene.get("positions") or {}
     rooms = scene.get("rooms") or {}
     entities = scene.get("entities") or {}
     if isinstance(entities, dict):
+        # One folded read of `positions` for the whole sweep (B18).
+        index = PositionsIndex(scene.get("positions") or {})
         for eid, entity in sorted(entities.items()):
             if not isinstance(entity, dict):
                 continue
@@ -1116,9 +1117,7 @@ def sound_sources(scene: dict, *, turn_idx=None, crowds=None, events=None,
             if not level or not _running(entity):
                 continue
             label = str(entity.get("name") or eid)
-            room = _ci_get(positions, eid)
-            if room is None:
-                room = _ci_get(positions, label)
+            room = room_of_record(scene, eid, entity, index=index)
             if not room or room not in rooms:
                 continue
             beat = steadiness_this_beat(entity.get("steadiness"), turn_idx,
@@ -2044,7 +2043,9 @@ def far_field_graph(scene: dict) -> dict:
     silence a sound because of which room's author was more careful.
 
     Every edge, not only the ones sound walks: a wall is on this graph, at
-    45 dB, which is the whole point of the far field.
+    `WALL_LOSS_DB`, which is the whole point of the far field. The number
+    is the constant's to state and is not repeated here (E26, 2026-09-07:
+    this still read "45 dB" after the 2026-09-05 re-denomination to 16).
 
     CACHED ON THE SCENE OBJECT, because building it is the whole cost of a
     loud beat: `effective_adjacent` resolves passages scene-wide and costs

@@ -63,11 +63,12 @@ class TestARhythmNotASchedule:
 
 class TestFactsAssertOnlyWhatLedgersHold:
     def test_occupancy_is_relative_never_an_hour(self):
-        """The clock has no day anchor — `display` is prose the Director
-        owns — so 'it is midday' would assert what no ledger holds, and
-        one story-night's taproom would be narrated busy at the wrong
-        hour. A relative claim ('quieter than when last seen') asserts
-        only the passage the clock actually measured."""
+        """A routine reads elapsed seconds and is handed no day anchor —
+        the story clock may carry one (`world/day_cycle.clock_anchor`) and
+        this module never asks — so 'it is midday' would assert an hour
+        nothing here can read, and one story-night's taproom would be
+        narrated busy at the wrong one. A relative claim ('quieter than
+        when last seen') asserts only the passage the clock measured."""
         fact = None
         for hours in range(1, 4 * 24):
             fact = occupancy_fact("The Brass Tankard tavern", "k",

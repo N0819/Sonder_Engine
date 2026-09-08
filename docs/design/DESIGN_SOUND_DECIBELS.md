@@ -200,8 +200,8 @@ work did not own. Stated exactly, in § 8.
 | sources, dB at one pace | faint 30, audible 51, loud 56, deafening 62 | **40.0 / 50.8 / 56.0 / 61.8** | the same |
 | new rungs above the ladder | `thunderous` 85, `catastrophic` 100 | **as proposed** | declared in dB, not converted from anything; the only two rungs over the far-field entry |
 | authored number | `db` on an entity or event | **built** | `event_db` reads it first, ahead of `level` and the older `intensity`; absent means the word decides |
-| wall transmission loss | 45 dB | **as proposed** | the physical number, and its measured consequence is not the note's sentence -- see § 5a |
-| floor and ceiling loss | 50 dB | **as proposed** | charged only where a vertical edge is a WALL; a stairwell is an aperture and keeps its own |
+| wall transmission loss | 45 dB | `WALL_LOSS_DB` **16.0** | 45 was the real-world number on a scale nothing else in this table is on; see § 5a and its resolution |
+| floor and ceiling loss | 50 dB | `FLOOR_CEILING_LOSS_DB` **18.0** | the same re-denomination, and it stays the heavier of the two; charged only where a vertical edge is a WALL; a stairwell is an aperture and keeps its own |
 | ambient, dB | enclosed 14, sheltered 17, open 20 | **27.0 / 30.0 / 30.0** | the note's steps are right and its reference is not (§ 5a); `open` then moved 33.0 → 30.0 in the same session, the owner accepting `docs/UNBUILT.md` § 1.120 |
 | weather, dB | (not in the note) | light **30.0**, moderate **34.0**, heavy **37.0** | was 34.8 / 37.8 / 40.0; moved with `open` under the same accepted recommendation. `WIND_NOISE` deliberately unmoved |
 | far-field entry | any source over 70 dB | **as proposed** | above `deafening` 61.8 and below `thunderous` 85, so exactly the two new rungs and an authored number reach it |
@@ -244,6 +244,16 @@ the top rung crosses a wall at all, and only one. Whether that is right is
 the owner's; 18 dB would make both of the note's sentences true and 45 dB is
 the physical number for masonry. **Registered, not chosen**
 (`docs/UNBUILT.md` § 1.125).
+
+**Resolved 2026-09-05, and it was a unit and not a judgement.** Every other
+number in this table is on a compressed scale (whisper->shout is 20.8 dB here
+against 58 in the world, a factor of 0.358, and every aperture loss is already
+scaled); only `wall` and `floor/ceiling` were raw. A real 45 dB wall on that
+scale is **16**, a real 50 dB floor is **18**, and those are the shipped
+constants. The table above is what 45 measured, kept as the argument for the
+change; at 16, `thunderous` carries through two walls and `catastrophic`
+through three, while a shout still dies against one (60.8 - 16 - 21.6 = 23.2,
+under the 27.0 floor) -- which is the sentence the number had to keep.
 
 ### 5b. The outdoor floor, moved in the same session (`docs/UNBUILT.md` § 1.120)
 

@@ -11,8 +11,18 @@ catch-up job, consequence mint and bounded apertures that connect it to play.
 
 Split across siblings from the first commit rather than after a monolith grew
 one, because this repo has now paid for that split three times
-(``world/spatial.py`` over fourteen, ``mind/memory.py`` over twelve,
-``persist/commit.py`` over thirteen). The seam each sibling owns:
+(``world/spatial.py``, ``mind/memory.py`` and ``persist/commit.py`` are each a
+facade over their own family; every document that stated a count for one of
+them has since been wrong, so none is stated here).
+
+**THE TWELVE BELOW ARE NOT THE ROSTER.** There are forty-one ``charter_*``
+siblings today and this facade re-exports names from twenty-nine of them; the
+list is the seams the FIRST split named, and it has been read as coverage
+(E33, 2026-09-07 -- it omits ``charter_runtime``, the production seam named
+two paragraphs up). The exact statement of what this facade carries is the
+import block below this docstring; ``docs/guides/LIVING_WORLD.md`` §3 themes
+the whole family and ``AGENTS.md`` routes an edit to one. The seams the first
+split named:
 
   * ``charter_model``  — the five primitives, normalized. No behaviour.
   * ``charter_drift``  — what time does to an upkeep. Recomputable, no history.

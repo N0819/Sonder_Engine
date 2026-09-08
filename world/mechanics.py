@@ -64,7 +64,7 @@ import hashlib
 import json
 
 from core import jobs
-from world.spatial import apply_transit_dock_edges
+from world.spatial import apply_transit_dock_edges, room_of_record
 from world.spatial_frames import infer_companion_carry, infer_vehicle_zones
 
 
@@ -571,7 +571,6 @@ def _schedule_new_arrivals(scene, elapsed, frame_id, pending_entity_ids,
     event_ops = []
     scheduled = 0
     entities = scene.get("entities") or {}
-    positions = scene.get("positions") or {}
 
     for eid, ent in entities.items():
         if not isinstance(ent, dict):
@@ -596,7 +595,10 @@ def _schedule_new_arrivals(scene, elapsed, frame_id, pending_entity_ids,
             "chat_id": chat_id,
             "due_at": elapsed + eta,
             "kind": "transit_arrival",
-            "location_id": positions.get(eid),
+            # Where the mover IS, by identity (review 2026-09-07, B18):
+            # `positions.get(eid)` filed the arrival event at no location
+            # whenever the row was keyed by the vehicle's display name.
+            "location_id": room_of_record(scene, eid, ent),
             "payload": json.dumps({"entity_id": eid,
                                    "destination_room": destination,
                                    "frame_id": frame_id},
@@ -967,8 +969,15 @@ HAZARD_REPORT_CAP = 6
 #: a roll, a standing condition, a vital, a consequence. Named here because
 #: this is the whole vocabulary the engine has for "something happened to
 #: this body", and a floor that checked fewer of them would report a beat
-#: that did answer.
-_HAZARD_ANSWER_CHANNELS = ("dice", "conditions", "vitals", "consequences")
+#: that did answer. `_answered_bodies` READS these -- it spelled the same
+#: four out for itself while this constant sat unread (E30, 2026-09-07),
+#: which is the two-representations-free-to-disagree failure this repo keeps
+#: finding, and a channel added to one copy would have reached neither floor.
+#: The first member is the whole-beat channel: it names no subject and
+#: answers for everybody at once, so it is read apart from the rest.
+_HAZARD_WHOLE_BEAT_CHANNEL = "dice"
+_HAZARD_ANSWER_CHANNELS = (_HAZARD_WHOLE_BEAT_CHANNEL, "conditions", "vitals",
+                           "consequences")
 
 
 def _condition_states_harm(cond):
@@ -1016,13 +1025,16 @@ def _answered_bodies(state_diff):
 
     A `dice` list with any entry in it answers for EVERYBODY: a beat that
     rolled has contested something, and this floor is about beats that never
-    reached for the dice at all.
+    reached for the dice at all. The channels are `_HAZARD_ANSWER_CHANNELS`,
+    read and not re-typed.
     """
     diff = state_diff if isinstance(state_diff, dict) else {}
-    if diff.get("dice"):
+    if diff.get(_HAZARD_WHOLE_BEAT_CHANNEL):
         return None                     # None means "the whole beat answered"
     named = set()
-    for key in ("vitals", "conditions", "consequences"):
+    for key in _HAZARD_ANSWER_CHANNELS:
+        if key == _HAZARD_WHOLE_BEAT_CHANNEL:
+            continue
         value = diff.get(key)
         if isinstance(value, dict):
             for subject, entry in value.items():

@@ -129,8 +129,9 @@ agents/          pipeline stages (director, perception, character, narration,
 core/            db, settings, jobs, pipeline context, install paths
 llm/             providers, streaming, retries, embeddings; model-output
                  contracts (schemas.py) and system prompts (prompts.py)
-world/           scene, spatial (a facade over fourteen siblings), mechanics,
-                 survival, comfort, weather, offscreen life, paradox
+world/           scene, spatial (a facade over its spatial_* siblings —
+                 the import list is the roster), mechanics, survival,
+                 comfort, weather, offscreen life, paradox
 mind/            memory and retrieval, affect (mood, wants, intentions,
                  projects), psychology_runtime (stress, pain, pleasure),
                  theory_of_mind (belief)

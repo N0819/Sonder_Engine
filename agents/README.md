@@ -50,13 +50,34 @@ pipeline drawer on its own. See [`docs/guides/EXTENSIONS.md`](../docs/guides/EXT
 
 Keep role modules one-directional: they may import `common.py`, but `common.py`
 should never import a role module — that direction holds today and is the one
-worth defending. Role modules importing each other is discouraged rather than
-prevented, and `loops.py → character.py` and `background.py → perception.py`
-already do. `runtime.py` should stay the only module that knows the plan;
-a step id is nevertheless named in FOUR registries — `runtime.STEP_HANDLERS`,
+worth defending, and it is the ONLY direction anything enforces. Role modules
+importing each other is discouraged rather than prevented, and the real graph
+is wider than the two edges this paragraph used to name: `loops → character`,
+`background → perception` and `perception → director`, plus `character`,
+`narration`, `perception` and `director_movement` all reaching into
+`composer`. Those are the TURN-PIPELINE roles; the authoring side has its own
+edges outside the plan (`story_planner → dramaturge`). Read the graph rather
+than this sentence — it has gone stale once already. The shape worth keeping
+is that `composer` is a LEAF the roles share: the renderer may be called by
+any of them and calls none of them back, which is what stops a shared view
+builder from becoming a second plan.
+
+`runtime.py` should stay the only module that knows the plan; a step id is
+nevertheless named in FOUR registries — `runtime.STEP_HANDLERS`,
 `runtime.STEP_LABELS`, `schemas.SCHEMA_MAP` and `core/pipeline_context.py` —
-which is why steps 2, 4 and 6 exist. Keep plan placement
-explicit even when dispatch is registered dynamically.
+which is why steps 2, 4 and 6 exist. **Nothing checks that the four agree.**
+`tests/test_step_labels.py` checks one direction of one of them — every label
+a DEFAULT plan emits is in `STEP_LABELS` — and a default plan carries neither
+loop, nor `character:<id>`, nor `narrator_extra`, nor either
+`background_react.*` variant, so (measured 2026-09-07) six of the table's
+seventeen entries are absent from that plan. `character` is nonetheless
+covered, by the same file's template test, so FIVE entries are exercised by no
+test at all: `reaction_loop`, `interaction_loop`, `narrator_extra` and both
+`background_react.*` variants. `SCHEMA_MAP` and `PipelineContext` are checked
+against the plan by nothing. What `make structure` does catch is the
+consequence of an entry that IS present: a new label leaves the English UI
+catalog stale and untranslated in every pack. Keep plan placement explicit
+even when dispatch is registered dynamically.
 
 One consequence of the extension splice hook that is easy to miss: **the anchor
 vocabulary is the core step keys**, and extensions name them from outside the

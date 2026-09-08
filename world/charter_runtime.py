@@ -660,11 +660,17 @@ def registry_for_update(cid, frame_id=None):
 def save_registry(cid, stored, frame_id=None):
     """Persist an explicitly authored registry in one temporal frame.
 
-    The one write chokepoint for the registry, and therefore where the
-    story's registered identity forms are subtracted from every charter's
-    naming law before it lands. `story/naming.py` reads a stored Charter law
-    as one of its lanes, so a law persisted holding a registered mind's
-    address would keep offering it to readers that never saw this generation.
+    The entry point an authored write uses. The one WRITE is
+    `_write_registry` below, which this and the session flush and the two
+    landing paths all reach -- and that is where the story's registered
+    identity forms are subtracted from every charter's naming law before it
+    lands, with the deferred branch here subtracting them into the session
+    copy so the flush lands an already-clean registry. `story/naming.py`
+    reads a stored Charter law as one of its lanes, so a law persisted
+    holding a registered mind's address would keep offering it to readers
+    that never saw this generation. (E32, 2026-09-07: this claimed the
+    chokepoint for itself, which `_write_registry`'s own docstring has
+    contradicted since the landing paths were folded into it.)
 
     Inside a `registry_session` the write is DEFERRED: the session copy is
     marked dirty and lands once at `flush_registry_session`. A registry that

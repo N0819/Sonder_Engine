@@ -301,7 +301,8 @@ class TestThePersistedLawStopsOfferingTheAddress:
             for body in state["bodies"].values()}
 
     def test_saving_a_registry_scrubs_the_law_it_stores(self, temp_db):
-        """The registry's one write chokepoint, so a hand-authored charter or
+        """The authored write reaches the registry's one write
+        (`charter_runtime._write_registry`), so a hand-authored charter or
         an older generation's stored law is answered too."""
         chat_id = _chat(temp_db, cast=[REGISTERED])
         save_registry(chat_id, {"works": {

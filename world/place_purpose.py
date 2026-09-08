@@ -176,11 +176,14 @@ _HERE_LEXICON = {
     # purpose: it is a property of the room rather than of anything standing
     # in it, so no entity or anchor token can answer it. The structural fact
     # that would -- `weather.room_exposure` -- falls back to a keyword pass
-    # over room prose when unauthored and DEFAULTS TO ENCLOSED, and that
-    # fallback is documented as presentation only, never an authority a mind
-    # may act on. Wiring it here would have every unmapped room in the corpus
-    # promising a roof. So shelter is answerable only as memory (`assumed`,
-    # from the place's name) and as hearsay, not as a live echo. Three lists
+    # over room prose when unauthored and DEFAULTS TO ENCLOSED, so wiring it
+    # here would have every unmapped room in the corpus promising a roof.
+    # (E28, 2026-09-07: this used to add that the fallback is presentation
+    # only and never an authority a mind may act on. It is not -- `room_light`
+    # reads it and light gates sight -- and the reason it may not answer
+    # shelter is the one above: the direction it fails in IS a roof.)
+    # So shelter is answerable only as memory (`assumed`, from the place's
+    # name) and as hearsay, not as a live echo. Three lists
     # carry these purposes -- AFFORDANCES, this one, and `_CLAIM_LEXICON` --
     # and the next author to add one should find all three named here.
 }

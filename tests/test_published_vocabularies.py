@@ -436,33 +436,63 @@ class TestBothRoomSizingHandsSeeTheWholeScale:
 
 
 # ---------------------------------------------------------------------------
-# (g) the prose author's DELEGATED CHANNELS list -- 28 of the 31
+# (g) the DELEGATED CHANNELS paragraphs -- one per Director stage
 # ---------------------------------------------------------------------------
 #
 # Not a value vocabulary but the same failure one level up: a closed set the
 # engine owns (`director_scopes.SPECIALISTS`) restated by hand in a prompt and
-# drifted from. That paragraph is the prose author's ONLY statement of what is
+# drifted from. That paragraph is an author's ONLY statement of what is
 # not its to write, and it presents itself as the complete delegation -- so a
 # channel missing from it reads as one the author may still encode, and what
 # it writes in a delegated channel is discarded unread. `comms_ops` was the
 # costly absence: it is in SPEECH_WRITTEN_CHANNELS ("a line carried by a
 # device IS the op"), so a beat of pure dialogue settles it, which is the beat
 # the author is least likely to think a specialist is involved in.
+#
+# THERE ARE TWO OF THESE PARAGRAPHS, and binding only one is how the second
+# drifted (review E43): `director_interpret` fans out to the same hands, so
+# the note appended to it enumerates the same closed set -- and while the
+# resolve sheet was completed on 2026-09-01 the interpret note stayed short by
+# `public_evidence`, `charter_ops` and `contact_action_ops`. Both are checked
+# here; a paragraph that restates SPECIALISTS anywhere belongs in DELEGATIONS.
 
-def _delegation_block(language: str) -> str:
+def _prose_author_delegation(card) -> list:
     """The prose author sheet's one DELEGATED CHANNELS paragraph.
 
     Found by content rather than by index: the sheet is a list of blocks, and
     a fragment inserted above this one would silently move it.
     """
-    card = installed_language_packs()[language].card("system_prompts")
     # `SOCIAL FABRIC` is spelled the same in both packs and appears in this
     # block alone (the world's traffic folded into it on 2026-09-04, when
     # the offscreen hand was retired).
-    blocks = [text for _key, text in card["prose_author_sheet"]
-              if isinstance(text, str) and "SOCIAL FABRIC" in text]
+    return [text for _key, text in card["prose_author_sheet"]
+            if isinstance(text, str) and "SOCIAL FABRIC" in text]
+
+
+def _interpret_delegation(card) -> list:
+    """The note appended to `director_interpret` (agents/director.py).
+
+    It is a whole card fragment rather than a block of a sheet, so there is
+    exactly one of it by construction; the `SOCIAL FABRIC` check is kept so
+    both getters fail the same way if the paragraph is ever rewritten out.
+    """
+    text = str(card["interpret_delegation_note"])
+    return [text] if "SOCIAL FABRIC" in text else []
+
+
+#: Every published paragraph that restates `SPECIALISTS`, by the stage whose
+#: author reads it.
+DELEGATIONS = {
+    "resolve": _prose_author_delegation,
+    "interpret": _interpret_delegation,
+}
+
+
+def _delegation_block(language: str, stage: str = "resolve") -> str:
+    card = installed_language_packs()[language].card("system_prompts")
+    blocks = DELEGATIONS[stage](card)
     assert len(blocks) == 1, (
-        f"{language}: expected one delegated-channels block, got "
+        f"{language}/{stage}: expected one delegated-channels block, got "
         f"{len(blocks)}")
     return blocks[0]
 
@@ -487,25 +517,30 @@ class TestEveryDelegatedChannelIsNamedAsDelegated:
         causality and had just narrated the order, could not (PB13)."""
         assert len(delegated_channels()) == 32
 
+    @pytest.mark.parametrize("stage", sorted(DELEGATIONS))
     @pytest.mark.parametrize("language", LANGUAGES)
-    def test_the_sheet_names_all_of_them(self, language):
-        block = _delegation_block(language)
+    def test_the_sheet_names_all_of_them(self, language, stage):
+        block = _delegation_block(language, stage)
         missing = [c for c in delegated_channels() if c not in block]
         assert not missing, (
-            f"{language}: channels a specialist owns that the prose author's "
+            f"{language}/{stage}: channels a specialist owns that this "
             f"delegation paragraph does not name: {missing}. An unlisted "
             "channel reads as one the author may still write, and what it "
             "writes there is discarded unread and re-encoded anyway.")
 
+    @pytest.mark.parametrize("stage", sorted(DELEGATIONS))
     @pytest.mark.parametrize("language", LANGUAGES)
-    def test_the_channel_names_stay_identifiers_in_both_packs(self, language):
+    def test_the_channel_names_stay_identifiers_in_both_packs(
+            self, language, stage):
         """The ja pack had translated eleven of them, and one translation was
         wrong in a way prose cannot be: `stations` as 駅, a railway station.
         A state_diff channel name is an identifier -- a sheet cannot name a
-        channel it has translated out of existence."""
-        block = _delegation_block(language)
+        channel it has translated out of existence. The interpret note had the
+        same damage a week longer (review E43): `attire` as 服装, `containment`
+        as 封じ込め, `introductions` as 紹介."""
+        block = _delegation_block(language, stage)
         for channel in delegated_channels():
-            assert channel in block, f"{language}: {channel!r}"
+            assert channel in block, f"{language}/{stage}: {channel!r}"
 
 
 # ---------------------------------------------------------------------------

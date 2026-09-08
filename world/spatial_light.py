@@ -4,7 +4,7 @@ per-room and per-position light, and the light-to-sight ceiling."""
 
 from world.spatial_barriers import _SIGHT_BARRIERS, normalize_barrier
 from world.spatial_geometry import proximity_rel
-from world.spatial_identity import _ci_get, room_of
+from world.spatial_identity import PositionsIndex, room_of, room_of_record
 
 
 # ---------------------------------------------------------------------------
@@ -297,7 +297,9 @@ def source_light(scene: dict, room_id: str, *, filling_only=False) -> str:
     entities = (scene or {}).get("entities") or {}
     if not isinstance(entities, dict) or not room_id:
         return "dark"
-    positions = (scene or {}).get("positions") or {}
+    # One folded read of `positions` for the whole sweep (B18): the walk is
+    # three labels per emitter, and each one otherwise rescans the table.
+    index = PositionsIndex((scene or {}).get("positions") or {})
 
     best = "dark"
     for eid, entity in entities.items():
@@ -307,9 +309,7 @@ def source_light(scene: dict, room_id: str, *, filling_only=False) -> str:
         lit = state.get("lit", True)
         if lit in (False, 0, "off", "false", "no", "doused", "out"):
             continue
-        where = _ci_get(positions, eid)
-        if where is None:
-            where = _ci_get(positions, str(entity.get("name") or ""))
+        where = room_of_record(scene, eid, entity, index=index)
         if where != room_id:
             continue
         if filling_only and _light_radius(entity) != "room":
@@ -356,7 +356,7 @@ def light_at(scene: dict, name: str) -> str:
                       source_light(scene, room_id, filling_only=True))
 
     entities = (scene or {}).get("entities") or {}
-    positions = (scene or {}).get("positions") or {}
+    index = PositionsIndex((scene or {}).get("positions") or {})
     for eid, entity in entities.items():
         if not isinstance(entity, dict) or not entity.get("light_source"):
             continue
@@ -366,9 +366,7 @@ def light_at(scene: dict, name: str) -> str:
         if state.get("lit", True) in (False, 0, "off", "false", "no", "doused", "out"):
             continue
         label = str(entity.get("name") or eid)
-        where = _ci_get(positions, eid)
-        if where is None:
-            where = _ci_get(positions, label)
+        where = room_of_record(scene, eid, entity, index=index)
         if where != room_id:
             continue
 

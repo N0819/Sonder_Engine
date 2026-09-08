@@ -33,6 +33,7 @@ from world.spatial import (
     has_visual,
     hiding_holders_of,
     room_of,
+    room_of_record,
     same_subject,
     spatial_digest,
     spatial_rel,
@@ -1080,7 +1081,6 @@ def _visible_portal_states(scene, room_id, visible_rooms):
     out = {}
     _guessed = set()
     entities = scene.get("entities") or {}
-    positions = scene.get("positions") or {}
     rooms = scene.get("rooms") or {}
     interior_owner = {
         rid: (r or {}).get("parent_entity")
@@ -1102,7 +1102,10 @@ def _visible_portal_states(scene, room_id, visible_rooms):
             out[name] = ("open" if str(link.get("phase") or "").lower()
                          == "open" else "shut")
             continue
-        ent_room = positions.get(eid) or positions.get(name)
+        # Where this entity IS, not where two of its spellings are filed
+        # (review 2026-09-07, B18): a lift whose `positions` row sits under
+        # an alias reported no hatch state to the narrator at all.
+        ent_room = room_of_record(scene, eid, ent)
         transit = state.get("transit")
         if isinstance(transit, dict) and transit.get("hatch"):
             if ent_room == room_id or interior_owner.get(room_id) == eid:

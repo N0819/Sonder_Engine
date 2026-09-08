@@ -89,7 +89,7 @@ from world.spatial_fov import (
     wall_aperture_cells,
 )
 from world.spatial_geometry import door_anchor_id, effective_facing
-from world.spatial_identity import _ci_get, room_of
+from world.spatial_identity import PositionsIndex, room_of, room_of_record
 from world.spatial_light import (
     LIGHT_LEVELS, _light_radius, normalize_light, room_light)
 from world.spatial_orientation import _BEARING_DEG, normalize_bearing, relative_bearing
@@ -372,23 +372,24 @@ def emitted_level(entity: dict, source_id, beat) -> Optional[str]:
 
 def _room_fixtures(scene: dict, room_id) -> list:
     """Every ROOM-FILLING light source standing in `room_id`, lit or not --
-    the room's own account of what lights it. Positioned by id or by name,
-    the way `spatial_light.source_light` reads them; filling by
-    `_light_radius`, so a hearth, a sconce or a ceiling fixture counts and a
-    hand torch does not. What someone carried in is not the room's account
-    of itself, and a stranger walking into a lit hall with a dead lantern in
-    their fist must not put the hall out."""
+    the room's own account of what lights it. Positioned by identity --
+    `room_of`'s label walk, the way `spatial_light.source_light` reads them
+    (review 2026-09-07, B18); filling by `_light_radius`, so a hearth, a
+    sconce or a ceiling fixture counts and a hand torch does not. What
+    someone carried in is not the room's account of itself, and a stranger
+    walking into a lit hall with a dead lantern in their fist must not put
+    the hall out."""
     entities = (scene or {}).get("entities") or {}
-    positions = (scene or {}).get("positions") or {}
     if not isinstance(entities, dict) or not room_id:
         return []
+    # One folded read of `positions` for the whole sweep (B18) -- this runs
+    # per room per field build, and the label walk is three deep.
+    index = PositionsIndex((scene or {}).get("positions") or {})
     out = []
     for eid, entity in entities.items():
         if not isinstance(entity, dict) or not entity.get("light_source"):
             continue
-        where = _ci_get(positions, eid)
-        if where is None:
-            where = _ci_get(positions, str(entity.get("name") or ""))
+        where = room_of_record(scene, eid, entity, index=index)
         if where == room_id and _light_radius(entity) == "room":
             out.append(entity)
     return out

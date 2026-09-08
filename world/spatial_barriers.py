@@ -795,9 +795,12 @@ def resolve_edge(scene, edge):
 
 def normalize_scene_passages(scene: dict) -> list:
     """Passage hygiene, run at merge and on every World Browser write: a
-    passage whose `rooms` are not two live rooms, or whose barrier reads as
-    nothing, is dropped, and every edge naming a dropped or unknown passage
-    lets the name go (it reads per edge again, which is the fail-open). A
+    passage whose `rooms` are not two live rooms is dropped, and every edge
+    naming a dropped or unknown passage lets the name go (it reads per edge
+    again, which is the fail-open). The rooms test is the ONLY drop test --
+    `normalize_barrier` answers a word for everything, silence included
+    (`open`) and an unread word too (`wall`), so no barrier can read as
+    nothing and a barrier has never dropped a record (E25, 2026-09-07). A
     kept passage's barrier is canonicalised and its `width` read as a whole
     number of paces of at least one, or dropped. Returns the ids dropped;
     mutates. A scene with no `passages` key is left without one."""

@@ -711,10 +711,11 @@ def normalize_charter(stored, reservation=None):
             for key, held in (stored.get("needs") or {}).items()
             if isinstance(held, dict)},
         # How much felt state is allowed to bias the watch bill. 0.0 is the
-        # default and the shipped behaviour: mood is computed, reported, and
-        # read by nothing. Above zero it joins standing and pressure on the
-        # reluctance axis, which is the only way in it will ever get -- an
-        # experiment with a dial, not a second planner.
+        # default and the shipped behaviour: at zero `charter_run` never
+        # calls `charter_needs.mood` at all, so mood is computed on request
+        # and reported and reaches no decision. Above zero it joins standing
+        # and pressure on the reluctance axis, which is the only way in it
+        # will ever get -- an experiment with a dial, not a second planner.
         "mood_weight": float(stored.get("mood_weight") or 0.0),
         # Open social situations. Sparse: a population with nothing going on
         # between it carries none. See `charter_practice`.

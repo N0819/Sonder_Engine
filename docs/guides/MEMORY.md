@@ -1137,7 +1137,7 @@ index — all of which keep the pre-ranking filters that a global index cannot.
 ## 11. Neighbours in the same module
 
 Since 2026-08-19 they are neighbours in the same FAMILY rather than the same
-file: `mind/memory.py` is a facade over twelve `mind/memory_*` siblings
+file: `mind/memory.py` is a facade over thirteen `mind/memory_*` siblings
 (`docs/design/SPLIT_MEMORY.md`, module table in `AGENTS.md`). Every import path
 in this document still works — the facade re-exports every name — but when you
 go looking for the code, character memory is `memory_write`/`memory_read`/
@@ -1152,9 +1152,12 @@ They are *not* character memory and follow different rules:
   (`common`/`scholarly`/`esoteric`), range (`local`/`global`), and room. Books
   form a tree with inheritance modes and typed links.
 - **Relationships** (`memory_relationships`) — `RelationshipGraph` on a `world` KV blob, updated from
-  explicit director output and from inference. Stance axes are event-linked but
-  the link is optional and there is no change log (`Design.md` records this as
-  **Partial**).
+  explicit director output and from inference. Every axis that moves also
+  appends a `relationship_events` row (never updated, never deleted) with its
+  triggers, stated reason, provenance, turn and frame;
+  `relationship_history` reads that back. The link to evidence is still
+  optional, though: a trigger-less delta is logged as `unevidenced` rather than
+  refused, which is what `Design.md` still records as **Partial**.
 - **Host-facing feeds** (`memory_read`, under `HOST_SCOPE_READERS`) — `dramatic_irony_feed` (what the player knows that a
   character does not), `promise_ledger`.
 

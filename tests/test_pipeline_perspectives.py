@@ -282,9 +282,11 @@ class TestTheDirectorsSpecialistsAreTabsOfItsOwnWindow:
             assert f'"{name}"' not in block, name
 
     def test_a_specialist_that_never_ran_gets_no_tab(self):
-        """Most beats dispatch about two of the six. A tab per specialist
-        regardless would make every Director step look like it did six
-        things, which is the opposite of what the lens is for."""
+        """Most beats dispatch about two of them -- measured over the six
+        hands there were then, so the count is left off rather than restated
+        under a new denominator. A tab per specialist regardless would make
+        every Director step look like it did five things, which is the
+        opposite of what the lens is for."""
         block = _between(CHAT_JS, "function specialistIds(",
                          "function stepLenses(")
         assert "].run" in block or ".run)" in block
