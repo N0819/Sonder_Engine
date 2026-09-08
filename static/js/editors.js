@@ -5,7 +5,12 @@
 // wrote, which is exactly the moment anyone presses this. Nothing is written:
 // the proposal reopens the editor unsaved, and the author's ordinary Save is
 // still what commits it.
-function appearanceFillButton(kind, card, readDraft, reopen) {
+// `chatId` is the story whose card this is, or null for the reusable one --
+// the same scope `interiorFillButton` carries, and for the same reason:
+// `scene.active_cast` reads a per-story sheet OVER the reusable row, so a
+// fill offered only on the reusable card is inert for every story that has
+// its own (A64).
+function appearanceFillButton(kind, card, readDraft, reopen, chatId = null) {
   const path = kind === "character" ? "characters" : "personas";
   const button = el("button", {
     title: "Generate the body and the starting outfit from this card and your notes",
@@ -23,7 +28,9 @@ function appearanceFillButton(kind, card, readDraft, reopen) {
       button.textContent = "Generating…";
       button.disabled = true;
       try {
-        const r = await api("POST", `/api/${path}/${card.id}/fill_appearance`,
+        const r = await api("POST", chatId === null
+          ? `/api/${path}/${card.id}/fill_appearance`
+          : `/api/chats/${chatId}/characters/${card.id}/fill_appearance`,
           { prompt: answer.text, beneath: answer.checked, draft: readDraft() });
         const refreshed = {
           ...card,
@@ -31,7 +38,9 @@ function appearanceFillButton(kind, card, readDraft, reopen) {
           sheet: JSON.stringify(r.sheet)
         };
         closeAllModals();
-        await boot();
+        // A story card is not in the character list `boot()` reloads, and
+        // reloading it there would discard the proposal being reviewed.
+        if (chatId === null) await boot();
         reopen(refreshed);
         toast("Body and clothing generated. Review, then save.", "ok");
         showCardWarnings(r);
@@ -450,7 +459,10 @@ function charEditor(c, options = {}) {
 
   f.first_message = fArea("First message (optional, for scene open)", sheet.opening?.first_message, 3);
   const ph = phEditor(sheet.knowledge?.private_history, true);
-  const fillPsychology = c && !isChatCard ? el("button", {
+  // Offered on BOTH cards, like the interior fill below and for the same
+  // reason (A64): the sheet the proposal has to land in is whichever one
+  // this story reads.
+  const fillPsychology = c ? el("button", {
     title: "Generate only missing psychology fields; populated fields are preserved",
     onclick: async () => {
       const brief = await promptModal(
@@ -462,7 +474,9 @@ function charEditor(c, options = {}) {
       fillPsychology.textContent = "Filling…";
       fillPsychology.disabled = true;
       try {
-        const r = await api("POST", `/api/characters/${c.id}/fill_psychology`,
+        const r = await api("POST", chatId === null
+          ? `/api/characters/${c.id}/fill_psychology`
+          : `/api/chats/${chatId}/characters/${c.id}/fill_psychology`,
           { prompt: brief });
         const refreshed = {
           ...c,
@@ -470,8 +484,8 @@ function charEditor(c, options = {}) {
           sheet: JSON.stringify(r.sheet)
         };
         closeAllModals();
-        await boot();
-        charEditor(refreshed);
+        if (chatId === null) await boot();
+        charEditor(refreshed, options);
         toast("Missing psychology fields filled. Review and save any edits.", "ok");
         showCardWarnings(r);
       } catch (e) {
@@ -482,7 +496,7 @@ function charEditor(c, options = {}) {
     }
   }, "✨ Fill psychology gaps") : null;
 
-  const fillAppearance = c && !isChatCard
+  const fillAppearance = c
     ? appearanceFillButton("character", c, () => ({
         appearance: {
           summary: f.summary.read(), build: f.build.read(), face: f.face.read(),
@@ -491,7 +505,7 @@ function charEditor(c, options = {}) {
         },
         extra_parts: f.extra_parts.read(),
         initial_outfit: { regions: f.outfit_regions.read() }
-      }), refreshed => charEditor(refreshed))
+      }), refreshed => charEditor(refreshed, options), chatId)
     : null;
 
   // Offered on BOTH cards, unlike the two sibling fills: those propose a

@@ -960,17 +960,54 @@ def _merge_missing_fields(existing, proposed):
     return copy.deepcopy(existing)
 
 
-def fill_character_psychology(char_id, brief):
+def authored_card_for_fill(kind, entity_id, chat_id=None):
+    """The stored card a fill surface should read and propose against.
+
+    ONE READER FOR ALL THREE FILLS. `chat_id` names a story, and then the
+    sheet is the one `scene.active_cast` resolves -- `chat_chars.sheet` where
+    the story has its own card, the reusable row where it does not. Without
+    it a fill cannot reach a story with a per-story card AT ALL: it reads
+    `characters.sheet`, proposes against it, and the author reviews, saves,
+    and sees nothing change because the engine reads the cast row.
+
+    A64 (review 2026-09-07): only `fill_body_interior` had grown that scope;
+    `fill_appearance` and `fill_character_psychology` still read `characters`
+    alone. Nothing about which sheet a story runs on depends on which of the
+    three buttons was pressed. Measured read-only against the author's corpus
+    2026-08-25: 13 of 116 `chat_chars` rows carry a per-story sheet.
+
+    A persona has no per-story card, so a `chat_id` with one is a caller
+    error rather than a silent fallback to the reusable row.
+    """
+    if chat_id is not None:
+        if kind != "character":
+            raise ValueError("A persona has no per-story card")
+        stored = chat_character_sheet(chat_id, entity_id)
+        if stored is None:
+            raise ValueError("That character is not in this story")
+        return stored
+    table = "characters" if kind == "character" else "personas"
+    row = q(f"SELECT sheet FROM {table} WHERE id=?", (entity_id,), one=True)
+    if not row:
+        # Each surface keeps the words it had: the two are the same 404 and
+        # the host reads whichever names the thing they were editing.
+        if kind == "character":
+            raise ValueError("Character not found")
+        raise ValueError("Card not found")
+    return json.loads(row["sheet"] or "{}")
+
+
+def fill_character_psychology(char_id, brief, chat_id=None):
     """Preview an AI fill of missing psychology/interoception fields.
 
     The existing card remains unchanged until the editor's normal Save action.
     This lets an author review the generated completion and keeps this helper
     from turning a generation request into an implicit write.
+
+    `chat_id` scopes the read to the card THIS story runs on -- see
+    `authored_card_for_fill`.
     """
-    row = q("SELECT sheet FROM characters WHERE id=?", (char_id,), one=True)
-    if not row:
-        raise ValueError("Character not found")
-    stored = json.loads(row["sheet"] or "{}")
+    stored = authored_card_for_fill("character", char_id, chat_id)
     normalized = normalize_character_data(stored)
     payload = {
         "brief": str(brief or "").strip(),
@@ -1060,7 +1097,8 @@ def _require_whole_json(raw):
         )
 
 
-def fill_appearance(kind, entity_id, brief, include_beneath=False, draft=None):
+def fill_appearance(kind, entity_id, brief, include_beneath=False, draft=None,
+                    chat_id=None):
     """Preview an AI fill of one card's body and clothing.
 
     Like `fill_character_psychology`, this WRITES NOTHING -- the editor shows
@@ -1076,14 +1114,13 @@ def fill_appearance(kind, entity_id, brief, include_beneath=False, draft=None):
     and clothing are a single coherent description -- a generated outfit under
     a hand-written summary that contradicts it is worse than either alone -- so
     the author reviews a whole proposal and keeps or discards it.
+
+    `chat_id` scopes the read to the card THIS story runs on -- see
+    `authored_card_for_fill`.
     """
-    table = "characters" if kind == "character" else "personas"
     normalize = (normalize_character_data if kind == "character"
                  else normalize_persona_data)
-    row = q(f"SELECT sheet FROM {table} WHERE id=?", (entity_id,), one=True)
-    if not row:
-        raise ValueError("Card not found")
-    stored = json.loads(row["sheet"] or "{}")
+    stored = authored_card_for_fill(kind, entity_id, chat_id)
     normalized = normalize(stored)
     draft = draft if isinstance(draft, dict) else {}
     payload = {
@@ -1268,15 +1305,7 @@ def fill_body_interior(char_id, brief, draft=None, chat_id=None):
     2026-08-25: 13 of 116 `chat_chars` rows carry a per-story sheet, including
     all seven stories of the one line whose card documents a route.
     """
-    if chat_id is not None:
-        stored = chat_character_sheet(chat_id, char_id)
-        if stored is None:
-            raise ValueError("That character is not in this story")
-    else:
-        row = q("SELECT sheet FROM characters WHERE id=?", (char_id,), one=True)
-        if not row:
-            raise ValueError("Character not found")
-        stored = json.loads(row["sheet"] or "{}")
+    stored = authored_card_for_fill("character", char_id, chat_id)
     normalized = normalize_character_data(stored)
     draft = draft if isinstance(draft, dict) else {}
     # The author's UNSAVED rows, not the saved copy -- the same reason

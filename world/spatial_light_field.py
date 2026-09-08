@@ -63,7 +63,7 @@ import json
 import math
 from typing import Optional
 
-from world.scene_memo import scene_memo
+from world.scene_memo import scene_memo, scene_read_parts
 from world.spatial_barriers import _SIGHT_BARRIERS, normalize_barrier
 from world.spatial_containment import container_of
 from world.spatial_fov import (
@@ -900,14 +900,20 @@ def _cache_key(scene: dict, room_id) -> str:
     stands. Measured on the sibling sound field, whose key was short the
     same way, dropping one alias off an entity that neither sounds nor
     shines moved a carried source two cells. So entities go in entire.
+
+    AND THE READ SET IS STATED ONCE, in `scene_memo.SCENE_READS`, rather
+    than spelled again here (the Section I residual of review C12). Spelled
+    again, it was short by "passages" -- the barrier and the width of a
+    doorway may live on the passage record instead of on either edge, and
+    `effective_anchors` resolves every edge through it. Measured: a dark
+    hall lit only by the spill of one such doorway kept its LIT field when
+    the passage's barrier flipped to `wall`, median cell 0.02269 against a
+    right answer of 0.0; the same hall's median moved 0.02269 -> 0.30501
+    between a 1-pace and an 8-pace passage width, which nothing but the
+    passage record carries.
     """
-    sc = scene or {}
-    return json.dumps([
-        str(room_id), sc.get("rooms"), sc.get("entities"), sc.get("positions"),
-        sc.get("stations"), sc.get("orientation"), sc.get("poses"),
-        sc.get("contacts"), sc.get("contained"), sc.get("crossings"),
-        sc.get("day_phase"), sc.get("weather"), sc.get(BEAT_KEY),
-    ], sort_keys=True, default=str)
+    return json.dumps([str(room_id), *scene_read_parts(scene)],
+                      sort_keys=True, default=str)
 
 
 def light_field(scene: dict, room_id) -> Optional[LightField]:

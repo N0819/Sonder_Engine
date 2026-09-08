@@ -264,6 +264,7 @@
   "A part placed by cell needs x and y": "セルで置く部分には x と y が必要です",
   "a part's at must be a corner of the box (${', '.join(ROOM_CORNERS)}) or its origin cell [x, y] (got ${part.get('at')})": "部分の at は箱の角（${', '.join(ROOM_CORNERS)}）か、その原点セル [x, y] でなければなりません（受け取った値：${part.get('at')}）",
   "A person of unremarkable appearance.": "特徴のない外見の人物。",
+  "A persona has no per-story card": "ペルソナには物語ごとのカードがありません",
   "A pin needs a room id": "ピンにはルームIDが必要です",
   "a pinned mix needs at least one layer": "ピン留めされたミックスには少なくとも1つのレイヤーが必要です",
   "A pipeline is already running for this. Abort it and wait for the aborted response before retrying.": "このパイプラインはすでに実行中です。中断して、中断された応答を待ってから再試行してください。",

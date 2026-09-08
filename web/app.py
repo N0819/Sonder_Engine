@@ -135,7 +135,7 @@ from mind.memory import (
 )
 from story.scene import (
     persona_of, get_scene, chat_character_sheet, seed_initial_attire,
-    weather_severity,
+    weather_severity, char_state, set_char_state,
 )
 from dressing.backdrops import (build_backdrop_request, request_backdrop, cached_backdrop,
                        backdrop_status, backdrop_error)
@@ -652,6 +652,22 @@ def _require_frame_idle(chat_id: int, frame_id):
             "for the aborted response before submitting another turn.",
         )
 
+def _frame_of(cid: int, frame_id):
+    """One route's era as a validated frame id, or None for the present.
+
+    `_era` below scopes the world-key CONTEXTVAR, which is the right tool for
+    anything read through `wget`. The per-character overlay
+    (`chat_char_frames`) is a table with an explicit `frame_id` column
+    instead, so its readers and writers need the value itself -- this is the
+    same validation with the value handed back rather than scoped (A80).
+    """
+    if frame_id is None:
+        return None
+    fr = get_frame(int(frame_id))
+    if fr is None or fr["chat_id"] != cid:
+        raise HTTPException(404, f"Frame {frame_id} not found")
+    return int(frame_id)
+
 @contextmanager
 def _era(cid: int, frame_id):
     """Scope a route body's frame-scoped world reads/writes to one era.
@@ -683,12 +699,7 @@ def _era(cid: int, frame_id):
     nobody set it. Chat-global keys (`survival_enabled`, ...) are unaffected
     -- `_scoped_world_key` redirects only keys declared frame-scoped.
     """
-    if frame_id is not None:
-        fr = get_frame(int(frame_id))
-        if fr is None or fr["chat_id"] != cid:
-            raise HTTPException(404, f"Frame {frame_id} not found")
-    token = db.active_frame_id.set(
-        int(frame_id) if frame_id is not None else None)
+    token = db.active_frame_id.set(_frame_of(cid, frame_id))
     try:
         yield
     finally:
@@ -3021,18 +3032,34 @@ def char_generate_greeting(cid: int, body: dict = Body(default={})):
         raise HTTPException(502, f"Greeting generation failed: {exc}") from exc
     return {"greeting": greeting}
 
-@app.post("/api/characters/{cid}/fill_psychology")
-def char_fill_psychology(cid: int, body: dict = Body(default={})):
-    """Preview missing v3 psychology fields for editor review."""
+def _psychology_fill(char_id, body, chat_id=None):
+    """Shared handler for the reusable card and the per-story card.
+
+    The `_interior_fill` rule, applied to its sibling (A64): which row the
+    answer is proposed against is the story's business, not the button's."""
     brief = str(body.get("prompt") or body.get("brief") or "").strip()
     try:
         with language_scope(_require_story_language(body.get("language"))):
-            sheet = fill_character_psychology(cid, brief)
+            return fill_character_psychology(char_id, brief, chat_id=chat_id)
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
     except Exception as exc:
         raise HTTPException(502, f"Psychology fill failed: {exc}") from exc
+
+@app.post("/api/characters/{cid}/fill_psychology")
+def char_fill_psychology(cid: int, body: dict = Body(default={})):
+    """Preview missing v3 psychology fields for editor review."""
+    sheet = _psychology_fill(cid, body)
     return {"id": cid, "sheet": sheet,
+            "warnings": character_card_warnings(sheet)}
+
+@app.post("/api/chats/{cid}/characters/{ch}/fill_psychology")
+def chat_char_fill_psychology(cid: int, ch: int, body: dict = Body(default={})):
+    """The same fill, against the card THIS story reads. Writes nothing."""
+    if not q("SELECT 1 FROM chats WHERE id=?", (cid,), one=True):
+        raise HTTPException(404, "Chat not found")
+    sheet = _psychology_fill(ch, body, chat_id=cid)
+    return {"id": ch, "chat_id": cid, "sheet": sheet,
             "warnings": character_card_warnings(sheet)}
 
 def _interior_fill(char_id, body, chat_id=None):
@@ -3081,8 +3108,11 @@ def chat_char_fill_interior(cid: int, ch: int, body: dict = Body(default={})):
     return {"id": ch, "chat_id": cid, "sheet": sheet,
             "warnings": character_card_warnings(sheet)}
 
-def _appearance_fill(kind, entity_id, body):
-    """Shared handler for the two card editors' body-and-clothing generator."""
+def _appearance_fill(kind, entity_id, body, chat_id=None):
+    """Shared handler for the two card editors' body-and-clothing generator.
+
+    `chat_id` names the story whose card this is, the same way `_interior_fill`
+    does (A64) -- a persona has no per-story card and never passes one."""
     try:
         with language_scope(_require_story_language(body.get("language"))):
             return fill_appearance(
@@ -3090,6 +3120,7 @@ def _appearance_fill(kind, entity_id, body):
                 str(body.get("prompt") or body.get("brief") or "").strip(),
                 include_beneath=bool(body.get("beneath")),
                 draft=body.get("draft"),
+                chat_id=chat_id,
             )
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
@@ -3101,6 +3132,15 @@ def char_fill_appearance(cid: int, body: dict = Body(default={})):
     """Preview a generated body and outfit for editor review. Writes nothing."""
     sheet = _appearance_fill("character", cid, body)
     return {"id": cid, "sheet": sheet,
+            "warnings": character_card_warnings(sheet)}
+
+@app.post("/api/chats/{cid}/characters/{ch}/fill_appearance")
+def chat_char_fill_appearance(cid: int, ch: int, body: dict = Body(default={})):
+    """The same generator, against the card THIS story reads. Writes nothing."""
+    if not q("SELECT 1 FROM chats WHERE id=?", (cid,), one=True):
+        raise HTTPException(404, "Chat not found")
+    sheet = _appearance_fill("character", ch, body, chat_id=cid)
+    return {"id": ch, "chat_id": cid, "sheet": sheet,
             "warnings": character_card_warnings(sheet)}
 
 @app.post("/api/personas/{pid}/fill_appearance")
@@ -4654,18 +4694,29 @@ def chat_char_card_put(cid: int, ch: int, body: dict = Body(...)):
     ):
         raise HTTPException(400, "A story character's identity uid cannot be changed")
 
-    cc = q(
-        "SELECT state FROM chat_chars WHERE chat_id=? AND char_id=?",
-        (cid, ch), one=True,
-    )
-    state = json.loads(cc["state"] or "{}")
+    state = char_state(cid, ch) or {}
     # Private history already has a per-story runtime override. Keep that
     # authoritative channel in sync with the edited story card while leaving
     # every other live-state field (mood, stress, beliefs, relationships)
     # untouched.
-    state["private_history"] = (
-        (sheet.get("knowledge") or {}).get("private_history") or []
-    )
+    entries = (sheet.get("knowledge") or {}).get("private_history") or []
+    state["private_history"] = entries
+    # AND EVERY ERA (A80). The CARD is per-story; the runtime state it syncs
+    # into is per-era, and a frame that has committed a turn holds its own
+    # `chat_char_frames` row and never reads the base one again. So a card
+    # edit that wrote the base row alone was invisible to every era the story
+    # had actually played -- the host edits the person, and
+    # `private_knowledge_for` reads the frame.
+    eras = []
+    for row in q("SELECT frame_id,state FROM chat_char_frames "
+                 "WHERE chat_id=? AND char_id=?", (cid, ch)):
+        try:
+            era_state = json.loads(row["state"] or "{}")
+        except (TypeError, ValueError):
+            era_state = {}
+        era_state["private_history"] = entries
+        eras.append((json.dumps(era_state, ensure_ascii=False),
+                     row["frame_id"]))
     with transaction():
         qi(
             "UPDATE chat_chars SET sheet=?,state=? WHERE chat_id=? AND char_id=?",
@@ -4675,6 +4726,12 @@ def chat_char_card_put(cid: int, ch: int, body: dict = Body(...)):
                 cid, ch,
             ),
         )
+        for era_state, era in eras:
+            qi(
+                "UPDATE chat_char_frames SET state=? "
+                "WHERE chat_id=? AND char_id=? AND frame_id=?",
+                (era_state, cid, ch, era),
+            )
     return {"ok": True, "sheet": sheet, "card_source": "chat",
             "warnings": character_card_warnings(sheet)}
 
@@ -4923,9 +4980,14 @@ def chat_char_position_put(cid: int, ch: int, body: dict = Body(...),
     return {"ok": True, "name": name, "room": room or None}
 
 @app.get("/api/chats/{cid}/characters/{ch}/private_history")
-def ph_get(cid: int, ch: int):
-    cc = q("SELECT state FROM chat_chars WHERE chat_id=? AND char_id=?", (cid, ch), one=True)
-    st = json.loads(cc["state"] or "{}") if cc else {}
+def ph_get(cid: int, ch: int, frame_id: int | None = None):
+    """What this character privately knows, in the era named by `frame_id`.
+
+    A80: `private_knowledge_for` -- the reader that actually delivers these
+    lines to a mind -- takes the frame override over the base row, and every
+    committed turn in a frame creates that override. Reading the base row
+    here showed the host a channel the story had stopped using."""
+    st = char_state(cid, ch, _frame_of(cid, frame_id)) or {}
     if st.get("private_history") is not None:
         return {"entries": st["private_history"], "source": "chat"}
     raw_sheet = chat_character_sheet(cid, ch)
@@ -4933,13 +4995,15 @@ def ph_get(cid: int, ch: int):
     return {"entries": sheet.get("knowledge", {}).get("private_history", []), "source": "sheet"}
 
 @app.put("/api/chats/{cid}/characters/{ch}/private_history")
-def ph_put(cid: int, ch: int, body: dict = Body(...)):
+def ph_put(cid: int, ch: int, body: dict = Body(...),
+           frame_id: int | None = None):
+    """Rewrite it, in the era the host is editing (A80)."""
     _require_chat_idle(cid)
-    cc = q("SELECT state FROM chat_chars WHERE chat_id=? AND char_id=?", (cid, ch), one=True)
-    if not cc: raise HTTPException(404)
-    st = json.loads(cc["state"] or "{}")
+    frame_id = _frame_of(cid, frame_id)
+    st = char_state(cid, ch, frame_id)
+    if st is None: raise HTTPException(404)
     st["private_history"] = body.get("entries", [])
-    qi("UPDATE chat_chars SET state=? WHERE chat_id=? AND char_id=?", (json.dumps(st), cid, ch))
+    set_char_state(cid, ch, json.dumps(st, ensure_ascii=False), frame_id)
     return {"ok": True}
 
 @app.put("/api/chats/{cid}/characters/{ch}/dialogue_color")

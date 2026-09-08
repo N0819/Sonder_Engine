@@ -2964,8 +2964,13 @@ async function previewMemoryContext() {
 async function chatPH(p, boundChatId = null) {
   const chatId = boundChatId ?? S.chatId;
   if (!chatId || S.chatId !== chatId) return;
+  // The era being viewed, because `private_knowledge_for` reads this
+  // character's state from the frame overlay and every committed turn in a
+  // frame creates one -- editing the base row edited nothing (A80).
+  const era = S.currentFrameId != null
+    ? `?frame_id=${S.currentFrameId}` : "";
   const d = await api("GET",
-    `/api/chats/${chatId}/characters/${p.id}/private_history`);
+    `/api/chats/${chatId}/characters/${p.id}/private_history${era}`);
   if (S.chatId !== chatId) return;
   const ph = phEditor(d.entries, true);
   modal(`Private history (this story) — ${p.name}`, b => {
@@ -2982,7 +2987,7 @@ async function chatPH(p, boundChatId = null) {
           class: "primary",
           onclick: async () => {
             await api("PUT",
-              `/api/chats/${chatId}/characters/${p.id}/private_history`,
+              `/api/chats/${chatId}/characters/${p.id}/private_history${era}`,
               { entries: ph.read() });
             closeModal();
             toast("Private history saved.", "ok");

@@ -624,29 +624,20 @@ def _exchange_stops(ctx, couriers, crowds_standing, *, names, places, turn,
 
     cid = ctx.chat.id
     crowds_dirty = False
-    standing_surfaces = None  # lazily loaded once; most beats have no stops
+    # The one shared reader (A63), memoised per ROOM. It used to be one
+    # chat-wide query ordered by time, so a stop whose square held a standing
+    # surface offered the caravan nothing as soon as twelve located events
+    # anywhere were newer -- and a caravan pulling into a market is exactly
+    # the newcomer `ARRIVAL_SURFACES` is about. Lazy: most beats have no stop.
+    _reader = None
 
-    def surfaces():
-        nonlocal standing_surfaces
-        if standing_surfaces is None:
-            from story.carriers import ARRIVAL_SURFACES
+    def surfaces(room):
+        nonlocal _reader
+        if _reader is None:
+            from story.carriers import standing_surfaces_reader
 
-            standing_surfaces = []
-            for row in q(
-                    "SELECT * FROM world_events WHERE chat_id=? AND "
-                    "frame_id IS ? AND location_id IS NOT NULL "
-                    "ORDER BY occurred_at DESC LIMIT ?",
-                    (cid, ctx.turn.frame_id, ARRIVAL_SURFACES * 4)) or []:
-                try:
-                    payload = json.loads(row["payload"] or "{}")
-                except (TypeError, ValueError):
-                    payload = {}
-                witnessed = " ".join(
-                    str((payload or {}).get("witnessed") or "").split())
-                if witnessed:
-                    standing_surfaces.append(
-                        (dict(row), payload, witnessed[:320]))
-        return standing_surfaces
+            _reader = standing_surfaces_reader(cid, ctx.turn.frame_id)
+        return _reader(room)
 
     for i, courier in enumerate(couriers):
         if courier.get("kind") != KIND_CARAVAN \
@@ -706,9 +697,8 @@ def _exchange_stops(ctx, couriers, crowds_standing, *, names, places, turn,
             # boards before what the crowd merely says, so when both carry
             # one event the wagon holds the eyewitness version and the
             # dedupe drops the fainter hearsay -- never the reverse.
-            for row, payload, witnessed in surfaces():
-                if str(row["location_id"]) != room \
-                        or str(row["event_id"]) in known:
+            for row, payload, witnessed in surfaces(room):
+                if str(row["event_id"]) in known:
                     continue
                 cargo.append({
                     "world_event_id": str(row["event_id"]),

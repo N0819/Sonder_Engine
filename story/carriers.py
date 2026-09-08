@@ -92,7 +92,21 @@ PERSONA_STATE_KEY = "persona_carrier_state"
 #: arrival. Bounded so this is walking into a room and seeing what happened,
 #: not archaeology: a body reads the barred gate in front of it, and does not
 #: inherit every event that room has ever hosted.
+#:
+#: PER ROOM, and only per room. A63 (review 2026-09-07): the window was read
+#: with ONE chat-wide query ordered by time, so the newest twelve located
+#: events anywhere decided what every room offered -- twelve events in the
+#: busy half of a story pushed a quiet room's still-standing gate out of the
+#: window forever, and nobody walking in would ever see it again.
 ARRIVAL_SURFACES = 3
+
+#: How many rows the per-room query reads to find that many SURFACES. A
+#: located event is a surface only if its payload carries `witnessed`, which
+#: SQL cannot see, so the scan is widened and the filter happens in Python.
+#: Named rather than spelled `* 4` at two call sites: it drops nothing a
+#: reader would want -- it only decides how deep to look before giving up on
+#: a room whose recent events were all private.
+SURFACE_SCAN_FACTOR = 4
 
 #: How many listeners one speaker may reach in a single beat. Bounded route
 #: fan-out, and the deterministic half of the "town of criers" answer: a story
@@ -135,6 +149,59 @@ def reports_for_state(state, cap=PAYLOAD_CAP):
     ]
 
 
+def standing_surfaces_reader(cid, frame_id, skip_event_ids=()):
+    """A reader for the public surfaces still standing in ONE room.
+
+    Returns `f(room) -> [(row, payload, witnessed), ...]`, newest first, at
+    most `ARRIVAL_SURFACES` of them, memoised per room for the life of the
+    call that built it -- a turn-local memo, never a module global.
+
+    THE ONE HELPER (A63). Three sites asked this question -- a body walking
+    in, a crowd standing there, a caravan pulling up -- and all three asked
+    it with a chat-wide `ORDER BY occurred_at DESC LIMIT` and then filtered
+    by room in Python. That is a window over the STORY, not over the room:
+    twelve located events anywhere newer than the barred gate, and the room
+    holding the gate offers nothing. "Still standing HERE" has to be asked
+    here, and the `(chat_id, frame_id, location_id, occurred_at)` index is
+    what makes asking it per room cheap.
+
+    `skip_event_ids` drops surfaces the caller is already handling as this
+    beat's own new events, so a body does not acquire one twice.
+    """
+    skip = {str(e) for e in skip_event_ids or ()}
+    cache = {}
+
+    def surfaces(room):
+        room = str(room or "")
+        if not room:
+            return []
+        if room in cache:
+            return cache[room]
+        found = []
+        for row in q(
+                "SELECT * FROM world_events WHERE chat_id=? AND frame_id IS ? "
+                "AND location_id=? ORDER BY occurred_at DESC LIMIT ?",
+                (cid, frame_id, room,
+                 ARRIVAL_SURFACES * SURFACE_SCAN_FACTOR)) or []:
+            if str(row["event_id"]) in skip:
+                continue
+            try:
+                payload = json.loads(row["payload"] or "{}")
+            except (TypeError, ValueError):
+                payload = {}
+            witnessed = " ".join(
+                str((payload or {}).get("witnessed") or "").split())
+            if not witnessed:
+                continue
+            found.append((dict(row), payload, witnessed[:320]))
+            if len(found) >= ARRIVAL_SURFACES:
+                break
+        cache[room] = found
+        return found
+
+    return surfaces
+
+
 def advance_carriers(ctx, scene, world_event_result):
     """Acquire public event surfaces and update each holder's physical trail.
 
@@ -171,20 +238,9 @@ def advance_carriers(ctx, scene, world_event_result):
     #
     # The design already said the answer: consequences "are met as state when
     # someone next stands where they landed". This is that sentence.
-    standing_rows = []
-    for row in q("SELECT * FROM world_events WHERE chat_id=? AND frame_id IS ? "
-                 "AND location_id IS NOT NULL "
-                 "ORDER BY occurred_at DESC LIMIT ?",
-                 (cid, ctx.turn.frame_id, ARRIVAL_SURFACES * 4)) or []:
-        if str(row["event_id"]) in {str(r["event_id"]) for r, _, _ in event_rows}:
-            continue
-        try:
-            payload = json.loads(row["payload"] or "{}")
-        except (TypeError, ValueError):
-            payload = {}
-        witnessed = " ".join(str((payload or {}).get("witnessed") or "").split())
-        if witnessed:
-            standing_rows.append((dict(row), payload, witnessed[:320]))
+    standing = standing_surfaces_reader(
+        cid, ctx.turn.frame_id,
+        skip_event_ids=[str(r["event_id"]) for r, _, _ in event_rows])
 
     public_surfaces = len(event_rows)
     carrier_opportunities = acquired = moved = 0
@@ -216,8 +272,7 @@ def advance_carriers(ctx, scene, world_event_result):
                 changed = True
 
         known = {str(r.get("world_event_id")): r for r in reports}
-        here = [r for r in standing_rows
-                if str(r[0]["location_id"]) == current_room][:ARRIVAL_SURFACES]
+        here = standing(current_room)
         for row, payload, witnessed in event_rows + here:
             if str(row["location_id"]) != current_room:
                 continue
@@ -264,7 +319,7 @@ def advance_carriers(ctx, scene, world_event_result):
             save_state(cid, entry, state, frame_id=ctx.turn.frame_id)
 
     crowd_opportunities, crowd_acquired = _crowds_acquire(
-        ctx, event_rows, standing_rows)
+        ctx, event_rows, standing)
 
     return {"enabled": True, "events_offered": len(event_ids),
             "public_surfaces": public_surfaces,
@@ -274,7 +329,7 @@ def advance_carriers(ctx, scene, world_event_result):
             "crowd_acquired": crowd_acquired}
 
 
-def _crowds_acquire(ctx, event_rows, standing_rows):
+def _crowds_acquire(ctx, event_rows, surfaces):
     """A crowd standing where a public surface lands witnesses it too.
 
     The design named crowds the first anonymous carrier, and `apply_tellings`
@@ -306,8 +361,7 @@ def _crowds_acquire(ctx, event_rows, standing_rows):
         room = str(crowd.get("room_uid") or "")
         if not room:
             continue
-        here = [r for r in standing_rows
-                if str(r[0]["location_id"]) == room][:ARRIVAL_SURFACES]
+        here = surfaces(room)
         for row, payload, witnessed in event_rows + here:
             if str(row["location_id"]) != room:
                 continue

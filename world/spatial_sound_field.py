@@ -51,7 +51,7 @@ import json
 import math
 from typing import Optional
 
-from world.scene_memo import scene_memo
+from world.scene_memo import scene_memo, scene_read_parts
 from world.spatial_barriers import normalize_barrier
 from world.spatial_containment import container_of
 from world.spatial_fov import (
@@ -1570,12 +1570,23 @@ def _cache_key(scene, room_id, turn_idx, crowds, events, speakers) -> str:
     So the scene goes in as the sub-blobs the derivation reads, entities
     entire. A field that neither sounds nor shines is not a smaller read
     set, only a smaller guess at one.
+
+    AND THE READ SET IS STATED ONCE, in `scene_memo.SCENE_READS`, rather
+    than spelled a third time here (the Section I residual of review C12).
+    Spelled again, this one was short by "passages", "orientation", "poses"
+    and the beat index -- and a hand-written list is short by whatever its
+    author did not think of, which is the whole reason there is now one
+    list. Measured on the passage key: two rooms one doorway apart, the
+    doorway's barrier living on the passage record rather than on either
+    edge, flipped to `wall` -- the cache went on answering a shout at
+    `full` through it, pair gain 0.02117 where the right answer is no
+    field-borne channel at all; flipped to `closed_door` the same gain
+    should fall to 0.00529 and did not move. A passage's `width` is the
+    same class: 1 pace against 8 moved the pair gain 0.02117 -> 0.02703
+    and the door gain 0.06477 -> 0.1.
     """
     parts = [room_id, turn_idx, crowds, events, speakers,
-             scene.get("rooms"), scene.get("positions"), scene.get("stations"),
-             scene.get("contacts"), scene.get("contained"),
-             scene.get("crossings"), scene.get("weather"),
-             scene.get("day_phase"), scene.get("entities")]
+             *scene_read_parts(scene)]
     blob = json.dumps(parts, sort_keys=True, default=str)
     return hashlib.sha1(blob.encode("utf-8")).hexdigest()
 

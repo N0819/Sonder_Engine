@@ -54,13 +54,20 @@ log = logging.getLogger(__name__)
 #: over all of them rather than a per-derivation read set: a wider stamp
 #: fingerprints more than one derivation needs and can only cost a fraction
 #: of a millisecond, where a narrow one short by a key would miss a
-#: mutation. It is WIDER than what the two field caches spell into their own
-#: keys (`spatial_light_field._cache_key`, `spatial_sound_field._cache_key`):
-#: those omit "passages", which `effective_anchors` reads on every edge
-#: through `resolve_edge` -> `passage_of` -> `spatial_barriers.
-#: scene_passages`. That omission in the two field caches is pre-existing and
-#: is not fixed here -- it is a content KEY that can hand back a field built
-#: under a passage's old barrier, which is its own finding, not this memo's.
+#: mutation. ONE STATEMENT, SHARED: the two field content caches
+#: (`spatial_light_field._cache_key`, `spatial_sound_field._cache_key`) key
+#: on this same tuple through `scene_read_parts`, so a key cannot be short
+#: of the stamp again. Both were, by "passages", which `effective_anchors`
+#: reads on every edge through `resolve_edge` -> `passage_of` ->
+#: `spatial_barriers.scene_passages` (the Section I residual of review C12).
+#: Measured on the shape the fix was written for: a dark hall lit only by
+#: the spill of one doorway, with the doorway's barrier living on the
+#: passage record rather than on either edge -- flipping it to `wall`
+#: returned the LIT field from the cache, median cell 0.02269 where the
+#: right answer is 0.0, and the sibling sound field went on answering a
+#: shout at `full` through a wall. A passage's `width` is the same class:
+#: 1 pace against 8 moved the same hall's median from 0.02269 to 0.30501,
+#: and only a passage record carries one.
 #: "beat_idx" is `world.spatial`'s BEAT_KEY, and `tests/test_scene_memo.py`
 #: pins the two together so the spelling here cannot drift from the constant;
 #: `test_the_read_set_covers_what_the_derivations_read` pins the whole tuple
@@ -82,6 +89,20 @@ SCENE_READS = ("rooms", "positions", "entities", "stations", "orientation",
 _PASSES: dict = {}
 
 
+def scene_read_parts(scene):
+    """The scene's read set as a list, in `SCENE_READS` order.
+
+    The one place a caller turns "what a spatial derivation reads" into
+    values. The pass's own fingerprint below is one caller; the two field
+    content caches are the others, and they went their own way until the
+    C12 residual -- each spelled a hand-written list of sub-blobs, each was
+    short of this tuple, and both were short of the same key. A key derived
+    from the statement cannot drift from it.
+    """
+    scene = scene or {}
+    return [scene.get(name) for name in SCENE_READS]
+
+
 def _fingerprint(scene):
     """The scene's read set, for the self-check on close.
 
@@ -95,8 +116,7 @@ def _fingerprint(scene):
     pass against the seconds a pass saves on that scene is not a cost worth
     being clever about.
     """
-    return json.dumps([scene.get(name) for name in SCENE_READS],
-                      sort_keys=True, default=str)
+    return json.dumps(scene_read_parts(scene), sort_keys=True, default=str)
 
 
 class scene_read_pass:

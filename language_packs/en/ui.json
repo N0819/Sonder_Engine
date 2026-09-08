@@ -264,6 +264,7 @@
   "A part placed by cell needs x and y": "A part placed by cell needs x and y",
   "a part's at must be a corner of the box (${', '.join(ROOM_CORNERS)}) or its origin cell [x, y] (got ${part.get('at')})": "a part's at must be a corner of the box (${', '.join(ROOM_CORNERS)}) or its origin cell [x, y] (got ${part.get('at')})",
   "A person of unremarkable appearance.": "A person of unremarkable appearance.",
+  "A persona has no per-story card": "A persona has no per-story card",
   "A pin needs a room id": "A pin needs a room id",
   "a pinned mix needs at least one layer": "a pinned mix needs at least one layer",
   "A pipeline is already running for this. Abort it and wait for the aborted response before retrying.": "A pipeline is already running for this. Abort it and wait for the aborted response before retrying.",

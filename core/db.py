@@ -1871,6 +1871,16 @@ LATE_SCHEMA = """
 CREATE INDEX IF NOT EXISTS idx_lorebooks_anchor ON lorebooks(anchor_entity_id)
     WHERE anchor_entity_id IS NOT NULL;
 
+-- "What is still standing HERE" is a question about a ROOM, and every carrier
+-- asking it used to ask it about the story instead (review 2026-09-07 A63):
+-- one chat-wide `ORDER BY occurred_at DESC LIMIT`, then a filter by room in
+-- Python, so twelve newer located events anywhere hid a quiet room's own
+-- surface forever. `carriers.standing_surfaces_reader` now asks per room, and
+-- this is the index that makes asking cheap. `frame_id` before `location_id`
+-- because a story's eras partition the events before a room does.
+CREATE INDEX IF NOT EXISTS idx_world_events_room_time
+    ON world_events(chat_id, frame_id, location_id, occurred_at);
+
 -- A vector address that outlived its vectors is worse than no address: the
 -- checkpoint would file the memory by reference to bytes that are no longer
 -- its own, and the restore would put the wrong vector back silently. So any
