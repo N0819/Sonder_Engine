@@ -111,8 +111,9 @@ def is_part_leaf(leaf_path: tuple) -> bool:
 
     Only prose moves. Structure -- `specialists.<n>.order` (the authoritative
     assembly order, which is deliberately not `chunks` insertion order:
-    `contact` differs), `specialists.<n>.nsfw`, `nsfw_prompt_ids`, the
-    `prose_author_sheet` gate names, `character_block_keys` -- stays inline,
+    `contact` differs), `nsfw_prompt_ids` (the one roster of prompt ids the
+    adult overlay is appended to), the `prose_author_sheet` gate names,
+    `character_block_keys` -- stays inline,
     because a list in a text file needs a parser and gains nothing.
     """
     if len(leaf_path) == 1:

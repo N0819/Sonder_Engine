@@ -2073,6 +2073,26 @@ def _json_mode_recovery_stages(body, prov, model, *, stalled=False):
     yield stage_two, []
 
 
+def _is_reasoning_key(key):
+    """Does this message/delta key carry a model's private trace?
+
+    ONE PREDICATE FOR BOTH TRANSPORTS (B31). The blocking reader and the
+    stream reader each answer "what counts as a trace" and they must not be
+    free to answer it differently: the two-key stream read that A28 measured
+    was exactly that divergence, dropping `reasoning_details` on streams
+    while the blocking path kept it. The readers still differ in how they
+    JOIN what they find -- a stream arrives in fragments whose whitespace is
+    part of the trace, a message arrives whole -- but not in what they look
+    at.
+
+    Read by what the key SAYS it is, not against a list of spellings: a
+    provider renames this field every generation of its API and a list of
+    the ones seen so far is always one behind (`_reasoning_text`).
+    """
+    folded = str(key).casefold()
+    return "reason" in folded or "think" in folded
+
+
 def _delta_reasoning(delta):
     """The trace one stream delta carries, whichever key the seam used.
 
@@ -2086,8 +2106,7 @@ def _delta_reasoning(delta):
     if not isinstance(delta, dict):
         return ""
     return "".join(_flatten_text(value) for key, value in delta.items()
-                   if "reason" in str(key).casefold()
-                   or "think" in str(key).casefold())
+                   if _is_reasoning_key(key))
 
 
 def _reasoning_only_error(prov_name, model, reasoning, max_tokens=None):
@@ -2985,8 +3004,7 @@ def _reasoning_text(message):
     if not isinstance(message, dict):
         return ""
     chunks = [_flatten_text(value) for key, value in message.items()
-              if "reason" in str(key).casefold()
-              or "think" in str(key).casefold()]
+              if _is_reasoning_key(key)]
     return "\n".join(c for c in chunks if c).strip()
 
 

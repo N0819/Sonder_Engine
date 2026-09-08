@@ -140,6 +140,14 @@ def _summary_id(scope, end_turn_idx):
     return f"summary:{scope}:{int(end_turn_idx or 0)}"
 
 
+#: How far from neutral this beat's mood has to sit before a sign flip counts
+#: as one. Below it the surface is not clearly on either side of zero, so a
+#: crossing is drift in the number rather than a change of heart. Unchanged
+#: value; it was an inline literal until REVIEW_2026-09-07 B30 lifted the
+#: English word gate off this signal and left the number deciding alone.
+_MOOD_FLIP_MIN = 0.15
+
+
 def _origin_on_drift(chat_id, char_id, current_turn_idx, active_state, *,
                      clock, earlier_ids=()):
     """Surface the character's ORIGIN summary window when a drift signal fires.
@@ -183,35 +191,31 @@ def _origin_on_drift(chat_id, char_id, current_turn_idx, active_state, *,
             drift = True
             break
     # Signal 3: mood sign-flip from baseline.
-    mood = str(active_state.get("mood") or "").strip().casefold()
-    if mood and not drift:
-        # The baseline is "neutral" unless the character's stored affect
-        # says otherwise. A sign-flip is when a clearly positive mood gives
-        # way to a clearly negative one or vice versa, compared to what the
-        # character's affect surface has been tracking. We use the mood label
-        # vocabulary the engine already maintains.
-        _negative = any(w in mood for w in (
-            "afraid", "anxious", "angry", "ashamed", "despair", "disgust",
-            "fear", "grief", "guilt", "horror", "rage", "sad", "shame",
-            "terror", "worried", "dread", "misery", "anguish", "desolate",
-        ))
-        _positive = any(w in mood for w in (
-            "calm", "content", "delighted", "ecstatic", "elated", "excited",
-            "glad", "happy", "joy", "love", "peaceful", "pleased", "proud",
-            "relieved", "satisfied", "serene", "triumphant", "warm",
-        ))
-        # Only a clear signal counts: a mood that is clearly one or the other,
-        # and the character's active_state also carries valence from resolved
-        # affect. We check the valence sign flip against the stored baseline.
-        if _negative or _positive:
-            surface = (active_state.get("affect") or {}).get("surface") or {}
-            valence = float(surface.get("valence") or 0.0)
-            baseline = (active_state.get("affect") or {}).get("baseline") or {}
-            base_v = float(baseline.get("valence") or 0.0)
-            # A sign flip: current and baseline are on opposite sides of zero,
-            # and the current is not near zero (which is neutral, not a flip).
-            if abs(valence) > 0.15 and (valence * base_v) < 0:
-                drift = True
+    #
+    # THE NUMBER IS THE MOOD. `persist/commit_memory.py` writes
+    # `active_state["mood"]` as `affect.surface.label` and the valence beside
+    # it off the SAME resolved surface, so the label and the number are one
+    # fact in two spellings and only one of them is comparable. This site used
+    # to read the label first, against two module-local English word tuples,
+    # and consult the number only if a word matched (REVIEW_2026-09-07 B30) --
+    # a second answer to a question the sign already decides, narrower than
+    # the engine's own pack-backed mood vocabulary
+    # (`linguistics._MOOD_VALENCE`, read by `memory_retrieval._mood_axis`) and
+    # unable to fire at all for a story told in a language those tuples are
+    # not written in. The lists are gone; the sign decides.
+    if not drift:
+        affect = active_state.get("affect") or {}
+        surface = affect.get("surface") if isinstance(affect, dict) else None
+        baseline = affect.get("baseline") if isinstance(affect, dict) else None
+        try:
+            valence = float((surface or {}).get("valence") or 0.0)
+            base_v = float((baseline or {}).get("valence") or 0.0)
+        except (TypeError, ValueError, AttributeError):
+            valence = base_v = 0.0
+        # A sign flip: current and baseline are on opposite sides of zero,
+        # and the current is not near zero (which is neutral, not a flip).
+        if abs(valence) > _MOOD_FLIP_MIN and (valence * base_v) < 0:
+            drift = True
     if not drift:
         return {}
     # Fetch the earliest first-hand summary window.

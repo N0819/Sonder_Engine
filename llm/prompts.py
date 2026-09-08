@@ -86,7 +86,6 @@ SPECIALIST_PROMPT_SPECS = {
             str(spec["core"]), "en", f"director_{name}"),
         "order": tuple(spec["order"]),
         "chunks": dict(spec["chunks"]),
-        "nsfw": bool(spec.get("nsfw")),
     }
     for name, spec in _ENGLISH["specialists"].items()
 }
@@ -166,6 +165,23 @@ def active_preset():
 
 def nsfw_enabled():
     return get_setting("nsfw_enabled") == "1"
+
+
+def nsfw_overlay(pid, card):
+    """The adult overlay this prompt id receives from one card, or ``""``.
+
+    `nsfw_prompt_ids` is the whole roster. It was one of three answers to the
+    same question (B11): the specialists consulted a per-hand
+    `specialists.<name>.nsfw` flag, the prose author appended the overlay
+    unconditionally, and `get_prompt_body` read the roster -- so a pack could
+    grant `director_body` the overlay in one spelling and withhold it in the
+    other, with nothing anywhere objecting. Every path that assembles a sheet
+    asks here, by the prompt id the sheet is stored and edited under.
+    """
+    if not nsfw_enabled():
+        return ""
+    return str(card["nsfw_overlay"]) if pid in set(
+        card["nsfw_prompt_ids"]) else ""
 
 
 #: The opening of a `{{fragment:<name>}}` reference. References are a PACK
@@ -340,8 +356,7 @@ def specialist_prompt(name, scope, language=None):
     # every hand because the rule is about the CHANNEL a note arrives on, not
     # about any one hand's subject.
     sheet += str(card["director_note"])
-    if spec.get("nsfw") and nsfw_enabled():
-        sheet += str(card["nsfw_overlay"])
+    sheet += nsfw_overlay(pid, card)
     return apply_prompt_policy(sheet, _language(language), pid)
 
 
@@ -363,8 +378,8 @@ def prose_author_prompt(scope, language=None):
         granted = set(duty_names if scope is None else scope)
         sheet = "".join(text for name, text in localized
                         if name is None or name in granted)
-    if nsfw_enabled():
-        sheet += str(_prompt_card(language)["nsfw_overlay"])
+    sheet += nsfw_overlay(
+        "director_resolve_lean", _prompt_card(language))
     return apply_prompt_policy(
         sheet, _language(language), "director_resolve_lean")
 
@@ -504,10 +519,7 @@ def get_prompt_body(pid, language=None):
             raise KeyError(
                 f"language pack {language!r} has no system prompt {pid!r}"
             ) from exc
-    card = _prompt_card(language)
-    if nsfw_enabled() and pid in set(card["nsfw_prompt_ids"]):
-        base += str(card["nsfw_overlay"])
-    return base
+    return base + nsfw_overlay(pid, _prompt_card(language))
 
 
 def get_prompt(pid, language=None):

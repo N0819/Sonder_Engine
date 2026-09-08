@@ -189,8 +189,7 @@
         "overlays": {
           "$text": "specialists/body/chunks/overlays.txt"
         }
-      },
-      "nsfw": true
+      }
     },
     "social": {
       "core": {
@@ -239,8 +238,7 @@
         "charter_ops": {
           "$text": "specialists/social/chunks/charter_ops.txt"
         }
-      },
-      "nsfw": false
+      }
     },
     "contact": {
       "core": {
@@ -269,8 +267,7 @@
         "contact_action_ops": {
           "$text": "specialists/contact/chunks/contact_action_ops.txt"
         }
-      },
-      "nsfw": true
+      }
     },
     "objects": {
       "core": {
@@ -303,8 +300,7 @@
         "sensory_events": {
           "$text": "specialists/objects/chunks/sensory_events.txt"
         }
-      },
-      "nsfw": false
+      }
     },
     "spatial": {
       "core": {
@@ -341,8 +337,7 @@
         "comms_ops": {
           "$text": "specialists/spatial/chunks/comms_ops.txt"
         }
-      },
-      "nsfw": true
+      }
     }
   },
   "prose_author_sheet": [
