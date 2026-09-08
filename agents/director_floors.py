@@ -25,10 +25,11 @@ from story.scene import (
 )
 from world.mechanics import (condition_cadence_is_inert,
                             read_time_diff)
-from world.spatial import _is_body_entity, merge_scene_with_diff, room_of
+from world.spatial import _is_body_entity, room_of
 
 from .common import _mask_quoted_spans
 from .director_lingua import _ling
+from .director_movement import route_scene_for
 
 # Keep the keyword list small and specific so it does not fire on ordinary
 # descriptive prose. This is a legacy high-precision detector for one known
@@ -1340,7 +1341,7 @@ def _room_exists(sc, sd, room_id) -> bool:
     return False
 
 
-def _unplaced_minted_entities(sc, sd, *, merged=None):
+def _unplaced_minted_entities(sc, sd, *, merged=None, ctx=None):
     """Things this beat brought into the world and left nowhere.
 
     MEASURED BY OUTCOME, not by re-deriving where a thing should have gone:
@@ -1368,6 +1369,12 @@ def _unplaced_minted_entities(sc, sd, *, merged=None):
     `merged` is that merge already computed, for a caller that holds it (the
     placement below, and the commit, which is handed the scene the beat ends
     with). Passing it buys nothing but the merge; it must be the same answer.
+
+    `ctx` is the turn, and with it the merge is the turn's own -- one per
+    (scene, diff content), shared with every other route and placement
+    question the beat asks (`director_movement.route_scene_for`, review
+    2026-09-07 C6). Without it this merges for itself, which is what the
+    commit does: it has no turn and holds its own scene.
     """
     entities = (sd or {}).get("entities")
     if not isinstance(entities, dict) or not entities:
@@ -1375,7 +1382,7 @@ def _unplaced_minted_entities(sc, sd, *, merged=None):
     removed = {str(e).strip().casefold()
                for e in ((sd or {}).get("remove_entities") or [])}
     if merged is None:
-        merged = merge_scene_with_diff(sc or {}, sd or {})
+        merged = route_scene_for(ctx, sc or {}, sd or {})
     missing = []
     for eid, ent in entities.items():
         if not isinstance(ent, dict):
@@ -1399,7 +1406,7 @@ def _unplaced_minted_entities(sc, sd, *, merged=None):
     return sorted(missing)
 
 
-def unplaced_mints_needing_a_room(sc, sd, *, merged=None):
+def unplaced_mints_needing_a_room(sc, sd, *, merged=None, ctx=None):
     """Of the things this beat left nowhere, the ones nothing else places.
 
     ONE ANSWER TO ONE QUESTION, and the question was being answered twice.
@@ -1430,13 +1437,13 @@ def unplaced_mints_needing_a_room(sc, sd, *, merged=None):
     entities = (sd or {}).get("entities")
     entities = entities if isinstance(entities, dict) else {}
     if merged is None:
-        merged = merge_scene_with_diff(sc or {}, sd or {})
+        merged = route_scene_for(ctx, sc or {}, sd or {})
     contained = merged.get("contained")
     carried = {str(k).strip().casefold()
                for k in (contained if isinstance(contained, dict) else {})}
     carried.discard("")
     out = []
-    for eid in _unplaced_minted_entities(sc, sd, merged=merged):
+    for eid in _unplaced_minted_entities(sc, sd, merged=merged, ctx=ctx):
         ent = entities.get(eid)
         ent = ent if isinstance(ent, dict) else {}
         # THE RECORD THE WORLD ENDS WITH, not only the record the diff wrote:
@@ -1473,7 +1480,7 @@ def unplaced_mints_needing_a_room(sc, sd, *, merged=None):
     return out
 
 
-def place_unplaced_mints(sc, sd, fallback_room, *, merged=None):
+def place_unplaced_mints(sc, sd, fallback_room, *, merged=None, ctx=None):
     """A MINT THIS BEAT LEAVES NOWHERE STANDS WHERE THE BEAT IS -- AND IT
     STANDS THERE HERE, WHILE THE BEAT CAN STILL SEE IT.
 
@@ -1500,7 +1507,7 @@ def place_unplaced_mints(sc, sd, fallback_room, *, merged=None):
     room = str(fallback_room or "").strip()
     if not room:
         return []
-    ids = unplaced_mints_needing_a_room(sc, sd, merged=merged)
+    ids = unplaced_mints_needing_a_room(sc, sd, merged=merged, ctx=ctx)
     if not ids:
         return []
     positions = sd.get("positions")
