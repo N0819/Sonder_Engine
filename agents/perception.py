@@ -11,6 +11,7 @@ from language_runtime import (LanguagePackError, compositor_text,
                               linguistic)
 from story.character_schema import (
     character_appearance,
+    character_voice,
     character_name,
     character_name_from_text,
     character_senses,
@@ -3088,6 +3089,28 @@ def _composer_prev_seen(ledger, pid):
     return set(seen) if isinstance(seen, list) else None
 
 
+def _voice_register_for(ctx, speaker):
+    """The speaker's own vocal register from their sheet, or "" -- the voice
+    the composer establishes ONCE per observer (D2, `composer.speech_percept`).
+    Read through the cast row, so a per-story card override wins exactly as
+    it does for everything else the character is. A player persona carries
+    no `social.voice`, and a background presence has no sheet: both answer
+    "", and their lines carry only the tone they were declared with."""
+    target = str(speaker or "").strip()
+    if not target:
+        return ""
+    for row in (getattr(ctx, "cast", None) or []):
+        try:
+            sheet, _active, _stance = sheet_state(row)
+        except Exception:
+            continue
+        if not same_subject(ctx.get("scene") or {}, character_name(sheet), target) \
+                and str(character_name(sheet) or "").strip().casefold() != target.casefold():
+            continue
+        return str((character_voice(sheet) or {}).get("register") or "").strip()
+    return ""
+
+
 def _composer_prev_state(ledger, pid):
     entry = (ledger or {}).get(str(pid)) or {}
     return (frozenset(entry.get("standing") or []),
@@ -4650,7 +4673,9 @@ def _composer_act(ctx, sc, interp, perceivers, known, p_name, p_visible,
                         can_see=said_seen,
                         proximity=p.get("proximity_to_actor"),
                         order_key=idx, observer_id=pid,
-                        senses=p.get("sense_card"))
+                        senses=p.get("sense_card"),
+                        voice=_voice_register_for(ctx, p_name),
+                        prev_standing=prev_standing)
                     if percept:
                         percepts.append(percept)
                 elif event.get("type") == "communication":
@@ -5345,7 +5370,9 @@ def _composer_outcome(ctx, sc, prev_scene, diff, interp, res, known, p_name,
                         proximity=measured_proximity_rel(
                             sc, name, speaker),
                         order_key=order, observer_id=pid,
-                        senses=p.get("sense_card"))
+                        senses=p.get("sense_card"),
+                        voice=_voice_register_for(ctx, speaker),
+                        prev_standing=prev_standing)
                     if percept:
                         percepts.append(percept)
                         unheard.discard(

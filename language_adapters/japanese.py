@@ -128,7 +128,7 @@ class JapaneseRenderer:
             return self._text("dialogue_unseen", label=label, verb=verb,
                               articulation=articulation, body=body)
         return self._text("dialogue_visible", label=label,
-                          manner=self._tone(data.get("tone")),
+                          manner=self._tone(data.get("manner", data.get("tone"))),
                           articulation=articulation, verb=verb, body=body)
 
     def _tone(self, tone):
@@ -489,6 +489,8 @@ class JapaneseRenderer:
         percepts = list(percepts or [])
         standing_keys = {p.dedupe_key for p in percepts
                          if p.order_key is None and p.dedupe_key}
+        # A voice once known stays known (see `composer.carried_voices`).
+        standing_keys |= composer.carried_voices(prev_standing)
         described = set(prev_described or ())
 
         # The non-awake floor. If any residue percept is present the view IS
@@ -557,6 +559,10 @@ class JapaneseRenderer:
             sentence = _full_stop(self._sentence(p, brief=brief))
             if not sentence:
                 continue
+            # A voice heard is a voice established for this observer -- the
+            # same ledger entry the reference renderer files (D2).
+            if (p.data or {}).get("voice_key"):
+                standing_keys.add(str(p.data["voice_key"]))
             # Character mode keeps the sequence it always had: standing
             # state in percept order, then the beat. Only the player view
             # partitions.
