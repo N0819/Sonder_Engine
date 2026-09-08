@@ -186,6 +186,17 @@ function renderChatSidebar(list, actions) {
   }
 
   for (const chat of S.boot.chats) {
+    // A SETUP THAT DID NOT FINISH IS NOT A STORY. It has no turn, so opening
+    // it shows an empty transcript and no way forward; before it was kept at
+    // all there was simply nothing, and "you can't retry a quickstart as the
+    // story receives no entry" (owner, 2026-09-08). It gets its own row: what
+    // went wrong, a retry that reuses the plan already paid for, a discard,
+    // and an export of everything the attempt recorded.
+    const failure = (S.boot.failed_setups || {})[String(chat.id)];
+    if (failure) {
+      list.append(failedSetupRow(chat, failure));
+      continue;
+    }
     const storyName = el("span", {
       class: "item-label",
       title: chat.name,
@@ -295,6 +306,62 @@ function renderChatSidebar(list, actions) {
     )
   );
 }
+
+// A failed quick start, in the library. Deliberately not openable: there is
+// no turn behind it, and the three things worth doing to it are all here.
+function failedSetupRow(chat, failure) {
+  const who = [failure.character_name, failure.persona_name]
+    .filter(Boolean).join(" & ");
+  const detail = failure.error || "The setup did not finish.";
+  const title = `Setup failed${who ? " — " + who : ""}: ${detail}`;
+  return el("div", { class: "item story-item failed-setup", title },
+    el("span", { class: "badge err", "aria-hidden": "true" }, "⚠"),
+    el("span", { class: "item-label" }, chat.name),
+    el("div", { class: "item-actions", role: "group",
+                "aria-label": `Actions for the failed setup ${chat.name}` },
+      el("button", {
+        class: "icon-button story-action",
+        title: failure.plan_kept
+          ? "Retry — the plan this attempt paid for is reused"
+          : "Retry",
+        "aria-label": `Retry ${chat.name}`,
+        onclick: event => {
+          event.stopPropagation();
+          backgroundTask("Retrying story setup",
+            () => api("POST", `/api/chats/${chat.id}/retry_start`),
+            { onSuccess: async r => { await boot(); openChat(r.chat_id); },
+              successMessage: "Story started." });
+        },
+      }, "↻"),
+      el("button", {
+        class: "icon-button story-action",
+        title: "Export the setup log — the error, what was asked for, and "
+             + "every model call the attempt made",
+        "aria-label": `Export the setup log for ${chat.name}`,
+        onclick: async event => {
+          event.stopPropagation();
+          try {
+            const doc = await api("GET", `/api/chats/${chat.id}/setup_log`);
+            downloadJSON(doc, `setup-failure-${chat.id}.json`);
+          } catch (e) {
+            toast(e?.message || String(e), "err");
+          }
+        },
+      }, "⤓"),
+      el("button", {
+        class: "icon-button story-action danger",
+        title: "Discard this setup",
+        "aria-label": `Discard ${chat.name}`,
+        onclick: async event => {
+          event.stopPropagation();
+          if (!await confirmModal(
+              `Discard the failed setup "${chat.name}"?`)) return;
+          await api("DELETE", `/api/chats/${chat.id}`);
+          await boot();
+        },
+      }, "✕")));
+}
+
 
 // ---- New chat wizard ----
 // Two paths that land in the same underlying data model: "quick start"

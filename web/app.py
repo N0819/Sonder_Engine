@@ -1665,6 +1665,11 @@ def bootstrap() -> dict:
         "personas": [dict(r) for r in q("SELECT id,name,sheet FROM personas")],
         "lorebooks": [dict(r) for r in q("SELECT * FROM lorebooks WHERE chat_id IS NULL")],
         "chats": [dict(r) for r in q("SELECT * FROM chats ORDER BY id DESC")],
+        # A QUICK START THAT DID NOT FINISH IS SHOWN AS ONE. The library
+        # renders these rows as failed setups -- what went wrong, retry,
+        # discard, export -- rather than as stories with no beats, which is
+        # what they looked like before they were kept at all (2026-09-08).
+        "failed_setups": _failed_setups(),
         "nsfw_enabled": get_setting("nsfw_enabled") == "1",
         # What a card authors under each clothing region (attire.describe's
         # `beneath`). Off unless asked for: exposure itself is objective and
@@ -2111,6 +2116,97 @@ def turn_debug_export(turn_id: int, content: int = 1):
         return export_turn_debug(turn_id, include_content=bool(content))
     except PipelineTraceError as exc:
         raise HTTPException(404, str(exc)) from exc
+
+
+def _failed_setups():
+    """`{chat id: summary}` for every kept quick start that failed.
+
+    One query for the whole library rather than a key read per chat: the
+    marker lives in `world`, so the list asks for the marker and not for the
+    chats that might have one.
+    """
+    from core.db import QUICK_START_FAILURE_KEY
+
+    out = {}
+    for row in q("SELECT chat_id, value FROM world WHERE key=?",
+                 (QUICK_START_FAILURE_KEY,)):
+        try:
+            record = json.loads(row["value"] or "{}")
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(record, dict) or not record.get("error"):
+            continue
+        out[str(row["chat_id"])] = {
+            "error": record.get("error") or "",
+            "error_type": record.get("error_type") or "",
+            "stage": record.get("stage") or "",
+            "when": record.get("when") or 0,
+            "plan_kept": bool(record.get("plan_kept")),
+            "character_name": record.get("character_name") or "",
+            "persona_name": record.get("persona_name") or "",
+        }
+    return out
+
+
+def _failure_record(cid: int):
+    from core.db import QUICK_START_FAILURE_KEY
+
+    record = wget(cid, QUICK_START_FAILURE_KEY, None)
+    if not isinstance(record, dict) or not record.get("retry"):
+        raise HTTPException(404, "That story is not a failed setup.")
+    return record
+
+
+@app.post("/api/chats/{cid}/retry_start")
+def chat_retry_start(cid: int):
+    """Ask the same question again, and throw the failed attempt away.
+
+    The plan the failed attempt paid for was salvaged against what was ASKED
+    for, so this adopts it and goes straight to the writes -- a retry costs
+    the calls the failure did not reach, and no more.
+    """
+    record = _failure_record(cid)
+    retry = record.get("retry") or {}
+    from persist.chat_delete import delete_chat_data
+    try:
+        chat_id, turn_id = greetings.start_story(
+            int(retry["char_id"]), int(retry["persona_id"]),
+            int(retry.get("greeting_index") or 0),
+            lorebook_id=retry.get("lorebook_id"),
+            already_known=bool(retry.get("already_known", True)),
+            language=_require_story_language(retry.get("language")),
+            lived_location=retry.get("lived_location"))
+    except ValueError as exc:
+        _pipeline_logger.exception("quick start retry failed for chat %s", cid)
+        raise HTTPException(
+            404 if str(exc).endswith("not found") else 422, str(exc)) from exc
+    except providers.LLMError as exc:
+        _pipeline_logger.exception("quick start retry failed for chat %s", cid)
+        raise HTTPException(502, _lived_location_llm_detail(exc)) from exc
+    # Only once the new story exists: a retry that fails leaves the author
+    # exactly where they were, with one failed setup rather than none.
+    delete_chat_data(cid)
+    return {"chat_id": chat_id, "turn_id": turn_id}
+
+
+@app.get("/api/chats/{cid}/setup_log")
+def chat_setup_log(cid: int):
+    """Everything the failed attempt recorded, as one document to send on.
+
+    The record itself (stage, error, traceback, what was asked for) plus the
+    provider exchanges the attempt made, which are still on the chat because
+    the chat was kept.
+    """
+    from persist.pipeline_trace import export_chat_debug
+
+    record = dict(_failure_record(cid))
+    try:
+        exchanges = export_chat_debug(cid, include_content=True, limit=50)
+    except Exception as exc:                      # noqa: BLE001 -- best effort
+        exchanges = {"error": "%s: %s" % (type(exc).__name__, exc)}
+    return {"kind": "quick_start_failure", "chat_id": cid,
+            "exported": time.time(), "failure": record,
+            "attempt": exchanges}
 
 
 @app.get("/api/chats/{cid}/debug")

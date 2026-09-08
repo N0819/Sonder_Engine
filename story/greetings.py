@@ -15,8 +15,10 @@ import hashlib
 import json
 import re
 import time
+import traceback
 
 from core import db
+from core.db import QUICK_START_FAILURE_KEY
 from core.logging_utils import logger
 from world.charter_runtime import lived_location_job, salvage_plan
 from story.character_schema import (
@@ -828,7 +830,6 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
             # log line below is the whole of what survives today; making the
             # artifact outlive the chat is a persistence question and is the
             # owner's to answer.
-            from persist.chat_delete import delete_chat_data
             job = lived_location_job(cid) or {}
             # THE PLAN IS KEPT EVEN THOUGH THE STORY IS NOT. The two model
             # calls that made it are the expensive part and they had already
@@ -837,13 +838,41 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
             # against what was ASKED FOR, so the next start that asks the
             # same thing adopts it and goes straight to the writes.
             kept = salvage_plan(cid, request, reason=str(exc))
+            # THE SETUP STAYS, AS A SETUP. Deleting the chat left the author
+            # with nothing at all -- "you can't retry a quickstart as the
+            # story receives no entry" (owner, 2026-09-08) -- so the failed
+            # start is kept and MARKED, and the story library shows it as a
+            # setup that did not finish, with what went wrong, a retry that
+            # reuses the plan already paid for, a discard, and an export of
+            # everything the attempt recorded. It is not a story: it has no
+            # turn, and `quick_start_failure` is what says so to every reader.
+            db.wset(cid, QUICK_START_FAILURE_KEY, {
+                "version": 1,
+                "when": time.time(),
+                "stage": job.get("stage") or "planning",
+                "error": str(exc),
+                "error_type": type(exc).__name__,
+                "traceback": traceback.format_exc()[-4000:],
+                "plan_kept": bool(kept),
+                # Everything a retry needs to ask the same question again.
+                "retry": {
+                    "char_id": int(char_id), "persona_id": int(persona_id),
+                    "greeting_index": int(greeting_index),
+                    "lorebook_id": int(lorebook_id) if lorebook_id else None,
+                    "already_known": bool(already_known),
+                    "language": language or DEFAULT_LANGUAGE,
+                    "lived_location": copy.deepcopy(lived_location)
+                    if isinstance(lived_location, dict) else None,
+                },
+                "character_name": c_name,
+                "persona_name": p_name,
+            })
             logger.error(
                 "quick start: lived location failed for chat %s at stage %r "
-                "(%s: %s); discarding the chat, %s",
+                "(%s: %s); keeping it as a failed setup, %s",
                 cid, job.get("stage") or "planning", type(exc).__name__, exc,
-                "keeping the finished plan for the next attempt" if kept
+                "with the finished plan for the retry" if kept
                 else "with no finished plan to keep", exc_info=True)
-            delete_chat_data(cid)
             raise
 
     # Route every mind the extraction established -- the card character's in
