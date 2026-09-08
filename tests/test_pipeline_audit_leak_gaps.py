@@ -300,9 +300,16 @@ class TestCoPresentPositionsLeak:
 # ---------------------------------------------------------------------------
 
 class TestDeliveryGate:
-    """_delivery_ok is the single predicate every deterministic delivery site
-    calls: containment, awareness, hearing (with proximity) and sight (with
-    the rear-arc blind spot) in one place.
+    """_delivery_ok gathers containment, awareness, hearing (with proximity)
+    and sight (with the rear-arc blind spot) into one predicate.
+
+    It is the gate for ONE of the two deterministic delivery families -- the
+    micro-round deliveries in `agents/loops.py` -- not for all of them; this
+    docstring claimed "every deterministic delivery site calls it" until
+    review finding B35 (2026-09-07) measured the callers. The composer family
+    (`agents/perception.py`, `agents/composer.py`, `agents/background.py`)
+    re-derives the same questions from the same primitives, and the drift
+    between the two is `docs/UNBUILT.md` 3.8.
 
     These used to pass a scene as the first argument and assert only that the
     function returned True. That was vacuous -- the implementation returned

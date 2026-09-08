@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import NamedTuple
 import hashlib
 import json
 import re
@@ -20,6 +21,7 @@ from story.character_schema import (
     character_name,
     character_name_from_text,
     cue_boundary_pattern,
+    fold_identity_key,
     name_boundary_pattern,
     name_boundary_regex,
     normalize_character_data,
@@ -246,6 +248,79 @@ _COMMUNICATIVE_TYPES = frozenset({
 })
 
 
+#: The typed communicative acts the engine knows, each with the surface verb
+#: it renders as: (third-person present, first-person past).  ONE table, not
+#: one per tense -- review 2026-09-07 B14: the present forms lived here and the
+#: past forms in `persist/commit_memory._first_person_sequence_text`, free to
+#: disagree, so an act taught to one side rendered as bare "communicated" on
+#: the other.  It is not a closed vocabulary of what a model may write: an act
+#: outside it still renders, through `communication_verb`'s fallbacks.
+COMMUNICATION_ACT_VERBS = {
+    "ask": ("asks", "asked"), "question": ("asks", "asked"),
+    "explain": ("explains", "explained"),
+    "report": ("reports", "reported"), "tell": ("tells", "told"),
+    "warn": ("warns", "warned"), "request": ("requests", "requested"),
+    "offer": ("offers", "offered"), "instruct": ("instructs", "instructed"),
+    "reassure": ("reassures", "reassured"),
+    "promise": ("promises", "promised"), "admit": ("admits", "admitted"),
+    "answer": ("answers", "answered"), "clarify": ("clarifies", "clarified"),
+    "inform": ("informs", "informed"), "say": ("says", "said"),
+}
+
+#: The acts that leave their addressee owing an answer.  Review 2026-09-07 B14:
+#: this set was spelled out twice -- `agents/character` building the player's
+#: still-unanswered question, and `_asks_player` deciding whether the
+#: interaction loop is still waiting on the player -- so the two could answer
+#: "is this line awaiting a reply?" differently about the same event.  The
+#: distinction is the act's DIRECTION: it puts something to its addressee for
+#: them to supply or do, rather than only telling them something.
+COMMUNICATION_ACTS_AWAITING_REPLY = frozenset({
+    "ask", "question", "request", "instruct",
+})
+
+
+def communication_act(elem):
+    """The typed act of a communicative element, read the one canonical way.
+
+    Whitespace-collapsed and casefolded, because a model writing ``"Ask "``
+    means the act one writing ``"ask"`` means.  Before B14 the surface renderer
+    normalized it this way and the two awaiting-a-reply predicates did not, so
+    a single event could be rendered as a question and treated as a statement.
+    """
+    if not isinstance(elem, dict):
+        return ""
+    return " ".join(str(elem.get("act") or "").split()).casefold()
+
+
+def communication_awaits_reply(elem):
+    """Does this communicative act leave its addressee owing an answer?
+
+    The only reader of `COMMUNICATION_ACTS_AWAITING_REPLY`: callers ask the
+    question rather than re-spelling the vocabulary.
+    """
+    return communication_act(elem) in COMMUNICATION_ACTS_AWAITING_REPLY
+
+
+def communication_verb(elem, tense="present", fallback=None):
+    """Surface verb for a communicative act, in the tense the caller renders.
+
+    The TABLE is shared; the fallback for an act outside it is the caller's,
+    because that is a genuinely surface-local choice -- an observer's predicate
+    guesses a present verb from the author's own word, while a first-person
+    memory clause declines to guess an English past form and says
+    ``communicated``.  Only the shared half was ever two representations.
+    """
+    act = communication_act(elem)
+    known = COMMUNICATION_ACT_VERBS.get(act)
+    if known:
+        return known[1] if tense == "past" else known[0]
+    if fallback is not None:
+        return fallback
+    if not act:
+        return "said" if tense == "past" else "says"
+    return act if tense == "past" else act + "s"
+
+
 def communication_surface(elem):
     """Observable indirect-speech predicate for a typed communicative act.
 
@@ -255,21 +330,11 @@ def communication_surface(elem):
     """
     if not isinstance(elem, dict):
         return ""
-    act = " ".join(str(elem.get("act") or "say").split()).casefold()
     content = " ".join(str(
         elem.get("content") or elem.get("topic") or "").split())
     if not content:
         return ""
-    verbs = {
-        "ask": "asks", "question": "asks", "explain": "explains",
-        "report": "reports", "tell": "tells", "warn": "warns",
-        "request": "requests", "offer": "offers", "instruct": "instructs",
-        "reassure": "reassures", "promise": "promises", "admit": "admits",
-        "answer": "answers", "clarify": "clarifies", "inform": "informs",
-        "say": "says",
-    }
-    verb = verbs.get(act, (act + "s") if act else "says")
-    return f"{verb} {content}".strip()
+    return f"{communication_verb(elem)} {content}".strip()
 
 
 def resolve_action_referents(surface, elem, labels=None):
@@ -331,23 +396,61 @@ def sequence_onset_elements(sequence):
     return out
 
 
-def _claim_realized(elem, resolved):
-    """Whether resolution explicitly realized every claim for one action."""
-    if str(elem.get("commitment") or "") != "contestable":
-        return True
+def claim_disposition_rows(resolved):
+    """Every claim-disposition row one resolution carries, in order.
+
+    A resolve names its adjudications in two places -- the top-level
+    ``claim_dispositions`` and the same key inside ``state_diff`` -- so
+    "which rows are this resolution's" is asked here once instead of once
+    per reader. Diff rows come second, which is the order the reconciler's
+    claim-id index relies on to let the diff have the last word.
+    """
     resolved = resolved if isinstance(resolved, dict) else {}
-    rows = list(resolved.get("claim_dispositions") or [])
+    rows = [row for row in (resolved.get("claim_dispositions") or [])
+            if isinstance(row, dict)]
     sd = resolved.get("state_diff")
     if isinstance(sd, dict):
-        rows.extend(sd.get("claim_dispositions") or [])
-    event_id = str(elem.get("event_id") or "").strip()
+        rows.extend(row for row in (sd.get("claim_dispositions") or [])
+                    if isinstance(row, dict))
+    return rows
+
+
+class ClaimScan(NamedTuple):
+    """What one action's claim dispositions say about it.
+
+    ``statuses`` and ``claim_ids`` are the rows that bear on the action, in
+    the order resolution named them; ``realized`` is whether resolution made
+    the whole of the action true.
+    """
+
+    statuses: list
+    claim_ids: list
+    realized: bool
+
+
+def scan_claims_for(elem, resolved):
+    """The claim dispositions that speak for one declared action.
+
+    Finding B13 (2026-09-07 review): this scan lived twice -- in
+    ``_claim_realized`` (which decides the sequence verdict a phase gets)
+    and in ``adjudicated_player_action_text`` (which decides how much of the
+    player's declared surface the narrator and perception may show). One
+    question about one act cannot have two answers, so it has one scan.
+
+    A row bears on the action when it names the event id outright, or when
+    it is an intent claim of the same sequence index
+    (``claim:<index>:<kind>:<n>``) -- several of those can belong to one
+    multi-phase action, and one realized effect must not promote its
+    deferred siblings to completed fact. With no such row, the action counts
+    as realized only when some realized row lists its event id in
+    ``realized_event_ids``.
+    """
+    event_id = str((elem or {}).get("event_id") or "").strip()
     match = re.search(r":player:(\d+):action$", event_id)
     sequence_idx = match.group(1) if match else None
-    related = []
+    statuses, claim_ids = [], []
     realized_ids = set()
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
+    for row in claim_disposition_rows(resolved):
         claim_id = str(row.get("claim_id") or "").strip()
         status = str(row.get("status") or "").casefold()
         if status == "realized":
@@ -357,9 +460,20 @@ def _claim_realized(elem, resolved):
                 if str(value).strip())
         if claim_id == event_id or (sequence_idx is not None and
                 claim_id.startswith(f"claim:{sequence_idx}:")):
-            related.append(status)
-    return (bool(related) and all(status == "realized" for status in related)) \
-        or (not related and bool(event_id and event_id in realized_ids))
+            statuses.append(status)
+            claim_ids.append(claim_id)
+    if statuses:
+        realized = all(status == "realized" for status in statuses)
+    else:
+        realized = bool(event_id and event_id in realized_ids)
+    return ClaimScan(statuses, claim_ids, realized)
+
+
+def _claim_realized(elem, resolved):
+    """Whether resolution explicitly realized every claim for one action."""
+    if str(elem.get("commitment") or "") != "contestable":
+        return True
+    return scan_claims_for(elem, resolved).realized
 
 
 def _scene_has_subject(scene, subject):
@@ -628,46 +742,17 @@ def adjudicated_player_action_text(elem, resolved=None):
     resolved = resolved if isinstance(resolved, dict) else {}
     if not sequence_event_allowed(elem, resolved):
         return ""
-    sd = resolved.get("state_diff")
-    rows = list(resolved.get("claim_dispositions") or [])
-    if isinstance(sd, dict):
-        rows.extend(sd.get("claim_dispositions") or [])
-    event_id = str(elem.get("event_id") or "").strip()
-    match = re.search(r":player:(\d+):action$", event_id)
-    sequence_idx = match.group(1) if match else None
-    related = []
-    related_claim_ids = []
-    realized_ids = set()
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        claim_id = str(row.get("claim_id") or "").strip()
-        status = str(row.get("status") or "").casefold()
-        ids = {str(value).strip()
-               for value in (row.get("realized_event_ids") or [])
-               if str(value).strip()}
-        realized_ids.update(ids if status == "realized" else ())
-        # Intent claims use claim:<sequence-index>:intent:<effect-index>.
-        # Several can belong to one multi-phase action, and one realized
-        # effect must not promote its deferred siblings to completed fact.
-        if claim_id == event_id or (sequence_idx is not None and
-                claim_id.startswith("claim:%s:" % sequence_idx)):
-            related.append(status)
-            related_claim_ids.append(claim_id)
-    fully_realized = bool(related) and all(
-        status == "realized" for status in related)
-    if not related:
-        fully_realized = bool(event_id and event_id in realized_ids)
-    if fully_realized:
+    scan = scan_claims_for(elem, resolved)
+    if scan.realized:
         return surface
     # An intent-only alternative that was wholly deferred/rejected never
     # began. A direct event disposition of "deferred" is different: the
     # attempted onset may have happened before its effect was prevented.
-    intent_only = bool(related_claim_ids) and all(
-        claim_id.startswith("claim:") for claim_id in related_claim_ids)
+    intent_only = bool(scan.claim_ids) and all(
+        claim_id.startswith("claim:") for claim_id in scan.claim_ids)
     if intent_only and not any(
             status in ("realized", "begun", "contested")
-            for status in related):
+            for status in scan.statuses):
         return ""
     return observable_action_onset_text(elem)
 
@@ -2775,8 +2860,7 @@ def _asks_player(result, chat, cast=None):
         return False
     for event in _dict_list(result.get("sequence")):
         if event.get("type") == "communication":
-            if str(event.get("act") or "").casefold() in (
-                    "ask", "question", "request", "instruct"):
+            if communication_awaits_reply(event):
                 targets = {str(value).casefold()
                            for value in event.get("targets") or []}
                 if not targets or targets & aliases:
@@ -4650,8 +4734,23 @@ def _delivery_ok(relation, scene, observer_name, source_name, channel,
     partial gate, so every one of them skipped a rule the perception model path
     honours -- the micro-loop skipped containment and graded sight, the outcome
     action backstop skipped the rear arc, the background channel skipped
-    station. This is the one predicate all of them call, so a rule added here
-    reaches every deterministic delivery site at once.
+    station.
+
+    THIS GATE IS NOT UNIVERSAL, and this docstring used to say it was ("the one
+    predicate all of them call, so a rule added here reaches every
+    deterministic delivery site at once"). Measured for review finding B35
+    (2026-09-07): its only production callers are the two micro-round
+    deliveries in `agents/loops.py`. `agents/perception.py`,
+    `agents/composer.py` and `agents/background.py` answer the same questions
+    from the same primitives without routing through here (`hear_level`,
+    `_in_plain_view`/`_sight_detail`, `containment_conceals`,
+    `sense_adjusted`), so a rule added HERE reaches the micro-round path and
+    nothing else -- add it to that family in the same commit, or it holds on
+    one of the two delivery paths only. Two families exist and can drift apart:
+    that is the structural risk registered as `docs/UNBUILT.md` 3.8, which is
+    the entry to close, and AGENTS.md's delivery-gate row says the same.
+    `tests/test_delivery_gate_not_universal.py` measures the caller set rather
+    than trusting this paragraph.
 
     `relation` is the caller's own `spatial_rel` result (built from ROOM ids,
     which only the caller can resolve uid/alias-tolerantly). Everything else is
@@ -5316,7 +5415,7 @@ def cast_spelling_policy(cast, player_name=None, *, aliases=True):
     # spelling always wins over a squashed one.
     squashed = {}
     for spelling, canon in forms.items():
-        norm = re.sub(r"[^a-z0-9]", "", spelling)
+        norm = fold_identity_key(spelling)
         if norm and norm not in forms:
             squashed.setdefault(norm, canon)
 
@@ -5326,7 +5425,7 @@ def cast_spelling_policy(cast, player_name=None, *, aliases=True):
             return name
         folded = text.casefold()
         return (forms.get(folded)
-                or squashed.get(re.sub(r"[^a-z0-9]", "", folded))
+                or squashed.get(fold_identity_key(folded))
                 or name)
 
     return canonical, forms

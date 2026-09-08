@@ -93,6 +93,7 @@ from .common import (
     extra_parts_lines,
     cap_mind_model_updates,
     character_room,
+    communication_awaits_reply,
     fuse_speech_run,
     norm_sequence,
     player_speech_lines,
@@ -647,8 +648,7 @@ def _unanswered_question_note(chat_id, char_name, char_id, current_turn_idx,
             # Typed described questions carry their direction structurally;
             # no punctuation or invented exact quote is needed.
             for event in communicated:
-                if str(event.get("act") or "").casefold() not in (
-                        "ask", "question", "request", "instruct"):
+                if not communication_awaits_reply(event):
                     continue
                 content_text = str(event.get("content") or "").strip()
                 if content_text and _reached(content_text, row["idx"]):

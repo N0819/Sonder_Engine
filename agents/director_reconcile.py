@@ -30,7 +30,7 @@ from world.spatial import (
     speech_articulation_impediment,
 )
 
-from .common import _dict, _dict_list
+from .common import _dict, _dict_list, claim_disposition_rows
 from .director_evidence import (
     _claim_subject_in_world,
     _claim_subject_is_referrable,
@@ -71,8 +71,10 @@ def _player_claim_findings(out, sd, interp, cast, sc, player_input=""):
         return omissions, notes, contract_warnings
 
     statuses = {}
-    for d in _dict_list(out.get("claim_dispositions")) + \
-            _dict_list(sd.get("claim_dispositions")):
+    # B13 (2026-09-07 review): where a resolution's claim dispositions live
+    # is common's question, not this reader's -- three sites were spelling
+    # "the top-level rows, then the diff's" out for themselves.
+    for d in claim_disposition_rows({**out, "state_diff": sd}):
         cid = str(d.get("claim_id") or "")
         if cid:
             statuses[cid] = str(d.get("status") or "").strip().casefold()

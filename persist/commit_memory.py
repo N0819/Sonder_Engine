@@ -276,16 +276,13 @@ def _own_sequence_memory(seq):
                 f"I said {spoken!r}" + ("" if spoken[-1] in ".!?" else "."))
         elif (event.get("type") == "communication"
               and str(event.get("content") or "").strip()):
-            act = str(event.get("act") or "communicate").strip().casefold()
-            past = {
-                "ask": "asked", "explain": "explained", "report": "reported",
-                "tell": "told", "warn": "warned", "request": "requested",
-                "offer": "offered", "instruct": "instructed",
-                "reassure": "reassured", "promise": "promised",
-                "admit": "admitted", "answer": "answered",
-                "clarify": "clarified", "inform": "informed",
-                "say": "said",
-            }.get(act, "communicated")
+            # ONE act->verb table (`agents.common.COMMUNICATION_ACT_VERBS`),
+            # read here in the past tense.  Review 2026-09-07 B14: this was a
+            # second copy of it, and had never been taught `question` -- so an
+            # act perception rendered as "asks ..." came back to its own owner
+            # as "I communicated ...".  The unknown-act fallback stays local.
+            from agents.common import communication_verb as _comm_verb
+            past = _comm_verb(event, "past", fallback="communicated")
             clauses.append(
                 f"I {past} {str(event['content']).strip().rstrip('.')}.")
         elif event.get("type") == "action" and str(event.get("attempt") or "").strip():

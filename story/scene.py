@@ -11,6 +11,7 @@ _UNSET = object()
 from language_runtime import linguistic
 from story.character_schema import (
     EXTRA_PART_ASPECTS,
+    fold_identity_key,
     name_boundary_pattern,
     _extra_part_placement,
     cast_entity_id,
@@ -2002,9 +2003,14 @@ def is_player_speaker(speaker, chat):
     s = (speaker or "").lower().strip()
     if s in aliases:
         return True
-    s_norm = re.sub(r"[^a-z0-9]", "", s)
+    # One fold for every name comparison in the engine (B34): the ASCII
+    # `[^a-z0-9]` squash erased a Japanese persona name to the empty string,
+    # so `s_norm and a_norm` failed open and no kana speaker was ever the
+    # player -- while any two kana names that DID reach a comparison without
+    # that guard compared equal.
+    s_norm = fold_identity_key(s)
     for a in aliases:
-        a_norm = re.sub(r"[^a-z0-9]", "", a)
+        a_norm = fold_identity_key(a)
         if s_norm and a_norm and s_norm == a_norm:
             return True
     # A director/character model sometimes attributes a line to just the
@@ -2019,10 +2025,7 @@ def is_player_speaker(speaker, chat):
     # player said.
     if s_norm and len(s_norm) >= 4:
         for a in aliases:
-            a_words = {
-                re.sub(r"[^a-z0-9]", "", w)
-                for w in a.split()
-            }
+            a_words = {fold_identity_key(w) for w in a.split()}
             if s_norm in a_words:
                 return True
     return False
