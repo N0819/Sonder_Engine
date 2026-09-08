@@ -1096,7 +1096,7 @@ document.addEventListener("keydown", event => {
 window.addEventListener("unhandledrejection", event => {
   const reason = event.reason;
   if (reason && reason.__handled) return;
-  toast(reason?.message || String(reason || "Something went wrong"), "err", 8000);
+  toast(reason?.message || String(reason || "Something went wrong"), "err");
 });
 
 // The other half of the same net, and the half that was missing: a handler
@@ -1113,7 +1113,7 @@ window.addEventListener("error", event => {
   if (thrown && thrown.__handled) return;
   const message = thrown?.message || event.message;
   if (!message) return;
-  toast(String(message), "err", 8000);
+  toast(String(message), "err");
 });
 
 

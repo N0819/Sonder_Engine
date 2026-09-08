@@ -1351,7 +1351,7 @@ function castRoomSelect(charId, person, rooms, chatId) {
       // Never leave the dropdown asserting a move the server refused (a
       // running pipeline, a room that vanished).
       select.value = settled;
-      toast(error?.message || String(error), "err", 8000);
+      toast(error?.message || String(error), "err");
     } finally {
       select.disabled = false;
     }
@@ -2187,7 +2187,7 @@ function renderFirstRunProviderSetup(b) {
         toast("Provider connected — you're ready to write.", "ok");
       } catch (e) {
         // Never leave the first-run button permanently disabled with no feedback.
-        toast(e?.message || String(e), "err", 8000);
+        toast(e?.message || String(e), "err");
       } finally {
         useBtn.disabled = false;
       }
