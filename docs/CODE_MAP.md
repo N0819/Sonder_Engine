@@ -98,7 +98,7 @@
 | `story/character_schema.py` | 2703 | Versioned character/persona defaults, normalization, accessors, and export payloads. | `llm.schemas`, `story` |
 | `story/couriers.py` | 1170 |  | `story.carriers`, `world` |
 | `story/dialogue_colors.py` | 268 |  | — |
-| `story/greetings.py` | 1106 |  | `agents.runtime`, `core`, `core.db`, `core.logging_utils`, `llm.llm_quality`, `llm.prompts`, `mind.memory`, `mind.theory_of_mind`, `persist.steps`, `story.character_schema`, `story.importers`, `world.charter_runtime` |
+| `story/greetings.py` | 1117 |  | `agents.runtime`, `core`, `core.db`, `core.logging_utils`, `llm.llm_quality`, `llm.prompts`, `mind.memory`, `mind.theory_of_mind`, `persist.steps`, `story.character_schema`, `story.importers`, `world.charter_runtime` |
 | `story/history_routing.py` | 215 |  | — |
 | `story/importers.py` | 3155 | Native and AI-assisted character, persona, and lorebook import/generation. | `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory`, `story.character_schema`, `story.scene` |
 | `story/journey_history.py` | 461 |  | — |
@@ -1225,9 +1225,9 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `start_story()` | 693 | 315 lines |
+| `start_story()` | 722 | 297 lines |
 | `_seed_mind_state()` | 356 | 144 lines |
-| `generate_greeting()` | 1010 | 62 lines |
+| `generate_greeting()` | 1021 | 62 lines |
 | `_seed_minds()` | 554 | 57 lines |
 | `_route_mind_memories()` | 299 | 55 lines |
 | `_seed_player_mind()` | 502 | 50 lines |

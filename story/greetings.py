@@ -658,16 +658,45 @@ def claim_greeting_mind(chat_id, char_id, name, sheet):
 
 def _mark_failed_setup(cid, exc, *, char_id, persona_id, greeting_index,
                        lorebook_id, already_known, language, lived_location,
-                       character_name="", persona_name="", stage=""):
+                       character_name="", persona_name="", stage="",
+                       plan_request=None):
     """Keep this attempt as a failed SETUP, with everything a retry needs.
 
     One writer, because the library, the retry and the export all read one
     record -- and because a second spelling of it would be a setup the author
     can see but not retry, or retry with different answers than they gave.
     """
-    from world.charter_runtime import lived_location_job
+    from world.charter_runtime import lived_location_job, salvage_plan
+
+    # THE MARKER MAY NEVER REPLACE THE FAILURE IT IS RECORDING. Writing it is
+    # best-effort: it touches a chat row that a sibling path may have already
+    # deleted, and when it raised there, the FOREIGN KEY error travelled in
+    # place of the JSON error that actually happened -- so the author got a
+    # 500 about the database and no entry at all (2026-09-08).
+    try:
+        _write_failed_setup(cid, exc, char_id=char_id, persona_id=persona_id,
+                            greeting_index=greeting_index,
+                            lorebook_id=lorebook_id,
+                            already_known=already_known, language=language,
+                            lived_location=lived_location,
+                            character_name=character_name,
+                            persona_name=persona_name, stage=stage,
+                            plan_request=plan_request)
+    except Exception:                       # noqa: BLE001 -- see above
+        logger.exception(
+            "quick start: could not record the failed setup for chat %s", cid)
+
+
+def _write_failed_setup(cid, exc, *, char_id, persona_id, greeting_index,
+                        lorebook_id, already_known, language, lived_location,
+                        character_name, persona_name, stage, plan_request):
+    from world.charter_runtime import lived_location_job, salvage_plan
 
     job = lived_location_job(cid) or {}
+    # A retry starts a NEW chat, so the plan this attempt paid for has to be
+    # kept where a new chat can find it -- against what was asked for.
+    kept = bool(job.get("artifact")) and isinstance(plan_request, dict) and \
+        salvage_plan(cid, plan_request, reason=str(exc))
     db.wset(cid, QUICK_START_FAILURE_KEY, {
         "version": 1,
         "when": time.time(),
@@ -675,7 +704,7 @@ def _mark_failed_setup(cid, exc, *, char_id, persona_id, greeting_index,
         "error": str(exc),
         "error_type": type(exc).__name__,
         "traceback": traceback.format_exc()[-4000:],
-        "plan_kept": bool(job.get("artifact")),
+        "plan_kept": bool(kept),
         "retry": {
             "char_id": int(char_id), "persona_id": int(persona_id),
             "greeting_index": int(greeting_index),
@@ -763,6 +792,10 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
     cid = db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
                 (f"{c_name} — {p_name}", prose_final, time.time()))
     logger.info("quick start: chat %s created for character %s", cid, char_id)
+    # The request the location plan was built from, so a failure anywhere
+    # after it can keep that plan against what was ASKED for -- a retry starts
+    # a new chat and cannot see this one's job.
+    plan_request = None
     # EVERY FAILURE AFTER THIS POINT LEAVES A SETUP TO ACT ON. The marker
     # was written only around the location generation at first, so a start
     # that got past it and died later -- in the journey history, the minds
@@ -828,6 +861,7 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
             from world.charter_history import (
                 featured_resident_private_habits, featured_resident_seed)
             request = dict(lived_location)
+            plan_request = request
             route_request = request.get("character_history") or {}
             route = resolve_character_history_route(
                 sheet, requested=route_request,
@@ -859,41 +893,16 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
             try:
                 generated_location = generate_lived_location(cid, request)
             except Exception as exc:
-                # No turn exists yet and this chat was minted by this call.  A
-                # failed location proposal must not leave an invisible half-story
-                # that appears after refresh or gets duplicated on the next try.
-                #
-                # WHAT THIS COSTS, SAID OUT LOUD (2026-09-08). The generator saves
-                # its two model calls as a resumable artifact on the chat's own
-                # job record -- "exactly what is worth not paying for twice" --
-                # and `delete_chat_data` takes that record with the chat, so a
-                # retry pays for both calls again and the job's `stage` and
-                # `error`, the only record of what went wrong, go with it. The
-                # log line below is the whole of what survives today; making the
-                # artifact outlive the chat is a persistence question and is the
-                # owner's to answer.
+                # Logged here because this is the one stage that can say WHERE
+                # in itself it failed; the guard at the end of this function
+                # keeps the plan and marks the setup, for this failure exactly
+                # as for one three stages later. Nothing is deleted: the chat
+                # is the author's entry back into the attempt.
                 job = lived_location_job(cid) or {}
-                # THE PLAN IS KEPT EVEN THOUGH THE STORY IS NOT. The two model
-                # calls that made it are the expensive part and they had already
-                # succeeded; deleting the chat used to take the artifact holding
-                # them with it, so a retry paid for both again. It is saved
-                # against what was ASKED FOR, so the next start that asks the
-                # same thing adopts it and goes straight to the writes.
-                kept = salvage_plan(cid, request, reason=str(exc))
-                # THE SETUP STAYS, AS A SETUP. Deleting the chat left the author
-                # with nothing at all -- "you can't retry a quickstart as the
-                # story receives no entry" (owner, 2026-09-08) -- so the failed
-                # start is kept and MARKED, and the story library shows it as a
-                # setup that did not finish, with what went wrong, a retry that
-                # reuses the plan already paid for, a discard, and an export of
-                # everything the attempt recorded. It is not a story: it has no
-                # turn, and `quick_start_failure` is what says so to every reader.
                 logger.error(
-                    "quick start: lived location failed for chat %s at stage %r "
-                    "(%s: %s); keeping it as a failed setup, %s",
-                    cid, job.get("stage") or "planning", type(exc).__name__, exc,
-                    "with the finished plan for the retry" if kept
-                    else "with no finished plan to keep", exc_info=True)
+                    "quick start: lived location failed for chat %s at stage "
+                    "%r (%s: %s)", cid, job.get("stage") or "planning",
+                    type(exc).__name__, exc, exc_info=True)
                 raise
 
         # Route every mind the extraction established -- the card character's in
@@ -941,8 +950,11 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
                 db.wset(cid, "character_history_routes", routes)
             except Exception as exc:
                 if history_route.get("mode") == "generated_journey":
-                    from persist.chat_delete import delete_chat_data
-                    delete_chat_data(cid)
+                    # KEPT, like every other failure after the chat exists:
+                    # the guard at the end of this function marks it and the
+                    # library offers the retry. Deleting here left the guard
+                    # marking a row that was gone -- a FOREIGN KEY error that
+                    # replaced the real one and cost the entry (2026-09-08).
                     raise
                 routes = db.wget(cid, "character_history_routes", {}) or {}
                 routes[str(char_id)]["handoff"] = {
@@ -980,9 +992,7 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
                         }
                         db.wset(cid, "character_history_routes", routes)
                 except Exception:
-                    from persist.chat_delete import delete_chat_data
-                    delete_chat_data(cid)
-                    raise
+                    raise      # kept and marked by the guard, as above
 
         # Turn 0: run establishment (valid, committed), then show the greeting verbatim.
         tid = db.qi("INSERT INTO turns(chat_id,idx,player_input,created,frame_id) VALUES(?,?,?,?,?)",
@@ -1003,7 +1013,8 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
             already_known=already_known,
             language=language or DEFAULT_LANGUAGE,
             lived_location=lived_location,
-            character_name=c_name, persona_name=p_name)
+            character_name=c_name, persona_name=p_name,
+            plan_request=plan_request)
         raise
 
 
