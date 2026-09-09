@@ -2234,3 +2234,196 @@ def _report_unsourced_light(merged, report) -> None:
         return
     from world.spatial_light import unsourced_light_notices
     report.extend(unsourced_light_notices(merged))
+
+
+# ---------------------------------------------------------------------------
+# WHEN, WITHIN A BEAT, A BODY'S PLACE CHANGED
+#
+# A beat is composed as two snapshots -- the scene before and the scene the
+# commit will write -- and every event percept has been graded against the
+# second. That is right for a STANDING fact (the room a body ends in, the
+# light there, what its feet rest on) and wrong for an EVENT, which happened
+# at a moment. Measured live (chat 122 turn 3, 2026-09-08): the Doctor spoke,
+# turned, and walked up the beach, and both of his lines were graded from the
+# dune he finished at -- signal 0.0029 against the surf's 0.81 noise floor, so
+# `hear_level` refused them. His answers never reached any view; the narrator,
+# handed an action and no dialogue, invented a line for the player to cover
+# the hole, and its own fidelity check caught it. The player's OWN line was
+# refused by the same relation, though `perception_act` had delivered it at
+# `within_reach` in that same turn: one utterance, one beat, two verdicts.
+#
+# THREE RESCUES ALREADY APPROXIMATE THIS QUANTITY, each carved by hand for
+# the case that was in front of it, because the chronology was not available
+# where they were written: `_source_channels`'s `was_reachable_at_beat_start`
+# (sight only, whole-beat, upgrade-only), the "and only when the perceiver
+# stayed put" asymmetry bolted onto it, and `hear_level`'s
+# `open_group_continuity` floor. The stream those rescues needed exists --
+# `_outcome_event_stream` is causally ordered and says so -- it is simply
+# built by the consumer, 2,500 lines after the composition, and thrown away
+# once the narrator has its order.
+#
+# 1,332 of the corpus's 3,829 stored beats (35%) have a body that both moved
+# and spoke in the same beat, so this is not an edge.
+# ---------------------------------------------------------------------------
+
+#: The scene keys that say WHERE a body is. `poses` is deliberately absent:
+#: a pose's `support`/`relative_to` mirror the station rather than setting it,
+#: and restoring a stale pose alongside a restored station would put two
+#: spellings of one fact back in disagreement (the class this engine keeps
+#: closing). Sight and hearing read position, station and cell; none of them
+#: read the pose's support.
+_PLACE_KEYS = ("positions", "stations")
+
+
+def _place_of(scene: dict, body: str):
+    """Everything the graders read as this body's place, as one comparable."""
+    positions = (scene.get("positions") or {}) if isinstance(scene, dict) else {}
+    stations = (scene.get("stations") or {}) if isinstance(scene, dict) else {}
+    station = stations.get(body)
+    station = station if isinstance(station, dict) else {}
+    cell = station.get("cell")
+    return (
+        str(positions.get(body) or ""),
+        str(station.get("at") or ""),
+        tuple(cell) if isinstance(cell, (list, tuple)) else None,
+    )
+
+
+def moved_within_beat(prev_scene: dict, scene: dict) -> set:
+    """The bodies whose place is not where the beat found them.
+
+    A BODY THE BEAT PLACED FOR THE FIRST TIME HAS NOT MOVED. It was nowhere
+    before, and "nowhere" is not a previous place to put it back to -- winding
+    it back would delete it from the world for the first half of the beat.
+    Measured immediately (tests/test_background_presence_channels.py): the
+    composition lays background presences into `positions` as part of
+    composing the beat, so a guard who had stood in that cell all along read
+    as having crossed the room, and reverting him unplaced him. A charter
+    body, a minted entity and a promoted presence all arrive the same way.
+    So a prior room is the entry fee: no room before, no cut.
+
+    The cell is deliberately NOT decisive on its own. It is derived from the
+    station anchor and the composition assigns one where a body had none, so
+    grading on it alone would call a body that never stirred a mover on the
+    beat its coordinates were first written. It separates two bodies that
+    both carry one.
+    """
+    if not isinstance(prev_scene, dict) or not isinstance(scene, dict):
+        return set()
+    names = set()
+    for key in _PLACE_KEYS:
+        for side in (prev_scene, scene):
+            block = side.get(key)
+            if isinstance(block, dict):
+                names |= {str(k) for k in block}
+    moved = set()
+    for name in names:
+        was_room, was_at, was_cell = _place_of(prev_scene, name)
+        now_room, now_at, now_cell = _place_of(scene, name)
+        if not was_room:
+            continue
+        if (was_room, was_at) != (now_room, now_at):
+            moved.add(name)
+        elif was_cell and now_cell and was_cell != now_cell:
+            moved.add(name)
+    return moved
+
+
+def _actor_of(event) -> str:
+    """Whose conduct this stream entry is. Speech carries its speaker on the
+    bound dialogue row; an action and a communication carry an `actor`."""
+    if not isinstance(event, dict):
+        return ""
+    actor = event.get("actor")
+    if actor:
+        return str(actor)
+    entry = event.get("entry")
+    if isinstance(entry, dict):
+        return str(entry.get("speaker") or "")
+    return ""
+
+
+def beat_movement_cuts(prev_scene: dict, scene: dict, events) -> dict:
+    """`{body: index}` -- the stream index from which a body's NEW place holds.
+
+    A body that moved is at its old place for every event before the cut and
+    at its new one from the cut onward.
+
+    THE CUT IS THE BODY'S LAST ACTION, and that is stated without a verb
+    list. The engine already owns the distinction it needs: `SPEECH_WRITTEN_CHANNELS`
+    exists because "saying a thing is not a physical action", and `positions`
+    and `stations` are deliberately not in it -- so speech cannot have moved
+    anybody, and the move belongs to one of the mover's own actions. Which one
+    is not recoverable from two snapshots, and the last is the only choice
+    that renders the ordinary shape correctly: say something, cross the room,
+    say something else, with the first line heard from where it was spoken and
+    the second from where the speaker had got to.
+
+    A body that moved and declared NO action gets no cut. Nothing in the beat
+    can be said to have moved it -- it was carried, projected by `following_ops`,
+    or placed -- so its new place holds throughout, which is what this stage
+    has always done and is not a claim this function is entitled to weaken.
+
+    KNOWN RESIDUAL: a body that moves twice in a beat collapses to its last
+    move, so a line spoken between the two is graded from where it started.
+    Two snapshots cannot express a third place; recording the trajectory is
+    what fixes it, and this is the quantity that trajectory would be read for.
+    """
+    movers = moved_within_beat(prev_scene, scene)
+    if not movers:
+        return {}
+    last_action = {}
+    for index, event in enumerate(events or ()):
+        if not isinstance(event, dict) or event.get("kind") != "action":
+            continue
+        actor = _actor_of(event)
+        if actor:
+            last_action[actor] = index
+    cuts = {}
+    for body in movers:
+        index = last_action.get(body)
+        if index is None:
+            # ...and try the spellings the scene answers to, because a
+            # declaration names a body as its sheet does and the scene may
+            # key it otherwise.
+            index = next((i for name, i in last_action.items()
+                          if same_subject(scene, name, body)), None)
+        if index is not None:
+            cuts[body] = index
+    return cuts
+
+
+def scene_as_of(prev_scene: dict, scene: dict, cuts: dict, index: int) -> dict:
+    """The beat's geometry as it stood at stream position `index`.
+
+    Every body whose cut is still ahead is put back where the beat found it;
+    everything else -- rooms, entities, light, the rest of the scene -- is the
+    composed beat's, because those are the beat's standing facts and this
+    function is not a second composition.
+
+    READ-ONLY, AND SHALLOW ON PURPOSE. The place blocks are rebuilt; the rest
+    of the scene is shared by reference, which is safe exactly because nothing
+    grades a percept by mutating the scene. It matters that it stays that way:
+    the A26 skeptic's replay found a shared composed scene committing a
+    charter creature's position as durable world state on 7 of 124 beats. This
+    object never reaches a writer -- it is built inside the percept loop, read
+    by `spatial_rel_between`, and dropped.
+    """
+    pending = [body for body, cut in (cuts or {}).items() if index < cut]
+    if not pending:
+        return scene
+    out = dict(scene)
+    for key in _PLACE_KEYS:
+        block = dict(scene.get(key) or {})
+        prior = (prev_scene.get(key) or {}) if isinstance(prev_scene, dict) else {}
+        for body in pending:
+            if body in prior:
+                block[body] = prior[body]
+            else:
+                # Only reachable for the half of a place a body carried on one
+                # side and not the other -- a station written for a body that
+                # had only a position. `moved_within_beat` refuses anything
+                # with no prior ROOM, so this never unplaces a body.
+                block.pop(body, None)
+        out[key] = block
+    return out
