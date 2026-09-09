@@ -254,6 +254,81 @@ her travel shorts" as `conditions`, `ledger_notes` addressed it to `objects`,
 and the contact hand independently re-derived it as a fourth `contact_ops`
 entry nobody asked for. One change, three routings, no two alike.
 
+## 3c-bis. CORRECTION: section 3c is right and out of order
+
+Replayed 2026-09-09 against every captured Director ruling, through the real
+dispatch predicate (`tools/dispatch_replay.py`). **Section 3c as written would
+lose 178 productive specialist calls -- 38.3% of all the real work the hands
+did.**
+
+| categories-only dispatch, all beats | n |
+|---|---|
+| specialist calls scored | 1,156 |
+| still dispatched by a category | 168 |
+| skipped, hand had returned nothing (saved) | 276 |
+| **skipped, hand HAD returned content** | **178** |
+
+That is not a tuning problem. A hand that is not dispatched gets no prompt, no
+payload and no output surface, so each of those 178 is a change some mind could
+have observed that no ledger would carry.
+
+**Why**, and it is one cause, not a scatter: **96% of the false negatives are
+beats where the author filed no manifest at all.** Not a vocabulary gap -- zero
+categories reached no channel. The manifest simply was not there, and
+`ledger_notes` was carrying the entire ruling.
+
+Counted directly over 416 prose-author outputs:
+
+| | |
+|---|---|
+| manifest + notes | 28.6% |
+| manifest only | 2.2% |
+| **notes only** | **59.1%** |
+| neither | 10.1% |
+| **`changes_asserted` ABSENT** | **69.2%** |
+
+And by stage: present on 56.9% of `director_resolve` outputs, and on **0.0% of
+184 `director_interpret` outputs.**
+
+Zero, because **`DirectorInterpret` HAS NO `changes_asserted` FIELD.** Checked
+against the live schema: it declares `ledger_notes` and no manifest. So at
+interpret there is no categorized ledger to route on, and routing by category is
+not risky there -- it is impossible. Half of the design's own premise, that "the
+ledger already exists", is true only at resolve.
+
+**When a manifest IS filed, the design holds.** Restricted to those beats, the
+false-negative rate is **2.9% (8 of 278 productive calls)**, and the diagnostic
+puts all eight in one bucket: the manifest covered other hands and not this one.
+That is manifest INCOMPLETENESS, which is a fixable property of one output, not
+a wrong routing principle.
+
+So the design is not refuted. It is out of order, and the corrected order for
+the Director stages is:
+
+1. **Give `DirectorInterpret` a `changes_asserted` field, and ask for it.**
+   Until interpret writes a categorized ledger, it can only rule by addressing
+   hands -- the exact thing 3c exists to delete.
+2. **Get it filled every beat.** 69.2% absence is not the author being lazy;
+   nothing requires the field, which is section 5's grammar question wearing
+   its consequence. This is now the second place the stall blocks the design.
+3. **Re-run `tools/dispatch_replay.py`. The gate is zero false negatives**, and
+   the useful second run is `--filed-only`, which asks whether the manifest is
+   COMPLETE rather than whether it is PRESENT. Conflating those two is what made
+   3c look safe here in the first place.
+4. **Only then remove the `ledger_notes` trigger.**
+
+One limit on all of the above, stated because it bounds the numbers: the replay
+reconstructs the dispatch view from captured output, which carries
+`ledger_notes` and `changes_asserted` and not `pressure_ticks` or whatever
+`_specialist_views` adds. 534 of the 1,156 calls were addressed by something it
+cannot see and are excluded rather than counted. Read it as a lower bound on
+today's dispatch and a directional read on the alternative.
+
+The 82% self-disagreement in section 3c stands and still argues for one router
+rather than two. What this correction adds is that the router which survives has
+to be the one that is actually always there -- and today that is the notes, not
+the categories.
+
 ## 3d. Compress engine terms into concepts, and let code dissect them
 
 The owner's last requirement, and the one that makes "what actually happens?" a
