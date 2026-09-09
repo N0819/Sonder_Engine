@@ -59,6 +59,7 @@ from world.spatial import (
     normalize_room_id,
     room_of,
     same_subject,
+    scene_names_body,
     sense_adjusted,
     sight_verdict,
     visual_level_between,
@@ -10233,11 +10234,18 @@ def _llm_resolve_player_room(sc, pers, cast, interp, player_input):
             char_names.append(character_name_from_text(c["sheet"]))
         except Exception:
             pass
+    # The question is which BODY here is the player, so the keys offered are
+    # the scene's bodies. Offering every placed thing asked the model to
+    # decide whether a stove might be the player, and a key it picked that
+    # named one would have been accepted -- `key in positions` cannot tell
+    # the difference.
+    bodies = {k: v for k, v in positions.items() if scene_names_body(sc, k)}
+    offered = bodies or positions
     payload = {
         "player": {"name": pers.get("name") or persona_name(pers), "appearance": pers.get("appearance"),
                    "senses": pers.get("senses", "")},
-        "npc_names": char_names, "position_keys": list(positions.keys()),
-        "positions": positions, "rooms": sc.get("rooms", {}),
+        "npc_names": char_names, "position_keys": list(offered.keys()),
+        "positions": offered, "rooms": sc.get("rooms", {}),
         "player_input": player_input or "",
         "movement": (interp or {}).get("movement") or {},
         "private_thought": (interp or {}).get("private_thought") or ""
@@ -10259,8 +10267,8 @@ def _llm_resolve_player_room(sc, pers, cast, interp, player_input):
             % (type(exc).__name__, str(exc)[:120]))
         return None
     key = out.get("key") if isinstance(out, dict) else None
-    if key and key in positions:
-        return positions[key]
+    if key and key in offered:
+        return offered[key]
     return None
 
 def _resolve_player_room(sc, pers, interp, cast, player_input=None):
@@ -10282,8 +10290,26 @@ def _resolve_player_room(sc, pers, interp, cast, player_input=None):
             char_names.add(character_name_from_text(c["sheet"]).lower().strip())
         except Exception:
             pass
-    candidates = [v for k, v in (sc.get("positions") or {}).items()
-                  if k.lower().strip() not in char_names]
+    # POSITIONS IS NOT A BODY ROSTER (review 2026-09-07 A56, third site --
+    # `story/room_slice` and `web/world_routes` were the first two). Every
+    # placed thing stood in this list as a place the player might be, so a
+    # stove in one room and a moored boat in another made two candidates out
+    # of a scene holding exactly one person, and the resolver fell through to
+    # a model call to choose between them. Measured on the stored scenes
+    # 2026-09-08: six of twelve went from two-or-more candidates to one, and
+    # that call is 21-43s of a turn's wall clock.
+    #
+    # The two that remain are the ones the resolver exists for -- chat 117 and
+    # 122 really do stand bodies in two and three rooms -- so this narrows the
+    # question rather than answering it.
+    placed = [(k, v) for k, v in (sc.get("positions") or {}).items()
+              if k.lower().strip() not in char_names]
+    candidates = [v for k, v in placed if scene_names_body(sc, k)]
+    # Never ADD a call: a scene that stands no non-cast body anywhere has not
+    # placed the player either, and the unfiltered list is the guess this has
+    # always made there.
+    if not candidates:
+        candidates = [v for _, v in placed]
     if len(candidates) == 1:
         return candidates[0]
     if sc.get("positions"):
