@@ -466,9 +466,20 @@ def room_slices(cid, frame_id, room_ids, scene=None):
         return []
     regions = region_registry(cid, frame_id)
     positions = scene.get("positions") or {}
+    # OCCUPANTS ARE BODIES, and `positions` is not a body roster: it places a
+    # lamp, a lift car, a stretch of surf and the Moon alongside the people
+    # (review 2026-09-07 A56, the one site the sweep missed). Every position
+    # row was read as an occupant here, so the Bodies list offered a station
+    # and an ATTIRE editor for the Moon and a police box, and
+    # `_things_by_room` then excluded them from the things by name -- so they
+    # were not merely miscounted, they were only ever shown as people
+    # (2026-09-08).
+    from world.spatial import scene_names_body
+
     occupants = {}
     for who, room in positions.items():
-        occupants.setdefault(str(room), []).append(str(who))
+        if scene_names_body(scene, str(who)):
+            occupants.setdefault(str(room), []).append(str(who))
     things = _things_by_room(scene, occupants)
     stations = scene.get("stations") if isinstance(scene.get("stations"), dict) else {}
     attire = scene.get("attire") if isinstance(scene.get("attire"), dict) else {}

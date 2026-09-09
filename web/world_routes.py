@@ -375,14 +375,19 @@ def _holder_name(scene, holder):
 
 
 def _is_body(scene, who):
-    """`cast_rooms`'s rule: a position row keyed by a scene entity of an
-    inanimate kind places a thing; a row with no entity record behind it, or
-    an animate one, is a body."""
-    from llm.schemas import _ANIMATE_ENTITY_KINDS
-    ent = (scene.get("entities") or {}).get(str(who))
-    kind = (str(ent.get("kind") or "").strip().casefold()
-            if isinstance(ent, dict) else "")
-    return not kind or kind in _ANIMATE_ENTITY_KINDS
+    """The ONE body predicate (review 2026-09-07 A56).
+
+    This was a third spelling of it -- a position row keyed by an entity of
+    an inanimate kind places a thing, anything else is a body -- and it
+    answered the same as the shared ladder for every kind but one: a subject
+    the scene DRESSES or gives a size to, whose entity record calls it a
+    box, is a body by its wardrobe and was a thing here. `scene_names_body`
+    reads the body ledgers first and the entity record second, which is the
+    order that settles it.
+    """
+    from world.spatial import scene_names_body
+
+    return scene_names_body(scene, str(who))
 
 
 def _lint_rows(scene):
@@ -1733,6 +1738,21 @@ def body_station_put(cid: int, name: str, body: dict = Body(...),
         prior = stations.get(key) if isinstance(stations.get(key), dict) else {}
         station = {k: v for k, v in prior.items() if k not in ("at", "near", "cell")}
         station.update({"at": at, "near": near})
+        # NEAR IS ONE FACT STORED TWICE, so unchecking it has to be written
+        # twice. `normalize_scene_stations` SYMMETRIZES on every merge -- if A
+        # names B, B is given A -- and nothing ever removed the mirror, so
+        # clearing the box on A's row wrote `near: []` and the next merge put
+        # B back from B's own list. The link could not be broken from either
+        # side (owner, 2026-09-08: "I can't uncheck the near checkbox"). The
+        # route owns the intent, so it drops this body from the list of every
+        # co-located body it no longer names; the merge then re-symmetrizes
+        # what survives.
+        dropped = [n for n in (prior.get("near") or []) if n not in near]
+        for other in dropped:
+            mirror = stations.get(other)
+            if isinstance(mirror, dict) and isinstance(mirror.get("near"), list):
+                mirror["near"] = [n for n in mirror["near"]
+                                  if str(n).strip().casefold() != folded]
         if cell is not None:
             station["cell"] = cell
         stations[key] = station
