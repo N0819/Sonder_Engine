@@ -113,6 +113,147 @@ So: **one entry shape, `{category, subject, change}` plus the ten recurring
 named fields plus an open `props` map, routed by category.** One shape to
 teach. Thirty-nine destinations for code to sort into.
 
+## 3a. The compression is concept -> category, and the grammar delivers it
+
+The owner's sharper statement of the whole design: **the biggest optimization
+is compressing concepts into categories.** It is testable, and it holds.
+
+Across the 32 specialist chunks there are 45 capitalised rule lead-ins -- the
+sheets' own unit of "here is a concept you must understand". Classified against
+what the schema already names:
+
+| | n | |
+|---|---|---|
+| names a field or enum value on the chunk's own `Shape:` line | 21 | 47% |
+| names an existing enum value under a different spelling | 6 | 13% |
+| names a field, spelled as prose | 6 | 13% |
+| compresses to a code guard | 6 | 13% |
+| genuine boundary judgment, irreducible | 4 | 9% |
+| exhortation to comply -- not a concept at all | 2 | 4% |
+
+**39 of 45 (87%) are a category, a field, or a guard wearing a paragraph.**
+
+The clearest cases are the ones where the prose is a single enum value's
+definition written out longhand, on every call, forever:
+
+- *"CROSSING AN ENDPOINT IS AN EXPLICIT TRANSITION, NOT A REPHRASE"* -- ~700
+  chars defining `op: 'cross'`.
+- *"AN ENVELOPMENT IS RECORDED FROM THE ENCLOSED SIDE"* -- ~400 chars defining
+  `relation: 'interior'`, on a record the engine folds to that side anyway.
+- *"CLOTHING IS THE LAYER BETWEEN TWO SURFACES, NEVER ONE OF THEM"* -- ~700
+  chars saying: put it in `detail`.
+- *"WHICH SIDE OF THE FIXTURE"* -- the two field names `at` and `near` ARE the
+  concept.
+- *"NINE OF THOSE KINDS ARE THE UNDERTAKING LEDGER'S WHOLE VOCABULARY"* -- a
+  closed set the engine owns, which is a schema enum by `CLAUDE.md`'s own
+  definition, currently spelled as a word list in prose.
+
+**And this is where the missing grammar (§5) stops being a separate workstream
+and becomes the delivery mechanism for the compression itself.** A category
+name is a compressed concept only if the name actually reaches the model as a
+constraint. `op: 'add'|'remove'|'clear'|'cross'` inside a JSON grammar is
+enforced -- the model cannot emit anything else, and the word carries its own
+meaning. Sent as prose to a model with no grammar, it is a suggestion, so every
+value has to be argued for at length and the model still invents `pressure`,
+`grip_quality` and `my_part`. The engine is currently paying for the longhand
+BECAUSE it stopped sending the shorthand.
+
+Two of the 45 deserve their own note: *"AND YOU MUST ACTUALLY WRITE IT"* and
+*"AND YOU MUST ACTUALLY MOVE THEM"*. Those are not concepts, they are the sheet
+asking the model to please comply -- which is the signature of a missing guard,
+not a missing explanation. Where a sheet begs, write the check.
+
+The irreducible four are worth naming because they are the real floor, and it
+is low: *an announced plan is dialogue* (saying you will do a thing is not
+doing it), *when someone steps out of a crowd*, *what counts as public
+evidence*, and *what a room's size buys*. Each is a boundary between two
+categories that a mind draws and a table cannot.
+
+## 3b. How bare can the question get, and the test for a category
+
+The end of this road is a stage whose whole ask is a plain question -- **"what
+makes sense to happen?"** -- with the schema carrying the shape and code
+sorting the answer. For the prose author that question IS the job. For a
+bookkeeping hand it is "what changed?". For a character, "what do you do?".
+
+It works exactly to the degree the model shares the engine's conception of the
+categories, and that is the constraint worth stating plainly, because it is
+where a naive version of this fails. Asked bare, a model answers in prose.
+Prose then has to become categories either by CODE reading it -- which
+`CLAUDE.md` records failing four separate ways on 2026-08-29, each in whichever
+direction its missing word pointed -- or by the model filling a grammar. So the
+bare question is viable **paired with a grammar and not otherwise**: the
+question supplies the intent, the grammar supplies the structure, and neither
+alone is enough.
+
+Which yields the test for whether a concept may become a bare category:
+
+> **Does the word already mean this to a mind that has read the fiction?**
+
+Where it does, the name carries the concept and the paragraph is deletable:
+`cross`, `remove`, `interior`, `settled`, `moving`, `at`, `near`. A model needs
+no instruction to know that `op: 'remove'` on a contact means the hold ended.
+
+Where it does not, the paragraph is not explaining a rule -- it is defining
+engine jargon, and the fix is to **rename the category until the paragraph is
+unnecessary.** `amount_band` requires a paragraph. *a trace / a smear / a
+soaking* requires none. `salience` requires a paragraph. *who would repeat
+this* requires none. That is the compression done properly: not a shorter
+explanation of the same name, a better name that needs none.
+
+This also gives the reduction a stopping rule. A sheet is finished when every
+remaining sentence is either the role, a field only a mind can fill (§4d), or
+one of the four irreducible boundaries in §3a. Anything else is a name that has
+not been chosen well enough yet.
+
+## 3c. The Director should not know its specialists exist
+
+The proposal that makes the rest of this cheap: **the Director emits a
+categorized ledger and nothing else; code routes categories to hands.** It does
+not require winning the fan-out-versus-monolith argument again. The hands stay.
+They simply stop being addressable, and every sentence on both sides about
+who-is-whose disappears with the addressing.
+
+The Director currently rules to its bookkeepers through TWO fields:
+`ledger_notes`, keyed by hand or channel, and `changes_asserted`, keyed by
+category. `_specialist_addressed` dispatches a hand when EITHER names it. So
+the model is doing the routing twice, in two vocabularies.
+
+**Measured over 374 prose-author rulings, the two disagree 82% of the time.**
+
+| | n | |
+|---|---|---|
+| hands named by `ledger_notes` == hands implied by `changes_asserted` categories | 68 | 18% |
+| **disagree** | **306** | **82%** |
+| ...notes name a hand no category implies | 289 | |
+| ...a category implies a hand notes never named | 33 | |
+
+The asymmetry is the whole story. **The notes are broader than the categories
+289 times to 33** -- the model names more hands than its own manifest justifies,
+dispatch fires on the union, and the extra hands are handed a beat with nothing
+in their channels. That is where §1's empty rate comes from: `director_objects`
+87% empty, `director_body` 76%. **The dispatch is not over-permissive by
+accident; it is routed by a model's opinion about hands instead of by its own
+categories, and the opinion is consistently wider.**
+
+Fifteen more notes were keyed by a CATEGORY name (`substance`, `pose`,
+`contact_action`) where a hand or channel name was expected -- the model mixing
+the two vocabularies it was given, which is what happens when a system asks one
+mind to hold two naming schemes for the same fact.
+
+This is the engine's own most productive question answered against itself: the
+same routing decision is stored twice and the two copies are free to disagree,
+so they do, 82% of the time. Deleting `ledger_notes` and routing on
+`changes_asserted` alone removes a whole vocabulary from the Director's sheet,
+removes the five-hand table and `reroute_to`/`not_mine` from all five
+specialist sheets, and makes dispatch deterministic -- which is a correctness
+fix that happens to also be the latency fix.
+
+Turn 4162 shows the failure end to end: the manifest filed "sand brushed from
+her travel shorts" as `conditions`, `ledger_notes` addressed it to `objects`,
+and the contact hand independently re-derived it as a fourth `contact_ops`
+entry nobody asked for. One change, three routings, no two alike.
+
 ## 4. What must move into code before a sentence is deleted
 
 `AGENTS.md` already states the test: **whose fault would a failure be?** A
