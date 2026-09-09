@@ -98,6 +98,8 @@ from world.spatial import (
     same_subject,
     spatial_rel,
     spatial_rel_between,
+    beat_movement_cuts,
+    scene_as_of,
     sound_field,
     sound_shape,
     room_holds_a_standing_source,
@@ -5511,6 +5513,16 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
         ctx, sc, interp, res, p_name, enriched_dlog,
         _background_beats(ctx, sc))
 
+    # WHERE EACH BODY WAS WHEN EACH EVENT HAPPENED. The stream above is
+    # causally ordered and says so; until 2026-09-09 nothing downstream asked
+    # it, and every percept was graded against `sc` -- the scene the commit
+    # will write, i.e. where everybody ENDED. Right for a standing fact, wrong
+    # for an event. Live: chat 122 turn 3, the Doctor spoke, turned and walked
+    # off, and both lines were graded from the dune he reached; the surf's
+    # noise floor refused them; his answers reached no view and the narrator
+    # invented a player line to cover the hole. See `beat_movement_cuts`.
+    movement_cuts = beat_movement_cuts(prev_scene, sc, beat_events)
+
     # A NOISE IS AN EVENT, AND AN EVENT IS OVER WHEN THE BEAT IS
     # (DESIGN_SOUND_DECIBELS.md § 4). Read from the beat's own diff rather
     # than from the scene, and it has to be: the record the scene will carry
@@ -5727,15 +5739,21 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
     full_player_render = _explicit_look_intent(interp)
     _ubiq = _ubiquitous_names(sc)
 
-    # Every background line this beat produced, until a view takes it.
-    # `source` is stamped where the reactions are merged into the dialogue
-    # log (`perception_outcome`), the same marker `commit_memory` files them
-    # under in the persisted event record.
+    # EVERY line this beat produced, until a view takes it.
+    #
+    # This watched background presences alone until 2026-09-09, because a
+    # burner answering into silence is the case it was written for. The class
+    # is not the speaker's: chat 122 turn 3 dropped two lines from a CAST
+    # character and one from the player, all three to the same stale relation,
+    # and `perception_outcome` raised nothing at all -- the only alarm in the
+    # whole turn came from the narrator's fidelity check, after it had already
+    # invented a replacement line to cover the hole. A produced line reaching
+    # no view is either a firewall refusal worth saying out loud or a fault,
+    # and one that says nothing is indistinguishable from the two.
     unheard = {(str(d.get("speaker") or "").strip(),
                 str(d.get("exact_quote") or ""))
                for d in enriched_dlog
-               if str(d.get("source") or "") == "background_react"
-               and str(d.get("exact_quote") or "").strip()}
+               if str(d.get("exact_quote") or "").strip()}
     clean_views, observations, ledger, company = {}, {}, {}, {}
     episodes, episode_meta = {}, {}
     for p in perceivers:
@@ -5838,7 +5856,59 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
             recognized, unknown = _composer_unknown_sources(
                 name, known, ident_roster, bodies_by_name)
             order = 0
-            for beat_event in beat_events:
+            # THE RELATION AS IT STOOD WHEN THE EVENT HAPPENED, rather than
+            # as it stands once the beat is over. Identical to the precomputed
+            # map whenever no mover's cut is still ahead of this event -- which
+            # is every event of a beat nobody crossed, and every event from the
+            # last cut onward in the rest -- so the ordinary beat still pays one
+            # dict lookup.
+            #
+            # IT MAY ONLY CHANGE THE ANSWER, NEVER THE ROSTER. A counterparty
+            # the composed map does not hold is one this observer has no source
+            # for, and it stays refused: this is about WHEN a channel was
+            # graded, not about who is gradable.
+            _as_of_scenes = {}
+
+            def _as_of(at_index, _observer=name, _p=p):
+                """`(scene, observer_room, sound_field)` for this event.
+
+                `sc` itself, by identity, whenever no mover's cut is still
+                ahead -- so the ordinary beat allocates nothing and every
+                downstream reader is handed exactly the object it was handed
+                before."""
+                pending = frozenset(
+                    b for b, cut in movement_cuts.items() if at_index < cut)
+                if not pending:
+                    return None
+                cached = _as_of_scenes.get(pending)
+                if cached is None:
+                    then = scene_as_of(prev_scene, sc, movement_cuts, at_index)
+                    room = room_of(then, _observer) or _p.get("room")
+                    # ONE BEAT, ONE FIELD (PC3) still holds -- it is the same
+                    # beat's field, built over the geometry the beat had at
+                    # this point rather than the geometry it ended with.
+                    cached = (then, room, _sound_field_for(
+                        ctx, then, _observer, room, events=beat_sounds))
+                    _as_of_scenes[pending] = cached
+                return cached
+
+            def _channel_as_of(counterparty, at_index, _observer=name,
+                               _spatial=spatial):
+                standing = _spatial.get(counterparty)
+                moment = None if standing is None else _as_of(at_index)
+                if moment is None:
+                    return standing, measured_proximity_rel(
+                        sc, _observer, counterparty)
+                then, observer_room, field_then = moment
+                rel = spatial_rel_between(
+                    then, _observer, counterparty,
+                    observer_room=observer_room,
+                    target_room=room_of(then, counterparty),
+                    sound=field_then)
+                return rel, measured_proximity_rel(
+                    then, _observer, counterparty)
+
+            for at_index, beat_event in enumerate(beat_events):
                 if beat_event.get("kind") == "speech":
                     d = beat_event.get("entry") or {}
                     speaker = d.get("speaker", "?")
@@ -5848,15 +5918,34 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                             and is_player_speaker(speaker, chat)):
                         order += 1
                         continue
-                    rel = spatial.get(speaker)
+                    rel, _prox = _channel_as_of(speaker, at_index)
                     if rel is None:
                         if str(speaker).strip().casefold() in _ubiq:
                             rel = {"same_room": True, "barrier": "open",
                                    "distance": "near", "note": (
                                        "bodiless voice, present throughout")}
                         else:
-                            sp_room = (d.get("speaker_room")
-                                       or room_of(sc, speaker))
+                            _moment = _as_of(at_index)
+                            _then = sc if _moment is None else _moment[0]
+                            _obs_room = (p.get("room") if _moment is None
+                                         else _moment[1])
+                            _field = (_sound_field_for(
+                                ctx, sc, name, p.get("room"),
+                                events=beat_sounds) if _moment is None
+                                else _moment[2])
+                            # `speaker_room` is stamped off the composed
+                            # scene, so for a body that MOVED this beat it is
+                            # where they ended -- and only for such a body is
+                            # the moment's own scene the better answer. The
+                            # precedence is otherwise untouched: a presence
+                            # two entities answer to is placed by the stamp
+                            # and not by a name `room_of` cannot resolve
+                            # (tests/test_background_presence_channels.py).
+                            sp_room = (
+                                room_of(_then, speaker)
+                                if _moment is not None and speaker in movement_cuts
+                                else (d.get("speaker_room")
+                                      or room_of(_then, speaker)))
                             # ONE BEAT, ONE FIELD. This fallback used to omit
                             # `sound`, so a listener the composite grid could
                             # not place fell through to the edge model while
@@ -5867,12 +5956,10 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                             # open edge in the house heard less than one
                             # behind a shut door.
                             rel = spatial_rel_between(
-                                sc, name, speaker,
-                                observer_room=p.get("room"),
+                                _then, name, speaker,
+                                observer_room=_obs_room,
                                 target_room=sp_room,
-                                sound=_sound_field_for(
-                                    ctx, sc, name, p.get("room"),
-                                    events=beat_sounds))
+                                sound=_field)
                     can_see = _in_plain_view(
                         rel, visual.get(speaker, False))
                     display = _attributed_label(
@@ -5887,8 +5974,7 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                             observer_room=p.get("room"),
                             speaker_room=d.get("speaker_room")),
                         name, display=display, can_see=can_see,
-                        proximity=measured_proximity_rel(
-                            sc, name, speaker),
+                        proximity=_prox,
                         order_key=order, observer_id=pid,
                         senses=p.get("sense_card"),
                         voice=_voice_register_for(ctx, speaker),
@@ -5936,7 +6022,7 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                             sc, actor, name, cast_aliases.get(name)):
                         order += 1
                         continue
-                    rel = spatial.get(actor)
+                    rel, _prox = _channel_as_of(actor, at_index)
                     if rel is None:
                         order += 1
                         continue
@@ -5952,7 +6038,7 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                             sc, rel, speaker=actor, observer=name,
                             observer_room=p.get("room")),
                         name, display=display, can_see=can_see,
-                        proximity=measured_proximity_rel(sc, name, actor),
+                        proximity=_prox,
                         order_key=order, observer_id=pid,
                         senses=p.get("sense_card"))
                     if percept:
@@ -5966,7 +6052,7 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                         sc, actor, name, cast_aliases.get(name)):
                     order += 1
                     continue
-                rel = spatial.get(actor)
+                rel, _prox = _channel_as_of(actor, at_index)
                 if rel is None:
                     order += 1
                     continue

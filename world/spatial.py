@@ -334,6 +334,7 @@ from world.spatial_merge import (
     _dedupe_adjacent, _ENTITY_DEFAULT_FIELDS, _ENTITY_STRUCTURAL_FIELDS,
     _merge_entity, _merge_room, _position_key, _ROOM_SILENT_WHEN_EMPTY,
     _shield_standing_bearings, _shield_standing_passage, apply_following_ops,
-    connect_orphan_new_rooms, merge_scene_with_diff, prune_bodiless_positions,
-    repair_entity_positions, sync_scene_passages,
+    beat_movement_cuts, connect_orphan_new_rooms, merge_scene_with_diff,
+    moved_within_beat, prune_bodiless_positions, repair_entity_positions,
+    scene_as_of, sync_scene_passages,
 )
