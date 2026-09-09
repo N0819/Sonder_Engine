@@ -254,6 +254,83 @@ her travel shorts" as `conditions`, `ledger_notes` addressed it to `objects`,
 and the contact hand independently re-derived it as a fourth `contact_ops`
 entry nobody asked for. One change, three routings, no two alike.
 
+## 3d. Compress engine terms into concepts, and let code dissect them
+
+The owner's last requirement, and the one that makes "what actually happens?" a
+viable ask: **the engine's terms should become concepts that need no
+explanation, and code should dissect and route them.** A stage's attention then
+goes to the beat instead of to the vocabulary.
+
+The constraint that keeps this honest: a plain term must still be a CLOSED SET
+THE ENGINE OWNS, or code cannot dissect it and we are back to reading free prose
+-- the failure `CLAUDE.md` records four ways on 2026-08-29. This is not a move
+from enums to prose. It is the same enums, spelled so the name carries its own
+meaning. `CLAUDE.md` already licenses exactly this: a closed set the engine owns
+and can enumerate is a schema; what it forbids is a list trying to anticipate
+how English will phrase something.
+
+**The ask.** One question, and a list of what changed:
+
+> What actually happens? Then: what is different now that was not before?
+
+**The kinds.** `changes_asserted.category` currently carries ~20 values that are
+channel names (`cast_changes`, `contact_action`, `remove_adjacent`). A mind
+answering "what is different now" does not think in channels. Eight kinds cover
+the delegated channels, and code maps kind-plus-fields onto the 39:
+
+| kind | what it means | routes to |
+|---|---|---|
+| `touch` | who is holding, pressing, inside or against what | contact_ops, contact_action_ops, containment |
+| `mess` | matter that moved and stayed moved | substance_ops |
+| `clothing` | what someone is wearing, or no longer is | attire |
+| `body` | what afflicts, marks or is spent on a body | conditions, vitals, overlays, scales |
+| `thing` | what exists, is carried, is broken | entities, inventory_ops, destruction, artifact_ops |
+| `place` | where bodies are, how they are arranged, what a room is | positions, rooms, poses, stations, adjacency |
+| `people` | who arrived, left, or learned a name | cast_changes, introductions |
+| `word` | speech with a consequence that outlives the beat | telling_ops, crowd_ops, courier_ops, comms_ops |
+
+**The terms.** Each row is a paragraph the sheet no longer has to carry:
+
+| today | as a concept | the paragraph it replaces |
+|---|---|---|
+| `op: 'add'` | `began` | -- |
+| `op: 'remove'` | `ended` | "CONTACT PERSISTS until you end it" |
+| `op: 'clear'` | `let go of everything` | -- |
+| `op: 'cross'` | `pushed past` | "CROSSING AN ENDPOINT IS AN EXPLICIT TRANSITION", ~700 chars |
+| `relation: 'surface'` | `against` | -- |
+| `relation: 'interior'` | `inside` | "AN ENVELOPMENT IS RECORDED FROM THE ENCLOSED SIDE", ~400 chars |
+| `motion: 'settled'` | `still` | "ALWAYS emit both. They answer different questions" |
+| `actor_part` | `with` | as in *touched it **with** her hand* |
+| `target_part` | `on` | as in *rested **on** his shoulder* |
+| `target_interior` | `enclosed by` | the target_interior/target_part distinction paragraph |
+| `erogenous` | `arousing to them` | still needs its one sentence -- it is irreducible |
+| `amount_band` | `how much: a trace / a smear / a soaking / a flood` | its whole definition |
+| `salience` | `who would repeat this` | its whole definition |
+| `poses.support` | `held up by` | -- |
+| `poses.constraint` | `cannot move because` | -- |
+| `rooms.exposure` | `open to the sky` | -- |
+| `entities.ubiquitous` | `everywhere in this world` | -- |
+| `conditions.severity` | `how bad` | -- |
+
+**And the terms that should not reach a model at all.** These are bookkeeping the
+engine assigns, echoes and links; every sentence teaching them is a sentence
+about the machine rather than the beat:
+
+`event_id` -- the engine numbers the manifest in narrated order already
+(`_manifest_items` assigns it, "never by the model").
+`resolved_events`, `phase_sources` -- the echo-back that only exists so dispatch
+can tell an answered id from an unanswered one; with code routing there is
+nothing to echo.
+`contact_ref` -- code links an effect to its relation.
+`reroute_to`, `not_mine` -- gone with §3c.
+
+**The test for any row of this table**, from §3b: does the word already mean this
+to a mind that has read the fiction? `pushed past` does. `cross` does not,
+which is why it costs 700 chars. Where a proposed concept still needs a
+paragraph, it is not compressed yet -- keep renaming, do not start explaining.
+Where the concept is genuinely irreducible, keep one sentence and no more; the
+measured list of those is four boundaries plus `erogenous`.
+
 ## 4. What must move into code before a sentence is deleted
 
 `AGENTS.md` already states the test: **whose fault would a failure be?** A
