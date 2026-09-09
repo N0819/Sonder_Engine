@@ -582,7 +582,11 @@ class TestMergeSceneWithDiff:
 
         merged = merge_scene_with_diff(scene, diff)
 
-        assert merged["rooms"]["garden"] == {"name": "Garden", "adjacent": []}
+        # `name_derived` rides every room the mint sees, saying whether the
+        # name is the engine's placeholder or somebody's (2026-09-08); the
+        # rest of a new room passes through untouched.
+        assert merged["rooms"]["garden"] == {
+            "name": "Garden", "adjacent": [], "name_derived": False}
 
     def test_remove_adjacent_explicitly_severs_an_edge(self):
         scene = {

@@ -49,6 +49,7 @@ from world.spatial_geometry import (apply_pose_diff, derive_scene_stations,
                               normalize_scene_anchor_cells,
                               normalize_scene_poses, normalize_scene_stations)
 from world.spatial_identity import (_ci_get, _entity_named, room_of,
+                              ROOM_NAME_DERIVED,
                               derived_room_name, is_derived_room_name,
                               normalize_scene_subjects,
                               same_subject)
@@ -162,10 +163,20 @@ def _name_nameless_new_rooms(prior_rooms, incoming_rooms):
     reader floor (`room_display_name`) covers a stored blank."""
     out = {}
     for rid, room in (incoming_rooms or {}).items():
-        if (isinstance(room, dict) and rid not in (prior_rooms or {})
-                and not str(room.get("name") or "").strip()):
+        if isinstance(room, dict) and rid not in (prior_rooms or {}):
             room = dict(room)
-            room["name"] = derived_room_name(rid)
+            # SAID OUTRIGHT, BOTH WAYS, HERE -- the one point every new room
+            # passes. No reader downstream can tell "Market Square" the label
+            # from "Market Square" the name by looking at it, so a room minted
+            # NAMELESS is marked as wearing a placeholder and a room minted
+            # WITH a name is marked as not, whatever that name resembles
+            # (2026-09-08). Marking only the first left the second to the
+            # spelling test, which is the guess this exists to replace.
+            if not str(room.get("name") or "").strip():
+                room["name"] = derived_room_name(rid)
+                room[ROOM_NAME_DERIVED] = True
+            else:
+                room[ROOM_NAME_DERIVED] = False
         out[rid] = room
     return out
 
@@ -202,6 +213,9 @@ def _merge_room(existing: dict, incoming: dict, room_id=None) -> dict:
                 and is_derived_room_name(room_id, incoming[field]):
             continue  # an id slug never overwrites a name someone authored
         merged_room[field] = incoming[field]
+        if field == "name":
+            # Named by somebody now, whatever it looks like.
+            merged_room.pop(ROOM_NAME_DERIVED, None)
 
     existing_edges = {
         edge.get("to"): dict(edge)

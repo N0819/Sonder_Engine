@@ -258,9 +258,11 @@ class TestMergeSceneWithDiff:
             {"to": "study", "barrier": "closed_door", "distance": "near"},
             {"to": "garden", "barrier": "open", "distance": "far"},
         ]
-        # New room lands whole; its alias barrier is normalized.
+        # New room lands whole; its alias barrier is normalized, and the
+        # mint records whether its name is the engine's placeholder or
+        # somebody's -- here, somebody's (2026-09-08).
         assert merged["rooms"]["attic"] == {
-            "name": "Attic", "desc": "Dust.",
+            "name": "Attic", "desc": "Dust.", "name_derived": False,
             "adjacent": [{"to": "hallway", "barrier": "closed_door",
                           "distance": "near"}],
         }
