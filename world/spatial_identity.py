@@ -727,6 +727,35 @@ def room_display_name(room, room_id) -> str:
     return name or derived_room_name(room_id)
 
 
+#: Set on a room whose name the ENGINE wrote because nobody had named it yet.
+#: A FACT, not a guess: `is_derived_room_name` can only ask whether a name
+#: looks like the id spelled out, and an authored name routinely does --
+#: "Market Square" for `market_square`, "Crossroads" for `crossroads`,
+#: "Spine" for `spine`. Every reader that must tell a placeholder from a name
+#: somebody chose was therefore wrong about the commonest way a room is
+#: named, which is what held D8 at the gate (review 2026-09-07, 2026-09-08).
+#: A hyphen or an article saved a name by accident and nothing else did.
+ROOM_NAME_DERIVED = "name_derived"
+
+
+def room_name_is_placeholder(room, room_id) -> bool:
+    """Is this room's name the engine's placeholder rather than a name?
+
+    Asks the ROOM first, because since 2026-09-08 the mint says so outright;
+    falls back to the spelling test for a scene written before that, where
+    the guess is all there is. The fallback is why an authored name that IS
+    the id spelled out still reads as a placeholder in an old scene, and the
+    reason the mark exists is that it cannot in a new one.
+    """
+    if isinstance(room, dict):
+        if room.get(ROOM_NAME_DERIVED):
+            return True
+        if ROOM_NAME_DERIVED in room:
+            return False           # said outright: somebody named this
+        return is_derived_room_name(room_id, room.get("name"))
+    return False
+
+
 def is_derived_room_name(room_id, name) -> bool:
     """Is `name` just the room id spelled out -- the placeholder
     `derived_room_name` gives a room that has to exist before anyone has
