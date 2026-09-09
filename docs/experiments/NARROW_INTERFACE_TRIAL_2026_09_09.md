@@ -166,6 +166,74 @@ better name the engine does not own is not a rename; it is a silent behaviour
 change. **The naming test needs a second clause: the engine must own the new
 name everywhere it is compared.**
 
+## Should JSON go entirely? Measured, and the answer splits
+
+Asked during the trial: drop schemas and JSON requests, use a simpler output
+format. Two measurements over the same 2,004 captured responses settle it, and
+they point opposite ways.
+
+**JSON is not failing.** The syntax tax is 0.6%.
+
+| | n | |
+|---|---|---|
+| parses clean, no fence, no trim | 1,991 | **99.4%** |
+| needed a ``` fence stripped | 13 | 0.6% |
+| needed trimming to outer braces | 0 | 0% |
+| **unparseable** | **0** | **0%** |
+
+Per role, the worst is `director_spatial` at 1.7% fenced. `director`,
+`director_objects`, `narrator`, `character_major` and `story_planner` are 100%
+clean. No repair-stage call appears anywhere in the capture corpus.
+
+So the argument that JSON fails all-or-nothing and a line format degrades
+gracefully is true in principle and describes a failure this engine does not
+have. Dropping the format would solve nothing measured here -- and it would make
+the problem it IS having worse: nine invented field names observed live are
+detectable precisely because a key can be compared to a schema. In a positional
+line format an invented field is a value in slot three, and nothing can tell it
+from a correct one. **The invented keys are a grammar problem, not a format
+problem, and the two fixes point in opposite directions.**
+
+The 0/5-against-2/5 measurement that motivated the question is about the FLAG,
+not the format: `response_format=json_object` on a prose-leading prompt. The fix
+for a bad flag is to stop sending the bad flag.
+
+**But the scaffolding cost is real, and lands somewhere unexpected.** Counting
+structural punctuation plus key names against value bytes:
+
+| role | scaffolding | per call |
+|---|---|---|
+| `director_objects` | 83.4% | ~38 tok |
+| `director_social` | 63.2% | ~68 tok |
+| `director_contact` | 62.4% | ~85 tok |
+| `director_spatial` | 60.0% | ~62 tok |
+| `director_body` | 57.9% | ~36 tok |
+| **`director` (prose author)** | 45.2% | **~399 tok** |
+| **`character_major`** | 28.9% | **~701 tok** |
+| `narrator` | 4.5% | ~13 tok |
+
+Overall, 37.9% of emitted JSON bytes are punctuation and key names.
+
+The percentages invert the absolute numbers, and the absolute numbers are what
+cost time. The specialists have the worst RATIOS and the smallest bills -- 36-85
+tokens on calls that are prefill-bound anyway, so a lighter format saves them
+nothing. `character_major` has the best ratio and the biggest bill: **~701
+tokens of scaffolding per call**, on the one stage that is decode-bound. At its
+measured rate (2,520 tokens in ~37.7s) that is roughly **ten seconds a call, or
+about 11% of a 91-second turn, spent emitting braces and key names.** The prose
+author is another ~400 tokens on a call that runs alone in serial.
+
+`director_objects` at 83.4% deserves its own line: the hand whose calls are 87%
+empty spends nearly all of its output naming channels in order to say they are
+empty. That is not a format problem either -- it is the dispatch finding in the
+design note's section 3c, wearing a different costume.
+
+**So: keep JSON, fix the grammar, and look for the output win on the two
+decode-bound stages** -- where the lever is emitting fewer keys (drop empty
+channels, shorten names) rather than changing format. A lighter format is worth
+revisiting only for those two, only after the grammar question is settled, and
+only positionally-closed if at all.
+
 ## Where this leaves the design
 
 Confirmed: 38% of rules are categories wearing paragraphs, 79% of the text goes,
