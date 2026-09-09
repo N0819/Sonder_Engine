@@ -324,11 +324,20 @@ def _keyed_body_ledger(scene: dict, keys) -> bool:
     return False
 
 
-#: An entity record whose `kind` is one of these is the scene naming a body
-#: (tier 2 of `scene_names_body`). Two words the engine itself writes, not a
-#: guess at English: `person` is how background people are placed and
-#: `creature` is how a hunting animal or a warden is minted.
-_BODY_KINDS = frozenset({"person", "creature"})
+def _body_kinds():
+    """The kinds an ENTITY RECORD can carry that name a body (tier 2).
+
+    `llm.schemas._ANIMATE_ENTITY_KINDS`, the engine's own animate vocabulary
+    -- the closed set the schema owns and two other readers already asked.
+    It began as `{"person", "creature"}` here, which was narrower than either
+    of them: a `guard`, an `android`, a `ghost` and a `swarm` are all bodies
+    to the schema and were things to this predicate, so the one predicate
+    disagreed with the vocabulary it was meant to speak for (2026-09-08).
+    Imported at call time: `world` may not import `llm` at module scope.
+    """
+    from llm.schemas import _ANIMATE_ENTITY_KINDS
+
+    return _ANIMATE_ENTITY_KINDS
 
 
 def scene_names_body(scene: dict, name: str) -> bool:
@@ -354,14 +363,12 @@ def scene_names_body(scene: dict, name: str) -> bool:
          carries air and injury, or is marked. Not a pose: a thing may be
          given one (see the tuple's note).
       2. Otherwise, an ENTITY RECORD is the scene saying what this is. One
-         whose `kind` names a person or a creature is the scene naming a
-         body -- background people are placed exactly so, "as entities with
-         kind 'person'" (director_establish) -- and any other kind (a lamp,
-         a lift car, a pry bar) is not a body. A creature counts because a
-         condition standing over its room acts on it and a body leaning on
-         it is leaning on someone; the warden `world/paradox.py` mints is
-         one. Measured on 138 stored blobs: all 14 person-kind records
-         already carried a body-ledger row, so no answer changed.
+         whose `kind` is in the engine's own animate vocabulary
+         (`llm.schemas._ANIMATE_ENTITY_KINDS` -- person, creature, guard,
+         android, ghost, swarm and the rest) is the scene naming a body;
+         any other kind -- a lamp, a lift car, a celestial body, a stretch
+         of terrain -- is not. Background people are placed exactly so, "as
+         entities with kind 'person'" (director_establish).
       3. Otherwise, a subject the scene STANDS SOMEWHERE and records nothing
          else about is a body. A registered mind routinely has no entity
          record at all, and on the beat before it is dressed it has no ledger
@@ -401,7 +408,7 @@ def scene_names_body(scene: dict, name: str) -> bool:
     if eid:
         kind = str((ent or {}).get("kind") or "").strip().casefold() \
             if isinstance(ent, dict) else ""
-        return kind in _BODY_KINDS
+        return kind in _body_kinds()
     positions = scene.get("positions")
     if not isinstance(positions, dict):
         return False
