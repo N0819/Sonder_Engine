@@ -465,6 +465,79 @@ grammar now, the output shape leaves the token budget entirely and the invented
 keys stop, which is a larger simplification than any prose edit and does not
 risk a behaviour change.
 
+## 5a. THE BIGGEST OPTIMIZATION IN THIS DOCUMENT IS ALREADY BUILT AND SWITCHED OFF
+
+Everything above is worth doing and none of it is worth as much as this.
+
+`_apply_json_mode`'s own docstring (`llm/providers.py:2177-2199`) carries the
+engine's measurement of what an ENFORCED grammar does, five trials per mode:
+
+```
+narrator    none 2/5 valid   json_object 0/5   json_schema 5/5
+character   none 4/5 valid   json_object 4/5   json_schema 5/5
+```
+
+and, in the same docstring:
+
+> it is faster, because a constrained model cannot pad: `character` went
+> **53.4s/2029 tokens to 15.3s/587**, a 3.5x cut on the heaviest role in the
+> pipeline.
+
+That is the same effect this note measured from the other side: section 3d's
+scaffolding count found `character_major` spending ~701 tokens a call on
+punctuation and key names, and a grammar is what stops a model padding.
+
+**It is not running.** `providers_no_json_schema` holds
+`google/gemini-3.8-flash`, which every Director specialist inherits from
+`default`. Live `character_major` output measures **2,520 tokens a call** --
+*above* the docstring's unconstrained 2,029 and four times its constrained 587.
+The heaviest role in the pipeline is running unconstrained, and falling back to
+`json_object`, which the same docstring measures as WORSE THAN SENDING NOTHING
+on a prose-leading prompt.
+
+**How it got switched off, and why that is the defect rather than the
+configuration.** Read together:
+
+- `_SCHEMA_STALL_LIMIT = 2` (`providers.py:1920`). Two stalls.
+- A stall is not a refusal. `_note_json_schema_stalled` counts "a schema request
+  that was accepted and then never answered" -- which is also what a timeout,
+  a loaded host, or a bad minute looks like.
+- The decision is PERSISTED to the `providers_no_json_schema` setting
+  (`:1926`, `:1951-1953`), so it survives the process.
+- **There is no way back.** `_NO_JSON_SCHEMA` is only ever `.add`-ed
+  (`:1945`, `:1975`, `:2034`). No `discard`, no expiry, no re-test, anywhere in
+  the module. The only exit is editing the setting by hand.
+
+So two transient timeouts permanently disable the largest single speedup the
+engine has, for that model, forever, and nothing ever asks again. Nothing is
+wrong with preferring a grammar, memoising a refusal, or falling back; what is
+wrong is that a LATENCY symptom is treated as a CAPABILITY verdict, and a
+capability verdict is written down in ink.
+
+**What it is worth.** `character` is 37.7s of a 91.2s median turn (section 1).
+If the docstring's 3.5x holds for this model, restoring the grammar is roughly
+**23 seconds off a 91-second turn -- about 25% -- with no prompt rewritten, no
+rule deleted, and no guard to write.** The whole reduction programme above,
+executed perfectly, was worth ~15s and 93 refutations.
+
+Three things this changes elsewhere in this note:
+
+1. Section 5's "retest the stall" is not step one of the prompt work. It is the
+   work, and the prompt work is the follow-on.
+2. Section 3c-bis's precondition -- a manifest reliably filled -- is this. A
+   field nothing enforces is the reason `changes_asserted` is absent 69.2% of
+   the time.
+3. Section 3d's argument for renaming enum values gets stronger, not weaker: a
+   grammar transmits the closed set as a constraint, so the name is all the
+   model gets and all it needs.
+
+**The fix is not to clear the setting.** That re-tests once and re-blacklists on
+the next bad minute. The fix is that a stall-derived blacklist must expire and
+be re-tested, and that the threshold for writing one down permanently should be
+higher than two -- with a rejection (a 400, which IS a capability verdict) kept
+permanent as it is today. Clearing the live setting is worth doing once, by
+hand, to measure the payoff -- but only after the entry can heal.
+
 ## 6. Order of work
 
 1. **Retest the `json_schema` stall** on the current default model. Settings
