@@ -1,0 +1,32 @@
+=== chunks/attire.txt ===
+ATTIRE -- what each body wears. Three fields, and a fact in the wrong one moves nothing: how far off the body is `add`/`remove`, what a still-worn garment covers NOW is `coverage`, what happened to the cloth is `conditions`. A jacket pushed off the shoulders is fully worn, undamaged, and changed only in `coverage`.
+Say where a garment goes (`covers`) whenever that is not what its name implies. Nothing else knows, and nothing will ask.
+Anything reaching a covered part of a body goes through the cloth first: mark the garment AND the body under it. A body part is not clothing.
+The player's own hands are theirs: do not take a garment off them that they did not say they were taking off. A garment coming off them by any other means is yours to resolve, however far it goes.
+Shape: attire:{body:{add:['name' or {name,covers:[region,...]}],remove:['worn garment'],coverage:{'worn garment':{region:[zones it still covers], [] for none}},conditions:{'worn garment':'what happened to the cloth'}}}
+Regions: head, torso, arms, hands, waist, groin, legs, feet. Zones: torso is chest and midriff; no other region has any.
+
+=== chunks/conditions.txt ===
+CONDITIONS -- anything standing on a body or a place that the story has to go on carrying. `kind` is yours to name; the four kinds the engine acts on are below, each with the state it needs. End what has ended: re-emit the id `active_conditions` gives you with active:0, or set `expires_at_seconds` where the clock ends it. A condition declaring neither stands for the rest of the story.
+A condition that keeps acting for as long as it lasts declares `tick_interval_seconds` -- how often a person would actually notice it change -- and a `tick` saying what one costs: `vitals` mapping a vital to its signed move, `percept` one clause the world keeps announcing. THE INTERVAL MUST BE GREATER THAN ZERO. Zero is not "constantly"; it is a row the clock can never fire, so the fire you declared burns nobody for the rest of the story, and nothing repairs it.
+
+awareness -- a mind gone OUT of the scene: level unconscious|sedated|asleep|dazed, a short `cause`, optional `rousable_by`. The bar is that they can no longer answer what is said to them. A body that could still answer is awake. Saying you will sleep is a line spoken by somebody standing there saying it, and the acts that follow it are an awake body in motion; the beat where they stop answering is a later beat and its own to record. Nothing but you ends `sedated` or `unconscious`.
+
+restraint -- a body kept from moving itself, against its capacity to leave: level held|bound|pinned|encased, whichever is deepest; `by` whoever or whatever does the holding; `means`; optional `escapable_by`. An embrace, and a body's own grip on a thing, are neither.
+
+physical_transformation -- the body has actually changed: `form`, `appearance` (its new TRUE look, which replaces the card's outright), `parts` [{kind,count,at,aspect}] (omit to keep the card's, [] for a form with none), `reversible:false` with `reversal` only for a genuine one-way door, `caused_by`.
+
+physical_disguise -- the body is concealing what it really looks like: `presented_appearance` (what somebody who does not know sees), `concealed_terms` (the feature words to keep out of their view), `known_to` (who legitimately knows), `conceals_identity:true` only where somebody who knows this person would no longer know them -- hiding a feature is not hiding an identity.
+
+A body presents ONE outward form: the newer of those two ends whatever it had.
+
+Shape: conditions:{condition_id:[{condition_id,subject_id,kind,severity,started_at_seconds,expires_at_seconds?,tick_interval_seconds?,tick?,state,active?}]} -- a list, because one subject can carry several readings of one kind.
+
+=== chunks/overlays.txt ===
+OVERLAYS -- a mark ON a body that is still recognisably itself: it stays because nothing has taken it off, it sits on the form without altering it, and it changes only how the body reads to whoever can see it. A motion or a reaction of a body is never one, however visible -- it stopped when the body stopped making it, and your prose is where it lives. A body that has CHANGED, or changed what it is recognised by, is a transformation; something that changes what the body can do, or what anyone else must do about it, is a condition.
+It leaves when whoever is entitled to say so says it is gone -- the player about their own body, a character about what they are doing, the beat about what the world did.
+Shape: overlays:{body:['how the surface reads',...]}; re-emit one with active:false to end it.
+
+=== chunks/vitals.txt ===
+BODILY CONDITION -- air, stamina, nourishment and injury, 0..1 each. The clock already moves them for the time your beat took, and it already runs a sealed body out of air. Write here only where the FICTION moved one: a wound taken, a meal eaten, a sprint, a lungful of clean air.
+Shape: vitals:{body:{air,stamina,nourishment,injury}}, each 0..1.

@@ -1,0 +1,31 @@
+CAST CHANGES: a character the story registered (payload.cast) enters the scene or leaves it entirely.
+Shape: cast_changes:[{who,status:'active'|'dormant',reason}].
+
+INTRODUCTIONS: a name, title or descriptor one body learned of another this beat, by being told it or shown it. Never anything else about them.
+Shape: introductions:[{who,learns}].
+
+WORLD FACTS: what this beat established as durably true of the world at large, rather than of this scene.
+Shape: world_facts:[string].
+
+BACKGROUND CLAIMS: the payload lists things a background presence asserted on an earlier beat that you never established -- hearsay, with the credence the fiction has already signalled. Adopt one only where it FITS what you have established: ratification is canon and canon is a one-way door. Naming it contradicted is how the speaker turns out to have been wrong; nothing else can record a rejection, and a claim you name in neither quietly expires.
+Shape: ratified_claims:[claim name exactly as listed]; contradicted_claims:[claim name exactly as listed].
+
+CROWDS: a populous place is ONE crowd, never several extras. A crowd murmurs and is felt; a line belongs to whoever steps out of it. Its `talk` is what the murmur is about, and carries the world_event_id a telling needs.
+`emerge` produces a STRANGER, named as the beat would name one ('a rope-seller'); somebody the story already knows ARRIVES instead, because a cast member coming out of the extras is a claim about where they have been that nobody wrote. On a crowd marked `derived` that is the only op, and leaving `who` empty lets the engine pick whoever has most reason to step forward.
+Shape: crowd_ops:[{op:'set'|'move'|'split'|'disperse'|'emerge'|'absorb', crowd_id?(omit to raise a new crowd; otherwise one perception showed you in that room's `crowds`), who?, room?, band:'a handful'|'a dozen or so'|'a few dozen'|'a throng', composition, mood, heading?(an adjacent room the press is flowing toward; a 'split' needs one)}].
+
+COURIERS AND CARAVANS: word put on the road -- a rider sent to the garrison, a boy running to the harbourmaster, a trader's circuit that carries the news along with it. A courier is a stranger, so `description` is what an observer on the road sees, never a name. Anyone standing where perception shows a courier can stop him. `freight` loads only stock `from_holder` really holds at a market in the origin room; asking for what is not there refuses the whole dispatch rather than sending an empty wagon.
+Shape: courier_ops:[{op:'send'|'question'|'silence', sender?, to_room?, stops?:[room,...](makes it a caravan: it dwells and trades news both ways at each), from_room?(an empty caravan, with no sender and no message), addressee?, world_event_id?(one the sender carries)|claim?(what they assert instead, true or not), method?:'word'|'letter', pace?:'riding'|'walking', description?, courier_id?(from that room's `couriers`), listener?, by?, freight?:{from_holder,stock:{good:amount},wants:{good:amount}}}].
+
+TELLINGS: one mind passes on to another, in the dialogue you just wrote, something it carries (its `carried_reports`) -- or a `claim` no event backs, a lie or a boast or a rumour it has the wrong end of, which travels exactly as the truth does. A witness's own faded memory is not a claim; they already hold it. A crowd tells and is told by its crowd_id, and only ever repeats what it holds.
+Shape: telling_ops:[{speaker,listener,world_event_id|claim}].
+
+ERRANDS: somebody the story has not registered is sent to do something elsewhere -- a serving hand for the gate warden, a runner to the yard. Write one where the fiction ORDERED it and somebody took the order; an order nobody took is a line of dialogue. You are saying only what was dispatched: who covers the post and who is blamed is the institution's own answer on later beats. Name the body and the place as the ledgers do.
+Shape: charter_ops:[{op:'errand',body,to,purpose}].
+
+PUBLIC EVIDENCE: payload.public_sources is the engine's list of player and major-character speech and action that background minds may witness. Annotate each meaningful one; the engine supplies a fallback for the rest. For speech, say what the line publicly DOES, from the actor's side (`request` means the actor requests it) -- never what its speaker privately means or whether what they said is true.
+kind opens an undertaking: promise|offer|bargain
+kind answers one already standing between the same two: agreement|refusal|dispute|release|repudiation|transfer
+kind carries no undertaking: greeting|question|command|threat|accusation|disclosure|denial|warning|apology|thanks|praise|insult|challenge|other
+content/about/condition are spans of the source's own quote, copied out of it word for word.
+Shape: public_evidence:[{source_id(copied from the payload),speech_acts:[{kind,content,about,condition}],salience:0..1(how likely a bystander is to repeat this)}].

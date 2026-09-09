@@ -1,0 +1,42 @@
+ROOMS -- the places and the ways between them. Write a room the first time a body enters it or has it in view; join a new room to the room the mover came from.
+Shape: rooms:{room_id:{name,desc,adjacent:[{to,barrier,distance,dir,vertical?,name?,passage_from?}],notes,zone?,region?,size?,extent?:{w,d},shape?,parts?:[{w,d,at}],light?,quiet?,exposure?,anchors?:{anchor_id:{desc,dir,footprint?,height?,opacity?}},remove_anchors?:[anchor_id],parent_entity?,transit_seconds?}}
+barrier: open | open_door | closed_door | window (sight, never a body) | bars (sight and sound, never a body) | membrane (a body, never sight) | one_way_window (sight one way, named by `sight_from:'<room_id>'`) | wall. What the way IS goes in the edge's `name`.
+passage_from:'<room_id>' -- the one room a body may cross this edge FROM. Absent means either way.
+dir -- the compass point of that opening from inside this room, and the only thing left, right, ahead and a lamp's beam are derived from. Give it wherever the fiction implies one; without it a body arrives with no heading. vertical: up | down where the two rooms are on different floors -- there `dir` says only which way the climb leans.
+size: tiny | small | medium | large | huge | vast. extent {w,d} in paces (w east-west), and shape rectangle | round | l | composite with `parts` placing each rectangle in the bounding box by corner (ne|se|sw|nw) or origin cell [x,y] -- state one where the proportion is a fact of the place.
+light: dark | dim | lit | bright -- what there is to SEE BY. Set it on the beat the fiction changes it.
+quiet: hushed | dead -- how little noise the PLACE itself makes, so a small sound is caught in it. Rare, and only where the silence is a fact of the place rather than of the moment.
+zone -- a slug shared by every room of a locale nothing here reaches on foot (another ship, a distant city). Not an unmapped hallway.
+transit_seconds -- story seconds to cross a place that is passed THROUGH rather than occupied. The magnitude is the whole declaration.
+parent_entity -- this room is INSIDE that entity, and the world reaches it only through the holder. The question is whether the way out is a fact about the map or about the thing around it; what the holder is made of decides nothing.
+anchors -- places a body can stand at, reach from, put a thing on, brace against or hide behind, scaled to the place. A quality of the room is not one: `desc`, `light` and `quiet` carry those. height: floor | waist | head | full is what a line of sight is cut at; footprint: point | small | large | run; opacity: opaque | see_through. A fixture that has genuinely left the place goes in `remove_anchors`.
+desc -- the room's, and each anchor's. Every later beat renders this place from these words alone, so write what it is like, not a label.
+payload.planned_rooms holds rooms the location's plan laid out that no beat has described: purpose and exits given, contents yours. Each arrives under a placeholder name -- name it for what it turns out to be.
+
+POSITIONS -- the room each RELOCATED body ends the beat in; omit every body that did not change rooms.
+Shape: positions:{name:room_id}
+Where a body WALKS is its own; where the world PUTS it is yours.
+A direction ('west', 'through the doorway', 'ahead') names a doorway only through that mover's own `exits`, and `exits.bearings` gives each of those rooms its compass word. Where a declared bearing matches no doorway here, resolve it by the rooms the declaration plainly means; where nothing does, the move does not happen, and what they learn is that no way out of this room carries that heading.
+A run is bounded by that mover's `sprint_reach`: `path` is the rooms in order, `stops` what ends it. Leave them in the last room they cover -- short of the reach for a reason you narrate, never past it.
+A body let go -- out of a hold, out of an inside, out of whatever kept it where it was -- ends the beat in the room of whoever released it. The place it came out of stays.
+
+POSES -- how each body is arranged where it stands. Station says where in the room; pose says how the body is arranged.
+Shape: poses:{name:{posture,support,relative_to,relation,constraint,detail}} -- a touched pose is a COMPLETE replacement snapshot; omit the fields that ended rather than copying them forward.
+support names what bears the body's weight. relative_to may name a co-located body or one of the room's own anchors, and relation how this body stands to it; record a turn as turning TOWARD whatever they now face. constraint is a standing restriction.
+detail is prose about THIS body only: where another body is belongs to positions, that it is held to contact_ops, what state it is in to conditions.
+A present body with no pose whose arrangement the scene has already made plain may be given one now.
+
+STATIONS -- where each body is INSIDE its room.
+Shape: stations:{name:{at:anchor_id|null,near:[names],cover?:true|anchor_id}}
+at names one of that room's anchors, null when they step away from every fixture; near is who is right beside them; cover:true (or an anchor id) puts the body on the FAR side of that fixture instead of at it. payload.sightlines shows what your stations come to.
+
+COMMS_OPS -- equipment that carries a VOICE between places, separately from the doorway between them. Emit an op when a beat installs, keys, opens, closes or destroys one.
+Shape: comms_ops:[{id, op, name, rooms:[room_id], carriers:[name], mode, source, private, live}]
+op: set (a COMPLETE replacement snapshot of that channel) | open | close (flip `live` only) | remove.
+rooms are a fixed installation wired into those places; carriers are the bodies HOLDING a set, so the channel travels wherever they walk. mode: duplex | broadcast (one way, out of `source` only). private: a handset at an ear -- false is a speaker, so whoever stands in that room hears it too.
+
+REMOVE_ADJACENT -- a way between two rooms that genuinely no longer exists: bricked up, collapsed. Omission never severs; name it here.
+Shape: remove_adjacent:[{room,to}]
+
+REMOVE_ROOMS -- rooms that ceased to EXIST as navigable places: collapsed, sealed permanently, consumed. A room merely left, darkened or shut is not removed.
+Shape: remove_rooms:[room_id]

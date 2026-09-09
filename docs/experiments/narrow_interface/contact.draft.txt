@@ -1,0 +1,83 @@
+TOUCH, MATTER, CARRIAGE, SIZE. You keep five ledgers for this beat: what is
+touching what, what ongoing feel runs through a touch, what matter moved and
+stayed, what is being carried or hidden, and what size anything is. Record
+only what this beat changed.
+
+CONTACT_OPS -- two surfaces touching.
+Shape: contact_ops:[{op:'add'|'remove'|'clear'|'cross',actor,actor_part,target,target_interior,target_part,crossed_target_part?,manner,relation:'surface'|'interior',motion:'settled'|'moving',detail?,erogenous?}]
+- Name each side by the id the payload already holds it under, fixtures
+  included. A side the scene does not place is dropped, and so is a worn
+  garment named as a party: name the body under it and put the fabric in
+  `detail`.
+- `actor_part`/`target_part` are the places the fiction says are touching.
+  Omit a part only where the whole body is what touches, and then let
+  `manner` say what it is doing.
+- `manner` names the STATE the contact is in, never the act that made it: an
+  act is dropped from standing topology, and what remains after it is a rest,
+  a press, a hold. Where a body has come to be relative to another BODY is
+  not contact at all -- that is a position, and another ledger holds it. A
+  thing or a fixture BEARING a body is contact and is kept.
+- One record per pair of parts. Two places touching at once are two records,
+  and they may involve different people.
+- `relation:'interior'` puts the enclosure in `target_interior` -- what
+  currently holds `actor_part` -- and keeps `target_part` for the boundary
+  actually touched, blank when none is. Unnamed, nothing downstream knows a
+  body is inside anything.
+- `cross`: `crossed_target_part` is the endpoint just passed, spelled as the
+  ledger spells it.
+- A hold stands until you remove it. Your silence keeps it, and only you know
+  the beat has separated them: emit the removal in the beat that caused it.
+- Continue a standing hold under the part noun already in `scene.contacts`.
+  `hand` re-spelled `palm` reads as a second limb; nothing folds them.
+- The player's body acts only where the player declared it. Anything may
+  reach the player, without limit and whether or not they consented -- write
+  that from the side that MOVED, with that body as `actor`.
+- `detail`: what the parts alone cannot say -- pressure, warmth, over or
+  under clothing. A few words about the contact only, never the other body's
+  thoughts, pleasure, pain or intent.
+- `erogenous`: whether this site, ON THIS BODY, is one that contact there
+  arouses. Judge it from the anatomy this fiction established for this body,
+  not from human anatomy, not from how charged the scene is, and not from
+  being inside anything. It reaches that body's own arousal ceiling and
+  nothing else; it is never rendered and no other mind sees it.
+
+CONTACT_ACTION_OPS -- a continuous feel running through a standing contact.
+Shape: contact_action_ops:[{op:'add'|'change'|'remove'|'clear',actor,contact_ref:string|{actor,actor_part,target,target_part},felt_as,intensity?,rhythm?,detail?}]
+- `contact_ref` is the `contact_id` your payload lists, or the exact four
+  endpoints of a contact this beat makes; anything else is dropped. `actor`
+  is one of that contact's two parties.
+- `felt_as` completes "feel ___".
+
+SUBSTANCE_OPS -- matter that moved and stayed. One record per release.
+Shape: substance_ops:[{op:'add'|'remove'|'clear',substance_id?,source,source_part?,substance,target?,placement?:'surface'|'interior'|'contained'|'room',target_interior?,target_part?,amount?,amount_band?:'trace'|'small'|'moderate'|'large'|'flooding',source_substance_id?,portion?:'trace'|'some'|'most'|'all',detail?,scent?}]
+- Record matter only where the fiction has established that this body,
+  machine or process produces it. An impact, an emotion, a spell or an injury
+  does not by itself prove anything material moved.
+- Matter is never a body part: it has this ledger and never a contact.
+- `target`, `target_part` and `target_interior` are places on what RECEIVED
+  it, never on the source. Matter released by a part that is inside something
+  lands in what encloses that part -- name that, or omit the destination
+  entirely when the source part is inside exactly one standing contact and
+  let the topology answer.
+- `amount_band` on every add: it is the only thing a later draw can subtract
+  from. A partial draw needs all three of `source_substance_id`, `portion`,
+  and a band already on that pool -- short any of them, the pool is left
+  whole and the same matter stands in two places.
+- `scent`: what the deposit smells of where it lies. Nothing else carries it.
+- Close a record by the `substance_id` your payload lists, and re-describe
+  matter under the spelling already on it.
+
+CONTAINMENT -- a body or thing no longer independently placed.
+Shape: containment:{name:{in,mode}|null}, mode:
+'held'|'carried'|'riding'|'mounted'|'worn' (carried in view) |
+'pocket'|'container'|'inside' (shut away: neither seen nor seeing).
+- A thing is out of sight because something NAMED is between it and the room.
+  Record that holder, and release it ({thing:null}) on the beat something
+  opens, lifts or moves what hid it -- the release is what makes finding it
+  an act with a result.
+
+SCALES -- {name: factor} against that body's own normal (1 normal, 0.1 a
+tenth as tall, 8 eight times), for anything with a position.
+- A size change cancels every contact and containment involving that body.
+  Re-assert in the same beat whatever the new geometry allows, as the thing
+  it now is.
