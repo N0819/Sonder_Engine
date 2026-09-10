@@ -26,6 +26,8 @@ from world.spatial import (_merge_entity, _merge_room, resolve_placement_target,
 # sibling, so this direction adds no cycle.
 from .director_scopes import manifest_category_targets
 from .common import (
+    downgraded_sequence_indices,
+    prune_blocked_phase_changes,
     _contextual_rooms,
     _dict,
     _dict_list,
@@ -1348,7 +1350,7 @@ def _span_items(out):
     a speech act that changes nothing in the world is the ordinary case.
     """
     items = []
-    for element in (out.get("sequence") or []):
+    for position, element in enumerate(out.get("sequence") or []):
         if not isinstance(element, dict):
             continue
         # THE RAW VALUE DECIDES, not the normalized one.
@@ -1380,6 +1382,14 @@ def _span_items(out):
         # name two still sees the string it expects rather than a list.
         item["category"] = categories[0]
         item["event_id"] = len(items) + 1
+        # WHERE IT CAME FROM, for the engine only. Player authority is settled
+        # against the sequence POSITION (`claim:<index>:...`) and voiding a
+        # span needs the other direction. Deriving it by re-walking the same
+        # category filter somewhere else is how the filter gets two spellings,
+        # which is the failure this file already carries three notes about.
+        # Stripped before any payload (`_specialist_payload`): a leading
+        # underscore marks a key no model ever sees.
+        item["_from_position"] = position
         items.append(item)
     return items
 
@@ -1420,6 +1430,50 @@ def _split_joined_categories(raw):
     # One name the engine does not know makes the whole string one unknown
     # name, which is the honest thing for the unrouted report to receive.
     return [raw]
+
+
+def voided_span_ids(out, downgrades):
+    """The spans the player's authority did not cover, by their own ids.
+
+    A downgrade names a sequence POSITION (`claim:<index>:...`); a record cites
+    a SPAN id (`from_event`). This is the join between them, and it exists
+    because the two id spaces are both real and neither is the other -- the
+    lesson of the beat where a hand cited the phase graph because the payload
+    carried two fields called `event_id`.
+
+    An element that became no span contributes nothing: it addressed no ledger,
+    so no record cites it and there is nothing to void.
+    """
+    positions = downgraded_sequence_indices(downgrades)
+    if not positions:
+        return []
+    return [int(span["event_id"]) for span in _span_items(out)
+            if span.get("_from_position") in positions
+            and span.get("event_id")]
+
+
+def void_span_records(assertions, span_ids):
+    """Drop every record citing one of these spans, whichever hand wrote it.
+
+    WHOLE, which is the owner's rule: a span may have several owners
+    (`span_owners`) and voiding one hand's half while another's stands is the
+    state the rule was given to end. Every owner's record cites the same span
+    id, so one pass reaches all of them.
+
+    The walker is `prune_blocked_phase_changes` unchanged -- it already drops a
+    record whose cited event is dead, it already reads `from_event`, and the
+    deferred-phase floor calls it the same way a few lines from the caller. A
+    second walker would be a second answer to "is this record's event void".
+
+    Returns the (path, span_id) pairs dropped, for the record that tells the
+    Director what the dial refused.
+    """
+    if not span_ids or not isinstance(assertions, dict):
+        return []
+    return prune_blocked_phase_changes(
+        assertions,
+        [{"event_id": int(span_id), "status": "blocked"}
+         for span_id in span_ids])
 
 
 def _span_id_ceiling(out):

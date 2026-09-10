@@ -6968,6 +6968,24 @@ def _claim_authority_kind(claim, player_name):
     return "own_effect"
 
 
+def downgraded_sequence_indices(records):
+    """Which sequence positions a set of authority downgrades came from.
+
+    `apply_player_authority` computes this internally to move each element's
+    commitment and then discards it; the caller needs the same answer to void
+    the spans those elements became. Parsed HERE rather than at the call site
+    because `claim:<index>:<...>` is this module's spelling -- the extractor
+    writes it and the downgrade reads it -- and a second parse elsewhere is a
+    second thing to keep in step with it.
+    """
+    indices = set()
+    for record in records or []:
+        parts = str((record or {}).get("claim_id") or "").split(":")
+        if len(parts) >= 2 and parts[1].isdigit():
+            indices.add(int(parts[1]))
+    return indices
+
+
 def apply_player_authority(out, mode, player_name=None):
     """Enforce a `PlayerAuthorityMode` on one interpreted beat, in place.
 
