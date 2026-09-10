@@ -749,25 +749,23 @@ class TestASpanIsSettledOnlyWhenEveryOwnerHas:
         assert index[1]["by_hand"]["objects"]["status"] == "not_mine"
 
     def test_a_half_settled_span_stays_owed(self):
-        from agents.director_reconcile import _acquit_addressed_events
         out = {"orchestration": {
             "events_addressed": self._index({"body": "encoded",
                                              "objects": "not_mine"})}}
         omission = {"event_id": 1, "category": "attire", "subject": "Corin",
                     "change": "the belt is off"}
-        owed, acquitted, _refused = _acquit_addressed_events(
+        owed, acquitted, _refused = director._acquit_addressed_events(
             out, [omission], {})
         assert owed == [omission]
         assert acquitted == []
 
     def test_a_fully_settled_span_is_acquitted(self):
-        from agents.director_reconcile import _acquit_addressed_events
         out = {"orchestration": {
             "events_addressed": self._index({"body": "encoded",
                                              "objects": "encoded"})}}
         omission = {"event_id": 1, "category": "attire", "subject": "Corin",
                     "change": "the belt is off"}
-        owed, acquitted, _refused = _acquit_addressed_events(
+        owed, acquitted, _refused = director._acquit_addressed_events(
             out, [omission], {})
         assert owed == []
         assert len(acquitted) == 1
@@ -775,12 +773,11 @@ class TestASpanIsSettledOnlyWhenEveryOwnerHas:
     def test_a_single_owner_settles_as_it_always_did(self):
         """The fallback. A row written before `by_hand` existed, and a span
         one hand owns, both read the way they always have."""
-        from agents.director_reconcile import _acquit_addressed_events
         out = {"orchestration": {
             "events_addressed": {1: {"owner": "body", "status": "encoded"}}}}
         omission = {"event_id": 1, "category": "attire", "subject": "Corin",
                     "change": "the belt is off"}
-        owed, acquitted, _refused = _acquit_addressed_events(
+        owed, acquitted, _refused = director._acquit_addressed_events(
             out, [omission], {})
         assert owed == []
         assert len(acquitted) == 1
