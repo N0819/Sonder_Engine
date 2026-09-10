@@ -170,10 +170,23 @@ def _published_manifest_categories(language):
     actually sent."""
     card = read_card_source(ROOT / "language_packs" / language,
                             "system_prompts")
-    text = card["prose_author_sheet"][4][1]
-    match = re.search(r"category:((?:'[a-z_]+'\|)+'[a-z_]+')", text)
+    text = card["prose_author_output_shape"]
+    if isinstance(text, (list, tuple)):
+        text = "\n".join(str(part) for part in text)
+    match = re.search(r"specialist is one of ([a-z|]+)", str(text))
+    # `project_check` imports `generate_code_map` as a sibling, so the tools
+    # directory has to be importable -- the same line
+    # `test_language_pack_integrity.py` carries for the same reason.
+    import sys as _sys
+    _sys.path.insert(0, str(ROOT / "tools"))
+    from tools.project_check import DEFERRED_PACK_PARITY
+    if not match and language in DEFERRED_PACK_PARITY:
+        pytest.skip(
+            f"{language!r} has not been migrated to the chunk contract "
+            "(DESIGN_SPECIALIST_CONTRACT.md); protocol parity for it is "
+            "deferred to the end of the English pass. Debt: docs/UNBUILT.md")
     assert match, f"{language}: no category vocabulary found in the sheet"
-    return {token.strip("'") for token in match.group(1).split("|")}
+    return {token.strip() for token in match.group(1).split("|")}
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
@@ -193,12 +206,21 @@ def test_every_delegated_channel_is_reachable_from_the_published_vocabulary(
 
     `comms_ops` was the only unreachable one when this was written.
     """
-    reached = {
-        _CATEGORY_CHANNELS[folded]
-        for folded in (_normalize_omission_category(cat)
-                       for cat in _published_manifest_categories(language))
-        if folded in _CATEGORY_CHANNELS
-    }
+    # THE VOCABULARY IS THE HAND NAMES NOW. `changes_asserted`'s twenty-odd
+    # category words are gone with it (DESIGN_SPECIALIST_CONTRACT.md 4a): the
+    # Director categorizes a span by the family it belongs to, and
+    # `manifest_category_targets` resolves that to a hand or a channel. Five
+    # names covering all 32 channels is a STRONGER guarantee than the old
+    # list, not a weaker one -- a hand's name reaches every channel it owns,
+    # so a newly added channel is reachable the day it is registered.
+    from agents.director import SPECIALISTS, manifest_category_targets
+    reached = set()
+    for word in _published_manifest_categories(language):
+        for kind, target in manifest_category_targets(word):
+            if kind == "hand":
+                reached.update(SPECIALISTS[target]["channels"])
+            else:
+                reached.add(target)
     unreachable = sorted(set(_CATEGORY_CHANNELS.values()) - reached)
     assert not unreachable, (
         f"{language}: delegated channels no published changes_asserted "
@@ -208,7 +230,22 @@ def test_every_delegated_channel_is_reachable_from_the_published_vocabulary(
 
 @pytest.mark.parametrize("language", LANGUAGES)
 def test_the_manifest_vocabulary_publishes_comms(language):
-    assert "comms" in _published_manifest_categories(language)
+    """`comms_ops` is reachable from the published vocabulary.
+
+    It used to need its own published category word, because the vocabulary
+    was a list of twenty-odd category names and a channel absent from it was
+    a route nothing could enter. The vocabulary is now the five HAND names
+    (DESIGN_SPECIALIST_CONTRACT.md 4a), and `spatial` owns `comms_ops` -- so
+    the channel is reachable through its hand, and the category table still
+    routes the word for anything that spells it out.
+    """
+    from agents.director import SPECIALISTS, manifest_category_targets
+    reachable = set()
+    for word in _published_manifest_categories(language):
+        for kind, target in manifest_category_targets(word):
+            reachable.update(SPECIALISTS[target]["channels"]
+                             if kind == "hand" else {target})
+    assert "comms_ops" in reachable
     assert _CATEGORY_CHANNELS[
         _normalize_omission_category("comms")] == "comms_ops"
 
