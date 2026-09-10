@@ -947,13 +947,13 @@ def _ruling_for(name, view):
                     named.append(target)
                 if "note" not in addressed_by:
                     addressed_by.append("note")
-    # CHUNKS DISPATCH TOO, by the same categories as the manifest. A hand is
+    # SPANS DISPATCH TOO, by the same categories as the manifest. A hand is
     # addressed by any work item in its ledgers, whether the Director filed it
     # as a categorized span of the input (`chunks`) or as an asserted change
     # (`changes_asserted`) -- the second is what the first becomes when
     # `DESIGN_SPECIALIST_CONTRACT.md`'s migration finishes.
     work = list((view or {}).get("manifest") or []) \
-        + list((view or {}).get("chunks") or [])
+        + list((view or {}).get("spans") or [])
     for item in work:
         if not isinstance(item, dict):
             continue
@@ -1008,7 +1008,7 @@ def _unrouted_rulings(view):
     # quietly, which is the failure `_note_key_forms` refuses in as many
     # words. The next beat's author sees the word it used beside the names
     # that route.
-    for item in (view or {}).get("chunks") or []:
+    for item in (view or {}).get("spans") or []:
         if not isinstance(item, dict):
             continue
         category = str(item.get("category") or "").strip()

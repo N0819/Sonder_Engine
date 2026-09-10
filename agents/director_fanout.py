@@ -21,7 +21,7 @@ from world.spatial import (contact_action_ledger_index, contact_id,
 
 from .common import (communication_surface, observable_action_text,
                      scene_compact_attire)
-from .director_evidence import _chunk_items, _manifest_items
+from .director_evidence import _manifest_items, _span_items
 from .director_scopes import (
     SPECIALISTS,
     reads_dialogue,
@@ -202,7 +202,7 @@ def _resolve_beat_view(out, decls, char_actions, dice, p_name, interp,
         "manifest": _manifest_items(out, cast, scene),
         # Same work items on the resolve half: "resolve would mostly do the
         # same but for characters".
-        "chunks": _chunk_items(out),
+        "spans": _span_items(out),
         "declared_actions": declared,
         "dice": dice if isinstance(dice, list) else [],
         "player": p_name,
@@ -271,7 +271,7 @@ def _interpret_beat_view(ctx, out, p_name):
         # THE WORK ITEMS. A categorized span of the player's declaration, with
         # the id the engine gave it and the Director's note on how it should
         # resolve (`DESIGN_SPECIALIST_CONTRACT.md` 4a).
-        "chunks": _chunk_items(out),
+        "spans": _span_items(out),
         "declared_actions": declared,
         "dice": [],
         "player": p_name,
@@ -297,7 +297,7 @@ def _specialist_manifest_slice(name, view):
 
 
 
-def _specialist_chunk_slice(name, view):
+def _specialist_span_slice(name, view):
     """The numbered chunks in one specialist's categories.
 
     The same filter as `_specialist_manifest_slice` and for the same reason:
@@ -306,7 +306,7 @@ def _specialist_chunk_slice(name, view):
     """
     channels = set(SPECIALISTS[name]["channels"])
     return [
-        item for item in (view.get("chunks") or [])
+        item for item in (view.get("spans") or [])
         if any(target == name if kind == "hand" else target in channels
                for kind, target in
                manifest_category_targets(item.get("category")))
@@ -494,9 +494,9 @@ def _specialist_payload(name, ctx, sc, view, extras):
     manifest = _specialist_manifest_slice(name, view)
     if manifest:
         payload["changes_asserted"] = manifest
-    chunks = _specialist_chunk_slice(name, view)
-    if chunks:
-        payload["chunks"] = chunks
+    spans = _specialist_span_slice(name, view)
+    if spans:
+        payload["spans"] = spans
 
     rooms_index = {
         rid: str((room or {}).get("name") or rid)
@@ -891,10 +891,25 @@ def _index_addressed_events(dispatch):
         if not isinstance(state, dict) or not state.get("ran"):
             continue
         for entry in (state.get("events_resolved") or []):
-            index[int(entry["event_id"])] = {
+            answer = {
                 "owner": name, "status": entry["status"],
                 **({"reroute_to": entry["reroute_to"]}
                    if entry.get("reroute_to") else {})}
+            # ONE ENTRY PER HAND, not one per event. A span may fall into
+            # several categories and be handed to several hands, and those are
+            # not competing answers to one question -- they are completed
+            # halves, or thirds, of a single ledger. Keyed by event alone the
+            # last hand to answer overwrote the first, so a span whose wardrobe
+            # half was encoded and whose object half was not read as settled.
+            #
+            # `owner`/`status` stay on the row for the readers that want one
+            # answer (the reroute-notes builder wants whoever declined), and
+            # `by_hand` carries the whole picture for the acquittal, which is
+            # the reader that must not settle a span early.
+            row = index.setdefault(int(entry["event_id"]),
+                                   {"by_hand": {}})
+            row["by_hand"][name] = answer
+            row.update(answer)
     return index
 
 

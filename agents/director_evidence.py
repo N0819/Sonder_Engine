@@ -1323,7 +1323,7 @@ def _evidence_present(sd, omission, forms=None, *, scene=None):
 _RECONCILE_MAX_MANIFEST_ITEMS = 8
 
 
-def _chunk_items(out):
+def _span_items(out):
     """The beat's DISSECTED CHUNKS, numbered by the engine.
 
     `sequence` is the Director's decomposition of the player's (or a
@@ -1364,7 +1364,7 @@ def _chunk_items(out):
     return items
 
 
-def _chunk_id_ceiling(out):
+def _span_id_ceiling(out):
     """The highest id the chunks used, so the manifest can continue past it.
 
     ONE ID SPACE PER BEAT. During the migration a beat can carry both
@@ -1374,7 +1374,7 @@ def _chunk_id_ceiling(out):
     the manifest continues at N+1. When `changes_asserted` goes this returns
     0 for every beat and the numbering is simply 1..N.
     """
-    return len(_chunk_items(out))
+    return len(_span_items(out))
 
 
 def _manifest_items(out, cast=None, scene=None):
@@ -1405,10 +1405,10 @@ def _manifest_items(out, cast=None, scene=None):
             "category": _normalize_omission_category(item.get("category")),
             "subject": str(item.get("subject") or "").strip(),
             "change": change, "evidence": "", "source": "manifest",
-            # CONTINUES PAST THE CHUNKS, see `_chunk_id_ceiling`: one id space
+            # CONTINUES PAST THE SPANS, see `_span_id_ceiling`: one id space
             # per beat, so a record's `from_event` is never ambiguous about
             # which list it points into.
-            "event_id": _chunk_id_ceiling(out) + len(items) + 1,
+            "event_id": _span_id_ceiling(out) + len(items) + 1,
         }
         # Preserve the historical public manifest shape for every non-contact
         # change; endpoint keys exist only when the model actually supplied
@@ -1431,7 +1431,7 @@ def _manifest_items(out, cast=None, scene=None):
     # entries and used to restart at 1, which silently undid the chunk offset
     # above -- ids have to be dense AND in the beat's one id space.
     items = _fold_derived_manifest_events(items, cast, scene,
-                                          start=_chunk_id_ceiling(out) + 1)
+                                          start=_span_id_ceiling(out) + 1)
     # NO CLAMP. Until 2026-09-07 this returned the first eight: items 9+
     # were dispatched to no hand, sliced into no specialist view and
     # checked against no evidence, so a busy beat's later changes were the

@@ -14,11 +14,11 @@
 | `agents/director.py` | 5264 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 477 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 1579 |  | `agents.common`, `agents.director_lingua`, `llm`, `story.character_schema`, `world.spatial` |
-| `agents/director_fanout.py` | 1093 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
+| `agents/director_fanout.py` | 1108 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 2066 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 1453 |  | `agents.director_lingua`, `story.character_schema`, `world.spatial` |
-| `agents/director_reconcile.py` | 594 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story`, `world.spatial` |
+| `agents/director_reconcile.py` | 605 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story`, `world.spatial` |
 | `agents/director_scopes.py` | 1119 |  | `agents.director_lingua`, `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 706 |  | `agents.common`, `story.character_schema`, `story.scene`, `world.background_claims` |
 | `agents/dramaturge.py` | 348 |  | `core.db`, `core.logging_utils` |
@@ -310,13 +310,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `_specialist_payload()` | 426 | 335 lines |
-| `_orchestration_scope_backstop()` | 939 | 155 lines |
+| `_orchestration_scope_backstop()` | 954 | 155 lines |
 | `_resolve_beat_view()` | 75 | 151 lines |
 | `_resolved_event_verdicts()` | 826 | 53 lines |
 | `_interpret_beat_view()` | 228 | 52 lines |
 | `_beat_rooms()` | 347 | 40 lines |
 | `_anchor_names()` | 389 | 35 lines |
-| `_note_for()` | 316 | 30 lines |
+| `_index_addressed_events()` | 881 | 33 lines |
 
 ### `agents/director_floors.py`
 
@@ -358,8 +358,8 @@
 | `_scale_relation_conflicts()` | 213 | 107 lines |
 | `_player_claim_findings()` | 60 | 82 lines |
 | `_stamp_dialogue_articulation()` | 147 | 64 lines |
-| `_acquit_addressed_events()` | 495 | 52 lines |
-| `_route_repair_omissions()` | 555 | 40 lines |
+| `_acquit_addressed_events()` | 495 | 63 lines |
+| `_route_repair_omissions()` | 566 | 40 lines |
 | `_verify_no_referent()` | 338 | 27 lines |
 | `_deep_audit_mode()` | 48 | 11 lines |
 

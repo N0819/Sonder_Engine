@@ -723,7 +723,70 @@ class TestTheInstructionRidesOnTheEvent:
             assert "carries `note`" in sheet, name
 
 
-class TestTheChunkIsTheWorkItem:
+class TestASpanIsSettledOnlyWhenEveryOwnerHas:
+    """A span in several categories is not a routing hedge with one right
+    answer. The owner, 2026-09-10: "neither resolve overwrites the other, they
+    are both completed halves or thirds or quarters of a singular ledger."
+
+    `_index_addressed_events` keyed one owner per `event_id`, so the last hand
+    to answer overwrote the first: a span whose wardrobe half was encoded and
+    whose object half was not would read as fully settled, and the seam would
+    acquit it. Written BEFORE any span carries two categories, so the silent
+    loss is never possible rather than fixed after it appears.
+    """
+
+    def _index(self, answers):
+        dispatch = {
+            hand: {"ran": True,
+                   "events_resolved": [{"event_id": 1, "status": status}]}
+            for hand, status in answers.items()}
+        return director._index_addressed_events(dispatch)
+
+    def test_every_owner_is_kept_not_the_last_one(self):
+        index = self._index({"body": "encoded", "objects": "not_mine"})
+        assert set(index[1]["by_hand"]) == {"body", "objects"}
+        assert index[1]["by_hand"]["body"]["status"] == "encoded"
+        assert index[1]["by_hand"]["objects"]["status"] == "not_mine"
+
+    def test_a_half_settled_span_stays_owed(self):
+        from agents.director_reconcile import _acquit_addressed_events
+        out = {"orchestration": {
+            "events_addressed": self._index({"body": "encoded",
+                                             "objects": "not_mine"})}}
+        omission = {"event_id": 1, "category": "attire", "subject": "Corin",
+                    "change": "the belt is off"}
+        owed, acquitted, _refused = _acquit_addressed_events(
+            out, [omission], {})
+        assert owed == [omission]
+        assert acquitted == []
+
+    def test_a_fully_settled_span_is_acquitted(self):
+        from agents.director_reconcile import _acquit_addressed_events
+        out = {"orchestration": {
+            "events_addressed": self._index({"body": "encoded",
+                                             "objects": "encoded"})}}
+        omission = {"event_id": 1, "category": "attire", "subject": "Corin",
+                    "change": "the belt is off"}
+        owed, acquitted, _refused = _acquit_addressed_events(
+            out, [omission], {})
+        assert owed == []
+        assert len(acquitted) == 1
+
+    def test_a_single_owner_settles_as_it_always_did(self):
+        """The fallback. A row written before `by_hand` existed, and a span
+        one hand owns, both read the way they always have."""
+        from agents.director_reconcile import _acquit_addressed_events
+        out = {"orchestration": {
+            "events_addressed": {1: {"owner": "body", "status": "encoded"}}}}
+        omission = {"event_id": 1, "category": "attire", "subject": "Corin",
+                    "change": "the belt is off"}
+        owed, acquitted, _refused = _acquit_addressed_events(
+            out, [omission], {})
+        assert owed == []
+        assert len(acquitted) == 1
+
+
+class TestTheSpanIsTheWorkItem:
     """`sequence` becomes the four-field work item: chunk, id, note, category.
 
     `DESIGN_SPECIALIST_CONTRACT.md` 4a, and the owner's ruling on which field
@@ -736,13 +799,13 @@ class TestTheChunkIsTheWorkItem:
     points into.
     """
 
-    def test_the_engine_numbers_the_chunks(self):
+    def test_the_engine_numbers_the_spans(self):
         out = {"sequence": [
             {"type": "action", "attempt": "I pull off my belt",
              "category": "attire", "note": "belt comes off"},
             {"type": "action", "attempt": "drop it on the bench",
              "category": "entities", "note": "belt rests on the bench"}]}
-        items = director._chunk_items(out)
+        items = director._span_items(out)
         assert [i["event_id"] for i in items] == [1, 2]
         assert items[0]["note"] == "belt comes off"
 
@@ -754,37 +817,37 @@ class TestTheChunkIsTheWorkItem:
         out = {"sequence": [
             {"type": "speech", "text": "Have you seen the reeve?"},
             {"type": "action", "attempt": "I sit", "category": "poses"}]}
-        items = director._chunk_items(out)
+        items = director._span_items(out)
         assert [i["attempt"] for i in items] == ["I sit"]
         assert items[0]["event_id"] == 1
 
-    def test_the_manifest_continues_past_the_chunks(self):
+    def test_the_manifest_continues_past_the_spans(self):
         """ONE ID SPACE. Both lists live during the migration, and a record's
         `from_event` names one number -- so they cannot both start at 1."""
         out = {"sequence": [{"type": "action", "attempt": "x",
                              "category": "poses"}],
                "changes_asserted": [{"category": "attire", "subject": "Corin",
                                      "change": "the belt is off"}]}
-        assert director._chunk_items(out)[0]["event_id"] == 1
+        assert director._span_items(out)[0]["event_id"] == 1
         assert director._manifest_items(out)[0]["event_id"] == 2
 
-    def test_a_chunk_dispatches_the_hand_that_owns_its_category(self):
-        view = {"ledger_notes": {}, "manifest": [], "chunks": [
+    def test_a_span_dispatches_the_hand_that_owns_its_category(self):
+        view = {"ledger_notes": {}, "manifest": [], "spans": [
             {"category": "poses", "event_id": 1, "attempt": "I kneel",
              "note": "set her kneeling"}]}
         assert director._ruling_for("spatial", view)[0] == ["manifest"]
         assert director._ruling_for("body", view)[0] == []
 
-    def test_the_chunk_reaches_the_hand_that_owns_it(self):
-        view = {"chunks": [
+    def test_the_span_reaches_the_hand_that_owns_it(self):
+        view = {"spans": [
             {"category": "poses", "event_id": 1, "attempt": "I kneel",
              "note": "set her kneeling"},
             {"category": "attire", "event_id": 2, "attempt": "belt off",
              "note": "unequip the belt"}]}
         assert [c["event_id"] for c in
-                director._specialist_chunk_slice("spatial", view)] == [1]
+                director._specialist_span_slice("spatial", view)] == [1]
         assert [c["event_id"] for c in
-                director._specialist_chunk_slice("body", view)] == [2]
+                director._specialist_span_slice("body", view)] == [2]
 
     def test_the_interpret_view_does_not_drop_the_three_fields(self):
         """The allowlist that nearly ate them. `_interpret_beat_view` copies
@@ -799,9 +862,9 @@ class TestTheChunkIsTheWorkItem:
         span = view["declaration"]["sequence"][0]
         assert span["category"] == "poses"
         assert span["note"] == "set her kneeling"
-        assert view["chunks"][0]["event_id"] == 1
+        assert view["spans"][0]["event_id"] == 1
 
-    def test_a_chunk_nothing_answers_to_is_reported_not_guessed(self):
+    def test_a_span_nothing_answers_to_is_reported_not_guessed(self):
         """A work item in a category no hand owns is a change the engine
         cannot deliver, and the silence is the same one `_unrouted_rulings`
         was written for -- one field over.
@@ -814,7 +877,7 @@ class TestTheChunkIsTheWorkItem:
         Director's behalf and getting it wrong quietly, which is what
         `_note_key_forms` refuses in as many words.
         """
-        view = {"ledger_notes": {}, "chunks": [
+        view = {"ledger_notes": {}, "spans": [
             {"category": "geography", "event_id": 1, "attempt": "I walk out"},
             {"category": "poses", "event_id": 2, "attempt": "I kneel"}]}
         assert director._unrouted_rulings(view) == ["geography"]
@@ -926,7 +989,7 @@ class TestNoSheetAddressesACallThatCannotHappen:
     def test_a_hand_with_no_address_is_not_dispatched(self):
         """The premise. If this ever stops holding, the card above has a case
         to describe again."""
-        empty = {"ledger_notes": {}, "manifest": [], "chunks": []}
+        empty = {"ledger_notes": {}, "manifest": [], "spans": []}
         for name in director.SPECIALISTS:
             assert director._ruling_for(name, empty)[0] == [], name
 
@@ -938,7 +1001,7 @@ class TestBothHalvesEmitWorkItems:
     anything the beat made true, by anyone, rather than only the player's own
     declared conduct.
 
-    It did not have one. `_chunk_items` reads `sequence`, `DirectorResolve`
+    It did not have one. `_span_items` reads `sequence`, `DirectorResolve`
     had no such field, and the retirement of `changes_asserted` left the
     resolve author with a sheet block telling it that "the categorized spans
     of the beat are the work items every ledger is written from" and NO FIELD
@@ -957,7 +1020,7 @@ class TestBothHalvesEmitWorkItems:
             assert built.sequence[0]["category"] == "poses", model.__name__
             assert built.sequence[0]["note"], model.__name__
 
-    def test_both_beat_views_carry_chunks(self):
+    def test_both_beat_views_carry_spans(self):
         """The view is what a hand is handed. Numbered on both halves, by the
         engine, or the ids a record cites mean nothing on one of them."""
         from types import SimpleNamespace
@@ -965,15 +1028,15 @@ class TestBothHalvesEmitWorkItems:
                              "category": "poses", "note": "face you"}]}
         interpret = director._interpret_beat_view(
             SimpleNamespace(cast=[], scene=None), out, "Corin")
-        assert interpret["chunks"][0]["event_id"] == 1
+        assert interpret["spans"][0]["event_id"] == 1
 
         resolve = director._resolve_beat_view(
             out, [], {}, [], "Corin", {"sequence": []})
-        assert resolve["chunks"][0]["event_id"] == 1
-        assert resolve["chunks"][0]["note"] == "face you"
+        assert resolve["spans"][0]["event_id"] == 1
+        assert resolve["spans"][0]["note"] == "face you"
 
     def test_a_resolve_span_dispatches_by_its_category(self):
-        view = {"ledger_notes": {}, "manifest": [], "chunks": [
+        view = {"ledger_notes": {}, "manifest": [], "spans": [
             {"actor": "Maren", "attempt": "turns", "category": "poses",
              "event_id": 1, "note": "face you"}]}
         assert director._ruling_for("spatial", view)[0] == ["manifest"]
