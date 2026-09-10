@@ -1622,6 +1622,18 @@ def coerce_diff_shape(diff):
                         marks[handle] = _flatten_note(text)
                 out["conditions"] = marks
             continue
+        if name == "from_event":
+            # PROVENANCE, NOT A GARMENT. Without this arm the id lands in
+            # `notes` as an unrecognised key -- the exact "unknown keys become
+            # notes" rule two paragraphs up -- and commit then tries to
+            # resolve "from_event" against the wardrobe as a garment handle.
+            # A tolerant reader has to be told what its new fields are, or its
+            # tolerance quietly eats them.
+            try:
+                out["from_event"] = int(value)
+            except (TypeError, ValueError):
+                pass
+            continue
         if name == "coverage":
             # {garment handle: {region: [zones still covered]}}. Keep the
             # structure intact; apply_coverage_changes validates zones and

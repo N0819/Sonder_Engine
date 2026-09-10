@@ -231,8 +231,55 @@ def _normalize_diff_shape(sd):
         for _key in [k for k in rooms if str(k).strip().casefold()
                      in _OUTPUT_FIELD_NAMES]:
             rooms.pop(_key, None)
+    # A PROVENANCE ID OF ZERO IS NOT PROVENANCE. `from_event` is declared on
+    # every typed delegated record so validation cannot strip it (typed models
+    # drop what they do not declare), which means an unset one serialises as
+    # `from_event: 0` on EVERY record in the diff -- and the diff is what gets
+    # stored, archived and checkpointed. That is the same noise
+    # `_manifest_items` refuses when it adds an endpoint key "only when the
+    # model actually supplied them, rather than four empty strings appearing
+    # on every item".
+    #
+    # Non-zero ids survive untouched, so reconciliation still reads them; a
+    # record that answered no numbered work item comes out looking exactly as
+    # it did before the field existed.
+    _drop_zero_provenance(sd)
     sd.setdefault("time", None)
     return sd
+
+
+def _without_provenance(value, depth=0):
+    """A copy of a channel value with every `from_event` removed.
+
+    For COMPARING two spellings of the same content. A hand stamps the chunk
+    it resolved and the stage author never does, so an author and a hand that
+    emitted the identical record differ by construction once provenance
+    exists -- and the orchestration backstop, which asks whether the author
+    put CONTENT somewhere it was told not to, would report that as a
+    mis-emission on every beat.
+    """
+    if depth > 4:
+        return value
+    if isinstance(value, dict):
+        return {k: _without_provenance(v, depth + 1)
+                for k, v in value.items() if k != "from_event"}
+    if isinstance(value, list):
+        return [_without_provenance(v, depth + 1) for v in value]
+    return value
+
+
+def _drop_zero_provenance(value, depth=0):
+    """Remove `from_event: 0` wherever it appears in a diff."""
+    if depth > 4:
+        return
+    if isinstance(value, dict):
+        if value.get("from_event") in (0, "0", None) and "from_event" in value:
+            value.pop("from_event", None)
+        for inner in list(value.values()):
+            _drop_zero_provenance(inner, depth + 1)
+    elif isinstance(value, list):
+        for inner in value:
+            _drop_zero_provenance(inner, depth + 1)
 
 
 def _is_blank_placeholder(entry):
@@ -873,6 +920,41 @@ def _subject_is_somewhere(sd, scene, subject, hits, forms=None):
     return False
 
 
+def _cited_event_ids(sd):
+    """Every chunk id the diff's own records claim to be resolving.
+
+    Walks the merged diff and collects `from_event` wherever a record carries
+    one, at any of the three shapes a delegated channel takes: a record dict
+    keyed by subject, a list of ops, or a dict of lists.
+
+    This is the id half of `DESIGN_SPECIALIST_CONTRACT.md` section 4b. A hand
+    that names the chunk it resolved makes reconciliation an exact lookup;
+    everything below this still runs unchanged for records that name nothing,
+    which is every record written before the field existed and every standing
+    record refreshed on its own account.
+    """
+    found = set()
+
+    def walk(value, depth=0):
+        if depth > 3:
+            return
+        if isinstance(value, dict):
+            raw = value.get("from_event")
+            if isinstance(raw, (int, float)) and int(raw) > 0:
+                found.add(int(raw))
+            for inner in value.values():
+                walk(inner, depth + 1)
+        elif isinstance(value, list):
+            for inner in value:
+                walk(inner, depth + 1)
+
+    for channel, content in (sd or {}).items():
+        if channel in ("phase_sources", "resolved_events", "notes"):
+            continue
+        walk(content)
+    return found
+
+
 def _evidence_present(sd, omission, forms=None, *, scene=None):
     """CATEGORY-AWARE evidence check: is the omission's subject touched in
     the RIGHT dimension of the diff, not merely mentioned somewhere? This is
@@ -885,6 +967,24 @@ def _evidence_present(sd, omission, forms=None, *, scene=None):
     classes read it (see `_subject_is_somewhere`). Omitted, those two keep
     their old, looser answer -- so a caller that has no scene degrades to the
     behaviour it had rather than to a wrong one."""
+    # THE ID WINS WHEN THERE IS ONE. A record that names the chunk it
+    # resolves has settled the question by construction, and no comparison of
+    # two spellings of the same change can improve on it. Measured
+    # 2026-09-09 (`tools/echo_derivable.py`): the text-based check below
+    # disagrees with the hands' own verdicts on 29.8% of 329 events, which is
+    # the distance between a conservative verifier and an oracle. An id has no
+    # such distance.
+    #
+    # Additive on purpose: a record naming nothing falls through to exactly
+    # the check that ran before, so this is safe to land ahead of the
+    # `sequence` migration rather than with it.
+    try:
+        wanted = int(omission.get("event_id") or 0)
+    except (TypeError, ValueError):
+        wanted = 0
+    if wanted and wanted in _cited_event_ids(sd):
+        return True
+
     category = _normalize_omission_category(omission.get("category"))
     subject = omission.get("subject")
     hits = _make_subject_hit(subject, forms)

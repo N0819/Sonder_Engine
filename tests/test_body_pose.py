@@ -45,15 +45,24 @@ def _scene():
 
 class TestSchemaAndOpening:
     def test_pose_round_trips_through_both_director_schemas(self):
+        # `from_event` is dropped before comparing: every delegated record type
+        # declares it so a hand's provenance survives validation
+        # (DESIGN_SPECIALIST_CONTRACT.md 4b), and an unset one dumps as 0. The
+        # claim here is that a pose's OWN fields survive both schemas, which a
+        # field the fixture never set does not bear on.
+        def _posed(dumped):
+            return {who: {k: v for k, v in rec.items() if k != "from_event"}
+                    for who, rec in dumped.items()}
+
         poses = _scene()["poses"]
-        assert StateDiff(poses=poses).dict()["poses"] == poses
-        assert DirectorEstablish(poses=poses).dict()["poses"] == poses
+        assert _posed(StateDiff(poses=poses).dict()["poses"]) == poses
+        assert _posed(DirectorEstablish(poses=poses).dict()["poses"]) == poses
         report = validate_llm_output_strict("director_resolve", {
             "resolved_event": "Ivo remains pinned beneath Mara.",
             "state_diff": {"poses": poses},
         })
         assert report.valid, report.errors
-        assert report.output["state_diff"]["poses"] == poses
+        assert _posed(report.output["state_diff"]["poses"]) == poses
 
     def test_legacy_opening_posture_seeds_durable_pose(self):
         out = {

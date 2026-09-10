@@ -1243,7 +1243,11 @@ class TestAScalarWhereAnObjectWasDeclared:
             "posture": "kneeling", "support": "the floor",
             "relative_to": "Vesk", "relation": "beneath",
             "constraint": "pinned", "detail": "one hand braced"}})
-        assert poses["Mara"] == {
+        # `from_event` omitted: a record type declares it so a hand's
+        # provenance survives validation, and an unset one dumps as 0. What
+        # this test is about is that the long spelling is not rewritten.
+        assert {k: v for k, v in poses["Mara"].items()
+                if k != "from_event"} == {
             "posture": "kneeling", "support": "the floor",
             "relative_to": "Vesk", "relation": "beneath",
             "constraint": "pinned", "detail": "one hand braced"}

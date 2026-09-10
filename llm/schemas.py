@@ -1337,6 +1337,8 @@ class DirectorInterpret(LenientModel):
 # ---- Scene Entities ----
 
 class SceneEntityDef(LenientModel):
+    # See the canonical note on `PoseEntry.from_event`.
+    from_event: int = 0
     name: str
     kind: str = "object"
     description: str = ""
@@ -1405,6 +1407,8 @@ class SceneEntityDef(LenientModel):
     scent: Optional[str] = None
 
 class RoomDef(LenientModel):
+    # See the canonical note on `PoseEntry.from_event`.
+    from_event: int = 0
     name: str = ""
     desc: str = ""
     adjacent: list[dict] = Field(default_factory=list)
@@ -1742,6 +1746,8 @@ class CommsOp(LenientModel):
     replacement snapshot; `open`/`close` flip the switch without restating who
     is on it; `remove` takes the equipment out of the world.
     """
+    # See the canonical note on `PoseEntry.from_event`.
+    from_event: int = 0
 
     _subject_field = "id"
 
@@ -1778,6 +1784,26 @@ class PoseEntry(LenientModel):
     against. Extra keys are ignored rather than refused, as everywhere else
     here -- `_clean_pose` keeps these six regardless.
     """
+    # WHICH CHUNK THIS RECORD RESOLVES -- the `event_id` of the entry in this
+    # hand's `changes_asserted` slice that it was asked to settle, or 0 when
+    # the record was restated for no numbered work item (a standing record
+    # refreshed on its own account, which is legitimate and common on
+    # record-shaped channels).
+    #
+    # Provenance ON THE RECORD, not beside it. `phase_sources` already carries
+    # the same information as a separate map and is emitted on 25% of
+    # productive calls -- 68% of `encoded` claims cited, and never once by
+    # `director_social` across 91 calls (`tools/provenance_coverage.py`),
+    # because a structure filled in ALONGSIDE the work is a second thing to
+    # remember and gets forgotten. A field inside the object the model is
+    # already composing does not.
+    #
+    # What it unblocks: reconciliation currently proves an entry was encoded
+    # by matching endpoint TEXT against the diff (`director_evidence` around
+    # 1074-1098), which is why `changes_asserted` carries ten endpoint fields
+    # it would otherwise not need. An id makes that an exact lookup.
+    # See `docs/design/DESIGN_SPECIALIST_CONTRACT.md` sections 4a and 4b.
+    from_event: int = 0
 
     _subject_field = "posture"
 
@@ -1818,6 +1844,8 @@ class CrowdOp(LenientModel):
     display name and never model-invented. Leaving it empty on `set` is how a
     NEW crowd is asked for -- commit mints the id, the model never does.
     """
+    # See the canonical note on `PoseEntry.from_event`.
+    from_event: int = 0
     op: str = "set"           # set | move | split | disperse | emerge | absorb
     crowd_id: str = ""
     # Who stepped out of it, or who is going back in. Never a cast member: a
@@ -1905,6 +1933,8 @@ class AttireDiff(LenientModel):
     and not fatal. `notes` is where an unrecognised key lands so commit can
     resolve its handle against the wardrobe (attire.coerce_diff_shape).
     """
+    # See the canonical note on `PoseEntry.from_event`.
+    from_event: int = 0
     wearing: Optional[list[str]] = None
     add: list[str] = Field(default_factory=list)
     remove: list[str] = Field(default_factory=list)
@@ -2000,6 +2030,8 @@ class CharterPublicEvidence(LenientModel):
     metadata from that source after validation, so none of those facts are
     model-authoritative here.
     """
+    # See the canonical note on `PoseEntry.from_event`.
+    from_event: int = 0
     source_id: str = ""
     speech_acts: list[PublicSpeechAct] = Field(default_factory=list)
     salience: float = 0.5
@@ -2086,6 +2118,8 @@ class TellingOp(LenientModel):
     this beat, and shares a room with the listener; the copy then arrives one
     retelling fainter through `degradation`.
     """
+    # See the canonical note on `PoseEntry.from_event`.
+    from_event: int = 0
     speaker: str = ""
     listener: str = ""
     world_event_id: str = ""
@@ -2109,6 +2143,8 @@ class CourierOp(LenientModel):
     are refused unless the named body is in the room the courier is actually
     in, because a route is cut where the rider rides.
     """
+    # See the canonical note on `PoseEntry.from_event`.
+    from_event: int = 0
     op: str = "send"          # send | question | silence
     courier_id: str = ""      # engine-minted uid; required for question/silence
     sender: str = ""          # registered character whose hands it starts in
@@ -2150,6 +2186,8 @@ class ArtifactOp(LenientModel):
     the artifact equivalent of silencing a courier. `artifact_id` is an
     engine-minted uid perception showed, exactly like a courier's.
     """
+    # See the canonical note on `PoseEntry.from_event`.
+    from_event: int = 0
     op: str = "post"          # post | read | remove
     artifact_id: str = ""     # engine-minted uid; required for read/remove
     poster: str = ""          # post: registered character whose hands nail it up
