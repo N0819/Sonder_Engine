@@ -255,7 +255,10 @@ def _interpret_beat_view(ctx, out, p_name):
             "speech": out.get("speech"),
             "movement": out.get("movement"),
         },
-        "manifest": [],
+        # Numbered by the engine from this stage's own ruling, exactly
+        # as the resolve view does. It was `[]` here, so no interpret
+        # beat could ever address a hand by category.
+        "manifest": _manifest_items(out, ctx.cast, getattr(ctx, "scene", None)),
         "declared_actions": declared,
         "dice": [],
         "player": p_name,

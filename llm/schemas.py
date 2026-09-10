@@ -1195,6 +1195,43 @@ class OtherPlayerInterpret(LenientModel):
         lambda cls, v: normalize_speech_volume(v)
     )
 
+class AssertedChange(LenientModel):
+    """One entry of director_resolve's own changes-asserted manifest: a
+    persistent physical change its resolved_event asserts as completed,
+    beyond the player's supplied authority_claims. Reconciled against the
+    state_diff deterministically (see agents/director.py's seam)."""
+    # rooms|adjacency|positions|entities|conditions|attire|contact|substance|inventory|
+    # cast_changes|time|transit|other
+    category: str = "other"
+    # Assigned by the engine in _manifest_items, never by the model: 1..N in
+    # the order the resolve narrated the changes, which is the beat's own
+    # chronology. Carried into each specialist's manifest slice and echoed
+    # back on its resolved_events, so composition is an id lookup rather
+    # than a comparison of two spellings of the same change (design note 21).
+    event_id: int = 0
+    subject: str = ""         # room id / entity id / character name concerned
+    change: str = ""          # one short sentence stating the persistent change
+    # Contact manifests need the relation's endpoints, not merely one person.
+    # Without them, two simultaneous contacts involving the same actor are
+    # indistinguishable: a correctly encoded hand-on-hip could falsely prove a
+    # separately asserted nozzle-to-valve contact was also encoded. Optional for
+    # every non-contact category and for compatibility with saved variants.
+    actor: str = ""
+    actor_part: str = ""
+    target: str = ""
+    target_part: str = ""
+    # Contact-effect manifests carry the parent relation and effect fields so
+    # reconciliation can distinguish two dynamics by the same participant.
+    contact_ref: Any = None
+    action: str = ""
+    intensity: str = ""
+    rhythm: str = ""
+    detail: str = ""
+    substance: str = ""
+    placement: str = ""
+    target_interior: str = ""
+
+
 class DirectorInterpret(LenientModel):
     kind: str = "mixed"
     # The ruling channel, mirroring DirectorResolve. `director_interpret` fans
@@ -1203,6 +1240,21 @@ class DirectorInterpret(LenientModel):
     # Director made of it -- the exact gap the channel was built to close,
     # on half the Director's specialist work.
     ledger_notes: dict[str, str] = Field(default_factory=dict)
+    # THE OTHER HALF OF THE RULING, mirroring DirectorResolve for the same
+    # reason `ledger_notes` above does. `ledger_notes` says WHICH HAND a beat
+    # concerns; `changes_asserted` says WHAT CHANGED, in categories the engine
+    # routes (`director_scopes._CATEGORY_CHANNELS`). Only the second can be
+    # dispatched on deterministically, and interpret had only the first.
+    #
+    # Measured 2026-09-09 over 416 captured rulings: `changes_asserted` was
+    # absent from 69.2% of them and from 100% of 184 interpret outputs, because
+    # the field did not exist here. Replayed through the real dispatch
+    # predicate, routing on categories alone would have skipped 178 hands that
+    # had produced real work -- 96% of them on beats with no manifest at all.
+    # The player's declared conduct IS a set of asserted changes: this stage is
+    # not a lesser authority than resolve, it is the same authority scoped to
+    # the player's input, exactly as the `state_diff` note below says.
+    changes_asserted: list[AssertedChange] = Field(default_factory=list)
     sequence: list[dict] = Field(default_factory=list)
     speech: Optional[str] = None
     speech_volume: SpeechVolume = SpeechVolume.normal
@@ -2343,42 +2395,6 @@ class OmittedThought(LenientModel):
     subject: str = ""   # whose interior it was
     thought: str = ""   # one short phrase; never rendered to a player
 
-
-class AssertedChange(LenientModel):
-    """One entry of director_resolve's own changes-asserted manifest: a
-    persistent physical change its resolved_event asserts as completed,
-    beyond the player's supplied authority_claims. Reconciled against the
-    state_diff deterministically (see agents/director.py's seam)."""
-    # rooms|adjacency|positions|entities|conditions|attire|contact|substance|inventory|
-    # cast_changes|time|transit|other
-    category: str = "other"
-    # Assigned by the engine in _manifest_items, never by the model: 1..N in
-    # the order the resolve narrated the changes, which is the beat's own
-    # chronology. Carried into each specialist's manifest slice and echoed
-    # back on its resolved_events, so composition is an id lookup rather
-    # than a comparison of two spellings of the same change (design note 21).
-    event_id: int = 0
-    subject: str = ""         # room id / entity id / character name concerned
-    change: str = ""          # one short sentence stating the persistent change
-    # Contact manifests need the relation's endpoints, not merely one person.
-    # Without them, two simultaneous contacts involving the same actor are
-    # indistinguishable: a correctly encoded hand-on-hip could falsely prove a
-    # separately asserted nozzle-to-valve contact was also encoded. Optional for
-    # every non-contact category and for compatibility with saved variants.
-    actor: str = ""
-    actor_part: str = ""
-    target: str = ""
-    target_part: str = ""
-    # Contact-effect manifests carry the parent relation and effect fields so
-    # reconciliation can distinguish two dynamics by the same participant.
-    contact_ref: Any = None
-    action: str = ""
-    intensity: str = ""
-    rhythm: str = ""
-    detail: str = ""
-    substance: str = ""
-    placement: str = ""
-    target_interior: str = ""
 
 class DirectorResolve(LenientModel):
     resolved_event: str = ""
@@ -4905,6 +4921,13 @@ OUTPUT_EXAMPLES = {
         # this declaration bears on, keyed by the hand or by a channel it
         # owns. Omit a specialist the declaration does not bear on.
         "ledger_notes": {},
+        # The other half of the ruling: one entry per persistent change the
+        # declaration asserts as already done, under the ledger it belongs in.
+        # Empty here for the same reason `ledger_notes` is -- this example is
+        # the SHAPE, not a worked beat -- but present, because a key absent
+        # from the object a repaired call imitates reads as no part of the
+        # answer, which is this table's whole argument.
+        "changes_asserted": [],
         "other_players": {},
         "location_query": None,
         "flow": {
