@@ -13,8 +13,8 @@
 | `agents/composer.py` | 4886 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 5234 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 477 |  | `story.character_schema`, `world.spatial` |
-| `agents/director_evidence.py` | 1410 |  | `agents.common`, `agents.director_lingua`, `llm`, `story.character_schema`, `world.spatial` |
-| `agents/director_fanout.py` | 1051 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
+| `agents/director_evidence.py` | 1418 |  | `agents.common`, `agents.director_lingua`, `llm`, `story.character_schema`, `world.spatial` |
+| `agents/director_fanout.py` | 1062 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 2066 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 1453 |  | `agents.director_lingua`, `story.character_schema`, `world.spatial` |
@@ -47,7 +47,7 @@
 | `llm/prompts.py` | 528 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 4142 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
-| `llm/schemas.py` | 5951 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `llm/schemas.py` | 5978 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2434 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 398 |  | — |
@@ -297,22 +297,22 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `_evidence_present()` | 876 | 341 lines |
-| `_fold_derived_manifest_events()` | 1322 | 89 lines |
+| `_fold_derived_manifest_events()` | 1330 | 89 lines |
 | `_merge_repair_into_diff()` | 537 | 80 lines |
 | `_omission_subject_encoded()` | 758 | 57 lines |
+| `_manifest_items()` | 1226 | 55 lines |
 | `_interpret_coverage_corpus()` | 93 | 53 lines |
 | `_subject_is_somewhere()` | 827 | 47 lines |
-| `_manifest_items()` | 1226 | 47 lines |
 | `_strip_blank_diff_placeholders()` | 260 | 42 lines |
 
 ### `agents/director_fanout.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_specialist_payload()` | 398 | 321 lines |
-| `_orchestration_scope_backstop()` | 897 | 155 lines |
+| `_specialist_payload()` | 398 | 332 lines |
+| `_orchestration_scope_backstop()` | 908 | 155 lines |
 | `_resolve_beat_view()` | 75 | 148 lines |
-| `_resolved_event_verdicts()` | 784 | 53 lines |
+| `_resolved_event_verdicts()` | 795 | 53 lines |
 | `_interpret_beat_view()` | 225 | 43 lines |
 | `_beat_rooms()` | 319 | 40 lines |
 | `_anchor_names()` | 361 | 35 lines |
@@ -657,12 +657,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `preprocess_llm_output()` | 4519 | 336 lines |
+| `preprocess_llm_output()` | 4540 | 336 lines |
 | `_lenient_coerce()` | 786 | 159 lines |
-| `validate_llm_output_strict()` | 5819 | 133 lines |
-| `semantic_output_errors()` | 5550 | 108 lines |
-| `canonicalize_prose_markup()` | 4324 | 102 lines |
-| `_uncross_concealed_speech()` | 4448 | 69 lines |
+| `validate_llm_output_strict()` | 5846 | 133 lines |
+| `semantic_output_errors()` | 5577 | 108 lines |
+| `canonicalize_prose_markup()` | 4345 | 102 lines |
+| `_uncross_concealed_speech()` | 4469 | 69 lines |
 | `_coerce_station_table()` | 85 | 65 lines |
 | `_coerce_list_valued_map()` | 152 | 57 lines |
 
