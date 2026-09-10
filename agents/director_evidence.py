@@ -925,12 +925,216 @@ def _subject_is_somewhere(sd, scene, subject, hits, forms=None):
     return False
 
 
+def _record_place(path, channel, record, sd, sc):
+    """WHERE this record happens, as a token, or None when the engine cannot
+    say.
+
+    Stated per channel from what the engine issues, never from prose:
+
+      * an edge is the doorway it describes -- `way:<a>|<b>`, sorted, so the
+        two mirrored edges of one doorway produce ONE token;
+      * a room record is that room;
+      * anything keyed by a subject the scene places -- an entity, a body -- is
+        the room it stands in;
+      * everything else is None, and pairs with nothing.
+
+    The scene is read for placement rather than the diff, then the diff over
+    it, so a subject this beat moved pairs where it now IS.
+    """
+    from world.spatial import passage_id_for
+
+    parts = str(path or "").split(".")
+    if channel == "rooms" and len(parts) >= 3 and "adjacent" in parts[2]:
+        target = str((record or {}).get("to") or "").strip()
+        if len(parts) >= 2 and target:
+            return "way:" + passage_id_for(parts[1], target)
+    if channel == "rooms" and len(parts) == 2:
+        return "room:" + parts[1]
+    if len(parts) >= 2:
+        subject = parts[1].split("[")[0]
+        for source in ((sd or {}).get("positions"),
+                       (sc or {}).get("positions")):
+            if isinstance(source, dict):
+                room = source.get(subject)
+                if isinstance(room, str) and room.strip():
+                    return "room:" + room.strip()
+        if channel == "positions" and isinstance(record, str) \
+                and record.strip():
+            return "room:" + record.strip()
+    return None
+
+
+def span_pairings(sd, sc=None):
+    """Each span's records, grouped by the place they happen.
+
+    `{span_id: {place_token: [(path, channel, record), ...]}}`, and a record
+    the engine cannot place is left out rather than parked under a guess.
+
+    This is the join the folds in this tree never had. Every one of them
+    matches on a name, an alias or a head noun -- `resolve_garment('coat',
+    ['coat rack'])` matches on the head noun, as its own comment admits --
+    because until the span id existed there was nothing else to match on.
+    Span plus place is two engine-issued facts, and it narrows an identity
+    question from the whole scene to one event in one place.
+    """
+    out = {}
+    for span_id, rows in span_records(sd).items():
+        placed = {}
+        for path, channel, record in rows:
+            token = _record_place(path, channel, record, sd, sc)
+            if token:
+                placed.setdefault(token, []).append((path, channel, record))
+        if placed:
+            out[span_id] = placed
+    return out
+
+
+def span_colocations(sd, sc=None):
+    """Each span's records grouped by the ROOM they happen in or border.
+
+    `{span_id: {room_id: [(path, channel, record), ...]}}`. A way belongs to
+    both rooms it joins, because a doorway is in each of them -- which is what
+    lets the thing standing in a room meet the doorway it was fitted to.
+
+    The coarser sibling of `span_pairings`, and the one a reconciler wants: a
+    padlock in the forge and the forge door are one event in one place, and
+    until the span id and this grouping existed there was no way to ask that
+    question except by matching their names.
+    """
+    grouped = {}
+    for span_id, places in span_pairings(sd, sc).items():
+        rooms = {}
+        for token, rows in places.items():
+            if token.startswith("room:"):
+                rooms.setdefault(token[5:], []).extend(rows)
+            elif token.startswith("way:"):
+                for room in token[4:].split("|"):
+                    if room:
+                        rooms.setdefault(room, []).extend(rows)
+        if rooms:
+            grouped[span_id] = rooms
+    return grouped
+
+
+def span_result_findings(sd, spans, dispatch, owners_of):
+    """What does not add up about each span's assembled result.
+
+    `spans` is this stage's work items, `dispatch` the per-hand record carrying
+    `events_resolved`, and `owners_of` the callable that says which hands own a
+    span (`span_owners` -- passed in rather than imported, because
+    `director_scopes` owns that table and this module must not grow a second
+    opinion about it).
+
+    Returns a list of `{event_id, kind, hand, detail}`, most specific first.
+    Empty is the ordinary beat.
+    """
+    by_span = span_records(sd)
+    channel_owner = {}
+    for hand, state in (dispatch or {}).items():
+        for channel in (state or {}).get("channels") or ():
+            channel_owner[str(channel)] = hand
+
+    findings = []
+    for span in (spans or []):
+        if not isinstance(span, dict):
+            continue
+        try:
+            span_id = int(span.get("event_id") or 0)
+        except (TypeError, ValueError):
+            continue
+        if span_id <= 0:
+            continue
+        owners = [hand for hand in (owners_of(span) or [])]
+        rows = by_span.get(span_id) or []
+        wrote = {}
+        for _path, channel, _record in rows:
+            hand = channel_owner.get(str(channel))
+            wrote.setdefault(hand, []).append(_path)
+
+        for hand, paths in wrote.items():
+            if hand is None:
+                findings.append({
+                    "event_id": span_id, "kind": "unowned_channel",
+                    "hand": None, "detail": sorted(paths)[:4]})
+            elif hand not in owners:
+                findings.append({
+                    "event_id": span_id, "kind": "written_by_non_owner",
+                    "hand": hand, "detail": sorted(paths)[:4]})
+
+        for hand in owners:
+            state = (dispatch or {}).get(hand) or {}
+            if not state.get("ran"):
+                continue
+            verdict = ""
+            for row in state.get("events_resolved") or []:
+                if isinstance(row, dict) and row.get("event_id") == span_id:
+                    verdict = str(row.get("status") or "")
+            if verdict in ("encoded",) and hand not in wrote:
+                findings.append({
+                    "event_id": span_id, "kind": "settled_and_silent",
+                    "hand": hand, "detail": verdict})
+            elif not verdict and hand not in wrote:
+                findings.append({
+                    "event_id": span_id, "kind": "owned_and_untouched",
+                    "hand": hand, "detail": ""})
+    return findings
+
+
+def span_records(sd):
+    """THE SPAN'S RESULT: every record citing each span, with where it lives.
+
+    Returns `{span_id: [(path, channel, record), ...]}`, path being the dotted
+    route into the merged diff (`entities.padlock`, `rooms.forge.adjacent[0]`)
+    and channel the delegated channel it sits in -- which is what says WHICH
+    HAND wrote it, since the channel partition is disjoint.
+
+    A span routed to several hands is settled in several channels, and until
+    this existed the halves were only ever reachable one channel at a time. So
+    the folds this codebase has accumulated are all per-PAIR and all match on
+    names, aliases and head nouns; none of them could ask the question the id
+    makes exact -- *which records are this one event's outcome*.
+
+    Walks the three shapes a delegated channel takes, and no deeper (`depth >
+    3`): a record dict keyed by subject, a list of ops, and a dict of lists.
+
+    IT IDENTIFIES THE EVENT AND NOT THE OBJECT, which is the whole of what it
+    can promise. The apron and the hook both cite the span that hung one on the
+    other. Grouping by id bounds an identity question to one event's records
+    instead of the whole scene; deciding it is still the caller's, and the
+    over-merges this tree has measured are all decisions, never groupings.
+    """
+    found = {}
+
+    def walk(value, channel, path, depth=0):
+        if depth > 3:
+            return
+        if isinstance(value, dict):
+            raw = value.get("from_event")
+            if isinstance(raw, (int, float)) and not isinstance(raw, bool) \
+                    and int(raw) > 0:
+                found.setdefault(int(raw), []).append((path, channel, value))
+            for key, inner in value.items():
+                if key == "from_event":
+                    continue
+                walk(inner, channel, f"{path}.{key}" if path else str(key),
+                     depth + 1)
+        elif isinstance(value, list):
+            for index, inner in enumerate(value):
+                walk(inner, channel, f"{path}[{index}]", depth + 1)
+
+    for channel, content in (sd or {}).items():
+        if channel in ("phase_sources", "resolved_events", "notes"):
+            continue
+        walk(content, channel, str(channel))
+    return found
+
+
 def _cited_event_ids(sd):
     """Every chunk id the diff's own records claim to be resolving.
 
-    Walks the merged diff and collects `from_event` wherever a record carries
-    one, at any of the three shapes a delegated channel takes: a record dict
-    keyed by subject, a list of ops, or a dict of lists.
+    A projection of `span_records`, not a second walker: two walkers over one
+    field are how the two of them come to disagree about which shapes a channel
+    takes, and this file already carries three notes about that failure.
 
     This is the id half of `DESIGN_SPECIALIST_CONTRACT.md` section 4b. A hand
     that names the chunk it resolved makes reconciliation an exact lookup;
@@ -938,26 +1142,7 @@ def _cited_event_ids(sd):
     which is every record written before the field existed and every standing
     record refreshed on its own account.
     """
-    found = set()
-
-    def walk(value, depth=0):
-        if depth > 3:
-            return
-        if isinstance(value, dict):
-            raw = value.get("from_event")
-            if isinstance(raw, (int, float)) and int(raw) > 0:
-                found.add(int(raw))
-            for inner in value.values():
-                walk(inner, depth + 1)
-        elif isinstance(value, list):
-            for inner in value:
-                walk(inner, depth + 1)
-
-    for channel, content in (sd or {}).items():
-        if channel in ("phase_sources", "resolved_events", "notes"):
-            continue
-        walk(content)
-    return found
+    return set(span_records(sd))
 
 
 def _evidence_present(sd, omission, forms=None, *, scene=None):
