@@ -826,6 +826,73 @@ class TestTheChunkIsTheWorkItem:
         assert "AND SAY WHERE EACH SPAN LANDS" in sheet
 
 
+class TestBothHalvesEmitWorkItems:
+    """Resolve is the interpret half's structural twin, and stayed behind.
+
+    "Resolve would mostly do the same but for characters" -- so a span there is
+    anything the beat made true, by anyone, rather than only the player's own
+    declared conduct.
+
+    It did not have one. `_chunk_items` reads `sequence`, `DirectorResolve`
+    had no such field, and the retirement of `changes_asserted` left the
+    resolve author with a sheet block telling it that "the categorized spans
+    of the beat are the work items every ledger is written from" and NO FIELD
+    to write them into -- so resolve-side hands got `director_note` and
+    nothing else. This is the same defect the class two files up was written
+    for (`ledger_notes` built on the resolve half only) pointing the other
+    way, which is why it gets a guard rather than a fix.
+    """
+
+    def test_both_models_carry_the_work_item_field(self):
+        from llm.schemas import DirectorInterpret, DirectorResolve
+        span = {"actor": "Maren", "attempt": "turns to face you",
+                "category": "poses", "note": "set her facing you"}
+        for model in (DirectorInterpret, DirectorResolve):
+            built = model(sequence=[span])
+            assert built.sequence[0]["category"] == "poses", model.__name__
+            assert built.sequence[0]["note"], model.__name__
+
+    def test_both_beat_views_carry_chunks(self):
+        """The view is what a hand is handed. Numbered on both halves, by the
+        engine, or the ids a record cites mean nothing on one of them."""
+        from types import SimpleNamespace
+        out = {"sequence": [{"actor": "Maren", "attempt": "turns",
+                             "category": "poses", "note": "face you"}]}
+        interpret = director._interpret_beat_view(
+            SimpleNamespace(cast=[], scene=None), out, "Corin")
+        assert interpret["chunks"][0]["event_id"] == 1
+
+        resolve = director._resolve_beat_view(
+            out, [], {}, [], "Corin", {"sequence": []})
+        assert resolve["chunks"][0]["event_id"] == 1
+        assert resolve["chunks"][0]["note"] == "face you"
+
+    def test_a_resolve_span_dispatches_by_its_category(self):
+        view = {"ledger_notes": {}, "manifest": [], "chunks": [
+            {"actor": "Maren", "attempt": "turns", "category": "poses",
+             "event_id": 1, "note": "face you"}]}
+        assert director._ruling_for("spatial", view)[0] == ["manifest"]
+        assert director._ruling_for("social", view)[0] == []
+
+    def test_both_sheets_ask_for_the_field(self):
+        from llm.prompts import get_prompt_body, prose_author_prompt
+        assert "category, note}" in get_prompt_body("director_interpret")
+        resolve = prose_author_prompt(None)
+        assert "sequence:[{actor,attempt,category,note}]" in resolve
+        assert "SPANS ARE THE WORK ITEMS" in resolve
+
+    def test_a_resolve_span_is_reconciled_by_its_actor(self):
+        """An interpret span is the player's own and names no subject; a
+        resolve span names whose act it was, and that is what the evidence
+        check matches when the hand stamped no id."""
+        from agents.director import _subject_match_forms  # noqa: F401
+        item = {"actor": "Maren", "attempt": "turns", "category": "poses",
+                "event_id": 1, "note": "face you"}
+        filled = {**item, "change": item["note"],
+                  "subject": item.get("subject") or item.get("actor") or ""}
+        assert filled["subject"] == "Maren"
+
+
 class TestTheOpCarriesTheChunkId:
     """A record says which instruction it answers, on itself.
 
