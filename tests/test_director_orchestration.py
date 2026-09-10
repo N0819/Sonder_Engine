@@ -826,6 +826,68 @@ class TestTheChunkIsTheWorkItem:
         assert "AND SAY WHERE EACH SPAN LANDS" in sheet
 
 
+class TestTheSheetAsksForNothingUnread:
+    """A field the sheet asks for and nothing reads costs three times: the
+    sentence teaching it, the tokens writing it, and a reader's belief that it
+    matters.
+
+    `referents[].role` looked like that and IS NOT. It published six values --
+    actor / actor_possessive / target / target_possessive / instrument /
+    instrument_possessive -- and a first reading of
+    `agents.common.resolve_action_referents` found it using only `text`,
+    `entity` and `occurrence`. That reading was of a TRUNCATED view of the
+    function: line 378 reads `role` and drives the possessive form off it, and
+    cutting the field turned "takes Mara's hand with Iris' left hand" into
+    "takes Mara hand with Iris left hand". The guard below caught it, which is
+    the argument for writing the guard before the cut rather than after.
+
+    What IS dead is five sixths of the enum. The only test anywhere is
+    `"possessive" in role`, so actor / target / instrument are never
+    distinguished and the six values carry one bit. `plain|possessive`
+    satisfies the same predicate -- and so does every value the old enum had,
+    so a stored variant replayed from before this still resolves.
+    """
+
+    def test_the_referent_role_is_two_values_carrying_one_bit(self):
+        from llm.prompts import DEFAULT_PROMPTS
+        sheet = DEFAULT_PROMPTS["director_interpret"]
+        assert "role:'plain|possessive'" in sheet
+        assert "actor_possessive" not in sheet
+
+    def test_possessive_still_renders(self):
+        """The behaviour the enum actually drives, and the assertion that
+        caught the bad cut."""
+        from agents.common import resolve_action_referents
+        event = {"referents": [
+            {"text": "her", "entity": "Mara", "role": "possessive",
+             "occurrence": 1},
+            {"text": "her", "entity": "Iris", "role": "possessive",
+             "occurrence": 2},
+        ]}
+        assert resolve_action_referents(
+            "takes her hand with her left hand", event) == (
+            "takes Mara's hand with Iris' left hand")
+
+    def test_the_old_spelling_still_resolves(self):
+        """`"possessive" in role` matches every value the six-value enum had,
+        so stored variants and mid-flight reruns are unaffected."""
+        from agents.common import resolve_action_referents
+        event = {"referents": [
+            {"text": "her", "entity": "Mara", "role": "target_possessive",
+             "occurrence": 1},
+        ]}
+        assert resolve_action_referents("takes her hand", event) == \
+            "takes Mara's hand"
+
+    def test_a_plain_referent_is_not_made_possessive(self):
+        from agents.common import resolve_action_referents
+        event = {"referents": [
+            {"text": "her", "entity": "Mara", "role": "plain",
+             "occurrence": 1}]}
+        assert resolve_action_referents("takes her hand", event) == \
+            "takes Mara hand"
+
+
 class TestNoSheetAddressesACallThatCannotHappen:
     """A dispatched hand always carries something, so "you may have nothing"
     is text no running call ever needs.
