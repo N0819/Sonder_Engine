@@ -573,6 +573,55 @@ def test_at_interpret_both_halves_of_the_ruling_address(temp_db, monkeypatch):
     assert specialists["spatial"]["addressed_by"] == ["manifest"]
 
 
+class TestANoteAloneStillDispatchesAHand:
+    """`ledger_notes` stays a dispatch trigger. Design note section 3c-quater.
+
+    Section 3c proposed deleting it and letting `changes_asserted` categories
+    route everything. Measured 2026-09-09 with `tools/dispatch_survival.py`
+    against the engine's own committed output: of the 13 entries the eight
+    hands a categories-only dispatch would have skipped actually produced, 12
+    were COMMITTED -- and 11 of 11 on record-shaped channels.
+
+    The reason is structural, which is why this is a guard and not a note.
+    `changes_asserted` counts CHANGES. A record-shaped ledger (`poses`,
+    `overlays`, `conditions`, `attire`) carries the whole current state of a
+    subject and is restated every beat, so the Director correctly files no
+    manifest entry when nothing about it changed -- and the manifest therefore
+    cannot be what dispatches the hand that keeps it. `body`, whose channels
+    are ALL record-shaped, is the hand the manifest can least address and the
+    one whose empty-call rate (76%) made it the target.
+    """
+
+    def test_a_hand_named_by_a_note_alone_runs(self):
+        view = {"ledger_notes": {"body": "Hinami's flush deepens."},
+                "manifest": []}
+        assert director._ruling_for("body", view)[0] == ["note"]
+
+    def test_every_channel_the_body_hand_keeps_is_record_shaped(self):
+        """The premise of the rejection, pinned. If someone adds an
+        event-shaped channel to `body` this stops being true, and the
+        argument in section 3c-quater has to be re-read rather than
+        re-cited."""
+        from tools.narrow_interface_coverage import RECORD_SHAPED
+        from agents.director_scopes import SPECIALISTS
+        event_shaped = [c for c in SPECIALISTS["body"]["channels"]
+                        if c not in RECORD_SHAPED]
+        assert event_shaped == [], event_shaped
+
+    def test_a_manifest_cannot_reach_a_hand_whose_records_did_not_change(self):
+        """The case the corpus is full of: the Director rules that nothing
+        changed for a hand, files no manifest entry -- correctly -- and
+        addresses it by note so its records still get restated."""
+        view = {"ledger_notes": {
+                    "spatial": "No position changes; both remain at the bed."},
+                "manifest": [{"category": "contact_action", "subject": "Vexara",
+                              "change": "she settles"}]}
+        assert director._ruling_for("spatial", view)[0] == ["note"]
+        assert director._ruling_for("spatial",
+                                    {"ledger_notes": {},
+                                     "manifest": view["manifest"]})[0] == []
+
+
 class TestTheManifestSpeaksTheNoteKeysVocabulary:
     """One vocabulary, two fields, one resolver.
 
