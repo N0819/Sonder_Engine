@@ -854,6 +854,57 @@ def note_key_targets(key):
     return targets
 
 
+def manifest_category_targets(category):
+    """Every hand and channel one `changes_asserted` category addresses.
+
+    The manifest's vocabulary is the note key's vocabulary, and this is the
+    same resolver saying so. It was not, for the field's whole first life:
+    dispatch and the payload slice both read `_CATEGORY_CHANNELS` RAW, so a
+    category resolved only if it was a category-table key, spelled exactly,
+    in the right case -- while a `ledger_notes` key spelled the same way
+    resolved through hand names, channel names, plural tolerance and the
+    pack's aliases. One field's vocabulary was four times the other's, and
+    nothing said so out loud.
+
+    Measured 2026-09-09 over twelve interpret beats on gemini-3.8-flash,
+    which is the reason this exists: the author filed a manifest on 8 of 12
+    beats and used FOUR distinct category words -- `body`, `objects`,
+    `spatial`, `contact`. Three of the four reached no channel, so
+    `tools/dispatch_replay.py --filed-only` scored 8 false negatives, 100%
+    of productive calls. Not one of them was a bad ruling. Every `change`
+    string was accurate and correctly scoped; the entries simply named the
+    HAND rather than the ledger.
+
+    The model was doing what the sheet said. `director_interpret.txt` asked
+    for "`category`, one of the ledgers named above", and the only names
+    above it are the five specialists -- so the sheet taught one closed
+    vocabulary and the router accepted a different one. Given a choice
+    between teaching a second twenty-four-word vocabulary to every story and
+    letting code accept the one the sheet already teaches, this is the
+    cheaper half, and it is the half that matches what the engine is for: a
+    hand's name is a legitimate answer to "which ledger", just a coarser one.
+
+    Coarser, and that is the whole cost. A category naming a CHANNEL grants
+    that channel; a category naming a HAND grants the hand its story's
+    channels, by the rule `_dispatch_specialists` already follows for a note
+    keyed by hand alone -- "a ruling that reached it is better evidence than
+    a prediction that nothing there could change". Fail-open, as that gate is.
+
+    Widening only: the union, not the fallback, because `note_key_targets`
+    stops at the first kind that matched and `contact` matches BOTH -- the
+    hand and, through the category table, `contact_ops`. Resolving it as a
+    hand alone would have quietly dropped the one channel the manifest used
+    to name correctly.
+    """
+    targets = set(note_key_targets(category))
+    cat = str(category or "").strip().casefold()
+    cat = _ling("_OMISSION_CATEGORY_ALIASES").get(cat, cat)
+    channel = _CATEGORY_CHANNELS.get(cat)
+    if channel:
+        targets.add(("channel", channel))
+    return targets
+
+
 def _ruling_for(name, view):
     """What the Director's ruling addressed to this hand.
 
@@ -899,10 +950,14 @@ def _ruling_for(name, view):
     for item in (view or {}).get("manifest") or []:
         if not isinstance(item, dict):
             continue
-        channel = _CATEGORY_CHANNELS.get(item.get("category"))
-        if channel in own:
-            if channel not in named:
-                named.append(channel)
+        for kind, target in manifest_category_targets(item.get("category")):
+            if kind == "hand" and target != name:
+                continue
+            if kind == "channel":
+                if target not in own:
+                    continue
+                if target not in named:
+                    named.append(target)
             if "manifest" not in addressed_by:
                 addressed_by.append("manifest")
     if (view or {}).get("pressure_ticks") and "sensory_events" in own:

@@ -27,6 +27,7 @@ from .director_scopes import (
     reads_dialogue,
     _CATEGORY_CHANNELS,
     note_key_targets,
+    manifest_category_targets,
     _DELEGATED_CHANNELS,
     _LIST_DELEGATED,
     _PROSE_DUTY_SHIPPED,
@@ -274,10 +275,12 @@ def _specialist_manifest_slice(name, view):
     spellings of this filter would mean a specialist could be judged on an
     event it never received.
     """
-    channels = SPECIALISTS[name]["channels"]
+    channels = set(SPECIALISTS[name]["channels"])
     return [
         item for item in (view.get("manifest") or [])
-        if _CATEGORY_CHANNELS.get(item.get("category")) in channels
+        if any(target == name if kind == "hand" else target in channels
+               for kind, target in
+               manifest_category_targets(item.get("category")))
     ]
 
 

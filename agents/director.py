@@ -281,6 +281,7 @@ from .director_scopes import (
     _CATEGORY_CHANNELS,
     RETIRED_HANDS,
     note_key_targets,
+    manifest_category_targets,
     _LIST_DELEGATED,
     _CHANNEL_GATES,
     _CHANNEL_SPECIALISTS,
