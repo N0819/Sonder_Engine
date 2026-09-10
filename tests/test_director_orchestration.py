@@ -826,6 +826,49 @@ class TestTheChunkIsTheWorkItem:
         assert "AND SAY WHERE EACH SPAN LANDS" in sheet
 
 
+class TestNoSheetAddressesACallThatCannotHappen:
+    """A dispatched hand always carries something, so "you may have nothing"
+    is text no running call ever needs.
+
+    Dispatch is `bool(scope)` and a hand is only addressed by a `ledger_notes`
+    line, a work item in one of its categories, or a pressure tick -- and each
+    of those puts its own key in the payload. A hand that would arrive empty is
+    a hand that does not run.
+
+    Measured 2026-09-10 across every current-code run: 185 dispatched
+    specialist calls, 129 note-only, 55 note-and-work, 1 work-only, and ZERO
+    with nothing. (The owner's archive shows 796 of 1,214 arriving empty, which
+    is historical traffic from before `ledger_notes` reached the interpret
+    half -- the same trap that made an earlier reading of this look like a live
+    defect. And 17 apparently-empty calls in the current runs were
+    JSON-REPAIR retries, whose payload is `instruction`/`validation_errors`
+    and is not a dispatch at all.)
+    """
+
+    def test_the_ruling_card_does_not_offer_an_empty_beat(self):
+        from llm.prompts import specialist_prompt
+        for name in director.SPECIALISTS:
+            sheet = specialist_prompt(name,
+                                      director.SPECIALISTS[name]["channels"])
+            assert "nothing at all" not in sheet, name
+
+    def test_the_ruling_card_does_not_send_a_hand_back_to_prose(self):
+        """It told hands not to restate ledgers "from the prose" -- which they
+        have not been given since the prose left the payload."""
+        from llm.prompts import specialist_prompt
+        for name in director.SPECIALISTS:
+            sheet = specialist_prompt(name,
+                                      director.SPECIALISTS[name]["channels"])
+            assert "restating them from the prose" not in sheet, name
+
+    def test_a_hand_with_no_address_is_not_dispatched(self):
+        """The premise. If this ever stops holding, the card above has a case
+        to describe again."""
+        empty = {"ledger_notes": {}, "manifest": [], "chunks": []}
+        for name in director.SPECIALISTS:
+            assert director._ruling_for(name, empty)[0] == [], name
+
+
 class TestBothHalvesEmitWorkItems:
     """Resolve is the interpret half's structural twin, and stayed behind.
 
