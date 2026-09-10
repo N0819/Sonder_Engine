@@ -215,6 +215,26 @@ Elsewhere:
   greeting-seeded openings. Shipped, under a materially different architecture
   than proposed; its header records the deviation.
 
+The Director's fan-out — what its five specialists are FOR, which is a
+different question from how the modules are split:
+
+- [`DESIGN_SPECIALIST_CONTRACT.md`](design/DESIGN_SPECIALIST_CONTRACT.md) —
+  the intended contract (2026-09-09): a hand receives its scene-scoped world
+  state plus dissected chunks carrying a chronological id and the Director's
+  note on how each should resolve, and NOTHING of the beat's prose. Specifies
+  the target; nothing is built. Measures the inversion it is against — the
+  hands are sent the whole beat on 100% of calls and the categorized events on
+  27% — and leaves the record-shaped channel question open rather than
+  answered. Registered in [`UNBUILT.md`](UNBUILT.md) §1.1.
+- [`DESIGN_NARROW_MODEL_INTERFACE.md`](design/DESIGN_NARROW_MODEL_INTERFACE.md)
+  — the prompt/schema optimization study that preceded it. Its MEASUREMENTS
+  stand and are cited throughout the engine; most of its PROPOSALS are
+  superseded, because each assumed the hands read prose. Read its `-ter` and
+  `-quater` sections, which are the measured verdicts on its own earlier ones.
+- [`SPLIT_DIRECTOR.md`](design/SPLIT_DIRECTOR.md) — the module split of
+  `agents/director*.py`: import direction, monkeypatch targets, execution
+  order. Structure, not contract.
+
 ## `experiments/` — records of runs that cannot be repeated
 
 The models are not deterministic and the character's accumulated memory is
