@@ -14,7 +14,7 @@
 | `agents/director.py` | 5234 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 477 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 1410 |  | `agents.common`, `agents.director_lingua`, `llm`, `story.character_schema`, `world.spatial` |
-| `agents/director_fanout.py` | 1011 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
+| `agents/director_fanout.py` | 1051 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 2066 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 1453 |  | `agents.director_lingua`, `story.character_schema`, `world.spatial` |
@@ -310,13 +310,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `_specialist_payload()` | 398 | 321 lines |
-| `_orchestration_scope_backstop()` | 857 | 155 lines |
+| `_orchestration_scope_backstop()` | 897 | 155 lines |
 | `_resolve_beat_view()` | 75 | 148 lines |
+| `_resolved_event_verdicts()` | 784 | 53 lines |
 | `_interpret_beat_view()` | 225 | 43 lines |
 | `_beat_rooms()` | 319 | 40 lines |
 | `_anchor_names()` | 361 | 35 lines |
 | `_note_for()` | 288 | 30 lines |
-| `_resolved_event_verdicts()` | 767 | 30 lines |
 
 ### `agents/director_floors.py`
 
