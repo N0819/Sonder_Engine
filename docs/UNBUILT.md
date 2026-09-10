@@ -93,6 +93,20 @@ per-HAND (`ledger_notes`) rather than per-event; and the chronological ids
 never reach perception, where ordering is list position and `event_id` is used
 only as a dedupe key.
 
+**The Director is still asked to work out things code already knows.**
+`flow.reactors` asks for "every awake character who could plausibly PERCEIVE
+this beat" while perception is DETERMINISTIC and `agents/runtime.py` already
+filters the answer through a presence gate -- the sheet's own text records the
+model naming fewer reactors than witnesses on 79% of multi-witness beats, and
+the gate's comment records six `character_major` calls at 13-22s each spent on
+minds the scene placed nowhere. The paragraph is cut from 1,319 to 616 chars
+(the pacing judgement is genuinely the model's); DERIVING the list is a
+behaviour change to who speaks in every beat and wants its own measurement.
+Same shape, unmeasured: MOVEMENT DIRECTION (996 chars, and
+`world/spatial_orientation.py` owns bearing math), FOLLOWING STATE (863),
+LOCATION & SYSTEM DETECTION (589). See `DESIGN_SPECIALIST_CONTRACT.md` 4f for
+the table and the test each row has to pass.
+
 **Room minting is the one exception, and the prose removal exposed it.** The
 spatial hand authors a room's `desc`, name, anchors, `light` and `quiet` -- its
 own sheet calls `desc` "the only durable record of how this place reads" -- and
