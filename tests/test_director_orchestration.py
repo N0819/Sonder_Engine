@@ -573,6 +573,113 @@ def test_at_interpret_both_halves_of_the_ruling_address(temp_db, monkeypatch):
     assert specialists["spatial"]["addressed_by"] == ["manifest"]
 
 
+class TestTheInstructionRidesOnTheEvent:
+    """The Director's intent belongs to the EVENT, not to the hand.
+
+    `DESIGN_SPECIALIST_CONTRACT.md`: a hand's work item is a chunk carrying a
+    chronological id and a note saying how the Director wants that one
+    resolved. Before this, resolution intent existed only as `ledger_notes:
+    {specialist: line}` -- one line per HAND, aggregated across everything
+    that hand does this beat, arriving through a different channel from the
+    event it was about.
+
+    Measured 2026-09-09 on current code (`tools/instruction_coverage.py`):
+    every dispatched hand does receive some instruction -- 0% get none -- but
+    46% of calls carry a hand-level note with no numbered event beside it, so
+    the intent and its event had different coverage and no link.
+
+    `note` is OPTIONAL and stays so: an entry without one is still a routable
+    change, and the hand reads it exactly as it does today.
+    """
+
+    def test_the_shared_type_carries_the_instruction(self):
+        from llm.schemas import AssertedChange
+        entry = AssertedChange(category="pose", subject="Maren",
+                               change="Maren has turned to face you.",
+                               note="She is standing, facing you now.")
+        assert entry.note == "She is standing, facing you now."
+
+    def test_an_entry_without_one_is_still_valid(self):
+        from llm.schemas import AssertedChange
+        assert AssertedChange(category="pose", subject="Maren",
+                              change="Maren has turned.").note == ""
+
+    def test_both_halves_of_the_director_carry_it(self):
+        """`AssertedChange` is shared by both stages deliberately, so this
+        pins that the sharing still holds rather than re-testing the field."""
+        from llm.schemas import DirectorInterpret, DirectorResolve
+        for model in (DirectorInterpret, DirectorResolve):
+            built = model(changes_asserted=[
+                {"category": "pose", "subject": "Maren", "change": "turned",
+                 "note": "settle her facing you"}])
+            assert built.changes_asserted[0].note == "settle her facing you"
+
+    def test_the_instruction_reaches_the_hand_that_owns_the_event(self):
+        """The whole point: it has to survive the slice into the payload."""
+        view = {"manifest": [
+            {"category": "poses", "event_id": 1, "subject": "Maren",
+             "change": "Maren has turned to face you.",
+             "note": "She is standing, facing you now."}]}
+        sliced = director._specialist_manifest_slice("spatial", view)
+        assert sliced[0]["note"] == "She is standing, facing you now."
+
+    def test_it_survives_the_numbering_the_engine_actually_runs(self):
+        """THROUGH `_manifest_items`, not around it.
+
+        The test above hand-builds its view and so proves nothing about the
+        pipeline. `_manifest_items` rebuilds every entry as an explicit dict
+        and then copies a FIXED LIST of extra fields onto it, so a field
+        missing from that list is dropped with nothing raised and nothing
+        logged. `note` was, on the first cut of this change: the Director
+        wrote the instruction, the slice would have carried it, and the hand
+        would never have seen it.
+        """
+        out = {"changes_asserted": [
+            {"category": "pose", "subject": "Maren",
+             "change": "Maren has turned to face you.",
+             "note": "She is standing, facing you now."}]}
+        items = director._manifest_items(out)
+        assert items[0]["note"] == "She is standing, facing you now."
+        assert items[0]["event_id"] == 1
+
+    def test_an_entry_with_no_instruction_grows_no_empty_key(self):
+        """Same rule the endpoint fields follow: a key appears when the model
+        supplied one, rather than an empty string on every item."""
+        out = {"changes_asserted": [
+            {"category": "pose", "subject": "Maren", "change": "turned"}]}
+        assert "note" not in director._manifest_items(out)[0]
+
+    def test_both_prompts_ask_for_it(self):
+        """Four places, and this is two of them. A field the sheet never names
+        is a field the model never writes."""
+        from llm.prompts import get_prompt
+        interpret = get_prompt("director_interpret", "en")
+        assert "changes_asserted:[{category,subject,change,note}]" in interpret
+        from llm import prompts
+        resolve = prompts._PROSE_AUTHOR_OUTPUT_SHAPE
+        assert "changes_asserted:[{category,subject,change,note," in resolve
+
+    def test_the_output_example_shows_it(self):
+        """The third place: the object a repaired call is told to imitate.
+        `director_interpret`'s example is shape-only by its own stated
+        convention, so the worked entry lives on the resolve side."""
+        from llm.schemas import OUTPUT_EXAMPLES
+        entry = OUTPUT_EXAMPLES["director_resolve"]["changes_asserted"][0]
+        assert entry.get("note"), entry
+
+    def test_every_specialist_sheet_says_the_event_carries_it(self):
+        """The fourth place, and the one that matters most: the hand has to
+        know the instruction is there, or it reads the prose instead.
+
+        Assembled through `specialist_prompt`, which is what the hand is
+        actually sent -- a core the pack ships but the assembler drops would
+        pass a file-level check and teach nobody."""
+        from llm.prompts import specialist_prompt
+        for name in director.SPECIALISTS:
+            sheet = specialist_prompt(name, director.SPECIALISTS[name]["channels"])
+            assert "carries `note`" in sheet, name
+
+
 class TestAnEncodedClaimNeedsSomethingEncoded:
     """`encoded` from a hand whose channels are all empty is not an answer.
 

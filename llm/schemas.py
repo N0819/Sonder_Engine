@@ -1230,6 +1230,27 @@ class AssertedChange(LenientModel):
     substance: str = ""
     placement: str = ""
     target_interior: str = ""
+    # HOW THE DIRECTOR WANTS THIS ONE RESOLVED -- one line of plain authorship
+    # to the hand that owns it, attached to the EVENT rather than to the hand.
+    #
+    # `change` is a description ("one short sentence stating the persistent
+    # change"); this is an instruction. They are not the same thing, and the
+    # engine had only the first: resolution intent existed solely as
+    # `ledger_notes: {specialist: line}` -- ONE line per hand, aggregated
+    # across everything that hand does this beat.
+    #
+    # Measured 2026-09-09 on current code: every dispatched hand does get an
+    # instruction (0% receive none), but 46% of calls carry a hand-level note
+    # with no numbered event beside it, so the Director's intent and the event
+    # it is about arrive through different channels with different coverage and
+    # no link between them. Per `DESIGN_SPECIALIST_CONTRACT.md`, the work item
+    # a hand resolves is one chunk carrying its id and its instruction; this is
+    # the instruction half of that.
+    #
+    # Optional, and stays optional: an entry with no note is still a routable
+    # change, exactly as it is today. The hand falls back to the same reading
+    # it does now.
+    note: str = ""
 
 
 class DirectorInterpret(LenientModel):
@@ -5072,7 +5093,13 @@ OUTPUT_EXAMPLES = {
         # owns `poses`, and this is how the two meet.
         "changes_asserted": [
             {"category": "pose", "subject": "Maren",
-             "change": "Maren has turned from the water to face you."},
+             "change": "Maren has turned from the water to face you.",
+             # The instruction, not a second description: `change` says what is
+             # different, `note` says how the hand that owns `poses` should
+             # settle it. A key absent from the object a repaired call is told
+             # to imitate reads as not part of the answer.
+             "note": "She is standing, facing you now; her back is no longer "
+                     "to the room."},
         ],
         # THE RULING TO THE HANDS. One short line per specialist this beat
         # settled, keyed by the hand or by a channel it owns -- the channel

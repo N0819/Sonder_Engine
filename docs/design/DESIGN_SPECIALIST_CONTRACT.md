@@ -35,6 +35,25 @@ owner's, stated 2026-09-09. This note exists because
 > The Director never learns the ledger rules, because it never writes a ledger.
 > The specialists are how the Director resolves its intents onto the world.
 
+**The Director does not author prose at all.** It outputs events; the
+specialists push them to the world. `resolved_event` is not a smaller part of
+its job under this contract, it is none of it -- and it is not needed
+downstream either, because perception composes from committed structured state
+and the narrator renders from perception, never from the Director (verified:
+`agents/narration.py` reads `perception_outcome.views.player`, and the only
+mention of `resolved_event` in that module is a comment recording a past leak
+that was closed).
+
+**What the Director is FOR: how an input realistically unfolds.** Causality,
+plausibility, timing, who could interfere and how. The specialists are its
+RESOLUTION TOOLS -- the mechanism by which those judgements become world
+state. That is the test for every sentence in its sheets: a rule about what a
+valid `attire` record looks like, which endpoints a contact needs, or where a
+substance may be placed is a LEDGER rule, and belongs to the hand that owns
+the ledger. Measured today, the Director's sheets are 23.8k chars (interpret)
+and 45.7k across 29 chunks (resolve), and a large share of that is exactly
+those rules.
+
 Two consequences worth stating, because they are the point rather than side
 effects:
 
