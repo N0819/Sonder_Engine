@@ -194,6 +194,72 @@ out-of-order completion already cannot corrupt state, by construction. The ids
 are unnecessary for the state merge and unimplemented for perception, which is
 the only place they would do real work.
 
+## 4a. THE TARGET OUTPUT FORMAT, in four fields
+
+The owner, 2026-09-09, giving the shape the Director should emit -- one list,
+one entry per chunk:
+
+| field | what it is |
+|---|---|
+| the chunk | the dissected piece of player or character input itself |
+| id | the chronological id |
+| note | how the Director thinks THIS chunk should resolve |
+| category | which ledger family it belongs to |
+
+**And the Director does not need to know the specialists exist.** It is not
+choosing a hand; it is being asked to categorize its own changes. Code turns a
+category into a hand (`manifest_category_targets`, already built). That is
+section 3c's original insight, finally in the right place: 3c tried to make it
+true by DELETING the address, and was rejected because the manifest could not
+carry the dispatch. It becomes true instead by making the categorized chunk the
+only thing there is.
+
+### What this collapses
+
+Today the Director emits TWO decompositions of the same input, neither of which
+is this:
+
+- `sequence` -- the chunks, well dissected, with `type`, `attempt`,
+  `observable`, `visibility`, `conceal_from`, `targets`, `commitment`, `verb`,
+  `stage`, `intended_effects`, `asserted_effects`, `participants`,
+  `requires_contacts`, `referents`, `phase`, `phase_id`, `depends_on` -- and no
+  category and no id.
+- `changes_asserted` -- consequences rather than chunks, with `category`,
+  `event_id`, `note` (2026-09-09), `subject`, `change`, and ten endpoint fields
+  (`actor`, `actor_part`, `target`, `target_part`, `contact_ref`, `action`,
+  `intensity`, `rhythm`, `detail`, `substance`, `placement`,
+  `target_interior`).
+
+The target is one list of four-field entries. `changes_asserted` is already
+three quarters of the way there -- it has `category`, `event_id` and now `note`
+-- and what it lacks is the chunk itself: `change` is the Director's
+DESCRIPTION of a consequence, not the piece of input the hand was asked to
+settle.
+
+### What has to move, and where the risk is
+
+**The ten endpoint fields.** `actor`/`actor_part`/`target`/`target_part` exist
+because "two simultaneous contacts involving the same actor are
+indistinguishable" without them -- reconciliation matches a manifest entry
+against the diff by them. Under the four-field format the HAND derives
+endpoints from the chunk plus its own ledgers, which is exactly its scoped job
+and exactly what it already does when it reads a chunk. But reconciliation
+then loses the key it currently matches on, so `_evidence_present` needs a
+different question. That is the load-bearing piece and it is not a rename.
+
+**The record-shaped channels, again.** A four-field chunk entry is an EVENT.
+`poses`, `overlays`, `conditions`, `attire` are whole current-state records
+with frequently no chunk to hang on (section 6). Either they get a second
+instruction shape or `body` has no work items at all.
+
+**Sequencing.** `changes_asserted` is the reconciliation seam's one mechanism;
+`sequence` is read by perception, the narrator, the floors and the reaction
+loop. Neither can be replaced in one commit. The order that survives contact:
+carry the chunk on the manifest entry first (additive), verify hands resolve
+from it, then move `sequence`'s readers, then delete the second decomposition
+-- with the endpoint-matching question answered before the first step, not
+after.
+
 ## 5. What already exists to build on
 
 This is a rewire of proven mechanisms, not a green field. **The output half of
