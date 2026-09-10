@@ -57,11 +57,17 @@ Rules that keep it honest:
 Live bugs and unfinished corrections — places the engine is currently wrong,
 not places it is merely thin.
 
-### 1.1 The specialists read the beat's prose instead of instructions
+### 1.1 The specialist contract: BUILT, with two parts still open
 
-**Specified 2026-09-09 in
-[`DESIGN_SPECIALIST_CONTRACT.md`](design/DESIGN_SPECIALIST_CONTRACT.md);
-nothing built.** The owner's contract: a hand receives its scene-scoped slice
+**BUILT 2026-09-10** (`DESIGN_SPECIALIST_CONTRACT.md` section 4d). The
+Director emits one list of categorized, numbered, annotated spans; the hands
+get their scene-scoped ledgers and their work items and nothing of the beat;
+each record names the chunk it resolves. `changes_asserted` is retired -- no
+sheet asks for it, and it is still read so a stored variant from before the
+migration still reconciles. TWO PARTS REMAIN OPEN, below.
+
+The measurements that motivated it, kept because they are what the design was
+argued from: The owner's contract: a hand receives its scene-scoped slice
 of world state, plus one or more dissected chunks of player/character input,
 each carrying a chronological id and a natural-language note on how the
 Director thinks it should resolve — and nothing else. It renders those through

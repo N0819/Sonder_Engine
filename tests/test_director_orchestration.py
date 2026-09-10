@@ -801,6 +801,24 @@ class TestTheChunkIsTheWorkItem:
         assert span["note"] == "set her kneeling"
         assert view["chunks"][0]["event_id"] == 1
 
+    def test_a_chunk_nothing_answers_to_is_reported_not_guessed(self):
+        """A work item in a category no hand owns is a change the engine
+        cannot deliver, and the silence is the same one `_unrouted_rulings`
+        was written for -- one field over.
+
+        Measured 2026-09-10: with `reasoning_effort=low` on the Director the
+        category vocabulary DRIFTS. It filed `geography` twice for what
+        `spatial` owns, on a run that was otherwise clean (0 errors, 0
+        unroutable notes). Reported rather than folded onto the nearest hand:
+        a synonym table would be the engine inventing vocabulary on the
+        Director's behalf and getting it wrong quietly, which is what
+        `_note_key_forms` refuses in as many words.
+        """
+        view = {"ledger_notes": {}, "chunks": [
+            {"category": "geography", "event_id": 1, "attempt": "I walk out"},
+            {"category": "poses", "event_id": 2, "attempt": "I kneel"}]}
+        assert director._unrouted_rulings(view) == ["geography"]
+
     def test_the_sheet_asks_for_them(self):
         from llm.prompts import get_prompt
         sheet = get_prompt("director_interpret", "en")

@@ -1,8 +1,12 @@
 # The specialist contract: hands resolve instructions, not narrative
 
-**Nothing here is built; the gap is registered in
-[`UNBUILT.md`](../UNBUILT.md) §1.1, which is the authority on its status rather
-than this header.** The measurements are real and dated; the target is the
+**BUILT 2026-09-10.** The Director emits one list of categorized, numbered,
+annotated spans; the hands receive their scene-scoped ledgers and their work
+items and nothing of the beat; each record names the chunk it resolves. What
+remains open is section 6 (record-shaped channels) and section 6a (the
+room-mint agent), both registered in
+[`UNBUILT.md`](../UNBUILT.md) §1.1, which is the authority on status rather
+than this header. The measurements are real and dated; the target is the
 owner's, stated 2026-09-09. This note exists because
 `DESIGN_NARROW_MODEL_INTERFACE.md` — including the sections added the same day
 — has been optimizing *around* the gap described here rather than at it.
@@ -369,6 +373,85 @@ Three consequences:
   reporting 100% of 484 calls as productive work. A lookup that silently
   degrades to "assume the flattering answer" produces a number, and the number
   is the thing that gets quoted.
+
+## 4d. BUILT: what the three steps actually changed
+
+Landed 2026-09-09/10 in the order the owner set -- the endpoint question
+answered first, then the chunk, then the retirement.
+
+**1. The record names the chunk it resolves.** `from_event` on every typed
+delegated record, and an id-first arm in `_evidence_present`. Additive: a
+record naming nothing falls through to the check that ran before. Four things
+had to be true and three were not -- typed models strip what they do not
+declare; `AttireDiff`'s tolerant reader filed the id under `notes` as a
+garment handle; an unset id serialised as `from_event: 0` on every record in
+every stored diff; and the orchestration backstop compared provenance when it
+meant to compare content.
+
+**2. The chunk is the work item.** `sequence` carries `category`, the engine's
+`event_id`, and `note`. Chunks dispatch, slice per hand, and ride in the
+payload. One id space: chunks 1..N, the manifest continuing at N+1.
+
+**3. The second decomposition is gone.** Neither sheet asks for
+`changes_asserted`. The prose author's manifest block went 5,732 -> 2,012
+chars. The field stays on both models and is still READ, because a stored
+variant replayed from before the migration carries one and nothing else.
+
+Measured on the closing run -- 12 beats, 0 errors, 0 `changes_asserted`
+entries, 13 of 22 spans carrying a category and a note, 0 unroutable:
+
+    I pull off my sword belt     body      remove sword belt from attire
+    and drop it on the bench     objects   sword belt moved to bench
+    then sit down heavily.       spatial   update posture to seated
+
+**The leftovers, because the owner predicted them and they are the reusable
+part.** Every one was a place that copied a shape rather than reading it:
+`_fold_derived_manifest_events` renumbering from 1; `_normalize_omission_category`
+folding a missing category onto `other` (which made every line of dialogue a
+work item); `_interpret_beat_view`'s key allowlist; a sentence in
+`prose_author_sheet/12.txt` still naming endpoints on a retired field;
+`project_check` and three tests pinning the old block name; a
+published-vocabulary guard reading a category list that no longer exists.
+
+That last one ended up STRONGER. The vocabulary is now the five hand names,
+and `manifest_category_targets` resolves a hand to every channel it owns -- so
+five names reach all 32 channels, and a newly registered channel is reachable
+the day it is added rather than when somebody remembers to publish a word for
+it.
+
+## 4e. THE DIRECTOR'S REASONING MODE: 62% cheaper, and it drifts
+
+The owner asked for this to be tried across runs. Same twelve beats, same
+model, the five specialists at `low` in both arms; the only difference is the
+Director's own effort.
+
+| | Director default | Director `low` |
+|---|---|---|
+| director s/call | 169.7s total | **64.3s (-62%)** |
+| its reasoning trace | 3,220 ch | 136 ch |
+| ALL Director time | 239.6s | **117.9s (-51%)** |
+| spans categorized | 13/22 (59%) | 14/20 (70%) |
+| errors | 0 | 0 |
+| **unroutable categories** | **none** | **`geography` x2** |
+
+The saving is the largest single number in this document. The cost is precise:
+at `low` the Director's category vocabulary DRIFTS. It filed `geography` twice
+for what `spatial` owns, on a run that was otherwise clean -- and a work item
+in a category no hand answers to is a change the engine cannot deliver.
+
+**Not fixed with a synonym table.** Folding `geography` onto `spatial` would be
+the engine inventing vocabulary on the Director's behalf and getting it wrong
+quietly, which is exactly what `_note_key_forms` refuses in as many words
+("guessing that `transit` means `positions`..."). Instead `_unrouted_rulings`
+now reports an unroutable CHUNK CATEGORY the same way it has always reported an
+unroutable note key -- the next beat's author sees the word it used beside the
+names that route, and corrects itself.
+
+**So the mode is a live choice rather than a setting to flip.** With the
+reporting in place the drift is visible and self-correcting instead of silent,
+which is what makes `low` on the Director arguable at all. It is still the one
+role doing authorship rather than transcription, and this is a measurement of
+ENCODING, not of fiction: nothing here says the beats read as well.
 
 ## 5. What already exists to build on
 

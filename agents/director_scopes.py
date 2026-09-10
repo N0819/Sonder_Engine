@@ -995,6 +995,26 @@ def _unrouted_rulings(view):
             continue
         if not note_key_targets(key):
             unrouted.append(str(key))
+    # AND A WORK ITEM IN A CATEGORY NOTHING ANSWERS TO. A chunk is the beat's
+    # unit of work now, so a category that resolves to no hand is a change the
+    # engine cannot deliver -- the same silence this function was written for,
+    # one field over.
+    #
+    # Measured 2026-09-10: with `reasoning_effort=low` on the Director the
+    # category vocabulary DRIFTS -- it filed `geography` twice for what
+    # `spatial` owns, on a run that was otherwise clean. Reported rather than
+    # guessed at, deliberately: a synonym table would have the engine
+    # inventing vocabulary on the Director's behalf and getting it wrong
+    # quietly, which is the failure `_note_key_forms` refuses in as many
+    # words. The next beat's author sees the word it used beside the names
+    # that route.
+    for item in (view or {}).get("chunks") or []:
+        if not isinstance(item, dict):
+            continue
+        category = str(item.get("category") or "").strip()
+        if category and not manifest_category_targets(category):
+            if category not in unrouted:
+                unrouted.append(category)
     return unrouted
 
 
