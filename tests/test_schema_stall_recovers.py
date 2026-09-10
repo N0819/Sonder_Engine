@@ -568,7 +568,8 @@ class TestBothHalvesOfTheDirectorCarryTheRuling:
                                  prose_author_prompt)
         interpret = get_prompt_body("director_interpret") + \
             interpret_delegation_note()
-        assert "category, note}" in interpret
+        for _field in ("category", "note", "items:[]"):
+            assert _field in interpret, _field
         assert "changes_asserted" not in interpret
         assert "changes_asserted" not in prose_author_prompt(None)
 

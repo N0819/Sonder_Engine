@@ -677,7 +677,8 @@ class TestTheInstructionRidesOnTheEvent:
         from llm.prompts import get_prompt
         from llm import prompts
         interpret = get_prompt("director_interpret", "en")
-        assert "depends_on:[], category, note}" in interpret
+        for _field in ("depends_on:[]", "category", "note", "items:[]"):
+            assert _field in interpret, _field
         assert "changes_asserted" not in interpret
         assert "changes_asserted" not in prompts._PROSE_AUTHOR_OUTPUT_SHAPE
 
@@ -914,7 +915,8 @@ class TestTheSpanIsTheWorkItem:
     def test_the_sheet_asks_for_them(self):
         from llm.prompts import get_prompt
         sheet = get_prompt("director_interpret", "en")
-        assert "depends_on:[], category, note}" in sheet
+        for _field in ("depends_on:[]", "category", "note", "items:[]"):
+            assert _field in sheet, _field
         assert "AND SAY WHERE EACH SPAN LANDS" in sheet
 
 
@@ -1073,7 +1075,9 @@ class TestBothHalvesEmitWorkItems:
 
     def test_both_sheets_ask_for_the_field(self):
         from llm.prompts import get_prompt_body, prose_author_prompt
-        assert "category, note}" in get_prompt_body("director_interpret")
+        _body = get_prompt_body("director_interpret")
+        for _field in ("category", "note", "items:[]"):
+            assert _field in _body, _field
         resolve = prose_author_prompt(None)
         assert "sequence:[{actor,attempt,category,note}]" in resolve
         assert "SPANS ARE THE WORK ITEMS" in resolve
@@ -4759,3 +4763,532 @@ class TestASpansRecordsArePairedByWhereTheyHappen:
         diff = {"rooms": {"forge": {"name": "Forge", "desc": "dark",
                                     "from_event": 1}}}
         assert sorted(director.span_pairings(diff, {})[1]) == ["room:forge"]
+
+
+class TestTheBeatNumbersTheThingsItTouches:
+    """The owner, 2026-09-10: "the director main stage could also emit
+    temporary item ids for the persons places or things mentioned in input
+    that get attached to all ledgers that involve that item ... this id
+    actually never gets exposed to the specialists ... it should allow the
+    reconciliation of multiple interactions with a freshly minted object to be
+    just that."
+
+    THE GAP, and neither the span id nor place reaches it. A hand's payload is
+    built from the scene AS IT STOOD BEFORE THE BEAT, and the hands run in
+    parallel -- so a thing minted in span 1 exists for nobody, and every later
+    interaction with it is an interaction with something the acting hand cannot
+    see. Its only outcomes are to mint a second copy or decline. Only the
+    Director can supply the identity, because only the Director reads the input
+    and can say the console in the last clause is the console from the third.
+
+    A NUMBER, and the model's own. The reasons a span id must be engine-issued
+    -- dense, ordered, unique, because every downstream use assumes a dense
+    sequence -- do not carry: a temp item id need only be CONSISTENT, repeats
+    are the entire point, and skips and order mean nothing. It also removes
+    what made a string unusable: across 34 measured Director calls the same
+    model wrote `sword_belt` and `sword belt` for one object.
+
+    Measured live on the first try (gemini-3.8-flash): "I tell Sera to wait
+    here, then I step into the tardis, pull the door shut behind me, tell her
+    she can't hear me now, and pull the levers on the console" numbered Sera 1
+    across spans 1 AND 4, tardis 2 across spans 2 and 3, door 3, console 4,
+    levers 5. And "I set the crate down by the forge door, open the crate, and
+    take the mallet out of it" carried crate 1 through all three spans --
+    including the one where the input says only "it".
+    """
+
+    def _spans(self, sequence):
+        return director._span_items({"sequence": sequence})
+
+    def test_the_numbers_are_kept_and_never_reach_a_hand(self):
+        """The owner's constraint, enforced rather than asked for: they ride
+        under a leading underscore, and `_specialist_payload` already strips
+        every such key from a span. A number in a payload is a number the model
+        will try to cite -- one spent 16,180 output tokens doing exactly
+        that."""
+        span, = self._spans([
+            {"type": "action", "attempt": "I step into the tardis",
+             "category": "spatial", "note": "inside",
+             "items": [{"id": 2, "name": "tardis"}]}])
+        assert span["_items"] == [{"id": 2, "name": "tardis"}]
+        assert "items" not in span
+        assert not [k for k in director._without_private_keys(span)
+                    if str(k).startswith("_")]
+        assert "_items" not in director._without_private_keys(span)
+
+    def test_one_thing_across_several_spans_is_one_thing(self):
+        """The case it exists for. Three interactions with a crate the beat
+        itself minted, the last of them naming it only as "it"."""
+        spans = self._spans([
+            {"type": "action", "attempt": "I set the crate down",
+             "category": "objects", "note": "a",
+             "items": [{"id": 1, "name": "crate"}]},
+            {"type": "action", "attempt": "open the crate",
+             "category": "objects", "note": "b",
+             "items": [{"id": 1, "name": "crate"}]},
+            {"type": "action", "attempt": "take the mallet out of it",
+             "category": "objects", "note": "c",
+             "items": [{"id": 3, "name": "mallet"},
+                       {"id": 1, "name": "crate"}]}])
+        sd = {"entities": {
+            "crate": {"name": "crate", "from_event": 1},
+            "mallet": {"name": "mallet", "from_event": 3}}}
+        items = director.beat_item_records(sd, spans)
+        assert items[1]["name"] == "crate"
+        assert items[1]["spans"] == [1, 2, 3]
+        assert items[3]["spans"] == [3]
+
+    def test_it_gathers_what_two_hands_wrote_that_could_not_see_each_other(
+            self):
+        """The TARDIS shape, from the live beat: `objects` minted
+        `entities.tardis` and `spatial` minted `rooms.tardis_interior`, in
+        parallel, each from a payload showing the scene before either existed.
+        One thing, two records, and nothing joined them."""
+        spans = self._spans([
+            {"type": "action", "attempt": "I step into the tardis",
+             "category": ["objects", "spatial"], "note": "inside",
+             "items": [{"id": 2, "name": "tardis"}]}])
+        sd = {"entities": {"tardis": {"name": "tardis", "from_event": 1}},
+              "rooms": {"tardis_interior": {"name": "TARDIS interior",
+                                            "from_event": 1}}}
+        paths = sorted({p for p, _c, _r
+                        in director.beat_item_records(sd, spans)[2]["records"]})
+        assert paths == ["entities.tardis", "rooms.tardis_interior"]
+
+    def test_a_beat_that_numbers_nothing_costs_nothing(self):
+        spans = self._spans([
+            {"type": "action", "attempt": "I kneel", "category": "spatial",
+             "note": "n"}])
+        assert spans[0].get("_items") is None
+        assert director.beat_item_records(
+            {"poses": {"Corin": {"posture": "kneeling", "from_event": 1}}},
+            spans) == {}
+
+    def test_a_mention_with_no_number_says_nothing_and_is_dropped(self):
+        """Tolerant about the shape a model reaches for -- a bare number is an
+        id with no name -- but a mention carrying no number cannot say the one
+        thing this exists to say."""
+        span, = self._spans([
+            {"type": "action", "attempt": "x", "category": "objects",
+             "note": "n", "items": [{"id": 4, "name": "console"}, 5,
+                                    "levers", {"name": "no number"}]}])
+        assert span["_items"] == [{"id": 4, "name": "console"},
+                                  {"id": 5, "name": ""}]
+
+    def test_both_sheets_ask_for_them(self):
+        from llm.prompts import DEFAULT_PROMPTS, prose_author_prompt
+        for sheet in (DEFAULT_PROMPTS["director_interpret"],
+                      prose_author_prompt(None, "en")):
+            assert "NUMBER THE THINGS THE BEAT TOUCHES" in sheet
+            assert "SAME THING KEEPS THE SAME NUMBER" in sheet
+
+
+class TestWhichRecordOfAThingIsAllowedToExist:
+    """The owner, 2026-09-10: "the temp id allows the reconciler to apply all
+    transforms in chronological order to an existing object, the priority ...
+    being 'Actually exists in the world even before this beat.' then 'Freshly
+    minted by the most relevant authority.' And the chosen object must receive
+    all transforms."
+
+    ORDER is borrowed, not owned: the chronological id exists so that events
+    resolved in parallel are reassembled in the beat's true order for
+    PERCEPTION, which must deliver them to a mind in the order they happened.
+    This is a second consumer of the same property. (The first is still
+    unbuilt -- `perception.py` dedupes on the phase id and streams each actor's
+    sequence by `enumerate`.)
+    """
+
+    OWNER = {channel: hand for hand, spec in director.SPECIALISTS.items()
+             for channel in spec["channels"]}
+
+    def _spans(self, *sequence):
+        return director._span_items({"sequence": list(sequence)})
+
+    def _span(self, category, item_id, name):
+        return {"type": "action", "attempt": "x", "category": category,
+                "note": "n", "items": [{"id": item_id, "name": name}]}
+
+    def test_what_stood_before_the_beat_outranks_what_it_minted(self):
+        """Rung one, and it is what stops a beat re-founding a crate it merely
+        opened."""
+        spans = self._spans(self._span("objects", 1, "crate"))
+        sd = {"entities": {
+            "crate": {"name": "crate", "from_event": 1},
+            "wooden_crate": {"name": "wooden crate", "from_event": 1}}}
+        sc = {"entities": {"crate": {"name": "crate"}}}
+        got = director.item_survivors(sd, spans, sc, self.OWNER)[1]
+        assert got["render_from"][0] == "entities.crate"
+        assert got["reason"] == "standing"
+        assert [p for p, _c, _r in got["duplicates"]] == ["entities.wooden_crate"]
+
+    def test_otherwise_the_channels_own_hand_wins(self):
+        """Rung two. The partition is disjoint, so "most relevant authority"
+        is a lookup and never a judgement."""
+        spans = self._spans(self._span(["objects", "spatial"], 2, "tardis"))
+        sd = {"entities": {"tardis": {"name": "tardis", "from_event": 1}},
+              "rooms": {"tardis_interior": {"name": "TARDIS interior",
+                                            "from_event": 1}}}
+        got = director.item_survivors(sd, spans, {}, self.OWNER)[2]
+        assert got["reason"] == "owning_hand"
+
+    def test_a_duplicate_folds_and_a_pair_only_links(self):
+        """The distinction the channel decides. `entities.tardis` and
+        `rooms.tardis_interior` are one thing and two TRUE halves -- folding
+        either into the other deletes the place the player is standing in --
+        while two records in ONE channel are one hand's two attempts at one
+        thing, because the partition is disjoint."""
+        spans = self._spans(self._span(["objects", "spatial"], 2, "tardis"))
+        sd = {"entities": {"tardis": {"name": "tardis", "from_event": 1},
+                           "tardis_box": {"name": "blue box",
+                                          "from_event": 1}},
+              "rooms": {"tardis_interior": {"name": "TARDIS interior",
+                                            "from_event": 1}}}
+        got = director.item_survivors(sd, spans, {}, self.OWNER)[2]
+        assert [p for p, _c, _r in got["duplicates"]] == ["entities.tardis_box"]
+        assert [p for p, _c, _r in got["other_facts"]] == ["rooms.tardis_interior"]
+
+    def test_what_folds_arrives_in_chronological_order(self):
+        """"in chronological order" is the owner's phrase and the span number
+        is what carries it -- not the order a hand's call happened to return
+        in, which the parallel fan-out makes meaningless."""
+        spans = self._spans(
+            self._span("objects", 1, "crate"),
+            self._span("objects", 1, "crate"),
+            self._span("objects", 1, "crate"))
+        sd = {"entities": {
+            "crate": {"name": "crate", "from_event": 1},
+            "z_later": {"name": "crate", "from_event": 3},
+            "a_middle": {"name": "crate", "from_event": 2}}}
+        sc = {"entities": {"crate": {"name": "crate"}}}
+        got = director.item_survivors(sd, spans, sc, self.OWNER)[1]
+        # Alphabetically `a_middle` precedes `z_later`; chronologically it is
+        # span 2 before span 3, and that is what decides.
+        assert [p for p, _c, _r in got["duplicates"]] == [
+            "entities.a_middle", "entities.z_later"]
+
+    def test_one_record_is_not_a_reconciliation(self):
+        spans = self._spans(self._span("objects", 1, "crate"))
+        sd = {"entities": {"crate": {"name": "crate", "from_event": 1}}}
+        assert director.item_survivors(sd, spans, {}, self.OWNER) == {}
+
+    def test_a_beat_that_numbers_nothing_reconciles_nothing(self):
+        spans = self._spans(
+            {"type": "action", "attempt": "x", "category": "objects",
+             "note": "n"})
+        sd = {"entities": {"a": {"name": "a", "from_event": 1},
+                           "b": {"name": "b", "from_event": 1}}}
+        assert director.item_survivors(sd, spans, {}, self.OWNER) == {}
+
+
+class TestTheCausalityRecompiler:
+    """The owner's name for it, 2026-09-10: "basically we are making a
+    causality recompiler after our director deciphers and resolves", serving
+    the thesis "a system that can decipher any arbitrarily long series of
+    events by a player or character and resolve it properly with proper
+    respect to chronology and space. Even though its disecting and feeding it
+    to paralel agents."
+
+    A beat's diff is applied all at once, so every question about the beat is
+    answered against the world as it stood AFTER everything in it happened. In
+    a beat where a door shuts halfway through, that is the wrong world for both
+    halves: the speech before it shut was audible and the speech after was not,
+    and one world cannot say both.
+
+    NOTHING NEW IS NEEDED FOR THE CONES. `world/spatial_fov` is pure, derived
+    and never stored, and `spatial_rel` / `body_visibility` / `hear_level` take
+    the SCENE as a parameter -- so handing them a different scene answers for
+    that world, and the geometry is respected by construction rather than by a
+    rule a caller has to remember.
+    """
+
+    SCENE = {
+        "rooms": {
+            "yard": {"name": "Yard", "adjacent": [
+                {"to": "box", "barrier": "open_door", "name": "box door"}]},
+            "box": {"name": "Box", "adjacent": [
+                {"to": "yard", "barrier": "open_door", "name": "box door"}]},
+        },
+        "positions": {"Corin": "yard", "Sera": "yard"},
+        "entities": {}, "contacts": [], "poses": {}, "stations": {},
+        "contained": {},
+    }
+    DIFF = {
+        # span 2: he steps inside. A position is `dict[str, str]` -- a bare
+        # string with nowhere to carry a citation -- so its provenance rides
+        # in the sidecar the sheets already ask for.
+        "positions": {"Corin": "box"},
+        "phase_sources": {"positions.Corin": 2},
+        # span 3: the door is pulled shut, both sides, as the hands write it.
+        "rooms": {
+            "yard": {"adjacent": [{"to": "box", "barrier": "closed_door",
+                                   "name": "box door", "from_event": 3}]},
+            "box": {"adjacent": [{"to": "yard", "barrier": "closed_door",
+                                  "name": "box door", "from_event": 3}]},
+        },
+    }
+
+    def _worlds(self):
+        from world.spatial import merge_scene_with_diff
+        return director.beat_worlds(
+            json.loads(json.dumps(self.SCENE)), self.DIFF,
+            merge_scene_with_diff)
+
+    def test_the_beat_yields_a_world_per_span_in_order(self):
+        worlds = self._worlds()
+        assert [span for span, _w in worlds] == [2, 3]
+        before2, before3 = worlds[0][1], worlds[1][1]
+        # The world BEFORE a span does not contain that span.
+        assert before2["positions"]["Corin"] == "yard"
+        assert before3["positions"]["Corin"] == "box"
+        assert before3["rooms"]["yard"]["adjacent"][0]["barrier"] == "open_door"
+
+    def test_the_same_question_gets_three_answers_from_one_beat(self):
+        """The whole claim, measured. Today every event in this beat is judged
+        against the last row, so the first two are unreachable."""
+        from world.spatial import (merge_scene_with_diff, hear_level, room_of,
+                                   spatial_rel)
+
+        def heard(world):
+            rel = spatial_rel(world, room_of(world, "Sera"),
+                              room_of(world, "Corin"))
+            return rel.get("same_room"), hear_level(rel, "normal")
+
+        worlds = self._worlds()
+        assert heard(worlds[0][1]) == (True, "full")        # same room
+        assert heard(worlds[1][1]) == (False, "full")       # apart, door open
+        final = merge_scene_with_diff(
+            json.loads(json.dumps(self.SCENE)), self.DIFF)
+        assert heard(final) == (False, "fragment")          # door shut
+
+    def test_a_scalar_channel_is_placed_by_the_sidecar(self):
+        """`positions` is `dict[str, str]`, so a body's position cannot carry
+        `from_event` -- and a beat's movements are exactly what a replay must
+        order. `phase_sources` is the sidecar built for that, already taught by
+        the sheets and already read by `prune_blocked_phase_changes`."""
+        slices, loose = director.span_slices(self.DIFF)
+        assert slices[2] == {"positions": {"Corin": "box"}}
+        assert "positions" not in loose
+
+    def test_a_records_own_citation_outranks_the_sidecar(self):
+        """The field the sheets now lead with, and the one a hand fills while
+        composing the record itself. The sidecar is a second structure to
+        remember, and measured 25% emission."""
+        slices, _loose = director.span_slices({
+            "poses": {"Corin": {"posture": "kneeling", "from_event": 5}},
+            "phase_sources": {"poses.Corin": 9}})
+        assert sorted(slices) == [5]
+
+    def test_a_record_and_its_rows_go_to_their_own_spans(self):
+        """`rooms.<id>` holds `name` beside an `adjacent` LIST whose rows cite
+        their own spans. Filing the whole record in one bucket AND
+        distributing its rows applies the same edge twice on replay."""
+        slices, loose = director.span_slices({
+            "rooms": {"forge": {"name": "Forge", "adjacent": [
+                {"to": "well", "barrier": "closed_door", "from_event": 2}]}}})
+        assert slices[2] == {"rooms": {"forge": {"adjacent": [
+            {"to": "well", "barrier": "closed_door", "from_event": 2}]}}}
+        assert loose == {"rooms": {"forge": {"name": "Forge"}}}
+
+    def test_what_cites_nothing_lands_before_the_beat(self):
+        """It belongs to no point in the order, and the two ends are not
+        equal: applied first it is background the beat acts upon, applied last
+        it would silently overwrite what the beat established."""
+        from world.spatial import merge_scene_with_diff
+        worlds = director.beat_worlds(
+            json.loads(json.dumps(self.SCENE)),
+            {"positions": {"Sera": "box"},
+             "poses": {"Corin": {"posture": "kneeling", "from_event": 4}}},
+            merge_scene_with_diff)
+        assert [span for span, _w in worlds] == [4]
+        assert worlds[0][1]["positions"]["Sera"] == "box"
+
+    def test_every_sliced_record_is_a_collected_record(self):
+        """`span_records` collects and `span_slices` reconstructs, so they
+        cannot be one function -- and this pins them to each other rather than
+        to shared code. The property is what matters: the two must agree about
+        which shapes a channel takes."""
+        slices, _loose = director.span_slices(self.DIFF)
+        for span_id, sliced in slices.items():
+            collected = {path for path, _c, _r
+                         in director.span_records(self.DIFF).get(span_id, [])}
+            for channel, content in sliced.items():
+                if isinstance(content, dict):
+                    for key in content:
+                        assert any(p.startswith("%s.%s" % (channel, key))
+                                   for p in collected) or not collected, (
+                            span_id, channel, key)
+
+
+class TestASpecialistReturnsTransformsNotRecords:
+    """The owner, 2026-09-10: "what the specialists actually give us are
+    transforms we can apply to objects, even if it's an object the specialists
+    freshly minted", and "the chosen object must receive all transforms."
+
+    That is the right abstraction for the fan-out. Identity is the Director's
+    item number, order is the chronological span number, and a freshly minted
+    object is one whose first transform happens to be its creation.
+    """
+
+    OWNER = {channel: hand for hand, spec in director.SPECIALISTS.items()
+             for channel in spec["channels"]}
+
+    def _spans(self, *ids):
+        return director._span_items({"sequence": [
+            {"type": "action", "attempt": "x", "category": "objects",
+             "note": "n", "items": [{"id": i, "name": "crate"}]}
+            for i in ids]})
+
+    def _fold(self, sd, sc):
+        spans = self._spans(1, 1)
+        survivors = director.item_survivors(sd, spans, sc, self.OWNER)
+        return director.apply_item_transforms(sd, survivors)
+
+    def test_the_survivor_receives_the_transforms_and_the_duplicate_goes(self):
+        sd = {"entities": {
+            "crate": {"name": "crate", "from_event": 1},
+            "wooden_crate": {"name": "wooden crate", "kind": "container",
+                             "material": "oak", "aliases": ["box"],
+                             "from_event": 2}}}
+        applied = self._fold(sd, {"entities": {"crate": {"name": "crate"}}})
+        assert list(sd["entities"]) == ["crate"]
+        assert sd["entities"]["crate"]["kind"] == "container"
+        assert sd["entities"]["crate"]["material"] == "oak"
+        assert applied[0]["folded"] == ["entities.wooden_crate"]
+
+    def test_the_latest_transform_sets_the_state(self):
+        """A crate that stood before the beat and was opened during it must
+        not keep the shut snapshot it stood as. Identity comes from the
+        survivor; state comes from the most recent thing said about it."""
+        sd = {"entities": {
+            "crate": {"name": "crate", "state": {"open": False},
+                      "from_event": 1},
+            "wooden_crate": {"name": "wooden crate", "state": {"open": True},
+                             "from_event": 2}}}
+        self._fold(sd, {"entities": {"crate": {"name": "crate"}}})
+        assert sd["entities"]["crate"]["state"] == {"open": True}
+
+    def test_state_is_never_deep_merged(self):
+        """The tree's own rule and its reason: state describes a single
+        instant, so folding a stale snapshot into a fresh one is what
+        manufactures the contradiction. The latest wins WHOLE."""
+        sd = {"entities": {
+            "crate": {"name": "crate", "state": {"open": False, "locked": True},
+                      "from_event": 1},
+            "crate_two": {"name": "crate", "state": {"open": True},
+                          "from_event": 2}}}
+        self._fold(sd, {"entities": {"crate": {"name": "crate"}}})
+        assert sd["entities"]["crate"]["state"] == {"open": True}
+
+    def test_a_duplicate_never_rewrites_what_the_survivor_already_says(self):
+        """The conservative direction, deliberately: the survivor may be a
+        thing that STOOD BEFORE THE BEAT whose fields are the world's existing
+        truth, and a duplicate the beat minted must not rewrite it. A wrong
+        adoption is reported and visible; a wrong duplicate is silent,
+        permanent, and compounds every beat."""
+        sd = {"entities": {
+            "crate": {"name": "crate", "kind": "crate", "from_event": 1},
+            "crate_two": {"name": "barrel", "kind": "barrel",
+                          "from_event": 2}}}
+        self._fold(sd, {"entities": {"crate": {"name": "crate"}}})
+        assert sd["entities"]["crate"]["name"] == "crate"
+        assert sd["entities"]["crate"]["kind"] == "crate"
+
+    def test_a_pair_in_two_channels_is_never_folded(self):
+        """`entities.tardis` and `rooms.tardis_interior` are one thing and two
+        TRUE halves. Folding either into the other deletes the place the player
+        is standing in, so `apply` touches only the `fold` side."""
+        spans = director._span_items({"sequence": [
+            {"type": "action", "attempt": "x", "category": ["objects",
+                                                            "spatial"],
+             "note": "n", "items": [{"id": 2, "name": "tardis"}]}]})
+        sd = {"entities": {"tardis": {"name": "tardis", "from_event": 1}},
+              "rooms": {"tardis_interior": {"name": "TARDIS interior",
+                                            "from_event": 1}}}
+        survivors = director.item_survivors(sd, spans, {}, self.OWNER)
+        director.apply_item_transforms(sd, survivors)
+        assert "tardis_interior" in sd["rooms"]
+        assert "tardis" in sd["entities"]
+
+    def test_nothing_to_reconcile_changes_nothing(self):
+        sd = {"entities": {"crate": {"name": "crate", "from_event": 1}}}
+        before = json.dumps(sd, sort_keys=True)
+        spans = self._spans(1)
+        assert director.apply_item_transforms(
+            sd, director.item_survivors(sd, spans, {}, self.OWNER)) == []
+        assert json.dumps(sd, sort_keys=True) == before
+
+
+class TestWhichHandRendersAThingTheBeatMinted:
+    """The owner, 2026-09-10: "if the object is freshly minted potentially by
+    multiple agents, we have to decide which is the highest authority for
+    rendering that object, it might be case by case, but thankfully we only
+    have 5 classess to work with." Then, on the TARDIS: "in that case interior
+    and entity are two seperate facts about one object", and "neither should be
+    discarded."
+
+    THE GAP THIS CLOSED WAS REAL. The ladder's second rung is "the channel's
+    own hand", and the partition is DISJOINT -- every record already sits in
+    its own hand's channel -- so that rung cannot discriminate between two
+    hands at all. Two mints of one thing tied there and fell through to a
+    tiebreak that ordered them BY PATH: `entities.tardis` beat
+    `rooms.tardis_interior` because "e" sorts before "r".
+    """
+
+    OWNER = {channel: hand for hand, spec in director.SPECIALISTS.items()
+             for channel in spec["channels"]}
+
+    def _tardis(self, sd):
+        spans = director._span_items({"sequence": [
+            {"type": "action", "attempt": "I step into the tardis",
+             "category": ["objects", "spatial"], "note": "n",
+             "items": [{"id": 2, "name": "tardis"}]}]})
+        return director.item_survivors(sd, spans, {}, self.OWNER)[2]
+
+    def test_the_table_is_ordered_and_total(self):
+        for index, hand in enumerate(
+                ("objects", "spatial", "body", "contact", "social")):
+            assert director.mint_authority_rank(hand) == index, hand
+        assert set(director.SPECIALISTS) == {
+            "objects", "spatial", "body", "contact", "social"}, (
+            "five classes -- if a sixth hand is registered the table needs a "
+            "rung, and an unranked hand sorts last rather than raising")
+        assert director.mint_authority_rank("nobody") == 5
+
+    def test_authority_decides_and_path_order_does_not(self):
+        """`attire` sorts before `entities`, so path order would hand the
+        rendering record to the body hand."""
+        got = self._tardis({
+            "attire": {"tardis_cloth": {"subject": "Corin", "from_event": 1}},
+            "entities": {"tardis": {"name": "tardis", "from_event": 1}},
+            "rooms": {"tardis_interior": {"name": "TARDIS interior",
+                                          "from_event": 1}}})
+        assert got["render_from"][0] == "entities.tardis"
+
+    def test_neither_fact_is_discarded(self):
+        """The owner's rule, stated twice and pinned here. An entity and its
+        interior are two separate facts about one object; choosing which to
+        render FROM is not a claim that the other is a lesser truth."""
+        sd = {"entities": {"tardis": {"name": "tardis", "from_event": 1}},
+              "rooms": {"tardis_interior": {"name": "TARDIS interior",
+                                            "from_event": 1}}}
+        got = self._tardis(sd)
+        assert [p for p, _c, _r in got["other_facts"]] == [
+            "rooms.tardis_interior"]
+        assert got["duplicates"] == []
+        director.apply_item_transforms(sd, {2: got})
+        assert "tardis_interior" in sd["rooms"]
+        assert "tardis" in sd["entities"]
+
+    def test_a_standing_thing_still_outranks_authority(self):
+        """The ladder's first rung is above the table: what the world already
+        held is the thing, whichever hand wrote about it this beat."""
+        spans = director._span_items({"sequence": [
+            {"type": "action", "attempt": "x", "category": ["objects",
+                                                            "spatial"],
+             "note": "n", "items": [{"id": 2, "name": "hall"}]}]})
+        sd = {"entities": {"lamp": {"name": "lamp", "from_event": 1}},
+              "rooms": {"hall": {"name": "Hall", "from_event": 1}}}
+        got = director.item_survivors(
+            sd, spans, {"rooms": {"hall": {"name": "Hall"}}}, self.OWNER)[2]
+        assert got["render_from"][0] == "rooms.hall"
+        assert got["reason"] == "standing"
