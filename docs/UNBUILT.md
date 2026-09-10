@@ -57,6 +57,43 @@ Rules that keep it honest:
 Live bugs and unfinished corrections — places the engine is currently wrong,
 not places it is merely thin.
 
+### 1.1 The specialists read the beat's prose instead of instructions
+
+**Specified 2026-09-09 in
+[`DESIGN_SPECIALIST_CONTRACT.md`](design/DESIGN_SPECIALIST_CONTRACT.md);
+nothing built.** The owner's contract: a hand receives its scene-scoped slice
+of world state, plus one or more dissected chunks of player/character input,
+each carrying a chronological id and a natural-language note on how the
+Director thinks it should resolve — and nothing else. It renders those through
+its own output format, which is already built.
+
+What happens instead, measured over 632 resolve-side specialist calls:
+
+| the hand is sent | calls | size |
+|---|---|---|
+| `resolved_event` — the whole beat as prose, declared AUTHORITATIVE | 632/632 (100%) | 910 ch |
+| `director_note` — what the Director asked of this hand | 311/632 (49%) | 147 ch |
+| `changes_asserted` — the categorized events for this hand | 172/632 (27%) | 459 ch |
+
+So 73% of specialist calls run on narrative alone, and the hands derive the
+events themselves as a private step — which is what 90-97% of their output
+tokens are spent on.
+
+Five specific gaps, each with its measurement in the note: the dissection
+(`sequence`) carries neither category nor id; categories and ids live on a
+second, non-corresponding decomposition (`changes_asserted`, defined in its own
+docstring as derived FROM the prose); the resolution intent exists only
+per-HAND (`ledger_notes`) rather than per-event; and the chronological ids
+never reach perception, where ordering is list position and `event_id` is used
+only as a dedupe key.
+
+**Open, and not to be papered over:** record-shaped channels (`poses`,
+`overlays`, `conditions`, `attire`) are whole current-state records rather than
+events, so there is often no chunk to attach an instruction to. `director_body`
+owns four such channels and no others, which is why the manifest can never
+dispatch it. That needs a second instruction shape before an event-only
+pipeline is worth building.
+
 ### 1.0 The Japanese pack cannot route the Director's manifest
 
 **Deliberate, dated, and switched off in code rather than forgotten.**
