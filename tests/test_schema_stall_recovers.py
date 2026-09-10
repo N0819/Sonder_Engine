@@ -555,26 +555,35 @@ class TestBothHalvesOfTheDirectorCarryTheRuling:
         view = director._interpret_beat_view(_Ctx(), out, "Player")
         assert [i["event_id"] for i in view["manifest"]] == [1, 2]
 
-    def test_both_prompts_declare_the_manifest_in_the_shape(self):
-        """The measured lesson this class exists for, applied to the second
-        field: asked for in prose and absent from the OUTPUT SHAPE, it does
-        not exist as far as the model is concerned."""
+    def test_both_prompts_declare_the_work_item_in_the_shape(self):
+        """The measured lesson this class exists for, applied to whatever
+        carries the ruling: asked for in prose and absent from the OUTPUT
+        SHAPE, it does not exist as far as the model is concerned.
+
+        The field it names has changed. `changes_asserted` was retired on
+        2026-09-10 (DESIGN_SPECIALIST_CONTRACT.md 4d) and the work item is now
+        the categorized span, so the shape has to declare THAT -- the lesson
+        is about the shape, not about the field that happened to teach it."""
         from llm.prompts import (get_prompt_body, interpret_delegation_note,
                                  prose_author_prompt)
         interpret = get_prompt_body("director_interpret") + \
             interpret_delegation_note()
-        for name, text in (("director_interpret", interpret),
-                           ("prose_author_sheet", prose_author_prompt(None))):
-            assert "changes_asserted" in text, name
+        assert "category, note}" in interpret
+        assert "changes_asserted" not in interpret
+        assert "changes_asserted" not in prose_author_prompt(None)
 
-    def test_the_delegation_note_enumeration_carries_the_manifest(self):
+    def test_the_delegation_note_enumeration_names_no_retired_field(self):
         """The note gets the last word and ends in a closed list of the
         author's own fields. A field omitted there is a field the model is
-        right to leave out -- that is what cost every ruling last time."""
+        right to leave out -- and a RETIRED field still listed there is one it
+        is right to keep writing, which is the same fault pointing the other
+        way."""
         from llm.prompts import interpret_delegation_note
         note = interpret_delegation_note()
         assert "stays yours" in note, "the enumeration moved; re-pin this"
-        assert "changes_asserted" in note.split("stays yours")[-1]
+        tail = note.split("stays yours")[-1]
+        assert "ledger_notes" in tail
+        assert "changes_asserted" not in tail
 
     def test_no_enumeration_of_the_authors_output_omits_the_ruling(self):
         """Every list of "what your output contains" has to contain it.
