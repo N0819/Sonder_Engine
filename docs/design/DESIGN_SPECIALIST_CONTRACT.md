@@ -44,6 +44,22 @@ and the narrator renders from perception, never from the Director (verified:
 mention of `resolved_event` in that module is a comment recording a past leak
 that was closed).
 
+**"Tools" does not mean uncreative -- it means SCOPED.** (Owner, 2026-09-09:
+*"they aren't fully uncreative tools even though that's a majority of their
+job; attire and a few of the other specialized things are incredibly highly
+scoped creativity vs the broad scope that is the main director call."*) A hand
+names a garment, writes what a place is like, picks the word for a substance.
+That is authorship, and it is meant to be there. The difference is the SIZE OF
+THE SCOPE, not the presence of invention: the Director judges how a whole beat
+unfolds and who could interfere; a hand invents only inside the one ledger it
+owns, about the one thing it was asked to settle. Most of its job is
+mechanical; the creative part is narrow and deep rather than broad.
+
+This is why the contract subtracts the BEAT rather than subtracting judgement.
+A hand given its ledgers and its instruction can still write the perfect word
+for a garment. A hand given the whole beat starts making decisions about the
+beat, which is the Director's scope and not its own.
+
 **What the Director is FOR: how an input realistically unfolds.** Causality,
 plausibility, timing, who could interfere and how. The specialists are its
 RESOLUTION TOOLS -- the mechanism by which those judgements become world
@@ -227,6 +243,54 @@ subject's record needs restating, and here is why"*, with its own answer to
 what a chronological id means when nothing discrete happened. Until that is
 designed, an event-only pipeline reaches `contact`, `objects` and `social`
 cleanly and leaves `body` — the hand with the 76% empty-call rate — unaddressed.
+
+## 6a. THE ONE EXCEPTION: minting a room is authorship
+
+**Owner, 2026-09-09: "the only one that might benefit from some authorship is
+spatial minting a new room or planned room with high fidelity."** Every hand
+does some scoped invention (section 1); this is the far end of that scale, and
+the one place the scope is arguably too large for the hand holding it.
+
+Naming a garment or wording a substance is invention bounded by a thing that
+already exists. A minted room is not: the hand is writing the place itself into
+existence, and the words outlive the beat by an unbounded margin. Its own sheet says so:
+`desc` is *"the only durable record of how this place reads"*, and *"descs do
+not expire, so a place revisited long after is rendered from these words alone
+-- thin descs are how the same room comes back a different room."* Names,
+anchors, `light` and `quiet` are the same kind of writing.
+
+**And removing the prose took away an input it was using.**
+`DESIGN_ROOM_FIDELITY.md` records the spatial hand doing exactly this: *"the
+road run's spatial hand read the sentence and wrote `{w: 15, d: 20}, round`
+from it."* That is a transcription tool reading narrative to author a place,
+which is the contract's problem in miniature -- and the answer is not to give
+the prose back, because under this contract the Director is not writing prose
+for it to read.
+
+What the hand still has when it mints today: the dissected chunk, its
+`director_note` and per-event notes, the room index, and -- when they exist --
+`planned_rooms` and `mapping_scene_proposal`. What it no longer has is anybody's
+rendering of what the place is like.
+
+**The owner's proposal: spatial calls a specialised room-mint agent**, for the
+two cases that need one:
+
+- a **planned** room, created by the Story Planner and not yet fleshed out;
+- a **new** room, created by a player declaration.
+
+That fits the existing split rather than inventing one:
+`DESIGN_ROOM_FIDELITY.md` already rules that *"the Director writes extents on a
+live room; the WRITERS' ROOM writes them on a planned one"*, so authorship of
+places is already understood to belong somewhere other than the beat's hands.
+A mint agent would take the plan, the purpose, the lore and the declaration --
+the things a place should be written from -- rather than a beat's narration,
+which is what it happened to have.
+
+**Not built, and not to be built on this evidence alone.** It is a new model
+role: it needs its own scope, its own gate (mint is rare, and a role that runs
+on every beat is the wrong shape), and a measurement of what room fidelity
+actually is today before and after. Registered here so the gap the prose
+removal opened is on the record rather than discovered later as thin descs.
 
 ## 7. What this supersedes
 

@@ -87,6 +87,19 @@ per-HAND (`ledger_notes`) rather than per-event; and the chronological ids
 never reach perception, where ordering is list position and `event_id` is used
 only as a dedupe key.
 
+**Room minting is the one exception, and the prose removal exposed it.** The
+spatial hand authors a room's `desc`, name, anchors, `light` and `quiet` -- its
+own sheet calls `desc` "the only durable record of how this place reads" -- and
+`DESIGN_ROOM_FIDELITY.md` records it reading the Director's narration to do so
+("the road run's spatial hand read the sentence and wrote `{w: 15, d: 20},
+round` from it"). That input is gone as of the prose removal, correctly, and
+nothing replaced it. The owner's proposal (2026-09-09) is a specialised
+room-mint agent that spatial calls for a PLANNED room (Story Planner, not yet
+fleshed out) or a NEW one (player declaration), taking the plan, purpose and
+lore rather than a beat's narration. Not built: it is a new model role needing
+its own scope, its own gate, and a measurement of current room fidelity first.
+See `DESIGN_SPECIALIST_CONTRACT.md` section 6a.
+
 **Open, and not to be papered over:** record-shaped channels (`poses`,
 `overlays`, `conditions`, `attire`) are whole current-state records rather than
 events, so there is often no chunk to attach an instruction to. `director_body`
