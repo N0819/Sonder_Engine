@@ -329,6 +329,136 @@ rather than two. What this correction adds is that the router which survives has
 to be the one that is actually always there -- and today that is the notes, not
 the categories.
 
+## 3c-ter. THE BEATS: the manifest was filed, and named the wrong thing
+
+Item 4 of section 6 ran on 2026-09-09. Twelve interpret beats, played live on
+`google/gemini-3.8-flash` -- the model the owner's `agent_models` actually
+points the Director at -- into a scratch database, provider rows mirrored
+read-only from `engine.db` so the configuration under test is the shipped one.
+Zero errors. Harness: `tools/interpret_beats.py`.
+
+**It plays the interpret half and nothing else, on purpose.** What
+`dispatch_replay` scores is one `director_interpret` step, which already fans
+out to the prose author plus all five specialists; perception, every character,
+resolve, the narrator and the off-screen rungs are most of a turn's wall clock
+and contribute nothing the replay reads. Capture is flushed at each step's own
+persist point rather than at the turn's commit, so stopping the pipeline at the
+interpret step keeps its rows. Six calls a beat instead of about twenty.
+
+What it costs, stated because it bounds every number here: nothing commits, so
+the scene never advances and each beat's interpret reads the same world. That
+makes it a poor STORY and a fair DISPATCH sample. The beats span the manifest's
+category vocabulary rather than following one another -- which a linear
+playthrough would not have done either.
+
+### The result
+
+The field WORKS. The author filed a manifest on **8 of 12 beats**, and the
+entries are good: `"Corin has taken off his sword belt."`, `"The door between
+the forge and market_square is shut."`, `"Corin is kneeling."` -- accurate,
+scoped to one change each, and correctly ABSENT on the two beats that deserved
+nothing (a question asked, and an attempt to take a ledger from a man's hands,
+which is contestable and belongs to resolution). Section 3c-bis predicted the
+field would be filled once it existed. It is.
+
+**And every single entry routed to nobody.** `--filed-only` scored **8 false
+negatives, 100% of productive calls.**
+
+The cause is one word wide. The author used four category words --
+`body`, `objects`, `spatial`, `contact` -- and three of the four are not in
+`_CATEGORY_CHANNELS` at all. They are the names of the five SPECIALISTS.
+`contact` routed only by coincidence, being both a hand's name and a category
+alias for `contact_ops`.
+
+**The model was doing exactly what the sheet told it.** The paragraph asked for
+"`category`, one of the ledgers named above", and the only names above it are
+the five hands, one line earlier, in `ledger_notes`'s own enumeration. The
+sheet taught one closed vocabulary and the router accepted a different one, and
+nothing in four places' worth of guards noticed, because the four-places rule is
+about whether a FIELD is declared -- not about whether its VOCABULARY is.
+
+That is the rule's blind spot, and it is worth stating on its own: **a field can
+be present in every place the guard checks and still be unroutable, because a
+key and its value space are declared in different places and only the key is
+checked.**
+
+### The fix: accept the vocabulary the sheet already teaches
+
+`manifest_category_targets` (`agents/director_scopes.py`), read by dispatch
+(`_ruling_for`) and by the payload slice (`_specialist_manifest_slice`).
+
+The asymmetry it removes was never intentional. `note_key_targets` resolves a
+`ledger_notes` key through hand names, retired hand names, channel names, plural
+tolerance and the pack's own aliases, and its docstring calls itself "ONE
+RESOLVER, read by dispatch". The manifest path beside it read `_CATEGORY_CHANNELS`
+raw -- no hand names, no aliases, not even `.casefold()`. One field's vocabulary
+was four times the other's and the resolver's own docstring said otherwise.
+
+Given a choice between teaching a second twenty-four-word vocabulary to every
+story and letting code accept the one the sheet already teaches, this takes the
+second. It is the cheaper half, it is the half that does not grow a prompt, and
+it is what section 0 argues the engine is for: the hand's name is a legitimate
+answer to "which ledger", just a coarser one.
+
+Coarser is the whole cost, and it is bounded. A category naming a CHANNEL grants
+that channel. A category naming a HAND grants the hand its story's channels, by
+the rule `_dispatch_specialists` already follows for a note keyed by hand alone
+-- "a ruling that reached it is better evidence than a prediction that nothing
+there could change". Fail-open, exactly as that gate already is.
+
+Union, not fallback, and `contact` is the case that needs it: `note_key_targets`
+stops at the first kind that matched, so resolving through it alone would have
+dropped `contact_ops` -- the one channel the manifest had been naming correctly
+all along.
+
+**After: 0 false negatives, and 6 of 19 calls (32%) still saved.** The prompt's
+misleading half-sentence is corrected in the same commit, so the next model is
+not relying on the tolerance.
+
+### What did NOT change, and why it matters
+
+The pre-existing corpus is **unmoved**: still 8 filed-only false negatives, still
+178 across all beats. The fix neither helped nor harmed it, which is the correct
+result -- those rulings came from the resolve half, whose sheet does teach the
+category vocabulary, so they never had the hand-name miss.
+
+So there are two corpora with two different failure causes, and only one is now
+closed.
+
+### The eight that remain, and why item 5 is still blocked
+
+Read individually (`tools/dispatch_residuals.py`), the 8 are not a vocabulary problem and
+not obviously a LOSS:
+
+- turn 4144, `spatial`: the note reads **"No position changes; both remain at
+  the bed in the den."** The hand ran and emitted `poses`.
+- turn 4144, `body`: the note reads **"arousal state unchanged (hardened). No
+  new overlays or conditions."** The hand ran and emitted `overlays`.
+- turn 3812, `objects`: the note reports a sash *resting* where it already was.
+  The hand emitted `entities` and `inventory_ops`.
+- turn 3628, `spatial`: Hinami *remains* contained where she already was. The
+  hand emitted `poses` and `rooms`.
+
+The pattern in six of the eight is a note carrying a CONTINUING state, which the
+manifest correctly omits because a continuing state is not a change, followed by
+a hand re-encoding it. In two of them the note explicitly says nothing changed
+and the hand emits anyway.
+
+**`dispatch_replay`'s acceptance criterion cannot see this.** `_produced` counts
+any non-empty channel as productive, so it cannot tell "encoded a new change"
+from "re-asserted a standing fact" from "contradicted its own ruling". On these
+eight it is answering a question next to the one being asked.
+
+That is not a reason to trust the criterion less on the beats above -- there,
+the lost content was plainly new. It is a reason item 5 cannot be decided from
+this number. Deleting the `ledger_notes` trigger is a bet that those 8 are
+redundancy; the measurement that would settle it compares each hand's output
+against the committed `state_diff`, and does not exist yet.
+
+**Item 5 is therefore BLOCKED on a measurement, not on a gate.** Recorded rather
+than guessed: a 2.9% false-negative rate that is probably redundancy is exactly
+the shape of number that gets rounded to zero by someone who wants the change.
+
 ## 3d. Compress engine terms into concepts, and let code dissect them
 
 The owner's last requirement, and the one that makes "what actually happens?" a
@@ -626,15 +756,34 @@ the harnesses that produced it are checked in and re-runnable.
    it cannot widen into "skip the check"), a notice printed on every
    `make structure`, a skip naming the debt, and `UNBUILT.md` section 1.0.
 
+4. **Beats played, the gate failed, and the cause was one word wide**
+   (section 3c-ter). Twelve
+   live interpret beats on the shipped model: the manifest was filed on 8 of
+   12 with accurate entries, and every one of them routed to NOBODY -- the
+   author answered with the five HAND names, which the sheet taught it one
+   line earlier and which `_CATEGORY_CHANNELS` does not contain. 8 false
+   negatives, 100% of productive calls. `manifest_category_targets` makes the
+   manifest speak the note key's vocabulary (8 tests); after it, 0 false
+   negatives with 32% of calls still saved, and the sheet's misleading
+   half-sentence is corrected so the next model does not lean on the
+   tolerance.
+
 **NEXT, in order**
 
-4. **Play beats, then re-run `tools/dispatch_replay.py --filed-only`.** Nothing
-   advances until real traffic carries the interpret manifest; the whole
-   captured corpus predates the field. The gate is ZERO false negatives.
-5. **Then remove the `ledger_notes` dispatch trigger** (section 3c), only when
-   4 passes. This is where the empty-call rate falls: `director_objects` 87%,
+5. **Remove the `ledger_notes` dispatch trigger -- BLOCKED, on a measurement
+   rather than a gate** (sections 3c, 3c-ter). The pre-existing corpus still
+   scores 8 filed-only false negatives, unmoved by the fix above because those
+   rulings came from the resolve half, which never had the hand-name miss. Read
+   individually they are mostly a note carrying a CONTINUING state -- twice, a
+   note that says in words that nothing changed -- followed by a hand encoding
+   it anyway. `dispatch_replay`'s `_produced` counts any non-empty channel as
+   productive and cannot tell new content from a re-assertion, so on these eight
+   it answers a question next to the one being asked. What settles it is a
+   comparison of each hand's output against the committed `state_diff`; that
+   harness does not exist. Do not round 2.9% to zero. This is where the
+   empty-call rate falls when it is unblocked: `director_objects` 87%,
    `director_body` 76%.
-6. **The renames** (section 3d). Independent of 4 and 5, cheap, and the one
+6. **The renames** (section 3d). Independent of 5, cheap, and the one
    part of the trial no skeptic contested -- subject to the naming test's
    second clause: the engine must own the new name everywhere it is compared
    (`enclosure: 'membrane'` is the counter-example that earned that clause).

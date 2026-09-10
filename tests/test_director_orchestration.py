@@ -573,6 +573,89 @@ def test_at_interpret_both_halves_of_the_ruling_address(temp_db, monkeypatch):
     assert specialists["spatial"]["addressed_by"] == ["manifest"]
 
 
+class TestTheManifestSpeaksTheNoteKeysVocabulary:
+    """One vocabulary, two fields, one resolver.
+
+    Measured 2026-09-09 over twelve live interpret beats on
+    gemini-3.8-flash: the author filed a manifest on 8 of 12 and used four
+    category words -- `body`, `objects`, `spatial`, `contact`. Three reached
+    no channel, and `tools/dispatch_replay.py --filed-only` scored 8 false
+    negatives, 100% of productive calls. Every ruling was correct; only the
+    vocabulary missed, because `director_interpret.txt` asks for "one of the
+    ledgers named above" and the only names above it are the five hands.
+
+    These pin the resolver rather than the beat, so the guard survives the
+    prompt being reworded -- which it is going to be.
+    """
+
+    def test_a_category_naming_a_hand_reaches_that_hand(self):
+        for hand in ("body", "social", "contact", "objects", "spatial"):
+            view = {"ledger_notes": {}, "manifest": [
+                {"category": hand, "subject": "x", "change": "y"}]}
+            addressed, _ = director._ruling_for(hand, view)
+            assert addressed == ["manifest"], hand
+
+    def test_a_category_naming_a_hand_reaches_only_that_hand(self):
+        view = {"ledger_notes": {}, "manifest": [
+            {"category": "objects", "subject": "a bucket",
+             "change": "the bucket is up on the rim"}]}
+        for other in ("body", "social", "contact", "spatial"):
+            assert director._ruling_for(other, view)[0] == [], other
+
+    def test_a_hand_named_category_grants_no_channel_so_the_gate_decides(self):
+        """Coarser, deliberately. A hand's name does not say WHICH ledger, so
+        `named` stays empty and `_dispatch_specialists` grants the hand its
+        story's channels -- the fail-open rule it already follows for a note
+        keyed by hand alone."""
+        view = {"ledger_notes": {}, "manifest": [
+            {"category": "objects", "subject": "x", "change": "y"}]}
+        assert director._ruling_for("objects", view) == (["manifest"], [])
+
+    def test_a_category_naming_a_channel_still_names_that_channel(self):
+        view = {"ledger_notes": {}, "manifest": [
+            {"category": "poses", "subject": "Corin",
+             "change": "Corin is kneeling"}]}
+        assert director._ruling_for("spatial", view) == (["manifest"],
+                                                         ["poses"])
+
+    def test_contact_resolves_as_both_the_hand_and_its_ledger(self):
+        """The union, not the fallback, and this is the case that needs it.
+        `note_key_targets` stops at the first kind that matched, and `contact`
+        matches the HAND -- so resolving through it alone would have dropped
+        `contact_ops`, the one channel the manifest used to name correctly."""
+        view = {"ledger_notes": {}, "manifest": [
+            {"category": "contact", "subject": "Sera",
+             "change": "a hand rests on her shoulder"}]}
+        assert director._ruling_for("contact", view) == (["manifest"],
+                                                         ["contact_ops"])
+
+    def test_the_category_lookup_tolerates_case_and_a_plural(self):
+        """The note key's tolerances, which the manifest never had: its lookup
+        was raw, so `Objects` and `contacts` were misses on one field and hits
+        on the other."""
+        for spelling, hand in (("Objects", "objects"), ("BODY", "body"),
+                               ("contacts", "contact"), ("pose", "spatial")):
+            view = {"ledger_notes": {}, "manifest": [
+                {"category": spelling, "subject": "x", "change": "y"}]}
+            assert director._ruling_for(hand, view)[0] == ["manifest"], spelling
+
+    def test_a_hand_named_category_is_carried_into_that_hands_payload(self):
+        """Dispatch and the payload slice must agree. Routing the hand while
+        slicing its manifest by the old narrow lookup would run a specialist
+        and hand it an empty manifest -- a call paid for and told nothing."""
+        view = {"manifest": [
+            {"category": "objects", "event_id": 1, "subject": "the hinge",
+             "change": "the hinge has come apart"},
+            {"category": "body", "event_id": 2, "subject": "Corin",
+             "change": "Corin has burned his palm"},
+        ]}
+        got = director._specialist_manifest_slice("objects", view)
+        assert [i["event_id"] for i in got] == [1]
+        assert [i["event_id"] for i in
+                director._specialist_manifest_slice("body", view)] == [2]
+        assert director._specialist_manifest_slice("social", view) == []
+
+
 def test_an_interpret_category_no_channel_answers_for_still_reaches_nobody(
         temp_db, monkeypatch):
     """The manifest gains a router, not a guess.
