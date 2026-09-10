@@ -239,6 +239,8 @@ from .director_floors import (
     _scan_for_untracked_restraint,
 )
 from .director_evidence import (
+    voided_span_ids,
+    void_span_records,
     _SUBJECT_OP_CHANNELS,
     _RECONCILE_INTERPRET_MAX_UNITS,
     _INTERPRET_COVERAGE_MIN,
@@ -1414,6 +1416,40 @@ def director_interpret(ctx, nonce):
         out["authority_downgrades"] = _downgrades
         out["authority_mode"] = _authority_mode
         _sync_sequence_mirrors(out)
+        # AND THE RECORD GOES WITH IT. Relabelling the claim and the commitment
+        # is everything this function can do by itself, and it is not enough:
+        # the hands ran at the fan-out above and have already written the
+        # assertion into the world. Measured 2026-09-10, the same beat under
+        # both dials: `actor_only` downgraded the claim to an intention,
+        # flipped the act to contestable, and left `state_assertions`
+        # byte-identical to `world_author` -- the world kept the fact the
+        # player was not entitled to declare.
+        #
+        # The owner's rule: a span the dial refuses is refused WHOLE. Every
+        # owner of the span cites the same id, so one pass over the merged
+        # assertions takes all of their halves together, and a span half-voided
+        # is exactly the state the rule exists to end.
+        _voided = voided_span_ids(out, _downgrades)
+        if _voided:
+            _dropped = void_span_records(
+                out.get("state_assertions"), _voided)
+            _contacts = {"contact_ops": out.get("contact_assertions") or []}
+            _dropped += void_span_records(_contacts, _voided)
+            out["contact_assertions"] = _contacts.get("contact_ops") or []
+            # On the step, beside the downgrade record it belongs to, and in
+            # front of the Director in the SAME beat for the same reason: a
+            # refusal the player can read about is answerable, one that lands
+            # next beat is not.
+            out["voided_spans"] = [
+                {"event_id": span_id,
+                 "dropped": [path for path, cited in _dropped
+                             if str(cited) == str(span_id)]}
+                for span_id in _voided
+            ]
+            ctx.add_warning(
+                "PLAYER AUTHORITY: %d span(s) the %s dial does not cover were "
+                "refused whole; %d record(s) written for them were dropped."
+                % (len(_voided), _authority_mode, len(_dropped)))
 
     # Detect contested actions
     seq = out.get("sequence")

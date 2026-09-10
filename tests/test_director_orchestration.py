@@ -4419,3 +4419,157 @@ class TestAHandIsAnswerableForTheWorkItemsItGot:
         owed, acquitted, _refused = director._acquit_addressed_events(
             out, [omission], {})
         assert owed == [omission] and acquitted == []
+
+
+class TestADialRefusesTheSpanAndTheRecordWithIt:
+    """The owner's ruling, 2026-09-10: "Either it mints the window or door or
+    it refuses the whole span depending on player authority level."
+
+    The refuse arm did neither. `apply_player_authority` moves two labels --
+    the claim's scope to `intent`, the element's commitment to `contestable` --
+    and it runs AFTER the fan-out, so the hands have already written the
+    record. Measured on one beat under both dials, everything else equal:
+
+        world_author  downgrades=0  state_assertions {"rooms":{"bay":{"desc":"dark now"}}}
+        actor_only    downgrades=1  state_assertions {"rooms":{"bay":{"desc":"dark now"}}}
+
+    Byte-identical. Under hard mode the player's world assertion was relabelled
+    an intention and the world kept the fact.
+    """
+
+    LAMP = {
+        "kind": "action",
+        "sequence": [{
+            "type": "event",
+            "description": "the lamp above the door goes out",
+            "raw_text": "the lamp above the door goes out",
+            "category": "spatial",
+            "note": "the lamp above the door is out",
+        }],
+        "ledger_notes": {"spatial": "the lamp above the door is out"},
+        "flow": {"reactors": [], "dice": [], "authority_claims": [],
+                 "resolution_flags": {}, "fiction_frame": {}},
+    }
+    SPATIAL = {
+        "rooms": {"bay": {"name": "Bay", "desc": "dark now", "from_event": 1}},
+        "resolved_events": [{"event_id": 1, "status": "encoded"}],
+    }
+
+    def _beat(self, temp_db, monkeypatch, mode):
+        from story.scene import set_player_authority
+        calls = []
+        monkeypatch.setattr(director, "_agent_json", _fake_agent(
+            calls, {"director_interpret": self.LAMP,
+                    "director_spatial": self.SPATIAL}))
+        ctx = _make_ctx(temp_db, player_input="the lamp goes out")
+        set_player_authority(ctx.chat.id, mode)
+        ctx.director_interpret = None
+        return director.director_interpret(ctx, nonce=0)
+
+    def test_world_author_is_untouched(self, temp_db, monkeypatch):
+        """The default, and the property that matters most to everyone who
+        does not want hard mode: it grants everything, so there is nothing to
+        void and an existing story means tomorrow what it meant yesterday."""
+        out = self._beat(temp_db, monkeypatch, "world_author")
+        assert not out.get("authority_downgrades")
+        assert not out.get("voided_spans")
+        assert out["state_assertions"]["rooms"]["bay"]["desc"] == "dark now"
+
+    def test_a_refused_span_takes_the_record_with_it(self, temp_db,
+                                                     monkeypatch):
+        for mode in ("explicit_outcomes", "actor_only"):
+            out = self._beat(temp_db, monkeypatch, mode)
+            assert len(out["authority_downgrades"]) == 1, mode
+            assert out["voided_spans"] == [
+                {"event_id": 1, "dropped": ["rooms.bay"]}], mode
+            assert out["state_assertions"].get("rooms") == {}, mode
+
+    def test_the_refusal_is_reported_never_silent(self, temp_db, monkeypatch):
+        """A refused assertion must not silently vanish -- the player wrote it
+        for a reason. The downgrade already reaches the Director in the same
+        beat; the DROPPED RECORD is a second fact and needs saying too, or the
+        step shows a hand that ran and a channel that is empty with no reason
+        anywhere."""
+        ctx_warnings = []
+        from story.scene import set_player_authority
+        calls = []
+        monkeypatch.setattr(director, "_agent_json", _fake_agent(
+            calls, {"director_interpret": self.LAMP,
+                    "director_spatial": self.SPATIAL}))
+        ctx = _make_ctx(temp_db, player_input="the lamp goes out")
+        set_player_authority(ctx.chat.id, "actor_only")
+        ctx.director_interpret = None
+        director.director_interpret(ctx, nonce=0)
+        notes = [str(w) for w in ctx.warnings]
+        assert any("PLAYER AUTHORITY" in n and "refused whole" in n
+                   for n in notes), notes
+
+    def test_a_span_no_record_cites_voids_nothing(self):
+        """The bound on the guarantee, stated because it is real: `from_event`
+        is how a record says which span it settles, so a hand that omits it
+        leaves a record nothing can attribute. Same limit the deferred-phase
+        floor has always had, and the reason provenance went ON the record."""
+        assertions = {"rooms": {"bay": {"name": "Bay", "desc": "dark now"}}}
+        dropped = director.void_span_records(assertions, [1])
+        assert dropped == []
+        assert assertions["rooms"]["bay"]["desc"] == "dark now"
+
+    def test_every_owner_of_a_shared_span_loses_its_half(self):
+        """WHOLE is the rule. A span may be owned by several hands, and
+        voiding one hand's record while another's stands is exactly the
+        half-settlement the ruling was given to end. They cite one id, so one
+        pass reaches all of them."""
+        assertions = {
+            "entities": {"shutter": {"name": "shutter", "from_event": 1}},
+            "rooms": {"forge": {"name": "Forge", "from_event": 1}},
+            "poses": {"Corin": {"posture": "standing", "from_event": 2}},
+        }
+        dropped = director.void_span_records(assertions, [1])
+        assert assertions["entities"] == {} and assertions["rooms"] == {}
+        # A span nobody refused is untouched.
+        assert set(assertions["poses"]) == {"Corin"}
+        assert {path for path, _ in dropped} == {"entities.shutter",
+                                                 "rooms.forge"}
+
+    def test_the_join_is_position_to_span_id(self):
+        """A downgrade names a sequence POSITION; a record cites a SPAN id.
+        Both spaces are real and neither is the other -- the lesson of the
+        beat where a hand cited the phase graph because the payload carried
+        two fields called `event_id`."""
+        out = {"sequence": [
+            {"type": "speech", "text": "hello"},
+            {"type": "action", "attempt": "x", "category": "body",
+             "note": "n"},
+            {"type": "event", "description": "the lamp goes out",
+             "category": "spatial", "note": "m"},
+        ]}
+        # position 2 is the second SPAN (id 2), not the second element.
+        assert director.voided_span_ids(
+            out, [{"claim_id": "claim:2:event"}]) == [2]
+        assert director.voided_span_ids(
+            out, [{"claim_id": "claim:1:0"}]) == [1]
+        # An element that became no span addressed no ledger, so nothing
+        # cites it and there is nothing to void.
+        assert director.voided_span_ids(
+            out, [{"claim_id": "claim:0:0"}]) == []
+        assert director.voided_span_ids(out, []) == []
+
+    def test_no_engine_private_key_reaches_a_hand(self, temp_db, monkeypatch):
+        """`_from_position` is the engine's bookkeeping. A number in a payload
+        is a number the model will try to cite: the contact hand spent 16,180
+        output tokens citing the wrong one of two fields called `event_id`."""
+        from agents.director import _specialist_payload
+        view = {"source": "player_declaration", "player": "Corin", "cast": [],
+                "declared_actions": {}, "dice": [], "ledger_notes": {},
+                "declaration": {"sequence": []}, "manifest": [],
+                "spans": director._span_items({"sequence": [
+                    {"type": "action", "attempt": "x", "category": "spatial",
+                     "note": "n"}]})}
+        assert view["spans"][0]["_from_position"] == 0
+        ctx = _make_ctx(temp_db)
+        payload = _specialist_payload(
+            "spatial", ctx, json.loads(json.dumps(BASE_SCENE)), view,
+            {"nonce": 0})
+        assert payload["spans"], payload.keys()
+        for span in payload["spans"]:
+            assert not [k for k in span if str(k).startswith("_")], span

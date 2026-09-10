@@ -465,6 +465,22 @@ def _anchor_names(sc, whos, ctx=None, view=None):
     return out
 
 
+def _without_private_keys(item):
+    """A work item as the model sees it: no engine-only bookkeeping.
+
+    A leading underscore marks a key the engine put there for itself --
+    `_from_position`, which maps a span back to the sequence element whose
+    authority was settled. Every one of them is a number or an id, and a
+    number in a payload is one the model will try to cite: the contact hand
+    spent 16,180 output tokens citing the wrong one of two fields called
+    `event_id` on 2026-09-10.
+    """
+    if not isinstance(item, dict):
+        return item
+    return {key: value for key, value in item.items()
+            if not str(key).startswith("_")}
+
+
 def _specialist_payload(name, ctx, sc, view, extras):
     """One specialist's scoped payload -- its written entitlement, applied
     to whichever stage's beat view it was handed. Shared part: the beat
@@ -536,7 +552,8 @@ def _specialist_payload(name, ctx, sc, view, extras):
     manifest = _specialist_manifest_slice(name, view)
     if manifest:
         payload["changes_asserted"] = manifest
-    spans = _specialist_span_slice(name, view)
+    spans = [_without_private_keys(span)
+             for span in _specialist_span_slice(name, view)]
     if spans:
         payload["spans"] = spans
 
@@ -845,7 +862,17 @@ def _normalized_channel_value(channel, value):
 #: an unrecognized verdict must read as "this event was not addressed", the
 #: same as silence, because the whole point of the echo is that only a
 #: DELIBERATE answer counts as one.
-_EVENT_VERDICTS = frozenset({"encoded", "already_true", "not_mine"})
+#:
+#: `no_referent` is the fourth since 2026-09-10 and it is not a shade of
+#: `not_mine`. `not_mine` is a HAND-OFF -- it needs a channel I was not
+#: granted -- and it presumes somebody else can hold the work. `no_referent`
+#: says the span names something the world does not hold at all, so there is
+#: nothing for anyone to write it INTO. The word is borrowed deliberately from
+#: the core repair's own vocabulary, where it means the same thing for the
+#: same reason (`director_reconcile._NO_REFERENT`): the effect stands, and
+#: there is no structured home to encode it as.
+_EVENT_VERDICTS = frozenset({"encoded", "already_true", "not_mine",
+                             "no_referent"})
 
 #: What a specialist says ABOUT its work, as opposed to the work. Everything
 #: else in a specialist response is one of its channels.
@@ -856,7 +883,10 @@ _SPECIALIST_BOOKKEEPING = frozenset({"resolved_events", "phase_sources",
 #: ledgers already carry it and `not_mine` means it belongs elsewhere, so an
 #: empty response is the correct behaviour for both. `encoded` is not here: the
 #: sheet defines it as "you put it in your channels this beat".
-_VERDICTS_WITHOUT_CONTENT = frozenset({"already_true", "not_mine"})
+#: `no_referent` is here by definition -- it is the answer for a span there
+#: was nothing to write, so writing something would contradict it.
+_VERDICTS_WITHOUT_CONTENT = frozenset({"already_true", "not_mine",
+                                       "no_referent"})
 
 
 def _wrote_any_channel(result):

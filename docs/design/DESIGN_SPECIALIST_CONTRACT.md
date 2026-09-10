@@ -708,6 +708,91 @@ built from the channel its replacement had emptied. *Is this fact stored
 twice?* remains the question that finds them -- and its second half, asked
 after a migration: *which copy is this reader holding?*
 
+## 4h. MINT IT OR REFUSE IT WHOLE -- never half of it
+
+The owner, 2026-09-10, on the shutter beat: *"Either it mints the window or
+door or it refuses the whole span depending on player authority level."*
+
+The beat that prompted it: one span categorized `["objects","spatial"]`,
+"nail the shutter across the window". `objects` encoded a shutter. `spatial`
+answered `not_mine` -- *"no forge room or door edge exists in the navigable
+room graph"* -- and the beat kept a shutter nailed across a window that was in
+no room's edge list. A half-settlement, which is the one outcome the rule
+forbids.
+
+Half the rule was already in the engine and is worth quoting, because it is
+the same distinction one tier up (`director_reconcile._NO_REFERENT`):
+
+> `rejected` denies that the change happened, which the player authority
+> contract forbids for an asserted effect, while this accepts the effect and
+> reports that there is nothing structured to encode it AS.
+
+### The two arms, and which side of the seam each belongs on
+
+**MINT is the hand's.** One clause in `director_note` -- the card every hand
+carries, because this is about the contract and not any one subject: absence
+is not a reason to decline a span. A declaration is how a thing comes to be
+here, so give it the smallest honest record that makes the span true. Stated
+as the class and its ONE exclusion rather than a list of mintable things
+(a window, a door, a hook, a ledge -- English always has one more): what may
+NOT be minted is what has no durable record anywhere, a quantity, a quality, a
+stretch of time. That is `no_referent`, borrowed word for word from the core
+repair's vocabulary rather than restated as a second one, and now a fourth
+specialist verdict beside `encoded`, `already_true` and `not_mine`. It is
+deliberately not a shade of `not_mine`: that word is a HAND-OFF and presumes
+somebody else can hold the work, which is exactly what was false here.
+
+**REFUSE is the engine's, and the hands are told nothing about it.** They run
+BEFORE the dial is read, they are tools rather than policy, and a rule they had
+to reason about would live in six places instead of one. So a hand always does
+its job and the dial decides whether the work survives.
+
+### What the refuse arm found, which was bigger than the shutter
+
+`apply_player_authority` moves two labels -- the claim's scope to `intent`, the
+element's commitment to `contestable` -- and that is everything it can do,
+because it runs AFTER the fan-out. The hands have already written the record.
+Measured on one beat under both dials, everything else equal:
+
+    world_author  downgrades=0  state_assertions {"rooms":{"bay":{"desc":"dark now"}}}
+    actor_only    downgrades=1  state_assertions {"rooms":{"bay":{"desc":"dark now"}}}
+
+Byte-identical. **Under hard mode the player's world assertion was relabelled
+an intention and the world kept the fact.** `Design.md` called the ladder
+Built; what was built was the labelling.
+
+`voided_span_ids` joins the two id spaces -- a downgrade names a sequence
+POSITION (`claim:<index>:...`), a record cites a SPAN id (`from_event`) -- and
+`void_span_records` drops every record citing a voided span, WHOLE, across
+every owner. The walker is `prune_blocked_phase_changes` unchanged: it already
+answers "is this record's event dead", it reads `from_event` as of the same
+day, and the deferred-phase floor calls it the same way a few lines above. A
+second walker would be a second answer to one question.
+
+`world_author` is the default and grants everything, so there is nothing to
+void and the pass costs one falsy check on every beat of every story nobody has
+changed the dial for.
+
+WHAT IT CANNOT REACH, stated because it bounds the guarantee: a record citing
+no event. `from_event` is how a record says which span it settles, and a hand
+that omits it leaves a record nothing can attribute -- the same limit the
+deferred-phase floor has always had, and the reason provenance was put ON the
+record rather than beside it.
+
+### Measured, after
+
+Three declarations naming things the world did not hold
+(`tools/interpret_beats.py --beat`, google/gemini-3.8-flash):
+
+    nail the shutter across the window   ["objects","spatial"]  encoded / encoded
+    padlock the forge door shut          ["objects","spatial"]  encoded / encoded
+    hang my apron on the hook by the door ["body","objects"]    encoded / encoded
+
+Six of six halves settled, zero failures. The spatial hand minted the window
+edge it had refused an hour earlier; the apron beat found a pairing across two
+different hands, `body` taking it off the wardrobe and `objects` minting both
+the apron and the hook, neither of which existed.
+
 ## 5. What already exists to build on
 
 This is a rewire of proven mechanisms, not a green field. **The output half of
