@@ -239,6 +239,10 @@ from .director_floors import (
     _scan_for_untracked_restraint,
 )
 from .director_evidence import (
+    span_colocations,
+    span_pairings,
+    span_records,
+    span_result_findings,
     voided_span_ids,
     void_span_records,
     _SUBJECT_OP_CHANNELS,
@@ -317,6 +321,7 @@ from .director_fanout import (
     span_categories,
     span_owners,
     specialist_co_hands,
+    co_hand_view,
     _specialist_payload,
     _anchor_names,
     _beat_rooms,
@@ -1574,6 +1579,7 @@ def director_interpret(ctx, nonce):
     # Interpret's own scope backstop, on the FINAL interpretation -- the
     # same single check resolve runs, pointed at this stage's containers.
     _orchestration_scope_backstop(ctx, out, "interpret", sc)
+    _span_coherency_report(ctx, out, "interpret", _idispatch, _iview)
 
     return out
 
@@ -2729,6 +2735,36 @@ def _prose_author_scope(ctx, sc, payload, facts, p_name):
         if granted:
             scope.append(name)
     return scope
+
+
+def _span_coherency_report(ctx, out, stage, dispatch, view):
+    """Say what does not add up about each span's assembled result.
+
+    A span routed to several hands is settled in several channels, and until
+    `span_records` existed its halves were reachable only one channel at a
+    time. That is why every fold in this tree is per-PAIR and matches on names
+    -- none of them could ask the question the id makes exact: which records
+    are this one event's outcome.
+
+    Reported and never repaired. What a coherent merge of two halves looks like
+    is a question about the two channels' subjects, and this codebase's
+    measured cost of guessing at that is a story whose containment ledger sat
+    empty for twenty beats after one alias overlap folded two things into one.
+    """
+    diff = out.get("state_diff") if stage == "resolve" \
+        else out.get("state_assertions")
+    findings = span_result_findings(
+        diff, (view or {}).get("spans"), dispatch, span_owners)
+    if not findings:
+        return
+    record = out.setdefault("orchestration", {})
+    record["span_findings"] = findings
+    for finding in findings[:4]:
+        ctx.tell_director(
+            "span %s: %s%s" % (
+                finding.get("event_id"), finding.get("kind"),
+                " (%s)" % finding["hand"] if finding.get("hand") else ""))
+
 
 
 def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
@@ -5236,6 +5272,8 @@ def director_resolve(ctx, nonce, _corrections=None):
     # wrongly-omitted chunk is reported against what actually ships, never
     # against a draft.
     _orchestration_scope_backstop(ctx, out, "resolve", sc)
+    _span_coherency_report(ctx, out, "resolve", _orch_dispatch,
+                           _orch_view)
 
     # EXTENSION RESULT VALIDATION, last of all and deliberately so. A validator
     # judges the merged result AFTER every deterministic floor this engine owns

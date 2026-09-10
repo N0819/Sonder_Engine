@@ -16,6 +16,7 @@ from story.character_schema import character_name_from_text
 from core.db import get_setting, wget
 from world.survival import survival_enabled, vitals_of
 from world.spatial import (contact_action_ledger_index, contact_id,
+                           passage_id_for,
                            crossing_of, effective_anchors, room_of,
                            scene_room_id, substance_ledger_index)
 
@@ -481,6 +482,109 @@ def _without_private_keys(item):
             if not str(key).startswith("_")}
 
 
+#: What each hand shows a CO-OWNER of a span it is sharing: identity, and the
+#: one fact that says which thing it is. Never a ledger's own state -- see the
+#: module note on `worn_index`, which is this rule's unconditional ancestor.
+#: Keyed by the hand being LOOKED AT, not the hand looking, because what the
+#: body hand holds is the same answer whoever asks (`co_hands/<hand>.txt` makes
+#: the same collapse for the prose).
+def _co_view_body(sc):
+    """Who is wearing what. Not coverage, not condition, not what afflicts."""
+    return {"worn": [
+        {"garment": str(garment), "worn_by": str(who)}
+        for who, entry in (sc.get("attire") or {}).items()
+        if isinstance(entry, dict)
+        for garment in (entry.get("wearing") or [])
+        if str(garment).strip()
+    ]}
+
+
+def _co_view_objects(sc):
+    """What things there are, and where. Not their state."""
+    return {"things": [
+        {"id": str(eid), "name": str((entity or {}).get("name") or eid),
+         "at": str((sc.get("positions") or {}).get(eid) or "")}
+        for eid, entity in (sc.get("entities") or {}).items()
+        if isinstance(entity, dict)
+    ]}
+
+
+def _co_view_spatial(sc):
+    """Where bodies stand and which ways exist. Not poses, not distances."""
+    rooms = sc.get("rooms") or {}
+    return {
+        "standing": [{"who": str(who), "in": str(room)}
+                     for who, room in (sc.get("positions") or {}).items()
+                     if str(room).strip()],
+        # `way` is the doorway's OWN id (`passage_id_for`, sorted so the two
+        # mirrored edges of one doorway agree), and it is the same token
+        # `span_pairings` groups by. A hand handed the id can say where its
+        # record went; a hand handed only a name has to invent one.
+        "ways": [
+            {"way": passage_id_for(rid, str(edge.get("to") or "")),
+             "from": str(rid), "to": str(edge.get("to") or ""),
+             "barrier": str(edge.get("barrier") or "open"),
+             **({"name": str(edge["name"])} if edge.get("name") else {})}
+            for rid, room in rooms.items() if isinstance(room, dict)
+            for edge in (room.get("adjacent") or [])
+            if isinstance(edge, dict) and str(edge.get("to") or "").strip()
+        ],
+    }
+
+
+def _co_view_contact(sc):
+    """Who is touching whom, and what is inside what. Not manner, not scale."""
+    return {
+        "touching": [
+            {"actor": str(row.get("actor") or ""),
+             "target": str(row.get("target") or "")}
+            for row in (sc.get("contacts") or [])
+            if isinstance(row, dict) and str(row.get("actor") or "").strip()
+        ],
+        "inside": [
+            {"what": str(what), "in": str((entry or {}).get("in") or "")}
+            for what, entry in (sc.get("contained") or {}).items()
+            if isinstance(entry, dict)
+        ],
+    }
+
+
+def _co_view_social(sc):
+    """Who is present under what name. Not what anyone knows or believes."""
+    return {"present": [
+        {"who": str(who)} for who in (sc.get("positions") or {})
+        if str(who).strip()
+    ]}
+
+
+_CO_HAND_VIEWS = {
+    "body": _co_view_body,
+    "objects": _co_view_objects,
+    "spatial": _co_view_spatial,
+    "contact": _co_view_contact,
+    "social": _co_view_social,
+}
+
+
+def co_hand_view(name, view, sc):
+    """The identity slices of every OTHER owner of a span this hand received.
+
+    Empty on the ordinary beat, where every span a hand got is wholly its own
+    -- which is the point, and the same gate `specialist_co_hands` uses, so the
+    paragraph and the rows that make it actionable arrive together or not at
+    all.
+    """
+    slices = {}
+    for hand in specialist_co_hands(name, view):
+        builder = _CO_HAND_VIEWS.get(hand)
+        if not builder:
+            continue
+        rows = {key: value for key, value in builder(sc or {}).items() if value}
+        if rows:
+            slices[hand] = rows
+    return slices
+
+
 def _specialist_payload(name, ctx, sc, view, extras):
     """One specialist's scoped payload -- its written entitlement, applied
     to whichever stage's beat view it was handed. Shared part: the beat
@@ -556,6 +660,14 @@ def _specialist_payload(name, ctx, sc, view, extras):
              for span in _specialist_span_slice(name, view)]
     if spans:
         payload["spans"] = spans
+    # WHAT THE OTHER OWNERS OF THOSE SPANS ARE HOLDING, identity only. The
+    # sheet already tells this hand WHO is settling the other half
+    # (`co_hands/<hand>.txt`); without the rows that is a paragraph it cannot
+    # act on, and a hand that cannot name its co-owner's thing invents one --
+    # which is how a second record of an existing thing gets made.
+    _co = co_hand_view(name, view, sc)
+    if _co:
+        payload["co_hands"] = _co
 
     rooms_index = {
         rid: str((room or {}).get("name") or rid)

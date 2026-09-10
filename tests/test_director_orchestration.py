@@ -4573,3 +4573,189 @@ class TestADialRefusesTheSpanAndTheRecordWithIt:
         assert payload["spans"], payload.keys()
         for span in payload["spans"]:
             assert not [k for k in span if str(k).startswith("_")], span
+
+
+class TestAHandSeesWhatItsCoOwnerHolds:
+    """The owner, 2026-09-10: "we can temporarily show the part of the world
+    state the colaborating agents see", then "conditional formating based on
+    what hands are interacting".
+
+    `co_hands/<hand>.txt` tells a hand WHO is settling the other half of its
+    span. Without the rows behind it that is a paragraph it cannot act on: a
+    hand that cannot name its co-owner's thing invents one, and the invention
+    becomes a second record of a thing that already existed. That is not
+    hypothetical -- the payload's unconditional worn-garment index exists
+    because "the objects specialist minted a duplicate object for the same
+    reason and said so".
+
+    Five slices for twenty pairings, the same collapse the chunks made: what
+    the body hand holds is the same rows whoever asks.
+    """
+
+    SCENE = {
+        "attire": {"Corin": {"wearing": ["apron"],
+                             "regions": {"torso": ["apron"]},
+                             "conditions": ["scorched"]}},
+        "entities": {"hook": {"name": "hook", "state": {"loose": True}}},
+        "positions": {"Corin": "forge", "hook": "forge"},
+        "rooms": {"forge": {"name": "Forge", "adjacent": [
+            {"to": "well", "barrier": "closed_door", "name": "forge door"}]}},
+        "contacts": [], "contained": {},
+    }
+
+    def _view(self, categories):
+        return {"spans": director._span_items({"sequence": [
+            {"type": "action", "attempt": "hang my apron on the hook",
+             "category": categories, "note": "n"}]})}
+
+    def test_each_owner_sees_the_other_and_only_the_other(self):
+        view = self._view(["body", "objects"])
+        assert director.co_hand_view("objects", view, self.SCENE) == {
+            "body": {"worn": [{"garment": "apron", "worn_by": "Corin"}]}}
+        assert director.co_hand_view("body", view, self.SCENE) == {
+            "objects": {"things": [
+                {"id": "hook", "name": "hook", "at": "forge"}]}}
+
+    def test_a_hand_that_shares_no_span_sees_nothing(self):
+        """The same gate the chunk uses, so the paragraph and the rows that
+        make it actionable arrive together or not at all."""
+        view = self._view(["body", "objects"])
+        assert director.co_hand_view("spatial", view, self.SCENE) == {}
+        assert director.co_hand_view("contact", view, self.SCENE) == {}
+
+    def test_a_span_wholly_one_hands_own_shows_nobody_anything(self):
+        view = self._view("body")
+        for hand in director.SPECIALISTS:
+            assert director.co_hand_view(hand, view, self.SCENE) == {}, hand
+
+    def test_identity_crosses_and_state_never_does(self):
+        """The boundary the unconditional index already states: this widens
+        who can be NAMED, not what is KNOWN. A hand that could read its
+        co-owner's state could write its co-owner's conclusions, which is the
+        ownership race the disjoint partition exists to prevent."""
+        view = self._view(["body", "objects"])
+        objects_sees = json.dumps(director.co_hand_view(
+            "objects", view, self.SCENE))
+        # The wardrobe's own state: coverage, condition, the region map.
+        assert "scorched" not in objects_sees
+        assert "regions" not in objects_sees and "torso" not in objects_sees
+        body_sees = json.dumps(director.co_hand_view(
+            "body", view, self.SCENE))
+        assert "loose" not in body_sees and "state" not in body_sees
+
+    def test_the_slice_is_keyed_on_the_hand_looked_at_not_the_looker(self):
+        """Five functions, twenty pairings. What `body` holds is one answer,
+        so `contact` and `objects` reading it get the same rows."""
+        both = self._view(["body", "contact"])
+        assert director.co_hand_view("contact", both, self.SCENE)["body"] == \
+            director.co_hand_view("objects", self._view(
+                ["body", "objects"]), self.SCENE)["body"]
+
+    def test_the_ways_between_rooms_reach_a_sharing_hand(self):
+        """The pair this session made routine: a padlock is the objects hand's
+        and the door it hangs on is an edge in the spatial hand's. Neither
+        could name the other's half, and nothing in the tree joins an entity
+        to a passage."""
+        view = self._view(["objects", "spatial"])
+        seen = director.co_hand_view("objects", view, self.SCENE)
+        # `way` is the doorway's OWN id, the same token `span_pairings` groups
+        # by. A hand handed only a name has to invent where its record went;
+        # a hand handed the id can say it, and both sides of the seam then
+        # spell the place one way.
+        assert seen["spatial"]["ways"] == [
+            {"way": "forge|well", "from": "forge", "to": "well",
+             "barrier": "closed_door", "name": "forge door"}]
+        assert seen["spatial"]["standing"] == [
+            {"who": "Corin", "in": "forge"}, {"who": "hook", "in": "forge"}]
+
+    def test_it_reaches_the_payload_only_when_a_span_is_shared(self, temp_db):
+        from agents.director import _specialist_payload
+        ctx = _make_ctx(temp_db)
+        base = {"source": "player_declaration", "player": "Corin", "cast": [],
+                "declared_actions": {}, "dice": [], "ledger_notes": {},
+                "declaration": {"sequence": []}, "manifest": []}
+        shared = dict(base, spans=self._view(["body", "objects"])["spans"])
+        alone = dict(base, spans=self._view("objects")["spans"])
+        sc = json.loads(json.dumps(self.SCENE))
+        with_co = _specialist_payload("objects", ctx, sc, shared, {"nonce": 0})
+        without = _specialist_payload("objects", ctx, sc, alone, {"nonce": 0})
+        assert "body" in with_co["co_hands"]
+        assert "co_hands" not in without
+
+
+class TestASpansRecordsArePairedByWhereTheyHappen:
+    """The owner, 2026-09-10: "We need some sort of reconciliation code that
+    pairs things together based on where they are supposed to happen."
+
+    `span_records` says which records are one event's outcome; it cannot say
+    which of them are the same THING within it, because the apron and the hook
+    both cite the span that hung one on the other. Place answers that, and it
+    is the right key because the engine ISSUES it -- a room id, a doorway's
+    room pair. Names are the model's and drift; the folds in this tree all
+    match on names because until the span id there was nothing else to match
+    on, and one of them admits matching "coat" against "coat rack".
+
+    A grouping, never a decision. Two lamps in a room are two lamps.
+    """
+
+    SCENE = {"positions": {"Corin": "forge", "padlock": "forge"}}
+    DIFF = {
+        "entities": {"padlock": {"name": "padlock", "from_event": 1}},
+        "rooms": {
+            "forge": {"name": "Forge", "adjacent": [
+                {"to": "well", "barrier": "closed_door", "from_event": 1}]},
+            "well": {"name": "Well", "adjacent": [
+                {"to": "forge", "barrier": "closed_door", "from_event": 1}]},
+        },
+    }
+
+    def test_one_doorway_is_one_place_not_two_edges(self):
+        """Both mirrored edges of a doorway carry the same token, sorted, so
+        the two sides of one way cannot read as two places."""
+        places = director.span_pairings(self.DIFF, self.SCENE)[1]
+        assert sorted(places) == ["room:forge", "way:forge|well"]
+        assert len(places["way:forge|well"]) == 2
+
+    def test_a_thing_in_a_room_meets_the_doorway_of_that_room(self):
+        """The padlock stands in the forge and the door lies between the forge
+        and the well, so exactly by place they never met. A way belongs to each
+        room it joins, which costs no new vocabulary and is what lets the two
+        halves of one act land together."""
+        rooms = director.span_colocations(self.DIFF, self.SCENE)[1]
+        assert set(rooms) == {"forge", "well"}
+        assert [p for p, _c, _r in rooms["forge"]] == [
+            "entities.padlock", "rooms.forge.adjacent[0]",
+            "rooms.well.adjacent[0]"]
+        # The padlock is not in the well, and does not appear there.
+        assert "entities.padlock" not in [p for p, _c, _r in rooms["well"]]
+
+    def test_a_record_the_engine_cannot_place_pairs_with_nothing(self):
+        """Silence, never a guess. An unplaced entity has no room, and parking
+        it under one would weld it to whatever else was there."""
+        diff = {"entities": {"ghost": {"name": "ghost", "from_event": 1}}}
+        assert director.span_pairings(diff, {"positions": {}}) == {}
+        assert director.span_colocations(diff, {"positions": {}}) == {}
+
+    def test_this_beats_move_wins_over_where_it_stood(self):
+        """A subject the beat moved pairs where it now IS, so a record about
+        the arrival does not group with the room it left."""
+        sc = {"positions": {"Corin": "forge"}}
+        diff = {"positions": {"Corin": "well"},
+                "poses": {"Corin": {"posture": "kneeling", "from_event": 1}}}
+        rooms = director.span_colocations(diff, sc)[1]
+        assert set(rooms) == {"well"}
+
+    def test_separate_spans_are_never_pooled(self):
+        """The span bounds the question. Two acts in one room stay two acts,
+        which is the half of the key that names are no help with at all."""
+        sc = {"positions": {"lamp": "forge", "stool": "forge"}}
+        diff = {"entities": {"lamp": {"name": "lamp", "from_event": 1},
+                             "stool": {"name": "stool", "from_event": 2}}}
+        grouped = director.span_colocations(diff, sc)
+        assert [p for p, _c, _r in grouped[1]["forge"]] == ["entities.lamp"]
+        assert [p for p, _c, _r in grouped[2]["forge"]] == ["entities.stool"]
+
+    def test_the_room_record_itself_is_placed(self):
+        diff = {"rooms": {"forge": {"name": "Forge", "desc": "dark",
+                                    "from_event": 1}}}
+        assert sorted(director.span_pairings(diff, {})[1]) == ["room:forge"]

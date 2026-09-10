@@ -793,6 +793,94 @@ edge it had refused an hour earlier; the apron beat found a pairing across two
 different hands, `body` taking it off the wardrobe and `objects` minting both
 the apron and the hook, neither of which existed.
 
+## 4i. RECONCILING THE SHARED SPAN: by id, then by place
+
+A span settled by several hands is settled in several channels, and the halves
+have to add up. The owner, 2026-09-10, in three steps:
+
+> I smell duplicate potential, since they are part of the same ledger now I
+> imagine we can reconcile through code somehow.
+>
+> Perhaps as part of the solution we can temporarily show the part of the world
+> state the colaborating agents see ... conditional formating based on what
+> hands are interacting.
+>
+> We need some sort of reconciliation code that pairs things together based on
+> where they are supposed to happen.
+
+### What was already there, and why it was not enough
+
+Roughly fifteen cross-channel folds, each written after a specific failure and
+each matching on NAMES -- `_fold_duplicate_mints`, `mint_transferred_objects`,
+`_fold_worn_garment_entities`, `derive_worn_containment`, `derive_borne_
+containment`, `derive_scene_stations`, the pose invalidations. They match on
+names because until the span id there was nothing else to match on, and one of
+them says so: `resolve_garment("coat", ["coat rack"])` matches on the head
+noun.
+
+The apron case is already cured by that machinery and was measured to confirm
+it: `objects` minted `apron`, `body` shed the same garment, and
+`_adopt_shed_record` adopted the objects hand's record rather than minting
+`apron_corin` beside it. One entity, both hands' facts.
+
+The pair this session made routine is NOT cured, and nothing in the tree
+reconciles it: an entity and a passage. Measured on the padlock beat, merged
+from the two hands' real output --
+
+    padlock position : (unplaced)
+    passages         : {}
+    edge names it    : False
+
+-- two true records and one lost fact. The barrier ladder answers three
+questions (sight, passage, sound) and `closed_door` already answers all three
+the way `locked` would, so a locked door is not a missing rung; what is missing
+is anywhere to say that a THING fastens a WAY.
+
+### The three pieces built
+
+**1. The span's result exists.** `span_records` walks the merged diff once and
+groups every record by the span it cites, with its path and channel. The only
+reader of that id kept a SET of ids and discarded the records, which answers
+"did anyone cite this" and nothing else -- which is exactly why every fold is
+per-pair. `_cited_event_ids` is now a projection of it, because two walkers
+over one field are how the two of them come to disagree.
+
+**2. Place is the join.** `span_pairings` groups a span's records by where they
+happen, in tokens the ENGINE issues: `room:<id>`, and `way:<a>|<b>` from
+`passage_id_for`, sorted, so the two mirrored edges of one doorway collapse to
+one place. A record the engine cannot place returns None and pairs with
+nothing. `span_colocations` is the coarser sibling a reconciler wants: a
+doorway belongs to each room it joins, so the padlock standing in the forge and
+the door between the forge and the well finally meet.
+
+Span plus place is two engine-issued facts, and it BOUNDS an identity question
+that was previously scene-wide. It does not decide one: two lamps in a room are
+two lamps, and the tree's measured over-merge -- boards folded into a satchel on
+an alias overlap, twenty beats of empty containment ledger -- was a decision,
+never a grouping.
+
+**3. The hands see each other, shaped by who is interacting.** `co_hand_view`
+gives each hand the identity slice of every OTHER owner of a span it received.
+Five functions for twenty pairings, keyed on the hand being LOOKED AT, the same
+collapse `co_hands/<hand>.txt` makes for the prose -- what the body hand holds
+is one answer whoever asks. Identity ONLY, holding the line the unconditional
+worn-garment index already drew: *"this widens who can be NAMED, not what is
+KNOWN"*. And the ways carry the doorway's own id, not just its name, because a
+hand handed a name has to invent where its record went while a hand handed the
+id can say it -- the same token the pairing groups by, so both sides of the
+seam spell the place one way.
+
+### Still open
+
+An entity has no field for a passage, so "the padlock is ON that doorway"
+remains unsayable and the pairing groups them only by the room they share.
+`PASSAGE_FIELDS` is `(barrier, name, material, width)` and a passage is keyed
+by its room pair, so a fastening would be a new persistent field with the whole
+`docs/guides/DATABASE.md` checklist behind it. Left for the owner, with a third
+reading worth weighing: a padlock may not deserve to be an entity at all, and
+if the doorway's own record carried the fastening then the objects hand's half
+of that span would be nothing and the span would belong to `spatial` alone.
+
 ## 5. What already exists to build on
 
 This is a rewire of proven mechanisms, not a green field. **The output half of
