@@ -5418,3 +5418,142 @@ class TestAThingMintedInsideAPlaceTheBeatMade:
             {"type": "action", "attempt": "b", "category": "objects",
              "note": "b"}])
         assert rooms == {}
+
+
+class TestAHandHandedOneSpanWroteItForThatSpan:
+    """The dependency this removes: the recompiler's three-link case -- mint a
+    room, walk into it, mint a thing inside it -- rests on the MOVEMENT being
+    attributable, and movement is the one thing that structurally cannot carry
+    its own provenance. `positions` is `dict[str, str]`, a bare string with
+    nowhere to put a citation, so it fell back on `phase_sources`, which a hand
+    fills BESIDE its work and which measured 25% emission.
+
+    The rule that removes it needs no prose, no model and no guess: the
+    dispatch already records which spans each hand was handed, and a hand
+    handed exactly ONE span wrote every record for that span. There is nothing
+    else those records could be about. Measured over the day's live runs, 28 of
+    32 dispatched hands were handed exactly one span.
+    """
+
+    def _dispatch(self, *names):
+        return {name: {"ran": True,
+                       "channels": director.SPECIALISTS[name]["channels"]}
+                for name in names}
+
+    def _view(self, *sequence):
+        return {"spans": director._span_items({"sequence": list(sequence)})}
+
+    def test_a_movement_is_placed_in_the_beats_order_without_a_sidecar(self):
+        view = self._view(
+            {"type": "action", "attempt": "a crate stands here",
+             "category": "objects", "note": "a"},
+            {"type": "action", "attempt": "I step into the box",
+             "category": "spatial", "note": "b"})
+        sd = {"rooms": {"box": {"name": "Box", "from_event": 2}},
+              "positions": {"Corin": "box"},
+              "entities": {"crate": {"name": "crate", "from_event": 1}}}
+        got = director.single_span_attributions(
+            sd, self._dispatch("objects", "spatial"), view,
+            director._specialist_span_slice)
+        assert got["positions.Corin"] == 2
+
+    def test_it_never_argues_with_a_record_that_already_cited(self):
+        """An explicit write outranks a derivation -- the rule
+        `derive_minted_entity_placements` states and this obeys."""
+        view = self._view(
+            {"type": "action", "attempt": "I step into the box",
+             "category": "spatial", "note": "b"})
+        sd = {"rooms": {"box": {"name": "Box", "from_event": 7}}}
+        got = director.single_span_attributions(
+            sd, self._dispatch("spatial"), view,
+            director._specialist_span_slice)
+        assert "rooms.box" not in got
+
+    def test_it_never_argues_with_an_existing_sidecar_entry(self):
+        view = self._view(
+            {"type": "action", "attempt": "I step into the box",
+             "category": "spatial", "note": "b"})
+        sd = {"positions": {"Corin": "box"},
+              "phase_sources": {"positions.Corin": 9}}
+        got = director.single_span_attributions(
+            sd, self._dispatch("spatial"), view,
+            director._specialist_span_slice)
+        assert "positions.Corin" not in got
+
+    def test_two_spans_is_genuinely_ambiguous_and_says_nothing(self):
+        """Silence, never a guess. The typed record's own `from_event` is the
+        channel for that case, and a record carrying neither reaches the
+        unattributed slice, which is the honest place for it."""
+        view = self._view(
+            {"type": "action", "attempt": "I step into the box",
+             "category": "spatial", "note": "a"},
+            {"type": "action", "attempt": "I kneel", "category": "spatial",
+             "note": "b"})
+        sd = {"positions": {"Corin": "box"}}
+        assert director.single_span_attributions(
+            sd, self._dispatch("spatial"), view,
+            director._specialist_span_slice) == {}
+
+    def test_a_hand_that_did_not_run_attributes_nothing(self):
+        view = self._view(
+            {"type": "action", "attempt": "I step into the box",
+             "category": "spatial", "note": "b"})
+        sd = {"positions": {"Corin": "box"}}
+        dispatch = {"spatial": {"ran": False,
+                                "channels": director.SPECIALISTS[
+                                    "spatial"]["channels"]}}
+        assert director.single_span_attributions(
+            sd, dispatch, view, director._specialist_span_slice) == {}
+
+    def test_only_the_hands_own_channels(self):
+        """The partition is disjoint, and a hand cannot speak for a channel it
+        does not own -- the merge would not even look for it."""
+        view = self._view(
+            {"type": "action", "attempt": "I step into the box",
+             "category": "spatial", "note": "b"})
+        sd = {"positions": {"Corin": "box"},
+              "entities": {"crate": {"name": "crate"}}}
+        got = director.single_span_attributions(
+            sd, self._dispatch("spatial"), view,
+            director._specialist_span_slice)
+        assert "positions.Corin" in got
+        assert "entities.crate" not in got
+
+    def test_it_writes_nothing(self):
+        view = self._view(
+            {"type": "action", "attempt": "I step into the box",
+             "category": "spatial", "note": "b"})
+        sd = {"positions": {"Corin": "box"}}
+        before = json.dumps(sd, sort_keys=True)
+        director.single_span_attributions(
+            sd, self._dispatch("spatial"), view,
+            director._specialist_span_slice)
+        assert json.dumps(sd, sort_keys=True) == before
+
+    def test_the_whole_chain_resolves_once_the_move_is_attributed(self):
+        """Mint a room, walk into it, mint a thing inside it -- and a thing set
+        down BEFORE the move stays where it was set down."""
+        from world.spatial import merge_scene_with_diff
+        view = self._view(
+            {"type": "action", "attempt": "a crate stands here",
+             "category": "objects", "note": "a"},
+            {"type": "action", "attempt": "I step into the box",
+             "category": "spatial", "note": "b"})
+        sd = {"rooms": {"box": {"name": "Box", "adjacent": [],
+                                "from_event": 2}},
+              "positions": {"Corin": "box"},
+              "entities": {"crate": {"name": "crate", "from_event": 1}}}
+        sd.setdefault("phase_sources", {}).update(
+            director.single_span_attributions(
+                sd, self._dispatch("objects", "spatial"), view,
+                director._specialist_span_slice))
+        scene = {"rooms": {"yard": {"name": "Yard", "adjacent": []}},
+                 "positions": {"Corin": "yard"}, "entities": {},
+                 "contacts": [], "poses": {}, "stations": {}, "contained": {}}
+        worlds = director.beat_worlds(scene, sd, merge_scene_with_diff)
+        final = merge_scene_with_diff(scene, sd)
+        assert [(s, (w.get("positions") or {}).get("Corin"))
+                for s, w in worlds] == [(1, "yard"), (2, "yard")]
+        assert director.span_mint_rooms(
+            sd, view["spans"], worlds, final,
+            lambda span: "Corin") == {"crate": "yard"}
