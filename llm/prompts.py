@@ -336,8 +336,16 @@ def unique_preset_name(name, existing):
     raise ValueError(f"too many presets already named {name!r}")
 
 
-def specialist_prompt(name, scope, language=None):
-    """Assemble one scoped specialist sheet from the selected pack."""
+def specialist_prompt(name, scope, language=None, co_hands=()):
+    """Assemble one scoped specialist sheet from the selected pack.
+
+    `co_hands` names the other hands settling a part of some span this one was
+    handed (`director_fanout.specialist_co_hands`). Each contributes ONE shared
+    chunk describing what that hand settles -- five files for all twenty
+    pairings, because what the body hand does is the same sentence whoever is
+    reading it. Empty on the ordinary beat, which is the point: the paragraph
+    costs nothing on a sheet whose spans are wholly its own.
+    """
     card = _prompt_card(language)
     spec = card["specialists"][name]
     pid = f"director_{name}"
@@ -356,6 +364,14 @@ def specialist_prompt(name, scope, language=None):
     # for every hand because the rule is about the CHANNEL a note arrives on,
     # not about any one hand's subject.
     sheet += str(card["director_note"])
+    # Appended OUTSIDE the override branch, beside `director_note` and the
+    # overlay, because a host's replacement sheet still has no way to know
+    # which of the other four hands got a piece of the same span.
+    shared = card.get("co_hands") or {}
+    for hand in (co_hands or ()):
+        chunk = shared.get(hand)
+        if chunk:
+            sheet += str(chunk)
     sheet += nsfw_overlay(pid, card)
     return apply_prompt_policy(sheet, _language(language), pid)
 

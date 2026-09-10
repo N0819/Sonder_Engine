@@ -24,6 +24,7 @@ from .common import (communication_surface, observable_action_text,
 from .director_evidence import _manifest_items, _span_items
 from .director_scopes import (
     SPECIALISTS,
+    _CHANNEL_SPECIALISTS,
     reads_dialogue,
     _CATEGORY_CHANNELS,
     note_key_targets,
@@ -237,16 +238,21 @@ def _interpret_beat_view(ctx, out, p_name):
             continue
         sequence.append({
             k: element.get(k)
-            # `category`, `event_id` and `note` are what make a span a WORK
-            # ITEM rather than a description of one, so they have to be on
-            # this list -- an allowlist drops what it does not name, silently,
-            # which is how three other fields were lost today before anyone
-            # noticed.
+            # AND NOT `event_id`, `category` OR `note`. Those three are what
+            # make an element a WORK ITEM, and the work items are `spans` --
+            # one list, numbered by the engine. Carried here too, the payload
+            # held two fields named `event_id` with different values: the
+            # span's chronological number and this element's phase-graph id
+            # from `assign_event_ids`. Measured 2026-09-10, beat 2: the
+            # contact hand echoed the phase id, its whole answer was rejected,
+            # and the repair failed as well -- 16,180 output tokens and 96.9s
+            # on a receipt for the wrong ledger. The phase graph is the
+            # engine's; nothing a hand does reads it.
             for k in ("type", "text", "attempt", "raw_text", "commitment",
                       "act", "content", "phase_id", "phase", "depends_on",
                       "participants", "requires_contacts", "referents",
                       "targets", "asserted_effects", "intended_effects",
-                      "volume", "category", "event_id", "note")
+                      "volume")
             if element.get(k) is not None
         })
     declared = {}
@@ -304,13 +310,49 @@ def _specialist_span_slice(name, view):
     one definition, so a hand cannot be judged on a work item it was never
     handed.
     """
-    channels = set(SPECIALISTS[name]["channels"])
-    return [
-        item for item in (view.get("spans") or [])
-        if any(target == name if kind == "hand" else target in channels
-               for kind, target in
-               manifest_category_targets(item.get("category")))
-    ]
+    return [item for item in (view.get("spans") or [])
+            if name in span_owners(item)]
+
+
+def specialist_co_hands(name, view):
+    """The OTHER hands settling a part of some span this one was handed.
+
+    Empty on the ordinary beat where every span this hand got is wholly its
+    own, which is what keeps the chunks off the sheet the rest of the time.
+    """
+    others = []
+    for item in _specialist_span_slice(name, view or {}):
+        for hand in span_owners(item):
+            if hand != name and hand not in others:
+                others.append(hand)
+    return [hand for hand in SPECIALISTS if hand in others]
+
+
+def span_categories(item):
+    """Every ledger family one span names, normalized, as a list."""
+    if not isinstance(item, dict):
+        return []
+    listed = item.get("categories")
+    if isinstance(listed, (list, tuple)) and listed:
+        return [str(c) for c in listed if str(c or "").strip()]
+    single = str(item.get("category") or "").strip()
+    return [single] if single else []
+
+
+def span_owners(item):
+    """Every hand that owns a part of this span, in canonical order.
+
+    THE COLLAPSE IS CODE'S. The Director names ledger families; which hands
+    those belong to is the engine's own table, and a span naming two families
+    one hand owns is one hand's work, not two.
+    """
+    owners = []
+    for category in span_categories(item):
+        for kind, target in manifest_category_targets(category):
+            hand = target if kind == "hand" else _CHANNEL_SPECIALISTS.get(target)
+            if hand and hand not in owners:
+                owners.append(hand)
+    return [name for name in SPECIALISTS if name in owners]
 
 
 def _note_for(notes, name):
@@ -821,6 +863,32 @@ def _wrote_any_channel(result):
     """Did this response carry content in any channel at all?"""
     return any(value for key, value in (result or {}).items()
                if key not in _SPECIALIST_BOOKKEEPING)
+
+
+def _granted_event_ids(name, view):
+    """The numbered work items this hand was handed, in one list.
+
+    BOTH SLICES, because spans are the work items now and the manifest is what
+    they replaced. Built from the manifest alone it was empty on every beat --
+    no sheet asks for `changes_asserted` any more -- so
+    `_resolved_event_verdicts` discarded every verdict a hand returned and
+    `events_addressed` stayed `{}`, which left per-hand acquittal unable to
+    run at all (measured 2026-09-10, the padlock beat).
+
+    The two share ONE id space by construction: spans take 1..N and the
+    manifest continues past `_span_id_ceiling`. So this is a union, never a
+    renumbering, and an id cannot mean two things.
+    """
+    granted = []
+    for item in (_specialist_span_slice(name, view or {})
+                 + _specialist_manifest_slice(name, view or {})):
+        try:
+            number = int((item or {}).get("event_id") or 0)
+        except (TypeError, ValueError):
+            continue
+        if number > 0 and number not in granted:
+            granted.append(number)
+    return granted
 
 
 def _resolved_event_verdicts(result, granted_ids):

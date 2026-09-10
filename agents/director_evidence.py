@@ -22,6 +22,9 @@ from story.character_schema import (fold_identity_key,
 from world.spatial import (_merge_entity, _merge_room, resolve_placement_target,
                            room_of)
 
+# `director_scopes` owns the ownership table and imports no
+# sibling, so this direction adds no cycle.
+from .director_scopes import manifest_category_targets
 from .common import (
     _contextual_rooms,
     _dict,
@@ -1354,14 +1357,69 @@ def _span_items(out):
         # already knows is real, and wrong here: it made every uncategorized
         # span -- a question asked, a look given -- into a work item, and so
         # would have dispatched a hand for every line of dialogue.
-        if not str(element.get("category") or "").strip():
+        raw = element.get("category")
+        # ONE SPAN MAY NAME SEVERAL LEDGERS. A belt pulled off and dropped on
+        # a bench is one act of the player's and two records -- the wardrobe's
+        # and the object's -- so the span carries both and each hand settles
+        # its own part (`DESIGN_SPECIALIST_CONTRACT.md`; per-hand acquittal in
+        # `_index_addressed_events`). A string stays a string's worth of work.
+        names = (raw if isinstance(raw, (list, tuple))
+                 else _split_joined_categories(raw))
+        categories = []
+        for name in names:
+            if not str(name or "").strip():
+                continue
+            folded = _normalize_omission_category(name)
+            if folded and folded not in categories:
+                categories.append(folded)
+        if not categories:
             continue
-        category = _normalize_omission_category(element.get("category"))
         item = dict(element)
-        item["category"] = category
+        item["categories"] = categories
+        # `category` keeps the first, so a reader written before spans could
+        # name two still sees the string it expects rather than a list.
+        item["category"] = categories[0]
         item["event_id"] = len(items) + 1
         items.append(item)
     return items
+
+
+def _split_joined_categories(raw):
+    """`"objects, spatial"` as the two names it is -- or as one, untouched.
+
+    A model told to name two families in one string field reaches for a
+    separator, and the joined string folds to no known category: the span
+    routes to no hand and the change is lost in silence. Splitting is safe
+    here and only here, because the result is DISCARDED unless every part is
+    a category the engine already ROUTES -- so a string carrying one
+    unfamiliar name reaches `_unrouted_rulings` whole, echoed back to the
+    Director as the thing it actually wrote, to be reported rather than
+    guessed at. That is the rule `_note_key_forms` states for the sibling
+    channel, and routability rather than foldability is the test because the
+    fold passes an unknown name through unchanged.
+
+    Written as a delimiter class rather than a comma alone: the separator a
+    model reaches for is whichever one it reaches for, and every one of them
+    is punctuation no category contains.
+    """
+    text = str(raw or "").strip()
+    if not text:
+        return [raw]
+    parts = [part.strip() for part in re.split(r"[,;/|]|\band\b", text)]
+    parts = [part for part in parts if part]
+    if len(parts) < 2:
+        return [raw]
+    # EVERY part must ROUTE, not merely fold. `_normalize_omission_category`
+    # passes an unknown name straight through, so a truthiness test here
+    # split free prose into "categories": "the belt comes off and lands on
+    # the bench" is not two ledger families, and reporting it as two is worse
+    # noise than reporting it as one unknown name.
+    if all(manifest_category_targets(_normalize_omission_category(part))
+           for part in parts):
+        return parts
+    # One name the engine does not know makes the whole string one unknown
+    # name, which is the honest thing for the unrouted report to receive.
+    return [raw]
 
 
 def _span_id_ceiling(out):

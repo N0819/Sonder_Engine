@@ -1152,16 +1152,23 @@ def test_an_echoed_event_number_survives_the_shapes_models_actually_send():
         assert got.event_id == 1, sent
 
 
-def test_an_ambiguous_event_number_still_fails():
-    """Coercion is not repair. Two runs of digits, or none, means the model's
-    intent is genuinely unclear -- and inventing one there would hide a real
-    error, which is the whole reason LenientModel leaves required fields
-    alone."""
-    import pytest
+def test_an_ambiguous_event_number_lands_on_no_event_rather_than_failing():
+    """Coercion is still not repair -- nothing is invented. Two runs of digits,
+    or none, means the model's intent is genuinely unclear, and the answer is
+    0: an id the engine never issues, so the verdict is discarded by
+    `_resolved_event_verdicts` exactly as an unrecognised one would be.
+
+    It used to raise, and that cost more than the receipt is worth. Measured
+    2026-09-10, beat 2 (`tools/interpret_beats.py`, gemini-3.8-flash): the
+    contact hand echoed "turn:2:player:0:action" -- two digit runs -- on both
+    entries, so its ENTIRE answer was thrown away and its repair returned no
+    usable object. A receipt filed against the wrong ledger is not a reason to
+    burn the records it came with; the verdict lands nowhere either way, and
+    now it lands there alone."""
     from llm.schemas import ResolvedEvent, _validate
-    for sent in ("1,2", "none", "first"):
-        with pytest.raises(Exception):
-            _validate(ResolvedEvent, {"event_id": sent, "status": "encoded"})
+    for sent in ("1,2", "none", "first", "turn:2:player:0:action"):
+        got = _validate(ResolvedEvent, {"event_id": sent, "status": "encoded"})
+        assert got.event_id == 0, sent
 
 
 def test_one_named_location_is_read_as_a_list_of_one():
@@ -1468,3 +1475,69 @@ class TestAModelThatAnswersThenKeepsTalking:
 
         one = '{"prose": "x", "paragraph_count": 6}'
         assert strict_json_parse(one + self.CHATTER + one)["prose"] == "x"
+
+
+class TestACitationTheEngineNeverIssued:
+    """`from_event` is a claim ABOUT a record, so a misspelled one must not
+    cost the record.
+
+    Live, 2026-09-10 (`tools/interpret_beats.py` beat 1, gemini-3.8-flash):
+    the objects hand wrote `from_event: "turn:1:player:1:action"` -- a phase
+    id, from a different id space -- on both of its entities. Pydantic
+    rejected the whole answer, a repair call was spent, and the repair failed
+    too: two of that beat's six calls, and 110s of its wall clock.
+
+    Zero is the declared default and means "restated for no numbered work
+    item", so an uninterpretable citation lands in the same bucket as no
+    citation. That keeps the miss VISIBLE -- `_drop_zero_provenance` strips it
+    and every provenance count reads it as uncited -- rather than inventing an
+    event 0 the beat never had.
+    """
+
+    def test_a_phase_id_reads_as_uncited_rather_than_failing(self):
+        from llm.schemas import PoseEntry
+        assert PoseEntry(posture="seated",
+                         from_event="turn:1:player:1:action").from_event == 0
+
+    def test_the_digits_inside_a_foreign_id_are_never_mined(self):
+        """"turn:1:player:1:action" contains a 1, and citing event 1 because
+        of it would be worse than citing nothing: a wrong acquittal settles a
+        span that is still owed."""
+        from llm.schemas import PoseEntry
+        assert PoseEntry(posture="seated", from_event="1:x:2").from_event == 0
+
+    def test_a_number_written_as_text_is_the_number(self):
+        from llm.schemas import PoseEntry
+        assert PoseEntry(posture="seated", from_event="3").from_event == 3
+        assert PoseEntry(posture="seated", from_event=" 4 ").from_event == 4
+        assert PoseEntry(posture="seated", from_event="#7").from_event == 7
+
+    def test_an_integer_is_left_alone_and_absence_is_zero(self):
+        from llm.schemas import PoseEntry
+        assert PoseEntry(posture="seated", from_event=5).from_event == 5
+        assert PoseEntry(posture="seated").from_event == 0
+        assert PoseEntry(posture="seated", from_event=None).from_event == 0
+
+    def test_every_model_declaring_the_field_shares_the_rule(self):
+        """Declared on `LenientModel` so ten typed models get one rule. A
+        per-model copy is how the eleventh gets written without one.
+
+        Asserted by INHERITANCE rather than by building each model: several
+        carry required fields, so a constructor sweep would test this rule
+        against whatever placeholder the sweep invented for them."""
+        from llm import schemas
+        import inspect
+        field_holders = []
+        for _name, obj in vars(schemas).items():
+            if not inspect.isclass(obj):
+                continue
+            fields = (getattr(obj, "model_fields", None)
+                      or getattr(obj, "__fields__", None) or {})
+            if "from_event" in fields:
+                field_holders.append(obj)
+        assert len(field_holders) >= 10, len(field_holders)
+        for model in field_holders:
+            assert issubclass(model, schemas.LenientModel), model.__name__
+        # And the rule they inherit is the one the cases above pin.
+        assert schemas._coerce_event_citation("turn:1:player:1:action") == 0
+        assert schemas._coerce_event_citation("3") == 3

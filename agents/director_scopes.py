@@ -957,7 +957,12 @@ def _ruling_for(name, view):
     for item in work:
         if not isinstance(item, dict):
             continue
-        for kind, target in manifest_category_targets(item.get("category")):
+        _listed = item.get("categories")
+        _names = ([str(c) for c in _listed]
+                  if isinstance(_listed, (list, tuple)) and _listed
+                  else [item.get("category")])
+        for kind, target in {t for c in _names
+                             for t in manifest_category_targets(c)}:
             if kind == "hand" and target != name:
                 continue
             if kind == "channel":
@@ -1011,10 +1016,14 @@ def _unrouted_rulings(view):
     for item in (view or {}).get("spans") or []:
         if not isinstance(item, dict):
             continue
-        category = str(item.get("category") or "").strip()
-        if category and not manifest_category_targets(category):
-            if category not in unrouted:
-                unrouted.append(category)
+        _listed = item.get("categories")
+        _names = ([str(c) for c in _listed]
+                  if isinstance(_listed, (list, tuple)) and _listed
+                  else [item.get("category")])
+        for category in (str(c or "").strip() for c in _names):
+            if category and not manifest_category_targets(category):
+                if category not in unrouted:
+                    unrouted.append(category)
     return unrouted
 
 
@@ -1086,8 +1095,20 @@ def _dispatch_specialists(ctx, sc, facts, view):
             kept = [channel for channel in spec["channels"]
                     if facts.get(_STRUCTURAL_CHANNEL_FACTS.get(channel),
                                  True)]
-            scope = [channel for channel in kept
-                     if channel in gated or channel in named]
+            # THE RULING NAMED A CHANNEL, OR IT NAMED ONLY THE HAND. Where it
+            # named one, the gates may add to it -- both are evidence about
+            # this beat. Where it named none, there is nothing for the gates
+            # to narrow: the Director said this hand has work and did not say
+            # which ledger, so every ledger the story keeps is in play. A
+            # narrower sheet there does not save the call, it wastes it --
+            # the hand runs, finds no block for the work it was handed, and
+            # answers `not_mine` about its own span.
+            _stage = "resolve" if facts.get("resolved_stage") else "interpret"
+            scope = ([channel for channel in kept
+                      if channel in gated or channel in named]
+                     if named else
+                     [channel for channel in kept
+                      if channel_serves_stage(channel, _stage)])
             if not scope:
                 scope = kept
         dispatch[name] = {

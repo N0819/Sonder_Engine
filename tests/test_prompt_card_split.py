@@ -48,7 +48,12 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 115   # -2 (2026-09-07, review E45): narrator_fidelity_correction
+PART_COUNT = 120   # +5 (2026-09-10): `co_hands/<hand>.txt`, one shared
+                   # chunk per hand telling a DIFFERENT hand what that
+                   # one settles, loaded when a span was handed to
+                   # both. Five files, not twenty: the explanation of
+                   # what the body hand does does not vary by reader;
+                   # -2 (2026-09-07, review E45): narrator_fidelity_correction
                    # and narrator_craft_correction, the two rewrite-pass
                    # fragments left behind when the second narrator call was
                    # deleted -- `agents/narration.py` says "THE FIDELITY

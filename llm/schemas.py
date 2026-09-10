@@ -976,6 +976,31 @@ def coerce_to_declared(model_cls, field_name, value):
     return value
 
 
+def _coerce_event_citation(value):
+    """`from_event` as the whole number it is, or 0 when it is not one.
+
+    Zero is not provenance (`director_evidence._drop_zero_provenance`), so an
+    uninterpretable citation lands in the same bucket as no citation at all
+    rather than as a fabricated event 0.
+    """
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return value if value > 0 else 0
+    if isinstance(value, float):
+        return int(value) if value > 0 and value == int(value) else 0
+    text = str(value or "").strip()
+    if text.isdigit():
+        return int(text)
+    # A citation like "event 3" or "#3" is a number wearing a label; one like
+    # "turn:1:player:1:action" is a different id space and must NOT be mined
+    # for the digits inside it, which would cite whatever number happened to
+    # appear first.
+    if text.startswith("#") and text[1:].strip().isdigit():
+        return int(text[1:].strip())
+    return 0
+
+
 class LenientModel(BaseModel):
     """BaseModel that accepts a structured value where prose was declared.
 
@@ -1008,6 +1033,13 @@ class LenientModel(BaseModel):
         # discriminator as if it were prose ({"type": "action"} -> "action").
         # As a field validator this runs after the field's own, matching v1,
         # where a specific `pre=True` validator precedes the inherited `"*"`.
+        # Declared on the base so ten typed models share one rule; the models
+        # without the field skip it (`check_fields=False`).
+        @field_validator("from_event", mode="before", check_fields=False)
+        @classmethod
+        def _coerce_from_event(cls, value):
+            return _coerce_event_citation(value)
+
         @field_validator("*", mode="before")
         @classmethod
         def _coerce_structured_into_str(cls, value, info):
@@ -1018,6 +1050,11 @@ class LenientModel(BaseModel):
                 value, _declared(field),
                 f"{cls.__name__}.{info.field_name}")
     else:
+        @validator("from_event", pre=True, allow_reuse=True,
+                   check_fields=False)
+        def _coerce_from_event(cls, value):
+            return _coerce_event_citation(value)
+
         @validator("*", pre=True, allow_reuse=True)
         def _coerce_structured_into_str(cls, value, field):
             return _lenient_coerce(
@@ -2587,8 +2624,17 @@ def _manifest_event_number(value):
 
     Nothing is invented. A value carrying exactly ONE run of digits resolves to
     that run; anything else -- no digits, or two of them ("1,2"), where the
-    model's intent is genuinely unclear -- is passed through untouched and
-    fails exactly as it did before.
+    model's intent is genuinely unclear -- resolves to 0, an id the engine
+    never issues.
+
+    IT USED TO BE PASSED THROUGH AND FAIL THE CALL, and that cost more than
+    the receipt is worth. Measured 2026-09-10, beat 2: the contact hand echoed
+    a phase id ("turn:2:player:0:action" -- two digit runs, so genuinely
+    unclear), both entries were rejected, its entire answer was discarded, and
+    the repair returned no usable object. A verdict on an id the hand was
+    never handed is discarded by `_resolved_event_verdicts` in either case, so
+    the only thing failing bought was throwing away the RECORDS that came with
+    it. 0 lands the receipt in the same place, and lands it alone.
     """
     if isinstance(value, bool) or isinstance(value, int):
         return value
@@ -2596,11 +2642,11 @@ def _manifest_event_number(value):
         return value
     runs = re.findall(r"\d+", value)
     if len(runs) != 1:
-        return value
+        return 0
     try:
         return int(runs[0])
     except ValueError:
-        return value
+        return 0
 
 
 class ResolvedEvent(LenientModel):
@@ -5106,6 +5152,16 @@ OUTPUT_EXAMPLES = {
              "category": "spatial",
              "note": "she is facing you now; her back is no longer to the "
                      "room"},
+            # TWO FAMILIES, AND THE SHAPE IS A LIST. Where the crate now
+            # stands is the objects hand's record and the blocked doorway is
+            # the spatial hand's, and neither is derived from the other, so
+            # the span goes to both and closes when both have settled it.
+            # A comma-joined string would route to nobody: the normalizer
+            # folds each NAME, and "objects, spatial" is not one.
+            {"actor": "Maren", "attempt": "wedges the crate against the door",
+             "category": ["objects", "spatial"],
+             "note": "the crate stands against the door; the way from Pier "
+                     "Head into the store is blocked"},
         ],
         "dialogue_order": ["Maren"],
         "dialogue_log": [
