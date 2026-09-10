@@ -1037,6 +1037,14 @@ the harnesses that produced it are checked in and re-runnable.
 
 **NEXT, in order**
 
+0. **SET `reasoning_effort` TO `low` ON THE FIVE SPECIALIST ROLES** (section 9)
+   -- ahead of everything below, because it is a settings change with no code
+   behind it and it is worth more than the rest of this list combined:
+   specialist time fell 82% across twelve replayed beats (416.4s -> 73.0s),
+   output tokens -90 to -97% per role, with the manifest, the categories and
+   the error count unchanged. The false-`encoded` hole it exposed is now
+   guarded in `_resolved_event_verdicts` (6 tests). NOT the prose author, and
+   not `off` -- `off` is slower than `low` on this pair.
 7. **Reduce ONE sheet -- RE-SCOPED to a chunk, because the core's largest
    component is closed** (section 4a). The five cores are 89% identical and
    have not drifted; 39% of what they share is the `resolved_events` echo,
@@ -1079,6 +1087,15 @@ the harnesses that produced it are checked in and re-runnable.
 - The character stage's 37.7s. Already grammar-on, and 51% of its output is
   `appraisal` + `active_state`, which is the product rather than the fat.
 
+**REVISED AGAIN, upward, by section 9.** The two paragraphs below were
+written while this document still believed the pipeline was prefill-bound. It
+is not, on the model that ships: the Director's specialists spend 90-97% of
+their output tokens on a private reasoning trace, and the per-role
+`reasoning_effort` setting -- already built, already in the settings UI, unset
+-- cuts specialist time 82% on twelve replayed beats. Sheet reduction is
+second-order and the call-count saving is still gone; what changed is that
+there was a third axis nobody had costed. Read section 9 first, then this.
+
 **Honest expectation, revised down.** Median turn is 91.2s. The call-count
 saving is GONE: item 5 was where it lived, and section 3c-quater rejects it on
 the engine's own committed output. What remains (items 6 and 7) is token
@@ -1112,3 +1129,136 @@ and `active_state`, which is the engine's product and not its fat.
   categories; an entry reaching no destination must be reported, never dropped.
 - Every deletion is a behaviour change to every story, not an edit. Watch the
   beats after each one for what it licensed.
+
+## 9. THE COST MODEL WAS WRONG: the Director is decode-bound, and the lever is built
+
+Sections 1 and 5 cost this pipeline as PREFILL-bound: `duration ~= 1.8s +
+0.29s/1k input`, specialists emitting 43-222 tokens against 8-9k sheets. That
+was measured on a different model. On `google/gemini-3.8-flash`, which is what
+the owner's `agent_models` actually points all six Director roles at, it is
+false, and the whole ordering of this document follows from it.
+
+Measured 2026-09-09 over twelve live interpret beats:
+
+| role | sys tok | out tok | s/call | answer | reasoning | reasoning share |
+|---|---|---|---|---|---|---|
+| director | 6,866 | 3,478 | 20.3 | 2,700 ch | 5,820 ch | 68% |
+| director_objects | 6,890 | 3,389 | 19.7 | 555 ch | 7,102 ch | **93%** |
+| director_spatial | 10,074 | 2,885 | 18.0 | 448 ch | 3,900 ch | 90% |
+| director_contact | 8,380 | 1,940 | 13.4 | 161 ch | 4,978 ch | **97%** |
+| director_body | 5,921 | 1,726 | 10.6 | 379 ch | 3,856 ch | 91% |
+
+`director_contact` spends about five thousand characters of private trace to
+write one hundred and sixty. Decode rate is a steady ~160-172 tok/s, so wall
+clock is output tokens divided by that, and **the sheets are second-order**.
+Sections 4a and 7 were optimizing the wrong axis: a 3,300-char prompt cut is
+worth roughly a tenth of a second against a call that spends fourteen seconds
+thinking.
+
+### The lever exists, is per-role, is exposed in the UI, and is unset
+
+`llm/providers.py::reasoning_effort_for` reads a per-role `reasoning_effort`
+setting; `web/app.py` serves `PUT /api/reasoning_effort` and `settings.js`
+renders it. Nothing in the engine had to change to test it.
+
+A direct probe on a specialist-shaped task, same minute, same model:
+
+    default   2.9s   answer 175 ch   reasoning  944 ch
+    high      6.1s   answer 180 ch   reasoning 1119 ch
+    low       1.8s   answer 171 ch   reasoning  136 ch
+    minimal   1.6s   answer 187 ch   reasoning  136 ch
+    off       3.5s   answer 187 ch   reasoning  623 ch
+
+**`off` is a trap on this pair.** OpenRouter sends `reasoning: {enabled:
+false}`, gemini ignores it, and the call comes back SLOWER than `low` with its
+answer in a ```json fence. Do not read "off" as "least thinking".
+
+A caveat on the 136: at `low` the trace comes back ENCRYPTED
+(`reasoning.text AY89a19…google-gemini-v1`), so 136 chars is the length of an
+opaque stub, not of short thinking. The provider-reported OUTPUT TOKENS are the
+honest measure, and they agree.
+
+### Twelve beats, twice, the only difference being the setting
+
+Both runs mirror the owner's live provider rows; all six Director roles are
+`gemini-3.8-flash` in both; only `reasoning_effort` differs (the five
+specialists at `low`). `tools/effort_ab.py` compares them.
+
+| role | out tok/call | s/call |
+|---|---|---|
+| director_contact | 1,940 -> **66** (-97%) | 13.40 -> 1.98 |
+| director_objects | 3,389 -> **182** (-95%) | 19.69 -> 3.64 |
+| director_body | 1,726 -> **155** (-91%) | 10.64 -> 2.46 |
+| director_spatial | 2,885 -> **275** (-90%) | 17.95 -> 3.10 |
+| director_social | 670 -> **64** (-90%) | 5.74 -> 1.84 |
+
+**Specialist time across the twelve beats: 416.4s -> 73.0s, -82%.**
+
+The prose author was NOT set and moved 3,478 -> 2,009 tokens anyway. That is
+run-to-run variance and it is not counted here; it is also the reason a single
+run per arm cannot attribute wall clock on its own, and why the provider's
+token counts carry this result rather than the stopwatch.
+
+Quality held on everything the harness can see: 12 beats, 0 errors, 8/12 filed
+a manifest in BOTH arms, `UNROUTABLE: none`, no extra repair churn, and beat by
+beat the manifest counts matched. Channels moved by three lost
+(`entities` x2, `inventory_ops`) and three gained (`overlays`, `rooms`,
+`stations`).
+
+### And then the thing worth the whole experiment
+
+Two of those three lost channels were the same failure, and it is not "the hand
+went quiet". On *I bring the hammer down on the cracked hinge until it comes
+apart*, `director_objects` at `low` returned:
+
+    {"entities": {}, "remove_entities": [], "inventory_ops": [],
+     "sensory_events": [],
+     "resolved_events": [{"event_id": 1, "status": "encoded"}]}
+
+**It claimed to have encoded the change while encoding nothing.** The
+reconciliation seam believes `encoded`, buys no repair, and the change is lost
+with no warning anywhere. The other case was a notice nailed to a post. Both
+are the one judgement that hand makes — a thing coming into being or being
+broken — which is exactly what the core's own "THE BLOCKER IS FOR A THING YOU
+CANNOT NAME, NOT FOR A THING THAT DOES NOT YET EXIST" is written for.
+
+`tools/false_encoded.py` counts the shape across a run:
+
+    default effort : 0 of 11 `encoded` claims wrote nothing   (0%)
+    low effort     : 2 of 12 wrote nothing                    (17%)
+
+**The fix is not to avoid the lever.** The claim is refutable from the RESPONSE
+ALONE — no diff, no manifest, no scene — so there was never a reason to believe
+it at any effort level. `_resolved_event_verdicts` now drops an `encoded` whose
+response carries no channel content, which reads as "not addressed" and lets
+the existing repair path fire, exactly as an unrecognized verdict already does.
+`already_true` and `not_mine` still survive an empty response, because both
+MEAN "correctly wrote nothing". Six guards.
+
+That the lever exposed the hole is the argument for pulling levers on real
+traffic rather than reasoning about them: the hole was there at default effort
+too, waiting for a model to have a bad day.
+
+### What to set, and what is still unknown
+
+With the guard in place a false `encoded` costs a repair call instead of a lost
+change, which is the fail-open behaviour the rest of the seam already has. The
+recommendation is `low` on the five specialist roles.
+
+Deliberately NOT recommended without its own experiment:
+
+- **the prose author.** It is the one Director role doing authorship rather
+  than transcription — it decides what happened, writes the notes, files the
+  manifest — and its 68% reasoning share is the smallest of the six. Lowering
+  it is a fiction-quality question, and this harness measures encoding.
+- **`minimal`.** It probed the same as `low`; nothing distinguishes them yet.
+- **anything on a second model.** Every number here is one provider/model pair.
+
+**And a larger one, unmeasured.** `_apply_json_mode` records that a compiled
+grammar cut `character` from 53.4s/2,029 tokens to 15.3s/587 — 3.5x, the same
+padding mechanism this section is about. OpenRouter rejects
+`response_format=json_schema` for `gemini-3.8-flash` on every run, so all six
+Director roles fall back to `json_object` and are never constrained. Finding a
+route to this model that accepts a schema, or a comparable model that does, is
+plausibly worth more than everything else in this document put together. It is
+a model-routing decision and belongs to the owner.
