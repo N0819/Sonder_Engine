@@ -267,8 +267,8 @@ from .director_evidence import (
     _evidence_present,
     _RECONCILE_MAX_MANIFEST_ITEMS,
     _manifest_items,
-    _chunk_items,
-    _chunk_id_ceiling,
+    _span_items,
+    _span_id_ceiling,
     _without_provenance,
     _cited_event_ids,
     _DERIVED_OF_ATTIRE,
@@ -310,7 +310,7 @@ from .director_fanout import (
     _resolve_beat_view,
     _interpret_beat_view,
     _specialist_manifest_slice,
-    _specialist_chunk_slice,
+    _specialist_span_slice,
     _specialist_payload,
     _anchor_names,
     _beat_rooms,
@@ -2119,7 +2119,7 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
     # from before the migration carries one and nothing else, and a rerun that
     # silently stopped checking those would turn a settled beat into an
     # unchecked one.
-    manifest = _chunk_items(out) + _manifest_items(out, ctx.cast, sc)
+    manifest = _span_items(out) + _manifest_items(out, ctx.cast, sc)
     manifest_omissions = []
     for item in manifest:
         # A chunk states the work in `note` and names no subject of its own:

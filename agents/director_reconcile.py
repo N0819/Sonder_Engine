@@ -520,9 +520,20 @@ def _acquit_addressed_events(out, omissions, sc=None):
     for om in omissions:
         entry = index.get(om.get("event_id")) or index.get(
             str(om.get("event_id")))
+        # EVERY OWNER, not the last one to answer. A span handed to several
+        # hands is settled only when each has settled its own part; one hand
+        # saying `encoded` about its half says nothing about the other's.
+        # `by_hand` is absent on a row written before this existed, and on one
+        # a single hand answered, so the single-owner reading is the fallback
+        # rather than a special case.
+        answers = list(((entry or {}).get("by_hand") or {}).values()) \
+            or ([entry] if entry else [])
+        settled = bool(answers) and all(
+            (a or {}).get("status") in _SETTLING_VERDICTS for a in answers)
         status = (entry or {}).get("status")
-        if entry and status in _SETTLING_VERDICTS:
-            if status == "already_true":
+        if settled:
+            if any((a or {}).get("status") == "already_true"
+                   for a in answers):
                 ok, reason = _verify_already_true(om, sc or {})
                 if not ok:
                     refused.append({
