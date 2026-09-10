@@ -438,16 +438,27 @@ def _specialist_payload(name, ctx, sc, view, extras):
     if isinstance(note, str) and note.strip():
         payload["director_note"] = note.strip()
     if view["source"] == "resolved_beat":
-        payload["resolved_event"] = view["prose"]
-        # Dialogue only to the hands that own a channel a speech act can
-        # write (`director_scopes.reads_dialogue`). Saying a thing is not a
-        # physical action, so for `body`, `contact` and `objects` the
-        # transcript is material they cannot act on and can only echo -- and
-        # echoing the payload into the diff is this fan-out's measured
-        # failure mode. Measured over chat 78: 27% of the beat text every
-        # hand received, ~68 tokens a beat, on sheets whose correct answer
-        # was `{}`. The prose still carries what happened, including what
-        # speech made happen.
+        # THE BEAT'S PROSE IS NOT SENT. `DESIGN_SPECIALIST_CONTRACT.md`: a
+        # hand receives its scoped world state and the work it was asked to
+        # settle, and nothing of the Director's account. It used to receive
+        # `resolved_event` on 100% of calls, 910 chars, declared AUTHORITATIVE
+        # over the instruction -- so 73% of specialist calls ran on narrative
+        # alone and every hand re-derived the beat's events privately. That
+        # derivation is what 90-97% of specialist output tokens were spent on.
+        #
+        # What replaces it is what was always meant to: `director_note` (how
+        # the Director wants this hand's part settled) and the numbered
+        # `changes_asserted` slice, each entry carrying its own `note`.
+        #
+        # Dialogue still reaches the hands that own a channel a speech act can
+        # write (`director_scopes.reads_dialogue`). It is not narration: it is
+        # the lines themselves, which is data those channels encode FROM.
+        # Saying a thing is not a physical action, so for `body`, `contact`
+        # and `objects` the transcript is material they cannot act on and can
+        # only echo -- and echoing the payload into the diff is this fan-out's
+        # measured failure mode. Measured over chat 78: 27% of the beat text
+        # every hand received, ~68 tokens a beat, on sheets whose correct
+        # answer was `{}`.
         if reads_dialogue(name):
             payload["dialogue_log"] = view["dialogue"]
     else:

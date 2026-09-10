@@ -667,6 +667,47 @@ class TestTheInstructionRidesOnTheEvent:
         entry = OUTPUT_EXAMPLES["director_resolve"]["changes_asserted"][0]
         assert entry.get("note"), entry
 
+    def test_no_sheet_promises_the_hand_the_beats_prose(self):
+        """The inversion `DESIGN_SPECIALIST_CONTRACT.md` is about, in the
+        sheet's own words.
+
+        Every core used to call `resolved_event` "the AUTHORITATIVE prose of
+        what objectively happened" and close with "never contradict the
+        prose", while introducing the instruction channel conditionally --
+        so a hand asked to settle event 3 was told the narrative outranked
+        it. The prose is no longer sent at all, so a sheet that still
+        describes it is promising a payload key that will not arrive, which
+        is worse than the original inversion: the hand goes looking for its
+        account of the beat and finds nothing.
+        """
+        from llm.prompts import specialist_prompt
+        for name in director.SPECIALISTS:
+            sheet = specialist_prompt(name,
+                                      director.SPECIALISTS[name]["channels"])
+            assert "AUTHORITATIVE prose" not in sheet, name
+            assert "YOUR WHOLE JOB" in sheet, name
+            # Said out loud, because a hand told only "you don't get X" can
+            # reasonably infer it is being deprived of something it needs.
+            assert "nothing is being kept from you" in sheet, name
+
+    def test_the_beats_prose_is_not_in_the_payload(self):
+        """The removal itself, at the seam that assembles what a hand is
+        sent. Measured before it: `resolved_event` reached the hand on 632 of
+        632 resolve-side calls, 910 chars, and 73% of those calls carried no
+        numbered event to check it against."""
+        from types import SimpleNamespace
+        view = {"source": "resolved_beat", "player": "Corin", "cast": [],
+                "declared_actions": [], "dice": {},
+                "prose": "Maren turns from the water to face you.",
+                "dialogue": [],
+                "ledger_notes": {"spatial": "she is facing you"},
+                "manifest": []}
+        payload = director._specialist_payload(
+            "spatial", SimpleNamespace(chat={"id": 1}),
+            {"rooms": {}, "positions": {}, "entities": {}}, view, {})
+        assert "resolved_event" not in payload
+        assert payload.get("director_note") == "she is facing you"
+
     def test_every_specialist_sheet_says_the_event_carries_it(self):
         """The fourth place, and the one that matters most: the hand has to
         know the instruction is there, or it reads the prose instead.
@@ -1136,8 +1177,10 @@ def test_specialist_payload_is_the_body_slice_and_nothing_more(temp_db,
 
     spayload = next(c["payload"] for c in calls
                     if c["step_key"] == "director_body")
-    # Its entitlement:
-    assert spayload["resolved_event"]
+    # Its entitlement -- and the beat's PROSE is not part of it. A hand is a
+    # tool, not an author: it gets its scene-scoped ledgers and the work it
+    # was asked to settle. See DESIGN_SPECIALIST_CONTRACT.md.
+    assert "resolved_event" not in spayload
     assert "attire" in spayload and "overlays" in spayload
     assert "active_awareness" in spayload and "simulation_clock" in spayload
     assert spayload["declared_actions"]  # structured attempts, not prose
@@ -2341,7 +2384,11 @@ def test_routed_repair_is_answered_by_the_owning_specialist(temp_db,
                  "change": "The wool coat is off.", "evidence": "",
                  "source": "manifest"}]
             assert "previous_channels" in payload
-            assert payload["resolved_event"]      # the beat, same view
+            # The beat's PROSE is not sent, here either: a repair is still a
+            # specialist call and gets a specialist's entitlement. What it is
+            # answering is `detected_omissions` above, which is the
+            # instruction in its most explicit form.
+            assert "resolved_event" not in payload
             assert "relevant_lore" not in payload  # same entitlement slice
             return {"attire": {"Mara": {"remove": ["wool coat"]}},
                     "conditions": {}, "vitals": {}, "overlays": {},
@@ -3511,9 +3558,13 @@ def test_dialogue_reaches_only_the_hands_a_speech_act_can_write(temp_db):
     for name in ("body", "contact", "objects"):
         payload = director._specialist_payload(name, ctx, scene, view, {})
         assert "dialogue_log" not in payload, name
-        # The beat still reaches them -- what happened, including what speech
-        # made happen, is in the Director's prose.
-        assert payload["resolved_event"] == "x", name
+        # And the beat does NOT reach them by another door either. This used
+        # to assert the opposite -- that the prose carried what speech made
+        # happen -- which was the justification for withholding the
+        # transcript. With the prose gone the reasoning inverts: these hands
+        # get neither, because a spoken line is not something their channels
+        # can encode, and what they must encode arrives as an instruction.
+        assert "resolved_event" not in payload, name
 
 
 def test_who_reads_dialogue_is_derived_from_the_channel_table():
