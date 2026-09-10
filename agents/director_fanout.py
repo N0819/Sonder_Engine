@@ -21,7 +21,7 @@ from world.spatial import (contact_action_ledger_index, contact_id,
 
 from .common import (communication_surface, observable_action_text,
                      scene_compact_attire)
-from .director_evidence import _manifest_items
+from .director_evidence import _chunk_items, _manifest_items
 from .director_scopes import (
     SPECIALISTS,
     reads_dialogue,
@@ -200,6 +200,9 @@ def _resolve_beat_view(out, decls, char_actions, dice, p_name, interp,
             if isinstance(d, dict)
         ],
         "manifest": _manifest_items(out, cast, scene),
+        # Same work items on the resolve half: "resolve would mostly do the
+        # same but for characters".
+        "chunks": _chunk_items(out),
         "declared_actions": declared,
         "dice": dice if isinstance(dice, list) else [],
         "player": p_name,
@@ -234,11 +237,16 @@ def _interpret_beat_view(ctx, out, p_name):
             continue
         sequence.append({
             k: element.get(k)
+            # `category`, `event_id` and `note` are what make a span a WORK
+            # ITEM rather than a description of one, so they have to be on
+            # this list -- an allowlist drops what it does not name, silently,
+            # which is how three other fields were lost today before anyone
+            # noticed.
             for k in ("type", "text", "attempt", "raw_text", "commitment",
                       "act", "content", "phase_id", "phase", "depends_on",
                       "participants", "requires_contacts", "referents",
                       "targets", "asserted_effects", "intended_effects",
-                      "volume")
+                      "volume", "category", "event_id", "note")
             if element.get(k) is not None
         })
     declared = {}
@@ -260,6 +268,10 @@ def _interpret_beat_view(ctx, out, p_name):
         # as the resolve view does. It was `[]` here, so no interpret
         # beat could ever address a hand by category.
         "manifest": _manifest_items(out, ctx.cast, getattr(ctx, "scene", None)),
+        # THE WORK ITEMS. A categorized span of the player's declaration, with
+        # the id the engine gave it and the Director's note on how it should
+        # resolve (`DESIGN_SPECIALIST_CONTRACT.md` 4a).
+        "chunks": _chunk_items(out),
         "declared_actions": declared,
         "dice": [],
         "player": p_name,
@@ -283,6 +295,22 @@ def _specialist_manifest_slice(name, view):
                manifest_category_targets(item.get("category")))
     ]
 
+
+
+def _specialist_chunk_slice(name, view):
+    """The numbered chunks in one specialist's categories.
+
+    The same filter as `_specialist_manifest_slice` and for the same reason:
+    one definition, so a hand cannot be judged on a work item it was never
+    handed.
+    """
+    channels = set(SPECIALISTS[name]["channels"])
+    return [
+        item for item in (view.get("chunks") or [])
+        if any(target == name if kind == "hand" else target in channels
+               for kind, target in
+               manifest_category_targets(item.get("category")))
+    ]
 
 
 def _note_for(notes, name):
@@ -466,6 +494,9 @@ def _specialist_payload(name, ctx, sc, view, extras):
     manifest = _specialist_manifest_slice(name, view)
     if manifest:
         payload["changes_asserted"] = manifest
+    chunks = _specialist_chunk_slice(name, view)
+    if chunks:
+        payload["chunks"] = chunks
 
     rooms_index = {
         rid: str((room or {}).get("name") or rid)

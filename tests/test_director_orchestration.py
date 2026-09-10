@@ -721,6 +721,91 @@ class TestTheInstructionRidesOnTheEvent:
             assert "carries `note`" in sheet, name
 
 
+class TestTheChunkIsTheWorkItem:
+    """`sequence` becomes the four-field work item: chunk, id, note, category.
+
+    `DESIGN_SPECIALIST_CONTRACT.md` 4a, and the owner's ruling on which field
+    survives. `sequence` was always the right dissection -- typed spans of the
+    player's own input -- and lacked only a category saying which ledger family
+    a span belongs to, an id, and the Director's note on how it should resolve.
+
+    `changes_asserted` still exists and still routes; the two share ONE id
+    space so a record's `from_event` is never ambiguous about which list it
+    points into.
+    """
+
+    def test_the_engine_numbers_the_chunks(self):
+        out = {"sequence": [
+            {"type": "action", "attempt": "I pull off my belt",
+             "category": "attire", "note": "belt comes off"},
+            {"type": "action", "attempt": "drop it on the bench",
+             "category": "entities", "note": "belt rests on the bench"}]}
+        items = director._chunk_items(out)
+        assert [i["event_id"] for i in items] == [1, 2]
+        assert items[0]["note"] == "belt comes off"
+
+    def test_an_uncategorized_span_is_not_a_work_item(self):
+        """A question asked or a look given is a perfectly good sequence
+        element -- perception and the narrator read it -- it just addresses no
+        ledger. Making every span a work item would dispatch a hand for every
+        line of dialogue."""
+        out = {"sequence": [
+            {"type": "speech", "text": "Have you seen the reeve?"},
+            {"type": "action", "attempt": "I sit", "category": "poses"}]}
+        items = director._chunk_items(out)
+        assert [i["attempt"] for i in items] == ["I sit"]
+        assert items[0]["event_id"] == 1
+
+    def test_the_manifest_continues_past_the_chunks(self):
+        """ONE ID SPACE. Both lists live during the migration, and a record's
+        `from_event` names one number -- so they cannot both start at 1."""
+        out = {"sequence": [{"type": "action", "attempt": "x",
+                             "category": "poses"}],
+               "changes_asserted": [{"category": "attire", "subject": "Corin",
+                                     "change": "the belt is off"}]}
+        assert director._chunk_items(out)[0]["event_id"] == 1
+        assert director._manifest_items(out)[0]["event_id"] == 2
+
+    def test_a_chunk_dispatches_the_hand_that_owns_its_category(self):
+        view = {"ledger_notes": {}, "manifest": [], "chunks": [
+            {"category": "poses", "event_id": 1, "attempt": "I kneel",
+             "note": "set her kneeling"}]}
+        assert director._ruling_for("spatial", view)[0] == ["manifest"]
+        assert director._ruling_for("body", view)[0] == []
+
+    def test_the_chunk_reaches_the_hand_that_owns_it(self):
+        view = {"chunks": [
+            {"category": "poses", "event_id": 1, "attempt": "I kneel",
+             "note": "set her kneeling"},
+            {"category": "attire", "event_id": 2, "attempt": "belt off",
+             "note": "unequip the belt"}]}
+        assert [c["event_id"] for c in
+                director._specialist_chunk_slice("spatial", view)] == [1]
+        assert [c["event_id"] for c in
+                director._specialist_chunk_slice("body", view)] == [2]
+
+    def test_the_interpret_view_does_not_drop_the_three_fields(self):
+        """The allowlist that nearly ate them. `_interpret_beat_view` copies
+        sequence elements key by key, so a field it does not name is dropped
+        with nothing raised -- the fourth time that shape has cost something
+        today."""
+        from types import SimpleNamespace
+        ctx = SimpleNamespace(cast=[], scene=None)
+        out = {"sequence": [{"type": "action", "attempt": "I kneel",
+                             "category": "poses", "note": "set her kneeling"}]}
+        view = director._interpret_beat_view(ctx, out, "Corin")
+        span = view["declaration"]["sequence"][0]
+        assert span["category"] == "poses"
+        assert span["note"] == "set her kneeling"
+        assert view["chunks"][0]["event_id"] == 1
+
+    def test_the_sheet_asks_for_them(self):
+        from llm.prompts import get_prompt
+        sheet = get_prompt("director_interpret", "en")
+        assert "depends_on:[], category, note}" in sheet
+        assert "AND SAY WHERE EACH SPAN LANDS" in sheet
+
+
 class TestTheOpCarriesTheChunkId:
     """A record says which instruction it answers, on itself.
 

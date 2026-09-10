@@ -1323,6 +1323,60 @@ def _evidence_present(sd, omission, forms=None, *, scene=None):
 _RECONCILE_MAX_MANIFEST_ITEMS = 8
 
 
+def _chunk_items(out):
+    """The beat's DISSECTED CHUNKS, numbered by the engine.
+
+    `sequence` is the Director's decomposition of the player's (or a
+    character's) input into typed spans, and it has always been the right
+    dissection -- what it lacked was a category saying which ledger family the
+    span belongs to, an id, and the Director's note on how it should resolve.
+    Those three make a chunk a WORK ITEM
+    (`DESIGN_SPECIALIST_CONTRACT.md` section 4a).
+
+    Numbered HERE, by the engine, in declared order -- the same rule and the
+    same reason as `_manifest_items`: an id the model authored could repeat,
+    skip or reorder, and every downstream use assumes a dense sequence. A
+    chunk keeps whatever id it is given for the whole beat, which is what
+    `from_event` on a record cites.
+
+    Only chunks the Director CATEGORIZED become work items. A span with no
+    category is still a perfectly good sequence element -- perception, the
+    narrator and the floors all read it -- it simply addresses no ledger, and
+    a speech act that changes nothing in the world is the ordinary case.
+    """
+    items = []
+    for element in (out.get("sequence") or []):
+        if not isinstance(element, dict):
+            continue
+        # THE RAW VALUE DECIDES, not the normalized one.
+        # `_normalize_omission_category` folds a missing category onto
+        # 'other', which is correct when classifying an omission the engine
+        # already knows is real, and wrong here: it made every uncategorized
+        # span -- a question asked, a look given -- into a work item, and so
+        # would have dispatched a hand for every line of dialogue.
+        if not str(element.get("category") or "").strip():
+            continue
+        category = _normalize_omission_category(element.get("category"))
+        item = dict(element)
+        item["category"] = category
+        item["event_id"] = len(items) + 1
+        items.append(item)
+    return items
+
+
+def _chunk_id_ceiling(out):
+    """The highest id the chunks used, so the manifest can continue past it.
+
+    ONE ID SPACE PER BEAT. During the migration a beat can carry both
+    `sequence` chunks and a `changes_asserted` manifest, and a record's
+    `from_event` names one number -- so the two lists cannot both start at 1
+    or the id is ambiguous about which it points into. Chunks take 1..N and
+    the manifest continues at N+1. When `changes_asserted` goes this returns
+    0 for every beat and the numbering is simply 1..N.
+    """
+    return len(_chunk_items(out))
+
+
 def _manifest_items(out, cast=None, scene=None):
     """director_resolve's own changes_asserted manifest, normalized to the
     seam's omission shape (source 'manifest').
@@ -1351,7 +1405,10 @@ def _manifest_items(out, cast=None, scene=None):
             "category": _normalize_omission_category(item.get("category")),
             "subject": str(item.get("subject") or "").strip(),
             "change": change, "evidence": "", "source": "manifest",
-            "event_id": len(items) + 1,
+            # CONTINUES PAST THE CHUNKS, see `_chunk_id_ceiling`: one id space
+            # per beat, so a record's `from_event` is never ambiguous about
+            # which list it points into.
+            "event_id": _chunk_id_ceiling(out) + len(items) + 1,
         }
         # Preserve the historical public manifest shape for every non-contact
         # change; endpoint keys exist only when the model actually supplied
@@ -1370,7 +1427,11 @@ def _manifest_items(out, cast=None, scene=None):
             if value:
                 normalized[field] = value
         items.append(normalized)
-    items = _fold_derived_manifest_events(items, cast, scene)
+    # RENUMBERED WITH THE SAME OFFSET. The fold closes gaps left by merged
+    # entries and used to restart at 1, which silently undid the chunk offset
+    # above -- ids have to be dense AND in the beat's one id space.
+    items = _fold_derived_manifest_events(items, cast, scene,
+                                          start=_chunk_id_ceiling(out) + 1)
     # NO CLAMP. Until 2026-09-07 this returned the first eight: items 9+
     # were dispatched to no hand, sliced into no specialist view and
     # checked against no evidence, so a busy beat's later changes were the
@@ -1427,7 +1488,7 @@ def _subject_is_registered_body(subject, cast, scene):
     return False
 
 
-def _fold_derived_manifest_events(items, cast=None, scene=None):
+def _fold_derived_manifest_events(items, cast=None, scene=None, start=1):
     """One real-world change is ONE numbered event.
 
     The manifest may truthfully describe a single change twice -- "the sash
@@ -1514,5 +1575,5 @@ def _fold_derived_manifest_events(items, cast=None, scene=None):
         if item["category"] not in also:
             also.append(item["category"])
     for index, item in enumerate(folded):
-        item["event_id"] = index + 1
+        item["event_id"] = start + index
     return folded
