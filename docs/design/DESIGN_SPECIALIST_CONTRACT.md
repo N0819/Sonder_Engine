@@ -260,6 +260,70 @@ from it, then move `sequence`'s readers, then delete the second decomposition
 -- with the endpoint-matching question answered before the first step, not
 after.
 
+## 4b. ANSWERED: the op carries the chunk id
+
+Section 4a named one blocker. Reconciliation proves a manifest entry was
+encoded by matching it against the diff ON THE ENDPOINT FIELDS
+(`director_evidence.py` 1074-1098: `actor_part`, `target_part`), because "two
+simultaneous contacts involving the same actor are indistinguishable"
+otherwise. Four-field entries carry no endpoints, so that key disappears. The
+owner's ruling (2026-09-09) was to answer this BEFORE migrating, not after.
+
+**The obvious candidate fails on measurement.** `phase_sources` already exists
+and is exactly the right shape -- a map of `"<channel>.<subject>" -> event_id`
+the hand returns beside its channels, which would make reconciliation an id
+lookup. `tools/provenance_coverage.py` over the live corpus:
+
+    productive specialist calls : 484
+      emitted phase_sources     : 123 (25%)
+    `encoded` claims scored      : 291
+      cited in phase_sources     : 199 (68%)
+    channels written             : 631
+      attributed to an event     : 144 (23%)
+
+    role                productive   w/ sources   cited  uncited
+    director_body               71            4       5       16
+    director_contact           179           78     141       50
+    director_objects            24            4       3        3
+    director_social             91            0       0        0
+    director_spatial           119           37      50       23
+
+`director_social` has never emitted one, across 91 productive calls. An id-only
+reconciliation built on this would report 32% of correctly-encoded events as
+unencoded and buy a repair call for each.
+
+**Why it fails is the useful part, and it is a rule rather than a fact about
+this map.** `phase_sources` is a SECOND STRUCTURE, filled in beside the work.
+The channels are what the hand is thinking about; the provenance map is
+bookkeeping it must remember separately, and a second thing to remember is a
+thing that gets forgotten. This is the same shape as the four-places rule one
+level down: a field INSIDE the object the model is already writing gets
+written; a parallel structure describing that object does not.
+
+**So: the op carries the id.** Each channel entry gains a field naming the
+chunk it resolves -- one small integer, inside the record the hand is already
+composing, in the channel's own schema. Reconciliation becomes "does any op in
+this hand's channels cite chunk N", which needs no endpoint text and no second
+map.
+
+Three things this buys beyond unblocking section 4a:
+
+- **It is exact rather than heuristic.** `tools/echo_derivable.py` measured
+  `_evidence_present` disagreeing with the hands' own verdicts on 29.8% of 329
+  events -- the distance between a conservative verifier and an oracle
+  (section 4a of `DESIGN_NARROW_MODEL_INTERFACE.md`). An id match has no such
+  distance; the question stops being "does this text describe that op".
+- **It is cheaper than what it replaces.** One integer against ten endpoint
+  fields.
+- **It answers the record-shaped channels too**, at least partly: a record
+  restated for no chunk simply carries no id, which is a legible state rather
+  than an unmatched entry.
+
+**Not built.** It touches every delegated channel's schema and every chunk's
+output shape, and it must land BEFORE the `sequence` migration rather than
+alongside it -- that is what "answer it first" means. The measurement above is
+the evidence that the cheaper option was tried and rejected on data.
+
 ## 5. What already exists to build on
 
 This is a rewire of proven mechanisms, not a green field. **The output half of

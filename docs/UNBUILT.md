@@ -100,6 +100,16 @@ lore rather than a beat's narration. Not built: it is a new model role needing
 its own scope, its own gate, and a measurement of current room fidelity first.
 See `DESIGN_SPECIALIST_CONTRACT.md` section 6a.
 
+**The migration order is decided (owner, 2026-09-09).** `sequence` becomes the
+four-field chunk list (chunk / id / note / category) and `changes_asserted` is
+deleted at the end; the endpoint-matching question is answered FIRST. It is
+answered: the op carries the chunk id. `phase_sources` was the cheaper
+candidate and failed on measurement -- emitted on 25% of productive calls, 68%
+of `encoded` claims cited, and never once by `director_social` across 91 calls
+(`tools/provenance_coverage.py`), because it is a second structure filled in
+beside the work rather than a field inside it. See
+`DESIGN_SPECIALIST_CONTRACT.md` sections 4a and 4b.
+
 **Open, and not to be papered over:** record-shaped channels (`poses`,
 `overlays`, `conditions`, `attire`) are whole current-state records rather than
 events, so there is often no chunk to attach an instruction to. `director_body`
