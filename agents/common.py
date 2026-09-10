@@ -4000,16 +4000,23 @@ def cut_short_speech(text, ratio=0.6):
     return re.sub(r"[.,;:!?\s—–-]+$", "", joined) + "—"
 
 
-#: The two fields that make a sequence element a WORK ITEM rather than a
-#: description of one: which ledger family it lands in, and how the Director
-#: wants it settled. Everything else about a span is the engine's
-#: (`DESIGN_SPECIALIST_CONTRACT.md` 4a) -- the id is assigned, the order is the
-#: order it was written in.
-SPAN_FIELDS = ("category", "note")
+#: The fields that make a sequence element a WORK ITEM rather than a
+#: description of one: which ledger family it lands in, how the Director wants
+#: it settled, and which numbered things of the beat it concerns. Everything
+#: else about a span is the engine's (`DESIGN_SPECIALIST_CONTRACT.md` 4a) --
+#: the id is assigned, the order is the order it was written in.
+#:
+#: THIS LIST IS THE SINGLE POINT OF FAILURE for anything the Director writes
+#: onto a sequence element. `norm_sequence` rebuilds each element from a fixed
+#: set of keys, so a field added anywhere else and not added here is dropped
+#: between the model and every reader, silently. That has now cost three
+#: fields in one day: `category` and `note` (no work item reached any hand at
+#: all), then `items`.
+SPAN_FIELDS = ("category", "note", "items")
 
 
 def _restore_span_fields(source, clean, before):
-    """Carry `category` and `note` from a raw element onto the built one.
+    """Carry the span's own fields from a raw element onto the built one.
 
     Only the LAST element built from `source`, and only when the arm built
     anything. The speech arm emits promoted stage directions FIRST and the

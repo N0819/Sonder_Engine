@@ -239,6 +239,13 @@ from .director_floors import (
     _scan_for_untracked_restraint,
 )
 from .director_evidence import (
+    beat_item_records,
+    beat_ledger,
+    beat_worlds,
+    span_slices,
+    apply_item_transforms,
+    mint_authority_rank,
+    item_survivors,
     span_colocations,
     span_pairings,
     span_records,
@@ -322,6 +329,7 @@ from .director_fanout import (
     span_owners,
     specialist_co_hands,
     co_hand_view,
+    _without_private_keys,
     _specialist_payload,
     _anchor_names,
     _beat_rooms,

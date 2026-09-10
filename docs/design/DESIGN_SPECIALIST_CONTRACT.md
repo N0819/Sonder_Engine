@@ -881,6 +881,138 @@ reading worth weighing: a padlock may not deserve to be an entity at all, and
 if the doorway's own record carried the fastening then the objects hand's half
 of that span would be nothing and the span would belong to `spatial` alone.
 
+## 4k. THE CAUSALITY RECOMPILER
+
+The owner's name for it, 2026-09-10 -- *"basically we are making a causality
+recompiler after our director deciphers and resolves"* -- and the thesis it
+serves:
+
+> a system that can decipher any arbitrarily long series of events by a player
+> or character and resolve it properly with proper respect to chronology and
+> space. Even though its disecting and feeding it to paralel agents.
+
+The Director DECIPHERS the input into numbered spans. The five hands RESOLVE
+them in parallel, each blind to the others and to a scene that has not moved
+since before the beat. This puts the beat back together.
+
+### Everything it reads is an identifier something ISSUED
+
+That is the whole property, and the reason the ids exist:
+
+    WHEN    the chronological span number
+    WHOM    the record's subject -- its key under the channel
+    WHERE   a room or a doorway, `room:<id>` / `way:<a>|<b>`
+    WHICH   the Director's item number for the thing
+
+None of it is read out of prose, which is what makes the questions answerable
+without a model -- the owner's *"so you can ask, what happened and where with
+basically pure code"*, and then *"what happened to whom and when."*
+
+    span_records           which records are one EVENT's outcome
+    span_pairings          which are in one PLACE; span_colocations, by room
+    beat_item_records      which are one THING, across spans
+    item_survivors         which record an object is rendered FROM, and what
+                           else is true of it
+    apply_item_transforms  the chosen record receives every transform, in
+                           chronological order
+    span_slices            the beat cut into its spans
+    beat_worlds            the world as it stood BEFORE each span
+    beat_ledger            all of it as one flat, queryable table
+
+### Transforms, not records
+
+The owner's abstraction, and it is the right one for the whole fan-out:
+*"what the specialists actually give us are transforms we can apply to
+objects, even if it's an object the specialists freshly minted."* Identity is
+the item number, order is the span number, and a freshly minted object is one
+whose first transform happens to be its creation.
+
+The priority for which record an object is rendered from, in the owner's own
+order: **actually exists in the world even before this beat**, then **freshly
+minted by the most relevant authority**, then first written. And *"the chosen
+object must receive all transforms."*
+
+That last rule found a bug in the first implementation. `_dedup_duplicate_
+entity_keys` says *"the fresh record's state wins whole"* -- and THERE the
+winner IS the fresh record, so keeping the winner's state and rescuing the
+loser's structure is one sentence. On this ladder the winner is the STANDING
+record, so the two halves come apart: identity from the survivor, state from
+the latest transform. Read literally, a crate that stood before the beat and
+was opened during it kept its name, gained its material, and lost the fact
+that it was open.
+
+### Five classes, so the authority can be written down
+
+*"if the object is freshly minted potentially by multiple agents, we have to
+decide which is the highest authority for rendering that object, it might be
+case by case, but thankfully we only have 5 classess to work with."*
+
+There was no answer at all before this. The ladder's second rung is "the
+channel's own hand", and the partition is DISJOINT -- every record already sits
+in its own hand's channel -- so that rung never discriminated between two
+hands. Two mints of one thing tied there and fell through to a tiebreak that
+ordered them BY PATH, letting `entities.tardis` beat `rooms.tardis_interior`
+on the letter e.
+
+`_MINT_AUTHORITY` is `objects, spatial, body, contact, social`, ordered by how
+much of a thing's OWN identity the hand's channels carry: `entities` IS a
+thing's identity record and `rooms` is a place's, while `attire` names a
+garment as worn, contact names relations between things that already have
+records, and social names what minds hold true about them. CASE BY CASE stays
+open and is recorded rather than guessed: a beat that mints a PLACE should rank
+`spatial` first, and the table does not yet ask what kind of thing it is. It is
+a named ordered tuple so that question has ONE place to be answered when it has
+been measured.
+
+### And neither fact is discarded
+
+*"in that case interior and entity are two seperate facts about one object"*,
+*"neither should be discarded."*
+
+The channel decides which is which, exactly, because the partition is
+disjoint. Two records in ONE channel are one hand's two attempts at one thing
+and fold. Two records in DIFFERENT channels are two separate facts about one
+object; choosing which to render FROM is not a claim that the other is a
+lesser truth, and `apply_item_transforms` touches only the duplicates. The
+keys say so: `render_from`, `duplicates`, `other_facts`.
+
+### The replay, and why the cones came free
+
+`world/spatial_fov` is pure, derived and never stored, and `spatial_rel` /
+`body_visibility` / `hear_level` take the SCENE as a parameter. So handing them
+a different scene answers for that world, and the geometry is respected by
+construction rather than by a rule a caller has to remember. Three pieces made
+it possible: order (spans numbered in declared order), slicing (`span_slices`),
+and a scene per step -- `preview_player_state_assertions` already applies a
+diff to a scene COPY for the onset preview, so this generalizes one
+intermediate world to N.
+
+Measured, one beat and one question:
+
+    before span 2   Corin in yard   same_room True    hear full
+    before span 3   Corin in box    same_room False   hear full      (door open)
+    end of beat     Corin in box    same_room False   hear fragment  (door shut)
+
+Three answers, none from a model. Today every event in that beat is judged
+against the last row, so the first two are unreachable.
+
+**A SCALAR CHANNEL CANNOT CARRY ITS OWN PROVENANCE.** `positions` is
+`dict[str, str]` -- a body's position is a bare string with nowhere to put a
+citation -- and movement is the single most perception-relevant event a beat
+has. `phase_sources` is the sidecar built for exactly that, already taught by
+the sheets and already read by `prune_blocked_phase_changes`, so `span_slices`
+reads it where a record cannot cite for itself. A record's own `from_event`
+still wins where both exist.
+
+### Open
+
+The first consumer of the chronological id is still unbuilt: perception dedupes
+on the PHASE-graph id and streams each actor's sequence by `enumerate`, so
+nothing yet delivers events to a mind in the beat's order. `beat_worlds` is the
+primitive that path needs, and wiring it must SUBSUME the existing
+onset/deferred split rather than run beside it, or a continuation phase applies
+twice.
+
 ## 5. What already exists to build on
 
 This is a rewire of proven mechanisms, not a green field. **The output half of

@@ -332,6 +332,20 @@ class TestNormalizationKeepsTheSpansOwnFields:
         assert "category" not in out["sequence"][0]
         assert "note" not in out["sequence"][0]
 
+    def test_the_beats_item_numbers_survive_too(self):
+        """Third field this key list has eaten in one day. `category` and
+        `note` went first, and no work item reached any hand at all until that
+        was found; `items` went the same way and the beat's item index came
+        back empty on live output.
+
+        `SPAN_FIELDS` is the single point of failure for anything the Director
+        writes onto a sequence element, and a field added anywhere else without
+        being added there is dropped between the model and every reader."""
+        out = self._out(category="objects", note="set it down",
+                        items=[{"id": 1, "name": "crate"}])
+        norm_sequence(out)
+        assert out["sequence"][0]["items"] == [{"id": 1, "name": "crate"}]
+
     def test_a_speech_span_keeps_its_own_ruling(self):
         out = {"sequence": [{"type": "speech", "text": "The reeve has it.",
                              "category": "social",
