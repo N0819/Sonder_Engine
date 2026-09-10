@@ -2117,10 +2117,28 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
     for warning in contract_warnings:
         ctx.add_warning(warning)
 
-    # ---- Tier 1: the same-call manifest, checked deterministically -------
-    manifest = _manifest_items(out, ctx.cast, sc)
+    # ---- Tier 1: the beat's own work items, checked deterministically ----
+    #
+    # CHUNKS FIRST. A categorized span of the input carries everything the
+    # manifest entry did for this purpose -- a subject, a category, an id and
+    # a statement of what should be true -- and it is the artifact the
+    # Director now produces (`DESIGN_SPECIALIST_CONTRACT.md` 4a). The manifest
+    # is still read and still reconciles, because a stored variant replayed
+    # from before the migration carries one and nothing else, and a rerun that
+    # silently stopped checking those would turn a settled beat into an
+    # unchecked one.
+    manifest = _chunk_items(out) + _manifest_items(out, ctx.cast, sc)
     manifest_omissions = []
     for item in manifest:
+        # A chunk states the work in `note` and names no subject of its own:
+        # it is a span of the input, and who it concerns is whatever the span
+        # says. The seam wants both keys, so fill them from the chunk rather
+        # than teaching every reader two shapes.
+        if "change" not in item:
+            item = {**item,
+                    "change": str(item.get("note") or item.get("attempt")
+                                  or item.get("text") or ""),
+                    "subject": str(item.get("subject") or "")}
         forms = _subject_match_forms(item["subject"], ctx.cast, sc)
         if not _evidence_present(sd, item, forms, scene=sc):
             manifest_omissions.append({**item, "_forms": forms})

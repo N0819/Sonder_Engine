@@ -963,7 +963,7 @@ def check_nsfw_overlay_roster(errors: list[str]) -> None:
 #: exactly the quality regression the scoping was forbidden to introduce.
 PROSE_AUTHOR_NEVER_GATED = (
     "KNOWLEDGE FIREWALL",
-    "CHANGES MANIFEST",
+    "SPANS ARE THE WORK ITEMS",
     "PLAYER-ASSERTED FACTS",
     "DIALOGUE LOG — MANDATORY",
     "PLAYER AUTHORITY CONTRACT",
@@ -1014,7 +1014,7 @@ def check_prose_author_chunks(errors: list[str]) -> None:
             errors.append(
                 f"never-gated prose-author block {marker!r} is missing "
                 "from the sheet's core -- it must load on every beat")
-    for marker in ("KNOWLEDGE FIREWALL", "CHANGES MANIFEST",
+    for marker in ("KNOWLEDGE FIREWALL", "SPANS ARE THE WORK ITEMS",
                    "DIALOGUE LOG — MANDATORY", "PLAYER AUTHORITY CONTRACT"):
         if marker in gated:
             errors.append(

@@ -239,7 +239,7 @@ def test_every_delegated_block_has_exactly_one_owner():
                    "SIZE CHANGES WHAT IS POSSIBLE",
                    "WHAT LIGHT LETS THEM DO", "DESTINATION RESIDUE",
                    "AUTHORITY APPRAISAL", "CONSEQUENCES ON THE CLOCK",
-                   "CHANGES MANIFEST"):
+                   "SPANS ARE THE WORK ITEMS"):
         assert marker in lean, marker
 
 
@@ -649,15 +649,17 @@ class TestTheInstructionRidesOnTheEvent:
             {"category": "pose", "subject": "Maren", "change": "turned"}]}
         assert "note" not in director._manifest_items(out)[0]
 
-    def test_both_prompts_ask_for_it(self):
-        """Four places, and this is two of them. A field the sheet never names
-        is a field the model never writes."""
+    def test_the_instruction_now_rides_on_the_span(self):
+        """`note` moved with the work item. When `changes_asserted` was the
+        work list the instruction lived on a manifest entry; the work list is
+        now the categorized span, so that is where the sheet asks for it --
+        and neither sheet asks for a second decomposition at all."""
         from llm.prompts import get_prompt
-        interpret = get_prompt("director_interpret", "en")
-        assert "changes_asserted:[{category,subject,change,note}]" in interpret
         from llm import prompts
-        resolve = prompts._PROSE_AUTHOR_OUTPUT_SHAPE
-        assert "changes_asserted:[{category,subject,change,note," in resolve
+        interpret = get_prompt("director_interpret", "en")
+        assert "depends_on:[], category, note}" in interpret
+        assert "changes_asserted" not in interpret
+        assert "changes_asserted" not in prompts._PROSE_AUTHOR_OUTPUT_SHAPE
 
     def test_the_output_example_shows_it(self):
         """The third place: the object a repaired call is told to imitate.
@@ -2107,7 +2109,7 @@ PROSE_DUTY_HEADINGS = {
 #: Every-beat contract blocks that may NEVER be gated out of the sheet.
 NEVER_GATED_HEADINGS = (
     "KNOWLEDGE FIREWALL",
-    "CHANGES MANIFEST",
+    "SPANS ARE THE WORK ITEMS",
     "PLAYER-ASSERTED FACTS",
     "DIALOGUE LOG — MANDATORY",
     "PLAYER AUTHORITY CONTRACT",
@@ -2406,7 +2408,7 @@ def test_prose_author_shape_carries_no_delegated_fields():
                              _PROSE_AUTHOR_OUTPUT_SHAPE), channel
     # What stays the prose author's own is still all there.
     for kept in ("resolved_event", "summary", "dialogue_order",
-                 "dialogue_log", "changes_asserted", "state_diff", "time",
+                 "dialogue_log", "state_diff", "time",
                  "weather", "location", "claim_dispositions", "consequences",
                  "obligations", "world_pressure", "fact_adjudications"):
         assert kept in _PROSE_AUTHOR_OUTPUT_SHAPE, kept
