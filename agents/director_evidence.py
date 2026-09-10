@@ -1138,6 +1138,64 @@ def _drop_record_at(sd, path):
 # ---------------------------------------------------------------------------
 
 
+def single_span_attributions(sd, dispatch, view, span_slice_of):
+    """`{path: span_id}` for records a hand handed ONE span left uncited.
+
+    `span_slice_of(name, view)` is the caller's slicer
+    (`_specialist_span_slice`), passed in so this module keeps no second
+    opinion about which spans a hand received.
+
+    Returns sidecar additions in `phase_sources`' own spelling
+    (`"<channel>.<key>"`, `"<channel>.<index>"` for a list), which is what
+    `span_slices` and `prune_blocked_phase_changes` both already read. Writes
+    nothing: the caller merges them, so a beat can see what was derived.
+
+    This is what lets a MOVEMENT be placed in the beat's order. `positions` is
+    `dict[str, str]` and a body's position is a bare string with nowhere to
+    carry a citation, so without this the recompiler's three-link case --
+    mint a room, walk into it, mint a thing inside it -- depends on a hand
+    having remembered a sidecar it fills at a measured 25%.
+    """
+    additions = {}
+    existing = set((sd or {}).get("phase_sources") or {})
+    for name, state in (dispatch or {}).items():
+        if not (state or {}).get("ran"):
+            continue
+        spans = span_slice_of(name, view or {})
+        if len(spans) != 1:
+            continue
+        try:
+            span_id = int(spans[0].get("event_id") or 0)
+        except (TypeError, ValueError):
+            continue
+        if span_id <= 0:
+            continue
+        for channel in (state.get("channels") or ()):
+            content = (sd or {}).get(channel)
+            if isinstance(content, dict):
+                for key, value in content.items():
+                    path = "%s.%s" % (channel, key)
+                    if path in existing or _cites_a_span(value):
+                        continue
+                    additions[path] = span_id
+            elif isinstance(content, list):
+                for index, value in enumerate(content):
+                    path = "%s.%s" % (channel, index)
+                    if path in existing or _cites_a_span(value):
+                        continue
+                    additions[path] = span_id
+    return additions
+
+
+def _cites_a_span(record):
+    """Does this record already say which span it settles?"""
+    if not isinstance(record, dict):
+        return False
+    raw = record.get("from_event")
+    return (not isinstance(raw, bool) and isinstance(raw, (int, float))
+            and int(raw) > 0)
+
+
 def span_mint_rooms(sd, spans, worlds, final_world, actor_of=None):
     """Where a thing minted by a span was, from where its actor stood.
 
