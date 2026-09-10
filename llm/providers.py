@@ -1919,6 +1919,28 @@ _NO_JSON_SCHEMA_LOCK = threading.Lock()
 _SCHEMA_STALLS: dict = {}
 _SCHEMA_STALL_LIMIT = 2
 
+# ...AND A STALL VERDICT HEALS. A 400 is the provider describing itself and
+# stays written down forever; a stall is this engine INFERRING a capability
+# from a latency symptom, and an inference has to be allowed to expire.
+#
+# Before this, `_NO_JSON_SCHEMA` was only ever added to -- no discard, no
+# expiry, no re-test anywhere in the module -- so two slow minutes disabled a
+# model's grammar permanently and nothing ever asked again. Measured 2026-09-09
+# on the owner's database: `google/gemini-3.8-flash` sat in that set while
+# every Director role inherited it from `default`, so the prose author and all
+# five specialists ran with no grammar, falling back to `json_object`, which
+# this module's own `_apply_json_mode` docstring measures as WORSE than sending
+# nothing on a prose-leading prompt. A provider fixing its endpoint, or a model
+# id being repointed at a new build, could never be noticed.
+#
+# One re-test per window is the whole cost of being wrong in the healing
+# direction: a provider that still cannot compile a grammar stalls once more
+# and is suspended again. Being wrong in the other direction costs every call
+# it ever makes.
+_SCHEMA_SUSPENDED: dict = {}
+_SCHEMA_SUSPEND_SECONDS = 24 * 60 * 60
+_SCHEMA_SUSPEND_SETTING = "providers_schema_suspended"
+
 # The learned set, persisted so a restart does not re-pay the tuition. Kept as
 # a plain settings row rather than a table: it is a cache of provider
 # behaviour, it is always safe to lose, and anything that cannot be re-learned
@@ -1939,10 +1961,35 @@ def _load_schema_blacklist():
         return
     if not isinstance(stored, list):
         return
+    # ENTRIES WRITTEN BEFORE SUSPENSIONS EXISTED REHYDRATE AS SUSPENSIONS,
+    # not as permanent rejections. The old row recorded both verdicts under
+    # one key and cannot say which this was, and the two errors are not
+    # symmetrical: a stall kept forever costs every call the model makes,
+    # while a rejection re-tested costs one 400 per window on a cache this
+    # module already documents as safe to lose.
+    now = time.time()
     with _NO_JSON_SCHEMA_LOCK:
         for entry in stored:
             if isinstance(entry, str) and "\u0000" in entry:
-                _NO_JSON_SCHEMA.add(tuple(entry.split("\u0000", 1)))
+                _SCHEMA_SUSPENDED.setdefault(
+                    tuple(entry.split("\u0000", 1)),
+                    now + _SCHEMA_SUSPEND_SECONDS)
+    try:
+        held = _json.loads(get_setting(_SCHEMA_SUSPEND_SETTING) or "{}")
+    except Exception:
+        return
+    if not isinstance(held, dict):
+        return
+    with _NO_JSON_SCHEMA_LOCK:
+        for entry, until in held.items():
+            if not (isinstance(entry, str) and "\u0000" in entry):
+                continue
+            try:
+                until = float(until)
+            except (TypeError, ValueError):
+                continue
+            if until > now:   # a lapsed suspension is simply not loaded
+                _SCHEMA_SUSPENDED[tuple(entry.split("\u0000", 1))] = until
 
 
 def _persist_schema_blacklist():
@@ -1957,13 +2004,60 @@ def _persist_schema_blacklist():
         pass
 
 
+def _schema_suspended(key) -> bool:
+    """Is this key under a stall-derived suspension that has not lapsed?
+
+    Reads the clock ONCE and drops the entry when it lapses, so the next call
+    takes the ordinary path rather than re-deciding the same expiry forever.
+    """
+    with _NO_JSON_SCHEMA_LOCK:
+        until = _SCHEMA_SUSPENDED.get(key)
+        if until is None:
+            return False
+        if time.time() < until:
+            return True
+        _SCHEMA_SUSPENDED.pop(key, None)
+    _persist_schema_suspensions()
+    _logger.info(
+        "providers: %s/%s served its json_schema suspension; sending a grammar "
+        "again on the next call", key[0], key[1])
+    return False
+
+
+def _persist_schema_suspensions():
+    """Write the stall-derived suspensions and their expiries.
+
+    A separate settings row from `providers_no_json_schema` on purpose: that
+    one is the permanent record of what a provider REFUSED, this one is what
+    the engine INFERRED and will re-test. Merging them is how the inference
+    became indistinguishable from the fact in the first place.
+    """
+    try:
+        import json as _json
+        with _NO_JSON_SCHEMA_LOCK:
+            rows = {"%s\u0000%s" % k: v
+                    for k, v in sorted(_SCHEMA_SUSPENDED.items())}
+        set_setting(_SCHEMA_SUSPEND_SETTING, _json.dumps(rows))
+    except Exception:
+        # Same rule as the blacklist: bookkeeping never fails a call.
+        pass
+
+
 def _json_schema_supported(prov, model) -> bool:
-    """False once this provider+model is known not to answer a json_schema."""
-    if not _NO_JSON_SCHEMA and not getattr(_json_schema_supported, "_loaded", False):
+    """False while this provider+model is known not to answer a json_schema.
+
+    Two verdicts, and they differ in how long they last. A REJECTION (a 400
+    naming the grammar) is permanent: the provider has described itself. A
+    STALL is a suspension that expires -- see `_SCHEMA_SUSPEND_SECONDS`.
+    """
+    if not getattr(_json_schema_supported, "_loaded", False):
         _json_schema_supported._loaded = True
         _load_schema_blacklist()
+    key = _json_object_key(prov, model)
     with _NO_JSON_SCHEMA_LOCK:
-        return _json_object_key(prov, model) not in _NO_JSON_SCHEMA
+        if key in _NO_JSON_SCHEMA:
+            return False
+    return not _schema_suspended(key)
 
 
 def _note_json_schema_rejected(prov, model):
@@ -2019,7 +2113,7 @@ def _note_json_schema_stalled(prov, model):
     """Count a schema request that was accepted and then never answered."""
     key = _json_object_key(prov, model)
     with _NO_JSON_SCHEMA_LOCK:
-        if key in _NO_JSON_SCHEMA:
+        if key in _NO_JSON_SCHEMA or key in _SCHEMA_SUSPENDED:
             return
         n = _SCHEMA_STALLS.get(key, 0) + 1
         _SCHEMA_STALLS[key] = n
@@ -2031,7 +2125,20 @@ def _note_json_schema_stalled(prov, model):
             _prov_field(prov, "name") or "provider", model, n,
             _SCHEMA_STALL_LIMIT)
         return
-    _note_json_schema_rejected(prov, model)
+    # SUSPEND, DO NOT CONDEMN. Crossing the stall line is this engine inferring
+    # a capability from a latency symptom; the inference is good enough to stop
+    # paying for it now and not good enough to be believed forever. The stall
+    # count resets with it, so a model that comes back healthy is not one bad
+    # minute away from its old verdict.
+    with _NO_JSON_SCHEMA_LOCK:
+        _SCHEMA_SUSPENDED[key] = time.time() + _SCHEMA_SUSPEND_SECONDS
+        _SCHEMA_STALLS.pop(key, None)
+    _persist_schema_suspensions()
+    _logger.info(
+        "providers: %s stalled on json_schema for %s %d times; sending "
+        "json_object instead for %dh, then re-testing the grammar",
+        _prov_field(prov, "name") or "provider", model, _SCHEMA_STALL_LIMIT,
+        _SCHEMA_SUSPEND_SECONDS // 3600)
 
 
 def _json_mode_recovery_stages(body, prov, model, *, stalled=False):

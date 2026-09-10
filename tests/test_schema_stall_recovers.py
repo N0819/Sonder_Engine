@@ -228,6 +228,115 @@ class TestTheEngineLearnsWhatAProviderWillNotGive:
         assert not providers._json_schema_supported(_prov(), "m")
 
 
+class TestAStallVerdictHeals:
+    """A stall is an INFERENCE and expires; a 400 is a FACT and does not.
+
+    The gap this closes, measured 2026-09-09 on the owner's database:
+    `_NO_JSON_SCHEMA` was only ever added to -- no discard, no expiry, no
+    re-test anywhere in the module -- so two slow minutes disabled a model's
+    grammar permanently. `google/gemini-3.8-flash` sat in that set while every
+    Director role inherited it from `default`, so the prose author and all five
+    specialists ran with no grammar and fell back to `json_object`, which
+    `_apply_json_mode`'s own docstring measures as WORSE than sending nothing
+    on a prose-leading prompt. A provider fixing its endpoint could never be
+    noticed.
+
+    The asymmetry is the whole design: being wrong in the healing direction
+    costs one re-test per window, being wrong the other way costs every call
+    the model ever makes.
+    """
+
+    def setup_method(self):
+        providers._NO_JSON_SCHEMA.clear()
+        providers._SCHEMA_STALLS.clear()
+        providers._SCHEMA_SUSPENDED.clear()
+        providers._json_schema_supported._loaded = True
+
+    def _quiet(self, monkeypatch):
+        monkeypatch.setattr(providers, "_persist_schema_blacklist", lambda: None)
+        monkeypatch.setattr(providers, "_persist_schema_suspensions", lambda: None)
+
+    def test_the_stall_verdict_lapses_and_the_grammar_is_sent_again(
+            self, monkeypatch):
+        self._quiet(monkeypatch)
+        providers._note_json_schema_stalled(_prov(), "m")
+        providers._note_json_schema_stalled(_prov(), "m")
+        assert not providers._json_schema_supported(_prov(), "m")
+        # ...one window later, without anything else changing.
+        now = [providers.time.time() + providers._SCHEMA_SUSPEND_SECONDS + 1]
+        monkeypatch.setattr(providers.time, "time", lambda: now[0])
+        assert providers._json_schema_supported(_prov(), "m"), (
+            "a latency symptom must not be a permanent capability verdict")
+
+    def test_a_400_still_never_lapses(self, monkeypatch):
+        """The provider described itself. Time does not change that."""
+        self._quiet(monkeypatch)
+        providers._note_json_schema_rejected(_prov(), "m")
+        now = [providers.time.time() + providers._SCHEMA_SUSPEND_SECONDS * 100]
+        monkeypatch.setattr(providers.time, "time", lambda: now[0])
+        assert not providers._json_schema_supported(_prov(), "m")
+
+    def test_a_lapsed_suspension_is_dropped_rather_than_re_decided(
+            self, monkeypatch):
+        self._quiet(monkeypatch)
+        providers._note_json_schema_stalled(_prov(), "m")
+        providers._note_json_schema_stalled(_prov(), "m")
+        key = providers._json_object_key(_prov(), "m")
+        assert key in providers._SCHEMA_SUSPENDED
+        monkeypatch.setattr(
+            providers.time, "time",
+            lambda: 1e12 + providers._SCHEMA_SUSPEND_SECONDS)
+        providers._json_schema_supported(_prov(), "m")
+        assert key not in providers._SCHEMA_SUSPENDED
+
+    def test_the_stall_count_resets_with_the_suspension(self, monkeypatch):
+        """A model that comes back healthy is not one bad minute from its old
+        verdict: crossing the line clears the tally it crossed."""
+        self._quiet(monkeypatch)
+        providers._note_json_schema_stalled(_prov(), "m")
+        providers._note_json_schema_stalled(_prov(), "m")
+        assert providers._json_object_key(_prov(), "m") not in providers._SCHEMA_STALLS
+
+    def test_suspensions_are_written_to_their_own_row(self, monkeypatch):
+        """Separate from `providers_no_json_schema` on purpose: one row is what
+        a provider REFUSED, the other is what the engine INFERRED."""
+        written = {}
+        monkeypatch.setattr(providers, "set_setting",
+                            lambda k, v: written.update({k: v}), raising=False)
+        providers._note_json_schema_stalled(_prov(), "m")
+        providers._note_json_schema_stalled(_prov(), "m")
+        assert providers._SCHEMA_SUSPEND_SETTING in written
+        assert providers._NO_JSON_SCHEMA_SETTING not in written, (
+            "an inference must not be filed as a refusal")
+
+    def test_rows_written_before_suspensions_existed_rehydrate_as_suspensions(
+            self, monkeypatch):
+        """The old row cannot say which verdict it recorded, and the two
+        errors are not symmetrical -- so it heals."""
+        providers._SCHEMA_SUSPENDED.clear()
+        providers._NO_JSON_SCHEMA.clear()
+        # the JSON TEXT must carry the escape, not a raw NUL: json rejects a
+        # control character inside a string, and the early return there
+        # would have made this test pass for the wrong reason.
+        legacy = '["3\\u0000google/gemini-3.8-flash"]'
+        monkeypatch.setattr(
+            providers, "get_setting",
+            lambda k, *a: legacy if k == providers._NO_JSON_SCHEMA_SETTING else "",
+            raising=False)
+        providers._load_schema_blacklist()
+        assert ("3", "google/gemini-3.8-flash") in providers._SCHEMA_SUSPENDED
+        assert not providers._NO_JSON_SCHEMA, (
+            "a legacy row must not be promoted to a permanent refusal")
+
+    def test_bookkeeping_never_fails_the_call(self, monkeypatch):
+        def boom(*a, **k):
+            raise RuntimeError("no database")
+        monkeypatch.setattr(providers, "set_setting", boom, raising=False)
+        providers._note_json_schema_stalled(_prov(), "m")
+        providers._note_json_schema_stalled(_prov(), "m")   # must not raise
+        assert not providers._json_schema_supported(_prov(), "m")
+
+
 class TestARejectionInAStreamFrameIsStillARejection:
     """A provider that rejects a request does not always get an HTTP status.
 
