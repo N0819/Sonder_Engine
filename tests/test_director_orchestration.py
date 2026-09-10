@@ -5292,3 +5292,129 @@ class TestWhichHandRendersAThingTheBeatMinted:
             sd, spans, {"rooms": {"hall": {"name": "Hall"}}}, self.OWNER)[2]
         assert got["render_from"][0] == "rooms.hall"
         assert got["reason"] == "standing"
+
+
+class TestAThingMintedInsideAPlaceTheBeatMade:
+    """The owner's last class, 2026-09-10: "you enter a location and mint an
+    object inside that location."
+
+    Measured in the live TARDIS beat: "I step into the tardis ... and pull the
+    levers on the console" minted `entities.console` with NO POSITION, and
+    nothing could place it. `derive_minted_entity_placements` is subtractive by
+    design and speaks from ledgers that already NAME the thing -- a contact, a
+    transfer -- and the console has neither. The room it belongs in did not
+    exist when the objects hand was handed its payload, so it could not have
+    named it either.
+
+    The evidence only the recompiler has is where the actor STOOD at that span.
+    Nothing else in the engine knows: the hands see a scene that has not moved
+    since before the beat, and the merged diff has forgotten the order.
+    """
+
+    SCENE = {"rooms": {"yard": {"name": "Yard", "adjacent": []}},
+             "positions": {"Corin": "yard"}, "entities": {}, "contacts": [],
+             "poses": {}, "stations": {}, "contained": {}}
+
+    def _run(self, sd, sequence):
+        from world.spatial import merge_scene_with_diff
+        scene = json.loads(json.dumps(self.SCENE))
+        spans = director._span_items({"sequence": sequence})
+        worlds = director.beat_worlds(scene, sd, merge_scene_with_diff)
+        final = merge_scene_with_diff(scene, sd)
+        return director.span_mint_rooms(
+            sd, spans, worlds, final, lambda span: "Corin"), final
+
+    def test_a_thing_minted_after_a_move_is_where_the_actor_went(self):
+        sd = {
+            "rooms": {"box": {"name": "Box", "adjacent": [],
+                              "from_event": 1}},
+            "positions": {"Corin": "box"},
+            "phase_sources": {"positions.Corin": 1},
+            "entities": {"console": {"name": "console", "from_event": 2}},
+        }
+        rooms, final = self._run(sd, [
+            {"type": "action", "attempt": "I step into the box",
+             "category": "spatial", "note": "a"},
+            {"type": "action", "attempt": "I pull the levers on the console",
+             "category": "objects", "note": "b"}])
+        assert (final.get("positions") or {}).get("console") is None, (
+            "nothing else places it -- that is the gap")
+        assert rooms == {"console": "box"}
+
+    def test_the_world_the_span_LEAVES_decides_not_the_one_it_starts_in(self):
+        """"I step into the box and drop my bag" is ONE span in which the
+        actor moves and mints, so the world before it still has them
+        outside."""
+        sd = {
+            "rooms": {"box": {"name": "Box", "adjacent": [],
+                              "from_event": 1}},
+            "positions": {"Corin": "box"},
+            "phase_sources": {"positions.Corin": 1},
+            "entities": {"bag": {"name": "bag", "from_event": 1}},
+        }
+        rooms, _final = self._run(sd, [
+            {"type": "action", "attempt": "I step into the box and drop my bag",
+             "category": ["spatial", "objects"], "note": "a"}])
+        assert rooms == {"bag": "box"}
+
+    def test_a_thing_someone_already_placed_is_left_alone(self):
+        """An explicit write outranks a derivation -- the rule
+        `derive_minted_entity_placements` already states, and this speaks only
+        where nobody else did."""
+        sd = {
+            "rooms": {"box": {"name": "Box", "adjacent": [],
+                              "from_event": 1}},
+            "positions": {"Corin": "box", "console": "yard"},
+            "phase_sources": {"positions.Corin": 1},
+            "entities": {"console": {"name": "console", "from_event": 2}},
+        }
+        rooms, _final = self._run(sd, [
+            {"type": "action", "attempt": "a", "category": "spatial",
+             "note": "a"},
+            {"type": "action", "attempt": "b", "category": "objects",
+             "note": "b"}])
+        assert rooms == {}
+
+    def test_it_writes_nothing_itself(self):
+        """Placement belongs to `world/spatial_containment`, whose four
+        subtractive rules are the right ones. This supplies the evidence
+        nothing else has and applies none of it.
+
+        Snapshotted AFTER the replay, because `merge_scene_with_diff` writes
+        back into the diff it is handed -- an orphan room gains a connecting
+        edge -- so comparing across the whole helper would measure the merge
+        rather than the function under test."""
+        from world.spatial import merge_scene_with_diff
+        sd = {
+            "rooms": {"box": {"name": "Box", "adjacent": [],
+                              "from_event": 1}},
+            "positions": {"Corin": "box"},
+            "phase_sources": {"positions.Corin": 1},
+            "entities": {"console": {"name": "console", "from_event": 2}},
+        }
+        scene = json.loads(json.dumps(self.SCENE))
+        spans = director._span_items({"sequence": [
+            {"type": "action", "attempt": "a", "category": "spatial",
+             "note": "a"},
+            {"type": "action", "attempt": "b", "category": "objects",
+             "note": "b"}]})
+        worlds = director.beat_worlds(scene, sd, merge_scene_with_diff)
+        final = merge_scene_with_diff(scene, sd)
+        before = json.dumps(sd, sort_keys=True)
+        got = director.span_mint_rooms(
+            sd, spans, worlds, final, lambda span: "Corin")
+        assert got == {"console": "box"}
+        assert json.dumps(sd, sort_keys=True) == before
+
+    def test_a_room_the_scene_does_not_hold_places_nothing(self):
+        """Silence, never a guess: evidence that does not resolve against the
+        world writes nothing, which is the first of the four rules."""
+        sd = {"positions": {"Corin": "nowhere"},
+              "phase_sources": {"positions.Corin": 1},
+              "entities": {"console": {"name": "console", "from_event": 2}}}
+        rooms, _final = self._run(sd, [
+            {"type": "action", "attempt": "a", "category": "spatial",
+             "note": "a"},
+            {"type": "action", "attempt": "b", "category": "objects",
+             "note": "b"}])
+        assert rooms == {}

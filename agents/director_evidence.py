@@ -1138,6 +1138,61 @@ def _drop_record_at(sd, path):
 # ---------------------------------------------------------------------------
 
 
+def span_mint_rooms(sd, spans, worlds, final_world, actor_of=None):
+    """Where a thing minted by a span was, from where its actor stood.
+
+    `worlds` is `beat_worlds`' output and `final_world` the scene the whole
+    beat leaves. `actor_of(span)` names the body whose act the span was; a span
+    naming none falls to the beat's own actor, which the caller supplies by
+    closing over it.
+
+    Returns `{entity_key: room_id}` for mints this can speak for, and writes
+    NOTHING -- placement is `world/spatial_containment`'s, and its rule that an
+    explicit write outranks a derivation is the right one. This only supplies
+    the evidence nothing else has: the world moved DURING the beat, and the
+    hand that minted the thing was looking at the world as it stood before it.
+    """
+    minted = {key for key, value in ((sd or {}).get("entities") or {}).items()
+              if isinstance(value, dict)}
+    if not minted:
+        return {}
+    placed = (sd or {}).get("positions") or {}
+    # The world each span LEAVES: the next span's `before`, and the beat's
+    # final scene for the last of them.
+    leaves, order = {}, [span for span, _w in (worlds or [])]
+    for index, (span_id, _before) in enumerate(worlds or []):
+        leaves[span_id] = (worlds[index + 1][1]
+                           if index + 1 < len(worlds) else final_world)
+
+    rooms = {}
+    for span in (spans or []):
+        if not isinstance(span, dict):
+            continue
+        try:
+            span_id = int(span.get("event_id") or 0)
+        except (TypeError, ValueError):
+            continue
+        world = leaves.get(span_id)
+        if not world:
+            continue
+        actor = str((actor_of(span) if actor_of else span.get("actor")) or "")
+        if not actor:
+            continue
+        room = ((world.get("positions") or {}).get(actor) or "").strip()
+        if not room or room not in (world.get("rooms") or {}):
+            continue
+        for key, record in ((sd or {}).get("entities") or {}).items():
+            if not isinstance(record, dict) or key in placed or key in rooms:
+                continue
+            try:
+                cited = int(record.get("from_event") or 0)
+            except (TypeError, ValueError):
+                cited = 0
+            if cited == span_id:
+                rooms[key] = room
+    return rooms
+
+
 #: WHICH HAND IS THE AUTHORITY for a thing minted more than once in one beat,
 #: highest first. Ordered by how much of a thing's OWN identity the hand's
 #: channels carry, as against facts ABOUT a thing that already has one:
