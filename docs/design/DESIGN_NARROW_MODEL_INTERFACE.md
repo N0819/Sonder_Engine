@@ -659,10 +659,31 @@ sheet says so itself: *"yours to judge, and nothing else can."* It depends on
 the anatomy this fiction established for this body, and there is no table that
 answers it.
 
+**(e) THE ENGINE DROPS IT AND TELLS THE DIRECTOR.** Added 2026-09-09 after
+reading the code behind two of the (a) claims above, and it is the bucket that
+was missing rather than a refinement of one. `contacts_across_enclosure`
+"returns the dropped rows; appends one finished sentence per row to `report`",
+and the unmatched-cross rule is a bare `continue` beside
+`report("discarded a contact crossing that did not match the standing interior
+endpoint")`. Neither repairs. Both are loud.
+
+That is NOT the same as (a), and the difference decides whether a sentence may
+go. A repair means the beat is right whatever the model does. A drop-and-report
+means the beat is WRONG ONCE and the Director is told in time for the next one
+-- so deleting the sentence trades "never happens" for "happens, then is
+corrected a beat later", and one beat of wrong world state is exactly the
+failure this engine treats as a machine fault rather than model variance.
+**Sentences in (e) stay.** Two of the seven rules section 4 filed under (a) --
+"a cross that matches no standing endpoint is rejected" and "contacts between
+separated bodies are dropped" -- are (e), which their own wording said and the
+bucket did not: *rejected* and *dropped* are not *repaired*. The ~3,000 chars
+"delete on sight" is an over-claim by at least those two.
+
 **THE CHECK THAT MAKES (a) SAFE, and it is not optional.** A sentence saying
 "the engine drops X" may be deleted only if the engine REPAIRS X. Where it
 drops, the sentence is the only thing preventing silent data loss, and deleting
-it converts a repair into a hole. Every rule cut must be traced to the guard
+it converts a repair into a hole. Where it drops AND REPORTS, see (e): the hole
+is announced rather than silent, which is better and is still a hole. Every rule cut must be traced to the guard
 that makes it unnecessary, and where no guard exists the guard is written
 FIRST. These rules are a graveyard of live defects; the commit that removes one
 is the commit that must prove it cannot come back.
