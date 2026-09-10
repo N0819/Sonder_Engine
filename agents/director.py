@@ -897,13 +897,6 @@ def director_interpret(ctx, nonce):
     from story.authored_events import due_authored_events
     _due_authored = due_authored_events(chat["id"], ctx.turn.idx)
 
-    world_books = [
-        {"name": m["name"], "type": m["type"], "summary": (m["summary"] or "")[:240],
-         "scope_world_id": m.get("scope_world_id"),
-         "scope_location_id": m.get("scope_location_id"),
-         "parent_id": m.get("parent_id")}
-        for m in lorebook_manifest(chat["id"])["books"]
-    ]
 
     payload = {
         "scene": {
@@ -1030,7 +1023,6 @@ def director_interpret(ctx, nonce):
                 for _pn, _pr in presence_name_items(_addressable_ledger))
             if _bp["room"]
         ],
-        "world_books": world_books,
         "standing_intentions": raw_intents[:12],
         "pending": wget(chat["id"], "pending", []),
         # Future beats the PLAYER scheduled earlier ("the elevator crashes next
@@ -2138,7 +2130,13 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
             item = {**item,
                     "change": str(item.get("note") or item.get("attempt")
                                   or item.get("text") or ""),
-                    "subject": str(item.get("subject") or "")}
+                    # `actor` on the resolve half: a span there is anything
+                    # the beat made true BY ANYONE, so whose act it was is the
+                    # subject the evidence check matches on. Interpret spans
+                    # are the player's own and carry neither, which falls back
+                    # to "" exactly as before.
+                    "subject": str(item.get("subject")
+                                   or item.get("actor") or "")}
         forms = _subject_match_forms(item["subject"], ctx.cast, sc)
         if not _evidence_present(sd, item, forms, scene=sc):
             manifest_omissions.append({**item, "_forms": forms})

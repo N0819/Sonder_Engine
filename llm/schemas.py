@@ -2466,6 +2466,20 @@ class DirectorResolve(LenientModel):
     # state and never a replacement for dialogue_log/state_diff.
     public_evidence: list[CharterPublicEvidence] = Field(default_factory=list)
     state_diff: StateDiff = Field(default_factory=StateDiff)
+    # THE BEAT'S WORK ITEMS, the resolve half of `DirectorInterpret.sequence`
+    # and the same four fields: the span itself, the engine's chronological
+    # id, a `category` naming the ledger family it belongs to, and a `note`
+    # saying how the Director wants it settled
+    # (`DESIGN_SPECIALIST_CONTRACT.md` 4a).
+    #
+    # "Resolve would mostly do the same but for characters" -- so a span here
+    # is anything the beat made true, by anyone, rather than only the player's
+    # own declared conduct. `actor` says whose.
+    #
+    # Declared rather than left to ride on `LenientModel`: a typed model
+    # STRIPS what it does not name, which is how `note` and `from_event` were
+    # each lost once already this week.
+    sequence: list[dict] = Field(default_factory=list)
     changes_asserted: list[AssertedChange] = Field(default_factory=list)
     # The manifest's counterpart: what the beat deliberately did NOT list,
     # because it was interior. Never committed, never perceived, never
@@ -5083,6 +5097,16 @@ OUTPUT_EXAMPLES = {
             "Maren turns from the water as you reach the lamp. \"You're "
             "late,\" she says. \"The boat went out an hour ago.\""),
         "summary": "Maren says the boat left an hour ago",
+        # THE BEAT'S WORK ITEMS. One span per persistent change, in the order
+        # they happened; the engine numbers them. `actor` is whose act it was,
+        # which is what the resolve half adds over interpret's -- a span here
+        # is anything the beat made true, by anyone.
+        "sequence": [
+            {"actor": "Maren", "attempt": "turns from the water to face you",
+             "category": "spatial",
+             "note": "she is facing you now; her back is no longer to the "
+                     "room"},
+        ],
         "dialogue_order": ["Maren"],
         "dialogue_log": [
             {"speaker": "Maren",
