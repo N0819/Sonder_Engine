@@ -19,7 +19,7 @@
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 1453 |  | `agents.director_lingua`, `story.character_schema`, `world.spatial` |
 | `agents/director_reconcile.py` | 594 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story`, `world.spatial` |
-| `agents/director_scopes.py` | 1099 |  | `agents.director_lingua`, `agents.director_views`, `core.db`, `world.survival` |
+| `agents/director_scopes.py` | 1119 |  | `agents.director_lingua`, `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 706 |  | `agents.common`, `story.character_schema`, `story.scene`, `world.background_claims` |
 | `agents/dramaturge.py` | 348 |  | `core.db`, `core.logging_utils` |
 | `agents/loops.py` | 1400 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
@@ -367,14 +367,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_dispatch_specialists()` | 1001 | 99 lines |
+| `_dispatch_specialists()` | 1021 | 99 lines |
 | `_gate_facts()` | 706 | 79 lines |
 | `_ruling_for()` | 908 | 69 lines |
 | `register_specialist()` | 483 | 49 lines |
 | `manifest_category_targets()` | 857 | 49 lines |
+| `_unrouted_rulings()` | 979 | 40 lines |
 | `note_key_targets()` | 818 | 37 lines |
 | `_rebuild_channel_owners()` | 452 | 25 lines |
-| `_schema_list_channels()` | 266 | 23 lines |
 
 ### `agents/director_views.py`
 
