@@ -447,11 +447,39 @@ now reports an unroutable CHUNK CATEGORY the same way it has always reported an
 unroutable note key -- the next beat's author sees the word it used beside the
 names that route, and corrects itself.
 
-**So the mode is a live choice rather than a setting to flip.** With the
-reporting in place the drift is visible and self-correcting instead of silent,
-which is what makes `low` on the Director arguable at all. It is still the one
-role doing authorship rather than transcription, and this is a measurement of
-ENCODING, not of fiction: nothing here says the beats read as well.
+### RESOLVED: it was not drift, and it was not size
+
+The owner's read -- *"I'm wondering if its failure there is because the prompt
+is still rather large"* -- pointed at the prompt and was right about the place.
+The mechanism was not length. Two faults, both mine, both the same shape:
+
+**The sheet published two vocabularies for one set of things.**
+`interpret_delegation_note.txt`, which is part of the interpret Director's own
+prompt, labelled the five channel groups `BODIES`, `CONTACT AND MATTER`,
+`OBJECTS`, `SOCIAL FABRIC` and **`GEOGRAPHY`** -- while the paragraph that asks
+for a category names them `body / social / contact / objects / spatial`. The
+model never invented `geography`; it used the nearest label the sheet gave it,
+which is a fair reading of a sheet that says both. The group labels are now the
+hand names.
+
+**And the field was asked for without its value space.** The sequence paragraph
+said "add `category` -- which family of record it belongs to" and enumerated
+nothing, so the model had to bridge to a list in a different paragraph about a
+different field. That is the same failure as the unroutable manifest of
+2026-09-09, third occurrence: the key declared where it is asked, the values
+declared somewhere else. The five are now named inline.
+
+**Re-measured at `director=low` with only the inline naming in place** (the
+group labels were still wrong on that run): 21 spans, 15 categorized (71%),
+categories `objects/body/spatial/contact`, **UNROUTABLE: none**, 0 errors.
+Naming the vocabulary where the field is asked for was sufficient on its own.
+
+So the -62% stands with no measured encoding cost, and `low` on the Director
+becomes a real option rather than a trade. Two caveats survive it: this
+measures ENCODING and says nothing about whether the beats read as well, and
+the unrouted-category report added above stays -- a vocabulary that drifted
+once under one condition can drift again under another, and the point of the
+report is that the next occurrence is visible rather than silent.
 
 ## 5. What already exists to build on
 
