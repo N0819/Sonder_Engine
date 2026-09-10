@@ -667,6 +667,73 @@ that makes it unnecessary, and where no guard exists the guard is written
 FIRST. These rules are a graveyard of live defects; the commit that removes one
 is the commit that must prove it cannot come back.
 
+## 4a. MEASURED: the echo is not derivable, so 39% of the shared core stays
+
+The five specialist cores are five copies of one document. Measured
+2026-09-09: ~8.4-9.0k chars each, **89% byte-identical**, differing only in the
+opening role paragraph and the entitlement paragraph. Split into sentences, 40
+of ~45 appear in ALL five.
+
+**They have not drifted**, which is worth recording because five copies of a
+rule normally do: no sentence appears in three or four cores and is missing
+from another. The duplication is a maintenance hazard that has not yet gone
+wrong.
+
+**Sixteen of those forty sentences -- about 3,300 characters, 39% of the shared
+core, carried by every dispatched hand -- are the `resolved_events` echo and
+the `not_mine`/`reroute_to` reroute protocol.** Section 3d listed exactly these
+among the terms that "should not reach a model at all", on the reasoning that
+they die with section 3c. Section 3c-quater rejected 3c, so they do not die on
+their own, and the question had to be asked directly.
+
+Section 4's test governs. The engine already treats an unanswered id as
+unaddressed and repairs it, so deleting the echo would lose no DATA -- it would
+cost repair calls. It is therefore worth deleting only if code can DERIVE the
+same verdict. `_evidence_present` is the obvious candidate, because it already
+does this job one step later: it checks a claimed encoding against the merged
+`state_diff` before believing it.
+
+`tools/echo_derivable.py` replays every captured specialist call that carried
+both an echo and the numbered manifest it answers, and scores the code-derived
+verdict against the hand's own. **329 events. Code agrees 70.2%.**
+
+    encoded        220 agree /  75 disagree  (75%)
+    already_true     9 agree /  18 disagree  (33%)
+    not_mine         2 agree /   5 disagree  (29%)
+
+**The expensive direction is 75 of 329 (23%): the hand said `encoded` and the
+committed diff does not show it by this test.** Every one of those would buy a
+repair call for a change that was already carried. That is not a saving; at a
+scoped specialist call each, it is a large regression bought with a 3.3k-char
+prompt reduction worth about a tenth of a second.
+
+**Ruling: the echo stays. The 39% is not cuttable.**
+
+The reason generalises, and it is the more useful half. `_evidence_present` is
+a VERIFIER, deliberately conservative -- built to check a claim cheaply, with a
+shallow containment fallback for categories it does not model. That is the
+right shape for refusing to believe a false `encoded` and the wrong shape for
+originating the verdict, because a verifier's false negatives are free and an
+oracle's are not. **A check that is good enough to doubt an answer is not
+thereby good enough to replace it**, and the 29.8% is the distance between
+those two jobs.
+
+Note also what the disagreements are ABOUT: `contacts` dominates, and the
+contact ledger is the one whose identity is a composite (endpoints, parts,
+interiors) rather than a subject name. That is a hint about where
+`_evidence_present` is weakest, not an argument that the hands were wrong.
+
+**What this costs the plan.** Section 7's "93% proposed cut, shared specialist
+core first" was the largest remaining item, and its largest single component is
+now closed by measurement. The 39% stays; of the remaining 24 sentences, the
+role and entitlement paragraphs are per-hand rather than shared, the firewall
+and output-shape rules are section 4's buckets (c) and (d), and what is left is
+too small to be worth the risk of a prompt edit that reaches every story.
+Section 7 should be re-scoped to a single CHUNK -- `contact_ops` at 12,440
+chars is the candidate section 4 already analysed -- and a chunk is only loaded
+when its channel is in scope, so the saving is narrower than the core's would
+have been.
+
 ## 5. Do the schema work before the prompt work
 
 `providers_no_json_schema` in the owner's settings contains
@@ -882,10 +949,19 @@ the harnesses that produced it are checked in and re-runnable.
    part of the trial no skeptic contested -- subject to the naming test's
    second clause: the engine must own the new name everywhere it is compared
    (`enclosure: 'membrane'` is the counter-example that earned that clause).
-7. **Then reduce ONE sheet**, the shared specialist core first (93% proposed
-   cut, purest coordination content). Every deleted rule traced to a guard
-   WRITTEN FIRST, not cited after -- the trial produced 39 bad guard claims
-   from agents that had been told exactly this, in bold.
+7. **Reduce ONE sheet -- RE-SCOPED to a chunk, because the core's largest
+   component is closed** (section 4a). The five cores are 89% identical and
+   have not drifted; 39% of what they share is the `resolved_events` echo,
+   and `tools/echo_derivable.py` shows code can only derive that verdict 70.2%
+   of the time, with 75 of 329 events landing in the direction that BUYS a
+   repair call. The echo stays. What remains of the core is per-hand role text
+   plus section 4's buckets (c) and (d), which is too little to justify a
+   prompt edit that reaches every story. The candidate is now `contact_ops`
+   (12,440 chars), which section 4 already bucketed -- and a chunk loads only
+   when its channel is in scope, so the saving is narrower than the core's
+   would have been. Every deleted rule still traced to a guard WRITTEN FIRST,
+   not cited after: the trial produced 39 bad guard claims from agents that had
+   been told exactly this, in bold.
 8. **The consolidated check pass**, deferred by mandate while iterating:
    regenerate `docs/CODE_MAP.md`, `make structure`, full parallel suite, then
    empty `DEFERRED_PACK_PARITY`. The English pass is not finished while that
