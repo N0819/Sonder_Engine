@@ -947,7 +947,14 @@ def _ruling_for(name, view):
                     named.append(target)
                 if "note" not in addressed_by:
                     addressed_by.append("note")
-    for item in (view or {}).get("manifest") or []:
+    # CHUNKS DISPATCH TOO, by the same categories as the manifest. A hand is
+    # addressed by any work item in its ledgers, whether the Director filed it
+    # as a categorized span of the input (`chunks`) or as an asserted change
+    # (`changes_asserted`) -- the second is what the first becomes when
+    # `DESIGN_SPECIALIST_CONTRACT.md`'s migration finishes.
+    work = list((view or {}).get("manifest") or []) \
+        + list((view or {}).get("chunks") or [])
+    for item in work:
         if not isinstance(item, dict):
             continue
         for kind, target in manifest_category_targets(item.get("category")):
