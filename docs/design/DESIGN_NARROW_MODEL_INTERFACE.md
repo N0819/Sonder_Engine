@@ -632,6 +632,64 @@ paragraph, it is not compressed yet -- keep renaming, do not start explaining.
 Where the concept is genuinely irreducible, keep one sentence and no more; the
 measured list of those is four boundaries plus `erogenous`.
 
+## 3d-bis. MEASURED: the compression already happened, and it landed on five
+
+Section 3d proposes replacing `changes_asserted.category`'s ~20 channel-name
+values with eight concept kinds (`touch`, `mess`, `clothing`, `body`, `thing`,
+`place`, `people`, `word`), code mapping kind-plus-fields onto the 39 channels.
+The owner's framing is the reason it is in the document: *"the biggest
+optimization is compressing concepts into categories"*, and *"broader
+categories while allowing the code to sort what goes where."*
+
+**It has already happened, and nobody designed it.** Measured across 27 live
+interpret beats on `google/gemini-3.8-flash` (three runs, sections 3c-ter and
+this one), the author has never once filed a channel name. Not in any beat, not
+in any entry. It files the FIVE HAND NAMES:
+
+    entries filed: 14 over 12 beats      (the run under the corrected sheet)
+      objects  8    spatial  3    body  2    contact  1
+      hand names: 14/14 = 100%
+
+The corrected sheet offers both -- *"the ledger it goes in, or just the hand
+above that keeps it"* -- and the answer is unanimous. Which is not surprising
+once stated: the five names are the only closed vocabulary the sheet teaches,
+one line earlier, for `ledger_notes`. Given a coarse set it already knows and a
+fine set it has never been shown, a mind picks the coarse one.
+
+So the compression section 3d asks for is delivered at **five**, not eight, and
+the five arrived by use rather than by design. Section 3b's naming test --
+*does the word already mean this to a mind that has read the fiction?* -- is
+passed trivially, because the sheet defined them a line above.
+
+**Ruling: the kinds table is CLOSED, not built.** Teaching eight kinds now
+would replace a vocabulary that works and costs nothing with a third one that
+must be taught in the sheet, mapped in code, guarded in tests, and translated
+into every language pack -- to move from five categories to eight, in the wrong
+direction for the owner's own ask. The measured saving would be negative.
+
+**What the coarseness costs, stated so it is not discovered later.** A hand's
+name does not say WHICH ledger, so a hand-named entry grants the hand its
+story's channels rather than one channel (section 3c-ter). That is the
+fail-open rule `_dispatch_specialists` already follows, and it is the entire
+price of the compression: slightly wider scope on a dispatched hand, never a
+missed one.
+
+**The terms table (the second half of 3d) is NOT closed and is NOT done.**
+`op: 'add'` -> `began`, `relation: 'surface'` -> `against`, `actor_part` ->
+`with` and the rest are a schema-vocabulary change across `contact_ops` and the
+pose/room records -- schema, prompts, commit code, archives, and every language
+pack. Three things now argue for doing it with the pack re-sync (item 8) rather
+than during the English pass:
+
+- its measured value is small, and section 6's expectation is revised down
+  (`duration ~= 1.8s + 0.29s/1k input`);
+- every canonical token it changes widens the Japanese debt that
+  `DEFERRED_PACK_PARITY` is currently holding, so doing it now means
+  translating twice;
+- `CLAUDE.md`'s naming test has a second clause the first half did not need --
+  the engine must own the new name everywhere it is COMPARED -- and these
+  names are compared in commit code and in archives, not only in prompts.
+
 ## 4. What must move into code before a sentence is deleted
 
 `AGENTS.md` already states the test: **whose fault would a failure be?** A
@@ -964,12 +1022,21 @@ the harnesses that produced it are checked in and re-runnable.
    them; a deterministic pre-call gate on record-shaped subjects is the next
    idea and is a different experiment.
 
+6. **The renames (section 3d): the KINDS half is closed as already
+   delivered, the TERMS half is deferred to item 8** (section 3d-bis). Across
+   27 live beats the author has never filed a channel name -- it files the five
+   HAND names, 14/14 in the run under the corrected sheet, unanimous even
+   though that sheet offers both. The compression 3d asks for exists at five
+   rather than eight, arrived at by use rather than design, and teaching eight
+   kinds now would move from five categories to eight in the wrong direction
+   for the ask. The terms table (`op: 'add'` -> `began` and the rest) is a
+   schema-vocabulary change reaching commit code and archives, so it belongs
+   with the pack re-sync rather than the English pass: every canonical token it
+   moves widens the Japanese debt `DEFERRED_PACK_PARITY` is holding, and doing
+   it now means translating twice.
+
 **NEXT, in order**
 
-6. **The renames** (section 3d). Independent of 5, cheap, and the one
-   part of the trial no skeptic contested -- subject to the naming test's
-   second clause: the engine must own the new name everywhere it is compared
-   (`enclosure: 'membrane'` is the counter-example that earned that clause).
 7. **Reduce ONE sheet -- RE-SCOPED to a chunk, because the core's largest
    component is closed** (section 4a). The five cores are 89% identical and
    have not drifted; 39% of what they share is the `resolved_events` echo,
