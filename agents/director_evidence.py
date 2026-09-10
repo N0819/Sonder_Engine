@@ -1256,8 +1256,16 @@ def _manifest_items(out, cast=None, scene=None):
         # Preserve the historical public manifest shape for every non-contact
         # change; endpoint keys exist only when the model actually supplied
         # them, rather than four empty strings appearing on every item.
+        #
+        # `note` RIDES WITH THEM, and it is the reason this list is a list: the
+        # normalized dict above is built key by key, so a field absent from it
+        # is silently dropped here rather than at any boundary that would say
+        # so. The Director wrote the instruction, `_specialist_manifest_slice`
+        # would have carried it, and the hand would never have seen it --
+        # caught 2026-09-09 only because the guard test hand-built its view and
+        # bypassed this function, which is the shape of a test proving a stub.
         for field in ("actor", "actor_part", "target", "target_part",
-                      "substance", "placement", "target_interior"):
+                      "substance", "placement", "target_interior", "note"):
             value = str(item.get(field) or "").strip()
             if value:
                 normalized[field] = value
