@@ -309,8 +309,12 @@ from .director_fanout import (
     _note_for,
     _resolve_beat_view,
     _interpret_beat_view,
+    _granted_event_ids,
     _specialist_manifest_slice,
     _specialist_span_slice,
+    span_categories,
+    span_owners,
+    specialist_co_hands,
     _specialist_payload,
     _anchor_names,
     _beat_rooms,
@@ -1814,7 +1818,9 @@ def _specialist_repairs(ctx, sc, sd, routed, view, extras, recon):
             else:
                 result = _agent_json(
                     spec["role"], spec["step_key"],
-                    specialist_prompt(name, scope, ctx.language), payload,
+                    specialist_prompt(name, scope, ctx.language,
+                                      specialist_co_hands(name, view)),
+                    payload,
                     temperature=0.0,
                     max_tokens=None,   # the configured ceiling
                 )
@@ -2778,7 +2784,8 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
             return _agent_json(
                 spec["role"],
                 spec["step_key"],
-                specialist_prompt(name, state["scope"], ctx.language),
+                specialist_prompt(name, state["scope"], ctx.language,
+                                  specialist_co_hands(name, view)),
                 _specialist_payload(name, ctx, sc, view, extras),
                 temperature=0.2,
                 max_tokens=None,   # the configured ceiling
@@ -2787,15 +2794,18 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
 
     jobs = [(name, state) for name, state in dispatch.items()
             if state.get("run")]
-    # Recorded BEFORE the call, from the same filter that builds the
-    # payload: which numbered events this specialist is answerable for.
+    # Recorded BEFORE the call, from the same filters that build the
+    # payload: which numbered work items this specialist is answerable for.
     # A verdict on anything else is discarded (_resolved_event_verdicts).
+    #
+    # BOTH SLICES. Spans are the work items now and the manifest is what they
+    # replaced, so a list built from the manifest alone is empty on every beat
+    # -- and an empty grant discards every verdict, which left
+    # `events_addressed` blank and per-hand acquittal unable to run at all.
+    # The two share one id space (spans 1..N, the manifest continuing past the
+    # ceiling), so this is a union and never a renumbering.
     for name, state in jobs:
-        state["event_ids"] = [
-            int(item["event_id"])
-            for item in _specialist_manifest_slice(name, view)
-            if item.get("event_id")
-        ]
+        state["event_ids"] = _granted_event_ids(name, view)
     results = {}
     if len(jobs) > 1 and not fanout_is_parallel():
         # SEQUENTIAL, by host choice. Same context copy per job, same

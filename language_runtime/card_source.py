@@ -107,7 +107,7 @@ def _render_path(leaf_path: tuple) -> str:
 
 
 def is_part_leaf(leaf_path: tuple) -> bool:
-    """Is this leaf path one of the five shapes that becomes a file?
+    """Is this leaf path one of the shapes that becomes a file?
 
     Only prose moves. Structure -- `specialists.<n>.order` (the authoritative
     assembly order, which is deliberately not `chunks` insertion order:
@@ -119,7 +119,14 @@ def is_part_leaf(leaf_path: tuple) -> bool:
     if len(leaf_path) == 1:
         return isinstance(leaf_path[0], str)
     if len(leaf_path) == 2:
-        return leaf_path[0] == "prompts" and isinstance(leaf_path[1], str)
+        # `co_hands.<hand>` joins `prompts.<id>` as a two-segment family: one
+        # shared chunk per hand saying what THAT hand settles, read by a
+        # DIFFERENT hand when a span it was handed is also going there. Five
+        # files serve all twenty pairings, because what the body hand settles
+        # is the same sentence whoever is reading it.
+        if leaf_path[0] in ("prompts", "co_hands"):
+            return isinstance(leaf_path[1], str)
+        return False
     if len(leaf_path) == 3:
         if leaf_path[0] == "specialists" and leaf_path[2] == "core":
             return isinstance(leaf_path[1], str)
@@ -165,7 +172,8 @@ def canonical_part_path(leaf_path: tuple, sheet_key: Any = None) -> str:
     if len(leaf_path) == 1:
         return f"{_component(leaf_path[0], leaf_path)}{PART_SUFFIX}"
     if len(leaf_path) == 2:
-        return f"prompts/{_component(leaf_path[1], leaf_path)}{PART_SUFFIX}"
+        return (f"{leaf_path[0]}/"
+                f"{_component(leaf_path[1], leaf_path)}{PART_SUFFIX}")
     if leaf_path[0] == "prose_author_sheet":
         index = int(leaf_path[1])
         if sheet_key is None:

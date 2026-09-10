@@ -351,14 +351,28 @@ def test_orchestration_record_survives_the_schema_round_trip():
 # fails open within it.
 # ---------------------------------------------------------------------------
 
-def test_the_gate_fails_open_within_an_addressed_hand(temp_db, monkeypatch):
-    """A bare-bodied cast with no active conditions is NOT evidence the body
-    channels are out of play: a physical beat can wound a body that wears
-    nothing. So when the ruling reaches the body hand, the channels
-    structure cannot decide (conditions, overlays) stay in its scope, and
-    only the one whose subject provably does not exist (attire, over bare
-    bodies) loads no chunk -- the saving comes from subjects that cannot
-    change, not from predicting cleverly."""
+def test_a_hand_named_without_a_channel_keeps_its_whole_ledger_set(
+        temp_db, monkeypatch):
+    """A ruling that names the HAND and no channel leaves the gates nothing
+    to narrow, so the hand loads every ledger its story keeps.
+
+    This replaced `gated union named`, which let a standing-state prediction
+    overrule the Director. Measured live 2026-09-10
+    (`tools/interpret_beats.py` beat 1, gemini-3.8-flash): the Director filed
+    "pull off my sword belt" under category `body` with the note "remove sword
+    belt from worn gear"; the wardrobe gate read `anyone_wears` false over a
+    bare-bodied scene; and the body hand ran and answered `not_mine` about its
+    own span -- "Event 1 requires the attire/wardrobe channel, which has no
+    block on this sheet" -- at 6,466 output tokens and 37 seconds.
+
+    It was never going to name a channel, either: the Director's sheet asks
+    for a category from the five HAND names, and the owner's design is that it
+    need not know a specialist's channels at all. The gate table had already
+    logged this exact case as an open residual and chosen to backstop it; a
+    backstop catches the record, it does not get the call back.
+
+    What it costs, measured on the assembled sheets: 1.08x the two-chunk sheet
+    for `body`, 2.17x for `social`, all of it prefill."""
     calls = []
     monkeypatch.setattr(director, "_agent_json",
                         _fake_agent(calls, {"director_resolve": _ruling("body")}))
@@ -371,8 +385,14 @@ def test_the_gate_fails_open_within_an_addressed_hand(temp_db, monkeypatch):
     assert body["run"] is True and body["ran"] is True
     assert body["addressed_by"] == ["note"]
     assert "conditions" in body["scope"] and "overlays" in body["scope"]
-    assert "attire" not in body["scope"]
-    assert body["gated"] == body["scope"]
+    # The channel the gate used to subtract, over a scene where nobody wears
+    # anything -- which is a fact about what STANDS, and a span is a claim
+    # about what CHANGES.
+    assert "attire" in body["scope"]
+    # `gated` still records what the scene admitted, unchanged: the record has
+    # to keep saying "the ruling reached this hand" apart from "this story
+    # keeps no such ledger", and a scope that swallowed the gates would not.
+    assert "attire" not in (body["gated"] or [])
 
 
 def test_no_ruling_runs_no_hand(temp_db, monkeypatch):
@@ -846,20 +866,32 @@ class TestTheSpanIsTheWorkItem:
         assert [c["event_id"] for c in
                 director._specialist_span_slice("body", view)] == [2]
 
-    def test_the_interpret_view_does_not_drop_the_three_fields(self):
-        """The allowlist that nearly ate them. `_interpret_beat_view` copies
-        sequence elements key by key, so a field it does not name is dropped
-        with nothing raised -- the fourth time that shape has cost something
-        today."""
+    def test_the_work_item_reaches_the_hand_in_exactly_one_list(self):
+        """`spans` carries the work; `declaration` carries what was declared.
+
+        The three fields lived in BOTH for a day, and the duplication cost a
+        beat. `assign_event_ids` stamps every declaration element with a
+        phase-graph id also called `event_id`, so a hand's payload held two
+        fields of that name with different values. Measured 2026-09-10, beat
+        2: the contact hand echoed "turn:2:player:0:action", its entire answer
+        was rejected, and its repair returned no usable object -- 16,180
+        output tokens and 96.9s on a receipt for the wrong ledger.
+
+        The allowlist that drops what it does not name is still the hazard it
+        was; what changed is which list is meant to hold these."""
         from types import SimpleNamespace
         ctx = SimpleNamespace(cast=[], scene=None)
         out = {"sequence": [{"type": "action", "attempt": "I kneel",
                              "category": "poses", "note": "set her kneeling"}]}
         view = director._interpret_beat_view(ctx, out, "Corin")
-        span = view["declaration"]["sequence"][0]
+        span = view["spans"][0]
         assert span["category"] == "poses"
         assert span["note"] == "set her kneeling"
-        assert view["spans"][0]["event_id"] == 1
+        assert span["event_id"] == 1
+        declared = view["declaration"]["sequence"][0]
+        assert declared["attempt"] == "I kneel"
+        for field in ("event_id", "category", "note"):
+            assert field not in declared, field
 
     def test_a_span_nothing_answers_to_is_reported_not_guessed(self):
         """A work item in a category no hand owns is a change the engine
@@ -1792,15 +1824,21 @@ def test_scope_gates_out_channels_whose_subject_does_not_exist(temp_db,
     out = director.director_resolve(ctx, nonce=0)
 
     specialists = out["orchestration"]["specialists"]
-    assert "attire" not in specialists["body"]["scope"]
-    assert "conditions" in specialists["body"]["scope"]
+    # THE GATES STILL MEASURE THE SCENE; what changed is who they may overrule.
+    # Each hand here is named without a channel, so each loads its whole
+    # ledger set and `gated` is where the saving is still visible.
+    assert "attire" not in (specialists["body"]["gated"] or [])
+    assert "conditions" in (specialists["body"]["gated"] or [])
     objects = specialists["objects"]
-    assert "destruction" not in objects["scope"]
-    assert "artifact_ops" not in objects["scope"]
-    assert "entities" in objects["scope"]
+    assert "destruction" not in (objects["gated"] or [])
+    assert "artifact_ops" not in (objects["gated"] or [])
+    assert "entities" in (objects["gated"] or [])
     contact = specialists["contact"]
-    assert set(contact["scope"]) >= {"contact_ops", "substance_ops",
-                                     "containment", "scales"}
+    assert set(contact["gated"] or []) >= {"contact_ops", "substance_ops",
+                                           "containment", "scales"}
+    # And a channel THIS STAGE cannot carry is still subtracted, because that
+    # is not a prediction about the beat (`channel_serves_stage`).
+    assert set(specialists["body"]["scope"]) >= {"attire", "conditions"}
 
 
 def test_specialist_notes_reach_tell_director(temp_db, monkeypatch):
@@ -4129,7 +4167,12 @@ def test_resolve_still_fails_open_on_a_genuine_under_grant(temp_db,
         "director_resolve": {
             "resolved_event": "Mara says nothing more.",
             "summary": "Quiet.",
-            "state_diff": {}, **_ruling("social"),
+            "state_diff": {},
+            # KEYED BY A CHANNEL, not by the hand. That is what leaves the
+            # gates something to narrow -- a hand named alone now loads every
+            # ledger it keeps, so it cannot be under-granted and this path
+            # would never be reached through one.
+            "ledger_notes": {"introductions": "social: settled this beat"},
         },
         "director_social": {
             "cast_changes": [{"name": "Mara", "change": "present"}],
@@ -4153,3 +4196,226 @@ def test_resolve_still_fails_open_on_a_genuine_under_grant(temp_db,
         {"name": "Mara", "change": "present"}]
     notes = [str(note) for note in ctx.engine_feedback]
     assert any("kept (fail-open)" in note for note in notes), notes
+
+
+class TestAHandIsToldWhoElseHasThisSpan:
+    """Five shared chunks, one per hand, loaded by whoever ELSE got the span.
+
+    The owner, 2026-09-10: "we basically just need 5 chunks, 1 explaining each
+    hand and that it is working on one or more ledgers that you've also
+    received, and they can be shared chunks as I don't think the 5 hands need
+    explanations unique to them on how other hands work."
+
+    The failure this prevents is a hand doing its co-worker's half: a record
+    written into a channel it does not own is dropped by the merge, so the work
+    is invisible AND the span still does not close (`_acquit_addressed_events`
+    waits for every owner). The hand cannot know that from its own sheet, which
+    describes only its own channels -- so the engine says it, from the same
+    ownership table dispatch reads.
+    """
+
+    BELT = {"event_id": 1, "categories": ["attire", "objects"],
+            "category": "attire", "note": "the belt leaves her waist"}
+    STEP = {"event_id": 2, "categories": ["positions"],
+            "category": "positions", "note": "she crosses to the window"}
+
+    def test_the_roster_is_every_other_owner_of_a_span_it_got(self):
+        view = {"spans": [self.BELT, self.STEP]}
+        assert director.specialist_co_hands("body", view) == ["objects"]
+        assert director.specialist_co_hands("objects", view) == ["body"]
+        # `spatial` was handed the step and nothing else, and the step is
+        # wholly its own -- so it is told about nobody.
+        assert director.specialist_co_hands("spatial", view) == []
+        # A hand handed no span at all has no co-workers to hear about.
+        assert director.specialist_co_hands("social", view) == []
+
+    def test_a_span_wholly_one_hands_own_adds_nothing(self):
+        """The ordinary beat. Every span single-category means every roster is
+        empty, which is what keeps the paragraph off the sheet the rest of the
+        time -- a clause every hand always carries is a clause in the core."""
+        view = {"spans": [self.STEP]}
+        for name in director.SPECIALISTS:
+            assert director.specialist_co_hands(name, view) == [], name
+
+    def test_the_roster_reaches_the_sheet(self, temp_db):
+        from llm.prompts import specialist_prompt
+        view = {"spans": [self.BELT]}
+        shared = specialist_prompt(
+            "body", ["attire"], "en", director.specialist_co_hands("body", view))
+        alone = specialist_prompt("body", ["attire"], "en")
+        assert "OBJECTS hand" in shared
+        assert "OBJECTS hand" not in alone
+        # It says what the OTHER hand settles, never what this one does.
+        assert "BODY hand" not in shared
+
+    def test_every_hand_has_a_chunk_in_every_story_pack(self):
+        """A missing chunk is silent: the loop skips a hand it cannot find and
+        the sheet assembles one paragraph short. `installed_language_packs`
+        refuses a pack missing an English leaf, so this holds for `ja` too --
+        pinned here because the fanout, not the pack loader, is what breaks."""
+        from language_runtime import installed_language_packs
+        for pack in installed_language_packs().values():
+            if not pack.story:
+                continue
+            shared = pack.card("system_prompts").get("co_hands") or {}
+            for name in director.SPECIALISTS:
+                assert str(shared.get(name) or "").strip(), (pack.id, name)
+
+    def test_a_preset_override_still_carries_it(self, temp_db):
+        """A host's replacement sheet has no way to know which of the other
+        four hands got a piece of the same span, so the chunk is appended
+        outside the override branch -- beside `director_note`."""
+        from llm import prompts
+        temp_db.set_setting("prompt_presets", json.dumps({
+            "Mine": {"director_body": "BODY SHEET, REWRITTEN."}}))
+        temp_db.set_setting("active_preset", "Mine")
+        sheet = prompts.specialist_prompt("body", ["attire"], "en", ["objects"])
+        assert sheet.startswith("BODY SHEET, REWRITTEN.")
+        assert "OBJECTS hand" in sheet
+
+
+class TestTwoKnownNamesInOneStringAreTwoNames:
+    """The sheets say to write a list. A model that reaches for a separator
+    instead used to lose the whole span in silence: "body, objects" folds to
+    no known category, routes to no hand, and the change the beat asserted
+    reaches nobody.
+
+    This is not the guessing `_note_key_forms` refuses. Nothing is inferred
+    from wording -- the string is split on punctuation and the split is
+    DISCARDED unless every part is a category the engine already routes, so it
+    can recognise names the engine owns and can never invent a route.
+    """
+
+    def _cats(self, raw):
+        out = director._span_items({"sequence": [
+            {"type": "action", "attempt": "x", "category": raw, "note": "n"}]})
+        return out[0].get("categories"), director.span_owners(out[0])
+
+    def test_a_separator_a_model_reaches_for_is_two_names(self):
+        for raw in ("body, objects", "body and objects", "body/objects",
+                    "body; objects", "body|objects"):
+            cats, owners = self._cats(raw)
+            assert cats == ["body", "objects"], raw
+            assert owners == ["body", "objects"], raw
+
+    def test_three_of_them_are_three(self):
+        cats, owners = self._cats("body, objects, spatial")
+        assert cats == ["body", "objects", "spatial"]
+        assert owners == ["body", "objects", "spatial"]
+
+    def test_one_unknown_name_keeps_the_whole_string_whole(self):
+        """Routability, not foldability: `_normalize_omission_category` passes
+        an unknown name straight through, so a truthiness test would accept
+        anything. The Director gets its own string echoed back by the unrouted
+        report, which is clearer feedback than half a route."""
+        cats, owners = self._cats("body, geography")
+        assert cats == ["body, geography"]
+        assert owners == []
+
+    def test_free_prose_is_never_split_into_categories(self):
+        """The failure the routability test exists to prevent. This string
+        contains "and", so a looser rule would file two ledger families named
+        after halves of a sentence."""
+        cats, owners = self._cats(
+            "the belt comes off and lands on the bench")
+        assert cats == ["the belt comes off and lands on the bench"]
+        assert owners == []
+
+    def test_a_single_name_is_untouched(self):
+        cats, owners = self._cats("body")
+        assert cats == ["body"] and owners == ["body"]
+
+    def test_a_real_list_is_still_the_preferred_shape(self):
+        """The clause asks for this and the worked example shows it; the split
+        above is the fallback, not the contract."""
+        cats, owners = self._cats(["objects", "spatial"])
+        assert cats == ["objects", "spatial"]
+        assert owners == ["objects", "spatial"]
+
+    def test_both_sheets_say_how_to_write_two(self):
+        """A capability the prompt does not describe does not exist, and one
+        it describes without a SHAPE gets written as a comma string -- which
+        is what the split above had to be built for. `state_diff.time` is the
+        precedent: prose two thousand lines away, a scalar in the example, and
+        a model that sent a string."""
+        from llm.prompts import DEFAULT_PROMPTS, prose_author_prompt
+        from llm.schemas import output_example
+        for sheet in (DEFAULT_PROMPTS["director_interpret"],
+                      prose_author_prompt(None, "en")):
+            assert "may name TWO" in sheet
+            assert "never one string with a comma" in sheet
+        worked = [e.get("category")
+                  for e in output_example("director_resolve").get("sequence")]
+        assert ["objects", "spatial"] in worked
+
+
+class TestAHandIsAnswerableForTheWorkItemsItGot:
+    """`event_ids` is the grant a verdict is checked against, and it was built
+    from the RETIRED channel.
+
+    `_resolved_event_verdicts` discards any id outside the grant, so a grant
+    built from `changes_asserted` alone -- a field neither sheet asks for, and
+    which measured 0 entries on all 12 beats of every live run since it was
+    retired -- is empty on every beat, and every verdict a hand returns is
+    thrown away. `events_addressed` is then `{}`, and per-hand acquittal, the
+    seam that keeps a half-settled span owed, cannot run at all.
+
+    Measured 2026-09-10, the padlock beat: the Director filed ONE span
+    categorized `["objects", "spatial"]`, both hands were handed it, `objects`
+    answered `encoded` and `spatial` answered `not_mine` with a reason. Three
+    correct structured facts, and that beat's orchestration record read
+    `events_addressed: {}`.
+    """
+
+    VIEW = {"spans": [
+        {"event_id": 1, "categories": ["objects", "spatial"],
+         "category": "objects", "attempt": "padlock the forge door shut",
+         "note": "the forge door is shut and padlocked"},
+        {"event_id": 2, "categories": ["body"], "category": "body",
+         "note": "the belt leaves her waist"},
+    ]}
+
+    def test_the_grant_is_the_hands_own_spans(self):
+        granted = director._granted_event_ids("objects", self.VIEW)
+        assert granted == [1]
+        assert director._granted_event_ids("spatial", self.VIEW) == [1]
+        assert director._granted_event_ids("body", self.VIEW) == [2]
+        # A hand no span reached is answerable for nothing, which is a
+        # different fact from a hand whose grant was never built.
+        assert director._granted_event_ids("social", self.VIEW) == []
+
+    def test_a_verdict_on_a_granted_span_survives(self):
+        """The whole point: without the grant this returned {} and the hand's
+        answer vanished."""
+        kept = director._resolved_event_verdicts(
+            {"entities": {"padlock": {"name": "padlock"}},
+             "resolved_events": [{"event_id": 1, "status": "encoded"}]},
+            director._granted_event_ids("objects", self.VIEW))
+        assert kept and kept[0]["status"] == "encoded"
+
+    def test_a_manifest_id_is_still_granted_beside_the_spans(self):
+        """One id space, so this is a union and never a renumbering: spans
+        take 1..N and the manifest continues past the ceiling."""
+        view = dict(self.VIEW)
+        view["manifest"] = [{"event_id": 3, "category": "objects",
+                             "subject": "hinge", "change": "it came apart"}]
+        assert director._granted_event_ids("objects", view) == [1, 3]
+
+    def test_a_span_neither_owner_settles_stays_owed(self):
+        """And the reason the grant has to be right: acquittal reads the index
+        the grant produces, so an empty grant acquitted nothing AND owed
+        nothing -- silence that looks exactly like a beat with no work."""
+        dispatch = {
+            "objects": {"ran": True, "events_resolved": [
+                {"event_id": 1, "status": "encoded"}]},
+            "spatial": {"ran": True, "events_resolved": [
+                {"event_id": 1, "status": "not_mine"}]},
+        }
+        index = director._index_addressed_events(dispatch)
+        assert set(index[1]["by_hand"]) == {"objects", "spatial"}
+        out = {"orchestration": {"events_addressed": index}}
+        omission = {"event_id": 1, "category": "objects",
+                    "subject": "forge door", "change": "it is padlocked"}
+        owed, acquitted, _refused = director._acquit_addressed_events(
+            out, [omission], {})
+        assert owed == [omission] and acquitted == []

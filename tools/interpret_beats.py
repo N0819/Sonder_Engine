@@ -139,6 +139,12 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--beats", type=int, default=0,
                     help="play only the first N (0 = all)")
+    ap.add_argument("--beat", action="append", default=[], metavar="TEXT",
+                    help="play THIS declaration instead of the stock list, "
+                         "repeatable and in order. For a question the stock "
+                         "beats cannot reach -- they measure the ordinary "
+                         "case, and a capability the ordinary case never "
+                         "exercises needs inputs written for it.")
     ap.add_argument("--providers-from", default="", metavar="DB",
                     help="mirror providers and agent_models out of this "
                          "database instead of seeding from the environment")
@@ -190,7 +196,9 @@ def main():
 
     from agents.runtime import run_pipeline
 
-    inputs = BEATS[:args.beats] if args.beats else BEATS
+    inputs = list(args.beat) if args.beat else BEATS
+    if args.beats:
+        inputs = inputs[:args.beats]
     print("playing the interpret half of %d beats" % len(inputs), flush=True)
     rows = []
     for idx, text in enumerate(inputs, start=1):

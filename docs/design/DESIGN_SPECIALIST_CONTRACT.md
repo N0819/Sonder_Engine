@@ -544,6 +544,170 @@ the contract moved what the hands are TOLD, this moves what the Director is
 asked to WORK OUT. Each row needs a guard written first and a live beat run
 after, which is why none of them is landed here.
 
+## 4g. THE SHARED SPAN, AND THE CHAIN THAT WAS SWALLOWING EVERY WORK ITEM
+
+The owner, 2026-09-10: *"maybe a disected chunk falls into multiple categories
+and needs to be digested by multiple specialists"*, and those are *"both
+completed halves or thirds or quarters of a singular ledger"* rather than
+competing answers. Then: *"we basically just need 5 chunks, 1 explaining each
+hand and that it is working on one or more ledgers that you've also recieved,
+and they can be shared chunks as I don't think the 5 hands need explanations
+unique to them on how other hands work."*
+
+Built, in that order:
+
+- **`category` may name several families.** `_span_items` normalizes to a
+  `categories` list and keeps `category` as its first entry, so a reader
+  written before this still sees a string. Dispatch, the unrouted report and
+  the per-hand slice all read every name.
+- **Per-hand acquittal**, written BEFORE any span carried two categories.
+  `_index_addressed_events` keys `event_id -> {by_hand: {...}}`, so a span
+  whose wardrobe half is encoded and whose object half is not stays owed.
+- **Five shared chunks**, `co_hands/<hand>.txt` in every story pack, each
+  saying what THAT hand settles. A hand's sheet gains the chunk for every
+  OTHER hand owning a span it received (`specialist_co_hands`, the same
+  ownership table dispatch and acquittal read). Five files serve all twenty
+  pairings because what the body hand settles is the same sentence whoever is
+  reading it. Empty on the ordinary beat, which is the point.
+- **Both sheets now permit two.** They said *"one of"*, so no beat would ever
+  have produced one; the worked example in `OUTPUT_EXAMPLES` is what says the
+  field takes a list rather than a comma-joined string.
+
+### And then it was run, and none of it had ever reached a hand
+
+`4d` reported the closing run as *"13 of 22 spans carrying a category and a
+note"*. That measured what the Director EMITTED. Nothing measured what a hand
+RECEIVED, and the answer was nothing at all -- four defects in series, each
+invisible behind the one in front of it. All four found by playing beats
+against `google/gemini-3.8-flash` (`tools/interpret_beats.py`).
+
+**1. `norm_sequence` was eating the work item.** It rebuilds every element
+from a fixed key list and the list never learned `category` or `note`. It runs
+between the model and the beat view, so the span channel died before any hand
+saw it. Beat 1: three correctly categorized spans with notes, three hands
+dispatched, zero work items delivered. The objects hand, handed nothing,
+invented ids off `phase_id`, spent 110s and 19,704 output tokens re-deriving
+the beat, failed validation, and failed its repair -- two of the beat's six
+calls. Fixed by restoring the two fields onto whatever the arm built, in ONE
+place rather than five, and only onto the last element built from a source
+element: a promoted stage direction is an act the Director never categorized,
+and inheriting a category would hand a hand a span nobody wrote.
+
+**2. Two id spaces in one payload.** With spans finally arriving, the contact
+hand echoed `resolved_events[].event_id: "turn:2:player:0:action"`. It did not
+invent that either: `player_declaration` carried each element's phase-graph id
+under the same name `event_id` as the span's chronological number. Two
+representations of "which event", free to disagree, in one payload. 16,180
+output tokens and 96.9s, then a repair that returned no usable object. Fixed
+by taking `event_id`, `category` and `note` OFF the declaration copy -- the
+work items are `spans`, one list, and the phase graph is the engine's.
+
+**3. A misfiled receipt was burning the records that came with it.** Both
+`from_event` and `resolved_events[].event_id` are typed ints, and an
+unrecognisable citation failed the whole call. A verdict on an id the hand was
+never handed is discarded by `_resolved_event_verdicts` either way, so failing
+bought nothing but the loss of the encoding it arrived with. Both now resolve
+to 0 -- an id the engine never issues -- which keeps the miss visible to every
+provenance count while leaving the answer intact.
+
+**4. The gates were overruling the Director.** Scope was `gated union named`,
+and `named` is empty whenever the ruling names only the hand -- which is
+ALWAYS, because the Director's sheet asks for a category from the five hand
+names and by design need not know a specialist's channels at all. Beat 1: the
+Director filed "pull off my sword belt" under `body`; the wardrobe gate read
+`anyone_wears` false over a bare-bodied scene; and the body hand ran and
+answered `not_mine` about its own span -- *"Event 1 requires the
+attire/wardrobe channel, which has no block on this sheet"* -- at 6,466 output
+tokens and 37s. The gate table's docstring had already logged this exact case
+as an open residual and chosen to backstop it. A backstop catches the record;
+it does not get the call back.
+
+A ruling that names a channel still meets the gates, which is where they have
+something to add. A ruling that names only the hand now loads every ledger the
+story keeps, filtered by `channel_serves_stage` -- because a channel this
+stage cannot carry is not a prediction about the beat. Cost, on the assembled
+sheets: 1.08x the two-chunk sheet for `body`, 2.17x for `social`, all of it
+prefill, against a refused call that spends decode and returns nothing.
+
+**Three tests pinned the rule this disproved** and were repinned with the live
+evidence rather than worked around: `test_the_gate_fails_open_within_an_
+addressed_hand` (now `..._a_hand_named_without_a_channel_keeps_its_whole_
+ledger_set`), `test_scope_gates_out_channels_whose_subject_does_not_exist`
+(the gates still measure the scene; `gated` is where the saving is visible),
+and `test_resolve_still_fails_open_on_a_genuine_under_grant` (reached through
+a channel-keyed ruling, the only way a hand can still be under-granted).
+
+
+### Measured: the shared span, end to end
+
+Three declarations written for the case, played against
+`google/gemini-3.8-flash` (`tools/interpret_beats.py --beat`, 2026-09-10). The
+`--beat` flag exists because the stock list measures the ORDINARY case, and a
+capability the ordinary case never reaches needs inputs written for it: over
+the stock twelve beats the Director filed 15 categorized spans and NONE of
+them named two families, which is not evidence the capability fails.
+
+    padlock the forge door shut        ["objects","spatial"]  encoded / encoded
+    nail the shutter across the window ["objects","spatial"]  encoded / not_mine
+    set the anvil across the doorway   ["objects","spatial"]  encoded / encoded
+
+Three of three named two families, unprompted; both owners were handed the
+span in their own payload; five of the six halves settled. The sixth is the
+interesting one -- `spatial` answered `not_mine` and rerouted to `objects`,
+because the window is in no room's edge list, so there was no passage for a
+nailed shutter to block. An honest refusal with a reason, which is what the
+verdict is for.
+
+**FIVE OF THE FIVE INPUTS FIRST TRIED PRODUCED NOTHING, and the reason is the
+sheet working.** Shoving, dragging and hauling a person, and tying a blindfold
+over someone's eyes, all came back `commitment: contestable` with no category:
+the interpret half refuses to span an act whose outcome is still contested,
+because resolution owns those. A capability test on the interpret half needs
+acts the player can simply DO.
+
+### 5. The grant was built from the retired channel, so acquittal never ran
+
+`state["event_ids"]` -- "which numbered events this specialist is answerable
+for" -- read `_specialist_manifest_slice` alone. `changes_asserted` is retired:
+no sheet asks for it and it has measured 0 entries on every beat of every live
+run since. `_resolved_event_verdicts` discards any id outside the grant, so an
+empty grant discarded EVERY verdict, and `orchestration.events_addressed` was
+`{}` on every beat.
+
+Which means per-hand acquittal -- the seam built first, deliberately, so a
+half-settled span could never read as settled -- had never once run. Measured
+on the padlock beat before the fix: one span, two hands, three correct
+structured answers, and an `events_addressed` of `{}`.
+
+The grant now reads BOTH slices and lives in one named function beside them
+(`_granted_event_ids`), for the reason `_specialist_span_slice` is one
+function: two spellings mean a hand judged on work it never got, or its answer
+to real work thrown away. They share one id space by construction, so it is a
+union and never a renumbering. After the fix, the same three beats:
+
+    turn 1  span 1  by_hand {objects: encoded, spatial: encoded}
+    turn 2  span 1  by_hand {objects: encoded, spatial: not_mine -> objects}
+    turn 3  span 1  by_hand {objects: encoded, spatial: encoded}
+
+**OPEN, and it is the owner's call.** `not_mine` is not in
+`_SETTLING_VERDICTS`, so turn 2's span stays owed forever: one owner encoded
+its half and the other reported, correctly, that it has no ledger to change.
+Two readings, and the evidence does not choose between them. Either the
+Director over-routed and a refusal that names another OWNER which settled the
+span is itself a settlement -- both hands agree where the work belonged and it
+got done there -- or the window genuinely should be an edge and the missing
+edge is the real defect the owed span is pointing at. The second is a scene
+built without that edge, not a contract failure, which is what makes the first
+reading tempting and the measurement inconclusive.
+
+**The reusable lesson, which is the same one four times.** Every defect here
+was a second copy of something the engine already knew, or a reader still
+pointed at the copy that was retired: a key list beside a schema, a phase id
+beside a chronological id, a standing-state gate beside a ruling, a grant
+built from the channel its replacement had emptied. *Is this fact stored
+twice?* remains the question that finds them -- and its second half, asked
+after a migration: *which copy is this reader holding?*
+
 ## 5. What already exists to build on
 
 This is a rewire of proven mechanisms, not a green field. **The output half of

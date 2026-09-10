@@ -658,5 +658,22 @@
   ],
   "prose_author_output_shape": {
     "$text": "prose_author_output_shape.txt"
+  },
+  "co_hands": {
+    "body": {
+      "$text": "co_hands/body.txt"
+    },
+    "social": {
+      "$text": "co_hands/social.txt"
+    },
+    "contact": {
+      "$text": "co_hands/contact.txt"
+    },
+    "objects": {
+      "$text": "co_hands/objects.txt"
+    },
+    "spatial": {
+      "$text": "co_hands/spatial.txt"
+    }
   }
 }

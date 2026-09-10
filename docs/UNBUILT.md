@@ -59,12 +59,31 @@ not places it is merely thin.
 
 ### 1.1 The specialist contract: BUILT, with two parts still open
 
-**BUILT 2026-09-10** (`DESIGN_SPECIALIST_CONTRACT.md` section 4d). The
-Director emits one list of categorized, numbered, annotated spans; the hands
-get their scene-scoped ledgers and their work items and nothing of the beat;
-each record names the chunk it resolves. `changes_asserted` is retired -- no
-sheet asks for it, and it is still read so a stored variant from before the
-migration still reconciles. TWO PARTS REMAIN OPEN, below.
+**BUILT 2026-09-10, and DELIVERING since later the same day**
+(`DESIGN_SPECIALIST_CONTRACT.md` sections 4d and 4g). The Director emits one
+list of categorized, numbered, annotated spans; the hands get their
+scene-scoped ledgers and their work items and nothing of the beat; each record
+names the chunk it resolves. A span may name SEVERAL ledger families and be
+settled by several hands, each answering for its own part, and a hand is told
+what the other owners of its span settle (`co_hands/<hand>.txt`, five shared
+chunks per pack). `changes_asserted` is retired -- no sheet asks for it, and it
+is still read so a stored variant from before the migration still reconciles.
+TWO PARTS REMAIN OPEN, below.
+
+**THIS ENTRY SAID "BUILT" WHILE NOT ONE WORK ITEM HAD EVER REACHED A HAND.**
+The measurement behind it counted what the Director EMITTED -- "13 of 22 spans
+carrying a category and a note" -- and nothing counted what a specialist
+RECEIVED. Playing beats live found four defects in series, each hidden behind
+the one in front: `norm_sequence` rebuilt every element from a key list that
+never learned `category` or `note`, so the span channel died before the view
+was built; the payload carried two different fields named `event_id`, so hands
+cited the phase graph instead of the chronology; a citation the engine never
+issued failed the whole call rather than the receipt; and the scope gates
+overruled the Director on every beat, so a hand was handed a span and denied
+the ledger to settle it in. Section 4g has each one, its live cost, and the
+tests repinned for it. The lesson for this file: a stage's OUTPUT is not
+evidence about its CONSUMER, and "built" needs a measurement taken at the far
+end of the seam.
 
 The measurements that motivated it, kept because they are what the design was
 argued from: The owner's contract: a hand receives its scene-scoped slice
