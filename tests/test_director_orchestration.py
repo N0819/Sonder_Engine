@@ -721,6 +721,98 @@ class TestTheInstructionRidesOnTheEvent:
             assert "carries `note`" in sheet, name
 
 
+class TestTheOpCarriesTheChunkId:
+    """A record says which instruction it answers, on itself.
+
+    `DESIGN_SPECIALIST_CONTRACT.md` section 4b. Reconciliation proves an entry
+    was encoded by matching ENDPOINT TEXT against the diff, which is why
+    `changes_asserted` carries ten endpoint fields it would otherwise not
+    need. An id makes that an exact lookup and unblocks the four-field chunk
+    format.
+
+    `phase_sources` was the cheaper candidate and lost on measurement:
+    emitted on 25% of productive calls, 68% of `encoded` claims cited, never
+    once by `director_social` across 91 calls
+    (`tools/provenance_coverage.py`) -- because a structure filled in ALONGSIDE
+    the work is a second thing to remember. A field inside the object the
+    model is already composing is not.
+    """
+
+    def test_a_typed_record_keeps_it(self):
+        """Typed models STRIP what they do not declare, so every delegated
+        channel's record type has to name it or the hand's answer is dropped
+        by validation -- which is how `note` was lost earlier today."""
+        from llm.schemas import (ArtifactOp, AttireDiff, CharterPublicEvidence,
+                                 CommsOp, CourierOp, CrowdOp, PoseEntry,
+                                 RoomDef, SceneEntityDef, TellingOp)
+        # A superset of the required fields across the ten; each model ignores
+        # the keys it does not declare, so this is still real validation and
+        # not a construct-without-checking.
+        common = {"from_event": 3, "name": "x", "id": "x", "kind": "x",
+                  "op": "add", "subject": "x", "text": "x", "who": "x",
+                  "what": "x", "location_id": "x", "claim_id": "x"}
+        for model in (SceneEntityDef, RoomDef, CommsOp, PoseEntry, CrowdOp,
+                      AttireDiff, CharterPublicEvidence, TellingOp, CourierOp,
+                      ArtifactOp):
+            assert model(**common).from_event == 3, model.__name__
+
+    def test_the_attire_coercion_does_not_eat_it(self):
+        """`AttireDiff` runs a before-validator that files unrecognised keys
+        under `notes` for commit to resolve against the wardrobe. Untaught, it
+        turned the provenance id into a garment handle called
+        'from_event' -- a tolerant reader has to be told what its new fields
+        are, or its tolerance quietly eats them."""
+        from llm.schemas import AttireDiff
+        diff = AttireDiff(from_event=3, remove=["wool coat"])
+        assert diff.from_event == 3
+        assert "from_event" not in diff.notes
+
+    def test_reconciliation_accepts_an_id_over_endpoint_text(self):
+        """The point of the field. The manifest entry and the record share no
+        subject spelling and no endpoints -- only the id."""
+        sd = {"poses": {"Maren": {"posture": "kneeling", "from_event": 7}}}
+        omission = {"category": "pose", "subject": "somebody the text does "
+                                                   "not name the same way",
+                    "change": "she kneels", "event_id": 7}
+        assert director._evidence_present(sd, omission) is True
+
+    def test_a_record_naming_nothing_falls_through_to_the_old_check(self):
+        """Additive, so it can land ahead of the `sequence` migration: every
+        record written before the field existed, and every standing record
+        refreshed on its own account, still gets exactly the check it got."""
+        sd = {"poses": {"Maren": {"posture": "kneeling"}}}
+        assert director._evidence_present(
+            sd, {"category": "pose", "subject": "Maren", "change": "kneels",
+                 "event_id": 7}) is True
+        assert not director._evidence_present(
+            sd, {"category": "pose", "subject": "Corin", "change": "kneels",
+                 "event_id": 7})
+
+    def test_a_wrong_id_does_not_acquit(self):
+        sd = {"poses": {"Maren": {"posture": "kneeling", "from_event": 2}}}
+        assert not director._evidence_present(
+            sd, {"category": "pose", "subject": "Nobody", "change": "x",
+                 "event_id": 7})
+
+    def test_ids_are_found_at_every_channel_shape(self):
+        """A delegated channel is a record dict, a list of ops, or a dict of
+        lists. Provenance has to be read out of all three or it works on
+        poses and silently not on contacts."""
+        assert director._cited_event_ids(
+            {"poses": {"Maren": {"from_event": 1}}}) == {1}
+        assert director._cited_event_ids(
+            {"contact_ops": [{"op": "add", "from_event": 2}]}) == {2}
+        assert director._cited_event_ids(
+            {"conditions": {"Maren": [{"kind": "hurt", "from_event": 3}]}}) == {3}
+
+    def test_every_specialist_sheet_asks_for_it(self):
+        from llm.prompts import specialist_prompt
+        for name in director.SPECIALISTS:
+            sheet = specialist_prompt(name,
+                                      director.SPECIALISTS[name]["channels"])
+            assert "from_event" in sheet, name
+
+
 class TestAnEncodedClaimNeedsSomethingEncoded:
     """`encoded` from a hand whose channels are all empty is not an answer.
 

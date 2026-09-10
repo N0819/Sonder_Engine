@@ -267,6 +267,8 @@ from .director_evidence import (
     _evidence_present,
     _RECONCILE_MAX_MANIFEST_ITEMS,
     _manifest_items,
+    _without_provenance,
+    _cited_event_ids,
     _DERIVED_OF_ATTIRE,
     _fold_derived_manifest_events,
     _state_diff_channels,
@@ -2856,7 +2858,16 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
                 dropped.append(channel)
                 continue
             if channel in state["scope"]:
-                if authored and authored != owned:
+                # CONTENT, not provenance. This warning is about the author
+                # putting content in a channel it was told to leave to a hand;
+                # whether the two sides agree about `from_event` says nothing
+                # about that. Without stripping it the ids differ by
+                # construction -- the hand stamps the chunk it resolved and the
+                # author never does -- so an author and a hand emitting the
+                # IDENTICAL room would be reported as a mis-emission on every
+                # beat.
+                if authored and _without_provenance(authored) != \
+                        _without_provenance(owned):
                     replaced.append(channel)
                     ctx.add_warning(
                         f"orchestration: the stage model emitted {channel} "
