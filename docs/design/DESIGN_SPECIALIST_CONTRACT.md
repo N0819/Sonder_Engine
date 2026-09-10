@@ -1013,6 +1013,103 @@ primitive that path needs, and wiring it must SUBSUME the existing
 onset/deferred split rather than run beside it, or a continuation phase applies
 twice.
 
+## 4l. AN OBJECT THAT EXISTS AS TEXT FIRST, AND IS MADE REAL NEXT PASS
+
+The close of the 2026-09-10 design thread, in the owner's words:
+
+> the director specialists and recompiler should be able to handle anything
+> that happens in a singular room, even multiple if there are things already
+> interacting across rooms, but that cross room interaction becomes weird when
+> you mint a room and go inside that room and mint an object inside that
+> minted room.
+>
+> the location can be minted before the recompiler runs so you can genuinely
+> render someone within the new location and even show them moving inside it,
+> just yeah minting an object inside a minted space is yeah.
+>
+> we can use event text describe what happened and even within the new
+> location so anyone looking gets the proper event as it should be resolved.
+> An object exists, but is only text, then is made real with the next director.
+
+### The asymmetry is the channel partition, not the recompiler
+
+A BODY in a newly minted room needs no reconciliation at all. The spatial hand
+owns `rooms` AND `positions` AND `stations` AND `poses`, so minting the box and
+standing Corin in it is ONE hand's self-consistent answer from ONE payload.
+Rendering someone in a room the beat just made, and moving them about inside
+it, works with no recompiler involved.
+
+An OBJECT in that room needs two hands and neither can finish. `objects` owns
+`entities` and mints the console; it has no field in which to say where the
+console is, and the merge reads only each hand's own channels from its result,
+so a position it wrote would not be overruled -- it would never be looked for.
+`spatial` owns `positions` and was never handed the console. The fact "the
+console is in the box" belongs to no single hand's channel set.
+
+That is the whole of the residual, and it is why the recompiler earns its keep
+on exactly one fact here. Everything else in the scenario never crosses a hand
+boundary.
+
+### Two-phase existence
+
+    PHASE 1  the object exists as EVENT TEXT. The beat renders what was done,
+             in the place it was done, and every observer receives it.
+    PHASE 2  the next Director pass gives it a row and a room.
+
+**Waiting one pass converts the hard case into the easy one.** By the next
+Director the minted room is standing state, so placing an object in it is an
+ordinary origin-room placement -- the case the tree already handles. The
+deferral does not work around the problem; it dissolves it. And the next pass
+has not yet expended its authority to ask where, which the current one has: it
+has already dissected and dispatched, and has no second question left.
+
+### Why it costs perception nothing
+
+`composer.act_percept` admits an action element's observable surface gated on
+concealment, rear arc and sight. It never consults the object's row. So an
+observer sees the levers pulled on the console in the box because that is what
+was DONE, and would see it identically had the console carried a row all along.
+The perception layer cannot tell the difference, which is the strongest
+available statement that nothing was lost.
+
+Nor is the world lied to. There is no wrong row; there is no row. Absence is
+truthful where a guessed room is not -- and the object was TEXT before any hand
+touched it, because the player wrote it. Deferring the row is the engine
+declining to pretend it has finished bookkeeping it has not.
+
+### The bound, and the handoff
+
+During the window the object has NARRATIVE existence and not MECHANICAL
+existence: nobody can take it, no query finds it, nothing reaches it. Correct
+for one pass and corrosive if it ever stretched to several.
+
+The handoff is clean because the recompiler DECLINES rather than guesses in
+exactly this case. Measured: with the movement attributed to its span the whole
+three-link chain resolves (`crate -> yard`, `console -> box`); without it the
+position falls into the unattributed slice, is applied first, and the
+intermediate world is incoherent -- an actor standing in a room the beat has
+not minted yet -- so `span_mint_rooms` returns nothing for that mint rather
+than placing it wrongly.
+
+### What it needs before it is built
+
+The natural channel is `generation_requests`, which files a typed planning
+need -- and NOTHING in the tree drains a `thing` or a `room` need.
+`drain_planning_needs` loops `kind="person"` only, so a deferred object filed
+that way sits open forever. Either the deferral gets its own consumer, or it
+rides the payload channel instead: interpret's unresolved question into
+resolve's payload, the way `authority_downgrades` does, a seam built precisely
+because `engine_notices` reaches the next beat and that was judged a beat too
+late.
+
+And the dependency worth removing first: the chain rests on the MOVEMENT being
+attributable to a span, and movement is the one thing that structurally cannot
+carry its own provenance (`positions: dict[str, str]`). It depends on
+`phase_sources`, measured at 25% emission. The engine already knows which span
+carried the declared movement, so it can stamp that attribution itself --
+deterministic, no schema change, and it turns the fragile link into a derived
+one.
+
 ## 5. What already exists to build on
 
 This is a rewire of proven mechanisms, not a green field. **The output half of
