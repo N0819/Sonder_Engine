@@ -508,6 +508,74 @@ class TestBothHalvesOfTheDirectorCarryTheRuling:
             assert "|".join(SPECIALISTS) in text, name
             assert "offscreen" not in text.split("specialist is one of")[-1][:80], name
 
+    def test_both_schemas_carry_the_manifest_too(self):
+        """`ledger_notes` says WHICH HAND; `changes_asserted` says WHAT
+        CHANGED. Only the second can be dispatched on without reading prose,
+        and for a release interpret had only the first.
+
+        Measured 2026-09-09 over 416 captured rulings: the manifest was absent
+        from 69.2% of them and from 100% of 184 interpret outputs, because the
+        field did not exist on this half. Replayed through the real dispatch
+        predicate (`tools/dispatch_replay.py`), routing on categories alone
+        would have skipped 178 hands that had produced real work -- 96% of
+        them on beats carrying no manifest at all.
+        """
+        from llm.schemas import DirectorInterpret, DirectorResolve
+        for model in (DirectorInterpret, DirectorResolve):
+            assert "changes_asserted" in model.model_fields, model.__name__
+        assert (DirectorInterpret.model_fields["changes_asserted"].annotation
+                == DirectorResolve.model_fields["changes_asserted"].annotation), (
+            "one manifest type, or the halves drift apart field by field")
+
+    def test_the_interpret_view_exposes_the_manifest_routing_reads(self):
+        """`_ruling_for` reads `view["manifest"]`. The interpret view returned
+        a literal `[]`, so no interpret beat could address a hand by category
+        however well the author filled the field."""
+        from agents import director
+        from agents.director import _ruling_for
+        out = {"sequence": [], "ledger_notes": {},
+               "changes_asserted": [
+                   {"category": "attire", "subject": "Player",
+                    "change": "The player pulls her hood down."}]}
+        view = director._interpret_beat_view(_Ctx(), out, "Player")
+        assert view.get("manifest"), "the interpret view dropped the manifest"
+        addressed, named = _ruling_for("body", view)
+        assert "manifest" in addressed, addressed
+        assert "attire" in named, named
+
+    def test_the_engine_numbers_the_interpret_manifest_not_the_model(self):
+        """Same rule as resolve: ids are a dense sequence over exactly this
+        manifest, so a model-authored number could repeat, skip or reorder."""
+        from agents import director
+        out = {"sequence": [], "ledger_notes": {},
+               "changes_asserted": [
+                   {"category": "attire", "subject": "P", "change": "a",
+                    "event_id": 77},
+                   {"category": "poses", "subject": "P", "change": "b"}]}
+        view = director._interpret_beat_view(_Ctx(), out, "Player")
+        assert [i["event_id"] for i in view["manifest"]] == [1, 2]
+
+    def test_both_prompts_declare_the_manifest_in_the_shape(self):
+        """The measured lesson this class exists for, applied to the second
+        field: asked for in prose and absent from the OUTPUT SHAPE, it does
+        not exist as far as the model is concerned."""
+        from llm.prompts import (get_prompt_body, interpret_delegation_note,
+                                 prose_author_prompt)
+        interpret = get_prompt_body("director_interpret") + \
+            interpret_delegation_note()
+        for name, text in (("director_interpret", interpret),
+                           ("prose_author_sheet", prose_author_prompt(None))):
+            assert "changes_asserted" in text, name
+
+    def test_the_delegation_note_enumeration_carries_the_manifest(self):
+        """The note gets the last word and ends in a closed list of the
+        author's own fields. A field omitted there is a field the model is
+        right to leave out -- that is what cost every ruling last time."""
+        from llm.prompts import interpret_delegation_note
+        note = interpret_delegation_note()
+        assert "stays yours" in note, "the enumeration moved; re-pin this"
+        assert "changes_asserted" in note.split("stays yours")[-1]
+
     def test_no_enumeration_of_the_authors_output_omits_the_ruling(self):
         """Every list of "what your output contains" has to contain it.
 

@@ -57,6 +57,36 @@ Rules that keep it honest:
 Live bugs and unfinished corrections — places the engine is currently wrong,
 not places it is merely thin.
 
+### 1.0 The Japanese pack cannot route the Director's manifest
+
+**Deliberate, dated, and switched off in code rather than forgotten.**
+`DirectorInterpret` gained `changes_asserted` on 2026-09-09 (design note
+`DESIGN_NARROW_MODEL_INTERFACE.md` §3c-bis) and the English prompts declare it
+in all three places a field has to appear. `language_packs/ja` does not.
+
+That is not an untranslated string: `canonical_language_tokens` is a PROTOCOL
+guard, so a Japanese Director now emits a ruling missing a key the engine
+routes on — "not a wrong answer, no answer". Every interpret beat in a Japanese
+story addresses its hands by note alone, which is the state English was in
+before this change.
+
+Suspended under the owner's mandate of 2026-09-09: finish optimizing, testing
+and debugging the English pipeline first, because a translation written against
+a prompt that is still moving is work done twice. Two switches carry it, both
+loud:
+
+- `tools/project_check.DEFERRED_PACK_PARITY = ("ja",)` — a tuple, not a
+  boolean, so it cannot widen into "skip the check"; `make structure` prints
+  the deferral on every run whether or not anything else is wrong.
+- `tests/test_language_pack_integrity.py::test_no_pack_translates_a_canonical_protocol_span`
+  skips exactly the deferred ids and names this entry in the skip reason.
+
+**To clear:** bring `ja`'s `prompts/director_interpret.txt` and
+`interpret_delegation_note.txt` up to the English canonical tokens (plus
+whatever else the English pass adds before it ends), empty
+`DEFERRED_PACK_PARITY`, and delete this entry in the same commit. Until that
+tuple is empty the English pass is not finished.
+
 **Rule 3 is overdue here, and this note is the debt.** §1.2, §1.3, §1.5, §1.13,
 §1.17, §1.19 and both surviving §1.24 bullets were all found at alpha 6.0–6.9;
 the tree is at alpha 9.6, so each has sat through ten-plus releases untouched.

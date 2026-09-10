@@ -80,7 +80,20 @@ def test_repetition_is_not_drift():
 def test_no_pack_translates_a_canonical_protocol_span(language_id):
     """psychology_runtime, affect and importers parse these values back. A
     translated one is not a wrong answer, it is no answer -- the lookup misses
-    and the operation silently does not happen."""
+    and the operation silently does not happen.
+
+    Deferred per pack rather than switched off: see
+    `tools/project_check.DEFERRED_PACK_PARITY` for why one is listed and what
+    emptying it means. A deferred pack is BROKEN for its own users, not merely
+    untranslated, so this skips loudly and names the debt.
+    """
+    from tools.project_check import DEFERRED_PACK_PARITY
+    if language_id in DEFERRED_PACK_PARITY:
+        pytest.skip(
+            f"protocol parity for {language_id!r} is deferred to the end of "
+            "the English optimization pass (owner's mandate 2026-09-09); "
+            f"{language_id!r} cannot route the schema keys added since. Debt: "
+            "docs/UNBUILT.md")
     english = dict(_leaves(PACKS["en"].card("system_prompts")))
     localized = dict(_leaves(PACKS[language_id].card("system_prompts")))
     lost = {}

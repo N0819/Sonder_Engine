@@ -506,11 +506,29 @@ def test_a_ruling_nobody_answers_to_is_reported_not_guessed(temp_db,
     assert notes and "'transit'" in notes[0] and "spatial" in notes[0]
 
 
-def test_at_interpret_only_the_notes_address(temp_db, monkeypatch):
-    """The interpret view carries no manifest (the declaration asserts, it
-    does not narrate changes), so at that stage a hand is reached by a
-    note alone. A note keyed `body` dispatches body; a `changes_asserted`
-    list in the interpret output reaches nobody."""
+def test_at_interpret_both_halves_of_the_ruling_address(temp_db, monkeypatch):
+    """Both halves of the ruling reach a hand at interpret, as at resolve.
+
+    This test previously pinned the opposite -- "the declaration asserts, it
+    does not narrate changes", interpret view manifest `[]`, a
+    `changes_asserted` list reaching nobody. That premise is contradicted by
+    the schema it describes: `DirectorInterpret` carries a full `StateDiff`
+    because "WHAT THE PLAYER SAYS HAPPENS, HAPPENS -- that turn, before
+    perception pass 1 fires", and every specialist sheet tells a hand serving
+    `player_declaration` to encode what the declaration asserts as ALREADY
+    TRUE or COMPLETED. Pulling off a coat is a completed change. What interpret
+    lacked was not the authority, it was the FIELD.
+
+    Measured 2026-09-09 over 416 captured rulings, the cost of that gap:
+    `changes_asserted` was absent from 100% of 184 interpret outputs, so no
+    interpret beat could ever address a hand by category, and dispatch there
+    ran entirely on hand-addressed notes -- the one router that cannot be
+    replaced by code (`tools/dispatch_replay.py`, design note section 3c-bis).
+
+    Contestable acts are still nobody's to encode here, but that is the
+    sheet's rule about what belongs IN the manifest, not a reason the stage
+    cannot have one.
+    """
     calls = []
     interpret_out = {
         "kind": "action",
@@ -539,14 +557,52 @@ def test_at_interpret_only_the_notes_address(temp_db, monkeypatch):
     ctx.director_interpret = None
     out = director.director_interpret(ctx, nonce=0)
 
-    assert director._interpret_beat_view(ctx, interpret_out, "P")[
-        "manifest"] == []
+    view = director._interpret_beat_view(ctx, interpret_out, "P")
+    assert [i["category"] for i in view["manifest"]] == ["positions"]
+    assert [i["event_id"] for i in view["manifest"]] == [1], (
+        "the engine numbers the manifest here exactly as it does at resolve")
+
     specialists = out["orchestration"]["specialists"]
+    # the note still addresses its hand, unchanged
     assert specialists["body"]["run"] is True
     assert specialists["body"]["addressed_by"] == ["note"]
-    assert specialists["spatial"]["run"] is False
-    assert specialists["spatial"]["addressed_by"] == []
-    assert "director_spatial" not in _steps(calls)
+    # ...and the manifest now addresses the hand that owns `positions`, which
+    # no note named. Before the field existed this hand did not run and the
+    # player's declared step reached no ledger at this stage.
+    assert specialists["spatial"]["run"] is True
+    assert specialists["spatial"]["addressed_by"] == ["manifest"]
+
+
+def test_an_interpret_category_no_channel_answers_for_still_reaches_nobody(
+        temp_db, monkeypatch):
+    """The manifest gains a router, not a guess.
+
+    `_CATEGORY_CHANNELS` is the whole map; a category outside it reaches no
+    hand and is not approximated to the nearest one. Same rule the notes side
+    already follows for a key nobody answers to.
+    """
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_interpret": {
+            "kind": "action",
+            "sequence": [{"type": "action", "attempt": "wait",
+                          "commitment": "asserted", "targets": [],
+                          "raw_text": "I wait"}],
+            "speech": None, "action": None, "movement": None,
+            "ledger_notes": {},
+            "changes_asserted": [
+                {"category": "weather", "subject": "sky", "change": "it rains"},
+            ],
+            "flow": {"reactors": [], "authority_claims": [], "dice": [],
+                     "resolution_flags": {}, "fiction_frame": {}},
+        }}))
+
+    ctx = _make_ctx(temp_db, player_input="I wait")
+    ctx.director_interpret = None
+    out = director.director_interpret(ctx, nonce=0)
+
+    for name, record in out["orchestration"]["specialists"].items():
+        assert record["addressed_by"] == [], (name, record["addressed_by"])
 
 
 def test_gate_skips_a_pure_dialogue_beat_over_clean_bodies(temp_db,

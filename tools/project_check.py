@@ -1189,7 +1189,7 @@ def check_language_pack_surfaces(errors: list[str]) -> None:
             errors.append(
                 f"language pack {language_id!r} retains English authored prompt "
                 f"bodies: {', '.join(unchanged_authored[:8])}")
-        if prompt_protocol_drift:
+        if prompt_protocol_drift and language_id not in DEFERRED_PACK_PARITY:
             errors.append(
                 f"language pack {language_id!r} changes canonical tokens in "
                 f"system prompts: {', '.join(prompt_protocol_drift[:8])}")
@@ -3306,6 +3306,29 @@ def check_pipeline_side_channels(errors: list[str]) -> None:
                         f"key with the one word saying how it survives.")
 
 
+#: Language packs whose PROTOCOL parity with English is deliberately deferred.
+#:
+#: TEMPORARY, AND ONLY ON THE PROMPT-OPTIMIZATION BRANCH. The owner's mandate
+#: (2026-09-09): finish optimizing, testing and debugging the English pipeline
+#: before spending anything on Japanese, because a translation written against
+#: a prompt that is still moving is work done twice.
+#:
+#: WHAT THIS SUSPENDS IS NOT TRANSLATION QUALITY. `canonical_language_tokens`
+#: is a protocol guard: every schema key and enum value in an English prompt
+#: must survive into every pack, or that pack's Director emits JSON the engine
+#: cannot route -- "not a wrong answer, no answer", as the test that pairs with
+#: this puts it. So each id listed here names a pack that IS CURRENTLY BROKEN
+#: for its own users, not one that is merely untranslated.
+#:
+#: It is a list rather than a boolean so it can never quietly widen to "skip
+#: the check", and the deferral PRINTS on every run rather than passing in
+#: silence, because a suspended guard nobody is reminded of is a deleted one.
+#: Emptying this tuple is the last step of the English pass; the debt is
+#: `docs/UNBUILT.md` and the test is
+#: test_language_pack_integrity.test_no_pack_translates_a_canonical_protocol_span.
+DEFERRED_PACK_PARITY = ("ja",)
+
+
 def main() -> int:
     errors: list[str] = []
     check_undefined_names(errors)
@@ -3343,6 +3366,15 @@ def main() -> int:
     check_identity_fold_is_owned(errors)
     check_pipeline_side_channels(errors)
     check_generated_map(errors)
+
+    if DEFERRED_PACK_PARITY:
+        # Loud on every run, whether or not anything else is wrong: this is a
+        # guard that is switched off, and the only thing keeping it from
+        # becoming permanent is that nobody can miss it.
+        print("NOTICE: protocol parity is DEFERRED for language pack(s) %s -- "
+              "those packs cannot route the English schema keys added since. "
+              "See docs/UNBUILT.md; empty DEFERRED_PACK_PARITY to re-enable."
+              % ", ".join(repr(p) for p in DEFERRED_PACK_PARITY))
 
     if errors:
         print("Project structure checks failed:")
