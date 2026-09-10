@@ -481,6 +481,69 @@ the unrouted-category report added above stays -- a vocabulary that drifted
 once under one condition can drift again under another, and the point of the
 report is that the next occurrence is visible rather than silent.
 
+## 4f. THE SHEET IS NOT CUT DOWN, AND FLOW IS THE CLEAREST CASE
+
+The owner, 2026-09-10: *"I feel as if scene flow can be determined in code. And
+have you really been reviewing this prompt with my optimization philosophies?
+It doesn't seem that cut down at all."* Both fair. The contract work ADDED
+fields (`note`, `category`, `from_event`) and trimmed only what the retirement
+forced. The interpret sheet is ~25k chars and the resolve lean ~44.5k.
+
+### `flow.reactors` is already computed, then guessed, then corrected
+
+The sheet asks for *"every awake character who could plausibly PERCEIVE this
+beat"*. Perception in this engine is DETERMINISTIC -- no model, no role,
+`agents/perception.py` imports no model seam at all. So the engine knows the
+answer before it asks.
+
+It also knows the asking does not work. The paragraph cites its own
+measurement: **79% of beats with two or more witnesses named fewer reactors
+than there were witnesses.** And `agents/runtime.py` then filters what the
+model returned through a deterministic presence gate, with its own measured
+reason:
+
+> Chat 95, turns 4/5/8/14: `flow.reactors` named two cast members
+> `scene.positions` had no entry for, in beats whose own `perception_act.views`
+> listed observers ['75'] / ['74','75'] -- 6 `character_major` calls at 13-22s
+> each on an empty perception base.
+
+So the engine pays for a guess at a fact it holds, measures the guess wrong,
+and corrects it afterwards -- and spends ~900 characters of every interpret
+call trying to make the guess better.
+
+**What is genuinely the model's here is PACING**: whether a character who could
+respond should get a turn. `runtime.py` calls it "the Director's PACING
+judgement" in as many words. That is a fifth of the paragraph, and the rest is
+a witness list.
+
+**Cut now, deferred, and why.** The paragraph is 1,319 -> 616 chars, keeping
+the pacing instruction and dropping the witness tutorial. DERIVING the list is
+a behaviour change to every beat -- it decides who speaks -- so it wants its
+own measurement (does a story improve when every witness is a reactor?) rather
+than landing unattended. Recorded rather than done.
+
+### The rest of the interpret sheet, by the same test
+
+What does this stage need in order to dissect input into spans, categorize
+them, and say how each resolves? Measured, biggest first:
+
+| chars | paragraph | verdict |
+|---|---|---|
+| 1,805 | ADDRESSEE PRIORITY | partly derivable -- `targets` plus who is present; the ambiguity rules are judgement |
+| 1,352 | WHAT THE PLAYER SAYS HAPPENED, HAS HAPPENED | KEEP -- the authority contract is the stage's whole job |
+| 1,346 | output shape | KEEP |
+| 1,318 | Flow planning | CUT to 616; the rest wants the derivation above |
+| 1,247 | OBSERVABLE SURFACE | KEEP -- it is the firewall at the span level |
+| 1,232 | PLAYER AUTHORITY CONTRACT | KEEP |
+| 996 | MOVEMENT DIRECTION | derivable -- `world/spatial_orientation.py` owns bearing math |
+| 863 | FOLLOWING STATE | mostly reading a payload field back |
+| 589 | LOCATION & SYSTEM DETECTION | name matching against `world_books`; code can do it |
+
+That is the reduction programme, and it is not the same work as the contract:
+the contract moved what the hands are TOLD, this moves what the Director is
+asked to WORK OUT. Each row needs a guard written first and a live beat run
+after, which is why none of them is landed here.
+
 ## 5. What already exists to build on
 
 This is a rewire of proven mechanisms, not a green field. **The output half of
