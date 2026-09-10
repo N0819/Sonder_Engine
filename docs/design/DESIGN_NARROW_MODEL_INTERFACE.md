@@ -459,6 +459,102 @@ against the committed `state_diff`, and does not exist yet.
 than guessed: a 2.9% false-negative rate that is probably redundancy is exactly
 the shape of number that gets rounded to zero by someone who wants the change.
 
+## 3c-quater. VERDICT ON 3c: the manifest cannot dispatch a record-keeping hand
+
+Section 3c-ter left item 5 blocked on a measurement that did not exist: whether
+the content a categories-only dispatch would skip was worth keeping.
+`tools/dispatch_survival.py` is that measurement. It compares each skipped
+hand's own output against the MERGED `state_diff` the turn committed -- the
+`director_resolve` step's active variant, which is what `persist/commit.py`
+reads -- so "did this reach the world" is answered by the world.
+
+**It did. 12 of the 13 entries the eight skipped hands produced were
+committed (92%), and 11 of 11 on record-shaped channels (100%).**
+
+    record  channels : 11 of 11 entries committed
+    event   channels :  1 of  2
+
+Dropping the `ledger_notes` dispatch trigger would not have saved those calls.
+It would have deleted committed world state.
+
+### Why, and it is structural rather than statistical
+
+A hand's ledgers come in two shapes, and section 3 already names the split.
+EVENT-shaped channels (`contact_ops`, `inventory_ops`, `substance_ops`) record
+a thing that happened. RECORD-shaped channels (`poses`, `overlays`,
+`conditions`, `entities`, `rooms`) carry the whole current state of a subject,
+restated every beat.
+
+`changes_asserted` counts CHANGES. So it can only ever address the first kind.
+A pose record is re-emitted whether or not the pose changed, and the Director is
+RIGHT to file no manifest entry for it -- nothing changed, so nothing is
+asserted. Which means **the manifest can never be the thing that dispatches the
+hand that keeps a record-shaped ledger.** No amount of better category
+vocabulary fixes that; the two fields answer different questions, exactly as
+the interpret sheet says they do.
+
+Sorted by hand, this is sharpest at the extreme:
+
+| hand | its channels | can the manifest dispatch it? |
+|---|---|---|
+| `body` | attire, conditions, vitals, overlays | **never** -- all four are record-shaped |
+| `spatial` | positions, rooms, stations, poses + comms_ops | only for `comms_ops` |
+| `objects` | entities, destruction + inventory_ops, artifact_ops, sensory_events | partly |
+| `contact` | containment, scales + contact_ops, contact_action_ops, substance_ops | mostly |
+| `social` | cast_changes, introductions, world_facts, crowd_ops, courier_ops, telling_ops | mostly |
+
+`director_body` is the hand with the 76% empty-call rate section 6 wanted to
+attack, and it is precisely the hand the manifest is structurally incapable of
+addressing. The proposal aimed at the one target it could not hit.
+
+### The two notes that looked like the strongest case for 3c, read properly
+
+Turn 4144 carried the two most quotable notes in the corpus:
+
+- `spatial`: *"No position changes; both remain at the bed in the den."*
+- `body`: *"arousal state unchanged (hardened). No new overlays or conditions."*
+
+Both hands ran anyway, and section 3c-ter read that as a hand contradicting its
+own ruling -- redundancy, and therefore a saving. Compared against what the hand
+was SHOWN (`llm_capture.payload_hashes` keeps the payload), it is not:
+
+    shown: flush = [{active: true,  "A bright flush spreads across her face..."}]
+    emit : flush = [{active: false, "A bright flush spreads across her face..."},
+                    {active: true,  "A DEEPENED flush spreads across her face..."}]
+
+The hand retired the standing overlay and wrote a deepened replacement. That is
+the retire-and-replace transition a record-shaped ledger is kept by, and both
+entries committed. The note was accurate at the level it speaks -- no NEW kind
+of overlay -- and the work was real.
+
+**The lesson generalises past this note.** "The hand emitted something its
+ruling did not announce" is not evidence of waste, because on a record-shaped
+channel the ruling and the ledger are not counting the same things. Any future
+measurement of specialist redundancy has to compare against what the hand was
+SHOWN, not against what the Director SAID.
+
+### Ruling
+
+**Item 5 is REJECTED, not deferred.** `ledger_notes` stays a dispatch trigger.
+Section 3c's "the Director should not know its specialists exist" survives only
+in the half that 3c-ter already delivered: code resolves whatever vocabulary the
+author uses, so the author need not know which name is a hand and which is a
+ledger. It does not extend to deleting the address itself.
+
+What this costs the plan: the 87%/76% empty-call rates stay on the table as a
+target, and the lever that was going to reach them does not exist. Section 7's
+sheet reduction is now the largest remaining item, and it is a token
+optimization rather than a call-count one.
+
+**What a real call-count saving would need**, recorded so it is not
+re-proposed from scratch: a way to tell, deterministically and before the call,
+that none of a hand's record-shaped subjects can have changed this beat. That is
+a question about the beat's gates and the scene, not about the Director's
+ruling, and `_dispatch_specialists` already computes something close to it (the
+gates it consults when a hand is addressed by name alone). Whether those gates
+are sharp enough to dispatch ON is unmeasured, and it is a different experiment
+from this one.
+
 ## 3d. Compress engine terms into concepts, and let code dissect them
 
 The owner's last requirement, and the one that makes "what actually happens?" a
@@ -768,21 +864,20 @@ the harnesses that produced it are checked in and re-runnable.
    half-sentence is corrected so the next model does not lean on the
    tolerance.
 
+5. **Removing the `ledger_notes` dispatch trigger: REJECTED, with the
+   measurement that decides it** (section 3c-quater, `tools/dispatch_survival.py`).
+   12 of the 13 entries the eight skipped hands produced were COMMITTED, and 11
+   of 11 on record-shaped channels. The reason is structural: `changes_asserted`
+   counts changes, record-shaped ledgers restate whole current state every beat,
+   so the manifest can never dispatch the hand that keeps one -- and `body`,
+   whose four channels are all record-shaped and whose empty-call rate (76%) was
+   the target, is the hand it can never address at all. `ledger_notes` stays.
+   The 87%/76% empty-call rates stay on the table with no lever that reaches
+   them; a deterministic pre-call gate on record-shaped subjects is the next
+   idea and is a different experiment.
+
 **NEXT, in order**
 
-5. **Remove the `ledger_notes` dispatch trigger -- BLOCKED, on a measurement
-   rather than a gate** (sections 3c, 3c-ter). The pre-existing corpus still
-   scores 8 filed-only false negatives, unmoved by the fix above because those
-   rulings came from the resolve half, which never had the hand-name miss. Read
-   individually they are mostly a note carrying a CONTINUING state -- twice, a
-   note that says in words that nothing changed -- followed by a hand encoding
-   it anyway. `dispatch_replay`'s `_produced` counts any non-empty channel as
-   productive and cannot tell new content from a re-assertion, so on these eight
-   it answers a question next to the one being asked. What settles it is a
-   comparison of each hand's output against the committed `state_diff`; that
-   harness does not exist. Do not round 2.9% to zero. This is where the
-   empty-call rate falls when it is unblocked: `director_objects` 87%,
-   `director_body` 76%.
 6. **The renames** (section 3d). Independent of 5, cheap, and the one
    part of the trial no skeptic contested -- subject to the naming test's
    second clause: the engine must own the new name everywhere it is compared
@@ -806,10 +901,19 @@ the harnesses that produced it are checked in and re-runnable.
 - The character stage's 37.7s. Already grammar-on, and 51% of its output is
   `appraisal` + `active_state`, which is the product rather than the fat.
 
-**Honest expectation.** Median turn is 91.2s. Items 5-7 together are worth
-perhaps 15-25s, hard-won, against 93 refutations already collected. The
-correctness findings are the larger return: section 3c's 82% self-disagreement,
-and the six engine defects in `NARROW_INTERFACE_TRIAL_2026_09_09.md`.
+**Honest expectation, revised down.** Median turn is 91.2s. The call-count
+saving is GONE: item 5 was where it lived, and section 3c-quater rejects it on
+the engine's own committed output. What remains (items 6 and 7) is token
+reduction on sheets that are 0.7-4.6k against an 8-9k prose author, and the
+measured relationship is `duration ~= 1.8s + 0.29s/1k input` -- so a 93% cut to
+the shared specialist core is worth roughly a second per dispatched hand, not
+the 15-25s this section claimed while item 5 was still open.
+
+The correctness findings remain the larger return, and that is now the honest
+summary of the whole document rather than a consolation: section 3c's 82%
+self-disagreement, the manifest's unroutable vocabulary (3c-ter), the
+record-versus-event split that decides dispatch (3c-quater), and the six engine
+defects in `NARROW_INTERFACE_TRIAL_2026_09_09.md`.
 
 ## 7. What this does not fix
 
