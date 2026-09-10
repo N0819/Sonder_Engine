@@ -4854,13 +4854,43 @@ def director_resolve(ctx, nonce, _corrections=None):
     # reported beyond perception and committed into riser 13 in one beat).
     # Same rule, same room, written where all four readers see it. The commit
     # keeps its pass as the backstop for a diff that never met this floor.
-    _placed = place_unplaced_mints(sc, sd, _mint_room, ctx=ctx)
+    # THE RECOMPILER'S ANSWER FIRST, where it has one. `_mint_fallback_room`
+    # is this answer with the ORDER thrown away -- one room for the whole beat,
+    # the one the player arrived in -- so the two agree whenever the mint is
+    # the last thing that matters and diverge whenever it is not. Measured: a
+    # crate set down in the yard BEFORE the player walked into the box is
+    # stood in the box by the fallback and in the yard by the replay.
+    #
+    # Bought only when there is an unplaced mint to spend it on. The replay is
+    # N merges of the scene -- bounded and pure, beats measured at 1-5 spans --
+    # and a beat that placed everything has nothing to buy with it.
+    _span_rooms = {}
+    if unplaced_mints_needing_a_room(sc, sd, ctx=ctx):
+        _rspans = _span_items(out)
+        if _rspans:
+            _rsd = dict(sd)
+            _rsd.setdefault("phase_sources", {}).update(
+                single_span_attributions(
+                    sd, _orch_dispatch, _orch_view, _specialist_span_slice))
+            _span_rooms = span_mint_rooms(
+                _rsd, _rspans,
+                beat_worlds(sc, _rsd, merge_scene_with_diff),
+                merge_scene_with_diff(sc, _rsd),
+                lambda span: str(span.get("actor") or p_name))
+    _placed = place_unplaced_mints(sc, sd, _mint_room, ctx=ctx,
+                                   rooms=_span_rooms)
     for _eid in _placed:
+        _where = _span_rooms.get(str(_eid))
         _note = (
-            "%r was minted with no room, so the beat stood it where the beat "
-            "is (%s). A thing in no room can be seen, reached and acted on by "
-            "nobody; write `state_diff.positions` for anything you mint."
-            % (_eid, _mint_room))
+            ("%r was minted with no room, so the beat stood it where its own "
+             "span left the actor (%s). A thing in no room can be seen, "
+             "reached and acted on by nobody; write `state_diff.positions` "
+             "for anything you mint." % (_eid, _where))
+            if _where else
+            ("%r was minted with no room, so the beat stood it where the beat "
+             "is (%s). A thing in no room can be seen, reached and acted on "
+             "by nobody; write `state_diff.positions` for anything you mint."
+             % (_eid, _mint_room)))
         ctx.add_warning(_note)
         ctx.tell_director(_note)
     # What no room could be found for: the fallback declines where the beat
