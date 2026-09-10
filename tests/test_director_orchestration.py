@@ -5557,3 +5557,59 @@ class TestAHandHandedOneSpanWroteItForThatSpan:
         assert director.span_mint_rooms(
             sd, view["spans"], worlds, final,
             lambda span: "Corin") == {"crate": "yard"}
+
+
+class TestThePlacementLadderPrefersTheOrderAwareAnswer:
+    """`place_unplaced_mints` stood every orphan in ONE room -- where the beat
+    is, which `_mint_fallback_room` answers as the room the player ARRIVED in.
+    That is right whenever the mint is the last thing that matters and wrong
+    whenever it is not.
+
+    Measured: a crate set down in the yard BEFORE the player walked into the
+    box is stood in the box by the fallback, because it has one room for the
+    whole beat and cannot see when anything happened. The fallback is the
+    recompiler's answer with the ORDER thrown away.
+    """
+
+    def _sd(self):
+        return {"entities": {"crate": {"name": "crate", "kind": "crate"},
+                             "console": {"name": "console",
+                                         "kind": "fixture"}},
+                "positions": {}}
+
+    def _sc(self):
+        return {"rooms": {"yard": {"name": "Yard", "adjacent": []},
+                          "box": {"name": "Box", "adjacent": []}},
+                "positions": {"Corin": "yard"}, "entities": {},
+                "contacts": [], "poses": {}, "stations": {}, "contained": {}}
+
+    def test_a_per_entity_room_wins_over_the_one_room_fallback(self):
+        sc, sd = self._sc(), self._sd()
+        placed = director.place_unplaced_mints(sc, sd, "box",
+                                      rooms={"crate": "yard"})
+        assert set(placed) == {"crate", "console"}
+        assert sd["positions"]["crate"] == "yard", (
+            "the crate was set down before the move")
+        assert sd["positions"]["console"] == "box", (
+            "the recompiler said nothing about it, so the fallback stands")
+
+    def test_with_no_mapping_it_is_the_function_it_was(self):
+        sc, sd = self._sc(), self._sd()
+        placed = director.place_unplaced_mints(sc, sd, "box")
+        assert set(placed) == {"crate", "console"}
+        assert sd["positions"] == {"crate": "box", "console": "box"}
+
+    def test_a_mapping_alone_places_where_the_beat_could_not_say(self):
+        """The fallback declines where the beat names no single room the
+        player is in, and inventing one is worse than leaving a thing nowhere.
+        A per-entity answer is not an invention -- it is where the actor
+        stood -- so it may speak when the fallback cannot."""
+        sc, sd = self._sc(), self._sd()
+        placed = director.place_unplaced_mints(sc, sd, "", rooms={"crate": "yard"})
+        assert placed == ["crate"]
+        assert sd["positions"] == {"crate": "yard"}
+
+    def test_neither_places_nothing(self):
+        sc, sd = self._sc(), self._sd()
+        assert director.place_unplaced_mints(sc, sd, "") == []
+        assert sd["positions"] == {}

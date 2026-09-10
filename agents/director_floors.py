@@ -1480,7 +1480,8 @@ def unplaced_mints_needing_a_room(sc, sd, *, merged=None, ctx=None):
     return out
 
 
-def place_unplaced_mints(sc, sd, fallback_room, *, merged=None, ctx=None):
+def place_unplaced_mints(sc, sd, fallback_room, *, merged=None, ctx=None,
+                         rooms=None):
     """A MINT THIS BEAT LEAVES NOWHERE STANDS WHERE THE BEAT IS -- AND IT
     STANDS THERE HERE, WHILE THE BEAT CAN STILL SEE IT.
 
@@ -1503,9 +1504,24 @@ def place_unplaced_mints(sc, sd, fallback_room, *, merged=None, ctx=None):
     Where the beat cannot say where it is happening -- no player room, or two
     of them -- nothing is placed and the report stands: inventing a room for a
     thing is worse than leaving it nowhere. Returns the ids placed.
+
+    `rooms` is the per-entity answer the causality recompiler can give and this
+    floor cannot: `{entity_id: room}` from where the ACTOR STOOD at the span
+    that minted it (`director_evidence.span_mint_rooms`). It takes precedence
+    where it speaks. The fallback is that same answer with the ORDER thrown
+    away -- one room for the whole beat, the one the player arrived in -- so
+    the two agree whenever the mint is the last thing that matters and diverge
+    whenever it is not. Measured: a crate set down in the yard before the
+    player walked into the box is stood in the box by the fallback and in the
+    yard by the recompiler.
+
+    Additive: with no mapping this is the function it was.
     """
     room = str(fallback_room or "").strip()
-    if not room:
+    per_entity = {str(key): str(value).strip()
+                  for key, value in (rooms or {}).items()
+                  if str(value or "").strip()}
+    if not room and not per_entity:
         return []
     ids = unplaced_mints_needing_a_room(sc, sd, merged=merged, ctx=ctx)
     if not ids:
@@ -1513,9 +1529,14 @@ def place_unplaced_mints(sc, sd, fallback_room, *, merged=None, ctx=None):
     positions = sd.get("positions")
     if not isinstance(positions, dict):
         positions = sd["positions"] = {}
+    placed = []
     for eid in ids:
-        positions[str(eid)] = room
-    return ids
+        where = per_entity.get(str(eid)) or room
+        if not where:
+            continue
+        positions[str(eid)] = where
+        placed.append(eid)
+    return placed
 
 
 def _scan_for_untracked_restraint(resolved_event, dialogue_log, conditions,
