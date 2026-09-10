@@ -324,6 +324,52 @@ output shape, and it must land BEFORE the `sequence` migration rather than
 alongside it -- that is what "answer it first" means. The measurement above is
 the evidence that the cheaper option was tried and rejected on data.
 
+## 4c. CHECKED: a hand that fires is doing real work
+
+Every "productive call" figure in this document and in
+`DESIGN_NARROW_MODEL_INTERFACE.md` counts a call as productive when any channel
+came back non-empty (`dispatch_replay._produced`). That definition includes
+doing nothing: a hand that re-emits a pose record byte-identically scores like
+one that encoded a new pose. Since section 3c's rejection rests on "12 of 13
+entries were committed", the definition is load-bearing and was worth checking.
+
+`tools/should_it_have_fired.py` compares what each hand EMITTED against the
+same channel in its OWN PAYLOAD -- what it was looking at when it answered --
+and classifies every entry as new, changed, or byte-identical.
+
+| hand | calls | did work | no-op | unjudged |
+|---|---|---|---|---|
+| `director_spatial` | 119 | **119** | 0 | 0 |
+| `director_body` | 71 | 59 | 0 | 12 |
+| `director_objects` | 24 | 19 | 0 | 5 |
+| `director_contact` | 179 | — | — | 179 |
+| `director_social` | 91 | — | — | 91 |
+| **total** | **484** | **197** | **0** | 287 |
+
+**197 of 197 judgeable calls changed the world. Zero no-ops.** Entry-level: 40
+new, 318 changed, 5 byte-identical -- 1.4%.
+
+The 287 unjudged emitted only op-shaped channels (`contact_ops`,
+`public_evidence`, `inventory_ops`), which have no comparable ledger in the
+payload because an op list and a record list are not the same shape. The
+question does not arise there anyway: **an op IS an action.** A record can be
+restated without changing anything; an operation cannot.
+
+Three consequences:
+
+- **Section 3c's rejection is stronger than it was argued.** Those 12 committed
+  entries were not merely committed -- they were genuine changes to records.
+- **The waste is entirely in the calls that return NOTHING**, of which this
+  corpus has 730 against 484 that return something. Trimming what a firing hand
+  does is optimizing the wrong end; not firing it is the whole prize.
+- **The first cut of this tool got it wrong in the flattering direction**, and
+  the way it did is worth keeping. It looked each emitted channel up in the
+  payload by name, missed for every op-shaped channel (`contact_ops` emitted
+  against a `contacts` ledger), and counted 803 unmatched entries as NEW --
+  reporting 100% of 484 calls as productive work. A lookup that silently
+  degrades to "assume the flattering answer" produces a number, and the number
+  is the thing that gets quoted.
+
 ## 5. What already exists to build on
 
 This is a rewire of proven mechanisms, not a green field. **The output half of
