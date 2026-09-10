@@ -601,20 +601,66 @@ genuinely unexplained is a handful of single-digit occurrences, and some of
 those are on a grammar-ON role, which the invention story does not fit. The
 argument for the grammar rests on enforcement and padding, not on that claim.
 
-## 6. Order of work
+## 6. Order of work -- STATUS as of 2026-09-09
 
-1. **Retest the `json_schema` stall** on the current default model. Settings
-   change, no behaviour risk, and it may remove the need for §3's prose shape
-   entirely.
-2. **Pilot one hand: `director_contact`.** It sets the specialist batch clock
-   44% of the time and is the one call that does not fit the cost model (7.6s
-   against a fit of 4.5s). Trace each rule to its guard per §4, keep the old
-   sheet behind the preset system, A/B on the same beats, report wall clock and
-   correctness.
-3. **Grow the ledger entry** by the shared fields in §3 and route by category.
-4. **Collapse the specialist phase** once the entry carries the event-shaped
-   channels. This is where the ~15s/turn is: the phase is serial after the
-   prose author, not concurrent with it.
+Branch `worktree-prompt-latency-evidence`. Every number below is measured, and
+the harnesses that produced it are checked in and re-runnable.
+
+**DONE**
+
+1. **The grammar blacklist heals** (`llm/providers.py`, 7 tests). A stall
+   suspends for 24h and is re-tested; a 400 stays permanent; the stall tally
+   clears with the suspension; suspensions get their own settings row; legacy
+   rows rehydrate as suspensions. Was: `_NO_JSON_SCHEMA` only ever `.add`-ed,
+   so two timeouts disabled a model's grammar forever and nothing re-asked.
+   `_SCHEMA_STALL_LIMIT` stays 2 -- the threshold was never the defect, the
+   permanence was.
+2. **`changes_asserted` mirrored onto `DirectorInterpret`** (9 tests). Four
+   places, which is what it takes for a model to write a field: the schema, the
+   output shape, the delegation note's closed enumeration, and
+   `OUTPUT_EXAMPLES`. `AssertedChange` lifted so both halves share one type;
+   the interpret view numbers its manifest instead of returning `[]`.
+   `test_at_interpret_only_the_notes_address` pinned the opposite and is
+   rewritten with the reasoning.
+3. **Japanese parity deferred, loudly** -- `DEFERRED_PACK_PARITY` (a tuple, so
+   it cannot widen into "skip the check"), a notice printed on every
+   `make structure`, a skip naming the debt, and `UNBUILT.md` section 1.0.
+
+**NEXT, in order**
+
+4. **Play beats, then re-run `tools/dispatch_replay.py --filed-only`.** Nothing
+   advances until real traffic carries the interpret manifest; the whole
+   captured corpus predates the field. The gate is ZERO false negatives.
+5. **Then remove the `ledger_notes` dispatch trigger** (section 3c), only when
+   4 passes. This is where the empty-call rate falls: `director_objects` 87%,
+   `director_body` 76%.
+6. **The renames** (section 3d). Independent of 4 and 5, cheap, and the one
+   part of the trial no skeptic contested -- subject to the naming test's
+   second clause: the engine must own the new name everywhere it is compared
+   (`enclosure: 'membrane'` is the counter-example that earned that clause).
+7. **Then reduce ONE sheet**, the shared specialist core first (93% proposed
+   cut, purest coordination content). Every deleted rule traced to a guard
+   WRITTEN FIRST, not cited after -- the trial produced 39 bad guard claims
+   from agents that had been told exactly this, in bold.
+8. **The consolidated check pass**, deferred by mandate while iterating:
+   regenerate `docs/CODE_MAP.md`, `make structure`, full parallel suite, then
+   empty `DEFERRED_PACK_PARITY`. The English pass is not finished while that
+   tuple is non-empty.
+
+**PARKED, with reasons**
+
+- The grammar A/B on the prose author. Section 5b already shows constrained
+  roles are not visibly thinner; not on the critical path, and it costs live
+  calls.
+- Dropping JSON for a lighter format (section 5b): refuted at 99.4% clean
+  parse, and it points the wrong way on invented keys.
+- The character stage's 37.7s. Already grammar-on, and 51% of its output is
+  `appraisal` + `active_state`, which is the product rather than the fat.
+
+**Honest expectation.** Median turn is 91.2s. Items 5-7 together are worth
+perhaps 15-25s, hard-won, against 93 refutations already collected. The
+correctness findings are the larger return: section 3c's 82% self-disagreement,
+and the six engine defects in `NARROW_INTERFACE_TRIAL_2026_09_09.md`.
 
 ## 7. What this does not fix
 
