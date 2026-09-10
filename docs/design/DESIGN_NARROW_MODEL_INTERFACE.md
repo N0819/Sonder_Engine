@@ -538,6 +538,69 @@ higher than two -- with a rejection (a 400, which IS a capability verdict) kept
 permanent as it is today. Clearing the live setting is worth doing once, by
 hand, to measure the payoff -- but only after the entry can heal.
 
+## 5b. CORRECTION to 5a, and the narrative-quality question
+
+**5a scoped the blacklist wrong.** `providers_no_json_schema` holds provider 3
+plus `google/gemini-3.7-flash` / `gemini-3.8-flash`. Resolved against live
+`agent_models`:
+
+| role | model | grammar |
+|---|---|---|
+| `character_major` | fireworks `glm-5p3-fast` | **sent** |
+| `narrator` | `z-ai/glm-5.3` | **sent** |
+| `story_planner` | `deepseek-v4-flash` | **sent** |
+| `director` (prose author) | gemini-3.8-flash *(inherits default)* | BLOCKED |
+| all five specialists | gemini-3.8-flash *(inherits default)* | BLOCKED |
+
+So `character_major` is NOT running unconstrained, and 5a's "~23s, about 25% of
+a turn" was wrong -- it priced the heaviest role into a fix that does not touch
+it. What is blocked is the **six Director roles**: the prose author, whose two
+stages are 25.4s of the turn and whose output is 45.2% scaffolding, and five
+specialists that are prefill-bound and would gain little decode time. The
+realistic prize is the prose author's padding plus the correctness win on the
+specialists -- worth having, not worth a quarter of the turn.
+
+The claim about the blacklist ITSELF stands unchanged and is the part worth
+fixing: `_SCHEMA_STALL_LIMIT = 2`, a stall is indistinguishable from a timeout,
+the verdict is persisted, and `_NO_JSON_SCHEMA` is only ever `.add`-ed -- no
+discard, no expiry, no re-test anywhere in the module.
+
+**Does a grammar cost narrative quality?** The owner's question, and the corpus
+can answer it because three roles run grammar-on today. Prose-bearing field,
+per role:
+
+| role | grammar | n | mean chars | median | TTR |
+|---|---|---|---|---|---|
+| `narrator` (`prose`) | **ON** | 171 | **1,076** | 1,020 | **0.087** |
+| `director` (`resolved_event`) | off | 222 | 1,023 | 948 | 0.083 |
+
+The grammar-on role writes marginally LONGER prose with marginally MORE varied
+vocabulary than the grammar-off one. `character_major`, also grammar-on, emits
+2,413 tokens of content per call -- `appraisal` 783, `active_state` 464,
+`sequence` 326 -- which is not a starved model.
+
+The mechanism says why, and it is the thing to hold onto: **a JSON grammar
+constrains STRUCTURE, not string contents.** Inside a string value the sampler
+is free to the closing quote, so prose is sampled exactly as it would be
+unconstrained. What the grammar removes is the freedom to invent structure --
+extra keys, repeated fields, padding around content. That is what "cannot pad"
+means in `_apply_json_mode`'s docstring, and it is why the 2029->587 measurement
+there should be read as a structural saving rather than the model saying less.
+
+**Two honest limits.** This is a BETWEEN-ROLE comparison -- different models,
+different jobs, different prompts -- not a controlled A/B, so it can only say
+that constrained roles are not visibly thinner, never that the grammar is free.
+The real test is one role, both ways, on the same beats.
+
+And a second correction while here: this note earlier described nine field names
+as "invented ... silently discarded". Re-checked per role, most are legitimate
+fields of the emitting role's own schema and the survey had compared them
+against `AssertedChange` instead -- `visibility` is a real `sequence` field
+(382 occurrences on `director`, 157 on `character_major`). What remains
+genuinely unexplained is a handful of single-digit occurrences, and some of
+those are on a grammar-ON role, which the invention story does not fit. The
+argument for the grammar rests on enforcement and padding, not on that claim.
+
 ## 6. Order of work
 
 1. **Retest the `json_schema` stall** on the current default model. Settings
