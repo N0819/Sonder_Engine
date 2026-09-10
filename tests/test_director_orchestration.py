@@ -603,8 +603,7 @@ class TestANoteAloneStillDispatchesAHand:
         argument in section 3c-quater has to be re-read rather than
         re-cited."""
         from tools.narrow_interface_coverage import RECORD_SHAPED
-        from agents.director_scopes import SPECIALISTS
-        event_shaped = [c for c in SPECIALISTS["body"]["channels"]
+        event_shaped = [c for c in director.SPECIALISTS["body"]["channels"]
                         if c not in RECORD_SHAPED]
         assert event_shaped == [], event_shaped
 

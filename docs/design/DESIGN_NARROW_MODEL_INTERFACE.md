@@ -1050,7 +1050,21 @@ the harnesses that produced it are checked in and re-runnable.
    would have been. Every deleted rule still traced to a guard WRITTEN FIRST,
    not cited after: the trial produced 39 bad guard claims from agents that had
    been told exactly this, in bold.
-8. **The consolidated check pass**, deferred by mandate while iterating:
+8. **The consolidated check pass -- RUN 2026-09-09, all but the last step.**
+   `docs/CODE_MAP.md` regenerated (line counts only, no structural surprise),
+   `tools/project_check.py` PASSES, and the full parallel suite is 14,507
+   passed / 1 skipped in 109s -- the skip being the deferred `ja` parity, which
+   is the one step left. The check earned its keep on the first run: it caught
+   a facade violation in a guard written earlier the same day
+   (`test_every_channel_the_body_hand_keeps_is_record_shaped` imported
+   `agents.director_scopes` directly instead of the `agents.director` facade),
+   which is exactly the class the deferral was known to accumulate and which no
+   focused test can see. What remains needs the owner's word, because the
+   mandate that suspended it is theirs: empty `DEFERRED_PACK_PARITY`, bring
+   `ja` up to the English canonical tokens, and delete `docs/UNBUILT.md` 1.0 in
+   the same commit. The original wording of this item follows.
+
+   Deferred by mandate while iterating:
    regenerate `docs/CODE_MAP.md`, `make structure`, full parallel suite, then
    empty `DEFERRED_PACK_PARITY`. The English pass is not finished while that
    tuple is non-empty.
