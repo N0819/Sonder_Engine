@@ -143,6 +143,17 @@ def main():
                     help="mirror providers and agent_models out of this "
                          "database instead of seeding from the environment")
     ap.add_argument("--json", default="", help="write the per-beat rows here")
+    ap.add_argument("--role-effort", action="append", default=[],
+                    metavar="ROLE=LEVEL",
+                    help="reasoning effort for ONE role, repeatable. Measured "
+                         "2026-09-09 on google/gemini-3.8-flash: a specialist "
+                         "spends 90-97%% of its output tokens on its private "
+                         "trace, so the trace IS the wall clock. A direct "
+                         "probe moved it 944 -> 136 chars at `low`, 2.9s -> "
+                         "1.8s, same answer. NOTE that 'off' is a trap on this "
+                         "pair: OpenRouter sends reasoning:{enabled:false}, "
+                         "gemini ignores it and still emitted 623 chars, "
+                         "SLOWER than low and in a ```json fence.")
     args = ap.parse_args()
 
     _require_scratch()
@@ -160,6 +171,17 @@ def main():
     # and scores nothing.
     db_module.set_setting("llm_capture_enabled", "1")
     db_module.set_setting("llm_capture_bodies", "full")
+
+    if args.role_effort:
+        efforts = {}
+        for pair in args.role_effort:
+            role, _, level = pair.partition("=")
+            role, level = role.strip(), level.strip()
+            if not role or not level:
+                raise SystemExit("--role-effort wants ROLE=LEVEL, got %r" % pair)
+            efforts[role] = level
+            print("  reasoning effort: %s -> %s" % (role, level), flush=True)
+        db_module.set_setting("reasoning_effort", json.dumps(efforts))
 
     from tools.model_playthrough import install
     from tools.quest_drive import QuestAuthor, build_story

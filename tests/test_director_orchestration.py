@@ -573,6 +573,82 @@ def test_at_interpret_both_halves_of_the_ruling_address(temp_db, monkeypatch):
     assert specialists["spatial"]["addressed_by"] == ["manifest"]
 
 
+class TestAnEncodedClaimNeedsSomethingEncoded:
+    """`encoded` from a hand whose channels are all empty is not an answer.
+
+    The shared specialist core defines the verdict as "you put it in your
+    channels this beat", and warns that "answering honestly is always cheaper
+    than answering agreeably". A hand that returns every channel empty and
+    still says `encoded` is self-contradictory, and it is the worst available
+    answer: the reconciliation seam believes it, buys no repair, and the
+    change is lost with no warning anywhere.
+
+    Measured 2026-09-09 (`tools/false_encoded.py`). At the roles' default
+    reasoning effort, 0 of 11 `encoded` claims wrote nothing. With
+    `reasoning_effort=low` on the five specialists, 2 of 12 did -- both
+    `director_objects`, both on a beat where a thing came into being or was
+    broken (a hinge hammered apart; a notice nailed up). It returned
+    `{"entities": {}}` beside `resolved_events: [{event_id: 1, status:
+    "encoded"}]`.
+
+    The guard is not about that lever. The claim is refutable from the
+    RESPONSE ALONE -- no diff, no manifest, no scene -- so there is no reason
+    to have ever believed it, at any effort level.
+
+    `already_true` and `not_mine` are deliberately still honoured on an empty
+    response: both MEAN "correctly wrote nothing".
+    """
+
+    def test_an_encoded_claim_with_content_is_kept(self):
+        result = {"entities": {"hinge": {"name": "broken hinge"}},
+                  "resolved_events": [{"event_id": 1, "status": "encoded"}]}
+        assert director._resolved_event_verdicts(result, [1]) == [
+            {"event_id": 1, "status": "encoded"}]
+
+    def test_an_encoded_claim_with_every_channel_empty_is_dropped(self):
+        result = {"entities": {}, "remove_entities": [], "inventory_ops": [],
+                  "sensory_events": [],
+                  "resolved_events": [{"event_id": 1, "status": "encoded"}],
+                  "notes": []}
+        assert director._resolved_event_verdicts(result, [1]) == []
+
+    def test_already_true_survives_an_empty_response(self):
+        """It is the verdict that MEANS the ledgers already carry it, so
+        writing nothing is the correct behaviour, not a contradiction."""
+        result = {"entities": {},
+                  "resolved_events": [{"event_id": 1,
+                                       "status": "already_true"}]}
+        assert director._resolved_event_verdicts(result, [1]) == [
+            {"event_id": 1, "status": "already_true"}]
+
+    def test_not_mine_survives_an_empty_response(self):
+        result = {"entities": {},
+                  "resolved_events": [{"event_id": 1, "status": "not_mine",
+                                       "reroute_to": "spatial"}]}
+        assert director._resolved_event_verdicts(result, [1]) == [
+            {"event_id": 1, "status": "not_mine", "reroute_to": "spatial"}]
+
+    def test_bookkeeping_keys_do_not_count_as_content(self):
+        """`notes` and `phase_sources` are the hand talking about its work,
+        not the work. Counting them would make the guard inert exactly when a
+        model pads its excuse."""
+        result = {"entities": {}, "notes": ["could not name the thing"],
+                  "phase_sources": {"entities.x": 1},
+                  "resolved_events": [{"event_id": 1, "status": "encoded"}]}
+        assert director._resolved_event_verdicts(result, [1]) == []
+
+    def test_one_empty_claim_does_not_silence_a_sibling_that_worked(self):
+        """The drop is per RESPONSE, and a response either wrote something or
+        did not -- so this pins the whole-call semantics rather than letting a
+        later reader assume it is per event."""
+        result = {"poses": {"Corin": {"posture": "kneeling"}},
+                  "resolved_events": [{"event_id": 1, "status": "encoded"},
+                                      {"event_id": 2, "status": "encoded"}]}
+        assert director._resolved_event_verdicts(result, [1, 2]) == [
+            {"event_id": 1, "status": "encoded"},
+            {"event_id": 2, "status": "encoded"}]
+
+
 class TestANoteAloneStillDispatchesAHand:
     """`ledger_notes` stays a dispatch trigger. Design note section 3c-quater.
 
@@ -2447,7 +2523,12 @@ def test_a_verdict_on_an_unhanded_event_is_discarded(temp_db):
     """A specialist cannot acquit an event it was never given. Without this,
     a model echoing the whole manifest back would silence every omission in
     the beat."""
-    result = {"resolved_events": [
+    # The channel content is not what this test is about, but it has to be
+    # here: an `encoded` verdict from a response that wrote NOTHING is dropped
+    # on its own account (TestAnEncodedClaimNeedsSomethingEncoded), which would
+    # make this pass for the wrong reason.
+    result = {"poses": {"Corin": {"posture": "kneeling"}},
+              "resolved_events": [
         {"event_id": 1, "status": "encoded"},      # granted
         {"event_id": 2, "status": "already_true"},  # NOT granted to this call
         {"event_id": 1, "status": "nonsense"},      # unrecognized verdict
@@ -3224,7 +3305,12 @@ def test_an_address_naming_nobody_falls_back_to_the_category(temp_db,
 def test_an_address_on_anything_but_a_decline_is_ignored(temp_db):
     """Only a decline forwards. An `encoded` verdict carrying an address is
     a model contradicting itself, and the engine keeps the encoding."""
-    result = {"resolved_events": [
+    # Carries channel content for the same reason as
+    # test_a_verdict_on_an_unhanded_event_is_discarded: an empty response's
+    # `encoded` is dropped on its own account, and this test is about the
+    # ADDRESS, not the content.
+    result = {"poses": {"Corin": {"posture": "kneeling"}},
+              "resolved_events": [
         {"event_id": 1, "status": "encoded", "reroute_to": "spatial"}]}
     assert director._resolved_event_verdicts(result, [1]) == [
         {"event_id": 1, "status": "encoded"}]

@@ -763,6 +763,23 @@ def _normalized_channel_value(channel, value):
 #: DELIBERATE answer counts as one.
 _EVENT_VERDICTS = frozenset({"encoded", "already_true", "not_mine"})
 
+#: What a specialist says ABOUT its work, as opposed to the work. Everything
+#: else in a specialist response is one of its channels.
+_SPECIALIST_BOOKKEEPING = frozenset({"resolved_events", "phase_sources",
+                                     "notes"})
+
+#: Verdicts that are compatible with writing nothing. `already_true` MEANS the
+#: ledgers already carry it and `not_mine` means it belongs elsewhere, so an
+#: empty response is the correct behaviour for both. `encoded` is not here: the
+#: sheet defines it as "you put it in your channels this beat".
+_VERDICTS_WITHOUT_CONTENT = frozenset({"already_true", "not_mine"})
+
+
+def _wrote_any_channel(result):
+    """Did this response carry content in any channel at all?"""
+    return any(value for key, value in (result or {}).items()
+               if key not in _SPECIALIST_BOOKKEEPING)
+
 
 def _resolved_event_verdicts(result, granted_ids):
     """One specialist's resolved_events, kept only where they answer an
@@ -772,8 +789,29 @@ def _resolved_event_verdicts(result, granted_ids):
     event it never saw, and a model that echoes the whole manifest back
     would otherwise silence every omission in the beat. Last verdict wins
     on a duplicated id -- deterministic, and the shape is already degenerate.
+
+    AND AN `encoded` FROM AN EMPTY RESPONSE IS NOT AN ANSWER EITHER. The sheet
+    defines the verdict as "you put it in your channels this beat", so a hand
+    that returns every channel empty and still claims it is contradicting
+    itself in the same object -- and it is the worst answer available, because
+    the reconciliation seam believes it, buys no repair, and the change is lost
+    with nothing warned anywhere. Refutable from the RESPONSE ALONE: no diff,
+    no manifest, no scene, so there was never a reason to believe it.
+
+    Measured 2026-09-09 (`tools/false_encoded.py`) over the same twelve beats
+    run twice: at the roles' default reasoning effort 0 of 11 `encoded` claims
+    wrote nothing; with `reasoning_effort=low` on the five specialists, 2 of 12
+    did. Both were `director_objects`, both on a beat where a thing came into
+    being or was broken -- a hinge hammered apart, a notice nailed up -- and
+    both returned `{"entities": {}}` beside `status: "encoded"`. The guard is
+    not about that lever, which only made an existing hole easy to see.
+
+    Dropping reads as "this event was not addressed", exactly as an
+    unrecognized verdict does, and for the same stated reason: only a
+    DELIBERATE answer counts as one.
     """
     granted = {int(i) for i in granted_ids}
+    wrote = _wrote_any_channel(result)
     verdicts = {}
     for entry in (result.get("resolved_events") or []):
         if not isinstance(entry, dict):
@@ -783,6 +821,8 @@ def _resolved_event_verdicts(result, granted_ids):
         except (TypeError, ValueError):
             continue
         status = str(entry.get("status") or "").strip().casefold()
+        if status == "encoded" and not wrote:
+            continue
         if event_id in granted and status in _EVENT_VERDICTS:
             record = {"status": status}
             # An address is only meaningful ON a decline, and only when it
