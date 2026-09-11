@@ -1355,6 +1355,64 @@ and `spans`, so a change filed the older way -- as a `changes_asserted` entry
 -- is DELIVERED but not reported. Delivery is the half the ruling is about,
 and the manifest is what spans replace when the migration finishes.
 
+## 4p. THE MAGIC WORDS ARE RIGHT THERE: `any`, not `all`
+
+The owner: "But the words are right there! The magic words that summon the
+specialists are right there! Is there really no way for code to recover them
+because it was formatted slightly wrong?"
+
+There was not, and the asymmetry is the whole argument. Identical content, one
+comma's difference:
+
+    ['body', 'objects', 'geography']  ->  body, objects
+    'body, objects, geography'        ->  NOTHING
+
+Two hand names the engine OWNS, discarded because the model invented a third
+word beside them. The list spelling had always recovered them, because the
+list branch splits nothing and each member stands alone; the string spelling
+threw them away.
+
+**THE RULE WAS `all` AND IT WAS GUARDING A REAL THING.** Categories split on
+`, ; / |` and `and`, because a model naming two families reaches for whichever
+separator it likes -- and English sentences are full of commas and "and". So
+an unconditional split turns one sentence into several "category names":
+`"the belt comes off and lands on the bench"` becomes `"the belt comes off"`
+plus `"lands on the bench"`, two ledger families that do not exist, invented
+by the ENGINE out of one act and then reported to the Director as two words it
+never wrote. That is noise the engine manufactured, and it is worse than one
+honest "I do not know this word".
+
+**BUT `all` PAID FOR THAT GUARD WITH EVERY KNOWN NAME BESIDE AN UNKNOWN ONE,
+AND THE GUARD DOES NOT NEED THAT PAYMENT.** `any` is the honest
+discriminator: a string in which AT LEAST ONE part names a family the engine
+already routes is a model writing NAMES, and a string in which no part does is
+a model writing PROSE. Evidence, not a guess -- it never asks what the words
+MEAN, only whether they are names the engine already owns, which is why it
+stands with `_note_key_forms` rather than against it.
+
+**WHAT "PROSE" MEANS HERE**, since the word is doing real work: the model
+wrote a DESCRIPTION of what happened into a field meant to hold a LABEL for
+where it goes. `"the belt comes off and lands on the bench"` says what
+happened; it does not say who should write it down. It belongs in `note`.
+
+**IT HAS NEVER ACTUALLY BEEN OBSERVED.** Across the long-beat run's 54
+categories: 49 plain strings, 5 lists, zero prose. The guard is defensive,
+against a shape that has not happened -- which is precisely why it must not
+cost real names when it fires.
+
+**THE RESIDUAL EDGE, named rather than left to be found.** A sentence
+containing a bare routing word as its own delimited fragment does split:
+`"the belt comes off, body, and it lands"` yields three parts, of which
+`body` routes and two are reported as unknown names. The span reaches the
+right hand and the cost is two junk entries in the unrouted report. That is
+the case where this rule is wrong, and it is the cheap direction to be wrong
+in -- the change is delivered.
+
+**AND THE REPORT GOT SHARPER, not weaker.** Under `all`, the Director was
+handed its own whole string back. Under `any` it is told the ONE word that
+reached nobody -- `geography` rather than `"body, geography"` -- which is the
+feedback the old rule claimed as its reason for existing.
+
 ## 5. What already exists to build on
 
 This is a rewire of proven mechanisms, not a green field. **The output half of

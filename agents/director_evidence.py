@@ -2401,16 +2401,36 @@ def _split_joined_categories(raw):
     parts = [part for part in parts if part]
     if len(parts) < 2:
         return [raw]
-    # EVERY part must ROUTE, not merely fold. `_normalize_omission_category`
-    # passes an unknown name straight through, so a truthiness test here
-    # split free prose into "categories": "the belt comes off and lands on
-    # the bench" is not two ledger families, and reporting it as two is worse
-    # noise than reporting it as one unknown name.
-    if all(manifest_category_targets(_normalize_omission_category(part))
+    # AT LEAST ONE part must ROUTE -- not every part, and not merely fold.
+    #
+    # `_normalize_omission_category` passes an unknown name straight through,
+    # so a bare truthiness test would split free prose into "categories":
+    # "the belt comes off and lands on the bench" is not two ledger families,
+    # and reporting it as two is worse noise than reporting it as one unknown
+    # name. That is the case this guard was written for and it is untouched.
+    #
+    # BUT THE RULE USED TO BE `all`, AND THAT PAID FOR THE GUARD WITH EVERY
+    # KNOWN NAME STANDING BESIDE AN UNKNOWN ONE. Measured, and the asymmetry
+    # is the whole argument -- identical content, one comma's difference:
+    #
+    #     ['body', 'objects', 'geography']  ->  body, objects
+    #     'body, objects, geography'        ->  NOTHING
+    #
+    # Two hand names the engine OWNS, discarded because the model invented a
+    # third word. The names were right there.
+    #
+    # `any` is evidence and not a guess: a string in which at least one part
+    # is a family the engine already routes is a model writing NAMES, and one
+    # in which no part is is a model writing PROSE. So prose still passes
+    # through whole, and a partly-known string now delivers its known half and
+    # reports the rest by itself -- which is what the LIST spelling of the
+    # same content has always done.
+    if any(manifest_category_targets(_normalize_omission_category(part))
            for part in parts):
         return parts
-    # One name the engine does not know makes the whole string one unknown
-    # name, which is the honest thing for the unrouted report to receive.
+    # No part names anything the engine knows: this is prose, and the honest
+    # thing for the unrouted report to receive is one unknown name rather than
+    # a sentence minced into seven.
     return [raw]
 
 
