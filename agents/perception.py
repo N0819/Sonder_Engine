@@ -5528,9 +5528,17 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
     # records it, so the cut falls on the move rather than after everything
     # the mover did next. A body it cannot speak for keeps the heuristic.
     from .director import mover_cut_events
+    # BOTH HALVES. The player's cut comes from his own declaration, whose
+    # elements carry the phase ids this stream is keyed on. A CHARACTER's comes
+    # from the author's whole-beat list, whose elements cite the declaration
+    # they describe -- the Director categorizes and cites, the character only
+    # declares, and that is why nothing has to ask a mind about ledgers.
+    # The player's own answer wins a collision: his sequence IS the
+    # declaration, and the author is describing it second-hand.
+    _moved_at = dict(mover_cut_events(res, (res or {}).get("state_diff")))
+    _moved_at.update(mover_cut_events(interp))
     movement_cuts = beat_movement_cuts(
-        prev_scene, sc, beat_events,
-        moved_at=mover_cut_events(interp))
+        prev_scene, sc, beat_events, moved_at=_moved_at)
 
     # A NOISE IS AN EVENT, AND AN EVENT IS OVER WHEN THE BEAT IS
     # (DESIGN_SOUND_DECIBELS.md § 4). Read from the beat's own diff rather

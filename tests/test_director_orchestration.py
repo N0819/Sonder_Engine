@@ -5774,3 +5774,71 @@ class TestWhichEventMovedThem:
         out = self._out()
         out["state_assertions"] = {"phase_sources": {"positions.Corin": 9}}
         assert director.mover_cut_events(out) == {}
+
+
+class TestACharactersMoveIsFoundThroughTheCitation:
+    """A character DECLARES behaviour from private perception; the DIRECTOR
+    categorizes. The character sheet never mentions `category` and should not
+    -- asking a fictional mind which engine ledger its act belongs in would
+    make it do the Director's bookkeeping and hand it channels it has no
+    business knowing.
+
+    So the character half was never a missing capability, it was a missing
+    JOIN, and `from_declaration` supplies it: the author's element carries the
+    category AND names the act that was declared. One rule serves both halves
+    -- an element that cites a declaration answers with the cited id, one that
+    does not answers with its own.
+    """
+
+    def test_a_characters_move_resolves_through_the_cited_declaration(self):
+        res = {"sequence": [
+            {"actor": "Mara", "attempt": "crosses to the store",
+             "category": "spatial", "note": "a",
+             "from_declaration": "turn:9:character:4:0:action"},
+            {"actor": "Mara", "attempt": "sets the lantern down",
+             "category": "objects", "note": "b",
+             "from_declaration": "turn:9:character:4:1:action"}]}
+        diff = {"positions": {"Mara": "store"},
+                "phase_sources": {"positions.Mara": 1}}
+        assert director.mover_cut_events(res, diff) == {
+            "Mara": "turn:9:character:4:0:action"}
+
+    def test_the_players_own_declaration_is_unchanged(self):
+        """Interpret's elements carry their own phase ids and cite nothing,
+        because interpret's sequence IS the player's declaration."""
+        interp = {"sequence": [
+            {"type": "action", "attempt": "I step into the box",
+             "event_id": "turn:9:player:0:action",
+             "category": "spatial", "note": "a"}],
+            "state_assertions": {"positions": {"Corin": "box"},
+                                 "phase_sources": {"positions.Corin": 1}}}
+        assert director.mover_cut_events(interp) == {
+            "Corin": "turn:9:player:0:action"}
+
+    def test_a_citation_outranks_the_elements_own_id(self):
+        """Where both exist the CITED one wins: the stream is built from
+        declarations, so that is the id it is keyed on."""
+        res = {"sequence": [
+            {"actor": "Mara", "attempt": "crosses", "category": "spatial",
+             "note": "a", "event_id": "authors-own",
+             "from_declaration": "declared-one"}]}
+        assert director.mover_cut_events(
+            res, {"phase_sources": {"positions.Mara": 1}}) == {
+                "Mara": "declared-one"}
+
+    def test_an_element_citing_nothing_still_answers_with_its_own(self):
+        res = {"sequence": [
+            {"actor": "Mara", "attempt": "crosses", "category": "spatial",
+             "note": "a", "event_id": "own-id"}]}
+        assert director.mover_cut_events(
+            res, {"phase_sources": {"positions.Mara": 1}}) == {
+                "Mara": "own-id"}
+
+    def test_the_character_sheet_never_asks_for_a_category(self):
+        """Pinned because it is a DESIGN boundary and not an omission: the
+        moment a character sheet asks for one, a mind is doing the Director's
+        bookkeeping."""
+        from llm.prompts import DEFAULT_PROMPTS
+        sheet = DEFAULT_PROMPTS["character"]
+        assert "category" not in sheet
+        assert "from_declaration" not in sheet
