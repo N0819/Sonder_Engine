@@ -5613,3 +5613,164 @@ class TestThePlacementLadderPrefersTheOrderAwareAnswer:
         sc, sd = self._sc(), self._sd()
         assert director.place_unplaced_mints(sc, sd, "") == []
         assert sd["positions"] == {}
+
+
+class TestTheCutFallsOnTheEventThatMoved:
+    """`beat_movement_cuts` had to infer which of a mover's actions did the
+    moving and took the LAST one, because two snapshots cannot say. Its own
+    docstring names the quantity it wanted: "recording the trajectory is what
+    fixes it, and this is the quantity that trajectory would be read for."
+
+    Measured against the function as it stood, the shape it gets wrong is the
+    ordinary one -- and it is not the double move the docstring warned about:
+
+        move, act, act   cuts at the LAST act
+           0 step into the box   graded in yard
+           1 pull levers         graded in YARD   <- he is in the box
+           2 read dial           graded in box
+
+    That is "step into the tardis, pull the levers on the console".
+    """
+
+    PREV = {"rooms": {"yard": {"name": "Yard", "adjacent": []},
+                      "box": {"name": "Box", "adjacent": []}},
+            "positions": {"Corin": "yard"}, "entities": {}, "contacts": [],
+            "poses": {}, "stations": {}, "contained": {}}
+
+    def _events(self, *ids):
+        return [{"kind": "action", "actor": "Corin", "attempt": str(i),
+                 "event": {"event_id": i}} for i in ids]
+
+    def _where(self, cuts, count):
+        from world.spatial import scene_as_of
+        now = dict(self.PREV, positions={"Corin": "box"})
+        return [(scene_as_of(self.PREV, now, cuts, index).get("positions")
+                 or {}).get("Corin") for index in range(count)]
+
+    def test_the_heuristic_misgrades_the_act_between_move_and_last(self):
+        """Pinned so the improvement is legible and so a regression to it is
+        caught. This is what `moved_at=None` still does, for a body the beat
+        cannot speak for."""
+        from world.spatial import beat_movement_cuts
+        now = dict(self.PREV, positions={"Corin": "box"})
+        events = self._events("e0", "e1", "e2")
+        cuts = beat_movement_cuts(self.PREV, now, events)
+        assert cuts == {"Corin": 2}
+        assert self._where(cuts, 3) == ["yard", "yard", "box"]
+
+    def test_the_trajectory_puts_him_where_he_went(self):
+        """The move itself is seen from the room he is leaving, and everything
+        after it from where he went. Measured by rendering the view: cutting ON
+        the move hid the departure from the observer left behind."""
+        from world.spatial import beat_movement_cuts
+        now = dict(self.PREV, positions={"Corin": "box"})
+        events = self._events("e0", "e1", "e2")
+        cuts = beat_movement_cuts(self.PREV, now, events,
+                                  moved_at={"Corin": "e0"})
+        assert cuts == {"Corin": 1}
+        assert self._where(cuts, 3) == ["yard", "box", "box"]
+
+    def test_the_departure_is_seen_from_the_room_being_left(self):
+        """The regression this correction exists for. With the cut ON the move
+        the observer in the origin room lost it entirely -- he spoke and then
+        vanished -- because `scene_as_of` grades the move event itself at the
+        destination."""
+        from world.spatial import beat_movement_cuts
+        now = dict(self.PREV, positions={"Corin": "box"})
+        for events, moved in ((self._events("m0"), "m0"),
+                              (self._events("m0", "m1"), "m0"),
+                              (self._events("m0", "m1", "m2"), "m0")):
+            cuts = beat_movement_cuts(self.PREV, now, events,
+                                      moved_at={"Corin": moved})
+            where = self._where(cuts, len(events))
+            assert where[0] == "yard", (len(events), where)
+            assert all(room == "box" for room in where[1:]), where
+
+    def test_the_heuristic_and_the_trajectory_agree_on_the_common_shape(self):
+        """`say, move, say` -- the shape the heuristic was reasoned from. The
+        move is the mover's only action, so the last-action guess and the
+        trajectory name the same event, and the +1 puts the cut on the line
+        spoken after he got there."""
+        from world.spatial import beat_movement_cuts
+        now = dict(self.PREV, positions={"Corin": "box"})
+        events = [{"kind": "speech", "actor": "Corin",
+                   "event": {"event_id": "s0"}},
+                  {"kind": "action", "actor": "Corin", "attempt": "cross",
+                   "event": {"event_id": "m1"}},
+                  {"kind": "speech", "actor": "Corin",
+                   "event": {"event_id": "s2"}}]
+        assert beat_movement_cuts(self.PREV, now, events) == {"Corin": 1}
+        assert beat_movement_cuts(
+            self.PREV, now, events, moved_at={"Corin": "m1"}) == {"Corin": 2}
+        assert self._where({"Corin": 2}, 3) == ["yard", "yard", "box"]
+
+    def test_a_body_it_cannot_speak_for_keeps_the_heuristic(self):
+        from world.spatial import beat_movement_cuts
+        now = dict(self.PREV, positions={"Corin": "box"})
+        events = self._events("e0", "e1", "e2")
+        assert beat_movement_cuts(self.PREV, now, events,
+                                  moved_at={"Someone": "e0"}) == {"Corin": 2}
+
+    def test_an_id_the_stream_does_not_carry_changes_nothing(self):
+        """Silence, never a guess: an attribution that resolves to no stream
+        event leaves the body to the heuristic rather than to index zero."""
+        from world.spatial import beat_movement_cuts
+        now = dict(self.PREV, positions={"Corin": "box"})
+        events = self._events("e0", "e1", "e2")
+        assert beat_movement_cuts(self.PREV, now, events,
+                                  moved_at={"Corin": "nope"}) == {"Corin": 2}
+
+    def test_nobody_moved_is_still_no_cuts(self):
+        from world.spatial import beat_movement_cuts
+        assert beat_movement_cuts(self.PREV, dict(self.PREV),
+                                  self._events("e0"),
+                                  moved_at={"Corin": "e0"}) == {}
+
+
+class TestWhichEventMovedThem:
+    """The three hops that make the cut recoverable, all engine-issued ids and
+    no prose: the span that carried the position change, the sequence position
+    that span came from, and that element's phase id -- which is what the
+    perception stream carries on every entry built from a declaration."""
+
+    def _out(self):
+        from agents.common import assign_event_ids, norm_sequence
+        out = {"sequence": [
+            {"type": "action", "attempt": "step into the box",
+             "category": "spatial", "note": "a"},
+            {"type": "action", "attempt": "pull the levers",
+             "category": "objects", "note": "b"}]}
+        norm_sequence(out)
+        out["sequence"] = assign_event_ids(out["sequence"], "turn:1:player")
+        return out
+
+    def test_it_names_the_declared_event_that_moved_them(self):
+        out = self._out()
+        out["state_assertions"] = {"positions": {"Corin": "box"},
+                                   "phase_sources": {"positions.Corin": 1}}
+        assert director.mover_cut_events(out) == {
+            "Corin": "turn:1:player:0:action"}
+
+    def test_the_second_span_names_the_second_element(self):
+        out = self._out()
+        out["state_assertions"] = {"positions": {"Corin": "box"},
+                                   "phase_sources": {"positions.Corin": 2}}
+        assert director.mover_cut_events(out) == {
+            "Corin": "turn:1:player:1:action"}
+
+    def test_no_sidecar_says_nothing(self):
+        out = self._out()
+        out["state_assertions"] = {"positions": {"Corin": "box"}}
+        assert director.mover_cut_events(out) == {}
+
+    def test_only_position_paths(self):
+        """A sidecar entry for another channel says nothing about where a body
+        was standing."""
+        out = self._out()
+        out["state_assertions"] = {"phase_sources": {"poses.Corin": 1}}
+        assert director.mover_cut_events(out) == {}
+
+    def test_a_span_id_no_span_carries_says_nothing(self):
+        out = self._out()
+        out["state_assertions"] = {"phase_sources": {"positions.Corin": 9}}
+        assert director.mover_cut_events(out) == {}

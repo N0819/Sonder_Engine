@@ -1138,6 +1138,57 @@ def _drop_record_at(sd, path):
 # ---------------------------------------------------------------------------
 
 
+def mover_cut_events(out, diff=None):
+    """`{body: phase_event_id}` -- the declared event that moved each body.
+
+    `out` is the output whose `sequence` the perception stream was built from
+    (the player's declaration); `diff` the beat's own diff, defaulting to
+    `out["state_assertions"]`, whose `phase_sources` says which span carried
+    each position change.
+
+    Feeds `world.spatial.beat_movement_cuts(..., moved_at=...)`, which grades
+    every event against where bodies were WHEN IT HAPPENED. A body this cannot
+    speak for is left to that function's own heuristic, unchanged.
+    """
+    if not isinstance(out, dict):
+        return {}
+    if diff is None:
+        diff = out.get("state_assertions")
+    sources = (diff or {}).get("phase_sources") \
+        if isinstance(diff, dict) else None
+    if not isinstance(sources, dict) or not sources:
+        return {}
+
+    position_of = {}
+    for span in _span_items(out):
+        try:
+            span_id = int(span.get("event_id") or 0)
+        except (TypeError, ValueError):
+            continue
+        where = span.get("_from_position")
+        if span_id > 0 and isinstance(where, int):
+            position_of[span_id] = where
+
+    sequence = [element for element in (out.get("sequence") or [])
+                if isinstance(element, dict)]
+    cuts = {}
+    for path, source in sources.items():
+        channel, _dot, subject = str(path or "").partition(".")
+        if channel != "positions" or not subject:
+            continue
+        try:
+            span_id = int(source)
+        except (TypeError, ValueError):
+            continue
+        where = position_of.get(span_id)
+        if where is None or not (0 <= where < len(sequence)):
+            continue
+        phase_id = str(sequence[where].get("event_id") or "").strip()
+        if phase_id:
+            cuts[subject] = phase_id
+    return cuts
+
+
 def single_span_attributions(sd, dispatch, view, span_slice_of):
     """`{path: span_id}` for records a hand handed ONE span left uncited.
 

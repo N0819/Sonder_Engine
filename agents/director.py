@@ -245,6 +245,7 @@ from .director_evidence import (
     span_slices,
     apply_item_transforms,
     mint_authority_rank,
+    mover_cut_events,
     single_span_attributions,
     span_mint_rooms,
     item_survivors,
