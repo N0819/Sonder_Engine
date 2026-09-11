@@ -268,3 +268,69 @@ def test_the_stage_that_renders_the_beat_may_not_write_the_world(temp_db):
     committed = prepare_scene_commit(ctx)["scene"]
     for ledger in ("positions", "stations", "orientation"):
         assert "Carbonic_stalker_0" not in (committed.get(ledger) or {}), ledger
+
+
+def test_the_composed_scene_carries_the_beats_events(temp_db):
+    """THE ARROW INTO THE WORLD: character -> director -> recompiler -> WORLD
+    -> perception. The composition is where the beat stops being something
+    perception re-derives out of everybody's declarations and becomes a thing
+    it READS, and it is written HERE rather than at the commit because the
+    commit runs after the narrator (`_record_sensory_events` is the record
+    that does, which is why it reads empty during its own beat)."""
+    from world.beat_ledger import beat_events
+    ctx = _make_ctx(temp_db)
+    ctx.director_resolve["beat_events"] = [
+        {"order": 0, "actor": "Mirela Andelic", "surface": "holds out the box",
+         "declared": "turn:4:character:1:0:action"},
+        {"order": 1, "actor": "Vesna Kolar", "surface": "does not take it"},
+    ]
+    composed = compose_beat_scene(ctx)
+    rows = beat_events(composed.scene, 4)
+    assert [r["actor"] for r in rows] == ["Mirela Andelic", "Vesna Kolar"]
+    assert rows[0]["declared"] == "turn:4:character:1:0:action"
+
+
+def test_another_beat_inherits_no_events_and_nothing_swept_them(temp_db):
+    """The beat number IS the lifetime. A sweep is a second thing that has to
+    run on every path forever, and the path it misses renders a stale event as
+    though it had just happened; a reader that must prove the beat matches
+    cannot be wrong that way."""
+    from world.beat_ledger import beat_events
+    ctx = _make_ctx(temp_db)
+    ctx.director_resolve["beat_events"] = [
+        {"order": 0, "actor": "Mirela Andelic", "surface": "holds out the box"}]
+    composed = compose_beat_scene(ctx)
+    assert beat_events(composed.scene, 4)
+    assert beat_events(composed.scene, 5) == []
+
+
+def test_a_beat_with_no_events_clears_the_one_before_it(temp_db):
+    """"This beat had no events" and "no beat has spoken" are different
+    answers; an establish turn, or any beat whose resolve wrote none, must not
+    leave the previous beat's list standing where the first could be read as
+    the second."""
+    from world.beat_ledger import BEAT_EVENTS_KEY, beat_events
+    scene = _scene()
+    scene[BEAT_EVENTS_KEY] = {"beat": 3, "events": [
+        {"order": 0, "actor": "Vesna Kolar", "surface": "a beat ago"}]}
+    ctx = _make_ctx(temp_db, scene=scene)
+    composed = compose_beat_scene(ctx)
+    assert composed.scene[BEAT_EVENTS_KEY]["beat"] == 4
+    assert beat_events(composed.scene, 3) == []
+    assert beat_events(composed.scene, 4) == []
+
+
+def test_the_actors_own_words_never_reach_the_scene(temp_db):
+    """A strict projection, not a passthrough. `attempt` is the actor's own
+    intent-bearing words and `surface` the intent-free outward form; writing
+    the element wholesale would put the first into the world for every
+    observer to read, which is the leak the perception filter exists for."""
+    ctx = _make_ctx(temp_db)
+    ctx.director_resolve["beat_events"] = [{
+        "order": 0, "actor": "Mirela Andelic",
+        "surface": "holds out the box",
+        "attempt": "get her fingerprints onto it before the constable comes"}]
+    composed = compose_beat_scene(ctx)
+    row, = composed.scene["beat_events"]["events"]
+    assert "attempt" not in row
+    assert "fingerprints" not in str(row)

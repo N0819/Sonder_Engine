@@ -228,6 +228,115 @@ class TestTheEngineLearnsWhatAProviderWillNotGive:
         assert not providers._json_schema_supported(_prov(), "m")
 
 
+class TestAStallVerdictHeals:
+    """A stall is an INFERENCE and expires; a 400 is a FACT and does not.
+
+    The gap this closes, measured 2026-09-09 on the owner's database:
+    `_NO_JSON_SCHEMA` was only ever added to -- no discard, no expiry, no
+    re-test anywhere in the module -- so two slow minutes disabled a model's
+    grammar permanently. `google/gemini-3.8-flash` sat in that set while every
+    Director role inherited it from `default`, so the prose author and all five
+    specialists ran with no grammar and fell back to `json_object`, which
+    `_apply_json_mode`'s own docstring measures as WORSE than sending nothing
+    on a prose-leading prompt. A provider fixing its endpoint could never be
+    noticed.
+
+    The asymmetry is the whole design: being wrong in the healing direction
+    costs one re-test per window, being wrong the other way costs every call
+    the model ever makes.
+    """
+
+    def setup_method(self):
+        providers._NO_JSON_SCHEMA.clear()
+        providers._SCHEMA_STALLS.clear()
+        providers._SCHEMA_SUSPENDED.clear()
+        providers._json_schema_supported._loaded = True
+
+    def _quiet(self, monkeypatch):
+        monkeypatch.setattr(providers, "_persist_schema_blacklist", lambda: None)
+        monkeypatch.setattr(providers, "_persist_schema_suspensions", lambda: None)
+
+    def test_the_stall_verdict_lapses_and_the_grammar_is_sent_again(
+            self, monkeypatch):
+        self._quiet(monkeypatch)
+        providers._note_json_schema_stalled(_prov(), "m")
+        providers._note_json_schema_stalled(_prov(), "m")
+        assert not providers._json_schema_supported(_prov(), "m")
+        # ...one window later, without anything else changing.
+        now = [providers.time.time() + providers._SCHEMA_SUSPEND_SECONDS + 1]
+        monkeypatch.setattr(providers.time, "time", lambda: now[0])
+        assert providers._json_schema_supported(_prov(), "m"), (
+            "a latency symptom must not be a permanent capability verdict")
+
+    def test_a_400_still_never_lapses(self, monkeypatch):
+        """The provider described itself. Time does not change that."""
+        self._quiet(monkeypatch)
+        providers._note_json_schema_rejected(_prov(), "m")
+        now = [providers.time.time() + providers._SCHEMA_SUSPEND_SECONDS * 100]
+        monkeypatch.setattr(providers.time, "time", lambda: now[0])
+        assert not providers._json_schema_supported(_prov(), "m")
+
+    def test_a_lapsed_suspension_is_dropped_rather_than_re_decided(
+            self, monkeypatch):
+        self._quiet(monkeypatch)
+        providers._note_json_schema_stalled(_prov(), "m")
+        providers._note_json_schema_stalled(_prov(), "m")
+        key = providers._json_object_key(_prov(), "m")
+        assert key in providers._SCHEMA_SUSPENDED
+        monkeypatch.setattr(
+            providers.time, "time",
+            lambda: 1e12 + providers._SCHEMA_SUSPEND_SECONDS)
+        providers._json_schema_supported(_prov(), "m")
+        assert key not in providers._SCHEMA_SUSPENDED
+
+    def test_the_stall_count_resets_with_the_suspension(self, monkeypatch):
+        """A model that comes back healthy is not one bad minute from its old
+        verdict: crossing the line clears the tally it crossed."""
+        self._quiet(monkeypatch)
+        providers._note_json_schema_stalled(_prov(), "m")
+        providers._note_json_schema_stalled(_prov(), "m")
+        assert providers._json_object_key(_prov(), "m") not in providers._SCHEMA_STALLS
+
+    def test_suspensions_are_written_to_their_own_row(self, monkeypatch):
+        """Separate from `providers_no_json_schema` on purpose: one row is what
+        a provider REFUSED, the other is what the engine INFERRED."""
+        written = {}
+        monkeypatch.setattr(providers, "set_setting",
+                            lambda k, v: written.update({k: v}), raising=False)
+        providers._note_json_schema_stalled(_prov(), "m")
+        providers._note_json_schema_stalled(_prov(), "m")
+        assert providers._SCHEMA_SUSPEND_SETTING in written
+        assert providers._NO_JSON_SCHEMA_SETTING not in written, (
+            "an inference must not be filed as a refusal")
+
+    def test_rows_written_before_suspensions_existed_rehydrate_as_suspensions(
+            self, monkeypatch):
+        """The old row cannot say which verdict it recorded, and the two
+        errors are not symmetrical -- so it heals."""
+        providers._SCHEMA_SUSPENDED.clear()
+        providers._NO_JSON_SCHEMA.clear()
+        # the JSON TEXT must carry the escape, not a raw NUL: json rejects a
+        # control character inside a string, and the early return there
+        # would have made this test pass for the wrong reason.
+        legacy = '["3\\u0000google/gemini-3.8-flash"]'
+        monkeypatch.setattr(
+            providers, "get_setting",
+            lambda k, *a: legacy if k == providers._NO_JSON_SCHEMA_SETTING else "",
+            raising=False)
+        providers._load_schema_blacklist()
+        assert ("3", "google/gemini-3.8-flash") in providers._SCHEMA_SUSPENDED
+        assert not providers._NO_JSON_SCHEMA, (
+            "a legacy row must not be promoted to a permanent refusal")
+
+    def test_bookkeeping_never_fails_the_call(self, monkeypatch):
+        def boom(*a, **k):
+            raise RuntimeError("no database")
+        monkeypatch.setattr(providers, "set_setting", boom, raising=False)
+        providers._note_json_schema_stalled(_prov(), "m")
+        providers._note_json_schema_stalled(_prov(), "m")   # must not raise
+        assert not providers._json_schema_supported(_prov(), "m")
+
+
 class TestARejectionInAStreamFrameIsStillARejection:
     """A provider that rejects a request does not always get an HTTP status.
 
@@ -398,6 +507,84 @@ class TestBothHalvesOfTheDirectorCarryTheRuling:
             from agents.director import SPECIALISTS
             assert "|".join(SPECIALISTS) in text, name
             assert "offscreen" not in text.split("specialist is one of")[-1][:80], name
+
+    def test_both_schemas_carry_the_manifest_too(self):
+        """`ledger_notes` says WHICH HAND; `changes_asserted` says WHAT
+        CHANGED. Only the second can be dispatched on without reading prose,
+        and for a release interpret had only the first.
+
+        Measured 2026-09-09 over 416 captured rulings: the manifest was absent
+        from 69.2% of them and from 100% of 184 interpret outputs, because the
+        field did not exist on this half. Replayed through the real dispatch
+        predicate (`tools/dispatch_replay.py`), routing on categories alone
+        would have skipped 178 hands that had produced real work -- 96% of
+        them on beats carrying no manifest at all.
+        """
+        from llm.schemas import DirectorInterpret, DirectorResolve
+        for model in (DirectorInterpret, DirectorResolve):
+            assert "changes_asserted" in model.model_fields, model.__name__
+        assert (DirectorInterpret.model_fields["changes_asserted"].annotation
+                == DirectorResolve.model_fields["changes_asserted"].annotation), (
+            "one manifest type, or the halves drift apart field by field")
+
+    def test_the_interpret_view_exposes_the_manifest_routing_reads(self):
+        """`_ruling_for` reads `view["manifest"]`. The interpret view returned
+        a literal `[]`, so no interpret beat could address a hand by category
+        however well the author filled the field."""
+        from agents import director
+        from agents.director import _ruling_for
+        out = {"sequence": [], "ledger_notes": {},
+               "changes_asserted": [
+                   {"category": "attire", "subject": "Player",
+                    "change": "The player pulls her hood down."}]}
+        view = director._interpret_beat_view(_Ctx(), out, "Player")
+        assert view.get("manifest"), "the interpret view dropped the manifest"
+        addressed, named = _ruling_for("body", view)
+        assert "manifest" in addressed, addressed
+        assert "attire" in named, named
+
+    def test_the_engine_numbers_the_interpret_manifest_not_the_model(self):
+        """Same rule as resolve: ids are a dense sequence over exactly this
+        manifest, so a model-authored number could repeat, skip or reorder."""
+        from agents import director
+        out = {"sequence": [], "ledger_notes": {},
+               "changes_asserted": [
+                   {"category": "attire", "subject": "P", "change": "a",
+                    "event_id": 77},
+                   {"category": "poses", "subject": "P", "change": "b"}]}
+        view = director._interpret_beat_view(_Ctx(), out, "Player")
+        assert [i["event_id"] for i in view["manifest"]] == [1, 2]
+
+    def test_both_prompts_declare_the_work_item_in_the_shape(self):
+        """The measured lesson this class exists for, applied to whatever
+        carries the ruling: asked for in prose and absent from the OUTPUT
+        SHAPE, it does not exist as far as the model is concerned.
+
+        The field it names has changed. `changes_asserted` was retired on
+        2026-09-10 (DESIGN_SPECIALIST_CONTRACT.md 4d) and the work item is now
+        the categorized span, so the shape has to declare THAT -- the lesson
+        is about the shape, not about the field that happened to teach it."""
+        from llm.prompts import (get_prompt_body, interpret_delegation_note,
+                                 prose_author_prompt)
+        interpret = get_prompt_body("director_interpret") + \
+            interpret_delegation_note()
+        for _field in ("category", "note", "items:[]"):
+            assert _field in interpret, _field
+        assert "changes_asserted" not in interpret
+        assert "changes_asserted" not in prose_author_prompt(None)
+
+    def test_the_delegation_note_enumeration_names_no_retired_field(self):
+        """The note gets the last word and ends in a closed list of the
+        author's own fields. A field omitted there is a field the model is
+        right to leave out -- and a RETIRED field still listed there is one it
+        is right to keep writing, which is the same fault pointing the other
+        way."""
+        from llm.prompts import interpret_delegation_note
+        note = interpret_delegation_note()
+        assert "stays yours" in note, "the enumeration moved; re-pin this"
+        tail = note.split("stays yours")[-1]
+        assert "ledger_notes" in tail
+        assert "changes_asserted" not in tail
 
     def test_no_enumeration_of_the_authors_output_omits_the_ruling(self):
         """Every list of "what your output contains" has to contain it.

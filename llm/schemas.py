@@ -976,6 +976,31 @@ def coerce_to_declared(model_cls, field_name, value):
     return value
 
 
+def _coerce_event_citation(value):
+    """`from_event` as the whole number it is, or 0 when it is not one.
+
+    Zero is not provenance (`director_evidence._drop_zero_provenance`), so an
+    uninterpretable citation lands in the same bucket as no citation at all
+    rather than as a fabricated event 0.
+    """
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return value if value > 0 else 0
+    if isinstance(value, float):
+        return int(value) if value > 0 and value == int(value) else 0
+    text = str(value or "").strip()
+    if text.isdigit():
+        return int(text)
+    # A citation like "event 3" or "#3" is a number wearing a label; one like
+    # "turn:1:player:1:action" is a different id space and must NOT be mined
+    # for the digits inside it, which would cite whatever number happened to
+    # appear first.
+    if text.startswith("#") and text[1:].strip().isdigit():
+        return int(text[1:].strip())
+    return 0
+
+
 class LenientModel(BaseModel):
     """BaseModel that accepts a structured value where prose was declared.
 
@@ -1008,6 +1033,13 @@ class LenientModel(BaseModel):
         # discriminator as if it were prose ({"type": "action"} -> "action").
         # As a field validator this runs after the field's own, matching v1,
         # where a specific `pre=True` validator precedes the inherited `"*"`.
+        # Declared on the base so ten typed models share one rule; the models
+        # without the field skip it (`check_fields=False`).
+        @field_validator("from_event", mode="before", check_fields=False)
+        @classmethod
+        def _coerce_from_event(cls, value):
+            return _coerce_event_citation(value)
+
         @field_validator("*", mode="before")
         @classmethod
         def _coerce_structured_into_str(cls, value, info):
@@ -1018,6 +1050,11 @@ class LenientModel(BaseModel):
                 value, _declared(field),
                 f"{cls.__name__}.{info.field_name}")
     else:
+        @validator("from_event", pre=True, allow_reuse=True,
+                   check_fields=False)
+        def _coerce_from_event(cls, value):
+            return _coerce_event_citation(value)
+
         @validator("*", pre=True, allow_reuse=True)
         def _coerce_structured_into_str(cls, value, field):
             return _lenient_coerce(
@@ -1195,6 +1232,64 @@ class OtherPlayerInterpret(LenientModel):
         lambda cls, v: normalize_speech_volume(v)
     )
 
+class AssertedChange(LenientModel):
+    """One entry of director_resolve's own changes-asserted manifest: a
+    persistent physical change its resolved_event asserts as completed,
+    beyond the player's supplied authority_claims. Reconciled against the
+    state_diff deterministically (see agents/director.py's seam)."""
+    # rooms|adjacency|positions|entities|conditions|attire|contact|substance|inventory|
+    # cast_changes|time|transit|other
+    category: str = "other"
+    # Assigned by the engine in _manifest_items, never by the model: 1..N in
+    # the order the resolve narrated the changes, which is the beat's own
+    # chronology. Carried into each specialist's manifest slice and echoed
+    # back on its resolved_events, so composition is an id lookup rather
+    # than a comparison of two spellings of the same change (design note 21).
+    event_id: int = 0
+    subject: str = ""         # room id / entity id / character name concerned
+    change: str = ""          # one short sentence stating the persistent change
+    # Contact manifests need the relation's endpoints, not merely one person.
+    # Without them, two simultaneous contacts involving the same actor are
+    # indistinguishable: a correctly encoded hand-on-hip could falsely prove a
+    # separately asserted nozzle-to-valve contact was also encoded. Optional for
+    # every non-contact category and for compatibility with saved variants.
+    actor: str = ""
+    actor_part: str = ""
+    target: str = ""
+    target_part: str = ""
+    # Contact-effect manifests carry the parent relation and effect fields so
+    # reconciliation can distinguish two dynamics by the same participant.
+    contact_ref: Any = None
+    action: str = ""
+    intensity: str = ""
+    rhythm: str = ""
+    detail: str = ""
+    substance: str = ""
+    placement: str = ""
+    target_interior: str = ""
+    # HOW THE DIRECTOR WANTS THIS ONE RESOLVED -- one line of plain authorship
+    # to the hand that owns it, attached to the EVENT rather than to the hand.
+    #
+    # `change` is a description ("one short sentence stating the persistent
+    # change"); this is an instruction. They are not the same thing, and the
+    # engine had only the first: resolution intent existed solely as
+    # `ledger_notes: {specialist: line}` -- ONE line per hand, aggregated
+    # across everything that hand does this beat.
+    #
+    # Measured 2026-09-09 on current code: every dispatched hand does get an
+    # instruction (0% receive none), but 46% of calls carry a hand-level note
+    # with no numbered event beside it, so the Director's intent and the event
+    # it is about arrive through different channels with different coverage and
+    # no link between them. Per `DESIGN_SPECIALIST_CONTRACT.md`, the work item
+    # a hand resolves is one chunk carrying its id and its instruction; this is
+    # the instruction half of that.
+    #
+    # Optional, and stays optional: an entry with no note is still a routable
+    # change, exactly as it is today. The hand falls back to the same reading
+    # it does now.
+    note: str = ""
+
+
 class DirectorInterpret(LenientModel):
     kind: str = "mixed"
     # The ruling channel, mirroring DirectorResolve. `director_interpret` fans
@@ -1203,6 +1298,21 @@ class DirectorInterpret(LenientModel):
     # Director made of it -- the exact gap the channel was built to close,
     # on half the Director's specialist work.
     ledger_notes: dict[str, str] = Field(default_factory=dict)
+    # THE OTHER HALF OF THE RULING, mirroring DirectorResolve for the same
+    # reason `ledger_notes` above does. `ledger_notes` says WHICH HAND a beat
+    # concerns; `changes_asserted` says WHAT CHANGED, in categories the engine
+    # routes (`director_scopes._CATEGORY_CHANNELS`). Only the second can be
+    # dispatched on deterministically, and interpret had only the first.
+    #
+    # Measured 2026-09-09 over 416 captured rulings: `changes_asserted` was
+    # absent from 69.2% of them and from 100% of 184 interpret outputs, because
+    # the field did not exist here. Replayed through the real dispatch
+    # predicate, routing on categories alone would have skipped 178 hands that
+    # had produced real work -- 96% of them on beats with no manifest at all.
+    # The player's declared conduct IS a set of asserted changes: this stage is
+    # not a lesser authority than resolve, it is the same authority scoped to
+    # the player's input, exactly as the `state_diff` note below says.
+    changes_asserted: list[AssertedChange] = Field(default_factory=list)
     sequence: list[dict] = Field(default_factory=list)
     speech: Optional[str] = None
     speech_volume: SpeechVolume = SpeechVolume.normal
@@ -1264,6 +1374,8 @@ class DirectorInterpret(LenientModel):
 # ---- Scene Entities ----
 
 class SceneEntityDef(LenientModel):
+    # See the canonical note on `PoseEntry.from_event`.
+    from_event: int = 0
     name: str
     kind: str = "object"
     description: str = ""
@@ -1332,6 +1444,8 @@ class SceneEntityDef(LenientModel):
     scent: Optional[str] = None
 
 class RoomDef(LenientModel):
+    # See the canonical note on `PoseEntry.from_event`.
+    from_event: int = 0
     name: str = ""
     desc: str = ""
     adjacent: list[dict] = Field(default_factory=list)
@@ -1669,6 +1783,8 @@ class CommsOp(LenientModel):
     replacement snapshot; `open`/`close` flip the switch without restating who
     is on it; `remove` takes the equipment out of the world.
     """
+    # See the canonical note on `PoseEntry.from_event`.
+    from_event: int = 0
 
     _subject_field = "id"
 
@@ -1705,6 +1821,26 @@ class PoseEntry(LenientModel):
     against. Extra keys are ignored rather than refused, as everywhere else
     here -- `_clean_pose` keeps these six regardless.
     """
+    # WHICH CHUNK THIS RECORD RESOLVES -- the `event_id` of the entry in this
+    # hand's `changes_asserted` slice that it was asked to settle, or 0 when
+    # the record was restated for no numbered work item (a standing record
+    # refreshed on its own account, which is legitimate and common on
+    # record-shaped channels).
+    #
+    # Provenance ON THE RECORD, not beside it. `phase_sources` already carries
+    # the same information as a separate map and is emitted on 25% of
+    # productive calls -- 68% of `encoded` claims cited, and never once by
+    # `director_social` across 91 calls (`tools/provenance_coverage.py`),
+    # because a structure filled in ALONGSIDE the work is a second thing to
+    # remember and gets forgotten. A field inside the object the model is
+    # already composing does not.
+    #
+    # What it unblocks: reconciliation currently proves an entry was encoded
+    # by matching endpoint TEXT against the diff (`director_evidence` around
+    # 1074-1098), which is why `changes_asserted` carries ten endpoint fields
+    # it would otherwise not need. An id makes that an exact lookup.
+    # See `docs/design/DESIGN_SPECIALIST_CONTRACT.md` sections 4a and 4b.
+    from_event: int = 0
 
     _subject_field = "posture"
 
@@ -1745,6 +1881,8 @@ class CrowdOp(LenientModel):
     display name and never model-invented. Leaving it empty on `set` is how a
     NEW crowd is asked for -- commit mints the id, the model never does.
     """
+    # See the canonical note on `PoseEntry.from_event`.
+    from_event: int = 0
     op: str = "set"           # set | move | split | disperse | emerge | absorb
     crowd_id: str = ""
     # Who stepped out of it, or who is going back in. Never a cast member: a
@@ -1832,6 +1970,8 @@ class AttireDiff(LenientModel):
     and not fatal. `notes` is where an unrecognised key lands so commit can
     resolve its handle against the wardrobe (attire.coerce_diff_shape).
     """
+    # See the canonical note on `PoseEntry.from_event`.
+    from_event: int = 0
     wearing: Optional[list[str]] = None
     add: list[str] = Field(default_factory=list)
     remove: list[str] = Field(default_factory=list)
@@ -1927,6 +2067,8 @@ class CharterPublicEvidence(LenientModel):
     metadata from that source after validation, so none of those facts are
     model-authoritative here.
     """
+    # See the canonical note on `PoseEntry.from_event`.
+    from_event: int = 0
     source_id: str = ""
     speech_acts: list[PublicSpeechAct] = Field(default_factory=list)
     salience: float = 0.5
@@ -2013,6 +2155,8 @@ class TellingOp(LenientModel):
     this beat, and shares a room with the listener; the copy then arrives one
     retelling fainter through `degradation`.
     """
+    # See the canonical note on `PoseEntry.from_event`.
+    from_event: int = 0
     speaker: str = ""
     listener: str = ""
     world_event_id: str = ""
@@ -2036,6 +2180,8 @@ class CourierOp(LenientModel):
     are refused unless the named body is in the room the courier is actually
     in, because a route is cut where the rider rides.
     """
+    # See the canonical note on `PoseEntry.from_event`.
+    from_event: int = 0
     op: str = "send"          # send | question | silence
     courier_id: str = ""      # engine-minted uid; required for question/silence
     sender: str = ""          # registered character whose hands it starts in
@@ -2077,6 +2223,8 @@ class ArtifactOp(LenientModel):
     the artifact equivalent of silencing a courier. `artifact_id` is an
     engine-minted uid perception showed, exactly like a courier's.
     """
+    # See the canonical note on `PoseEntry.from_event`.
+    from_event: int = 0
     op: str = "post"          # post | read | remove
     artifact_id: str = ""     # engine-minted uid; required for read/remove
     poster: str = ""          # post: registered character whose hands nail it up
@@ -2344,42 +2492,6 @@ class OmittedThought(LenientModel):
     thought: str = ""   # one short phrase; never rendered to a player
 
 
-class AssertedChange(LenientModel):
-    """One entry of director_resolve's own changes-asserted manifest: a
-    persistent physical change its resolved_event asserts as completed,
-    beyond the player's supplied authority_claims. Reconciled against the
-    state_diff deterministically (see agents/director.py's seam)."""
-    # rooms|adjacency|positions|entities|conditions|attire|contact|substance|inventory|
-    # cast_changes|time|transit|other
-    category: str = "other"
-    # Assigned by the engine in _manifest_items, never by the model: 1..N in
-    # the order the resolve narrated the changes, which is the beat's own
-    # chronology. Carried into each specialist's manifest slice and echoed
-    # back on its resolved_events, so composition is an id lookup rather
-    # than a comparison of two spellings of the same change (design note 21).
-    event_id: int = 0
-    subject: str = ""         # room id / entity id / character name concerned
-    change: str = ""          # one short sentence stating the persistent change
-    # Contact manifests need the relation's endpoints, not merely one person.
-    # Without them, two simultaneous contacts involving the same actor are
-    # indistinguishable: a correctly encoded hand-on-hip could falsely prove a
-    # separately asserted nozzle-to-valve contact was also encoded. Optional for
-    # every non-contact category and for compatibility with saved variants.
-    actor: str = ""
-    actor_part: str = ""
-    target: str = ""
-    target_part: str = ""
-    # Contact-effect manifests carry the parent relation and effect fields so
-    # reconciliation can distinguish two dynamics by the same participant.
-    contact_ref: Any = None
-    action: str = ""
-    intensity: str = ""
-    rhythm: str = ""
-    detail: str = ""
-    substance: str = ""
-    placement: str = ""
-    target_interior: str = ""
-
 class DirectorResolve(LenientModel):
     resolved_event: str = ""
     summary: str = ""
@@ -2391,6 +2503,20 @@ class DirectorResolve(LenientModel):
     # state and never a replacement for dialogue_log/state_diff.
     public_evidence: list[CharterPublicEvidence] = Field(default_factory=list)
     state_diff: StateDiff = Field(default_factory=StateDiff)
+    # THE BEAT'S WORK ITEMS, the resolve half of `DirectorInterpret.sequence`
+    # and the same four fields: the span itself, the engine's chronological
+    # id, a `category` naming the ledger family it belongs to, and a `note`
+    # saying how the Director wants it settled
+    # (`DESIGN_SPECIALIST_CONTRACT.md` 4a).
+    #
+    # "Resolve would mostly do the same but for characters" -- so a span here
+    # is anything the beat made true, by anyone, rather than only the player's
+    # own declared conduct. `actor` says whose.
+    #
+    # Declared rather than left to ride on `LenientModel`: a typed model
+    # STRIPS what it does not name, which is how `note` and `from_event` were
+    # each lost once already this week.
+    sequence: list[dict] = Field(default_factory=list)
     changes_asserted: list[AssertedChange] = Field(default_factory=list)
     # The manifest's counterpart: what the beat deliberately did NOT list,
     # because it was interior. Never committed, never perceived, never
@@ -2498,8 +2624,17 @@ def _manifest_event_number(value):
 
     Nothing is invented. A value carrying exactly ONE run of digits resolves to
     that run; anything else -- no digits, or two of them ("1,2"), where the
-    model's intent is genuinely unclear -- is passed through untouched and
-    fails exactly as it did before.
+    model's intent is genuinely unclear -- resolves to 0, an id the engine
+    never issues.
+
+    IT USED TO BE PASSED THROUGH AND FAIL THE CALL, and that cost more than
+    the receipt is worth. Measured 2026-09-10, beat 2: the contact hand echoed
+    a phase id ("turn:2:player:0:action" -- two digit runs, so genuinely
+    unclear), both entries were rejected, its entire answer was discarded, and
+    the repair returned no usable object. A verdict on an id the hand was
+    never handed is discarded by `_resolved_event_verdicts` in either case, so
+    the only thing failing bought was throwing away the RECORDS that came with
+    it. 0 lands the receipt in the same place, and lands it alone.
     """
     if isinstance(value, bool) or isinstance(value, int):
         return value
@@ -2507,11 +2642,11 @@ def _manifest_event_number(value):
         return value
     runs = re.findall(r"\d+", value)
     if len(runs) != 1:
-        return value
+        return 0
     try:
         return int(runs[0])
     except ValueError:
-        return value
+        return 0
 
 
 class ResolvedEvent(LenientModel):
@@ -4905,6 +5040,13 @@ OUTPUT_EXAMPLES = {
         # this declaration bears on, keyed by the hand or by a channel it
         # owns. Omit a specialist the declaration does not bear on.
         "ledger_notes": {},
+        # The other half of the ruling: one entry per persistent change the
+        # declaration asserts as already done, under the ledger it belongs in.
+        # Empty here for the same reason `ledger_notes` is -- this example is
+        # the SHAPE, not a worked beat -- but present, because a key absent
+        # from the object a repaired call imitates reads as no part of the
+        # answer, which is this table's whole argument.
+        "changes_asserted": [],
         "other_players": {},
         "location_query": None,
         "flow": {
@@ -5001,6 +5143,26 @@ OUTPUT_EXAMPLES = {
             "Maren turns from the water as you reach the lamp. \"You're "
             "late,\" she says. \"The boat went out an hour ago.\""),
         "summary": "Maren says the boat left an hour ago",
+        # THE BEAT'S WORK ITEMS. One span per persistent change, in the order
+        # they happened; the engine numbers them. `actor` is whose act it was,
+        # which is what the resolve half adds over interpret's -- a span here
+        # is anything the beat made true, by anyone.
+        "sequence": [
+            {"actor": "Maren", "attempt": "turns from the water to face you",
+             "category": "spatial",
+             "note": "she is facing you now; her back is no longer to the "
+                     "room"},
+            # TWO FAMILIES, AND THE SHAPE IS A LIST. Where the crate now
+            # stands is the objects hand's record and the blocked doorway is
+            # the spatial hand's, and neither is derived from the other, so
+            # the span goes to both and closes when both have settled it.
+            # A comma-joined string would route to nobody: the normalizer
+            # folds each NAME, and "objects, spatial" is not one.
+            {"actor": "Maren", "attempt": "wedges the crate against the door",
+             "category": ["objects", "spatial"],
+             "note": "the crate stands against the door; the way from Pier "
+                     "Head into the store is blocked"},
+        ],
         "dialogue_order": ["Maren"],
         "dialogue_log": [
             {"speaker": "Maren",
@@ -5049,7 +5211,13 @@ OUTPUT_EXAMPLES = {
         # owns `poses`, and this is how the two meet.
         "changes_asserted": [
             {"category": "pose", "subject": "Maren",
-             "change": "Maren has turned from the water to face you."},
+             "change": "Maren has turned from the water to face you.",
+             # The instruction, not a second description: `change` says what is
+             # different, `note` says how the hand that owns `poses` should
+             # settle it. A key absent from the object a repaired call is told
+             # to imitate reads as not part of the answer.
+             "note": "She is standing, facing you now; her back is no longer "
+                     "to the room."},
         ],
         # THE RULING TO THE HANDS. One short line per specialist this beat
         # settled, keyed by the hand or by a channel it owns -- the channel

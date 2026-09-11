@@ -79,6 +79,219 @@ the locator below.
 Live bugs and unfinished corrections — places the engine is currently wrong,
 not places it is merely thin.
 
+### 1.1 The specialist contract: BUILT, with two parts still open
+
+**BUILT 2026-09-10, and DELIVERING since later the same day**
+(`DESIGN_SPECIALIST_CONTRACT.md` sections 4d and 4g). The Director emits one
+list of categorized, numbered, annotated spans; the hands get their
+scene-scoped ledgers and their work items and nothing of the beat; each record
+names the chunk it resolves. A span may name SEVERAL ledger families and be
+settled by several hands, each answering for its own part, and a hand is told
+what the other owners of its span settle (`co_hands/<hand>.txt`, five shared
+chunks per pack). `changes_asserted` is retired -- no sheet asks for it, and it
+is still read so a stored variant from before the migration still reconciles.
+TWO PARTS REMAIN OPEN, below.
+
+**THIS ENTRY SAID "BUILT" WHILE NOT ONE WORK ITEM HAD EVER REACHED A HAND.**
+The measurement behind it counted what the Director EMITTED -- "13 of 22 spans
+carrying a category and a note" -- and nothing counted what a specialist
+RECEIVED. Playing beats live found four defects in series, each hidden behind
+the one in front: `norm_sequence` rebuilt every element from a key list that
+never learned `category` or `note`, so the span channel died before the view
+was built; the payload carried two different fields named `event_id`, so hands
+cited the phase graph instead of the chronology; a citation the engine never
+issued failed the whole call rather than the receipt; and the scope gates
+overruled the Director on every beat, so a hand was handed a span and denied
+the ledger to settle it in. Section 4g has each one, its live cost, and the
+tests repinned for it. The lesson for this file: a stage's OUTPUT is not
+evidence about its CONSUMER, and "built" needs a measurement taken at the far
+end of the seam.
+
+The measurements that motivated it, kept because they are what the design was
+argued from: The owner's contract: a hand receives its scene-scoped slice
+of world state, plus one or more dissected chunks of player/character input,
+each carrying a chronological id and a natural-language note on how the
+Director thinks it should resolve — and nothing else. It renders those through
+its own output format, which is already built.
+
+What happens instead, measured over 632 resolve-side specialist calls:
+
+| the hand is sent | calls | size |
+|---|---|---|
+| `resolved_event` — the whole beat as prose, declared AUTHORITATIVE | 632/632 (100%) | 910 ch |
+| `director_note` — what the Director asked of this hand | 311/632 (49%) | 147 ch |
+| `changes_asserted` — the categorized events for this hand | 172/632 (27%) | 459 ch |
+
+So 73% of specialist calls run on narrative alone, and the hands derive the
+events themselves as a private step — which is what 90-97% of their output
+tokens are spent on.
+
+Five specific gaps, each with its measurement in the note: the dissection
+(`sequence`) carries neither category nor id; categories and ids live on a
+second, non-corresponding decomposition (`changes_asserted`, defined in its own
+docstring as derived FROM the prose); the resolution intent exists only
+per-HAND (`ledger_notes`) rather than per-event; and the chronological ids
+never reach perception, where ordering is list position and `event_id` is used
+only as a dedupe key.
+
+**The Director is still asked to work out things code already knows.**
+`flow.reactors` asks for "every awake character who could plausibly PERCEIVE
+this beat" while perception is DETERMINISTIC and `agents/runtime.py` already
+filters the answer through a presence gate -- the sheet's own text records the
+model naming fewer reactors than witnesses on 79% of multi-witness beats, and
+the gate's comment records six `character_major` calls at 13-22s each spent on
+minds the scene placed nowhere. The paragraph is cut from 1,319 to 616 chars
+(the pacing judgement is genuinely the model's); DERIVING the list is a
+behaviour change to who speaks in every beat and wants its own measurement.
+Same shape, unmeasured: MOVEMENT DIRECTION (996 chars, and
+`world/spatial_orientation.py` owns bearing math), FOLLOWING STATE (863),
+LOCATION & SYSTEM DETECTION (589). See `DESIGN_SPECIALIST_CONTRACT.md` 4f for
+the table and the test each row has to pass.
+
+**Room minting is the one exception, and the prose removal exposed it.** The
+spatial hand authors a room's `desc`, name, anchors, `light` and `quiet` -- its
+own sheet calls `desc` "the only durable record of how this place reads" -- and
+`DESIGN_ROOM_FIDELITY.md` records it reading the Director's narration to do so
+("the road run's spatial hand read the sentence and wrote `{w: 15, d: 20},
+round` from it"). That input is gone as of the prose removal, correctly, and
+nothing replaced it. The owner's proposal (2026-09-09) is a specialised
+room-mint agent that spatial calls for a PLANNED room (Story Planner, not yet
+fleshed out) or a NEW one (player declaration), taking the plan, purpose and
+lore rather than a beat's narration. Not built: it is a new model role needing
+its own scope, its own gate, and a measurement of current room fidelity first.
+See `DESIGN_SPECIALIST_CONTRACT.md` section 6a.
+
+**The migration order is decided (owner, 2026-09-09).** `sequence` becomes the
+four-field chunk list (chunk / id / note / category) and `changes_asserted` is
+deleted at the end; the endpoint-matching question is answered FIRST. It is
+answered: the op carries the chunk id. `phase_sources` was the cheaper
+candidate and failed on measurement -- emitted on 25% of productive calls, 68%
+of `encoded` claims cited, and never once by `director_social` across 91 calls
+(`tools/provenance_coverage.py`), because it is a second structure filled in
+beside the work rather than a field inside it. See
+`DESIGN_SPECIALIST_CONTRACT.md` sections 4a and 4b.
+
+**THE BEAT IS NOW REASSEMBLED AND KEPT (2026-09-10).** The recompiler
+(`DESIGN_SPECIALIST_CONTRACT.md` 4k) answers what happened, to whom and when
+off four engine-issued identifiers, and `world/beat_ledger.py` (4m) makes the
+beat's events WORLD STATE -- written at the composition rather than the commit,
+expiring by beat number with nothing sweeping them, and read by perception for
+the beat's chronology. Ingestion was widened to read a category in whatever
+shape it arrived (4n), an unroutable span is now offered to every hand to
+decline rather than reaching none (4o, on the owner's rule that "a ledger not
+reaching a specialist is as good as that ledger not existing"), and a known
+name is recovered from beside an unknown one (4p, `any` not `all` -- and a
+stray separator no longer costs the name).
+
+**A LONG BEAT COMPRESSES, AND THE OMISSION DETECTOR COULD NOT SEE IT.** Measured 2026-09-10 on paragraphs of
+hand-counted acts, all confined to one room so movement's own backstops were
+not in play:
+
+| acts written | interpret elements | speech acts kept |
+|---|---|---|
+| 12 | 11 | n/a |
+| 20 | 18 | 2 of 2 |
+| 31 | **11** | **0 of 3** |
+
+Twelve and twenty acts dissect near 1:1. Thirty-one collapse to eleven
+compound elements -- one covers three acts, another four -- and all three
+declared speech acts vanish from the typed sequence (`{'action': 11}`, where
+the twenty-act beat gave `{'action': 16, 'communication': 2}`).
+`_uncovered_declarations` reported ZERO uncovered for it, and the reason is
+structural rather than a threshold: `_declaration_units` splits on sentence
+boundaries and coordination, NOT on plain commas, so a comma-chained paragraph
+is 2 units for 31 acts. The detector then asks whether each coarse unit's
+significant tokens are present, and compression that KEEPS THE NOUNS while
+dropping the acts passes it cleanly. Note the corpus is already deliberately
+not `notes` -- coverage came from the sequence's own compressed `attempt`
+strings.
+
+**FIXED 2026-09-10, on the owner's choice of remedy, AND MEASURED BEFORE IT
+SHIPPED.** `_CLAUSE_SPLIT_RE` now ends a declaration unit at a BARE COMMA. The
+risk was the one the owner ruled on 2026-09-06 -- more units means more chances
+to fire the bounded self-repair on an interpretation that was already complete,
+the "guards that fire on valid output" class -- so it was measured across 171
+stored interpret beats first:
+
+| | before | after |
+|---|---|---|
+| declaration units | 261 | 311 (+19%) |
+| uncovered reported | 0 | 4 |
+| beats firing the repair | 0 | 2 (1.2%) |
+
+**All four newly-reported units are real drops, not false positives**, checked
+by reading each interpretation: the three speech acts of the 31-act beat, whose
+sequence held none (`{'action': 11}`), and "tell her she can't hear me now" --
+an input declaring two speech acts whose interpretation carried one, which is
+the dramatically load-bearing line of the owner's own tardis example. 169 of
+171 beats are untouched.
+
+What this does NOT fix is the compression itself: a 31-act paragraph still
+dissects to 11 compound elements, and the detector's answer to that is the
+bounded self-repair, which is one model call and is capped at
+`_RECONCILE_INTERPRET_MAX_UNITS` (4) units per beat -- deliberately, because
+"a fully off-the-rails interpretation is better re-run than repaired unit by
+unit". A beat losing more than four declarations is still losing them. Whether
+the prompt should also be sharpened is the open half, and wants its own
+measurement rather than being assumed from this one.
+
+`_CLAUSE_SPLIT_RE` is per-pack, so this is an ENGLISH change; the Japanese
+pattern already breaks on the Japanese comma only before a conjunction
+(`、(?:そして|しかし|だが)`), which is the same gap one alphabet over, and is
+covered by the standing deferral in s 1.0.
+
+**THE RESIDUAL EDGE IN THE SPLIT RULE, named so it is not rediscovered as a
+bug.** A sentence containing a bare routing word as its own delimited fragment
+does split: "the belt comes off, body, and it lands" yields three parts, of
+which `body` routes and two are reported as unknown names. The span reaches
+the right hand and the cost is two junk entries in the unrouted report -- the
+cheap direction to be wrong in, since the change is delivered. Prose in a
+category field has never actually been observed: across the long-beat run's 54
+categories, 49 plain strings, 5 lists, zero prose.
+
+**AND ONE REPORTING GAP, deliberate.** `_unrouted_rulings` reads `ledger_notes`
+keys and `spans`, so a change filed the older way -- as a `changes_asserted`
+entry -- is DELIVERED to every hand but not reported. Delivery is the half the
+owner's ruling is about, and the manifest is what spans replace when the
+migration finishes.
+
+**Open, and not to be papered over:** record-shaped channels (`poses`,
+`overlays`, `conditions`, `attire`) are whole current-state records rather than
+events, so there is often no chunk to attach an instruction to. `director_body`
+owns four such channels and no others, which is why the manifest can never
+dispatch it. That needs a second instruction shape before an event-only
+pipeline is worth building.
+
+### 1.0 The Japanese pack cannot route the Director's manifest
+
+**Deliberate, dated, and switched off in code rather than forgotten.**
+`DirectorInterpret` gained `changes_asserted` on 2026-09-09 (design note
+`DESIGN_NARROW_MODEL_INTERFACE.md` §3c-bis) and the English prompts declare it
+in all three places a field has to appear. `language_packs/ja` does not.
+
+That is not an untranslated string: `canonical_language_tokens` is a PROTOCOL
+guard, so a Japanese Director now emits a ruling missing a key the engine
+routes on — "not a wrong answer, no answer". Every interpret beat in a Japanese
+story addresses its hands by note alone, which is the state English was in
+before this change.
+
+Suspended under the owner's mandate of 2026-09-09: finish optimizing, testing
+and debugging the English pipeline first, because a translation written against
+a prompt that is still moving is work done twice. Two switches carry it, both
+loud:
+
+- `tools/project_check.DEFERRED_PACK_PARITY = ("ja",)` — a tuple, not a
+  boolean, so it cannot widen into "skip the check"; `make structure` prints
+  the deferral on every run whether or not anything else is wrong.
+- `tests/test_language_pack_integrity.py::test_no_pack_translates_a_canonical_protocol_span`
+  skips exactly the deferred ids and names this entry in the skip reason.
+
+**To clear:** bring `ja`'s `prompts/director_interpret.txt` and
+`interpret_delegation_note.txt` up to the English canonical tokens (plus
+whatever else the English pass adds before it ends), empty
+`DEFERRED_PACK_PARITY`, and delete this entry in the same commit. Until that
+tuple is empty the English pass is not finished.
+
 **Rule 3 is overdue here, and this note is the debt.** §1.2, §1.3, §1.5, §1.13,
 §1.17, §1.19 and both surviving §1.24 bullets were all found at alpha 6.0–6.9;
 the tree is at alpha 9.6, so each has sat through ten-plus releases untouched.

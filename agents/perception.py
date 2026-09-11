@@ -27,6 +27,7 @@ from story.character_schema import (
 )
 from core.db import q, wget
 from core.pipeline_context import note_step_decision
+from world.beat_ledger import beat_event_order
 from world.scene_memo import scene_read_pass
 from story import attire as attire_model
 from story.scene import (
@@ -788,10 +789,18 @@ def _outcome_event_stream(ctx, scene, interp, res, player_name,
             seen_events.add(event_key)
             if not sequence_event_allowed(event, res):
                 continue
-            destination = deferred_stream if (
+            _deferred = bool(
                 is_player and (event.get("depends_on") or
-                str(event.get("phase") or "").casefold() in (
-                    "continuation", "completion"))) else stream
+                               str(event.get("phase") or "").casefold() in (
+                                   "continuation", "completion")))
+            destination = deferred_stream if _deferred else stream
+            # WHICH DECLARATION THIS ENTRY IS, kept on the entry itself.
+            # The world's ledger cites declarations, so this is the join that
+            # lets it order a stream assembled out of several of them. Only a
+            # real phase id is carried -- `event_key` falls back to a JSON
+            # blob for an element that has none, and a blob is a dedup key,
+            # not an identity the world could ever name.
+            declared_id = str(event.get("event_id") or "").strip()
             if event.get("type") == "speech" and event.get("text"):
                 wanted = _quote_body(str(event.get("text") or "")).strip()
                 match = next((
@@ -804,11 +813,14 @@ def _outcome_event_stream(ctx, scene, interp, res, player_name,
                 if match is not None:
                     used_dialogue.add(match)
                     destination.append({"kind": "speech",
+                                        "declared": declared_id,
+                                        "deferred": _deferred,
                                         "entry": dialogue[match]})
             elif (event.get("type") == "communication"
                   and communication_surface(event)):
                 destination.append({
                     "kind": "communication", "actor": actor,
+                    "declared": declared_id, "deferred": _deferred,
                     "entry": {**event, "speaker": actor},
                 })
             elif (event.get("type") == "action"
@@ -818,6 +830,7 @@ def _outcome_event_stream(ctx, scene, interp, res, player_name,
                 if surface:
                     destination.append({
                         "kind": "action", "actor": actor,
+                        "declared": declared_id, "deferred": _deferred,
                         "attempt": surface, "event": event})
 
     # A dependent player phase occurs only after present minds had the chance
@@ -844,7 +857,71 @@ def _outcome_event_stream(ctx, scene, interp, res, player_name,
                       "event_id": "background:%s" % beat["name"]},
         })
     stream.extend(_unanswered_addresses(scene, sequences, stream, res))
-    return stream
+    return _world_ordered_stream(scene, ctx, stream)
+
+
+def _world_ordered_stream(scene, ctx, stream):
+    """The beat's stream, in the order the WORLD says the beat happened.
+
+    "perception should only be reading the world." The stream above is
+    assembled out of several separate declarations -- the player's, then each
+    character's, then the lines that bound to none of them -- and concatenating
+    them is a GUESS at chronology: it puts everything the player did before
+    anything anyone else did, whatever actually happened. Live, that is a
+    player who speaks, walks out and is answered, rendered as though the answer
+    came before he left.
+
+    The Director's author writes the beat as ONE ordered list ("one element
+    for EVERYTHING that happened, in the order it happened"), the recompiler
+    reassembles it, and `world/beat_ledger.py` keeps it. So the world can say
+    what the concatenation could only guess, and this asks it.
+
+    IT ONLY EVER REORDERS WHAT THE WORLD NAMES, AND NOTHING ELSE MOVES. The
+    named entries are permuted among the slots they already occupy; an entry
+    the ledger does not cite keeps its exact index. That matters in one
+    direction in particular: an unbound dialogue row, a background presence's
+    beat and a silence minted for an unanswered address are appended AFTER the
+    whole declared stream deliberately, and the first rule tried here --
+    anchoring an unnamed entry to the last named one before it -- dragged all
+    three into the middle of the beat the moment that neighbour moved earlier.
+    Holding every unnamed entry still cannot do that. A ledger that names
+    nothing changes nothing; a ledger that names half the beat reorders that
+    half and leaves the rest exactly where the declarations put it.
+    """
+    # `PipelineContext.__getattr__` raises KeyError rather than
+    # AttributeError, so `getattr(ctx, "turn", None)` does NOT shield a
+    # context without one -- a focused test's stub, or a resume that
+    # hydrated no turn. Caught by the suite, not by reading it.
+    try:
+        turn_idx = ctx.turn.idx
+    except (AttributeError, KeyError, TypeError):
+        return stream
+    order = beat_event_order(scene, turn_idx)
+    if len(stream) < 2 or not order:
+        return stream
+    # THE DETERMINISTIC FLOOR OUTRANKS THE WORLD'S ORDER, and this is the one
+    # place the two can disagree. A dependent player phase was DEFERRED above
+    # so the beat reads onset -> response -> continuation, off the player's
+    # own `depends_on`/`phase` -- a causal invariant the engine enforces,
+    # where the ledger is a model's account of what happened. Measured: the
+    # long-beat run's turn 1 listed all eleven of the player's acts before any
+    # character's, which would pull a continuation back in front of the answer
+    # it waits for. So a deferred entry keeps the index the floor gave it, and
+    # everything else permutes among the slots around it: the world still
+    # fixes the order of everything the floor has no opinion about, and can
+    # never invert the one thing it does.
+    slots = [index for index, entry in enumerate(stream)
+             if isinstance(entry, dict)
+             and str(entry.get("declared") or "") in order
+             and not entry.get("deferred")]
+    if len(slots) < 2:
+        return stream
+    ranked = sorted(slots, key=lambda index: (
+        order[str(stream[index].get("declared") or "")], index))
+    out = list(stream)
+    for slot, source in zip(slots, ranked):
+        out[slot] = stream[source]
+    return out
 
 
 def _unanswered_addresses(scene, sequences, stream, res):
@@ -5521,7 +5598,24 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
     # off, and both lines were graded from the dune he reached; the surf's
     # noise floor refused them; his answers reached no view and the narrator
     # invented a player line to cover the hole. See `beat_movement_cuts`.
-    movement_cuts = beat_movement_cuts(prev_scene, sc, beat_events)
+    # AND WHICH EVENT MOVED THEM, where the beat can say. `beat_movement_cuts`
+    # otherwise infers it as the mover's LAST action -- the only choice two
+    # snapshots allow, and its own docstring names the quantity it wanted:
+    # "recording the trajectory is what fixes it". The causality recompiler
+    # records it, so the cut falls on the move rather than after everything
+    # the mover did next. A body it cannot speak for keeps the heuristic.
+    from .director import mover_cut_events
+    # BOTH HALVES. The player's cut comes from his own declaration, whose
+    # elements carry the phase ids this stream is keyed on. A CHARACTER's comes
+    # from the author's whole-beat list, whose elements cite the declaration
+    # they describe -- the Director categorizes and cites, the character only
+    # declares, and that is why nothing has to ask a mind about ledgers.
+    # The player's own answer wins a collision: his sequence IS the
+    # declaration, and the author is describing it second-hand.
+    _moved_at = dict(mover_cut_events(res, (res or {}).get("state_diff")))
+    _moved_at.update(mover_cut_events(interp))
+    movement_cuts = beat_movement_cuts(
+        prev_scene, sc, beat_events, moved_at=_moved_at)
 
     # A NOISE IS AN EVENT, AND AN EVENT IS OVER WHEN THE BEAT IS
     # (DESIGN_SOUND_DECIBELS.md § 4). Read from the beat's own diff rather

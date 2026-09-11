@@ -16,17 +16,20 @@ from story.character_schema import character_name_from_text
 from core.db import get_setting, wget
 from world.survival import survival_enabled, vitals_of
 from world.spatial import (contact_action_ledger_index, contact_id,
+                           passage_id_for,
                            crossing_of, effective_anchors, room_of,
                            scene_room_id, substance_ledger_index)
 
 from .common import (communication_surface, observable_action_text,
                      scene_compact_attire)
-from .director_evidence import _manifest_items
+from .director_evidence import _manifest_items, _span_items
 from .director_scopes import (
     SPECIALISTS,
+    _CHANNEL_SPECIALISTS,
     reads_dialogue,
     _CATEGORY_CHANNELS,
     note_key_targets,
+    manifest_category_targets,
     _DELEGATED_CHANNELS,
     _LIST_DELEGATED,
     _PROSE_DUTY_SHIPPED,
@@ -199,6 +202,9 @@ def _resolve_beat_view(out, decls, char_actions, dice, p_name, interp,
             if isinstance(d, dict)
         ],
         "manifest": _manifest_items(out, cast, scene),
+        # Same work items on the resolve half: "resolve would mostly do the
+        # same but for characters".
+        "spans": _span_items(out),
         "declared_actions": declared,
         "dice": dice if isinstance(dice, list) else [],
         "player": p_name,
@@ -233,6 +239,16 @@ def _interpret_beat_view(ctx, out, p_name):
             continue
         sequence.append({
             k: element.get(k)
+            # AND NOT `event_id`, `category` OR `note`. Those three are what
+            # make an element a WORK ITEM, and the work items are `spans` --
+            # one list, numbered by the engine. Carried here too, the payload
+            # held two fields named `event_id` with different values: the
+            # span's chronological number and this element's phase-graph id
+            # from `assign_event_ids`. Measured 2026-09-10, beat 2: the
+            # contact hand echoed the phase id, its whole answer was rejected,
+            # and the repair failed as well -- 16,180 output tokens and 96.9s
+            # on a receipt for the wrong ledger. The phase graph is the
+            # engine's; nothing a hand does reads it.
             for k in ("type", "text", "attempt", "raw_text", "commitment",
                       "act", "content", "phase_id", "phase", "depends_on",
                       "participants", "requires_contacts", "referents",
@@ -255,7 +271,14 @@ def _interpret_beat_view(ctx, out, p_name):
             "speech": out.get("speech"),
             "movement": out.get("movement"),
         },
-        "manifest": [],
+        # Numbered by the engine from this stage's own ruling, exactly
+        # as the resolve view does. It was `[]` here, so no interpret
+        # beat could ever address a hand by category.
+        "manifest": _manifest_items(out, ctx.cast, getattr(ctx, "scene", None)),
+        # THE WORK ITEMS. A categorized span of the player's declaration, with
+        # the id the engine gave it and the Director's note on how it should
+        # resolve (`DESIGN_SPECIALIST_CONTRACT.md` 4a).
+        "spans": _span_items(out),
         "declared_actions": declared,
         "dice": [],
         "player": p_name,
@@ -271,12 +294,66 @@ def _specialist_manifest_slice(name, view):
     spellings of this filter would mean a specialist could be judged on an
     event it never received.
     """
-    channels = SPECIALISTS[name]["channels"]
+    channels = set(SPECIALISTS[name]["channels"])
     return [
         item for item in (view.get("manifest") or [])
-        if _CATEGORY_CHANNELS.get(item.get("category")) in channels
+        if any(target == name if kind == "hand" else target in channels
+               for kind, target in
+               manifest_category_targets(item.get("category")))
     ]
 
+
+
+def _specialist_span_slice(name, view):
+    """The numbered chunks in one specialist's categories.
+
+    The same filter as `_specialist_manifest_slice` and for the same reason:
+    one definition, so a hand cannot be judged on a work item it was never
+    handed.
+    """
+    return [item for item in (view.get("spans") or [])
+            if name in span_owners(item)]
+
+
+def specialist_co_hands(name, view):
+    """The OTHER hands settling a part of some span this one was handed.
+
+    Empty on the ordinary beat where every span this hand got is wholly its
+    own, which is what keeps the chunks off the sheet the rest of the time.
+    """
+    others = []
+    for item in _specialist_span_slice(name, view or {}):
+        for hand in span_owners(item):
+            if hand != name and hand not in others:
+                others.append(hand)
+    return [hand for hand in SPECIALISTS if hand in others]
+
+
+def span_categories(item):
+    """Every ledger family one span names, normalized, as a list."""
+    if not isinstance(item, dict):
+        return []
+    listed = item.get("categories")
+    if isinstance(listed, (list, tuple)) and listed:
+        return [str(c) for c in listed if str(c or "").strip()]
+    single = str(item.get("category") or "").strip()
+    return [single] if single else []
+
+
+def span_owners(item):
+    """Every hand that owns a part of this span, in canonical order.
+
+    THE COLLAPSE IS CODE'S. The Director names ledger families; which hands
+    those belong to is the engine's own table, and a span naming two families
+    one hand owns is one hand's work, not two.
+    """
+    owners = []
+    for category in span_categories(item):
+        for kind, target in manifest_category_targets(category):
+            hand = target if kind == "hand" else _CHANNEL_SPECIALISTS.get(target)
+            if hand and hand not in owners:
+                owners.append(hand)
+    return [name for name in SPECIALISTS if name in owners]
 
 
 def _note_for(notes, name):
@@ -389,6 +466,125 @@ def _anchor_names(sc, whos, ctx=None, view=None):
     return out
 
 
+def _without_private_keys(item):
+    """A work item as the model sees it: no engine-only bookkeeping.
+
+    A leading underscore marks a key the engine put there for itself --
+    `_from_position`, which maps a span back to the sequence element whose
+    authority was settled. Every one of them is a number or an id, and a
+    number in a payload is one the model will try to cite: the contact hand
+    spent 16,180 output tokens citing the wrong one of two fields called
+    `event_id` on 2026-09-10.
+    """
+    if not isinstance(item, dict):
+        return item
+    return {key: value for key, value in item.items()
+            if not str(key).startswith("_")}
+
+
+#: What each hand shows a CO-OWNER of a span it is sharing: identity, and the
+#: one fact that says which thing it is. Never a ledger's own state -- see the
+#: module note on `worn_index`, which is this rule's unconditional ancestor.
+#: Keyed by the hand being LOOKED AT, not the hand looking, because what the
+#: body hand holds is the same answer whoever asks (`co_hands/<hand>.txt` makes
+#: the same collapse for the prose).
+def _co_view_body(sc):
+    """Who is wearing what. Not coverage, not condition, not what afflicts."""
+    return {"worn": [
+        {"garment": str(garment), "worn_by": str(who)}
+        for who, entry in (sc.get("attire") or {}).items()
+        if isinstance(entry, dict)
+        for garment in (entry.get("wearing") or [])
+        if str(garment).strip()
+    ]}
+
+
+def _co_view_objects(sc):
+    """What things there are, and where. Not their state."""
+    return {"things": [
+        {"id": str(eid), "name": str((entity or {}).get("name") or eid),
+         "at": str((sc.get("positions") or {}).get(eid) or "")}
+        for eid, entity in (sc.get("entities") or {}).items()
+        if isinstance(entity, dict)
+    ]}
+
+
+def _co_view_spatial(sc):
+    """Where bodies stand and which ways exist. Not poses, not distances."""
+    rooms = sc.get("rooms") or {}
+    return {
+        "standing": [{"who": str(who), "in": str(room)}
+                     for who, room in (sc.get("positions") or {}).items()
+                     if str(room).strip()],
+        # `way` is the doorway's OWN id (`passage_id_for`, sorted so the two
+        # mirrored edges of one doorway agree), and it is the same token
+        # `span_pairings` groups by. A hand handed the id can say where its
+        # record went; a hand handed only a name has to invent one.
+        "ways": [
+            {"way": passage_id_for(rid, str(edge.get("to") or "")),
+             "from": str(rid), "to": str(edge.get("to") or ""),
+             "barrier": str(edge.get("barrier") or "open"),
+             **({"name": str(edge["name"])} if edge.get("name") else {})}
+            for rid, room in rooms.items() if isinstance(room, dict)
+            for edge in (room.get("adjacent") or [])
+            if isinstance(edge, dict) and str(edge.get("to") or "").strip()
+        ],
+    }
+
+
+def _co_view_contact(sc):
+    """Who is touching whom, and what is inside what. Not manner, not scale."""
+    return {
+        "touching": [
+            {"actor": str(row.get("actor") or ""),
+             "target": str(row.get("target") or "")}
+            for row in (sc.get("contacts") or [])
+            if isinstance(row, dict) and str(row.get("actor") or "").strip()
+        ],
+        "inside": [
+            {"what": str(what), "in": str((entry or {}).get("in") or "")}
+            for what, entry in (sc.get("contained") or {}).items()
+            if isinstance(entry, dict)
+        ],
+    }
+
+
+def _co_view_social(sc):
+    """Who is present under what name. Not what anyone knows or believes."""
+    return {"present": [
+        {"who": str(who)} for who in (sc.get("positions") or {})
+        if str(who).strip()
+    ]}
+
+
+_CO_HAND_VIEWS = {
+    "body": _co_view_body,
+    "objects": _co_view_objects,
+    "spatial": _co_view_spatial,
+    "contact": _co_view_contact,
+    "social": _co_view_social,
+}
+
+
+def co_hand_view(name, view, sc):
+    """The identity slices of every OTHER owner of a span this hand received.
+
+    Empty on the ordinary beat, where every span a hand got is wholly its own
+    -- which is the point, and the same gate `specialist_co_hands` uses, so the
+    paragraph and the rows that make it actionable arrive together or not at
+    all.
+    """
+    slices = {}
+    for hand in specialist_co_hands(name, view):
+        builder = _CO_HAND_VIEWS.get(hand)
+        if not builder:
+            continue
+        rows = {key: value for key, value in builder(sc or {}).items() if value}
+        if rows:
+            slices[hand] = rows
+    return slices
+
+
 def _specialist_payload(name, ctx, sc, view, extras):
     """One specialist's scoped payload -- its written entitlement, applied
     to whichever stage's beat view it was handed. Shared part: the beat
@@ -432,16 +628,27 @@ def _specialist_payload(name, ctx, sc, view, extras):
     if isinstance(note, str) and note.strip():
         payload["director_note"] = note.strip()
     if view["source"] == "resolved_beat":
-        payload["resolved_event"] = view["prose"]
-        # Dialogue only to the hands that own a channel a speech act can
-        # write (`director_scopes.reads_dialogue`). Saying a thing is not a
-        # physical action, so for `body`, `contact` and `objects` the
-        # transcript is material they cannot act on and can only echo -- and
-        # echoing the payload into the diff is this fan-out's measured
-        # failure mode. Measured over chat 78: 27% of the beat text every
-        # hand received, ~68 tokens a beat, on sheets whose correct answer
-        # was `{}`. The prose still carries what happened, including what
-        # speech made happen.
+        # THE BEAT'S PROSE IS NOT SENT. `DESIGN_SPECIALIST_CONTRACT.md`: a
+        # hand receives its scoped world state and the work it was asked to
+        # settle, and nothing of the Director's account. It used to receive
+        # `resolved_event` on 100% of calls, 910 chars, declared AUTHORITATIVE
+        # over the instruction -- so 73% of specialist calls ran on narrative
+        # alone and every hand re-derived the beat's events privately. That
+        # derivation is what 90-97% of specialist output tokens were spent on.
+        #
+        # What replaces it is what was always meant to: `director_note` (how
+        # the Director wants this hand's part settled) and the numbered
+        # `changes_asserted` slice, each entry carrying its own `note`.
+        #
+        # Dialogue still reaches the hands that own a channel a speech act can
+        # write (`director_scopes.reads_dialogue`). It is not narration: it is
+        # the lines themselves, which is data those channels encode FROM.
+        # Saying a thing is not a physical action, so for `body`, `contact`
+        # and `objects` the transcript is material they cannot act on and can
+        # only echo -- and echoing the payload into the diff is this fan-out's
+        # measured failure mode. Measured over chat 78: 27% of the beat text
+        # every hand received, ~68 tokens a beat, on sheets whose correct
+        # answer was `{}`.
         if reads_dialogue(name):
             payload["dialogue_log"] = view["dialogue"]
     else:
@@ -449,6 +656,18 @@ def _specialist_payload(name, ctx, sc, view, extras):
     manifest = _specialist_manifest_slice(name, view)
     if manifest:
         payload["changes_asserted"] = manifest
+    spans = [_without_private_keys(span)
+             for span in _specialist_span_slice(name, view)]
+    if spans:
+        payload["spans"] = spans
+    # WHAT THE OTHER OWNERS OF THOSE SPANS ARE HOLDING, identity only. The
+    # sheet already tells this hand WHO is settling the other half
+    # (`co_hands/<hand>.txt`); without the rows that is a paragraph it cannot
+    # act on, and a hand that cannot name its co-owner's thing invents one --
+    # which is how a second record of an existing thing gets made.
+    _co = co_hand_view(name, view, sc)
+    if _co:
+        payload["co_hands"] = _co
 
     rooms_index = {
         rid: str((room or {}).get("name") or rid)
@@ -755,7 +974,63 @@ def _normalized_channel_value(channel, value):
 #: an unrecognized verdict must read as "this event was not addressed", the
 #: same as silence, because the whole point of the echo is that only a
 #: DELIBERATE answer counts as one.
-_EVENT_VERDICTS = frozenset({"encoded", "already_true", "not_mine"})
+#:
+#: `no_referent` is the fourth since 2026-09-10 and it is not a shade of
+#: `not_mine`. `not_mine` is a HAND-OFF -- it needs a channel I was not
+#: granted -- and it presumes somebody else can hold the work. `no_referent`
+#: says the span names something the world does not hold at all, so there is
+#: nothing for anyone to write it INTO. The word is borrowed deliberately from
+#: the core repair's own vocabulary, where it means the same thing for the
+#: same reason (`director_reconcile._NO_REFERENT`): the effect stands, and
+#: there is no structured home to encode it as.
+_EVENT_VERDICTS = frozenset({"encoded", "already_true", "not_mine",
+                             "no_referent"})
+
+#: What a specialist says ABOUT its work, as opposed to the work. Everything
+#: else in a specialist response is one of its channels.
+_SPECIALIST_BOOKKEEPING = frozenset({"resolved_events", "phase_sources",
+                                     "notes"})
+
+#: Verdicts that are compatible with writing nothing. `already_true` MEANS the
+#: ledgers already carry it and `not_mine` means it belongs elsewhere, so an
+#: empty response is the correct behaviour for both. `encoded` is not here: the
+#: sheet defines it as "you put it in your channels this beat".
+#: `no_referent` is here by definition -- it is the answer for a span there
+#: was nothing to write, so writing something would contradict it.
+_VERDICTS_WITHOUT_CONTENT = frozenset({"already_true", "not_mine",
+                                       "no_referent"})
+
+
+def _wrote_any_channel(result):
+    """Did this response carry content in any channel at all?"""
+    return any(value for key, value in (result or {}).items()
+               if key not in _SPECIALIST_BOOKKEEPING)
+
+
+def _granted_event_ids(name, view):
+    """The numbered work items this hand was handed, in one list.
+
+    BOTH SLICES, because spans are the work items now and the manifest is what
+    they replaced. Built from the manifest alone it was empty on every beat --
+    no sheet asks for `changes_asserted` any more -- so
+    `_resolved_event_verdicts` discarded every verdict a hand returned and
+    `events_addressed` stayed `{}`, which left per-hand acquittal unable to
+    run at all (measured 2026-09-10, the padlock beat).
+
+    The two share ONE id space by construction: spans take 1..N and the
+    manifest continues past `_span_id_ceiling`. So this is a union, never a
+    renumbering, and an id cannot mean two things.
+    """
+    granted = []
+    for item in (_specialist_span_slice(name, view or {})
+                 + _specialist_manifest_slice(name, view or {})):
+        try:
+            number = int((item or {}).get("event_id") or 0)
+        except (TypeError, ValueError):
+            continue
+        if number > 0 and number not in granted:
+            granted.append(number)
+    return granted
 
 
 def _resolved_event_verdicts(result, granted_ids):
@@ -766,8 +1041,29 @@ def _resolved_event_verdicts(result, granted_ids):
     event it never saw, and a model that echoes the whole manifest back
     would otherwise silence every omission in the beat. Last verdict wins
     on a duplicated id -- deterministic, and the shape is already degenerate.
+
+    AND AN `encoded` FROM AN EMPTY RESPONSE IS NOT AN ANSWER EITHER. The sheet
+    defines the verdict as "you put it in your channels this beat", so a hand
+    that returns every channel empty and still claims it is contradicting
+    itself in the same object -- and it is the worst answer available, because
+    the reconciliation seam believes it, buys no repair, and the change is lost
+    with nothing warned anywhere. Refutable from the RESPONSE ALONE: no diff,
+    no manifest, no scene, so there was never a reason to believe it.
+
+    Measured 2026-09-09 (`tools/false_encoded.py`) over the same twelve beats
+    run twice: at the roles' default reasoning effort 0 of 11 `encoded` claims
+    wrote nothing; with `reasoning_effort=low` on the five specialists, 2 of 12
+    did. Both were `director_objects`, both on a beat where a thing came into
+    being or was broken -- a hinge hammered apart, a notice nailed up -- and
+    both returned `{"entities": {}}` beside `status: "encoded"`. The guard is
+    not about that lever, which only made an existing hole easy to see.
+
+    Dropping reads as "this event was not addressed", exactly as an
+    unrecognized verdict does, and for the same stated reason: only a
+    DELIBERATE answer counts as one.
     """
     granted = {int(i) for i in granted_ids}
+    wrote = _wrote_any_channel(result)
     verdicts = {}
     for entry in (result.get("resolved_events") or []):
         if not isinstance(entry, dict):
@@ -777,6 +1073,8 @@ def _resolved_event_verdicts(result, granted_ids):
         except (TypeError, ValueError):
             continue
         status = str(entry.get("status") or "").strip().casefold()
+        if status == "encoded" and not wrote:
+            continue
         if event_id in granted and status in _EVENT_VERDICTS:
             record = {"status": status}
             # An address is only meaningful ON a decline, and only when it
@@ -803,10 +1101,25 @@ def _index_addressed_events(dispatch):
         if not isinstance(state, dict) or not state.get("ran"):
             continue
         for entry in (state.get("events_resolved") or []):
-            index[int(entry["event_id"])] = {
+            answer = {
                 "owner": name, "status": entry["status"],
                 **({"reroute_to": entry["reroute_to"]}
                    if entry.get("reroute_to") else {})}
+            # ONE ENTRY PER HAND, not one per event. A span may fall into
+            # several categories and be handed to several hands, and those are
+            # not competing answers to one question -- they are completed
+            # halves, or thirds, of a single ledger. Keyed by event alone the
+            # last hand to answer overwrote the first, so a span whose wardrobe
+            # half was encoded and whose object half was not read as settled.
+            #
+            # `owner`/`status` stay on the row for the readers that want one
+            # answer (the reroute-notes builder wants whoever declined), and
+            # `by_hand` carries the whole picture for the acquittal, which is
+            # the reader that must not settle a span early.
+            row = index.setdefault(int(entry["event_id"]),
+                                   {"by_hand": {}})
+            row["by_hand"][name] = answer
+            row.update(answer)
     return index
 
 

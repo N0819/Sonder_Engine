@@ -854,6 +854,85 @@ def note_key_targets(key):
     return targets
 
 
+def manifest_category_targets(category):
+    """Every hand and channel one `changes_asserted` category addresses.
+
+    The manifest's vocabulary is the note key's vocabulary, and this is the
+    same resolver saying so. It was not, for the field's whole first life:
+    dispatch and the payload slice both read `_CATEGORY_CHANNELS` RAW, so a
+    category resolved only if it was a category-table key, spelled exactly,
+    in the right case -- while a `ledger_notes` key spelled the same way
+    resolved through hand names, channel names, plural tolerance and the
+    pack's aliases. One field's vocabulary was four times the other's, and
+    nothing said so out loud.
+
+    Measured 2026-09-09 over twelve interpret beats on gemini-3.8-flash,
+    which is the reason this exists: the author filed a manifest on 8 of 12
+    beats and used FOUR distinct category words -- `body`, `objects`,
+    `spatial`, `contact`. Three of the four reached no channel, so
+    `tools/dispatch_replay.py --filed-only` scored 8 false negatives, 100%
+    of productive calls. Not one of them was a bad ruling. Every `change`
+    string was accurate and correctly scoped; the entries simply named the
+    HAND rather than the ledger.
+
+    The model was doing what the sheet said. `director_interpret.txt` asked
+    for "`category`, one of the ledgers named above", and the only names
+    above it are the five specialists -- so the sheet taught one closed
+    vocabulary and the router accepted a different one. Given a choice
+    between teaching a second twenty-four-word vocabulary to every story and
+    letting code accept the one the sheet already teaches, this is the
+    cheaper half, and it is the half that matches what the engine is for: a
+    hand's name is a legitimate answer to "which ledger", just a coarser one.
+
+    Coarser, and that is the whole cost. A category naming a CHANNEL grants
+    that channel; a category naming a HAND grants the hand its story's
+    channels, by the rule `_dispatch_specialists` already follows for a note
+    keyed by hand alone -- "a ruling that reached it is better evidence than
+    a prediction that nothing there could change". Fail-open, as that gate is.
+
+    Widening only: the union, not the fallback, because `note_key_targets`
+    stops at the first kind that matched and `contact` matches BOTH -- the
+    hand and, through the category table, `contact_ops`. Resolving it as a
+    hand alone would have quietly dropped the one channel the manifest used
+    to name correctly.
+    """
+    targets = set(note_key_targets(category))
+    cat = str(category or "").strip().casefold()
+    cat = _ling("_OMISSION_CATEGORY_ALIASES").get(cat, cat)
+    channel = _CATEGORY_CHANNELS.get(cat)
+    if channel:
+        targets.add(("channel", channel))
+    return targets
+
+
+def _work_item_categories(item):
+    """The category names one work item lists, blank ones dropped."""
+    listed = item.get("categories") if isinstance(item, dict) else None
+    names = ([str(c) for c in listed]
+             if isinstance(listed, (list, tuple)) and listed
+             else [(item or {}).get("category")])
+    return [str(c).strip() for c in names if str(c or "").strip()]
+
+
+def unnamed_work(view):
+    """Work items whose categories reach NO hand and NO channel.
+
+    An item naming nothing at all is not one of these -- an element that
+    changes no ledger gets no category, and that is the common case (a
+    glance, a question, a look). This is the other thing: an item that DID
+    name a family, in a word the engine does not know.
+    """
+    orphans = []
+    for item in (list((view or {}).get("manifest") or [])
+                 + list((view or {}).get("spans") or [])):
+        if not isinstance(item, dict):
+            continue
+        names = _work_item_categories(item)
+        if names and not any(manifest_category_targets(c) for c in names):
+            orphans.append(item)
+    return orphans
+
+
 def _ruling_for(name, view):
     """What the Director's ruling addressed to this hand.
 
@@ -896,15 +975,49 @@ def _ruling_for(name, view):
                     named.append(target)
                 if "note" not in addressed_by:
                     addressed_by.append("note")
-    for item in (view or {}).get("manifest") or []:
+    # SPANS DISPATCH TOO, by the same categories as the manifest. A hand is
+    # addressed by any work item in its ledgers, whether the Director filed it
+    # as a categorized span of the input (`chunks`) or as an asserted change
+    # (`changes_asserted`) -- the second is what the first becomes when
+    # `DESIGN_SPECIALIST_CONTRACT.md`'s migration finishes.
+    work = list((view or {}).get("manifest") or []) \
+        + list((view or {}).get("spans") or [])
+    for item in work:
         if not isinstance(item, dict):
             continue
-        channel = _CATEGORY_CHANNELS.get(item.get("category"))
-        if channel in own:
-            if channel not in named:
-                named.append(channel)
+        _listed = item.get("categories")
+        _names = ([str(c) for c in _listed]
+                  if isinstance(_listed, (list, tuple)) and _listed
+                  else [item.get("category")])
+        for kind, target in {t for c in _names
+                             for t in manifest_category_targets(c)}:
+            if kind == "hand" and target != name:
+                continue
+            if kind == "channel":
+                if target not in own:
+                    continue
+                if target not in named:
+                    named.append(target)
             if "manifest" not in addressed_by:
                 addressed_by.append("manifest")
+    # A SPAN NAMED FOR NOBODY IS EVERYBODY'S TO DECLINE.
+    #
+    # "A ledger not reaching a specialist is as good as that ledger not
+    # existing" (the owner). A category in a word the engine does not know --
+    # `geography` for what `spatial` owns, measured twice on the drift run --
+    # addressed no hand at all, so the change was never written and the only
+    # remedy was a report that reaches the NEXT beat.
+    #
+    # Stated as the complement rather than as a table of synonyms, because a
+    # table can only ever cover the words somebody already saw: a span whose
+    # categories name somebody goes to whoever was named, and a span that
+    # names NOBODY goes to everybody. Safe by construction -- the hands own
+    # DISJOINT channels, so a hand handed a span outside its ledgers can only
+    # answer `not_mine`, which is the answer the scope comment below already
+    # expects of it.
+    if unnamed_work(view):
+        if "unnamed_work" not in addressed_by:
+            addressed_by.append("unnamed_work")
     if (view or {}).get("pressure_ticks") and "sensory_events" in own:
         if "sensory_events" not in named:
             named.append("sensory_events")
@@ -933,6 +1046,26 @@ def _unrouted_rulings(view):
             continue
         if not note_key_targets(key):
             unrouted.append(str(key))
+    # AND A WORK ITEM IN A CATEGORY NOTHING ANSWERS TO. A chunk is the beat's
+    # unit of work now, so a category that resolves to no hand is a change the
+    # engine cannot deliver -- the same silence this function was written for,
+    # one field over.
+    #
+    # Measured 2026-09-10: with `reasoning_effort=low` on the Director the
+    # category vocabulary DRIFTS -- it filed `geography` twice for what
+    # `spatial` owns, on a run that was otherwise clean. Reported rather than
+    # guessed at, deliberately: a synonym table would have the engine
+    # inventing vocabulary on the Director's behalf and getting it wrong
+    # quietly, which is the failure `_note_key_forms` refuses in as many
+    # words. The next beat's author sees the word it used beside the names
+    # that route.
+    for item in (view or {}).get("spans") or []:
+        if not isinstance(item, dict):
+            continue
+        for category in _work_item_categories(item):
+            if not manifest_category_targets(category):
+                if category not in unrouted:
+                    unrouted.append(category)
     return unrouted
 
 
@@ -1004,8 +1137,20 @@ def _dispatch_specialists(ctx, sc, facts, view):
             kept = [channel for channel in spec["channels"]
                     if facts.get(_STRUCTURAL_CHANNEL_FACTS.get(channel),
                                  True)]
-            scope = [channel for channel in kept
-                     if channel in gated or channel in named]
+            # THE RULING NAMED A CHANNEL, OR IT NAMED ONLY THE HAND. Where it
+            # named one, the gates may add to it -- both are evidence about
+            # this beat. Where it named none, there is nothing for the gates
+            # to narrow: the Director said this hand has work and did not say
+            # which ledger, so every ledger the story keeps is in play. A
+            # narrower sheet there does not save the call, it wastes it --
+            # the hand runs, finds no block for the work it was handed, and
+            # answers `not_mine` about its own span.
+            _stage = "resolve" if facts.get("resolved_stage") else "interpret"
+            scope = ([channel for channel in kept
+                      if channel in gated or channel in named]
+                     if named else
+                     [channel for channel in kept
+                      if channel_serves_stage(channel, _stage)])
             if not scope:
                 scope = kept
         dispatch[name] = {
