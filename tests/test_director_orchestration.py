@@ -39,6 +39,7 @@ from story.character_schema import default_character_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
 
 import agents.director as director
+from agents.director import manifest_category_targets
 
 
 BASE_SCENE = {
@@ -5842,3 +5843,78 @@ class TestACharactersMoveIsFoundThroughTheCitation:
         sheet = DEFAULT_PROMPTS["character"]
         assert "category" not in sheet
         assert "from_declaration" not in sheet
+
+
+class TestACategoryIsReadInWhateverShapeItArrived:
+    """The owner: "surely there is a more loosey goosey way to ingest the
+    categories."
+
+    There was not, and the reason is that tolerance had been added TWICE in
+    two places that never composed -- `_split_joined_categories` handled a
+    delimited STRING, the call site handled a LIST, and once a value took the
+    list branch no member was ever split. So the shapes that lost work were
+    the MIXTURES. Measured on the long-beat run: 5 of 54 categories arrived as
+    lists, so mixtures are not hypothetical.
+
+    A shape the engine refuses to read is a span that routes to no hand, and a
+    change nobody was handed is lost in SILENCE -- which is the failure this
+    whole seam exists to prevent.
+    """
+
+    def _hands(self, category):
+        out = {"sequence": [{"actor": "Corin", "attempt": "x", "note": "n",
+                             "category": category}]}
+        items = director._span_items(out)
+        if not items:
+            return []
+        hands = []
+        for name in items[0].get("categories") or []:
+            for kind, hand in (manifest_category_targets(name) or []):
+                if kind == "hand" and hand not in hands:
+                    hands.append(hand)
+        return hands
+
+    def test_every_shape_a_model_reaches_for_names_the_same_two_hands(self):
+        for shape in ("body, objects", "body and objects", "body; objects",
+                      "body/objects", ["body", "objects"], ("body", "objects"),
+                      ["BODY", " objects "]):
+            assert self._hands(shape) == ["body", "objects"], shape
+
+    def test_a_list_holding_one_delimited_string_used_to_route_nowhere(self):
+        """The mixture the two tolerant paths could not see between them."""
+        assert self._hands(["body, objects"]) == ["body", "objects"]
+
+    def test_a_mixed_list_no_longer_drops_everything_after_the_first(self):
+        assert self._hands(["body", "objects, spatial"]) == [
+            "body", "objects", "spatial"]
+
+    def test_a_mapping_answers_with_its_keys(self):
+        """Worth accepting for a specific reason: a model asked for categories
+        AND a note per category reaches for a mapping because `ledger_notes`
+        in this very output is one, so the schema it is already writing
+        suggests the shape."""
+        assert self._hands({"body": "gloves off",
+                            "objects": "gloves on the bench"}) == [
+            "body", "objects"]
+
+    def test_tolerance_is_not_credulity(self):
+        """Widening the shapes must not widen the discard rule. A string is
+        split only when EVERY part routes, so free prose reaches the unrouted
+        report WHOLE rather than minced into categories nobody named."""
+        prose = "the belt comes off and lands on the bench"
+        assert director._category_names(prose) == [prose]
+        assert director._category_names([prose]) == [prose]
+        assert director._category_names({prose: 1}) == [prose]
+        # A partly-unknown string is one unknown name, not one known and one
+        # unknown -- the honest thing for the unrouted report to receive.
+        assert director._category_names("body, and then something else") == [
+            "body, and then something else"]
+
+    def test_an_unknown_single_name_still_passes_through_to_be_reported(self):
+        assert director._category_names("wardrobe") == ["wardrobe"]
+
+    def test_nothing_named_is_still_nothing(self):
+        for empty in ([], None, "", {}):
+            out = {"sequence": [{"actor": "C", "attempt": "x",
+                                 "category": empty}]}
+            assert director._span_items(out) == []

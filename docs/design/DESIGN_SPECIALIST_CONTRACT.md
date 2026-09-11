@@ -1234,6 +1234,60 @@ records it and no onlooker is yet shown it. Both are the next step, and the
 ledger is the thing that makes them possible rather than the thing that does
 them.
 
+## 4n. READING A CATEGORY IN WHATEVER SHAPE IT ARRIVED
+
+The owner: "surely there is a more loosey goosey way to ingest the
+categories." There was not, and the reason is that tolerance had been added
+TWICE, in two places that never composed:
+
+* `_split_joined_categories` handled a delimited STRING -- `"body, objects"`,
+  `"body and objects"`, `"objects/spatial"`;
+* the `_span_items` call site handled a LIST -- `["body", "objects"]`.
+
+Once a value took the list branch, no member was ever split. So the shapes
+that lost work were the MIXTURES, and they are not hypothetical: measured on
+the long-beat run, **5 of 54 categories arrived as lists**.
+
+| shape | before | after |
+|---|---|---|
+| `"body, objects"` | body, objects | unchanged |
+| `["body", "objects"]` | body, objects | unchanged |
+| `["body, objects"]` | **no hand at all** | body, objects |
+| `["body", "objects, spatial"]` | **body only** | body, objects, spatial |
+| `{"body": ..., "objects": ...}` | **no hand at all** | body, objects |
+
+`_category_names` replaces both paths with one recursive normalizer: flatten
+any container, split any string member, apply the per-string rule where it was
+always meant to apply. A MAPPING answers with its keys, and that shape is
+worth accepting for a specific reason -- a model asked for categories AND a
+note per category reaches for a mapping because `ledger_notes` in the very
+same output IS one, so the schema it is already writing suggests it.
+
+**WHY TOLERANCE HERE AND NOT VOCABULARY TOLERANCE.** This widens the SHAPES
+the engine will read, never the NAMES it will accept. A synonym table would
+have the engine inventing vocabulary on the Director's behalf and getting it
+wrong quietly, which `_note_key_forms` refuses in as many words and which
+`_unrouted_rulings` exists to replace. A shape is punctuation; a name is a
+meaning. Reading `["body, objects"]` as two families it explicitly named is
+not a guess -- reading `geography` as `spatial` would be.
+
+**AND NOTHING IS DISCARDED, at any point on this path.** The word appears
+nowhere in the code and should not appear in discussion of it:
+
+1. a string that does not wholly route is not SPLIT -- it passes through
+   whole, because splitting `"the belt comes off and lands on the bench"`
+   would report seven unroutable names where the honest answer is one;
+2. the span is still CREATED -- the act stays in `sequence`, stays a work
+   item, and stays a row in the event ledger;
+3. the Director is TOLD, that beat, by `_unrouted_rulings` through
+   `tell_director` -- the word it used, beside the names that would route.
+
+The only thing that does not happen is a specialist being dispatched for that
+span. An element with NO category produces no work item at all, and that is
+the designed common case -- a glance, a question, a look changes no ledger.
+Before the event ledger such an element vanished entirely; it is now a row in
+the world, which is the hole s 4m filled.
+
 ## 5. What already exists to build on
 
 This is a rewire of proven mechanisms, not a green field. **The output half of
