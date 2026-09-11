@@ -418,6 +418,21 @@ function weatherFxVisible(weather) {
 
 function weatherFxApply(weather) {
   WFX.weather = weather || null;
+  // NO PAYLOAD, NOTHING TO DRAW. Three callers pass null on purpose --
+  // `backdrops.js` does it when a story is deselected and again when there is
+  // no chat at all, which is every app boot, and the turn observer does it for
+  // a state with no weather. The two lines around this one already tolerate
+  // that (`weather || null`, and `weatherFxVisible` returns false for it), and
+  // then the axis read below dereferenced it anyway: "can't access property
+  // precipitation_kind, weather is null", on load, every time.
+  //
+  // Stopping is what the rest of this function already decides for a null
+  // payload -- nothing visible, nothing falling, no storm -- so this is the
+  // same answer reached before the crash rather than a new behaviour.
+  if (!weather) {
+    weatherFxStop();
+    return;
+  }
   const visible = weatherFxVisible(weather);
   // WHAT IS DRAWN COMES OFF THE AXIS, NOT THE NAME (engine A88). The engine
   // says whether anything is coming down (`intensity`) and what it does on

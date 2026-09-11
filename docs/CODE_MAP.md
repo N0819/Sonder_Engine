@@ -2984,9 +2984,9 @@ Sections: API (`:105`); Download (`:224`); Card authoring warnings (`:233`).
 
 Declared functions: `t()`, `watchUILanguage()`, `localizeDocument()`, `memoryCategories()`, `memoryProvenance()`, `hasDefaultModel()`, `safeId()`, `splitCL()`, `numOr()`, `taggedError()`, `errorDetailText()`, `api()`, `streamPost()`, `downloadJSON()`, `showCardWarnings()`.
 
-### `static/js/weather-fx.js` (623 lines)
+### `static/js/weather-fx.js` (638 lines)
 
-Sections: Weather effects (`:2`); the tile (`:219`); the layers (`:292`); lifecycle (`:391`); lightning (`:466`); schedules nothing; the visibility handler re-enters through (`:492`).
+Sections: Weather effects (`:2`); the tile (`:219`); the layers (`:292`); lifecycle (`:391`); lightning (`:481`); schedules nothing; the visibility handler re-enters through (`:507`).
 
 Declared functions: `weatherFxLater()`, `weatherFxCancel()`, `weatherFxClearTimers()`, `weatherFxClearBolt()`, `weatherFxReduced()`, `weatherFxEffectsOff()`, `weatherFxSupported()`, `weatherFxHost()`, `weatherFxRandom()`, `weatherFxTile()`, `weatherFxReach()`, `weatherFxBuild()`, `weatherFxClearLayers()`, `weatherFxSetPlayState()`, `weatherFxStop()`, `weatherFxVisible()`, `weatherFxApply()`, `weatherFxStormy()`, `weatherFxScheduleFlash()`, `weatherFxFlash()`, `weatherFxOpenSky()`, `weatherFxBolt()`, `weatherFxThunder()`, `weatherFxForTurn()`.
 
