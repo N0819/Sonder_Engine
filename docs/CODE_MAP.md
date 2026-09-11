@@ -11,9 +11,9 @@
 | `agents/character.py` | 4476 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/common.py` | 10842 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 4886 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
-| `agents/director.py` | 5389 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
+| `agents/director.py` | 5391 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 477 |  | `story.character_schema`, `world.spatial` |
-| `agents/director_evidence.py` | 2532 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
+| `agents/director_evidence.py` | 2586 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
 | `agents/director_fanout.py` | 1318 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 2087 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
@@ -270,14 +270,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 3289 | 2067 lines |
-| `director_interpret()` | 860 | 736 lines |
-| `_reconcile_resolution()` | 1986 | 558 lines |
-| `_run_specialists()` | 2781 | 284 lines |
-| `director_establish()` | 365 | 187 lines |
-| `_reconcile_interpretation()` | 1598 | 139 lines |
-| `_specialist_repairs()` | 1799 | 133 lines |
-| `_ground_public_evidence()` | 3107 | 112 lines |
+| `director_resolve()` | 3291 | 2067 lines |
+| `director_interpret()` | 862 | 736 lines |
+| `_reconcile_resolution()` | 1988 | 558 lines |
+| `_run_specialists()` | 2783 | 284 lines |
+| `director_establish()` | 367 | 187 lines |
+| `_reconcile_interpretation()` | 1600 | 139 lines |
+| `_specialist_repairs()` | 1801 | 133 lines |
+| `_ground_public_evidence()` | 3109 | 112 lines |
 
 ### `agents/director_contact.py`
 
@@ -296,14 +296,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_evidence_present()` | 1767 | 359 lines |
-| `_fold_derived_manifest_events()` | 2444 | 89 lines |
-| `span_slices()` | 1615 | 85 lines |
+| `_evidence_present()` | 1821 | 359 lines |
+| `_fold_derived_manifest_events()` | 2498 | 89 lines |
+| `span_slices()` | 1669 | 85 lines |
 | `_merge_repair_into_diff()` | 590 | 80 lines |
-| `item_survivors()` | 1332 | 73 lines |
-| `_span_items()` | 2163 | 73 lines |
-| `span_result_findings()` | 1475 | 62 lines |
-| `_manifest_items()` | 2333 | 62 lines |
+| `item_survivors()` | 1386 | 73 lines |
+| `_span_items()` | 2217 | 73 lines |
+| `span_result_findings()` | 1529 | 62 lines |
+| `_manifest_items()` | 2387 | 62 lines |
 
 ### `agents/director_fanout.py`
 

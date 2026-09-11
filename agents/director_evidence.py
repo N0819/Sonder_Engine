@@ -1138,6 +1138,60 @@ def _drop_record_at(sd, path):
 # ---------------------------------------------------------------------------
 
 
+def declared_elements(interp, declarations):
+    """`{phase_event_id: element}` for every act anyone DECLARED this beat.
+
+    The player's own sequence and each character's, in one index. These are the
+    elements `norm_sequence` built and `assign_event_ids` stamped, so they
+    carry `observable` -- the intent-free outward surface an onlooker is
+    entitled to -- rather than anybody's later description of them.
+    """
+    index = {}
+    groups = [(interp or {}).get("sequence") or []]
+    for declaration in (declarations or []):
+        if isinstance(declaration, dict):
+            groups.append(declaration.get("sequence") or [])
+    for group in groups:
+        for element in group:
+            if not isinstance(element, dict):
+                continue
+            key = str(element.get("event_id") or "").strip()
+            if key and key not in index:
+                index[key] = element
+    return index
+
+
+def beat_timeline(resolved, interp, declarations):
+    """The beat as one ordered list, each entry paired with what was declared.
+
+    `[{"order", "actor", "element", "declared", "category", "note"}]` in the
+    author's order -- which is the beat's chronology, because the sheet asks
+    for "one element for EVERYTHING that happened, in the order it happened".
+
+    `declared` is the element the author CITED (`from_declaration`), or None
+    for something nobody declared: a consequence, a thing the world did back.
+    A reader that renders to an onlooker takes the surface from `declared`
+    where there is one, and only falls to the author's own words where nothing
+    was declared -- which is the whole point of the citation, and the reason
+    this returns the pair rather than a merged row.
+    """
+    index = declared_elements(interp, declarations)
+    timeline = []
+    for order, element in enumerate((resolved or {}).get("sequence") or []):
+        if not isinstance(element, dict):
+            continue
+        cited = str(element.get("from_declaration") or "").strip()
+        timeline.append({
+            "order": order,
+            "actor": str(element.get("actor") or ""),
+            "element": element,
+            "declared": index.get(cited),
+            "category": element.get("category"),
+            "note": element.get("note"),
+        })
+    return timeline
+
+
 def mover_cut_events(out, diff=None):
     """`{body: phase_event_id}` -- the declared event that moved each body.
 
