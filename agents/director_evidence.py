@@ -2399,8 +2399,21 @@ def _split_joined_categories(raw):
         return [raw]
     parts = [part.strip() for part in re.split(r"[,;/|]|\band\b", text)]
     parts = [part for part in parts if part]
-    if len(parts) < 2:
+    if not parts:
+        # Nothing but separators (",", "and", "  ,  ,  "). There is no name
+        # here to recover, so the raw value stands and the unrouted report
+        # shows what was actually written.
         return [raw]
+    if len(parts) < 2:
+        # A STRAY SEPARATOR IS NOT PART OF A NAME. This handed back the RAW
+        # string, and a trailing comma then defeated the routing outright:
+        # `"body"` reached the body hand and `"body,"` reached nobody, because
+        # `body,` is not a category anybody answers to. One keystroke, one
+        # lost hand name -- the same class the `any`/`all` rule was fixed for,
+        # one branch earlier. The single part IS the string minus the stray
+        # punctuation, so handing it back changes nothing else: a value with
+        # no separator in it splits to itself.
+        return parts
     # AT LEAST ONE part must ROUTE -- not every part, and not merely fold.
     #
     # `_normalize_omission_category` passes an unknown name straight through,

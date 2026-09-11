@@ -789,10 +789,11 @@ def _outcome_event_stream(ctx, scene, interp, res, player_name,
             seen_events.add(event_key)
             if not sequence_event_allowed(event, res):
                 continue
-            destination = deferred_stream if (
+            _deferred = bool(
                 is_player and (event.get("depends_on") or
-                str(event.get("phase") or "").casefold() in (
-                    "continuation", "completion"))) else stream
+                               str(event.get("phase") or "").casefold() in (
+                                   "continuation", "completion")))
+            destination = deferred_stream if _deferred else stream
             # WHICH DECLARATION THIS ENTRY IS, kept on the entry itself.
             # The world's ledger cites declarations, so this is the join that
             # lets it order a stream assembled out of several of them. Only a
@@ -813,12 +814,13 @@ def _outcome_event_stream(ctx, scene, interp, res, player_name,
                     used_dialogue.add(match)
                     destination.append({"kind": "speech",
                                         "declared": declared_id,
+                                        "deferred": _deferred,
                                         "entry": dialogue[match]})
             elif (event.get("type") == "communication"
                   and communication_surface(event)):
                 destination.append({
                     "kind": "communication", "actor": actor,
-                    "declared": declared_id,
+                    "declared": declared_id, "deferred": _deferred,
                     "entry": {**event, "speaker": actor},
                 })
             elif (event.get("type") == "action"
@@ -828,7 +830,7 @@ def _outcome_event_stream(ctx, scene, interp, res, player_name,
                 if surface:
                     destination.append({
                         "kind": "action", "actor": actor,
-                        "declared": declared_id,
+                        "declared": declared_id, "deferred": _deferred,
                         "attempt": surface, "event": event})
 
     # A dependent player phase occurs only after present minds had the chance
@@ -897,9 +899,21 @@ def _world_ordered_stream(scene, ctx, stream):
     order = beat_event_order(scene, turn_idx)
     if len(stream) < 2 or not order:
         return stream
-    # Two named entries are the minimum that can disagree about an order.
+    # THE DETERMINISTIC FLOOR OUTRANKS THE WORLD'S ORDER, and this is the one
+    # place the two can disagree. A dependent player phase was DEFERRED above
+    # so the beat reads onset -> response -> continuation, off the player's
+    # own `depends_on`/`phase` -- a causal invariant the engine enforces,
+    # where the ledger is a model's account of what happened. Measured: the
+    # long-beat run's turn 1 listed all eleven of the player's acts before any
+    # character's, which would pull a continuation back in front of the answer
+    # it waits for. So a deferred entry keeps the index the floor gave it, and
+    # everything else permutes among the slots around it: the world still
+    # fixes the order of everything the floor has no opinion about, and can
+    # never invert the one thing it does.
     slots = [index for index, entry in enumerate(stream)
-             if str(entry.get("declared") or "") in order]
+             if isinstance(entry, dict)
+             and str(entry.get("declared") or "") in order
+             and not entry.get("deferred")]
     if len(slots) < 2:
         return stream
     ranked = sorted(slots, key=lambda index: (

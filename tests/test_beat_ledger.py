@@ -298,3 +298,167 @@ class TestWhatPerceptionDoesWithIt:
                   {"kind": "speech", "declared": "p:speech"}]
         assert perception._world_ordered_stream(
             scene, _ctx(2), stream) == stream
+
+
+class TestAStraySeparatorIsNotPartOfAName:
+    """Found by fuzzing, and it is the same complaint one branch earlier:
+
+        'body'   ->  body
+        'body,'  ->  NOTHING
+
+    A trailing comma defeated the routing outright. The split yields ONE part
+    ("body"), the "fewer than two parts" branch handed back the RAW string,
+    and `body,` is not a category anybody answers to -- so a hand name the
+    engine owns was lost to a keystroke. A leading or trailing separator is an
+    entirely ordinary thing for a model to emit.
+    """
+
+    def test_a_trailing_or_leading_separator_does_not_cost_the_name(self):
+        for raw in ("body,", ",body", "body;", "body|", " body , ",
+                    "body,,", ",,body"):
+            assert director._category_names(raw) == ["body"], raw
+
+    def test_it_survives_all_the_way_to_a_hand(self):
+        out = director._span_items({"sequence": [
+            {"actor": "C", "attempt": "x", "note": "n", "category": "body,"}]})
+        assert director.span_owners(out[0]) == ["body"]
+
+    def test_separators_alone_recover_nothing_and_say_so(self):
+        """There is no name in ",", "and" or "  ,  ,  " to recover, so the raw
+        value stands and the unrouted report shows what was written rather
+        than an empty string."""
+        for raw in (",", "and", "  ,  ,  ", ";;"):
+            assert director._category_names(raw) == [raw], raw
+
+    def test_a_value_with_no_separator_is_unchanged(self):
+        """The branch may only strip punctuation -- a string that splits to
+        itself must come back as itself, prose included."""
+        for raw in ("objects", "wardrobe", "the belt comes off"):
+            assert director._category_names(raw) == [raw], raw
+
+
+class TestTheCausalFloorOutranksTheWorldsOrder:
+    """`_outcome_event_stream` defers a dependent player phase so the beat
+    reads onset -> response -> continuation: "a dependent player phase occurs
+    only after present minds had the chance to answer its prerequisite". That
+    is a causal invariant the engine enforces deterministically, off the
+    player's own `depends_on`/`phase`.
+
+    The ledger is a MODEL's account of the chronology, and it could pull the
+    continuation back in front of the answer it waits for. Measured: the
+    long-beat run's turn 1 listed all eleven of the player's acts before any
+    character's, which is exactly that shape. Where a failure would be the
+    engine's fault, the deterministic floor stays.
+    """
+
+    def _scene(self):
+        from world.beat_ledger import record_beat_events
+        scene = {}
+        record_beat_events(scene, 1, [
+            {"order": 0, "actor": "Corin", "surface": "onset",
+             "declared": "p:onset"},
+            {"order": 1, "actor": "Corin", "surface": "cont",
+             "declared": "p:cont"},
+            {"order": 2, "actor": "Mara", "surface": "answers",
+             "declared": "c:answer"}])
+        return scene
+
+    def _ctx(self):
+        from types import SimpleNamespace
+        return SimpleNamespace(turn=SimpleNamespace(idx=1))
+
+    def test_a_continuation_never_precedes_the_answer_it_waits_for(self):
+        stream = [
+            {"kind": "action", "declared": "p:onset"},
+            {"kind": "speech", "declared": "c:answer"},
+            {"kind": "action", "declared": "p:cont", "deferred": True}]
+        out = perception._world_ordered_stream(
+            self._scene(), self._ctx(), stream)
+        where = [e["declared"] for e in out]
+        assert where.index("p:cont") > where.index("c:answer")
+
+    def test_the_world_still_orders_everything_the_floor_has_no_view_on(self):
+        """The floor is not a veto on the whole beat -- only on what it
+        actually decided. Two ordinary entries the ledger disagrees with are
+        still put right."""
+        stream = [
+            {"kind": "speech", "declared": "c:answer"},
+            {"kind": "action", "declared": "p:onset"},
+            {"kind": "action", "declared": "p:cont", "deferred": True}]
+        out = perception._world_ordered_stream(
+            self._scene(), self._ctx(), stream)
+        assert [e["declared"] for e in out] == [
+            "p:onset", "c:answer", "p:cont"]
+
+    def test_the_builder_marks_what_it_deferred(self):
+        """A floor that only holds in a hand-built test is no floor: the flag
+        has to be stamped by the builder on every branch that can defer."""
+        import inspect
+        src = inspect.getsource(perception._outcome_event_stream)
+        assert src.count('"deferred": _deferred') == 3
+        assert "destination = deferred_stream if _deferred else stream" in src
+
+
+class TestTheAnswerLandsWhereItWasAnswered:
+    """The shape the whole feature exists for, taken from the long-beat run's
+    beat 2: Corin works, ASKS a question, Sera and Wren answer, and then Corin
+    RESUMES with the file.
+
+    The concatenation could never render that. It appends every one of the
+    player's acts, then each character's in the order the loops ran -- so his
+    last two acts were shown before the answers to the line that preceded
+    them, and the page read as though nobody had replied until he had finished
+    doing everything else.
+    """
+
+    def _scene(self):
+        from world.beat_ledger import record_beat_events
+        scene = {}
+        record_beat_events(scene, 2, [
+            {"order": 13, "actor": "Corin", "surface": "sets the hinge down",
+             "declared": "p:13"},
+            {"order": 14, "actor": "Corin", "surface": "asks about the reeve",
+             "declared": "p:14"},
+            {"order": 16, "actor": "Sera", "surface": "No reeve came by.",
+             "declared": "c:sera"},
+            {"order": 18, "actor": "Wren", "surface": "The reeve stays...",
+             "declared": "c:wren"},
+            {"order": 19, "actor": "Corin", "surface": "picks up a file",
+             "declared": "p:19"},
+            {"order": 20, "actor": "Corin", "surface": "draws it twice",
+             "declared": "p:20"}])
+        return scene
+
+    def _ctx(self):
+        from types import SimpleNamespace
+        return SimpleNamespace(turn=SimpleNamespace(idx=2))
+
+    #: What the concatenation builds: all of his, then all of theirs.
+    CONCATENATED = [{"declared": d} for d in
+                    ("p:13", "p:14", "p:19", "p:20", "c:sera", "c:wren")]
+
+    def test_his_resume_follows_the_answers_to_his_question(self):
+        out = perception._world_ordered_stream(
+            self._scene(), self._ctx(), list(self.CONCATENATED))
+        assert [e["declared"] for e in out] == [
+            "p:13", "p:14", "c:sera", "c:wren", "p:19", "p:20"]
+
+    def test_the_concatenation_really_did_get_it_wrong(self):
+        """Pinned so the test above cannot quietly become a tautology if the
+        stream builder's own ordering changes."""
+        order = [e["declared"] for e in self.CONCATENATED]
+        assert order.index("p:19") < order.index("c:sera")
+
+    def test_reordering_is_idempotent(self):
+        once = perception._world_ordered_stream(
+            self._scene(), self._ctx(), list(self.CONCATENATED))
+        twice = perception._world_ordered_stream(
+            self._scene(), self._ctx(), once)
+        assert once == twice
+
+    def test_nothing_is_gained_or_lost(self):
+        out = perception._world_ordered_stream(
+            self._scene(), self._ctx(), list(self.CONCATENATED))
+        assert len(out) == len(self.CONCATENATED)
+        assert sorted(e["declared"] for e in out) == sorted(
+            e["declared"] for e in self.CONCATENATED)
