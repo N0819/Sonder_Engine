@@ -11,7 +11,7 @@
 | `agents/character.py` | 4476 | Private character decision agent. | `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/common.py` | 10842 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 4886 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
-| `agents/director.py` | 5417 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
+| `agents/director.py` | 5418 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 477 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 2718 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
 | `agents/director_fanout.py` | 1318 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
@@ -19,7 +19,7 @@
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 1453 |  | `agents.director_lingua`, `story.character_schema`, `world.spatial` |
 | `agents/director_reconcile.py` | 605 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story`, `world.spatial` |
-| `agents/director_scopes.py` | 1140 |  | `agents.director_lingua`, `agents.director_views`, `core.db`, `world.survival` |
+| `agents/director_scopes.py` | 1182 |  | `agents.director_lingua`, `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 706 |  | `agents.common`, `story.character_schema`, `story.scene`, `world.background_claims` |
 | `agents/dramaturge.py` | 348 |  | `core.db`, `core.logging_utils` |
 | `agents/loops.py` | 1400 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
@@ -271,14 +271,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 3293 | 2091 lines |
-| `director_interpret()` | 864 | 736 lines |
-| `_reconcile_resolution()` | 1990 | 558 lines |
-| `_run_specialists()` | 2785 | 284 lines |
-| `director_establish()` | 369 | 187 lines |
-| `_reconcile_interpretation()` | 1602 | 139 lines |
-| `_specialist_repairs()` | 1803 | 133 lines |
-| `_ground_public_evidence()` | 3111 | 112 lines |
+| `director_resolve()` | 3294 | 2091 lines |
+| `director_interpret()` | 865 | 736 lines |
+| `_reconcile_resolution()` | 1991 | 558 lines |
+| `_run_specialists()` | 2786 | 284 lines |
+| `director_establish()` | 370 | 187 lines |
+| `_reconcile_interpretation()` | 1603 | 139 lines |
+| `_specialist_repairs()` | 1804 | 133 lines |
+| `_ground_public_evidence()` | 3112 | 112 lines |
 
 ### `agents/director_contact.py`
 
@@ -368,12 +368,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_dispatch_specialists()` | 1030 | 111 lines |
+| `_dispatch_specialists()` | 1072 | 111 lines |
+| `_ruling_for()` | 936 | 92 lines |
 | `_gate_facts()` | 706 | 79 lines |
-| `_ruling_for()` | 908 | 74 lines |
 | `register_specialist()` | 483 | 49 lines |
 | `manifest_category_targets()` | 857 | 49 lines |
-| `_unrouted_rulings()` | 984 | 44 lines |
+| `_unrouted_rulings()` | 1030 | 40 lines |
 | `note_key_targets()` | 818 | 37 lines |
 | `_rebuild_channel_owners()` | 452 | 25 lines |
 
