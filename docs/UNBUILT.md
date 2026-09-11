@@ -149,6 +149,67 @@ of `encoded` claims cited, and never once by `director_social` across 91 calls
 beside the work rather than a field inside it. See
 `DESIGN_SPECIALIST_CONTRACT.md` sections 4a and 4b.
 
+**THE BEAT IS NOW REASSEMBLED AND KEPT (2026-09-10).** The recompiler
+(`DESIGN_SPECIALIST_CONTRACT.md` 4k) answers what happened, to whom and when
+off four engine-issued identifiers, and `world/beat_ledger.py` (4m) makes the
+beat's events WORLD STATE -- written at the composition rather than the commit,
+expiring by beat number with nothing sweeping them, and read by perception for
+the beat's chronology. Ingestion was widened to read a category in whatever
+shape it arrived (4n), an unroutable span is now offered to every hand to
+decline rather than reaching none (4o, on the owner's rule that "a ledger not
+reaching a specialist is as good as that ledger not existing"), and a known
+name is recovered from beside an unknown one (4p, `any` not `all` -- and a
+stray separator no longer costs the name).
+
+**STILL OPEN, AND THE LARGEST OF THEM: A LONG BEAT COMPRESSES, AND THE
+OMISSION DETECTOR CANNOT SEE IT.** Measured 2026-09-10 on paragraphs of
+hand-counted acts, all confined to one room so movement's own backstops were
+not in play:
+
+| acts written | interpret elements | speech acts kept |
+|---|---|---|
+| 12 | 11 | n/a |
+| 20 | 18 | 2 of 2 |
+| 31 | **11** | **0 of 3** |
+
+Twelve and twenty acts dissect near 1:1. Thirty-one collapse to eleven
+compound elements -- one covers three acts, another four -- and all three
+declared speech acts vanish from the typed sequence (`{'action': 11}`, where
+the twenty-act beat gave `{'action': 16, 'communication': 2}`).
+`_uncovered_declarations` reported ZERO uncovered for it, and the reason is
+structural rather than a threshold: `_declaration_units` splits on sentence
+boundaries and coordination, NOT on plain commas, so a comma-chained paragraph
+is 2 units for 31 acts. The detector then asks whether each coarse unit's
+significant tokens are present, and compression that KEEPS THE NOUNS while
+dropping the acts passes it cleanly. Note the corpus is already deliberately
+not `notes` -- coverage came from the sequence's own compressed `attempt`
+strings.
+
+Not fixed here because the remedy is a judgement the owner should make, and
+both candidates have a known failure mode. Splitting units on commas would
+multiply the units and fire the repair path far more often (the
+"guards that fire on valid output" class). A prompt clause -- resolve's sheet
+already says "one element for EVERYTHING that happened" -- is the cheaper
+instrument, and prompt clauses have to be watched for what they license. A
+structural count (the input declares N speech acts, the sequence has zero)
+would be a guard reading free prose, which is the class that failed four times
+on 2026-08-29.
+
+**THE RESIDUAL EDGE IN THE SPLIT RULE, named so it is not rediscovered as a
+bug.** A sentence containing a bare routing word as its own delimited fragment
+does split: "the belt comes off, body, and it lands" yields three parts, of
+which `body` routes and two are reported as unknown names. The span reaches
+the right hand and the cost is two junk entries in the unrouted report -- the
+cheap direction to be wrong in, since the change is delivered. Prose in a
+category field has never actually been observed: across the long-beat run's 54
+categories, 49 plain strings, 5 lists, zero prose.
+
+**AND ONE REPORTING GAP, deliberate.** `_unrouted_rulings` reads `ledger_notes`
+keys and `spans`, so a change filed the older way -- as a `changes_asserted`
+entry -- is DELIVERED to every hand but not reported. Delivery is the half the
+owner's ruling is about, and the manifest is what spans replace when the
+migration finishes.
+
 **Open, and not to be papered over:** record-shaped channels (`poses`,
 `overlays`, `conditions`, `attire`) are whole current-state records rather than
 events, so there is often no chunk to attach an instruction to. `director_body`
