@@ -27,6 +27,7 @@ from story.character_schema import (
 )
 from core.db import q, wget
 from core.pipeline_context import note_step_decision
+from world.beat_ledger import beat_event_order
 from world.scene_memo import scene_read_pass
 from story import attire as attire_model
 from story.scene import (
@@ -792,6 +793,13 @@ def _outcome_event_stream(ctx, scene, interp, res, player_name,
                 is_player and (event.get("depends_on") or
                 str(event.get("phase") or "").casefold() in (
                     "continuation", "completion"))) else stream
+            # WHICH DECLARATION THIS ENTRY IS, kept on the entry itself.
+            # The world's ledger cites declarations, so this is the join that
+            # lets it order a stream assembled out of several of them. Only a
+            # real phase id is carried -- `event_key` falls back to a JSON
+            # blob for an element that has none, and a blob is a dedup key,
+            # not an identity the world could ever name.
+            declared_id = str(event.get("event_id") or "").strip()
             if event.get("type") == "speech" and event.get("text"):
                 wanted = _quote_body(str(event.get("text") or "")).strip()
                 match = next((
@@ -804,11 +812,13 @@ def _outcome_event_stream(ctx, scene, interp, res, player_name,
                 if match is not None:
                     used_dialogue.add(match)
                     destination.append({"kind": "speech",
+                                        "declared": declared_id,
                                         "entry": dialogue[match]})
             elif (event.get("type") == "communication"
                   and communication_surface(event)):
                 destination.append({
                     "kind": "communication", "actor": actor,
+                    "declared": declared_id,
                     "entry": {**event, "speaker": actor},
                 })
             elif (event.get("type") == "action"
@@ -818,6 +828,7 @@ def _outcome_event_stream(ctx, scene, interp, res, player_name,
                 if surface:
                     destination.append({
                         "kind": "action", "actor": actor,
+                        "declared": declared_id,
                         "attempt": surface, "event": event})
 
     # A dependent player phase occurs only after present minds had the chance
@@ -844,7 +855,59 @@ def _outcome_event_stream(ctx, scene, interp, res, player_name,
                       "event_id": "background:%s" % beat["name"]},
         })
     stream.extend(_unanswered_addresses(scene, sequences, stream, res))
-    return stream
+    return _world_ordered_stream(scene, ctx, stream)
+
+
+def _world_ordered_stream(scene, ctx, stream):
+    """The beat's stream, in the order the WORLD says the beat happened.
+
+    "perception should only be reading the world." The stream above is
+    assembled out of several separate declarations -- the player's, then each
+    character's, then the lines that bound to none of them -- and concatenating
+    them is a GUESS at chronology: it puts everything the player did before
+    anything anyone else did, whatever actually happened. Live, that is a
+    player who speaks, walks out and is answered, rendered as though the answer
+    came before he left.
+
+    The Director's author writes the beat as ONE ordered list ("one element
+    for EVERYTHING that happened, in the order it happened"), the recompiler
+    reassembles it, and `world/beat_ledger.py` keeps it. So the world can say
+    what the concatenation could only guess, and this asks it.
+
+    IT ONLY EVER REORDERS WHAT THE WORLD NAMES, AND NOTHING ELSE MOVES. The
+    named entries are permuted among the slots they already occupy; an entry
+    the ledger does not cite keeps its exact index. That matters in one
+    direction in particular: an unbound dialogue row, a background presence's
+    beat and a silence minted for an unanswered address are appended AFTER the
+    whole declared stream deliberately, and the first rule tried here --
+    anchoring an unnamed entry to the last named one before it -- dragged all
+    three into the middle of the beat the moment that neighbour moved earlier.
+    Holding every unnamed entry still cannot do that. A ledger that names
+    nothing changes nothing; a ledger that names half the beat reorders that
+    half and leaves the rest exactly where the declarations put it.
+    """
+    # `PipelineContext.__getattr__` raises KeyError rather than
+    # AttributeError, so `getattr(ctx, "turn", None)` does NOT shield a
+    # context without one -- a focused test's stub, or a resume that
+    # hydrated no turn. Caught by the suite, not by reading it.
+    try:
+        turn_idx = ctx.turn.idx
+    except (AttributeError, KeyError, TypeError):
+        return stream
+    order = beat_event_order(scene, turn_idx)
+    if len(stream) < 2 or not order:
+        return stream
+    # Two named entries are the minimum that can disagree about an order.
+    slots = [index for index, entry in enumerate(stream)
+             if str(entry.get("declared") or "") in order]
+    if len(slots) < 2:
+        return stream
+    ranked = sorted(slots, key=lambda index: (
+        order[str(stream[index].get("declared") or "")], index))
+    out = list(stream)
+    for slot, source in zip(slots, ranked):
+        out[slot] = stream[source]
+    return out
 
 
 def _unanswered_addresses(scene, sequences, stream, res):
