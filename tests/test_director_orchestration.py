@@ -4313,9 +4313,24 @@ class TestTwoKnownNamesInOneStringAreTwoNames:
     reaches nobody.
 
     This is not the guessing `_note_key_forms` refuses. Nothing is inferred
-    from wording -- the string is split on punctuation and the split is
-    DISCARDED unless every part is a category the engine already routes, so it
-    can recognise names the engine owns and can never invent a route.
+    from wording -- the string is split on punctuation, and a part counts only
+    when it IS a category the engine already routes, so this can recognise
+    names the engine owns and can never invent a route.
+
+    THE TEST IS `any`, NOT `all`, and that changed on the owner's objection:
+    "the magic words that summon the specialists are right there! Is there
+    really no way for code to recover them because it was formatted slightly
+    wrong?" Under `all`, one invented word discarded every real name beside
+    it, and the asymmetry was indefensible once written down -- identical
+    content, one comma's difference:
+
+        ['body', 'objects', 'geography']  ->  body, objects
+        'body, objects, geography'        ->  NOTHING
+
+    `any` is evidence rather than a guess: a string in which at least one part
+    names a family the engine routes is a model writing NAMES; one in which no
+    part does is a model writing PROSE. The prose case is unchanged and is
+    pinned below.
     """
 
     def _cats(self, raw):
@@ -4335,14 +4350,36 @@ class TestTwoKnownNamesInOneStringAreTwoNames:
         assert cats == ["body", "objects", "spatial"]
         assert owners == ["body", "objects", "spatial"]
 
-    def test_one_unknown_name_keeps_the_whole_string_whole(self):
-        """Routability, not foldability: `_normalize_omission_category` passes
-        an unknown name straight through, so a truthiness test would accept
-        anything. The Director gets its own string echoed back by the unrouted
-        report, which is clearer feedback than half a route."""
+    def test_a_known_name_is_recovered_from_beside_an_unknown_one(self):
+        """This asserted the opposite until the owner objected, and its stated
+        reason was that echoing the whole string back is "clearer feedback
+        than half a route". The ruling that overturns it: "a ledger not
+        reaching a specialist is as good as that ledger not existing" -- so
+        half a route DELIVERS a change where no route loses it, and the
+        unknown half is still reported by name, which is the feedback the old
+        rule was paying for.
+
+        Routability, not foldability, still decides: `_normalize_omission_
+        category` passes an unknown name straight through, so nothing here
+        accepts a part merely because it is non-empty."""
         cats, owners = self._cats("body, geography")
-        assert cats == ["body, geography"]
-        assert owners == []
+        assert cats == ["body", "geography"]
+        assert owners == ["body"]
+
+    def test_the_list_and_the_comma_spellings_now_agree(self):
+        """The asymmetry that made the case: same content, same answer,
+        whatever punctuation the model reached for."""
+        assert self._cats("body, objects, geography") == self._cats(
+            ["body", "objects", "geography"])
+
+    def test_the_unknown_half_is_still_reported_by_itself(self):
+        """Delivery and the report are not alternatives -- and the report is
+        now SHARPER than it was: the Director learns the one word that reached
+        nobody instead of getting a whole string echoed back at it."""
+        out = director._span_items({"sequence": [
+            {"type": "action", "attempt": "x", "note": "n",
+             "category": "body, geography"}]})
+        assert director._unrouted_rulings({"spans": out}) == ["geography"]
 
     def test_free_prose_is_never_split_into_categories(self):
         """The failure the routability test exists to prevent. This string
@@ -5932,10 +5969,18 @@ class TestACategoryIsReadInWhateverShapeItArrived:
         assert director._category_names(prose) == [prose]
         assert director._category_names([prose]) == [prose]
         assert director._category_names({prose: 1}) == [prose]
-        # A partly-unknown string is one unknown name, not one known and one
-        # unknown -- the honest thing for the unrouted report to receive.
+        # NO PART of that names a family the engine routes, which is what
+        # makes it prose rather than a list -- and the discriminator, so a
+        # sentence is never minced into seven invented categories.
+        assert len(director._category_names(prose)) == 1
+
+    def test_a_known_name_is_recovered_from_a_partly_unknown_string(self):
+        """The other side of the same discriminator, and the owner's point:
+        "the magic words ... are right there". One part names a family the
+        engine routes, so the string is a list of names; the known one is
+        delivered and the unknown one is reported by itself."""
         assert director._category_names("body, and then something else") == [
-            "body, and then something else"]
+            "body", "then something else"]
 
     def test_an_unknown_single_name_still_passes_through_to_be_reported(self):
         assert director._category_names("wardrobe") == ["wardrobe"]
