@@ -65,12 +65,30 @@ BEAT_EVENTS_KEY = "beat_events"
 
 #: The fields an event row carries, and nothing else reaches the scene. A
 #: strict projection rather than a passthrough: the author's element holds
-#: `attempt` -- the actor's own intent-bearing words -- and `observable` is the
-#: intent-free outward form an onlooker is entitled to. Copying the element
-#: wholesale would put the first into the world for every observer to read,
-#: which is the exact leak the perception filter exists to prevent.
-EVENT_FIELDS = ("order", "actor", "declared", "surface", "kind", "text",
-                "category", "note")
+#: `attempt` -- the actor's own intent-bearing words -- and copying the element
+#: wholesale would put those into the world for every observer to read, which
+#: is the exact leak the perception filter exists to prevent.
+#:
+#: `surface` AND `account` ARE TWO DIFFERENT CLAIMS AND ARE KEPT APART.
+#: `surface` is the engine's VETTED, intent-free outward form, taken from the
+#: declaration the author cited -- what an onlooker is entitled to. `account`
+#: is what the AUTHOR wrote, which is a third-hand description of the act and
+#: has never been through the filter.
+#:
+#: One field used to mean both, with only the citation beside it to say which.
+#: Measured across every stored beat, 19 of 19 uncited rows name a PERSON and
+#: not one belongs to the world -- "lean close and whisper inquiry", "recount
+#: what he saw at the well" -- so "uncited means nobody declared it, so there
+#: is no intent to strip" was false on the data.
+#:
+#: `surface` is therefore non-empty EXACTLY when `declared` is, and an empty
+#: `surface` is a true statement rather than a defect: the engine has vetted
+#: no outward form for this row. WHAT MAY BE RENDERED IS THE RENDERER'S
+#: DECISION, not this record's -- the ledger says what it has and nothing
+#: more, because a record that also decides policy is how one field came to
+#: mean two things.
+EVENT_FIELDS = ("order", "actor", "declared", "surface", "account", "kind",
+                "text", "category", "note")
 
 
 def _clean_event(row):
@@ -90,7 +108,7 @@ def _clean_event(row):
         if text:
             clean[field] = text
     return clean if clean.get("actor") or clean.get("surface") \
-        or clean.get("text") else None
+        or clean.get("account") or clean.get("text") else None
 
 
 def record_beat_events(scene, turn_idx, events):

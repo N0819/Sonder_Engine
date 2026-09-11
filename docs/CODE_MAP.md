@@ -13,7 +13,7 @@
 | `agents/composer.py` | 4886 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 5418 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 477 |  | `story.character_schema`, `world.spatial` |
-| `agents/director_evidence.py` | 2779 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
+| `agents/director_evidence.py` | 2801 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
 | `agents/director_fanout.py` | 1318 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 2087 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
@@ -126,7 +126,7 @@
 | `web/world_routes.py` | 2581 |  | `core`, `core.db`, `persist.commit`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.charter`, `world.charter_runtime`, `world.spatial`, `world.weather` |
 | `world/__init__.py` | 6 |  | — |
 | `world/background_claims.py` | 598 |  | `core.db` |
-| `world/beat_ledger.py` | 166 |  | — |
+| `world/beat_ledger.py` | 184 |  | — |
 | `world/charter.py` | 524 |  | `world.charter_author`, `world.charter_chatter`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_feel`, `world.charter_figure`, `world.charter_identity`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_place`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_promote`, `world.charter_roster`, `world.charter_run`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_temper`, `world.charter_trigger` |
 | `world/charter_author.py` | 813 |  | `world.charter_commitment`, `world.charter_economy`, `world.charter_figure`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_needs`, `world.charter_politics`, `world.charter_practice` |
 | `world/charter_chatter.py` | 443 |  | `world.crowds` |
@@ -297,14 +297,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_evidence_present()` | 1929 | 359 lines |
-| `beat_event_ledger()` | 1197 | 90 lines |
-| `_fold_derived_manifest_events()` | 2691 | 89 lines |
-| `span_slices()` | 1777 | 85 lines |
+| `_evidence_present()` | 1951 | 359 lines |
+| `beat_event_ledger()` | 1197 | 112 lines |
+| `_fold_derived_manifest_events()` | 2713 | 89 lines |
+| `span_slices()` | 1799 | 85 lines |
 | `_merge_repair_into_diff()` | 592 | 80 lines |
-| `_span_items()` | 2325 | 80 lines |
-| `item_survivors()` | 1494 | 73 lines |
-| `_split_joined_categories()` | 2407 | 69 lines |
+| `_span_items()` | 2347 | 80 lines |
+| `item_survivors()` | 1516 | 73 lines |
+| `_split_joined_categories()` | 2429 | 69 lines |
 
 ### `agents/director_fanout.py`
 
@@ -1550,10 +1550,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `record_beat_events()` | 96 | 26 lines |
-| `beat_events()` | 124 | 21 lines |
-| `beat_event_order()` | 147 | 20 lines |
-| `_clean_event()` | 76 | 18 lines |
+| `record_beat_events()` | 114 | 26 lines |
+| `beat_events()` | 142 | 21 lines |
+| `beat_event_order()` | 165 | 20 lines |
+| `_clean_event()` | 94 | 18 lines |
 
 ### `world/charter_author.py`
 

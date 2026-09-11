@@ -43,15 +43,56 @@ class TestWhatTheRecompilerHandsOver:
         assert row["declared"] == "turn:1:player:0:action"
         assert "runes of slow" not in row["surface"]
 
-    def test_an_uncited_row_takes_the_authors_words_and_says_so(self):
-        """`from_declaration` is empty exactly when NOBODY declared the act --
-        a consequence, a thing the world did back -- so there is no actor's
-        purpose to strip, and the empty `declared` is how a reader tells the
-        engine's outward form from a description of it."""
+    def test_an_uncited_row_has_no_vetted_surface(self):
+        """This asserted the opposite, on a rule that was FALSE ON THE DATA:
+        "`from_declaration` is empty exactly when nobody declared the act -- a
+        consequence, a thing the world did back -- so there is no actor's
+        purpose to strip". Measured across every stored beat, 19 of 19 uncited
+        rows name a PERSON and not one belongs to the world ("lean close and
+        whisper inquiry", "recount what he saw at the well") -- the author
+        paraphrasing people, in language that can carry the intent
+        `observable` exists to strip.
+
+        So `surface` is the engine's VETTED form and is empty when nothing was
+        cited; the author's words live in `account`, a different claim in a
+        different field."""
         res = {"sequence": [{"actor": "", "attempt": "the sill cracks"}]}
         row, = director.beat_event_ledger(res, {}, [])
-        assert row["surface"] == "the sill cracks"
+        assert row["surface"] == ""
+        assert row["account"] == "the sill cracks"
         assert row["declared"] == ""
+
+    def test_surface_is_non_empty_exactly_when_declared_is(self):
+        """The invariant the split buys, and the reason an empty `surface` is
+        now a TRUE STATEMENT rather than a defect to chase: the engine has
+        vetted no outward form for that row."""
+        res = {"sequence": [
+            {"actor": "Corin", "attempt": "works at the windowsill",
+             "from_declaration": "p:0"},
+            {"actor": "Bryn", "attempt": "lean close and whisper inquiry"},
+            {"actor": "world", "attempt": "the sill cracks"}]}
+        interp = {"sequence": [{
+            "type": "action", "event_id": "p:0",
+            "attempt": "scratch runes of slow and soften",
+            "observable": "crouches over the sill"}]}
+        rows = director.beat_event_ledger(res, interp, [])
+        assert all(bool(r["surface"]) == bool(r["declared"]) for r in rows)
+
+    def test_all_three_descriptions_stay_apart(self):
+        """An act has three descriptions and the row keeps the two it is
+        entitled to, separately: the engine's vetted outward form, and the
+        author's account. The ACTOR'S OWN WORDS reach neither."""
+        res = {"sequence": [{
+            "actor": "Corin", "attempt": "works at the windowsill",
+            "from_declaration": "p:0"}]}
+        interp = {"sequence": [{
+            "type": "action", "event_id": "p:0",
+            "attempt": "scratch runes of slow and soften",
+            "observable": "crouches over the sill"}]}
+        row, = director.beat_event_ledger(res, interp, [])
+        assert row["surface"] == "crouches over the sill"
+        assert row["account"] == "works at the windowsill"
+        assert "runes of slow" not in row["surface"] + row["account"]
 
     def test_every_element_becomes_a_row_not_only_the_categorized_ones(self):
         """"The world just renders them in the order declared" -- a glance
@@ -619,8 +660,8 @@ class TestTwoDefectsTheProseBeatFound:
             {"actor": "A", "attempt": "z", "from_declaration": "ghost"}]}
         rows = director.beat_event_ledger(res, {}, [])
         assert len(rows) == 2
-        assert [r["surface"] for r in rows] == ["x", "z"]
-        assert all(r["declared"] == "" for r in rows)
+        assert [r["account"] for r in rows] == ["x", "z"]
+        assert all(r["declared"] == "" and r["surface"] == "" for r in rows)
 
     def test_uncited_rows_are_never_folded_together(self):
         """The fold keys on the DECLARATION. Rows citing nothing are separate
@@ -631,8 +672,9 @@ class TestTwoDefectsTheProseBeatFound:
             {"actor": "world", "attempt": "dust falls from the lintel"}]}
         rows = director.beat_event_ledger(res, {}, [])
         assert len(rows) == 2
-        assert [r["surface"] for r in rows] == [
+        assert [r["account"] for r in rows] == [
             "the sill cracks", "dust falls from the lintel"]
+        assert [r["surface"] for r in rows] == ["", ""]
 
     def test_every_element_type_reaches_the_world_with_a_surface(self):
         """The three types together, because each was found the same way --

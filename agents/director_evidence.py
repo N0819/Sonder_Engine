@@ -1215,12 +1215,23 @@ def beat_event_ledger(resolved, interp, declarations):
     sill", and the author wrote "works at the windowsill". A cited row takes
     the second of those.
 
-    AN UNCITED ROW TAKES THE AUTHOR'S WORDS, and there is no leak in that:
-    `from_declaration` is empty exactly when NOBODY DECLARED the act -- a
+    AN UNCITED ROW HAS NO VETTED SURFACE AT ALL, and says so by leaving
+    `surface` empty. It carries the author's words in `account` instead, which
+    is a different claim and is kept in a different field.
+
+    THAT SPLIT REPLACED A RULE THAT WAS FALSE ON THE DATA. The old one read:
+    "`from_declaration` is empty exactly when NOBODY DECLARED the act -- a
     consequence, a thing the world did back -- so there is no actor's purpose
-    to strip. The row says which it is (`declared` empty), so a reader that
-    renders one to an onlooker can tell the engine's outward form from a
-    description of it.
+    to strip." Measured across every stored beat, 19 of 19 uncited rows name a
+    PERSON and not one belongs to the world: "lean close and whisper inquiry",
+    "recount what he saw at the well". Those are the author paraphrasing
+    people, in language that can carry the intent `observable` exists to
+    strip. Nothing leaked, because perception reads only ORDER from the
+    ledger -- a latent leak with no consumer yet, which is the shape that gets
+    found later by whatever innocently renders the field.
+
+    So `surface` is non-empty exactly when `declared` is. What may be RENDERED
+    from either is the renderer's decision and not this function's.
     """
     rows = []
     # ONE DECLARATION IS ONE EVENT. Two elements may cite the same declared
@@ -1266,8 +1277,12 @@ def beat_event_ledger(resolved, interp, declarations):
                        or str(declared.get("description") or ""))
             text = str(declared.get("text") or "")
         else:
+            # NOTHING WAS CITED, SO THE ENGINE HAS VETTED NOTHING. The
+            # author's words go to `account` below; `surface` stays empty
+            # rather than being filled with a description that never went
+            # through the filter.
             kind = ""
-            surface = str(element.get("attempt") or "")
+            surface = ""
             text = ""
         if cited:
             if cited in seen_declarations:
@@ -1278,6 +1293,13 @@ def beat_event_ledger(resolved, interp, declarations):
             "actor": entry.get("actor") or "",
             "declared": cited,
             "surface": surface,
+            # ALWAYS THE AUTHOR'S OWN WORDS, cited or not: their description of
+            # the act, beside the engine's vetted form rather than merged into
+            # it. Keeping both is what lets a reader tell them apart -- and on
+            # a cited row they genuinely differ (measured: declared "scratch
+            # runes of slow and soften", vetted "crouches over the sill",
+            # author "works at the windowsill").
+            "account": str(element.get("attempt") or ""),
             "kind": kind,
             "text": text,
             "category": entry.get("category") or "",

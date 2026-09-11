@@ -1177,12 +1177,31 @@ engine's `observable`, the intent-free outward form an onlooker is entitled
 to; and the author's prose, a third description again. Measured on the join --
 the player declared "scratch runes of slow and soften", the outward form is
 "crouches over the sill", the author wrote "works at the windowsill". A cited
-row takes the second. An UNCITED row takes the author's words and there is no
-leak in that: `from_declaration` is empty exactly when nobody declared the act
--- a consequence, a thing the world did back -- so there is no actor's purpose
-to strip, and the empty `declared` says which kind of row it is. The scene
-record is a strict projection onto `EVENT_FIELDS`, so `attempt` never reaches
-it at all.
+row takes the second, in `surface`. The scene record is a strict projection
+onto `EVENT_FIELDS`, so `attempt` never reaches it at all.
+
+**AN UNCITED ROW HAS NO VETTED SURFACE, and the rule that said otherwise was
+FALSE ON THE DATA.** It read: "an uncited row takes the author's words and
+there is no leak in that -- `from_declaration` is empty exactly when nobody
+declared the act, a consequence, a thing the world did back, so there is no
+actor's purpose to strip." Measured across every stored beat, **19 of 19
+uncited rows name a PERSON and not one belongs to the world**: "lean close and
+whisper inquiry", "recount what he saw at the well", "stand watch and listen".
+That is the author paraphrasing people, in language that can carry the intent
+`observable` exists to strip.
+
+Nothing leaked, because perception reads only ORDER from the ledger -- a
+latent leak with no consumer yet, which is the shape found later by whatever
+innocently renders the field. So one field stopped meaning two things:
+`surface` is the engine's vetted outward form taken from the CITED
+declaration, `account` is what the author wrote, and **`surface` is non-empty
+exactly when `declared` is**. An empty `surface` is now a true statement --
+the engine has vetted no outward form for this row -- rather than a defect to
+chase, which is exactly what it looked like the two times it was fixed as one
+(the communication with no `observable`, then the event whose text was in
+`description`). WHAT MAY BE RENDERED FROM EITHER IS THE RENDERER'S DECISION:
+the ledger states what it has, because a record that also decides policy is
+how a field comes to mean two things in the first place.
 
 **THE REORDER MOVES ONLY WHAT THE WORLD NAMES.** Named entries are permuted
 among the slots they already occupy; an entry the ledger does not cite keeps
