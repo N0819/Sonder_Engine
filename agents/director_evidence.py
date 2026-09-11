@@ -1195,10 +1195,16 @@ def beat_timeline(resolved, interp, declarations):
 def mover_cut_events(out, diff=None):
     """`{body: phase_event_id}` -- the declared event that moved each body.
 
-    `out` is the output whose `sequence` the perception stream was built from
-    (the player's declaration); `diff` the beat's own diff, defaulting to
-    `out["state_assertions"]`, whose `phase_sources` says which span carried
-    each position change.
+    `out` is an output carrying a `sequence` -- the player's declaration at
+    interpret, or the author's whole-beat list at resolve -- and `diff` the
+    beat's own diff, defaulting to `out["state_assertions"]`, whose
+    `phase_sources` says which span carried each position change.
+
+    BOTH HALVES, through one rule. The player's own elements carry the phase
+    ids the stream is keyed on. The author's carry none, and instead CITE the
+    declaration they describe (`from_declaration`) -- which is how a
+    CHARACTER's move is found, without ever asking a character to categorize
+    anything.
 
     Feeds `world.spatial.beat_movement_cuts(..., moved_at=...)`, which grades
     every event against where bodies were WHEN IT HAPPENED. A body this cannot
@@ -1237,7 +1243,15 @@ def mover_cut_events(out, diff=None):
         where = position_of.get(span_id)
         if where is None or not (0 <= where < len(sequence)):
             continue
-        phase_id = str(sequence[where].get("event_id") or "").strip()
+        # THE CITED DECLARATION FIRST. The author's own elements carry no
+        # phase id -- resolve's sequence is never passed through
+        # `assign_event_ids` -- and what the perception stream is built from is
+        # the DECLARATION, so an element that names one answers with that.
+        # Interpret's elements cite nothing and carry their own id, because
+        # interpret's sequence IS the player's declaration; they are unchanged.
+        element = sequence[where]
+        phase_id = (str(element.get("from_declaration") or "").strip()
+                    or str(element.get("event_id") or "").strip())
         if phase_id:
             cuts[subject] = phase_id
     return cuts
