@@ -13,6 +13,7 @@ Import direction: nothing outside `agents/director*.py` may import an
 `agents.director` (that is the cycle the facade exists to prevent).
 """
 
+import copy
 import json
 import re
 
@@ -22,7 +23,14 @@ from story.character_schema import (fold_identity_key,
 from world.spatial import (_merge_entity, _merge_room, resolve_placement_target,
                            room_of)
 
+# `director_scopes` owns the ownership table and imports no
+# sibling, so this direction adds no cycle.
+from .director_scopes import manifest_category_targets
 from .common import (
+    communication_surface,
+    downgraded_sequence_indices,
+    observable_action_text,
+    prune_blocked_phase_changes,
     _contextual_rooms,
     _dict,
     _dict_list,
@@ -231,8 +239,55 @@ def _normalize_diff_shape(sd):
         for _key in [k for k in rooms if str(k).strip().casefold()
                      in _OUTPUT_FIELD_NAMES]:
             rooms.pop(_key, None)
+    # A PROVENANCE ID OF ZERO IS NOT PROVENANCE. `from_event` is declared on
+    # every typed delegated record so validation cannot strip it (typed models
+    # drop what they do not declare), which means an unset one serialises as
+    # `from_event: 0` on EVERY record in the diff -- and the diff is what gets
+    # stored, archived and checkpointed. That is the same noise
+    # `_manifest_items` refuses when it adds an endpoint key "only when the
+    # model actually supplied them, rather than four empty strings appearing
+    # on every item".
+    #
+    # Non-zero ids survive untouched, so reconciliation still reads them; a
+    # record that answered no numbered work item comes out looking exactly as
+    # it did before the field existed.
+    _drop_zero_provenance(sd)
     sd.setdefault("time", None)
     return sd
+
+
+def _without_provenance(value, depth=0):
+    """A copy of a channel value with every `from_event` removed.
+
+    For COMPARING two spellings of the same content. A hand stamps the chunk
+    it resolved and the stage author never does, so an author and a hand that
+    emitted the identical record differ by construction once provenance
+    exists -- and the orchestration backstop, which asks whether the author
+    put CONTENT somewhere it was told not to, would report that as a
+    mis-emission on every beat.
+    """
+    if depth > 4:
+        return value
+    if isinstance(value, dict):
+        return {k: _without_provenance(v, depth + 1)
+                for k, v in value.items() if k != "from_event"}
+    if isinstance(value, list):
+        return [_without_provenance(v, depth + 1) for v in value]
+    return value
+
+
+def _drop_zero_provenance(value, depth=0):
+    """Remove `from_event: 0` wherever it appears in a diff."""
+    if depth > 4:
+        return
+    if isinstance(value, dict):
+        if value.get("from_event") in (0, "0", None) and "from_event" in value:
+            value.pop("from_event", None)
+        for inner in list(value.values()):
+            _drop_zero_provenance(inner, depth + 1)
+    elif isinstance(value, list):
+        for inner in value:
+            _drop_zero_provenance(inner, depth + 1)
 
 
 def _is_blank_placeholder(entry):
@@ -873,6 +928,1026 @@ def _subject_is_somewhere(sd, scene, subject, hits, forms=None):
     return False
 
 
+def _record_place(path, channel, record, sd, sc):
+    """WHERE this record happens, as a token, or None when the engine cannot
+    say.
+
+    Stated per channel from what the engine issues, never from prose:
+
+      * an edge is the doorway it describes -- `way:<a>|<b>`, sorted, so the
+        two mirrored edges of one doorway produce ONE token;
+      * a room record is that room;
+      * anything keyed by a subject the scene places -- an entity, a body -- is
+        the room it stands in;
+      * everything else is None, and pairs with nothing.
+
+    The scene is read for placement rather than the diff, then the diff over
+    it, so a subject this beat moved pairs where it now IS.
+    """
+    from world.spatial import passage_id_for
+
+    parts = str(path or "").split(".")
+    if channel == "rooms" and len(parts) >= 3 and "adjacent" in parts[2]:
+        target = str((record or {}).get("to") or "").strip()
+        if len(parts) >= 2 and target:
+            return "way:" + passage_id_for(parts[1], target)
+    if channel == "rooms" and len(parts) == 2:
+        return "room:" + parts[1]
+    if len(parts) >= 2:
+        subject = parts[1].split("[")[0]
+        for source in ((sd or {}).get("positions"),
+                       (sc or {}).get("positions")):
+            if isinstance(source, dict):
+                room = source.get(subject)
+                if isinstance(room, str) and room.strip():
+                    return "room:" + room.strip()
+        if channel == "positions" and isinstance(record, str) \
+                and record.strip():
+            return "room:" + record.strip()
+    return None
+
+
+def span_pairings(sd, sc=None):
+    """Each span's records, grouped by the place they happen.
+
+    `{span_id: {place_token: [(path, channel, record), ...]}}`, and a record
+    the engine cannot place is left out rather than parked under a guess.
+
+    This is the join the folds in this tree never had. Every one of them
+    matches on a name, an alias or a head noun -- `resolve_garment('coat',
+    ['coat rack'])` matches on the head noun, as its own comment admits --
+    because until the span id existed there was nothing else to match on.
+    Span plus place is two engine-issued facts, and it narrows an identity
+    question from the whole scene to one event in one place.
+    """
+    out = {}
+    for span_id, rows in span_records(sd).items():
+        placed = {}
+        for path, channel, record in rows:
+            token = _record_place(path, channel, record, sd, sc)
+            if token:
+                placed.setdefault(token, []).append((path, channel, record))
+        if placed:
+            out[span_id] = placed
+    return out
+
+
+#: Which hand owns each delegated channel, for the "most relevant authority"
+#: rung. Filled from `director_scopes` by the caller rather than imported, so
+#: this module keeps no second opinion about the partition.
+#: What a record says a thing IS, as opposed to how it stands right now. Kept
+#: in step with `world.spatial_merge._ENTITY_STRUCTURAL_FIELDS`, which is the
+#: same question one layer down; a field this list lacks is one a fold can
+#: silently drop.
+_DURABLE_RECORD_FIELDS = (
+    "kind", "subtype", "name", "description", "aliases", "interior_rooms",
+    "portable", "container", "ubiquitous", "parent_entity", "interior_spec",
+    "enclosure", "light_source", "light_shape", "light_height",
+    "material", "scent", "sound", "reliable", "worn_by", "garment",
+)
+
+
+def apply_item_transforms(sd, survivors):
+    """Fold each numbered thing's duplicates onto the record allowed to exist.
+
+    Mutates `sd`: the survivor gains every durable field its duplicates
+    carried and it lacked, in chronological order, and the duplicates are
+    removed from their channel so no second record of one thing survives the
+    beat.
+
+    Returns `[{item, keep, folded, gained}]` -- one row per thing actually
+    reconciled, for the report. Nothing is silent: every fold in this tree is
+    reported, and the stated reason is that *"the Director asked for a referent
+    it did not have, and next beat it should know the answer was 'the ledger
+    has it'."*
+
+    `state` is never merged (see the module note): the survivor's own stands.
+    """
+    applied = []
+    for item, entry in sorted((survivors or {}).items()):
+        keep_path, keep_channel, keep_record = entry.get("render_from")
+        folds = entry.get("duplicates") or []
+        if not folds or not isinstance(keep_record, dict):
+            continue
+        gained, dropped = [], []
+        latest_state = None
+        for path, channel, record in folds:
+            if not isinstance(record, dict) or channel != keep_channel:
+                continue
+            for field in _DURABLE_RECORD_FIELDS:
+                if keep_record.get(field) not in (None, "", [], {}):
+                    continue
+                value = record.get(field)
+                if value in (None, "", [], {}):
+                    continue
+                keep_record[field] = value
+                gained.append(field)
+            # STATE COMES FROM THE LATEST TRANSFORM, whole. The folds arrive in
+            # chronological order, so the last one holding a state is the most
+            # recent thing said about how this object stands -- and a crate
+            # that was opened this beat must not keep the shut snapshot it
+            # stood as. Never deep-merged, for the reason the tree already
+            # gives: state describes a single instant, so folding a stale
+            # snapshot into a fresh one manufactures the contradiction.
+            if isinstance(record.get("state"), dict) and record["state"]:
+                latest_state = record["state"]
+            if _drop_record_at(sd, path):
+                dropped.append(path)
+        if latest_state is not None:
+            keep_record["state"] = latest_state
+            gained.append("state")
+        if gained or dropped:
+            applied.append({"item": item, "keep": keep_path,
+                            "folded": dropped, "gained": sorted(set(gained))})
+    return applied
+
+
+def _drop_record_at(sd, path):
+    """Remove one record from the merged diff by its dotted path.
+
+    Returns whether anything was removed. A path this cannot resolve is left
+    alone rather than guessed at -- the walk that produced it and the walk that
+    undoes it must agree, and where they do not the honest outcome is a
+    duplicate that survives and is reported, never a neighbour deleted.
+    """
+    parts = str(path or "").split(".")
+    if len(parts) < 2:
+        return False
+    channel = (sd or {}).get(parts[0])
+    key = parts[1]
+    if key.endswith("]") and "[" in key:
+        name, _, index = key.partition("[")
+        rows = channel.get(name) if isinstance(channel, dict) else None
+        if isinstance(channel, list) and not name:
+            rows = channel
+        try:
+            position = int(index.rstrip("]"))
+        except ValueError:
+            return False
+        if isinstance(rows, list) and 0 <= position < len(rows):
+            rows.pop(position)
+            return True
+        return False
+    if isinstance(channel, dict) and key in channel:
+        channel.pop(key)
+        return True
+    return False
+
+
+# ---------------------------------------------------------------------------
+# THE CAUSALITY RECOMPILER
+#
+# The owner's name for it, 2026-09-10: "basically we are making a causality
+# recompiler after our director deciphers and resolves", serving the thesis
+# "a system that can decipher any arbitrarily long series of events by a
+# player or character and resolve it properly with proper respect to
+# chronology and space. Even though its disecting and feeding it to paralel
+# agents."
+#
+# The Director DECIPHERS the input into numbered spans; the five hands RESOLVE
+# them in parallel, each blind to the others and to a scene that has not moved
+# since before the beat; this puts the beat back together.
+#
+# Everything below reads only identifiers the engine or the Director ISSUED.
+# Nothing reads prose, which is what makes the whole of it answerable without
+# a model -- and it is why the ids exist at all:
+#
+#   WHEN   the chronological span number     `_span_items`
+#   WHOM   the record's subject, its key under the channel
+#   WHERE  a room or a doorway               `_record_place`
+#   WHICH  the Director's item number        `_beat_item_refs`
+#
+#   span_records        which records are one EVENT's outcome
+#   span_pairings       which are in one PLACE; span_colocations, by room
+#   beat_item_records   which are one THING, across spans
+#   item_survivors      which record an object is rendered FROM, and what
+#                       else is true of it
+#   apply_item_transforms  the chosen record receives every transform, in
+#                       chronological order
+#   span_slices         the beat cut into its spans
+#   beat_worlds         the world as it stood BEFORE each span, which is what
+#                       lets a pure FOV layer answer about the world an
+#                       observer was standing in rather than the one the beat
+#                       left behind
+#   beat_ledger         all of it as one flat, queryable table
+#
+# What it deliberately does not do is DECIDE an identity. It bounds the
+# question -- one event, one place, one number -- and the folds that decide
+# are per-pair and belong to whoever owns those two channels. The measured
+# cost of treating a grouping as a decision is in this tree already: an alias
+# overlap folded some boards into a satchel, and a story's containment ledger
+# sat empty for twenty beats.
+# ---------------------------------------------------------------------------
+
+
+def declared_elements(interp, declarations):
+    """`{phase_event_id: element}` for every act anyone DECLARED this beat.
+
+    The player's own sequence and each character's, in one index. These are the
+    elements `norm_sequence` built and `assign_event_ids` stamped, so they
+    carry `observable` -- the intent-free outward surface an onlooker is
+    entitled to -- rather than anybody's later description of them.
+    """
+    index = {}
+    groups = [(interp or {}).get("sequence") or []]
+    for declaration in (declarations or []):
+        if isinstance(declaration, dict):
+            groups.append(declaration.get("sequence") or [])
+    for group in groups:
+        for element in group:
+            if not isinstance(element, dict):
+                continue
+            key = str(element.get("event_id") or "").strip()
+            if key and key not in index:
+                index[key] = element
+    return index
+
+
+def beat_timeline(resolved, interp, declarations):
+    """The beat as one ordered list, each entry paired with what was declared.
+
+    `[{"order", "actor", "element", "declared", "category", "note"}]` in the
+    author's order -- which is the beat's chronology, because the sheet asks
+    for "one element for EVERYTHING that happened, in the order it happened".
+
+    `declared` is the element the author CITED (`from_declaration`), or None
+    for something nobody declared: a consequence, a thing the world did back.
+    A reader that renders to an onlooker takes the surface from `declared`
+    where there is one, and only falls to the author's own words where nothing
+    was declared -- which is the whole point of the citation, and the reason
+    this returns the pair rather than a merged row.
+    """
+    index = declared_elements(interp, declarations)
+    timeline = []
+    for order, element in enumerate((resolved or {}).get("sequence") or []):
+        if not isinstance(element, dict):
+            continue
+        cited = str(element.get("from_declaration") or "").strip()
+        timeline.append({
+            "order": order,
+            "actor": str(element.get("actor") or ""),
+            "element": element,
+            "declared": index.get(cited),
+            "category": element.get("category"),
+            "note": element.get("note"),
+        })
+    return timeline
+
+
+def beat_event_ledger(resolved, interp, declarations):
+    """The beat's events as rows for the world's ledger (`world.beat_ledger`).
+
+    The owner's rule for what the world keeps: "just because a majority of
+    these are temporary actions and dialogues, does not mean they shouldn't be
+    rendered in the world. The world just renders them in the order declared
+    and what isn't permanent is gone after perception rolls." So EVERY element
+    the author wrote becomes a row -- not just the ones that changed a ledger.
+    A glance that settles nothing is still something that happened, and until
+    the ledger existed it had nowhere in the world to live, which is the one
+    thing that stopped perception from reading only the world.
+
+    THE SURFACE COMES FROM THE CITATION, and that is a firewall requirement
+    rather than plumbing. An actor's `attempt` is their own words and
+    routinely carries purpose and intent; `observable` is the intent-free
+    outward form an onlooker is entitled to, and the author's prose is a THIRD
+    description again. Measured on the join: the player declared "scratch
+    runes of slow and soften", the engine's outward form is "crouches over the
+    sill", and the author wrote "works at the windowsill". A cited row takes
+    the second of those.
+
+    AN UNCITED ROW HAS NO VETTED SURFACE AT ALL, and says so by leaving
+    `surface` empty. It carries the author's words in `account` instead, which
+    is a different claim and is kept in a different field.
+
+    THAT SPLIT REPLACED A RULE THAT WAS FALSE ON THE DATA. The old one read:
+    "`from_declaration` is empty exactly when NOBODY DECLARED the act -- a
+    consequence, a thing the world did back -- so there is no actor's purpose
+    to strip." Measured across every stored beat, 19 of 19 uncited rows name a
+    PERSON and not one belongs to the world: "lean close and whisper inquiry",
+    "recount what he saw at the well". Those are the author paraphrasing
+    people, in language that can carry the intent `observable` exists to
+    strip. Nothing leaked, because perception reads only ORDER from the
+    ledger -- a latent leak with no consumer yet, which is the shape that gets
+    found later by whatever innocently renders the field.
+
+    So `surface` is non-empty exactly when `declared` is. What may be RENDERED
+    from either is the renderer's decision and not this function's.
+    """
+    rows = []
+    # ONE DECLARATION IS ONE EVENT. Two elements may cite the same declared
+    # act -- measured on the prose beat, where the author described Sera's one
+    # step as both "steps a pace closer toward anvil" and "stands still
+    # observing Corin's bleeding hand" and cited the same id from both. A
+    # cited row takes its surface FROM the declaration, so the two come out
+    # identical and the world's record claims the act happened twice.
+    #
+    # The fold is safe because that identity is structural rather than a
+    # judgement about the words: one declaration is one act. The FIRST is
+    # kept, because that is where the act stands in the author's chronology.
+    # `beat_event_order` already took the first occurrence, so the order
+    # perception reads was never affected by this -- it is the world's own
+    # record that was double-counting.
+    seen_declarations = set()
+    for entry in beat_timeline(resolved, interp, declarations):
+        element = entry.get("element") or {}
+        declared = entry.get("declared")
+        cited = str(element.get("from_declaration") or "").strip() \
+            if isinstance(declared, dict) else ""
+        if isinstance(declared, dict):
+            kind = str(declared.get("type") or "").strip()
+            # EACH ELEMENT TYPE KEEPS ITS OUTWARD FORM IN ITS OWN FIELD, and
+            # the ledger has to ask all three. An ACTION has `observable`, the
+            # intent-free surface an onlooker is entitled to. A typed
+            # COMMUNICATIVE act has neither -- its outward form is the
+            # rendered verb over the proposition the author supplied ("asks
+            # whether the reeve came by"), deliberately not a quotation,
+            # because `content` is what the act was ABOUT and not words the
+            # engine may put in a mouth. An EVENT -- something that happened
+            # that nobody did, which is what the reconciliation repair mints
+            # for a dropped consequence -- carries `description` and neither
+            # of the others.
+            #
+            # Each was found the same way, by an event reaching the world with
+            # nothing said about it: the player's spoken beat (long-beat test,
+            # beat 2 order 14) and then "the hammer blows echo up into the
+            # rafters and startle something out of them" (the prose beat,
+            # order 13), which the world recorded as blank.
+            surface = (communication_surface(declared)
+                       or observable_action_text(declared)
+                       or str(declared.get("description") or ""))
+            text = str(declared.get("text") or "")
+        else:
+            # NOTHING WAS CITED, SO THE ENGINE HAS VETTED NOTHING. The
+            # author's words go to `account` below; `surface` stays empty
+            # rather than being filled with a description that never went
+            # through the filter.
+            kind = ""
+            surface = ""
+            text = ""
+        if cited:
+            if cited in seen_declarations:
+                continue
+            seen_declarations.add(cited)
+        rows.append({
+            "order": entry.get("order"),
+            "actor": entry.get("actor") or "",
+            "declared": cited,
+            "surface": surface,
+            # ALWAYS THE AUTHOR'S OWN WORDS, cited or not: their description of
+            # the act, beside the engine's vetted form rather than merged into
+            # it. Keeping both is what lets a reader tell them apart -- and on
+            # a cited row they genuinely differ (measured: declared "scratch
+            # runes of slow and soften", vetted "crouches over the sill",
+            # author "works at the windowsill").
+            "account": str(element.get("attempt") or ""),
+            "kind": kind,
+            "text": text,
+            "category": entry.get("category") or "",
+            "note": entry.get("note") or "",
+        })
+    return rows
+
+
+def mover_cut_events(out, diff=None):
+    """`{body: phase_event_id}` -- the declared event that moved each body.
+
+    `out` is an output carrying a `sequence` -- the player's declaration at
+    interpret, or the author's whole-beat list at resolve -- and `diff` the
+    beat's own diff, defaulting to `out["state_assertions"]`, whose
+    `phase_sources` says which span carried each position change.
+
+    BOTH HALVES, through one rule. The player's own elements carry the phase
+    ids the stream is keyed on. The author's carry none, and instead CITE the
+    declaration they describe (`from_declaration`) -- which is how a
+    CHARACTER's move is found, without ever asking a character to categorize
+    anything.
+
+    Feeds `world.spatial.beat_movement_cuts(..., moved_at=...)`, which grades
+    every event against where bodies were WHEN IT HAPPENED. A body this cannot
+    speak for is left to that function's own heuristic, unchanged.
+    """
+    if not isinstance(out, dict):
+        return {}
+    if diff is None:
+        diff = out.get("state_assertions")
+    sources = (diff or {}).get("phase_sources") \
+        if isinstance(diff, dict) else None
+    if not isinstance(sources, dict) or not sources:
+        return {}
+
+    position_of = {}
+    for span in _span_items(out):
+        try:
+            span_id = int(span.get("event_id") or 0)
+        except (TypeError, ValueError):
+            continue
+        where = span.get("_from_position")
+        if span_id > 0 and isinstance(where, int):
+            position_of[span_id] = where
+
+    sequence = [element for element in (out.get("sequence") or [])
+                if isinstance(element, dict)]
+    cuts = {}
+    for path, source in sources.items():
+        channel, _dot, subject = str(path or "").partition(".")
+        if channel != "positions" or not subject:
+            continue
+        try:
+            span_id = int(source)
+        except (TypeError, ValueError):
+            continue
+        where = position_of.get(span_id)
+        if where is None or not (0 <= where < len(sequence)):
+            continue
+        # THE CITED DECLARATION FIRST. The author's own elements carry no
+        # phase id -- resolve's sequence is never passed through
+        # `assign_event_ids` -- and what the perception stream is built from is
+        # the DECLARATION, so an element that names one answers with that.
+        # Interpret's elements cite nothing and carry their own id, because
+        # interpret's sequence IS the player's declaration; they are unchanged.
+        element = sequence[where]
+        phase_id = (str(element.get("from_declaration") or "").strip()
+                    or str(element.get("event_id") or "").strip())
+        if phase_id:
+            cuts[subject] = phase_id
+    return cuts
+
+
+def single_span_attributions(sd, dispatch, view, span_slice_of):
+    """`{path: span_id}` for records a hand handed ONE span left uncited.
+
+    `span_slice_of(name, view)` is the caller's slicer
+    (`_specialist_span_slice`), passed in so this module keeps no second
+    opinion about which spans a hand received.
+
+    Returns sidecar additions in `phase_sources`' own spelling
+    (`"<channel>.<key>"`, `"<channel>.<index>"` for a list), which is what
+    `span_slices` and `prune_blocked_phase_changes` both already read. Writes
+    nothing: the caller merges them, so a beat can see what was derived.
+
+    This is what lets a MOVEMENT be placed in the beat's order. `positions` is
+    `dict[str, str]` and a body's position is a bare string with nowhere to
+    carry a citation, so without this the recompiler's three-link case --
+    mint a room, walk into it, mint a thing inside it -- depends on a hand
+    having remembered a sidecar it fills at a measured 25%.
+    """
+    additions = {}
+    existing = set((sd or {}).get("phase_sources") or {})
+    for name, state in (dispatch or {}).items():
+        if not (state or {}).get("ran"):
+            continue
+        spans = span_slice_of(name, view or {})
+        if len(spans) != 1:
+            continue
+        try:
+            span_id = int(spans[0].get("event_id") or 0)
+        except (TypeError, ValueError):
+            continue
+        if span_id <= 0:
+            continue
+        for channel in (state.get("channels") or ()):
+            content = (sd or {}).get(channel)
+            if isinstance(content, dict):
+                for key, value in content.items():
+                    path = "%s.%s" % (channel, key)
+                    if path in existing or _cites_a_span(value):
+                        continue
+                    additions[path] = span_id
+            elif isinstance(content, list):
+                for index, value in enumerate(content):
+                    path = "%s.%s" % (channel, index)
+                    if path in existing or _cites_a_span(value):
+                        continue
+                    additions[path] = span_id
+    return additions
+
+
+def _cites_a_span(record):
+    """Does this record already say which span it settles?"""
+    if not isinstance(record, dict):
+        return False
+    raw = record.get("from_event")
+    return (not isinstance(raw, bool) and isinstance(raw, (int, float))
+            and int(raw) > 0)
+
+
+def span_mint_rooms(sd, spans, worlds, final_world, actor_of=None):
+    """Where a thing minted by a span was, from where its actor stood.
+
+    `worlds` is `beat_worlds`' output and `final_world` the scene the whole
+    beat leaves. `actor_of(span)` names the body whose act the span was; a span
+    naming none falls to the beat's own actor, which the caller supplies by
+    closing over it.
+
+    Returns `{entity_key: room_id}` for mints this can speak for, and writes
+    NOTHING -- placement is `world/spatial_containment`'s, and its rule that an
+    explicit write outranks a derivation is the right one. This only supplies
+    the evidence nothing else has: the world moved DURING the beat, and the
+    hand that minted the thing was looking at the world as it stood before it.
+    """
+    minted = {key for key, value in ((sd or {}).get("entities") or {}).items()
+              if isinstance(value, dict)}
+    if not minted:
+        return {}
+    placed = (sd or {}).get("positions") or {}
+    # The world each span LEAVES: the next span's `before`, and the beat's
+    # final scene for the last of them.
+    leaves, order = {}, [span for span, _w in (worlds or [])]
+    for index, (span_id, _before) in enumerate(worlds or []):
+        leaves[span_id] = (worlds[index + 1][1]
+                           if index + 1 < len(worlds) else final_world)
+
+    rooms = {}
+    for span in (spans or []):
+        if not isinstance(span, dict):
+            continue
+        try:
+            span_id = int(span.get("event_id") or 0)
+        except (TypeError, ValueError):
+            continue
+        world = leaves.get(span_id)
+        if not world:
+            continue
+        actor = str((actor_of(span) if actor_of else span.get("actor")) or "")
+        if not actor:
+            continue
+        room = ((world.get("positions") or {}).get(actor) or "").strip()
+        if not room or room not in (world.get("rooms") or {}):
+            continue
+        for key, record in ((sd or {}).get("entities") or {}).items():
+            if not isinstance(record, dict) or key in placed or key in rooms:
+                continue
+            try:
+                cited = int(record.get("from_event") or 0)
+            except (TypeError, ValueError):
+                cited = 0
+            if cited == span_id:
+                rooms[key] = room
+    return rooms
+
+
+#: WHICH HAND IS THE AUTHORITY for a thing minted more than once in one beat,
+#: highest first. Ordered by how much of a thing's OWN identity the hand's
+#: channels carry, as against facts ABOUT a thing that already has one:
+#: `entities` IS a thing's identity record and `rooms` is a place's, while
+#: `attire` names a garment as worn, contact names relations between things
+#: that already have records, and social names what minds hold true about them.
+#:
+#: It exists because the ladder's "the channel's own hand" rung cannot
+#: discriminate -- the partition is disjoint, so every record is already in its
+#: own hand's channel -- and without this the tiebreak ordered two mints of one
+#: thing BY PATH, which let "entities" beat "rooms" on the letter e.
+#:
+#: A table the engine owns and can enumerate, which is what makes it a schema
+#: rather than a vocabulary guess (CLAUDE.md's distinction). Case by case is
+#: still open: a beat that mints a PLACE should rank `spatial` first, and this
+#: does not yet ask what kind of thing it is -- it is written down so that
+#: question has ONE place to be answered when it has been measured.
+_MINT_AUTHORITY = ("objects", "spatial", "body", "contact", "social")
+
+
+def mint_authority_rank(hand):
+    """How authoritative this hand's mint is, lower being higher authority."""
+    name = str(hand or "")
+    return (_MINT_AUTHORITY.index(name) if name in _MINT_AUTHORITY
+            else len(_MINT_AUTHORITY))
+
+
+def item_survivors(sd, spans, sc=None, channel_owner=None):
+    """For each numbered thing: which record survives, and what folds onto it.
+
+    Returns
+    `{item_id: {"name", "render_from", "duplicates", "other_facts", "reason"}}`.
+
+      * `render_from` -- the record the object is rendered and referenced FROM,
+        chosen by the ladder and then by `_MINT_AUTHORITY`. It is not a claim
+        that the others are lesser truths.
+      * `duplicates` -- records in the SAME channel, chronologically. The only
+        group that folds: the partition is disjoint, so these are one hand's
+        two attempts at one thing, and the chosen record receives their
+        transforms.
+      * `other_facts` -- the object's other true records, in other channels.
+        An entity and its interior are TWO SEPARATE FACTS ABOUT ONE OBJECT and
+        NEITHER IS DISCARDED. Which field joins them is per-pair knowledge, so
+        they are named and never merged here.
+      * `reason` -- which rung of the ladder chose it.
+
+    Only things with more than one record are returned; one record is not a
+    reconciliation.
+    """
+    owner_of = dict(channel_owner or {})
+    standing = set()
+    for key in ("entities", "rooms", "positions"):
+        source = (sc or {}).get(key)
+        if isinstance(source, dict):
+            standing.update(str(name) for name in source)
+
+    def rung(row):
+        path, channel, _record = row
+        subject = str(path).split(".")[1].split("[")[0] \
+            if "." in str(path) else ""
+        if subject and subject in standing:
+            return 0                      # stood before this beat
+        if owner_of.get(str(channel)):
+            return 1                      # the channel's own hand minted it
+        return 2                          # everything else
+
+    def order(row):
+        path, _channel, record = row
+        try:
+            when = int((record or {}).get("from_event") or 0)
+        except (TypeError, ValueError):
+            when = 0
+        return (when, str(path))
+
+    def authority(row):
+        """The hand's rank, then the beat's order, then the path.
+
+        Rank FIRST: two hands minting one thing is the case this decides, and
+        ordering them by when they happened to be written would let the beat's
+        phrasing pick which record is the thing.
+        """
+        _path, channel, _record = row
+        return (mint_authority_rank(owner_of.get(str(channel))),) + order(row)
+
+    out = {}
+    for item, entry in beat_item_records(sd, spans, sc).items():
+        rows = list(entry.get("records") or [])
+        if len(rows) < 2:
+            continue
+        ranked = sorted(rows, key=lambda row: (rung(row),) + authority(row))
+        keep = ranked[0]
+        rest = sorted(ranked[1:], key=order)
+        out[item] = {
+            "name": entry.get("name") or "",
+            "render_from": keep,
+            "duplicates": [row for row in rest if row[1] == keep[1]],
+            "other_facts": [row for row in rest if row[1] != keep[1]],
+            "reason": ("standing", "owning_hand", "first_written")[rung(keep)],
+        }
+    return out
+
+
+def beat_item_records(sd, spans, sc=None):
+    """`{item_id: {name, spans, records}}` -- the beat's numbered things.
+
+    `records` is every record any hand wrote for any span that named the item,
+    which is why this can see what no single hand could: a thing minted in one
+    span and acted on in another, by a different hand, from a payload that
+    showed the scene as it stood BEFORE either.
+
+    `name` is the first non-empty name the Director gave the number, kept for
+    matching a record to the thing; the NUMBER is the identity, because across
+    34 measured Director calls the same model wrote `sword_belt` and `sword
+    belt` for one object.
+
+    A span carrying no `_items` contributes nothing -- the ordinary case, and
+    the reason this costs nothing on a beat that mints no new thing.
+    """
+    by_span = span_records(sd)
+    items = {}
+    for span in (spans or []):
+        if not isinstance(span, dict):
+            continue
+        try:
+            span_id = int(span.get("event_id") or 0)
+        except (TypeError, ValueError):
+            continue
+        for ref in span.get("_items") or []:
+            if not isinstance(ref, dict):
+                continue
+            number = ref.get("id")
+            if not isinstance(number, int) or number <= 0:
+                continue
+            entry = items.setdefault(
+                number, {"name": "", "spans": [], "records": []})
+            if not entry["name"] and str(ref.get("name") or "").strip():
+                entry["name"] = str(ref["name"]).strip()
+            if span_id and span_id not in entry["spans"]:
+                entry["spans"].append(span_id)
+                entry["records"].extend(by_span.get(span_id) or [])
+    return items
+
+
+def span_colocations(sd, sc=None):
+    """Each span's records grouped by the ROOM they happen in or border.
+
+    `{span_id: {room_id: [(path, channel, record), ...]}}`. A way belongs to
+    both rooms it joins, because a doorway is in each of them -- which is what
+    lets the thing standing in a room meet the doorway it was fitted to.
+
+    The coarser sibling of `span_pairings`, and the one a reconciler wants: a
+    padlock in the forge and the forge door are one event in one place, and
+    until the span id and this grouping existed there was no way to ask that
+    question except by matching their names.
+    """
+    grouped = {}
+    for span_id, places in span_pairings(sd, sc).items():
+        rooms = {}
+        for token, rows in places.items():
+            if token.startswith("room:"):
+                rooms.setdefault(token[5:], []).extend(rows)
+            elif token.startswith("way:"):
+                for room in token[4:].split("|"):
+                    if room:
+                        rooms.setdefault(room, []).extend(rows)
+        if rooms:
+            grouped[span_id] = rooms
+    return grouped
+
+
+def span_result_findings(sd, spans, dispatch, owners_of):
+    """What does not add up about each span's assembled result.
+
+    `spans` is this stage's work items, `dispatch` the per-hand record carrying
+    `events_resolved`, and `owners_of` the callable that says which hands own a
+    span (`span_owners` -- passed in rather than imported, because
+    `director_scopes` owns that table and this module must not grow a second
+    opinion about it).
+
+    Returns a list of `{event_id, kind, hand, detail}`, most specific first.
+    Empty is the ordinary beat.
+    """
+    by_span = span_records(sd)
+    channel_owner = {}
+    for hand, state in (dispatch or {}).items():
+        for channel in (state or {}).get("channels") or ():
+            channel_owner[str(channel)] = hand
+
+    findings = []
+    for span in (spans or []):
+        if not isinstance(span, dict):
+            continue
+        try:
+            span_id = int(span.get("event_id") or 0)
+        except (TypeError, ValueError):
+            continue
+        if span_id <= 0:
+            continue
+        owners = [hand for hand in (owners_of(span) or [])]
+        rows = by_span.get(span_id) or []
+        wrote = {}
+        for _path, channel, _record in rows:
+            hand = channel_owner.get(str(channel))
+            wrote.setdefault(hand, []).append(_path)
+
+        for hand, paths in wrote.items():
+            if hand is None:
+                findings.append({
+                    "event_id": span_id, "kind": "unowned_channel",
+                    "hand": None, "detail": sorted(paths)[:4]})
+            elif hand not in owners:
+                findings.append({
+                    "event_id": span_id, "kind": "written_by_non_owner",
+                    "hand": hand, "detail": sorted(paths)[:4]})
+
+        for hand in owners:
+            state = (dispatch or {}).get(hand) or {}
+            if not state.get("ran"):
+                continue
+            verdict = ""
+            for row in state.get("events_resolved") or []:
+                if isinstance(row, dict) and row.get("event_id") == span_id:
+                    verdict = str(row.get("status") or "")
+            if verdict in ("encoded",) and hand not in wrote:
+                findings.append({
+                    "event_id": span_id, "kind": "settled_and_silent",
+                    "hand": hand, "detail": verdict})
+            elif not verdict and hand not in wrote:
+                findings.append({
+                    "event_id": span_id, "kind": "owned_and_untouched",
+                    "hand": hand, "detail": ""})
+    return findings
+
+
+def beat_worlds(sc, sd, apply_diff):
+    """The scene as it stood BEFORE each span, in the beat's own order.
+
+    `apply_diff(scene, diff) -> scene` is passed in rather than imported --
+    `world.spatial.merge_scene_with_diff` is the caller's to supply, and this
+    module must not grow an opinion about how a diff lands.
+
+    Returns `[(span_id, scene_before_it)]`, ascending. The scene handed back
+    for span k has every earlier span applied and NOT span k itself, which is
+    the world an observer was standing in when span k happened -- so
+    `body_visibility(scene, ...)` at that point answers about the world as it
+    was, not as the beat left it.
+
+    The unattributed slice is folded in before the first span (see the module
+    note) and is never a span of its own: it happened at no point in the order.
+    """
+    slices, loose = span_slices(sd)
+    world = apply_diff(sc or {}, loose) if loose else copy.deepcopy(sc or {})
+    worlds = []
+    for span_id in sorted(slices):
+        worlds.append((span_id, world))
+        world = apply_diff(world, slices[span_id])
+    return worlds
+
+
+def beat_ledger(sd, spans=None, sc=None):
+    """The beat as a flat, queryable table -- one row per record.
+
+    `[{when, whom, where, channel, path, item, record}]`, sorted by `when`
+    then `path` so the order is the beat's own and never a hand's return
+    order.
+
+      * `when`  -- the span number, or 0 for a record citing none.
+      * `whom`  -- the subject the record is keyed under (`poses.Corin` ->
+                   "Corin"), which is what a channel's key MEANS in every
+                   delegated channel.
+      * `where` -- the place token, or None where the engine cannot say.
+      * `item`  -- the Director's number for the thing, when the span that
+                   produced this record named exactly one; several numbered
+                   things in one span leave it None rather than guessing
+                   which record is which.
+
+    Nothing here is read out of prose. Every field is something the engine or
+    the Director issued as an identifier, which is what makes the question
+    answerable without a model.
+    """
+    by_span_items = {}
+    for span in (spans or []):
+        if not isinstance(span, dict):
+            continue
+        try:
+            span_id = int(span.get("event_id") or 0)
+        except (TypeError, ValueError):
+            continue
+        refs = [ref for ref in (span.get("_items") or [])
+                if isinstance(ref, dict) and isinstance(ref.get("id"), int)]
+        if span_id and len(refs) == 1:
+            by_span_items[span_id] = refs[0]["id"]
+
+    rows = []
+    for span_id, records in span_records(sd).items():
+        for path, channel, record in records:
+            parts = str(path).split(".")
+            subject = parts[1].split("[")[0] if len(parts) > 1 else ""
+            rows.append({
+                "when": span_id,
+                "whom": subject,
+                "where": _record_place(path, channel, record, sd, sc),
+                "channel": channel,
+                "path": path,
+                "item": by_span_items.get(span_id),
+                "record": record,
+            })
+    return sorted(rows, key=lambda row: (row["when"], row["path"]))
+
+
+def span_slices(sd):
+    """`({span_id: diff}, unattributed_diff)` -- the beat, cut into its spans.
+
+    Each diff carries only records citing that span, in its channel's own
+    shape, so it can be applied to a scene exactly as the whole diff would be.
+    `unattributed` holds what cited nothing: it belongs to no point in the
+    beat's order, and a caller that needs a total world must decide which end
+    it lands at.
+
+    Applied in span order, the slices reconstruct the beat -- which is what
+    makes "the world as it stood at span k" a thing the engine can produce
+    without asking anyone.
+    """
+    def cited(record):
+        if not isinstance(record, dict):
+            return 0
+        raw = record.get("from_event")
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            return 0
+        return int(raw) if int(raw) > 0 else 0
+
+    # THE SIDECAR, for records that cannot carry a citation of their own.
+    # `positions` is `dict[str, str]`, so a body's position is a bare string
+    # with nowhere to put one -- and a beat's movements are exactly what a
+    # replay must order, because whether a mind heard a line turns on which
+    # room the speaker was in AT THAT MOMENT.
+    sidecar = {}
+    for path, source in ((sd or {}).get("phase_sources") or {}).items():
+        try:
+            number = int(source)
+        except (TypeError, ValueError):
+            continue
+        if number > 0:
+            sidecar[str(path)] = number
+
+    slices, loose = {}, {}
+
+    def bucket(span_id):
+        return slices.setdefault(span_id, {}) if span_id else loose
+
+    for channel, content in (sd or {}).items():
+        if channel in ("phase_sources", "resolved_events", "notes"):
+            continue
+        if isinstance(content, list):
+            for index, record in enumerate(content):
+                where = cited(record) or sidecar.get(
+                    "%s.%s" % (channel, index), 0)
+                bucket(where).setdefault(channel, []).append(record)
+        elif isinstance(content, dict):
+            for key, value in content.items():
+                if isinstance(value, list):
+                    # A dict of lists: `rooms.<id>.adjacent` is the shape this
+                    # is for, so the containing record is carried along with
+                    # whichever of its rows cite the span.
+                    for row in value:
+                        where = bucket(cited(row)).setdefault(channel, {})
+                        where.setdefault(key, []).append(row)
+                elif isinstance(value, dict):
+                    span_id = cited(value) or sidecar.get(
+                        "%s.%s" % (channel, key), 0)
+                    # SPLIT, NEVER DUPLICATE. `rooms.<id>` holds `name` and
+                    # `desc` beside an `adjacent` LIST whose rows cite their
+                    # own spans. Filing the whole record in one bucket AND
+                    # distributing its rows applies the same edge twice when
+                    # the slices are replayed in order.
+                    fields = {k: v for k, v in value.items()
+                              if not isinstance(v, list)}
+                    rowsets = {k: v for k, v in value.items()
+                               if isinstance(v, list)}
+                    if fields or not rowsets:
+                        bucket(span_id).setdefault(
+                            channel, {})[key] = fields or value
+                    for field, rows in rowsets.items():
+                        for row in rows:
+                            row_span = cited(row) or span_id
+                            holder = bucket(row_span).setdefault(
+                                channel, {}).setdefault(key, {})
+                            if isinstance(holder, dict):
+                                holder.setdefault(field, []).append(row)
+                else:
+                    # A scalar: its own record cannot cite anything, so the
+                    # sidecar is the only thing that can place it in the beat.
+                    bucket(sidecar.get("%s.%s" % (channel, key), 0)).setdefault(
+                        channel, {})[key] = value
+    return slices, loose
+
+
+def span_records(sd):
+    """THE SPAN'S RESULT: every record citing each span, with where it lives.
+
+    Returns `{span_id: [(path, channel, record), ...]}`, path being the dotted
+    route into the merged diff (`entities.padlock`, `rooms.forge.adjacent[0]`)
+    and channel the delegated channel it sits in -- which is what says WHICH
+    HAND wrote it, since the channel partition is disjoint.
+
+    A span routed to several hands is settled in several channels, and until
+    this existed the halves were only ever reachable one channel at a time. So
+    the folds this codebase has accumulated are all per-PAIR and all match on
+    names, aliases and head nouns; none of them could ask the question the id
+    makes exact -- *which records are this one event's outcome*.
+
+    Walks the three shapes a delegated channel takes, and no deeper (`depth >
+    3`): a record dict keyed by subject, a list of ops, and a dict of lists.
+
+    IT IDENTIFIES THE EVENT AND NOT THE OBJECT, which is the whole of what it
+    can promise. The apron and the hook both cite the span that hung one on the
+    other. Grouping by id bounds an identity question to one event's records
+    instead of the whole scene; deciding it is still the caller's, and the
+    over-merges this tree has measured are all decisions, never groupings.
+    """
+    found = {}
+
+    def walk(value, channel, path, depth=0):
+        if depth > 3:
+            return
+        if isinstance(value, dict):
+            raw = value.get("from_event")
+            if isinstance(raw, (int, float)) and not isinstance(raw, bool) \
+                    and int(raw) > 0:
+                found.setdefault(int(raw), []).append((path, channel, value))
+            for key, inner in value.items():
+                if key == "from_event":
+                    continue
+                walk(inner, channel, f"{path}.{key}" if path else str(key),
+                     depth + 1)
+        elif isinstance(value, list):
+            for index, inner in enumerate(value):
+                walk(inner, channel, f"{path}[{index}]", depth + 1)
+
+    for channel, content in (sd or {}).items():
+        if channel in ("phase_sources", "resolved_events", "notes"):
+            continue
+        walk(content, channel, str(channel))
+    return found
+
+
+def _cited_event_ids(sd):
+    """Every chunk id the diff's own records claim to be resolving.
+
+    A projection of `span_records`, not a second walker: two walkers over one
+    field are how the two of them come to disagree about which shapes a channel
+    takes, and this file already carries three notes about that failure.
+
+    This is the id half of `DESIGN_SPECIALIST_CONTRACT.md` section 4b. A hand
+    that names the chunk it resolved makes reconciliation an exact lookup;
+    everything below this still runs unchanged for records that name nothing,
+    which is every record written before the field existed and every standing
+    record refreshed on its own account.
+    """
+    return set(span_records(sd))
+
+
 def _evidence_present(sd, omission, forms=None, *, scene=None):
     """CATEGORY-AWARE evidence check: is the omission's subject touched in
     the RIGHT dimension of the diff, not merely mentioned somewhere? This is
@@ -885,6 +1960,24 @@ def _evidence_present(sd, omission, forms=None, *, scene=None):
     classes read it (see `_subject_is_somewhere`). Omitted, those two keep
     their old, looser answer -- so a caller that has no scene degrades to the
     behaviour it had rather than to a wrong one."""
+    # THE ID WINS WHEN THERE IS ONE. A record that names the chunk it
+    # resolves has settled the question by construction, and no comparison of
+    # two spellings of the same change can improve on it. Measured
+    # 2026-09-09 (`tools/echo_derivable.py`): the text-based check below
+    # disagrees with the hands' own verdicts on 29.8% of 329 events, which is
+    # the distance between a conservative verifier and an oracle. An id has no
+    # such distance.
+    #
+    # Additive on purpose: a record naming nothing falls through to exactly
+    # the check that ran before, so this is safe to land ahead of the
+    # `sequence` migration rather than with it.
+    try:
+        wanted = int(omission.get("event_id") or 0)
+    except (TypeError, ValueError):
+        wanted = 0
+    if wanted and wanted in _cited_event_ids(sd):
+        return True
+
     category = _normalize_omission_category(omission.get("category"))
     subject = omission.get("subject")
     hits = _make_subject_hit(subject, forms)
@@ -1223,6 +2316,289 @@ def _evidence_present(sd, omission, forms=None, *, scene=None):
 _RECONCILE_MAX_MANIFEST_ITEMS = 8
 
 
+def _beat_item_refs(listed):
+    """`items` as `[{"id": int, "name": str}]`, or [].
+
+    The Director's own numbers, kept only where a number is actually there.
+    Tolerant about the shape a model reaches for -- a bare number is an id with
+    no name, a bare string is a name with no number and is dropped, because a
+    mention that is not numbered says nothing this exists to say.
+    """
+    rows = []
+    for entry in (listed if isinstance(listed, (list, tuple)) else []):
+        if isinstance(entry, dict):
+            raw, name = entry.get("id"), entry.get("name")
+        elif isinstance(entry, (int, float)) and not isinstance(entry, bool):
+            raw, name = entry, ""
+        else:
+            continue
+        try:
+            number = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if number <= 0:
+            continue
+        row = {"id": number, "name": str(name or "").strip()}
+        if row not in rows:
+            rows.append(row)
+    return rows
+
+
+def _span_items(out):
+    """The beat's DISSECTED CHUNKS, numbered by the engine.
+
+    `sequence` is the Director's decomposition of the player's (or a
+    character's) input into typed spans, and it has always been the right
+    dissection -- what it lacked was a category saying which ledger family the
+    span belongs to, an id, and the Director's note on how it should resolve.
+    Those three make a chunk a WORK ITEM
+    (`DESIGN_SPECIALIST_CONTRACT.md` section 4a).
+
+    Numbered HERE, by the engine, in declared order -- the same rule and the
+    same reason as `_manifest_items`: an id the model authored could repeat,
+    skip or reorder, and every downstream use assumes a dense sequence. A
+    chunk keeps whatever id it is given for the whole beat, which is what
+    `from_event` on a record cites.
+
+    Only chunks the Director CATEGORIZED become work items. A span with no
+    category is still a perfectly good sequence element -- perception, the
+    narrator and the floors all read it -- it simply addresses no ledger, and
+    a speech act that changes nothing in the world is the ordinary case.
+    """
+    items = []
+    for position, element in enumerate(out.get("sequence") or []):
+        if not isinstance(element, dict):
+            continue
+        # THE RAW VALUE DECIDES, not the normalized one.
+        # `_normalize_omission_category` folds a missing category onto
+        # 'other', which is correct when classifying an omission the engine
+        # already knows is real, and wrong here: it made every uncategorized
+        # span -- a question asked, a look given -- into a work item, and so
+        # would have dispatched a hand for every line of dialogue.
+        raw = element.get("category")
+        # ONE SPAN MAY NAME SEVERAL LEDGERS. A belt pulled off and dropped on
+        # a bench is one act of the player's and two records -- the wardrobe's
+        # and the object's -- so the span carries both and each hand settles
+        # its own part (`DESIGN_SPECIALIST_CONTRACT.md`; per-hand acquittal in
+        # `_index_addressed_events`).
+        #
+        # READ IT IN WHATEVER SHAPE IT CAME. This branched on `list` here and
+        # split delimiters over in `_split_joined_categories`, and the two
+        # never composed: once a value took the list branch no member was ever
+        # split, so `["body, objects"]` routed to NO hand and
+        # `["body", "objects, spatial"]` routed only the first. Measured on
+        # the long-beat run, 5 of 54 categories arrived as lists, so the
+        # mixtures are not hypothetical.
+        names = _category_names(raw)
+        categories = []
+        for name in names:
+            if not str(name or "").strip():
+                continue
+            folded = _normalize_omission_category(name)
+            if folded and folded not in categories:
+                categories.append(folded)
+        if not categories:
+            continue
+        item = dict(element)
+        item["categories"] = categories
+        # `category` keeps the first, so a reader written before spans could
+        # name two still sees the string it expects rather than a list.
+        item["category"] = categories[0]
+        item["event_id"] = len(items) + 1
+        # WHERE IT CAME FROM, for the engine only. Player authority is settled
+        # against the sequence POSITION (`claim:<index>:...`) and voiding a
+        # span needs the other direction. Deriving it by re-walking the same
+        # category filter somewhere else is how the filter gets two spellings,
+        # which is the failure this file already carries three notes about.
+        # Stripped before any payload (`_specialist_payload`): a leading
+        # underscore marks a key no model ever sees.
+        item["_from_position"] = position
+        # THE BEAT'S OWN ITEM NUMBERS, moved out of sight. The hands must never
+        # see them (the owner's constraint): they are bookkeeping for the
+        # reconciler, and a number in a payload is a number the model will try
+        # to cite. `_specialist_payload` strips every leading-underscore key
+        # from a span, so renaming it here is the whole of the enforcement.
+        listed = item.pop("items", None)
+        numbered = _beat_item_refs(listed)
+        if numbered:
+            item["_items"] = numbered
+        items.append(item)
+    return items
+
+
+def _split_joined_categories(raw):
+    """`"objects, spatial"` as the two names it is -- or as one, untouched.
+
+    A model told to name two families in one string field reaches for a
+    separator, and the joined string folds to no known category: the span
+    routes to no hand and the change is lost in silence. Splitting is safe
+    here and only here, because the result is DISCARDED unless every part is
+    a category the engine already ROUTES -- so a string carrying one
+    unfamiliar name reaches `_unrouted_rulings` whole, echoed back to the
+    Director as the thing it actually wrote, to be reported rather than
+    guessed at. That is the rule `_note_key_forms` states for the sibling
+    channel, and routability rather than foldability is the test because the
+    fold passes an unknown name through unchanged.
+
+    Written as a delimiter class rather than a comma alone: the separator a
+    model reaches for is whichever one it reaches for, and every one of them
+    is punctuation no category contains.
+    """
+    text = str(raw or "").strip()
+    if not text:
+        return [raw]
+    parts = [part.strip() for part in re.split(r"[,;/|]|\band\b", text)]
+    parts = [part for part in parts if part]
+    if not parts:
+        # Nothing but separators (",", "and", "  ,  ,  "). There is no name
+        # here to recover, so the raw value stands and the unrouted report
+        # shows what was actually written.
+        return [raw]
+    if len(parts) < 2:
+        # A STRAY SEPARATOR IS NOT PART OF A NAME. This handed back the RAW
+        # string, and a trailing comma then defeated the routing outright:
+        # `"body"` reached the body hand and `"body,"` reached nobody, because
+        # `body,` is not a category anybody answers to. One keystroke, one
+        # lost hand name -- the same class the `any`/`all` rule was fixed for,
+        # one branch earlier. The single part IS the string minus the stray
+        # punctuation, so handing it back changes nothing else: a value with
+        # no separator in it splits to itself.
+        return parts
+    # AT LEAST ONE part must ROUTE -- not every part, and not merely fold.
+    #
+    # `_normalize_omission_category` passes an unknown name straight through,
+    # so a bare truthiness test would split free prose into "categories":
+    # "the belt comes off and lands on the bench" is not two ledger families,
+    # and reporting it as two is worse noise than reporting it as one unknown
+    # name. That is the case this guard was written for and it is untouched.
+    #
+    # BUT THE RULE USED TO BE `all`, AND THAT PAID FOR THE GUARD WITH EVERY
+    # KNOWN NAME STANDING BESIDE AN UNKNOWN ONE. Measured, and the asymmetry
+    # is the whole argument -- identical content, one comma's difference:
+    #
+    #     ['body', 'objects', 'geography']  ->  body, objects
+    #     'body, objects, geography'        ->  NOTHING
+    #
+    # Two hand names the engine OWNS, discarded because the model invented a
+    # third word. The names were right there.
+    #
+    # `any` is evidence and not a guess: a string in which at least one part
+    # is a family the engine already routes is a model writing NAMES, and one
+    # in which no part is is a model writing PROSE. So prose still passes
+    # through whole, and a partly-known string now delivers its known half and
+    # reports the rest by itself -- which is what the LIST spelling of the
+    # same content has always done.
+    if any(manifest_category_targets(_normalize_omission_category(part))
+           for part in parts):
+        return parts
+    # No part names anything the engine knows: this is prose, and the honest
+    # thing for the unrouted report to receive is one unknown name rather than
+    # a sentence minced into seven.
+    return [raw]
+
+
+def _category_names(raw, _depth=0):
+    """Every category name a value names, WHATEVER SHAPE IT ARRIVED IN.
+
+    A model asked to name the ledger families one act touches will reach for
+    whichever shape its training makes natural, and all of these are the same
+    answer: `"body"`, `"body, objects"`, `"body and objects"`,
+    `["body", "objects"]`, `["body, objects"]`, `["body", "objects, spatial"]`,
+    `("body", "objects")`, `{"body": <note>, "objects": <note>}`. Tolerance
+    here is not laxity -- a shape the engine refuses to read is a span that
+    routes to no hand, and a change nobody was handed is lost in SILENCE,
+    which is the one failure mode this whole seam exists to prevent.
+
+    A MAPPING ANSWERS WITH ITS KEYS, and is worth accepting for a specific
+    reason: a model asked for categories and a note per category reaches for
+    a mapping because `ledger_notes` in this very output is one, so the shape
+    is suggested by the schema it is already writing.
+
+    The per-string discard rule is untouched and now applies where it was
+    always meant to -- to each string, rather than only to a value that
+    happened not to be a list. `_split_joined_categories` still refuses to
+    split a string unless EVERY part routes, so free prose reaches
+    `_unrouted_rulings` whole instead of being minced into fake categories.
+    """
+    # A depth bound rather than a shape assertion: the point is to read what
+    # arrives, and nothing legitimate nests, so this only stops a pathological
+    # value from costing more than it is worth.
+    if _depth > 3:
+        return [raw]
+    if isinstance(raw, dict):
+        return [name for key in raw
+                for name in _category_names(key, _depth + 1)]
+    if isinstance(raw, (list, tuple, set, frozenset)):
+        # Sorted for a set ONLY: a set has no order to preserve and an
+        # unordered category list would make the span's first category --
+        # which `category` keeps for readers written before spans -- differ
+        # between runs on identical input.
+        members = sorted(raw, key=str) if isinstance(
+            raw, (set, frozenset)) else raw
+        names = []
+        for member in members:
+            names.extend(_category_names(member, _depth + 1))
+        return names
+    return _split_joined_categories(raw)
+
+
+def voided_span_ids(out, downgrades):
+    """The spans the player's authority did not cover, by their own ids.
+
+    A downgrade names a sequence POSITION (`claim:<index>:...`); a record cites
+    a SPAN id (`from_event`). This is the join between them, and it exists
+    because the two id spaces are both real and neither is the other -- the
+    lesson of the beat where a hand cited the phase graph because the payload
+    carried two fields called `event_id`.
+
+    An element that became no span contributes nothing: it addressed no ledger,
+    so no record cites it and there is nothing to void.
+    """
+    positions = downgraded_sequence_indices(downgrades)
+    if not positions:
+        return []
+    return [int(span["event_id"]) for span in _span_items(out)
+            if span.get("_from_position") in positions
+            and span.get("event_id")]
+
+
+def void_span_records(assertions, span_ids):
+    """Drop every record citing one of these spans, whichever hand wrote it.
+
+    WHOLE, which is the owner's rule: a span may have several owners
+    (`span_owners`) and voiding one hand's half while another's stands is the
+    state the rule was given to end. Every owner's record cites the same span
+    id, so one pass reaches all of them.
+
+    The walker is `prune_blocked_phase_changes` unchanged -- it already drops a
+    record whose cited event is dead, it already reads `from_event`, and the
+    deferred-phase floor calls it the same way a few lines from the caller. A
+    second walker would be a second answer to "is this record's event void".
+
+    Returns the (path, span_id) pairs dropped, for the record that tells the
+    Director what the dial refused.
+    """
+    if not span_ids or not isinstance(assertions, dict):
+        return []
+    return prune_blocked_phase_changes(
+        assertions,
+        [{"event_id": int(span_id), "status": "blocked"}
+         for span_id in span_ids])
+
+
+def _span_id_ceiling(out):
+    """The highest id the chunks used, so the manifest can continue past it.
+
+    ONE ID SPACE PER BEAT. During the migration a beat can carry both
+    `sequence` chunks and a `changes_asserted` manifest, and a record's
+    `from_event` names one number -- so the two lists cannot both start at 1
+    or the id is ambiguous about which it points into. Chunks take 1..N and
+    the manifest continues at N+1. When `changes_asserted` goes this returns
+    0 for every beat and the numbering is simply 1..N.
+    """
+    return len(_span_items(out))
+
+
 def _manifest_items(out, cast=None, scene=None):
     """director_resolve's own changes_asserted manifest, normalized to the
     seam's omission shape (source 'manifest').
@@ -1251,18 +2627,33 @@ def _manifest_items(out, cast=None, scene=None):
             "category": _normalize_omission_category(item.get("category")),
             "subject": str(item.get("subject") or "").strip(),
             "change": change, "evidence": "", "source": "manifest",
-            "event_id": len(items) + 1,
+            # CONTINUES PAST THE SPANS, see `_span_id_ceiling`: one id space
+            # per beat, so a record's `from_event` is never ambiguous about
+            # which list it points into.
+            "event_id": _span_id_ceiling(out) + len(items) + 1,
         }
         # Preserve the historical public manifest shape for every non-contact
         # change; endpoint keys exist only when the model actually supplied
         # them, rather than four empty strings appearing on every item.
+        #
+        # `note` RIDES WITH THEM, and it is the reason this list is a list: the
+        # normalized dict above is built key by key, so a field absent from it
+        # is silently dropped here rather than at any boundary that would say
+        # so. The Director wrote the instruction, `_specialist_manifest_slice`
+        # would have carried it, and the hand would never have seen it --
+        # caught 2026-09-09 only because the guard test hand-built its view and
+        # bypassed this function, which is the shape of a test proving a stub.
         for field in ("actor", "actor_part", "target", "target_part",
-                      "substance", "placement", "target_interior"):
+                      "substance", "placement", "target_interior", "note"):
             value = str(item.get(field) or "").strip()
             if value:
                 normalized[field] = value
         items.append(normalized)
-    items = _fold_derived_manifest_events(items, cast, scene)
+    # RENUMBERED WITH THE SAME OFFSET. The fold closes gaps left by merged
+    # entries and used to restart at 1, which silently undid the chunk offset
+    # above -- ids have to be dense AND in the beat's one id space.
+    items = _fold_derived_manifest_events(items, cast, scene,
+                                          start=_span_id_ceiling(out) + 1)
     # NO CLAMP. Until 2026-09-07 this returned the first eight: items 9+
     # were dispatched to no hand, sliced into no specialist view and
     # checked against no evidence, so a busy beat's later changes were the
@@ -1319,7 +2710,7 @@ def _subject_is_registered_body(subject, cast, scene):
     return False
 
 
-def _fold_derived_manifest_events(items, cast=None, scene=None):
+def _fold_derived_manifest_events(items, cast=None, scene=None, start=1):
     """One real-world change is ONE numbered event.
 
     The manifest may truthfully describe a single change twice -- "the sash
@@ -1406,5 +2797,5 @@ def _fold_derived_manifest_events(items, cast=None, scene=None):
         if item["category"] not in also:
             also.append(item["category"])
     for index, item in enumerate(folded):
-        item["event_id"] = index + 1
+        item["event_id"] = start + index
     return folded

@@ -239,6 +239,26 @@ from .director_floors import (
     _scan_for_untracked_restraint,
 )
 from .director_evidence import (
+    _category_names,
+    beat_event_ledger,
+    beat_item_records,
+    beat_ledger,
+    beat_worlds,
+    span_slices,
+    apply_item_transforms,
+    mint_authority_rank,
+    beat_timeline,
+    declared_elements,
+    mover_cut_events,
+    single_span_attributions,
+    span_mint_rooms,
+    item_survivors,
+    span_colocations,
+    span_pairings,
+    span_records,
+    span_result_findings,
+    voided_span_ids,
+    void_span_records,
     _SUBJECT_OP_CHANNELS,
     _RECONCILE_INTERPRET_MAX_UNITS,
     _INTERPRET_COVERAGE_MIN,
@@ -267,6 +287,10 @@ from .director_evidence import (
     _evidence_present,
     _RECONCILE_MAX_MANIFEST_ITEMS,
     _manifest_items,
+    _span_items,
+    _span_id_ceiling,
+    _without_provenance,
+    _cited_event_ids,
     _DERIVED_OF_ATTIRE,
     _fold_derived_manifest_events,
     _state_diff_channels,
@@ -281,6 +305,7 @@ from .director_scopes import (
     _CATEGORY_CHANNELS,
     RETIRED_HANDS,
     note_key_targets,
+    manifest_category_targets,
     _LIST_DELEGATED,
     _CHANNEL_GATES,
     _CHANNEL_SPECIALISTS,
@@ -297,6 +322,7 @@ from .director_scopes import (
     _gate_facts,
     _ruling_for,
     _unrouted_rulings,
+    unnamed_work,
     _dispatch_specialists,
 )
 from .director_fanout import (
@@ -304,7 +330,14 @@ from .director_fanout import (
     _note_for,
     _resolve_beat_view,
     _interpret_beat_view,
+    _granted_event_ids,
     _specialist_manifest_slice,
+    _specialist_span_slice,
+    span_categories,
+    span_owners,
+    specialist_co_hands,
+    co_hand_view,
+    _without_private_keys,
     _specialist_payload,
     _anchor_names,
     _beat_rooms,
@@ -891,13 +924,6 @@ def director_interpret(ctx, nonce):
     from story.authored_events import due_authored_events
     _due_authored = due_authored_events(chat["id"], ctx.turn.idx)
 
-    world_books = [
-        {"name": m["name"], "type": m["type"], "summary": (m["summary"] or "")[:240],
-         "scope_world_id": m.get("scope_world_id"),
-         "scope_location_id": m.get("scope_location_id"),
-         "parent_id": m.get("parent_id")}
-        for m in lorebook_manifest(chat["id"])["books"]
-    ]
 
     payload = {
         "scene": {
@@ -1024,7 +1050,6 @@ def director_interpret(ctx, nonce):
                 for _pn, _pr in presence_name_items(_addressable_ledger))
             if _bp["room"]
         ],
-        "world_books": world_books,
         "standing_intentions": raw_intents[:12],
         "pending": wget(chat["id"], "pending", []),
         # Future beats the PLAYER scheduled earlier ("the elevator crashes next
@@ -1412,6 +1437,40 @@ def director_interpret(ctx, nonce):
         out["authority_downgrades"] = _downgrades
         out["authority_mode"] = _authority_mode
         _sync_sequence_mirrors(out)
+        # AND THE RECORD GOES WITH IT. Relabelling the claim and the commitment
+        # is everything this function can do by itself, and it is not enough:
+        # the hands ran at the fan-out above and have already written the
+        # assertion into the world. Measured 2026-09-10, the same beat under
+        # both dials: `actor_only` downgraded the claim to an intention,
+        # flipped the act to contestable, and left `state_assertions`
+        # byte-identical to `world_author` -- the world kept the fact the
+        # player was not entitled to declare.
+        #
+        # The owner's rule: a span the dial refuses is refused WHOLE. Every
+        # owner of the span cites the same id, so one pass over the merged
+        # assertions takes all of their halves together, and a span half-voided
+        # is exactly the state the rule exists to end.
+        _voided = voided_span_ids(out, _downgrades)
+        if _voided:
+            _dropped = void_span_records(
+                out.get("state_assertions"), _voided)
+            _contacts = {"contact_ops": out.get("contact_assertions") or []}
+            _dropped += void_span_records(_contacts, _voided)
+            out["contact_assertions"] = _contacts.get("contact_ops") or []
+            # On the step, beside the downgrade record it belongs to, and in
+            # front of the Director in the SAME beat for the same reason: a
+            # refusal the player can read about is answerable, one that lands
+            # next beat is not.
+            out["voided_spans"] = [
+                {"event_id": span_id,
+                 "dropped": [path for path, cited in _dropped
+                             if str(cited) == str(span_id)]}
+                for span_id in _voided
+            ]
+            ctx.add_warning(
+                "PLAYER AUTHORITY: %d span(s) the %s dial does not cover were "
+                "refused whole; %d record(s) written for them were dropped."
+                % (len(_voided), _authority_mode, len(_dropped)))
 
     # Detect contested actions
     seq = out.get("sequence")
@@ -1536,6 +1595,7 @@ def director_interpret(ctx, nonce):
     # Interpret's own scope backstop, on the FINAL interpretation -- the
     # same single check resolve runs, pointed at this stage's containers.
     _orchestration_scope_backstop(ctx, out, "interpret", sc)
+    _span_coherency_report(ctx, out, "interpret", _idispatch, _iview)
 
     return out
 
@@ -1816,7 +1876,9 @@ def _specialist_repairs(ctx, sc, sd, routed, view, extras, recon):
             else:
                 result = _agent_json(
                     spec["role"], spec["step_key"],
-                    specialist_prompt(name, scope, ctx.language), payload,
+                    specialist_prompt(name, scope, ctx.language,
+                                      specialist_co_hands(name, view)),
+                    payload,
                     temperature=0.0,
                     max_tokens=None,   # the configured ceiling
                 )
@@ -2111,10 +2173,34 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
     for warning in contract_warnings:
         ctx.add_warning(warning)
 
-    # ---- Tier 1: the same-call manifest, checked deterministically -------
-    manifest = _manifest_items(out, ctx.cast, sc)
+    # ---- Tier 1: the beat's own work items, checked deterministically ----
+    #
+    # CHUNKS FIRST. A categorized span of the input carries everything the
+    # manifest entry did for this purpose -- a subject, a category, an id and
+    # a statement of what should be true -- and it is the artifact the
+    # Director now produces (`DESIGN_SPECIALIST_CONTRACT.md` 4a). The manifest
+    # is still read and still reconciles, because a stored variant replayed
+    # from before the migration carries one and nothing else, and a rerun that
+    # silently stopped checking those would turn a settled beat into an
+    # unchecked one.
+    manifest = _span_items(out) + _manifest_items(out, ctx.cast, sc)
     manifest_omissions = []
     for item in manifest:
+        # A chunk states the work in `note` and names no subject of its own:
+        # it is a span of the input, and who it concerns is whatever the span
+        # says. The seam wants both keys, so fill them from the chunk rather
+        # than teaching every reader two shapes.
+        if "change" not in item:
+            item = {**item,
+                    "change": str(item.get("note") or item.get("attempt")
+                                  or item.get("text") or ""),
+                    # `actor` on the resolve half: a span there is anything
+                    # the beat made true BY ANYONE, so whose act it was is the
+                    # subject the evidence check matches on. Interpret spans
+                    # are the player's own and carry neither, which falls back
+                    # to "" exactly as before.
+                    "subject": str(item.get("subject")
+                                   or item.get("actor") or "")}
         forms = _subject_match_forms(item["subject"], ctx.cast, sc)
         if not _evidence_present(sd, item, forms, scene=sc):
             manifest_omissions.append({**item, "_forms": forms})
@@ -2667,6 +2753,36 @@ def _prose_author_scope(ctx, sc, payload, facts, p_name):
     return scope
 
 
+def _span_coherency_report(ctx, out, stage, dispatch, view):
+    """Say what does not add up about each span's assembled result.
+
+    A span routed to several hands is settled in several channels, and until
+    `span_records` existed its halves were reachable only one channel at a
+    time. That is why every fold in this tree is per-PAIR and matches on names
+    -- none of them could ask the question the id makes exact: which records
+    are this one event's outcome.
+
+    Reported and never repaired. What a coherent merge of two halves looks like
+    is a question about the two channels' subjects, and this codebase's
+    measured cost of guessing at that is a story whose containment ledger sat
+    empty for twenty beats after one alias overlap folded two things into one.
+    """
+    diff = out.get("state_diff") if stage == "resolve" \
+        else out.get("state_assertions")
+    findings = span_result_findings(
+        diff, (view or {}).get("spans"), dispatch, span_owners)
+    if not findings:
+        return
+    record = out.setdefault("orchestration", {})
+    record["span_findings"] = findings
+    for finding in findings[:4]:
+        ctx.tell_director(
+            "span %s: %s%s" % (
+                finding.get("event_id"), finding.get("kind"),
+                " (%s)" % finding["hand"] if finding.get("hand") else ""))
+
+
+
 def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
     """Fan out to every dispatched specialist and assemble by ownership.
 
@@ -2756,7 +2872,8 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
             return _agent_json(
                 spec["role"],
                 spec["step_key"],
-                specialist_prompt(name, state["scope"], ctx.language),
+                specialist_prompt(name, state["scope"], ctx.language,
+                                  specialist_co_hands(name, view)),
                 _specialist_payload(name, ctx, sc, view, extras),
                 temperature=0.2,
                 max_tokens=None,   # the configured ceiling
@@ -2765,15 +2882,18 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
 
     jobs = [(name, state) for name, state in dispatch.items()
             if state.get("run")]
-    # Recorded BEFORE the call, from the same filter that builds the
-    # payload: which numbered events this specialist is answerable for.
+    # Recorded BEFORE the call, from the same filters that build the
+    # payload: which numbered work items this specialist is answerable for.
     # A verdict on anything else is discarded (_resolved_event_verdicts).
+    #
+    # BOTH SLICES. Spans are the work items now and the manifest is what they
+    # replaced, so a list built from the manifest alone is empty on every beat
+    # -- and an empty grant discards every verdict, which left
+    # `events_addressed` blank and per-hand acquittal unable to run at all.
+    # The two share one id space (spans 1..N, the manifest continuing past the
+    # ceiling), so this is a union and never a renumbering.
     for name, state in jobs:
-        state["event_ids"] = [
-            int(item["event_id"])
-            for item in _specialist_manifest_slice(name, view)
-            if item.get("event_id")
-        ]
+        state["event_ids"] = _granted_event_ids(name, view)
     results = {}
     if len(jobs) > 1 and not fanout_is_parallel():
         # SEQUENTIAL, by host choice. Same context copy per job, same
@@ -2855,7 +2975,16 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
                 dropped.append(channel)
                 continue
             if channel in state["scope"]:
-                if authored and authored != owned:
+                # CONTENT, not provenance. This warning is about the author
+                # putting content in a channel it was told to leave to a hand;
+                # whether the two sides agree about `from_event` says nothing
+                # about that. Without stripping it the ids differ by
+                # construction -- the hand stamps the chunk it resolved and the
+                # author never does -- so an author and a hand emitting the
+                # IDENTICAL room would be reported as a mis-emission on every
+                # beat.
+                if authored and _without_provenance(authored) != \
+                        _without_provenance(owned):
                     replaced.append(channel)
                     ctx.add_warning(
                         f"orchestration: the stage model emitted {channel} "
@@ -4731,13 +4860,43 @@ def director_resolve(ctx, nonce, _corrections=None):
     # reported beyond perception and committed into riser 13 in one beat).
     # Same rule, same room, written where all four readers see it. The commit
     # keeps its pass as the backstop for a diff that never met this floor.
-    _placed = place_unplaced_mints(sc, sd, _mint_room, ctx=ctx)
+    # THE RECOMPILER'S ANSWER FIRST, where it has one. `_mint_fallback_room`
+    # is this answer with the ORDER thrown away -- one room for the whole beat,
+    # the one the player arrived in -- so the two agree whenever the mint is
+    # the last thing that matters and diverge whenever it is not. Measured: a
+    # crate set down in the yard BEFORE the player walked into the box is
+    # stood in the box by the fallback and in the yard by the replay.
+    #
+    # Bought only when there is an unplaced mint to spend it on. The replay is
+    # N merges of the scene -- bounded and pure, beats measured at 1-5 spans --
+    # and a beat that placed everything has nothing to buy with it.
+    _span_rooms = {}
+    if unplaced_mints_needing_a_room(sc, sd, ctx=ctx):
+        _rspans = _span_items(out)
+        if _rspans:
+            _rsd = dict(sd)
+            _rsd.setdefault("phase_sources", {}).update(
+                single_span_attributions(
+                    sd, _orch_dispatch, _orch_view, _specialist_span_slice))
+            _span_rooms = span_mint_rooms(
+                _rsd, _rspans,
+                beat_worlds(sc, _rsd, merge_scene_with_diff),
+                merge_scene_with_diff(sc, _rsd),
+                lambda span: str(span.get("actor") or p_name))
+    _placed = place_unplaced_mints(sc, sd, _mint_room, ctx=ctx,
+                                   rooms=_span_rooms)
     for _eid in _placed:
+        _where = _span_rooms.get(str(_eid))
         _note = (
-            "%r was minted with no room, so the beat stood it where the beat "
-            "is (%s). A thing in no room can be seen, reached and acted on by "
-            "nobody; write `state_diff.positions` for anything you mint."
-            % (_eid, _mint_room))
+            ("%r was minted with no room, so the beat stood it where its own "
+             "span left the actor (%s). A thing in no room can be seen, "
+             "reached and acted on by nobody; write `state_diff.positions` "
+             "for anything you mint." % (_eid, _where))
+            if _where else
+            ("%r was minted with no room, so the beat stood it where the beat "
+             "is (%s). A thing in no room can be seen, reached and acted on "
+             "by nobody; write `state_diff.positions` for anything you mint."
+             % (_eid, _mint_room)))
         ctx.add_warning(_note)
         ctx.tell_director(_note)
     # What no room could be found for: the fallback declines where the beat
@@ -5159,6 +5318,32 @@ def director_resolve(ctx, nonce, _corrections=None):
     # wrongly-omitted chunk is reported against what actually ships, never
     # against a draft.
     _orchestration_scope_backstop(ctx, out, "resolve", sc)
+    _span_coherency_report(ctx, out, "resolve", _orch_dispatch,
+                           _orch_view)
+
+    # THE BEAT'S EVENTS, HANDED TO THE WORLD (`world/beat_ledger.py`).
+    #
+    # The owner, on why a character's act was being handled twice: "shouldn't
+    # it go character -> director -> recompiler -> world -> perception?" This
+    # is the arrow into the world. The recompiler has just reassembled the
+    # beat out of five hands' parallel work, and its chronology -- the author's
+    # own order, each element citing the declaration it describes -- is the
+    # one thing about the beat that had no place in the world to live. So it
+    # goes on the output, `compose_beat_scene` writes it onto the scene under
+    # the beat number that bounds it, and perception READS it there.
+    #
+    # NOT a `state_diff` channel, deliberately. The diff is partitioned into
+    # 32 channels each owned by exactly one hand, and every seam over it --
+    # ownership, span attribution, reconciliation -- is built on no channel
+    # having two authors. This is the ENGINE's own reassembly of what the
+    # hands produced, written after the last floor has run on the merge, so it
+    # travels beside the diff rather than inside it.
+    #
+    # Built here rather than after the campaign block because a validator's
+    # refusal re-enters this whole function: the corrected result builds its
+    # own ledger from its own sequence, which is the point of re-entering
+    # rather than patching.
+    out["beat_events"] = beat_event_ledger(out, interp, decls)
 
     # EXTENSION RESULT VALIDATION, last of all and deliberately so. A validator
     # judges the merged result AFTER every deterministic floor this engine owns

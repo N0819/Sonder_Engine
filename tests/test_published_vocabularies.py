@@ -462,11 +462,17 @@ def _prose_author_delegation(card) -> list:
     Found by content rather than by index: the sheet is a list of blocks, and
     a fragment inserted above this one would silently move it.
     """
-    # `SOCIAL FABRIC` is spelled the same in both packs and appears in this
-    # block alone (the world's traffic folded into it on 2026-09-04, when
-    # the offscreen hand was retired).
+    # Keyed on a CANONICAL CHANNEL IDENTIFIER, which every pack spells the
+    # same because that is what this class exists to assert. It used to key on
+    # `SOCIAL FABRIC`,
+    # one of five ALL-CAPS group labels -- and those labels were themselves
+    # the defect that made a Director at low effort file `geography` as a
+    # category (DESIGN_SPECIALIST_CONTRACT.md 4e): the sheet published two
+    # vocabularies for one set of things. The labels are the hand names now,
+    # so a detector cannot key on them any more -- and the block's English
+    # heading is not in the Japanese pack, which a heading-based fix found out.
     return [text for _key, text in card["prose_author_sheet"]
-            if isinstance(text, str) and "SOCIAL FABRIC" in text]
+            if isinstance(text, str) and "remove_adjacent" in text]
 
 
 def _interpret_delegation(card) -> list:
@@ -477,7 +483,7 @@ def _interpret_delegation(card) -> list:
     both getters fail the same way if the paragraph is ever rewritten out.
     """
     text = str(card["interpret_delegation_note"])
-    return [text] if "SOCIAL FABRIC" in text else []
+    return [text] if "remove_adjacent" in text else []
 
 
 #: Every published paragraph that restates `SPECIALISTS`, by the stage whose

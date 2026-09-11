@@ -2343,7 +2343,8 @@ def _actor_of(event) -> str:
     return ""
 
 
-def beat_movement_cuts(prev_scene: dict, scene: dict, events) -> dict:
+def beat_movement_cuts(prev_scene: dict, scene: dict, events,
+                       *, moved_at=None) -> dict:
     """`{body: index}` -- the stream index from which a body's NEW place holds.
 
     A body that moved is at its old place for every event before the cut and
@@ -2364,14 +2365,38 @@ def beat_movement_cuts(prev_scene: dict, scene: dict, events) -> dict:
     or placed -- so its new place holds throughout, which is what this stage
     has always done and is not a claim this function is entitled to weaken.
 
-    KNOWN RESIDUAL: a body that moves twice in a beat collapses to its last
-    move, so a line spoken between the two is graded from where it started.
-    Two snapshots cannot express a third place; recording the trajectory is
-    what fixes it, and this is the quantity that trajectory would be read for.
+    `moved_at` IS THAT TRAJECTORY, and it supersedes the heuristic for any
+    body it names: `{body: event_id}`, the phase id of the event that actually
+    moved them, which the causality recompiler derives from the span carrying
+    the position change (`director_evidence.mover_cut_events`). Supplying
+    nothing is this function as it was, and where the move IS the mover's last
+    action the two answers are identical -- it differs only where the old one
+    was guessing.
+
+    Measured, the shape the heuristic gets wrong and the docstring did not
+    claim: `move, act, act` cuts at the LAST act, so the act between the move
+    and it is graded from the room the mover has already left. That is the
+    ordinary shape of "step into the tardis, pull the levers on the console".
+
+    KNOWN RESIDUAL, and it is the heuristic's rather than this function's: a
+    body that moves twice in a beat collapses to its last move, so a line
+    spoken between the two is graded from where it started. Two snapshots
+    cannot express a third place, and `scene_as_of` carries two -- so
+    `moved_at` fixes WHICH event the single cut falls on and not how many
+    places a body may hold.
     """
     movers = moved_within_beat(prev_scene, scene)
     if not movers:
         return {}
+    at_event = {}
+    for index, event in enumerate(events or ()):
+        if not isinstance(event, dict):
+            continue
+        source = event.get("event") if isinstance(
+            event.get("event"), dict) else {}
+        key = str(source.get("event_id") or "").strip()
+        if key and key not in at_event:
+            at_event[key] = index
     last_action = {}
     for index, event in enumerate(events or ()):
         if not isinstance(event, dict) or event.get("kind") != "action":
@@ -2379,9 +2404,30 @@ def beat_movement_cuts(prev_scene: dict, scene: dict, events) -> dict:
         actor = _actor_of(event)
         if actor:
             last_action[actor] = index
+    told = {str(body): str(event_id or "").strip()
+            for body, event_id in (moved_at or {}).items()}
     cuts = {}
     for body in movers:
-        index = last_action.get(body)
+        # THE TRAJECTORY FIRST. A body the recompiler can place is placed
+        # where it actually moved, and the heuristic below answers only for
+        # the bodies it cannot -- a character's own declaration, an old stored
+        # variant, a beat whose spans carry no attribution.
+        # PLUS ONE, because the move is the last event that happened at the
+        # old place. `scene_as_of` restores the old place for every index
+        # BEFORE the cut, so cutting ON the move grades the move itself at its
+        # destination and everyone in the room being left loses the departure
+        # -- measured by rendering the view: "Corin says: 'Wait here.'" and
+        # then he is simply gone.
+        index = at_event.get(told.get(str(body), ""))
+        if index is None:
+            index = next((position for name, key in told.items()
+                          if same_subject(scene, name, body)
+                          for position in [at_event.get(key)]
+                          if position is not None), None)
+        if index is not None:
+            index += 1
+        if index is None:
+            index = last_action.get(body)
         if index is None:
             # ...and try the spellings the scene answers to, because a
             # declaration names a body as its sheet does and the scene may

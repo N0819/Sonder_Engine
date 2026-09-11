@@ -1,0 +1,26 @@
+ENTITIES — the things of the world, and what each thing itself is doing.
+`state` is that thing's OWN standing condition: never where it is, never what it lets past, never what another body is doing to it or inside it. A thing a body can get INSIDE is a place: give it `interior_rooms` and an `enclosure`. A room-carrying entity moves only by `state.transit`; write the state and the engine draws the doorway.
+Shape: entities:{entity_id:{name,kind,description,aliases:[],portable,container,interior_rooms:[],enclosure:'opaque'|'transparent'|'barred'|'curtained',scent,ubiquitous,light_source:'dim'|'lit'|'bright',light_radius:'spot'|'room',light_shape:'cone'|'all_round',light_height:'floor'|'waist'|'head'|'full',sound_source:'faint'|'audible'|'loud'|'deafening'|'thunderous'|'catastrophic',db:<number>,steadiness:'flickering'|'failing',state:{lit,running,hatch:'open'|'closed'|'locked',pointed_at:<entity, body, anchor or bearing>,transit:{phase:'docked'|'sealed'|'in_transit'|'arriving',hatch,destination_room,eta_seconds,route_room},...}}}
+  kind        free text, EXCEPT that a thing with a whole to lose must be one of vehicle|building|structure|ship|boat (or carry interior_rooms), or it can never be destroyed later. The fiction's own word goes in `name`.
+  scent       a smell the thing standingly gives off; most things have none.
+  ubiquitous  true for a thing with no place it could be AT — present throughout the vessel or system it belongs to.
+  emitting    a thing goes on giving off light or sound until something stops it; `state.lit`/`state.running` are the switch. A signal this beat alone is not this — it is `sensory_events`.
+
+INVENTORY_OPS — things changing hands or coming to rest.
+`to_id` is where it ENDED UP: a room, or a body named anywhere in the payload. What a body arrives carrying is a transfer too, from nobody to that body. Omit `relation` for an ordinary carry in view.
+Shape: inventory_ops:[{op,object_id,from_id,to_id,relation:'held'|'carried'|'riding'|'mounted'|'worn'|'pocket'|'container'|'inside',details}].
+
+ARTIFACT_OPS — notices somebody nails up, and who reads them.
+A bill goes up in the room its poster stands in, carrying a report that poster holds or a claim they invent.
+Shape: artifact_ops:[{op:'post'|'read'|'remove',poster?,reader?,by?,artifact_id?,world_event_id?,claim?,description?,manner?}].
+
+DESTRUCTION — a place or vehicle lost OUTRIGHT, not merely damaged.
+If the beat says one is gone as a whole, declare it — nothing is destroyed by prose. Name the largest whole lost and its scale; the engine retires everything recorded inside it. `news` is who learns of it later, one entry per audience; omit `latency_seconds` and the engine derives it from distance.
+Shape: destruction:{target_id,scale:'vehicle'|'building'|'region',kind,news:[{audience,latency_seconds,summary}]}|null.
+
+SENSORY_EVENTS — a signal the beat made, over when the beat is.
+`room` is where it happened, and must be a room the scene holds. `detail` is what it was LIKE — it is the whole of what a body beyond the room receives. Give `level`, or `db` where the words do not reach.
+Shape: sensory_events:[{kind,room,level:'faint'|'audible'|'loud'|'deafening'|'thunderous'|'catastrophic',db:<number>,source,detail}].
+
+REMOVE_ENTITIES — things that ceased to EXIST this beat. A thing that only moved or changed hands is not one.
+Shape: remove_entities:[entity_id].

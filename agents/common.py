@@ -626,27 +626,55 @@ def sequence_event_allowed(event, resolved):
     return True
 
 
+def _record_source_event(record):
+    """The event id a record cites, whichever of the two fields carries it.
+
+    `from_event` is checked FIRST because it is the field the sheets now ask
+    for; a record carrying both agrees with itself in every case measured, and
+    where it would not, the typed field is the one the engine declared.
+    Zero is not provenance (`director_evidence._drop_zero_provenance`), so it
+    reads as no citation rather than as event 0.
+    """
+    if not isinstance(record, dict):
+        return ""
+    for field in ("from_event", "source_event_id"):
+        value = record.get(field)
+        if value in (None, "", 0, "0"):
+            continue
+        return str(value)
+    return ""
+
+
 def prune_blocked_phase_changes(diff, dispositions):
     """Drop state-diff records explicitly sourced from a blocked phase.
 
-    Specialists map each derived channel path or list index to its event id in
-    ``phase_sources``.  Untagged legacy output is left alone; this floor never
-    guesses which change a prose sentence meant.  Inline ``source_event_id``
-    is accepted only as a compatibility input and stripped before persistence.
+    Specialists cite the event a record came from two ways, and this reads
+    both. ``from_event`` is a field OF the record and stays on it -- the
+    evidence seam cites it and `story/attire.py` resolves it -- while inline
+    ``source_event_id`` is a compatibility input and is stripped before
+    persistence. ``phase_sources``, a sidecar mapping channel path or list
+    index to event id, is read first and popped.
+
+    Untagged output is left alone; this floor never guesses which change a
+    prose sentence meant.
     """
     if not isinstance(diff, dict):
         return []
+    # An id of "" or 0 is NOT an id. It has to be dropped here rather than
+    # compared against, because an untagged record cites "" too, and one
+    # blocked row with no id would take the whole diff with it.
     blocked = {
-        str(row.get("event_id") or "") for row in dispositions or []
+        str(row.get("event_id")) for row in dispositions or []
         if isinstance(row, dict) and row.get("status") == "blocked"
+        and row.get("event_id") not in (None, "", 0, "0")
     }
     dropped = []
     phase_sources = diff.pop("phase_sources", {})
     numeric_list_drops = {}
     if isinstance(phase_sources, dict):
         for path, source in phase_sources.items():
-            source = str(source or "")
-            if source not in blocked:
+            source = "" if source in (None, "", 0, "0") else str(source)
+            if not source or source not in blocked:
                 continue
             channel, dot, key = str(path or "").partition(".")
             value = diff.get(channel)
@@ -672,9 +700,8 @@ def prune_blocked_phase_changes(diff, dispositions):
         if isinstance(value, list):
             kept = []
             for record in value:
-                source = (str(record.get("source_event_id") or "")
-                          if isinstance(record, dict) else "")
-                if source in blocked:
+                source = _record_source_event(record)
+                if source and source in blocked:
                     dropped.append((channel, source))
                 else:
                     if isinstance(record, dict) and "source_event_id" in record:
@@ -685,9 +712,8 @@ def prune_blocked_phase_changes(diff, dispositions):
         elif isinstance(value, dict):
             kept = {}
             for key, record in value.items():
-                source = (str(record.get("source_event_id") or "")
-                          if isinstance(record, dict) else "")
-                if source in blocked:
+                source = _record_source_event(record)
+                if source and source in blocked:
                     dropped.append((f"{channel}.{key}", source))
                 else:
                     if isinstance(record, dict) and "source_event_id" in record:
@@ -3974,6 +4000,44 @@ def cut_short_speech(text, ratio=0.6):
     return re.sub(r"[.,;:!?\s—–-]+$", "", joined) + "—"
 
 
+#: The fields that make a sequence element a WORK ITEM rather than a
+#: description of one: which ledger family it lands in, how the Director wants
+#: it settled, and which numbered things of the beat it concerns. Everything
+#: else about a span is the engine's (`DESIGN_SPECIALIST_CONTRACT.md` 4a) --
+#: the id is assigned, the order is the order it was written in.
+#:
+#: THIS LIST IS THE SINGLE POINT OF FAILURE for anything the Director writes
+#: onto a sequence element. `norm_sequence` rebuilds each element from a fixed
+#: set of keys, so a field added anywhere else and not added here is dropped
+#: between the model and every reader, silently. That has now cost three
+#: fields in one day: `category` and `note` (no work item reached any hand at
+#: all), then `items`.
+SPAN_FIELDS = ("category", "note", "items")
+
+
+def _restore_span_fields(source, clean, before):
+    """Carry the span's own fields from a raw element onto the built one.
+
+    Only the LAST element built from `source`, and only when the arm built
+    anything. The speech arm emits promoted stage directions FIRST and the
+    speech itself last, and a promoted direction is an act the Director never
+    categorized -- inheriting the category would hand a hand a span that was
+    never written.
+
+    `category` is passed through unfolded, list or string alike: normalizing it
+    is `director_evidence._span_items`' job and doing it in two places is how
+    the two spellings drift.
+    """
+    if len(clean) <= before:
+        return
+    built = clean[-1]
+    for field in SPAN_FIELDS:
+        value = source.get(field)
+        if value in (None, "", [], {}):
+            continue
+        built[field] = value
+
+
 def norm_sequence(out, warn=None):
     seq = out.get("sequence")
     if not isinstance(seq, list) or not seq:
@@ -3996,6 +4060,10 @@ def norm_sequence(out, warn=None):
     for e in seq:
         if not isinstance(e, dict):
             continue
+        # WHERE THE ELEMENT STOOD BEFORE THIS ARM RAN, so the span's own two
+        # fields can be restored onto whatever the arm built from it. See
+        # `_restore_span_fields`.
+        _before = len(clean)
         t = e.get("type") or (
             "speech" if (e.get("text") or e.get("speech")) else "action"
         )
@@ -4203,6 +4271,7 @@ def norm_sequence(out, warn=None):
                     "referents": [dict(x) for x in e.get("referents") or []
                                   if isinstance(x, dict)],
                 })
+        _restore_span_fields(e, clean, _before)
     # A promoted stage direction the character also declared as a real action
     # is the same act twice, and the narrator rendered both.
     clean = _dedupe_promoted_actions(clean)
@@ -6904,6 +6973,24 @@ def _claim_authority_kind(claim, player_name):
     if str(claim.get("claim_id") or "").endswith(":event"):
         return "world"
     return "own_effect"
+
+
+def downgraded_sequence_indices(records):
+    """Which sequence positions a set of authority downgrades came from.
+
+    `apply_player_authority` computes this internally to move each element's
+    commitment and then discards it; the caller needs the same answer to void
+    the spans those elements became. Parsed HERE rather than at the call site
+    because `claim:<index>:<...>` is this module's spelling -- the extractor
+    writes it and the downgrade reads it -- and a second parse elsewhere is a
+    second thing to keep in step with it.
+    """
+    indices = set()
+    for record in records or []:
+        parts = str((record or {}).get("claim_id") or "").split(":")
+        if len(parts) >= 2 and parts[1].isdigit():
+            indices.add(int(parts[1]))
+    return indices
 
 
 def apply_player_authority(out, mode, player_name=None):

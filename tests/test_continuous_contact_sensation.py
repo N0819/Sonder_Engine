@@ -684,11 +684,19 @@ def test_resolve_manifest_takes_endpoints_from_prose():
     own contact_ops in its head and writing `mouth` for the structural
     seal while the prose said `tongue`. The receiver's standing percept
     reflected the manifest, not the prose, for every reroll.
+
+    STRUCTURALLY IMPOSSIBLE NOW, which is the stronger form of the same
+    guarantee. The author no longer writes a manifest at all: its work items
+    are the categorized spans of the beat, and endpoints are not among their
+    fields (DESIGN_SPECIALIST_CONTRACT.md 4a). The contact hand derives
+    actor_part from the span and its own ledgers, which is its scoped job.
+    So there is no endpoint for the author to get wrong -- the defect above
+    cannot be spelled.
     """
     resolve = DEFAULT_PROMPTS["director_resolve_lean"]
-    assert "from your own resolved_event prose" in resolve
-    assert "contact_ops is delegated to the specialist" in resolve
-    assert "you write the manifest from prose, not from imagined contact_ops" in resolve
+    assert "copy actor/actor_part/target/target_part" not in resolve
+    for endpoint in ("actor_part", "target_part", "contact_ref"):
+        assert endpoint not in resolve, endpoint
 
 
 def test_a_moving_subpart_inside_a_container_renders_its_own_part():

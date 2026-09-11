@@ -69,6 +69,23 @@ _SHAPE_MARKER = "Output STRICT JSON"
 #: entry that has gone stale (the field is published now, or no longer exists),
 #: so this cannot decay into a mute allowlist.
 UNPUBLISHED = {
+    # RETIRED, NOT MISSING. `changes_asserted` was the Director's second
+    # decomposition of its own beat, and the work list is now the categorized
+    # span (`DESIGN_SPECIALIST_CONTRACT.md` 4a) -- so no sheet asks for it and
+    # no template should name it. The FIELD stays on both Director models
+    # because a stored variant replayed from before the migration carries one
+    # and nothing else, and reconciliation still reads it for exactly that
+    # case. A field nothing asks for and something still reads is what this
+    # list is for.
+    "director_resolve.changes_asserted":
+        "RETIRED, NOT MISSING. It was the Director's second decomposition of "
+        "its own beat; the work list is now the categorized span of "
+        "`sequence` (DESIGN_SPECIALIST_CONTRACT.md 4a), so no sheet asks for "
+        "it and no template should name it. The FIELD stays on both Director "
+        "models because a stored variant replayed from before the migration "
+        "carries one and nothing else, and reconciliation still reads it for "
+        "exactly that case.",
+
     # --- prose author -----------------------------------------------------
     # A DELEGATED CHANNEL. `public_evidence` belongs to the social specialist
     # (director_scopes._DELEGATED_CHANNELS), and run 20 measured what happens
