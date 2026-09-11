@@ -39,14 +39,29 @@ before either renders anything.
 #: Where the record lives on the scene.
 BEAT_EVENTS_KEY = "beat_events"
 
-#: How many of a beat's events the world keeps. NOT a pacing judgement and not
-#: a budget: a beat measured over twelve full turns held five events on average
-#: and never more than fourteen, so nothing an author writes reaches this. It
-#: is the bound that stops a model looping a sequence into an unbounded blob
-#: inside a scene that gets deep-copied several times a turn. The FIRST events
-#: are kept rather than the last, because the ones past the cap are the ones a
-#: runaway wrote.
-MAX_BEAT_EVENTS = 64
+# THERE IS NO CAP ON HOW MANY EVENTS A BEAT MAY HOLD, and that is a ruling
+# rather than an oversight. The owner: "hypothetically the director should be
+# able to hand and render quite an absurd amount of events per beat" -- which
+# follows from the thesis the recompiler was built for, "a system that can
+# decipher any arbitrarily long series of events by a player or character and
+# resolve it properly with proper respect to chronology and space". Arbitrarily
+# long and at-most-N cannot both be true.
+#
+# A cap of 64 stood here for one commit, defended as stopping a looping model
+# from growing an unbounded blob inside a scene that is deep-copied several
+# times a turn. THE PREMISE WAS FALSE: the author's whole `sequence` is already
+# persisted at full length in the `director_resolve` variant row, and this
+# record is a MIRROR of it. Capping the mirror prevented no blob -- it only let
+# the world's record silently disagree with the Director's about what happened,
+# which is the one thing a causality record may not do, and it did it by
+# dropping the TAIL of a long beat, the half a reader is least likely to miss.
+#
+# What actually bounds this record is `EVENT_FIELDS`: every row is a strict
+# projection onto eight short strings, so the cost is linear in a quantity the
+# Director already decided and already stored.
+#
+# For scale, the long run's 11 stored beats: mean 4.9 elements, median 5,
+# max 7.
 
 #: The fields an event row carries, and nothing else reaches the scene. A
 #: strict projection rather than a passthrough: the author's element holds
@@ -86,6 +101,10 @@ def record_beat_events(scene, turn_idx, events):
     keeps the older beat's list would let the second be read as the first.
     A beat the caller cannot name writes nothing -- the record is worthless
     without the number that bounds it.
+
+    EVERY event is kept. However many the Director handed over is how many
+    happened, and a record that holds some of them is a record that is wrong
+    about the beat.
     """
     if not isinstance(scene, dict) or turn_idx is None:
         return []
@@ -98,8 +117,6 @@ def record_beat_events(scene, turn_idx, events):
         clean = _clean_event(row)
         if clean is not None:
             rows.append(clean)
-        if len(rows) >= MAX_BEAT_EVENTS:
-            break
     scene[BEAT_EVENTS_KEY] = {"beat": beat, "events": rows}
     return rows
 

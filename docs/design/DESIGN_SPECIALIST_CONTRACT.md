@@ -1195,12 +1195,35 @@ middle of the beat the moment that neighbour moved earlier. Caught by the
 test, not by reading it. Fewer than two named entries reorders nothing --
 one cannot disagree with itself about an order.
 
-**THE CAP IS 64 EVENTS**, and it is not a pacing judgement. Twelve measured
-full turns held five events per beat on average and never more than fourteen,
-so nothing an author writes reaches it; it exists so a model looping a
-sequence cannot grow an unbounded blob inside a scene that is deep-copied
-several times a turn. The FIRST events are kept, because the ones past the cap
-are the ones a runaway wrote.
+**THERE IS NO CAP, and that is a ruling.** The owner: "hypothetically the
+director should be able to hand and render quite an absurd amount of events
+per beat" -- which follows directly from the thesis the recompiler was built
+for, "a system that can decipher any arbitrarily long series of events by a
+player or character and resolve it properly with proper respect to chronology
+and space". Arbitrarily long and at-most-N cannot both be true.
+
+A cap of 64 stood here for exactly one commit and **the premise it rested on
+was false.** It was defended as stopping a looping model from growing an
+unbounded blob inside a scene that is deep-copied several times a turn -- but
+the author's whole `sequence` is ALREADY persisted at full length in the
+`director_resolve` variant row, and this record is a MIRROR of it. Capping the
+mirror prevented no blob. All it did was let the world's record silently
+disagree with the Director's about what happened, and it did so by dropping
+the TAIL of a long beat -- the half a reader is least likely to notice
+missing. What actually bounds the record is `EVENT_FIELDS`: every row is a
+strict projection onto eight short strings, so the cost is linear in a
+quantity the Director already decided and already stored.
+
+**AND A MEASUREMENT IS CORRECTED WITH IT.** The commit that landed the cap
+claimed a beat "never held more than fourteen" events. That read a per-model-
+group TOTAL out of s 4l's table -- minimax's 14 elements across turns 2-5 --
+as a per-beat maximum. The per-beat figure had never been measured at all.
+Measured now, off the long run's stored resolve steps: **11 beats, mean 4.9
+elements, median 5, max 7** (interpret's own sequences: mean 1.3, max 3). The
+real distribution is less than half what the wrong number claimed, which is
+worth stating plainly -- the error made the cap look better evidenced than it
+was, and the correct figures are the ones that show how far ordinary play sits
+from any bound at all.
 
 **WHAT IS STILL NOT BUILT.** Perception takes its CHRONOLOGY from the world
 and still builds the stream's CONTENT from the declarations -- the dialogue

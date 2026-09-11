@@ -126,7 +126,7 @@
 | `web/world_routes.py` | 2581 |  | `core`, `core.db`, `persist.commit`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.charter`, `world.charter_runtime`, `world.spatial`, `world.weather` |
 | `world/__init__.py` | 6 |  | — |
 | `world/background_claims.py` | 598 |  | `core.db` |
-| `world/beat_ledger.py` | 149 |  | — |
+| `world/beat_ledger.py` | 166 |  | — |
 | `world/charter.py` | 524 |  | `world.charter_author`, `world.charter_chatter`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_feel`, `world.charter_figure`, `world.charter_identity`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_place`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_promote`, `world.charter_roster`, `world.charter_run`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_temper`, `world.charter_trigger` |
 | `world/charter_author.py` | 813 |  | `world.charter_commitment`, `world.charter_economy`, `world.charter_figure`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_needs`, `world.charter_politics`, `world.charter_practice` |
 | `world/charter_chatter.py` | 443 |  | `world.crowds` |
@@ -1550,10 +1550,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `record_beat_events()` | 81 | 24 lines |
-| `beat_events()` | 107 | 21 lines |
-| `beat_event_order()` | 130 | 20 lines |
-| `_clean_event()` | 61 | 18 lines |
+| `record_beat_events()` | 96 | 26 lines |
+| `beat_events()` | 124 | 21 lines |
+| `beat_event_order()` | 147 | 20 lines |
+| `_clean_event()` | 76 | 18 lines |
 
 ### `world/charter_author.py`
 

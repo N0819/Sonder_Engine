@@ -12,7 +12,7 @@ world keeps, and what perception does with it.
 from types import SimpleNamespace
 
 from agents import director, perception
-from world.beat_ledger import (MAX_BEAT_EVENTS, beat_event_order, beat_events,
+from world.beat_ledger import (beat_event_order, beat_events,
                                record_beat_events)
 
 
@@ -133,15 +133,40 @@ class TestWhatTheWorldKeeps:
         assert "attempt" not in row
         assert row["surface"] == "crouches over the sill"
 
-    def test_the_cap_keeps_the_first_events(self):
-        """The rows past the cap are the ones a runaway wrote."""
+    def test_an_absurd_beat_is_kept_whole(self):
+        """"Hypothetically the director should be able to hand and render
+        quite an absurd amount of events per beat" -- which follows from the
+        thesis the recompiler exists for: "a system that can decipher any
+        arbitrarily long series of events ... and resolve it properly with
+        proper respect to chronology and space". Arbitrarily long and
+        at-most-N cannot both be true.
+
+        A cap of 64 stood here for one commit. The premise was false: the
+        author's whole sequence is already persisted at full length in the
+        `director_resolve` variant row and this record MIRRORS it, so capping
+        the mirror prevented no blob and only let the world's record disagree
+        with the Director's about what happened -- by dropping the TAIL of a
+        long beat, the half a reader is least likely to miss."""
         scene = {}
         rows = [{"order": i, "actor": "A", "surface": "step %d" % i}
-                for i in range(MAX_BEAT_EVENTS + 20)]
+                for i in range(500)]
         record_beat_events(scene, 1, rows)
         kept = beat_events(scene, 1)
-        assert len(kept) == MAX_BEAT_EVENTS
+        assert len(kept) == 500
         assert kept[0]["surface"] == "step 0"
+        assert kept[-1]["surface"] == "step 499"
+        assert [r["order"] for r in kept] == list(range(500))
+
+    def test_an_absurd_beat_still_orders_whole(self):
+        """The chronology has to survive the size too -- a long beat is
+        exactly the one whose order a reader cannot reconstruct by eye."""
+        scene = {}
+        record_beat_events(scene, 1, [
+            {"order": i, "actor": "A", "surface": "step %d" % i,
+             "declared": "d:%d" % i} for i in range(500)])
+        order = beat_event_order(scene, 1)
+        assert len(order) == 500
+        assert order["d:499"] == 499
 
     def test_the_order_map_is_keyed_on_the_declaration(self):
         """The join perception makes: its stream is keyed on declarations, and
