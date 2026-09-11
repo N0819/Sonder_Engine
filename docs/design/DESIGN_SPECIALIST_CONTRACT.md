@@ -1283,10 +1283,77 @@ nowhere in the code and should not appear in discussion of it:
    `tell_director` -- the word it used, beside the names that would route.
 
 The only thing that does not happen is a specialist being dispatched for that
-span. An element with NO category produces no work item at all, and that is
-the designed common case -- a glance, a question, a look changes no ledger.
-Before the event ledger such an element vanished entirely; it is now a row in
-the world, which is the hole s 4m filled.
+span -- **and s 4o is the owner overturning that as an acceptable resting
+place**: "a ledger not reaching a specialist is as good as that ledger not
+existing." Read the two sections together; this one is about what shapes are
+READ, and that one about the change being DELIVERED.
+
+An element with NO category produces no work item at all, and that is the
+designed common case -- a glance, a question, a look changes no ledger. Before
+the event ledger such an element vanished entirely; it is now a row in the
+world, which is the hole s 4m filled.
+
+## 4o. A SPAN NAMED FOR NOBODY IS EVERYBODY'S TO DECLINE
+
+The owner's bar, and it overturns what s 4n settled for: **"a ledger not
+reaching a specialist is as good as that ledger not existing."**
+
+s 4n ended by saying an unroutable category was reported rather than
+discarded, and treated that as sufficient. It is not. `_unrouted_rulings`
+speaks through `tell_director`, which reaches the NEXT beat's author -- so
+THIS beat's change stays unwritten, and by the owner's bar it may as well
+never have been ruled on. A report is a fix for the VOCABULARY over time; it
+is not a fix for the change in front of us.
+
+**THE VOCABULARY IS NOT THE WEAK POINT, which is why no table fixes this.** A
+span category already routes by hand name, by channel name, by category
+family, and under plural tolerance -- measured: `pose` finds `poses`,
+`position` finds `positions`, `attire` finds the hand that owns it, and the
+category and note-key vocabularies are already aligned. What cannot be closed
+is the set of words a model might invent. Measured with `reasoning_effort=low`
+the Director filed `geography` twice for what `spatial` owns, and there is
+always one more word. A synonym table would have the engine inventing
+vocabulary on the Director's behalf and getting it wrong QUIETLY, which
+`_note_key_forms` refuses in as many words.
+
+**SO THE RULE IS STATED AS ITS COMPLEMENT**, which is the technique that
+reaches the case nobody has hit yet: a span whose categories name somebody
+goes to whoever was named; **a span that names NOBODY goes to everybody.**
+
+It is safe by construction rather than by luck, and on three counts:
+
+* the hands own **disjoint channels**, so a hand handed a span outside its
+  ledgers cannot write anything for it -- it can only decline;
+* `not_mine` is already that hand's answer. The scope rule's own comment
+  anticipated this exact shape: "the hand runs, finds no block for the work it
+  was handed, and answers `not_mine` about its own span";
+* one span reaching several hands is the INTENDED behaviour and already has a
+  reconciliation seam (s 4g, s 4i) -- a belt pulled off and dropped on a bench
+  is one act and two records.
+
+**AND NO HAND IS GUESSED AT.** The half of the old rule that was right is
+kept exactly: an unknown category is still never approximated to the nearest
+hand. Offering it to all five is a guess by nobody, where picking one would be
+a guess by the engine.
+
+**WHAT IT COSTS, named rather than buried.** On a beat whose only work is
+unroutable, five specialist calls run where none would have. An ordinary beat
+is untouched -- a routable span still addresses only the hand it named, which
+is pinned. Measured frequency of the class: 2 occurrences across the drift
+run. The alternative cost is the change never being written.
+
+**AN ELEMENT THAT NAMES NOTHING IS NOT THIS.** An element that changes no
+ledger gets no category, and that is the COMMON case -- a glance, a question,
+a look. Treating those as unnamed work would dispatch five hands every time
+somebody looked at something. Only an item that DID name a family, in a word
+the engine does not know, is unnamed work.
+
+**DELIVERY AND THE REPORT ARE NOT ALTERNATIVES.** The hand gets the work this
+beat AND the next beat's author is still told which word reached nobody. One
+gap remains and is deliberate: `_unrouted_rulings` reads `ledger_notes` keys
+and `spans`, so a change filed the older way -- as a `changes_asserted` entry
+-- is DELIVERED but not reported. Delivery is the half the ruling is about,
+and the manifest is what spans replace when the migration finishes.
 
 ## 5. What already exists to build on
 

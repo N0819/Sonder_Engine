@@ -322,6 +322,7 @@ from .director_scopes import (
     _gate_facts,
     _ruling_for,
     _unrouted_rulings,
+    unnamed_work,
     _dispatch_specialists,
 )
 from .director_fanout import (

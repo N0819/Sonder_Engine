@@ -1394,13 +1394,26 @@ class TestTheManifestSpeaksTheNoteKeysVocabulary:
         assert director._specialist_manifest_slice("social", view) == []
 
 
-def test_an_interpret_category_no_channel_answers_for_still_reaches_nobody(
+def test_an_interpret_category_no_channel_answers_for_is_offered_to_all(
         temp_db, monkeypatch):
-    """The manifest gains a router, not a guess.
+    """The manifest gains a router, not a guess -- AND NOT A LOSS EITHER.
 
-    `_CATEGORY_CHANNELS` is the whole map; a category outside it reaches no
-    hand and is not approximated to the nearest one. Same rule the notes side
-    already follows for a key nobody answers to.
+    `_CATEGORY_CHANNELS` is the whole map, and a category outside it is still
+    never approximated to the nearest hand: that half of this test is the
+    original one and is unchanged, because guessing `weather` into somebody's
+    ledger is how an engine invents vocabulary on the Director's behalf and
+    gets it wrong quietly.
+
+    WHAT CHANGED IS WHAT HAPPENS AFTER THE GUESS IS REFUSED. This asserted
+    that such a category "reaches nobody", and the owner's ruling is that
+    reaching nobody is not an acceptable resting place: "a ledger not reaching
+    a specialist is as good as that ledger not existing." The report it used
+    to rely on reaches the NEXT beat, so THIS beat's change stayed unwritten.
+
+    So the unknown category is offered to EVERY hand to decline, which is a
+    guess by nobody: the hands own disjoint channels, so one handed a span
+    outside its ledgers can only answer `not_mine`. No hand is picked, and
+    none is denied the chance.
     """
     calls = []
     monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
@@ -1422,8 +1435,22 @@ def test_an_interpret_category_no_channel_answers_for_still_reaches_nobody(
     ctx.director_interpret = None
     out = director.director_interpret(ctx, nonce=0)
 
+    # OFFERED TO EVERY HAND, and by name -- never routed to one.
     for name, record in out["orchestration"]["specialists"].items():
-        assert record["addressed_by"] == [], (name, record["addressed_by"])
+        assert record["addressed_by"] == ["unnamed_work"], (
+            name, record["addressed_by"])
+    # NO HAND WAS GUESSED AT: not one of them was addressed as though the
+    # category had named its ledger.
+    for name, record in out["orchestration"]["specialists"].items():
+        assert "manifest" not in record["addressed_by"], name
+    # NOTE: no `unrouted_rulings` here, and that is about the REPORT's reach
+    # rather than delivery's. `_unrouted_rulings` reads `ledger_notes` keys
+    # and `spans`; this beat files its change the older way, as a
+    # `changes_asserted` entry -- "the second is what the first becomes when
+    # the migration finishes". DELIVERY covers both (`unnamed_work` reads
+    # manifest and spans alike), which is the half the owner's ruling is
+    # about; the span path's own report is pinned in
+    # `TestASpanNamedForNobodyIsEverybodysToDecline`.
 
 
 def test_gate_skips_a_pure_dialogue_beat_over_clean_bodies(temp_db,
@@ -5918,3 +5945,77 @@ class TestACategoryIsReadInWhateverShapeItArrived:
             out = {"sequence": [{"actor": "C", "attempt": "x",
                                  "category": empty}]}
             assert director._span_items(out) == []
+
+
+class TestASpanNamedForNobodyIsEverybodysToDecline:
+    """The owner's bar: "a ledger not reaching a specialist is as good as that
+    ledger not existing."
+
+    `_unrouted_rulings` reports an unroutable category to the Director, and a
+    report reaches the NEXT beat -- THIS beat's change stays unwritten, so by
+    that bar the report is not a fix.
+
+    The vocabulary is not the weak point: a category already routes by hand
+    name, by channel name, by category family, and under plural tolerance.
+    What cannot be closed is the set of words a model might invent -- measured
+    with `reasoning_effort=low`, the Director filed `geography` twice for what
+    `spatial` owns. So the rule is stated as its COMPLEMENT, which is what
+    reaches the word nobody has seen yet: a span whose categories name
+    somebody goes to whoever was named; a span that names NOBODY goes to
+    everybody.
+
+    Safe by construction rather than by luck -- the hands own DISJOINT
+    channels, so a hand handed a span outside its ledgers can only answer
+    `not_mine`, which is what the scope rule already expects of it.
+    """
+
+    def test_an_unroutable_span_reaches_every_hand(self):
+        view = {"spans": [{"event_id": 1, "categories": ["geography"],
+                           "note": "he moved along the shelf"}]}
+        for name in director.SPECIALISTS:
+            addressed, _named = director._ruling_for(name, view)
+            assert "unnamed_work" in addressed, name
+
+    def test_a_routable_span_costs_nothing_extra(self):
+        """The guarantee must not dispatch hands on an ordinary beat."""
+        view = {"spans": [{"event_id": 1, "categories": ["objects"],
+                           "note": "tongs down"}]}
+        addressed = {name: director._ruling_for(name, view)[0]
+                     for name in director.SPECIALISTS}
+        assert addressed["objects"] == ["manifest"]
+        assert all(not a for n, a in addressed.items() if n != "objects")
+
+    def test_a_mixed_beat_keeps_the_named_hands_own_addressing(self):
+        view = {"spans": [
+            {"event_id": 1, "categories": ["objects"], "note": "tongs"},
+            {"event_id": 2, "categories": ["geography"], "note": "moved"}]}
+        addressed, _ = director._ruling_for("objects", view)
+        assert addressed == ["manifest", "unnamed_work"]
+
+    def test_an_element_that_names_nothing_is_not_unnamed_work(self):
+        """An element that changes no ledger gets no category, and that is the
+        COMMON case -- a glance, a question, a look. Treating it as unnamed
+        work would dispatch five hands on every beat somebody looked at
+        something."""
+        for empty in ([], None, "", [""], ["   "]):
+            view = {"spans": [{"event_id": 1, "categories": empty}]}
+            assert director.unnamed_work(view) == [], repr(empty)
+            for name in director.SPECIALISTS:
+                addressed, _ = director._ruling_for(name, view)
+                assert "unnamed_work" not in addressed
+
+    def test_a_channel_name_is_not_unnamed_work(self):
+        """A category naming a CHANNEL reaches the hand that owns it, so it
+        was never unnamed -- pinned because treating it as such would broadcast
+        a correctly-routed span to four hands that cannot use it."""
+        for category in ("attire", "poses", "pose", "positions", "position",
+                         "sensory_events", "body"):
+            view = {"spans": [{"event_id": 1, "categories": [category]}]}
+            assert director.unnamed_work(view) == [], category
+
+    def test_the_unrouted_report_still_names_the_word_that_was_used(self):
+        """Delivery and the report are not alternatives: the hand gets the
+        work THIS beat, and the next beat's author still learns which word
+        reached nobody."""
+        view = {"spans": [{"event_id": 1, "categories": ["geography"]}]}
+        assert director._unrouted_rulings(view) == ["geography"]

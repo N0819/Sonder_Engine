@@ -905,6 +905,34 @@ def manifest_category_targets(category):
     return targets
 
 
+def _work_item_categories(item):
+    """The category names one work item lists, blank ones dropped."""
+    listed = item.get("categories") if isinstance(item, dict) else None
+    names = ([str(c) for c in listed]
+             if isinstance(listed, (list, tuple)) and listed
+             else [(item or {}).get("category")])
+    return [str(c).strip() for c in names if str(c or "").strip()]
+
+
+def unnamed_work(view):
+    """Work items whose categories reach NO hand and NO channel.
+
+    An item naming nothing at all is not one of these -- an element that
+    changes no ledger gets no category, and that is the common case (a
+    glance, a question, a look). This is the other thing: an item that DID
+    name a family, in a word the engine does not know.
+    """
+    orphans = []
+    for item in (list((view or {}).get("manifest") or [])
+                 + list((view or {}).get("spans") or [])):
+        if not isinstance(item, dict):
+            continue
+        names = _work_item_categories(item)
+        if names and not any(manifest_category_targets(c) for c in names):
+            orphans.append(item)
+    return orphans
+
+
 def _ruling_for(name, view):
     """What the Director's ruling addressed to this hand.
 
@@ -972,6 +1000,24 @@ def _ruling_for(name, view):
                     named.append(target)
             if "manifest" not in addressed_by:
                 addressed_by.append("manifest")
+    # A SPAN NAMED FOR NOBODY IS EVERYBODY'S TO DECLINE.
+    #
+    # "A ledger not reaching a specialist is as good as that ledger not
+    # existing" (the owner). A category in a word the engine does not know --
+    # `geography` for what `spatial` owns, measured twice on the drift run --
+    # addressed no hand at all, so the change was never written and the only
+    # remedy was a report that reaches the NEXT beat.
+    #
+    # Stated as the complement rather than as a table of synonyms, because a
+    # table can only ever cover the words somebody already saw: a span whose
+    # categories name somebody goes to whoever was named, and a span that
+    # names NOBODY goes to everybody. Safe by construction -- the hands own
+    # DISJOINT channels, so a hand handed a span outside its ledgers can only
+    # answer `not_mine`, which is the answer the scope comment below already
+    # expects of it.
+    if unnamed_work(view):
+        if "unnamed_work" not in addressed_by:
+            addressed_by.append("unnamed_work")
     if (view or {}).get("pressure_ticks") and "sensory_events" in own:
         if "sensory_events" not in named:
             named.append("sensory_events")
@@ -1016,12 +1062,8 @@ def _unrouted_rulings(view):
     for item in (view or {}).get("spans") or []:
         if not isinstance(item, dict):
             continue
-        _listed = item.get("categories")
-        _names = ([str(c) for c in _listed]
-                  if isinstance(_listed, (list, tuple)) and _listed
-                  else [item.get("category")])
-        for category in (str(c or "").strip() for c in _names):
-            if category and not manifest_category_targets(category):
+        for category in _work_item_categories(item):
+            if not manifest_category_targets(category):
                 if category not in unrouted:
                     unrouted.append(category)
     return unrouted
