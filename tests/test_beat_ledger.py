@@ -462,3 +462,81 @@ class TestTheAnswerLandsWhereItWasAnswered:
         assert len(out) == len(self.CONCATENATED)
         assert sorted(e["declared"] for e in out) == sorted(
             e["declared"] for e in self.CONCATENATED)
+
+
+class TestABareCommaEndsADeclarationUnit:
+    """A long beat COMPRESSES, and until the comma was a boundary the omission
+    detector could not see it.
+
+    Measured on paragraphs of hand-counted acts, all confined to one room:
+    12 acts dissected to 11 elements and 20 to 18, near 1:1 -- but 31
+    collapsed to 11 compound elements and lost all three declared speech acts
+    (`{'action': 11}`, where the 20-act beat gave
+    `{'action': 16, 'communication': 2}`). `_uncovered_declarations` reported
+    ZERO for it.
+
+    The reason was structural rather than a threshold. `_CLAUSE_SPLIT_RE` broke
+    on sentence boundaries and on coordination -- ". ; ! ?", ", and", ", then",
+    " and " -- but NOT on a bare comma, so a comma-chained paragraph was 2
+    units for 31 acts. The detector then asked whether each coarse unit's
+    significant tokens were present, and compression that KEEPS THE NOUNS
+    while dropping the acts passed it cleanly.
+
+    THE RISK WAS REAL AND WAS MEASURED BEFORE SHIPPING, because more units
+    means more chances to fire the bounded self-repair on an interpretation
+    that was already complete -- the "guards that fire on valid output" class.
+    Across 171 stored interpret beats: declaration units rise 261 -> 311
+    (+19%), beats that fire the repair rise from 0 to 2 (1.2%), and all FOUR
+    newly-reported units are real drops, not false positives:
+
+      * "tell her she can't hear me now" -- an input declaring two speech acts
+        whose interpretation carried one;
+      * the three speech acts of the 31-act beat, whose sequence held none.
+    """
+
+    def _units(self, raw):
+        return director._declaration_units(raw)
+
+    def test_a_comma_chained_paragraph_is_no_longer_two_units(self):
+        """The measured beat, shortened. Its 2 units could never localise a
+        dropped act; one unit per clause can."""
+        raw = ("I put the file down, pick up the broom leaning against the "
+               "wall, sweep the scale away from the anvil, set the broom "
+               "back where it was, take the bellows handle, tell Sera the "
+               "glove has finally gone, pick the file back up")
+        assert len(self._units(raw)) >= 6
+
+    def test_the_speech_act_that_was_lost_is_now_its_own_unit(self):
+        """The detector can only report what the splitter separated, so the
+        act has to survive as a unit of its own before anything else matters.
+        This is the exact clause from the long-beat run."""
+        raw = ("I take the hinge off the bench, tell Sera the glove has "
+               "finally gone, ask her to fetch the spare pair from the chest")
+        units = self._units(raw)
+        assert any("glove has finally gone" in u for u in units)
+        assert any("spare pair" in u for u in units)
+
+    def test_the_tardis_line_separates_from_the_acts_around_it(self):
+        """items.db turn 1, and the owner's own example: an input declaring
+        two speech acts whose interpretation carried one. The line that goes
+        unheard is the dramatically load-bearing one."""
+        raw = ("I tell Sera to wait here, then I step into the tardis, pull "
+               "the door shut behind me, tell her she can't hear me now, and "
+               "pull the levers on the console")
+        units = self._units(raw)
+        assert any("hear me now" in u for u in units)
+        assert any("wait here" in u for u in units)
+
+    def test_a_short_ordinary_beat_is_unchanged(self):
+        """171 stored beats were measured and 169 of them fire nothing. A
+        change to the detector that moved ordinary play would not be worth
+        the drop it catches."""
+        for raw in ("I wait", "I ask Sera whether she has seen the reeve",
+                    "I walk out of the forge and shut the door behind me"):
+            assert len(self._units(raw)) <= 3, raw
+
+    def test_a_unit_still_needs_two_significant_tokens(self):
+        """The conservative floor is untouched: comma-splitting produces short
+        fragments, and a fragment with too little signal to judge must not be
+        reported as a dropped declaration."""
+        assert self._units("I nod, yes, ok") == []

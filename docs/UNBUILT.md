@@ -161,8 +161,7 @@ reaching a specialist is as good as that ledger not existing"), and a known
 name is recovered from beside an unknown one (4p, `any` not `all` -- and a
 stray separator no longer costs the name).
 
-**STILL OPEN, AND THE LARGEST OF THEM: A LONG BEAT COMPRESSES, AND THE
-OMISSION DETECTOR CANNOT SEE IT.** Measured 2026-09-10 on paragraphs of
+**A LONG BEAT COMPRESSES, AND THE OMISSION DETECTOR COULD NOT SEE IT.** Measured 2026-09-10 on paragraphs of
 hand-counted acts, all confined to one room so movement's own backstops were
 not in play:
 
@@ -185,15 +184,39 @@ dropping the acts passes it cleanly. Note the corpus is already deliberately
 not `notes` -- coverage came from the sequence's own compressed `attempt`
 strings.
 
-Not fixed here because the remedy is a judgement the owner should make, and
-both candidates have a known failure mode. Splitting units on commas would
-multiply the units and fire the repair path far more often (the
-"guards that fire on valid output" class). A prompt clause -- resolve's sheet
-already says "one element for EVERYTHING that happened" -- is the cheaper
-instrument, and prompt clauses have to be watched for what they license. A
-structural count (the input declares N speech acts, the sequence has zero)
-would be a guard reading free prose, which is the class that failed four times
-on 2026-08-29.
+**FIXED 2026-09-10, on the owner's choice of remedy, AND MEASURED BEFORE IT
+SHIPPED.** `_CLAUSE_SPLIT_RE` now ends a declaration unit at a BARE COMMA. The
+risk was the one the owner ruled on 2026-09-06 -- more units means more chances
+to fire the bounded self-repair on an interpretation that was already complete,
+the "guards that fire on valid output" class -- so it was measured across 171
+stored interpret beats first:
+
+| | before | after |
+|---|---|---|
+| declaration units | 261 | 311 (+19%) |
+| uncovered reported | 0 | 4 |
+| beats firing the repair | 0 | 2 (1.2%) |
+
+**All four newly-reported units are real drops, not false positives**, checked
+by reading each interpretation: the three speech acts of the 31-act beat, whose
+sequence held none (`{'action': 11}`), and "tell her she can't hear me now" --
+an input declaring two speech acts whose interpretation carried one, which is
+the dramatically load-bearing line of the owner's own tardis example. 169 of
+171 beats are untouched.
+
+What this does NOT fix is the compression itself: a 31-act paragraph still
+dissects to 11 compound elements, and the detector's answer to that is the
+bounded self-repair, which is one model call and is capped at
+`_RECONCILE_INTERPRET_MAX_UNITS` (4) units per beat -- deliberately, because
+"a fully off-the-rails interpretation is better re-run than repaired unit by
+unit". A beat losing more than four declarations is still losing them. Whether
+the prompt should also be sharpened is the open half, and wants its own
+measurement rather than being assumed from this one.
+
+`_CLAUSE_SPLIT_RE` is per-pack, so this is an ENGLISH change; the Japanese
+pattern already breaks on the Japanese comma only before a conjunction
+(`、(?:そして|しかし|だが)`), which is the same gap one alphabet over, and is
+covered by the standing deferral in s 1.0.
 
 **THE RESIDUAL EDGE IN THE SPLIT RULE, named so it is not rediscovered as a
 bug.** A sentence containing a bare routing word as its own delimited fragment

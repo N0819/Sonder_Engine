@@ -1633,7 +1633,7 @@
     },
     "_CLAUSE_SPLIT_RE": {
       "$type": "regex",
-      "pattern": "[.;!?\\n]+|,\\s+(?:and|then|but)\\s+|\\s+(?:and\\s+then|then)\\s+|\\s+and\\s+",
+      "pattern": "[.;!?\\n]+|,\\s*|\\s+(?:and\\s+then|then)\\s+|\\s+and\\s+",
       "flags": 32
     },
     "_TITLE_ABBREV": {
