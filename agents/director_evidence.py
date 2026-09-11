@@ -1223,6 +1223,20 @@ def beat_event_ledger(resolved, interp, declarations):
     description of it.
     """
     rows = []
+    # ONE DECLARATION IS ONE EVENT. Two elements may cite the same declared
+    # act -- measured on the prose beat, where the author described Sera's one
+    # step as both "steps a pace closer toward anvil" and "stands still
+    # observing Corin's bleeding hand" and cited the same id from both. A
+    # cited row takes its surface FROM the declaration, so the two come out
+    # identical and the world's record claims the act happened twice.
+    #
+    # The fold is safe because that identity is structural rather than a
+    # judgement about the words: one declaration is one act. The FIRST is
+    # kept, because that is where the act stands in the author's chronology.
+    # `beat_event_order` already took the first occurrence, so the order
+    # perception reads was never affected by this -- it is the world's own
+    # record that was double-counting.
+    seen_declarations = set()
     for entry in beat_timeline(resolved, interp, declarations):
         element = entry.get("element") or {}
         declared = entry.get("declared")
@@ -1230,21 +1244,35 @@ def beat_event_ledger(resolved, interp, declarations):
             if isinstance(declared, dict) else ""
         if isinstance(declared, dict):
             kind = str(declared.get("type") or "").strip()
-            # A TYPED COMMUNICATIVE ACT HAS NO `observable`. Its outward form
-            # is the rendered verb over the proposition the author supplied
-            # ("asks whether the reeve came by") -- deliberately not a
-            # quotation, because `content` is what the act was ABOUT and not
-            # words the engine may put in a mouth. Asking only
-            # `observable_action_text` put the player's spoken beat into the
-            # world with no description of it at all (measured: the long-beat
-            # test, beat 2 order 14).
+            # EACH ELEMENT TYPE KEEPS ITS OUTWARD FORM IN ITS OWN FIELD, and
+            # the ledger has to ask all three. An ACTION has `observable`, the
+            # intent-free surface an onlooker is entitled to. A typed
+            # COMMUNICATIVE act has neither -- its outward form is the
+            # rendered verb over the proposition the author supplied ("asks
+            # whether the reeve came by"), deliberately not a quotation,
+            # because `content` is what the act was ABOUT and not words the
+            # engine may put in a mouth. An EVENT -- something that happened
+            # that nobody did, which is what the reconciliation repair mints
+            # for a dropped consequence -- carries `description` and neither
+            # of the others.
+            #
+            # Each was found the same way, by an event reaching the world with
+            # nothing said about it: the player's spoken beat (long-beat test,
+            # beat 2 order 14) and then "the hammer blows echo up into the
+            # rafters and startle something out of them" (the prose beat,
+            # order 13), which the world recorded as blank.
             surface = (communication_surface(declared)
-                       or observable_action_text(declared))
+                       or observable_action_text(declared)
+                       or str(declared.get("description") or ""))
             text = str(declared.get("text") or "")
         else:
             kind = ""
             surface = str(element.get("attempt") or "")
             text = ""
+        if cited:
+            if cited in seen_declarations:
+                continue
+            seen_declarations.add(cited)
         rows.append({
             "order": entry.get("order"),
             "actor": entry.get("actor") or "",

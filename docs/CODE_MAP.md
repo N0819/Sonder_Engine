@@ -13,7 +13,7 @@
 | `agents/composer.py` | 4886 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 5418 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 477 |  | `story.character_schema`, `world.spatial` |
-| `agents/director_evidence.py` | 2751 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
+| `agents/director_evidence.py` | 2779 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
 | `agents/director_fanout.py` | 1318 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 2087 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
@@ -297,14 +297,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_evidence_present()` | 1901 | 359 lines |
-| `_fold_derived_manifest_events()` | 2663 | 89 lines |
-| `span_slices()` | 1749 | 85 lines |
+| `_evidence_present()` | 1929 | 359 lines |
+| `beat_event_ledger()` | 1197 | 90 lines |
+| `_fold_derived_manifest_events()` | 2691 | 89 lines |
+| `span_slices()` | 1777 | 85 lines |
 | `_merge_repair_into_diff()` | 592 | 80 lines |
-| `_span_items()` | 2297 | 80 lines |
-| `item_survivors()` | 1466 | 73 lines |
-| `_split_joined_categories()` | 2379 | 69 lines |
-| `mover_cut_events()` | 1261 | 63 lines |
+| `_span_items()` | 2325 | 80 lines |
+| `item_survivors()` | 1494 | 73 lines |
+| `_split_joined_categories()` | 2407 | 69 lines |
 
 ### `agents/director_fanout.py`
 

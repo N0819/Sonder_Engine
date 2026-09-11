@@ -540,3 +540,114 @@ class TestABareCommaEndsADeclarationUnit:
         fragments, and a fragment with too little signal to judge must not be
         reported as a dropped declaration."""
         assert self._units("I nod, yes, ok") == []
+
+
+class TestTwoDefectsTheProseBeatFound:
+    """Found by running one paragraph of actual novel prose through a live
+    Director -- quoted dialogue, observations that are not acts, a consequence
+    nobody declared, and a lie. Both defects are in the ledger itself.
+    """
+
+    def test_a_declared_event_has_its_surface_in_description(self):
+        """EACH ELEMENT TYPE KEEPS ITS OUTWARD FORM IN ITS OWN FIELD. An
+        action has `observable`; a typed communicative act has `content`
+        behind a rendered verb; an EVENT -- something that happened that
+        nobody did, which is what the reconciliation repair mints for a
+        dropped consequence -- has `description` and neither of the others.
+
+        The real row, from the prose beat's order 13: the repair recovered
+        "The hammer blows echo up into the rafters and startle something out
+        of them", and the world recorded it BLANK."""
+        res = {"sequence": [{
+            "actor": "world", "attempt": "sound reverberates into rafters",
+            "category": "spatial", "from_declaration": "turn:1:repair:2:event"}]}
+        interp = {"sequence": [{
+            "type": "event", "event_id": "turn:1:repair:2:event",
+            "description": "The hammer blows echo up into the rafters and "
+                           "startle something out of them"}]}
+        row, = director.beat_event_ledger(res, interp, [])
+        assert row["surface"].startswith("The hammer blows echo")
+        assert row["actor"] == "world"
+
+    def test_one_declaration_is_one_event(self):
+        """Two elements may cite the same declared act. Measured on the prose
+        beat: the author described Sera's one step as both "steps a pace
+        closer toward anvil" and "stands still observing Corin's bleeding
+        hand", citing the SAME id from both -- so the world's record claimed
+        she stepped closer twice and asked the same question twice.
+
+        A cited row takes its surface FROM the declaration, so the two come
+        out identical: the fold is structural, not a judgement about the
+        words."""
+        res = {"sequence": [
+            {"actor": "Sera", "attempt": "steps a pace closer",
+             "category": "spatial", "from_declaration": "c:1:0:action"},
+            {"actor": "Sera", "attempt": "stands still observing the hand",
+             "from_declaration": "c:1:0:action"}]}
+        decls = [{"name": "Sera", "sequence": [{
+            "type": "action", "event_id": "c:1:0:action",
+            "attempt": "get closer to see the hinge",
+            "observable": "steps a pace closer toward the anvil"}]}]
+        rows = director.beat_event_ledger(res, {}, decls)
+        assert len(rows) == 1
+        assert rows[0]["surface"] == "steps a pace closer toward the anvil"
+
+    def test_the_first_is_kept_because_that_is_where_the_act_stands(self):
+        res = {"sequence": [
+            {"actor": "A", "attempt": "x", "from_declaration": "d1"},
+            {"actor": "B", "attempt": "y", "from_declaration": "d2"},
+            {"actor": "A", "attempt": "z", "from_declaration": "d1"}]}
+        interp = {"sequence": [
+            {"type": "action", "event_id": "d1", "observable": "A acts"},
+            {"type": "action", "event_id": "d2", "observable": "B acts"}]}
+        rows = director.beat_event_ledger(res, interp, [])
+        assert [r["order"] for r in rows] == [0, 1]
+
+    def test_an_unresolvable_citation_is_not_folded(self):
+        """THE FOLD KEYS ON A RESOLVED CITATION, and that boundary is the
+        whole argument for it. Where the declaration is found, the row's
+        surface comes FROM it and two rows citing it are identical by
+        construction -- folding loses nothing. Where the id names no
+        declaration the engine holds, each row keeps the AUTHOR'S own words,
+        those words differ, and folding them would be a judgement about
+        wording rather than a structural fact.
+
+        Caught by this test failing on its first draft, which asserted the
+        fold for citations nothing could resolve."""
+        res = {"sequence": [
+            {"actor": "A", "attempt": "x", "from_declaration": "ghost"},
+            {"actor": "A", "attempt": "z", "from_declaration": "ghost"}]}
+        rows = director.beat_event_ledger(res, {}, [])
+        assert len(rows) == 2
+        assert [r["surface"] for r in rows] == ["x", "z"]
+        assert all(r["declared"] == "" for r in rows)
+
+    def test_uncited_rows_are_never_folded_together(self):
+        """The fold keys on the DECLARATION. Rows citing nothing are separate
+        events that merely share an empty citation -- a consequence and a
+        thing the world did back are two things, not one."""
+        res = {"sequence": [
+            {"actor": "world", "attempt": "the sill cracks"},
+            {"actor": "world", "attempt": "dust falls from the lintel"}]}
+        rows = director.beat_event_ledger(res, {}, [])
+        assert len(rows) == 2
+        assert [r["surface"] for r in rows] == [
+            "the sill cracks", "dust falls from the lintel"]
+
+    def test_every_element_type_reaches_the_world_with_a_surface(self):
+        """The three types together, because each was found the same way --
+        by an event reaching the world with nothing said about it."""
+        res = {"sequence": [
+            {"actor": "C", "attempt": "a", "from_declaration": "act"},
+            {"actor": "C", "attempt": "b", "from_declaration": "comm"},
+            {"actor": "world", "attempt": "c", "from_declaration": "evt"}]}
+        interp = {"sequence": [
+            {"type": "action", "event_id": "act", "attempt": "private intent",
+             "observable": "crouches over the sill"},
+            {"type": "communication", "act": "ask", "event_id": "comm",
+             "content": "whether the reeve came by"},
+            {"type": "event", "event_id": "evt",
+             "description": "the rafters give up a bird"}]}
+        rows = director.beat_event_ledger(res, interp, [])
+        assert all(r["surface"] for r in rows), rows
+        assert "private intent" not in " ".join(r["surface"] for r in rows)
