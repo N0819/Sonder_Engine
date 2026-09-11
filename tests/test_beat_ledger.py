@@ -79,6 +79,44 @@ class TestWhatTheRecompilerHandsOver:
         assert row["surface"] == "crosses to the console"
         assert row["actor"] == "Mara"
 
+    def test_a_communication_reaches_the_world_with_a_surface(self):
+        """A TYPED COMMUNICATIVE ACT HAS NO `observable`. Its outward form is
+        the rendered verb over the proposition the author supplied, and asking
+        only `observable_action_text` put the player's spoken beat into the
+        world with nothing said about it.
+
+        The real element, from the long-beat run's beat 2 order 14: the player
+        wrote "ask Sera whether she has seen the reeve today ... tell her I
+        will have the hinge done before dark", and the world recorded an event
+        with an empty surface. An event in the world's record of the beat with
+        no description of what happened is the ledger failing at the one thing
+        it is for."""
+        res = {"sequence": [{
+            "actor": "Corin",
+            "attempt": "asks Sera if reeve came by and promises hinge done",
+            "from_declaration": "turn:2:player:14:communication"}]}
+        interp = {"sequence": [{
+            "type": "communication", "act": "ask",
+            "event_id": "turn:2:player:14:communication",
+            "content": "whether the reeve came by today"}]}
+        row, = director.beat_event_ledger(res, interp, [])
+        assert row["surface"], "a communication reached the world with no surface"
+        assert "reeve came by today" in row["surface"]
+        assert row["kind"] == "communication"
+
+    def test_a_communication_is_never_quoted_into_a_surface(self):
+        """`content` is what the act was ABOUT, not words the engine may put
+        in a mouth -- so the surface is indirect speech, never a quotation."""
+        res = {"sequence": [{
+            "actor": "Corin", "attempt": "asks about the reeve",
+            "from_declaration": "d1"}]}
+        interp = {"sequence": [{
+            "type": "communication", "act": "ask", "event_id": "d1",
+            "content": "whether the reeve came by"}]}
+        row, = director.beat_event_ledger(res, interp, [])
+        assert '"' not in row["surface"]
+        assert row["text"] == ""
+
 
 class TestWhatTheWorldKeeps:
     """`world/beat_ledger.py` -- the beat number IS the lifetime."""

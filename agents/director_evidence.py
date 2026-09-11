@@ -27,6 +27,7 @@ from world.spatial import (_merge_entity, _merge_room, resolve_placement_target,
 # sibling, so this direction adds no cycle.
 from .director_scopes import manifest_category_targets
 from .common import (
+    communication_surface,
     downgraded_sequence_indices,
     observable_action_text,
     prune_blocked_phase_changes,
@@ -1229,7 +1230,16 @@ def beat_event_ledger(resolved, interp, declarations):
             if isinstance(declared, dict) else ""
         if isinstance(declared, dict):
             kind = str(declared.get("type") or "").strip()
-            surface = observable_action_text(declared)
+            # A TYPED COMMUNICATIVE ACT HAS NO `observable`. Its outward form
+            # is the rendered verb over the proposition the author supplied
+            # ("asks whether the reeve came by") -- deliberately not a
+            # quotation, because `content` is what the act was ABOUT and not
+            # words the engine may put in a mouth. Asking only
+            # `observable_action_text` put the player's spoken beat into the
+            # world with no description of it at all (measured: the long-beat
+            # test, beat 2 order 14).
+            surface = (communication_surface(declared)
+                       or observable_action_text(declared))
             text = str(declared.get("text") or "")
         else:
             kind = ""
@@ -2320,9 +2330,16 @@ def _span_items(out):
         # a bench is one act of the player's and two records -- the wardrobe's
         # and the object's -- so the span carries both and each hand settles
         # its own part (`DESIGN_SPECIALIST_CONTRACT.md`; per-hand acquittal in
-        # `_index_addressed_events`). A string stays a string's worth of work.
-        names = (raw if isinstance(raw, (list, tuple))
-                 else _split_joined_categories(raw))
+        # `_index_addressed_events`).
+        #
+        # READ IT IN WHATEVER SHAPE IT CAME. This branched on `list` here and
+        # split delimiters over in `_split_joined_categories`, and the two
+        # never composed: once a value took the list branch no member was ever
+        # split, so `["body, objects"]` routed to NO hand and
+        # `["body", "objects, spatial"]` routed only the first. Measured on
+        # the long-beat run, 5 of 54 categories arrived as lists, so the
+        # mixtures are not hypothetical.
+        names = _category_names(raw)
         categories = []
         for name in names:
             if not str(name or "").strip():
@@ -2395,6 +2412,51 @@ def _split_joined_categories(raw):
     # One name the engine does not know makes the whole string one unknown
     # name, which is the honest thing for the unrouted report to receive.
     return [raw]
+
+
+def _category_names(raw, _depth=0):
+    """Every category name a value names, WHATEVER SHAPE IT ARRIVED IN.
+
+    A model asked to name the ledger families one act touches will reach for
+    whichever shape its training makes natural, and all of these are the same
+    answer: `"body"`, `"body, objects"`, `"body and objects"`,
+    `["body", "objects"]`, `["body, objects"]`, `["body", "objects, spatial"]`,
+    `("body", "objects")`, `{"body": <note>, "objects": <note>}`. Tolerance
+    here is not laxity -- a shape the engine refuses to read is a span that
+    routes to no hand, and a change nobody was handed is lost in SILENCE,
+    which is the one failure mode this whole seam exists to prevent.
+
+    A MAPPING ANSWERS WITH ITS KEYS, and is worth accepting for a specific
+    reason: a model asked for categories and a note per category reaches for
+    a mapping because `ledger_notes` in this very output is one, so the shape
+    is suggested by the schema it is already writing.
+
+    The per-string discard rule is untouched and now applies where it was
+    always meant to -- to each string, rather than only to a value that
+    happened not to be a list. `_split_joined_categories` still refuses to
+    split a string unless EVERY part routes, so free prose reaches
+    `_unrouted_rulings` whole instead of being minced into fake categories.
+    """
+    # A depth bound rather than a shape assertion: the point is to read what
+    # arrives, and nothing legitimate nests, so this only stops a pathological
+    # value from costing more than it is worth.
+    if _depth > 3:
+        return [raw]
+    if isinstance(raw, dict):
+        return [name for key in raw
+                for name in _category_names(key, _depth + 1)]
+    if isinstance(raw, (list, tuple, set, frozenset)):
+        # Sorted for a set ONLY: a set has no order to preserve and an
+        # unordered category list would make the span's first category --
+        # which `category` keeps for readers written before spans -- differ
+        # between runs on identical input.
+        members = sorted(raw, key=str) if isinstance(
+            raw, (set, frozenset)) else raw
+        names = []
+        for member in members:
+            names.extend(_category_names(member, _depth + 1))
+        return names
+    return _split_joined_categories(raw)
 
 
 def voided_span_ids(out, downgrades):

@@ -239,6 +239,7 @@ from .director_floors import (
     _scan_for_untracked_restraint,
 )
 from .director_evidence import (
+    _category_names,
     beat_event_ledger,
     beat_item_records,
     beat_ledger,
