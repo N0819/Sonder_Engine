@@ -5521,7 +5521,16 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
     # off, and both lines were graded from the dune he reached; the surf's
     # noise floor refused them; his answers reached no view and the narrator
     # invented a player line to cover the hole. See `beat_movement_cuts`.
-    movement_cuts = beat_movement_cuts(prev_scene, sc, beat_events)
+    # AND WHICH EVENT MOVED THEM, where the beat can say. `beat_movement_cuts`
+    # otherwise infers it as the mover's LAST action -- the only choice two
+    # snapshots allow, and its own docstring names the quantity it wanted:
+    # "recording the trajectory is what fixes it". The causality recompiler
+    # records it, so the cut falls on the move rather than after everything
+    # the mover did next. A body it cannot speak for keeps the heuristic.
+    from .director import mover_cut_events
+    movement_cuts = beat_movement_cuts(
+        prev_scene, sc, beat_events,
+        moved_at=mover_cut_events(interp))
 
     # A NOISE IS AN EVENT, AND AN EVENT IS OVER WHEN THE BEAT IS
     # (DESIGN_SOUND_DECIBELS.md § 4). Read from the beat's own diff rather
