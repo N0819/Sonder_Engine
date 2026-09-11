@@ -28,6 +28,7 @@ from world.spatial import (_merge_entity, _merge_room, resolve_placement_target,
 from .director_scopes import manifest_category_targets
 from .common import (
     downgraded_sequence_indices,
+    observable_action_text,
     prune_blocked_phase_changes,
     _contextual_rooms,
     _dict,
@@ -1190,6 +1191,61 @@ def beat_timeline(resolved, interp, declarations):
             "note": element.get("note"),
         })
     return timeline
+
+
+def beat_event_ledger(resolved, interp, declarations):
+    """The beat's events as rows for the world's ledger (`world.beat_ledger`).
+
+    The owner's rule for what the world keeps: "just because a majority of
+    these are temporary actions and dialogues, does not mean they shouldn't be
+    rendered in the world. The world just renders them in the order declared
+    and what isn't permanent is gone after perception rolls." So EVERY element
+    the author wrote becomes a row -- not just the ones that changed a ledger.
+    A glance that settles nothing is still something that happened, and until
+    the ledger existed it had nowhere in the world to live, which is the one
+    thing that stopped perception from reading only the world.
+
+    THE SURFACE COMES FROM THE CITATION, and that is a firewall requirement
+    rather than plumbing. An actor's `attempt` is their own words and
+    routinely carries purpose and intent; `observable` is the intent-free
+    outward form an onlooker is entitled to, and the author's prose is a THIRD
+    description again. Measured on the join: the player declared "scratch
+    runes of slow and soften", the engine's outward form is "crouches over the
+    sill", and the author wrote "works at the windowsill". A cited row takes
+    the second of those.
+
+    AN UNCITED ROW TAKES THE AUTHOR'S WORDS, and there is no leak in that:
+    `from_declaration` is empty exactly when NOBODY DECLARED the act -- a
+    consequence, a thing the world did back -- so there is no actor's purpose
+    to strip. The row says which it is (`declared` empty), so a reader that
+    renders one to an onlooker can tell the engine's outward form from a
+    description of it.
+    """
+    rows = []
+    for entry in beat_timeline(resolved, interp, declarations):
+        element = entry.get("element") or {}
+        declared = entry.get("declared")
+        cited = str(element.get("from_declaration") or "").strip() \
+            if isinstance(declared, dict) else ""
+        if isinstance(declared, dict):
+            kind = str(declared.get("type") or "").strip()
+            surface = observable_action_text(declared)
+            text = str(declared.get("text") or "")
+        else:
+            kind = ""
+            surface = str(element.get("attempt") or "")
+            text = ""
+        rows.append({
+            "order": entry.get("order"),
+            "actor": entry.get("actor") or "",
+            "declared": cited,
+            "surface": surface,
+            "kind": kind,
+            "text": text,
+            "category": entry.get("category") or "",
+            "note": entry.get("note") or "",
+        })
+    return rows
 
 
 def mover_cut_events(out, diff=None):

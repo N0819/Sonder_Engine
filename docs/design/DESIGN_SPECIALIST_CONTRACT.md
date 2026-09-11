@@ -1110,6 +1110,107 @@ carried the declared movement, so it can stamp that attribution itself --
 deterministic, no schema change, and it turns the fragile link into a derived
 one.
 
+## 4m. THE EVENT LEDGER: the beat, written into the world
+
+The owner's chain, on why a character's act was being handled twice:
+"shouldn't it go character -> director -> recompiler -> world -> perception?
+Why would it be rendered twice?" Then the principle, and it is the whole
+section: **"perception should only be reading the world."** And what the world
+is obliged to keep: "just because a majority of these are temporary actions
+and dialogues, does not mean they shouldn't be rendered in the world. The
+world just renders them in the order declared and what isn't permanent is gone
+after perception rolls."
+
+**WHAT WAS MISSING WAS A PLACE, NOT A FACT.** A position, a pose, an attire
+row, a contact, a sound all live on the scene, and perception reads them
+there. The beat's own ACTS lived only in the declarations -- the player's
+sequence, then each character's -- so the one thing perception could not read
+from the world was the beat. It re-derived it by CONCATENATING those
+declarations, which is a guess at chronology and always the same guess:
+everything the player did, then everything anybody else did. Live, that
+renders a player who speaks, walks out and is answered as though the answer
+came before he left.
+
+The recompiler removed the reason. `beat_timeline` already reassembles the
+beat as ONE ordered list -- the author's own order, each element citing the
+declaration it describes -- so the order exists; it just had nowhere to live.
+
+**THE ARROW INTO THE WORLD, in three pieces.**
+
+* `director_evidence.beat_event_ledger` turns the timeline into rows.
+  EVERY element becomes one, not just the categorized ones: work items are the
+  categorized SUBSET of the beat, and a glance that settles nothing is still
+  something that happened. `director_resolve` puts them on its output as
+  `beat_events`, after the last floor has run on the merge.
+* `compose_beat_scene` writes them onto the scene. That is the ONE composition
+  of "the scene this beat produced", shared by `perception_outcome` and the
+  commit, and it runs BEFORE the narrator -- which is the whole reason it is
+  not written where `sensory_events` is. `_record_sensory_events` runs during
+  the commit, after the narrator, so its record reads empty during its own
+  beat and stale a turn later; that is right for a record the NEXT beat's
+  sound field reads and exactly wrong for one this beat renders from.
+* `perception._world_ordered_stream` asks the world what order the beat
+  happened in, and permutes the named entries into it.
+
+**NOT A `state_diff` CHANNEL, deliberately.** The diff is partitioned into 32
+channels each owned by exactly one hand, and every seam over it -- ownership,
+span attribution, reconciliation -- rests on no channel having two authors.
+The ledger is the ENGINE's reassembly of what the hands produced, so it
+travels beside the diff rather than inside it.
+
+**NOTHING SWEEPS IT, AND THAT IS THE DESIGN.** The record carries the beat
+that wrote it and `beat_ledger.beat_events` refuses any other beat's --
+`sensory_events`' own rule, stated there as "the beat number IS the lifetime".
+A sweep is a second thing that has to run, on every path, forever, and the
+path it misses is the one that renders a stale event as though it had just
+happened. A reader that must prove the beat matches cannot fail that way: a
+crashed turn, a resume, a reroll, a restored checkpoint and a branch all
+inherit a record that answers `[]` the moment the number moves. That is what
+"gone after perception rolls" means with nothing doing the going. An empty
+beat still WRITES a record, because "this beat had no events" and "no beat has
+spoken" are different answers.
+
+**THE SURFACE COMES FROM THE CITATION, and that is the firewall's clause
+rather than plumbing.** Three descriptions of one act exist: the actor's
+`attempt`, in their own words, routinely carrying purpose and intent; the
+engine's `observable`, the intent-free outward form an onlooker is entitled
+to; and the author's prose, a third description again. Measured on the join --
+the player declared "scratch runes of slow and soften", the outward form is
+"crouches over the sill", the author wrote "works at the windowsill". A cited
+row takes the second. An UNCITED row takes the author's words and there is no
+leak in that: `from_declaration` is empty exactly when nobody declared the act
+-- a consequence, a thing the world did back -- so there is no actor's purpose
+to strip, and the empty `declared` says which kind of row it is. The scene
+record is a strict projection onto `EVENT_FIELDS`, so `attempt` never reaches
+it at all.
+
+**THE REORDER MOVES ONLY WHAT THE WORLD NAMES.** Named entries are permuted
+among the slots they already occupy; an entry the ledger does not cite keeps
+its exact index. The first rule tried was "an unnamed entry takes the position
+of the last named entry before it", and it is wrong in the direction that
+matters: an unbound dialogue row, a background presence's beat and a silence
+minted for an unanswered address are appended AFTER the whole declared stream
+on purpose, and anchoring them to a named neighbour dragged all three into the
+middle of the beat the moment that neighbour moved earlier. Caught by the
+test, not by reading it. Fewer than two named entries reorders nothing --
+one cannot disagree with itself about an order.
+
+**THE CAP IS 64 EVENTS**, and it is not a pacing judgement. Twelve measured
+full turns held five events per beat on average and never more than fourteen,
+so nothing an author writes reaches it; it exists so a model looping a
+sequence cannot grow an unbounded blob inside a scene that is deep-copied
+several times a turn. The FIRST events are kept, because the ones past the cap
+are the ones a runaway wrote.
+
+**WHAT IS STILL NOT BUILT.** Perception takes its CHRONOLOGY from the world
+and still builds the stream's CONTENT from the declarations -- the dialogue
+binding, concealment, visibility and the communication surfaces are all still
+read there. An uncited row (something nobody declared: a consequence, a thing
+the world did back) is in the ledger and mints no stream entry, so the world
+records it and no onlooker is yet shown it. Both are the next step, and the
+ledger is the thing that makes them possible rather than the thing that does
+them.
+
 ## 5. What already exists to build on
 
 This is a rewire of proven mechanisms, not a green field. **The output half of

@@ -13,6 +13,7 @@ from core.pipeline_context import note_step_decision
 from mind.memory import add_lorebook_link
 from story.character_schema import character_name_from_text, persona_name
 from story.provenance_text import strip_engine_provenance
+from world.beat_ledger import record_beat_events
 from world.weather import advance_weather, normalize_weather
 from world.spatial import (contradictory_sight_edges, derived_room_name,
                            guessed_room_sizes,
@@ -1986,6 +1987,28 @@ def compose_beat_scene(ctx):
     infer_focus(cid, ctx.turn.frame_id, prev_scene, sc,
                 ctx.get("director_resolve") or {}, _carry_names)
     infer_facing(cid, ctx.turn.frame_id, prev_scene, sc, _carry_names)
+
+    # THE BEAT'S EVENTS, ONTO THE SCENE (`world/beat_ledger.py`).
+    #
+    # "The world just renders them in the order declared and what isn't
+    # permanent is gone after perception rolls." This is where the beat stops
+    # being something perception has to re-derive out of everybody's
+    # declarations and becomes a thing it READS -- the recompiler's ordered
+    # reassembly of what happened, written onto the scene this beat produced.
+    #
+    # NOTHING SWEEPS IT. The record carries the beat that wrote it and
+    # `beat_ledger.beat_events` refuses any other beat's, so a crashed turn, a
+    # resume, a reroll, a checkpoint and a branch all inherit a record that
+    # answers `[]` the moment the number moves. The beat number IS the
+    # lifetime -- the rule `sensory_events` already runs on, and the reason
+    # neither needs a sweep that has to be right on every path forever.
+    #
+    # An establish turn has no resolve and writes an empty list rather than
+    # nothing: "this beat had no events" and "no beat has spoken" are
+    # different answers, and leaving the older beat's record in place would
+    # let the second be read as the first.
+    record_beat_events(sc, getattr(getattr(ctx, "turn", None), "idx", None),
+                       res.get("beat_events"))
 
     planned_error = None
     try:

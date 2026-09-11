@@ -239,6 +239,7 @@ from .director_floors import (
     _scan_for_untracked_restraint,
 )
 from .director_evidence import (
+    beat_event_ledger,
     beat_item_records,
     beat_ledger,
     beat_worlds,
@@ -5317,6 +5318,30 @@ def director_resolve(ctx, nonce, _corrections=None):
     _orchestration_scope_backstop(ctx, out, "resolve", sc)
     _span_coherency_report(ctx, out, "resolve", _orch_dispatch,
                            _orch_view)
+
+    # THE BEAT'S EVENTS, HANDED TO THE WORLD (`world/beat_ledger.py`).
+    #
+    # The owner, on why a character's act was being handled twice: "shouldn't
+    # it go character -> director -> recompiler -> world -> perception?" This
+    # is the arrow into the world. The recompiler has just reassembled the
+    # beat out of five hands' parallel work, and its chronology -- the author's
+    # own order, each element citing the declaration it describes -- is the
+    # one thing about the beat that had no place in the world to live. So it
+    # goes on the output, `compose_beat_scene` writes it onto the scene under
+    # the beat number that bounds it, and perception READS it there.
+    #
+    # NOT a `state_diff` channel, deliberately. The diff is partitioned into
+    # 32 channels each owned by exactly one hand, and every seam over it --
+    # ownership, span attribution, reconciliation -- is built on no channel
+    # having two authors. This is the ENGINE's own reassembly of what the
+    # hands produced, written after the last floor has run on the merge, so it
+    # travels beside the diff rather than inside it.
+    #
+    # Built here rather than after the campaign block because a validator's
+    # refusal re-enters this whole function: the corrected result builds its
+    # own ledger from its own sequence, which is the point of re-entering
+    # rather than patching.
+    out["beat_events"] = beat_event_ledger(out, interp, decls)
 
     # EXTENSION RESULT VALIDATION, last of all and deliberately so. A validator
     # judges the merged result AFTER every deterministic floor this engine owns
