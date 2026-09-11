@@ -6,6 +6,105 @@ lands it.
 
 ## 1. Known defects
 
+<a id="unbuilt-1-0"></a>
+
+### 1.0 The Japanese pack cannot route the Director's manifest
+
+**Deliberate, dated, and switched off in code rather than forgotten.**
+`DirectorInterpret` gained `changes_asserted` on 2026-09-09 (design note
+`DESIGN_NARROW_MODEL_INTERFACE.md` §3c-bis) and the English prompts declare it
+in all three places a field has to appear. `language_packs/ja` does not.
+
+That is not an untranslated string: `canonical_language_tokens` is a PROTOCOL
+guard, so a Japanese Director now emits a ruling missing a key the engine
+routes on — "not a wrong answer, no answer". Every interpret beat in a Japanese
+story addresses its hands by note alone, which is the state English was in
+before this change.
+
+Suspended under the owner's mandate of 2026-09-09: finish optimizing, testing
+and debugging the English pipeline first, because a translation written against
+a prompt that is still moving is work done twice. Two switches carry it, both
+loud:
+
+- `tools/project_check.DEFERRED_PACK_PARITY = ("ja",)` — a tuple, not a
+  boolean, so it cannot widen into "skip the check"; `make structure` prints
+  the deferral on every run whether or not anything else is wrong.
+- `tests/test_language_pack_integrity.py::test_no_pack_translates_a_canonical_protocol_span`
+  skips exactly the deferred ids and names this entry in the skip reason.
+
+**To clear:** bring `ja`'s `prompts/director_interpret.txt` and
+`interpret_delegation_note.txt` up to the English canonical tokens (plus
+whatever else the English pass adds before it ends), empty
+`DEFERRED_PACK_PARITY`, and delete this entry in the same commit. Until that
+tuple is empty the English pass is not finished.
+
+**Rule 3 is overdue here, and this note is the debt.** §1.2, §1.3, §1.5, §1.13,
+§1.17, §1.19 and both surviving §1.24 bullets were all found at alpha 6.0–6.9;
+the tree is at alpha 9.6, so each has sat through ten-plus releases untouched.
+Rule 3 gives two answers and neither is "leave it here": promote it, or admit it
+is parked and move it to §8. The next reader to touch one of those entries owes
+one of those answers for each of the eight.
+
+### 2. Roadmap
+
+Features the architecture intends and has not built. Stable ids preserve the
+former value-per-risk ordering within each category; items 2.2–2.3 repay the
+structural debt in
+[`../Design.md`](../Design.md) § Structural debt.
+
+### 3. Information-pipeline leaks still open
+
+Ids are the erased pipeline sweep's own. Severity vocabulary: **leak** (a mind
+receives what it did not earn) / **degradation** (a mind is denied what it did
+earn, or is told something false about its own perception) / **corruption**
+(durable state made wrong) / **latent** (mechanism real, crossing model-gated).
+
+**The single largest item in this register**, on which the pipeline sweep and the
+architecture audit converged independently: **structured signals with stable
+identity, rather than prose matching, as the concealment and identity boundary.**
+Everything in §3.1 is a symptom of its absence, and `grep signal_id` returns
+nothing repo-wide. See §4.2.
+
+### 4. Architecture gaps
+
+From the erased 2026-07-19 audit. Its Gap 1 was conceptual, Gap 2 and Gap 7 are
+now largely closed, and Gap 4 is partial. These are what remain. Its Priority 3
+is done bar one item, and Priority 4 is done — the suite it measured at 527 tests
+now stands at 3,112. Gap 3 / Priority 0 (overlapping physical authorities) is
+gone too, and was settled the OPPOSITE way to the direction it recommended: it
+asked for the scene to be generated from the normalized tables, and
+consolidation made the frame-scoped `world.scene` blob the sole runtime
+authority with `world_entities` a derived projection and `world_placements`
+decommissioned. The matrix it said was "verified absent" is published in
+`docs/guides/DATABASE.md` and pinned by `tests/test_world_authority_consolidation.py`,
+whose `test_world_placements_have_no_runtime_writer` fails if the model forks
+again.
+
+### 5. Deferred backlog
+
+From the erased enterprise_d_v2 40-turn audit backlog. Its P1 (pronoun fidelity)
+and P3 (dialogue dedupe) shipped, as did the variant/alias half of P7. Each §5
+entry in the category files is written to be resumable cold: symptom, root
+cause, fix, test.
+
+### 6. Design-note residuals
+
+Features their design notes argue for that are not built. The note holds the
+argument; only the gap is listed in the register.
+
+### 7. Experiments not yet run
+
+Moved to
+[`docs/experiments/MEASUREMENT_BACKLOG.md`](experiments/MEASUREMENT_BACKLOG.md)
+§1 on 2026-08-19. An unrun experiment is unfinished work, not a broken thing —
+which is the argument for keeping it with the evidence rather than in a defect
+register.
+
+### 8. Parked
+
+Not scheduled and not committed to a phase. See the
+[parked register](UNBUILT_PARKED.md).
+
 <a id="unbuilt-1-17"></a>
 
 ### 1.17 A generic name cannot count
