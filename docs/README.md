@@ -10,8 +10,9 @@ them is how much authority they carry:
 | `experiments/` | Evidence of runs that happened once and cannot be reproduced. Findings, never build artifacts. |
 | `archive/` | Superseded. Kept for the reasoning, not the conclusions. Do not act on one without re-checking source. |
 
-`UNBUILT.md` and `CODE_MAP.md` sit at the top level because they are registers
-rather than prose, and everything points at them.
+`UNBUILT.md`, its `UNBUILT_*.md` category files, and `CODE_MAP.md` sit at the
+top level because they are registers rather than prose, and everything points
+at them.
 
 ## Start here
 
@@ -24,9 +25,11 @@ rather than prose, and everything points at them.
 
 ## Registers
 
-- [`UNBUILT.md`](UNBUILT.md) — **the single register of unfinished work**: known
-  defects, the roadmap, deferred audit findings, and every design-note residual.
-  Delete an entry in the commit that lands it.
+- [`UNBUILT.md`](UNBUILT.md) — **the index for the single register of unfinished
+  work**. The entries are split into linked `UNBUILT_*.md` files by system
+  category; the index resolves every stable section id across known defects,
+  the roadmap, deferred audit findings, and design-note residuals. Delete an
+  entry in the commit that lands it.
 - [`CODE_MAP.md`](CODE_MAP.md) — generated structural index of modules,
   functions, routes, tables and frontend sections. Regenerate with `make map`;
   never hand-edit.
