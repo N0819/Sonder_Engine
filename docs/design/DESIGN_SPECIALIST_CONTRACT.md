@@ -1579,6 +1579,43 @@ the two shapes a real model produces are now recovered rather than fatal.
 never be able to cost a beat. Two correct rulings were thrown away to enforce
 precision on a provenance string.
 
+### And the one that had disabled the interpret fan-out entirely
+
+The belt beat is the clearest thing four runs produced. *You work the belt off
+one-handed and drop it on the bench beside her.* The Director routed it
+correctly — `inventory_ops`, `sensory_events`, the objects hand's own channels
+— the objects hand ran, and the committed diff carried `speech`, `stations`
+and `poses` and **nothing about a belt**. Not worn, not carried, not on the
+bench, not an entity. The player took off an object and the world has no
+record that the object exists.
+
+The cause is one line, and it is not in the fan-out. `norm_sequence` rebuilds
+every sequence element from a fixed key set, and `SPAN_FIELDS` — what is
+carried across that rebuild — was `("category", "note", "items")`. The causal
+row's `item_id` was therefore dropped between the Director answering and the
+hands being dispatched. `compile_transforms` REJECTS a transform with no
+`item_id`, so **every interpret-stage specialist write was discarded by the
+engine that had just asked for it.** Turn 1 of the same run says so outright:
+
+    spatial  REJECTED [{"reason": "missing item_id", "chrono_id": 0}]
+
+`object_name` went the same way, so `world_matches` had nothing to resolve and
+each hand was handed prose and asked to find the object in it. So did the
+plural `categories`, which is the only field that says a span names TWO
+ledgers — keeping the folded singular alone silently halves the multi-hand
+routing this whole contract is built on.
+
+Resolve was never affected: its sequence does not pass through `norm_sequence`.
+That asymmetry is exactly why nothing caught it — the resolve half wrote
+channels on every beat and looked healthy, while the interpret half answered
+and was ignored.
+
+**The class:** a normalizer with an allow-list is a silent dropper, and it
+drops whatever the newest contract added. Nothing errored, no warning was
+raised for the missing `object_name`, and the one warning that WAS raised
+("missing item_id") named the symptom in a diagnostic field nobody reads
+rather than the beat that lost its object.
+
 **Still open.** `dialogue_log` remains a second projection of the same sources
 rather than a projection OF this channel. It cannot disagree with the channel
 today — both are built from `char_speech` and the interpret sequence — but it
