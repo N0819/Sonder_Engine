@@ -1710,6 +1710,39 @@ def _reconcile_interpretation(ctx, out, sc):
         return
     recon["uncovered"] = list(uncovered)
 
+    # A LEXICAL COVERAGE TEST CANNOT GRADE A CONTRACT THAT PARAPHRASES.
+    #
+    # `_uncovered_declarations` looks for the input's own significant tokens
+    # in the interpretation. That held while the Director echoed the player's
+    # phrasing. The causal contract REQUIRES the opposite: it slices prose
+    # into objective observable spans, so "Sera finds you before you find
+    # her" is correctly rendered "Sera comes around the end of the trestle",
+    # and the detector reads a faithful paraphrase as a dropped declaration.
+    #
+    # Measured on the paragraph run, 3 flags across 2 repair calls, 0 real:
+    #
+    #   "Sera finds you before you find her"      -> already a row, reworded
+    #   "The light has moved while you were..."   -> already a row, reworded
+    #   "Neither of you says anything for a..."   -> a NEGATIVE; no event
+    #
+    # Worse than the two wasted calls is what the pressure teaches. Told it
+    # dropped a sentence, the Director covers every clause -- including the
+    # ones describing absence -- and the same beat carried five non-event
+    # rows with live categories: a silence filed under `speech`, two bodies
+    # NOT turning filed under `poses`, dispatching hands to encode a posture
+    # that never changed.
+    #
+    # The detection stays, as a warning: a partial slice is still worth
+    # knowing about, and this is the only signal that sees one. What stops
+    # is spending a model call on it and asking the Director to widen.
+    if out.get("causal_ledger"):
+        for unit in uncovered:
+            ctx.add_warning(
+                "interpret coverage: no row obviously matches %r (a "
+                "paraphrase or a negative, most likely -- not repaired)"
+                % str(unit)[:120])
+        return
+
     # ---- One bounded self-repair by the interpretation's own owner ------
     repair = None
     try:
