@@ -1024,7 +1024,8 @@ def apply_item_transforms(sd, survivors):
     `state` is never merged (see the module note): the survivor's own stands.
     """
     applied = []
-    for item, entry in sorted((survivors or {}).items()):
+    for item, entry in sorted((survivors or {}).items(),
+                              key=lambda pair: str(pair[0])):
         keep_path, keep_channel, keep_record = entry.get("render_from")
         folds = entry.get("duplicates") or []
         if not folds or not isinstance(keep_record, dict):
@@ -2317,7 +2318,7 @@ _RECONCILE_MAX_MANIFEST_ITEMS = 8
 
 
 def _beat_item_refs(listed):
-    """`items` as `[{"id": int, "name": str}]`, or [].
+    """`items` as `[{"id": int|str, "name": str}]`, or [].
 
     The Director's own numbers, kept only where a number is actually there.
     Tolerant about the shape a model reaches for -- a bare number is an id with
@@ -2333,15 +2334,129 @@ def _beat_item_refs(listed):
         else:
             continue
         try:
-            number = int(raw)
+            identity = int(raw)
+            if identity <= 0:
+                continue
         except (TypeError, ValueError):
-            continue
-        if number <= 0:
-            continue
-        row = {"id": number, "name": str(name or "").strip()}
+            identity = str(raw or "").strip()
+            if not identity:
+                continue
+        row = {"id": identity, "name": str(name or "").strip()}
         if row not in rows:
             rows.append(row)
     return rows
+
+
+def normalize_causal_ledger(out):
+    """Make the Director's ledgers authoritative for legacy sequence readers.
+
+    Positive model-authored ``chrono_id`` values preserve chronology across
+    several event ledgers. ``item_id`` is the unique numeric cross-specialist
+    join for one ledger row. ``sequence`` and ``causal_ledger`` are
+    compatibility projections for existing perception, archive, and migration
+    readers.
+    """
+    raw = (out or {}).get("ledgers") or (out or {}).get("causal_ledger")
+    if not isinstance(raw, list) or not raw:
+        return out
+    ledger = []
+    sequence = []
+    used_item_ids = set()
+    next_item_id = 1
+    for order, entry in enumerate(raw, start=1):
+        if not isinstance(entry, dict):
+            continue
+        categories = []
+        for name in _category_names(entry.get("categories")):
+            folded = _normalize_omission_category(name)
+            if folded and folded not in categories:
+                categories.append(folded)
+        event = str(entry.get("event") or "").strip()
+        try:
+            chrono_id = int(entry.get("chrono_id") or order)
+        except (TypeError, ValueError):
+            chrono_id = order
+        if chrono_id <= 0:
+            chrono_id = order
+        try:
+            item_id = int(entry.get("item_id") or order)
+        except (TypeError, ValueError):
+            item_id = order
+        if item_id <= 0 or item_id in used_item_ids:
+            while next_item_id in used_item_ids:
+                next_item_id += 1
+            item_id = next_item_id
+        used_item_ids.add(item_id)
+        next_item_id = max(next_item_id, item_id + 1)
+        object_name = str(entry.get("object_name") or "").strip()
+        source_entity_id = str(entry.get("source_entity_id") or "").strip()
+        source_event_id = str(entry.get("source_event_id") or "").strip()
+        kind = str(entry.get("kind") or "event").strip().casefold()
+        note = str(entry.get("resolution_notes") or "").strip()
+        normalized = {
+            "chrono_id": chrono_id,
+            "item_id": item_id,
+            "object_name": object_name,
+            "source_entity_id": source_entity_id,
+            "authority_mode": str(entry.get("authority_mode") or "autonomous"),
+            "source_event_id": source_event_id,
+            "kind": kind,
+            "event": event,
+            "observable": str(entry.get("observable") or "").strip(),
+            "commitment": str(entry.get("commitment") or "asserted"),
+            "targets": [str(value) for value in entry.get("targets") or []],
+            "visibility": str(entry.get("visibility") or "overt"),
+            "conceal_from": [str(value)
+                             for value in entry.get("conceal_from") or []],
+            "volume": str(entry.get("volume") or "normal"),
+            "movement": (dict(entry["movement"])
+                         if isinstance(entry.get("movement"), dict) else None),
+            "ability": str(entry.get("ability") or ""),
+            "difficulty": str(entry.get("difficulty") or ""),
+            "resolution_notes": note,
+            "categories": categories,
+        }
+        ledger.append(normalized)
+        projected = {
+            "event_id": chrono_id,
+            "chrono_id": chrono_id,
+            "item_id": item_id,
+            "object_name": object_name,
+            "actor": source_entity_id,
+            "source_entity_id": source_entity_id,
+            "authority_mode": normalized["authority_mode"],
+            "from_declaration": source_event_id,
+            "categories": categories,
+            "note": note,
+            "items": [{"id": item_id, "name": object_name}],
+        }
+        if kind == "speech":
+            projected.update({
+                "type": "speech", "text": event,
+                "volume": normalized["volume"],
+                "visibility": normalized["visibility"],
+                "conceal_from": normalized["conceal_from"],
+                "targets": normalized["targets"],
+            })
+        elif kind == "action":
+            projected.update({
+                "type": "action", "attempt": event,
+                "observable": normalized["observable"],
+                "commitment": normalized["commitment"],
+                "visibility": normalized["visibility"],
+                "conceal_from": normalized["conceal_from"],
+                "targets": normalized["targets"],
+            })
+        else:
+            projected.update({"type": "event", "description": event,
+                              "attempt": event})
+        if categories:
+            projected["category"] = categories[0]
+        sequence.append(projected)
+    out["ledgers"] = ledger
+    out["causal_ledger"] = ledger
+    out["sequence"] = sequence
+    return out
 
 
 def _span_items(out):
@@ -2375,7 +2490,9 @@ def _span_items(out):
         # already knows is real, and wrong here: it made every uncategorized
         # span -- a question asked, a look given -- into a work item, and so
         # would have dispatched a hand for every line of dialogue.
-        raw = element.get("category")
+        raw = element.get("categories")
+        if not isinstance(raw, (list, tuple, set, frozenset)) or not raw:
+            raw = element.get("category")
         # ONE SPAN MAY NAME SEVERAL LEDGERS. A belt pulled off and dropped on
         # a bench is one act of the player's and two records -- the wardrobe's
         # and the object's -- so the span carries both and each hand settles
@@ -2404,7 +2521,11 @@ def _span_items(out):
         # `category` keeps the first, so a reader written before spans could
         # name two still sees the string it expects rather than a list.
         item["category"] = categories[0]
-        item["event_id"] = len(items) + 1
+        try:
+            chrono_id = int(element.get("chrono_id") or 0)
+        except (TypeError, ValueError):
+            chrono_id = 0
+        item["event_id"] = chrono_id if chrono_id > 0 else len(items) + 1
         # WHERE IT CAME FROM, for the engine only. Player authority is settled
         # against the sequence POSITION (`claim:<index>:...`) and voiding a
         # span needs the other direction. Deriving it by re-walking the same
@@ -2596,7 +2717,8 @@ def _span_id_ceiling(out):
     the manifest continues at N+1. When `changes_asserted` goes this returns
     0 for every beat and the numbering is simply 1..N.
     """
-    return len(_span_items(out))
+    return max((int(item.get("event_id") or 0)
+                for item in _span_items(out)), default=0)
 
 
 def _manifest_items(out, cast=None, scene=None):

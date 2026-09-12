@@ -193,7 +193,7 @@ def _resolve_beat_view(out, decls, char_actions, dice, p_name, interp,
             ordinal += 1
 
     return {
-        "source": "resolved_beat",
+        "source": "causal_ledger",
         "prose": out.get("resolved_event") or "",
         "ledger_notes": ledger_notes,
         "dialogue": [
@@ -204,7 +204,11 @@ def _resolve_beat_view(out, decls, char_actions, dice, p_name, interp,
         "manifest": _manifest_items(out, cast, scene),
         # Same work items on the resolve half: "resolve would mostly do the
         # same but for characters".
-        "spans": _span_items(out),
+        "spans": _span_items({
+            **out,
+            "sequence": out.get("_all_causal_sequence")
+                        or out.get("sequence") or [],
+        }),
         "declared_actions": declared,
         "dice": dice if isinstance(dice, list) else [],
         "player": p_name,
@@ -262,7 +266,7 @@ def _interpret_beat_view(ctx, out, p_name):
     if attempts:
         declared[p_name] = attempts
     return {
-        "source": "player_declaration",
+        "source": "causal_ledger",
         # Same key the resolve view uses, so `_note_for` routes an
         # interpret-side ruling with no change of its own.
         "ledger_notes": _normalized_ledger_notes(out),
@@ -278,7 +282,11 @@ def _interpret_beat_view(ctx, out, p_name):
         # THE WORK ITEMS. A categorized span of the player's declaration, with
         # the id the engine gave it and the Director's note on how it should
         # resolve (`DESIGN_SPECIALIST_CONTRACT.md` 4a).
-        "spans": _span_items(out),
+        "spans": _span_items({
+            **out,
+            "sequence": out.get("_all_causal_sequence")
+                        or out.get("sequence") or [],
+        }),
         "declared_actions": declared,
         "dice": [],
         "player": p_name,
@@ -482,6 +490,23 @@ def _without_private_keys(item):
             if not str(key).startswith("_")}
 
 
+def _specialist_ledger(item):
+    """A Director ledger row after its private join key is removed.
+
+    ``item_id`` belongs to the deterministic dispatch/recompile seam.  A
+    specialist is correlated with that row by response position, so showing
+    the id to a second model only creates an avoidable opportunity to alter or
+    mis-copy it.
+    """
+    visible = _without_private_keys(item)
+    if not isinstance(visible, dict):
+        return visible
+    visible = dict(visible)
+    visible.pop("item_id", None)
+    visible.pop("chrono_id", None)
+    return visible
+
+
 #: What each hand shows a CO-OWNER of a span it is sharing: identity, and the
 #: one fact that says which thing it is. Never a ledger's own state -- see the
 #: module note on `worn_index`, which is this rule's unconditional ancestor.
@@ -587,21 +612,15 @@ def co_hand_view(name, view, sc):
 
 def _specialist_payload(name, ctx, sc, view, extras):
     """One specialist's scoped payload -- its written entitlement, applied
-    to whichever stage's beat view it was handed. Shared part: the beat
-    (prose+dialogue at resolve, the declaration at interpret), declared
-    action attempts, final dice, the beat's manifest entries in this
-    specialist's categories, and the roster. Per-specialist part: its OWN
-    ledgers, and a minimal name index where its subjects need naming. What
-    is absent is the entitlement's other half: no room graph, no lore, no
-    minds, no world machinery, never the raw player input, and never
-    another specialist's ledgers."""
+    to whichever invocation's causal ledger it was handed. The shared part is
+    only the routed ledgers plus a deterministic variant seed. Each row carries
+    its source identity, adjacent authority mode, chronology, object name, and
+    resolution note. Its numeric item id remains private to dispatch and the
+    recompiler. Per-specialist context contains only that hand's standing
+    ledgers and the minimal indexes needed to address them."""
     spec = SPECIALISTS[name]
     payload = {
         "source": view["source"],
-        "player": view["player"],
-        "cast": view["cast"],
-        "declared_actions": view["declared_actions"],
-        "dice_results_final": view["dice"],
         "variant_seed": extras.get("nonce"),
     }
     # The Director's ruling for THIS hand's channels, when it made one, AT
@@ -627,39 +646,67 @@ def _specialist_payload(name, ctx, sc, view, extras):
     note = _note_for(notes, name)
     if isinstance(note, str) and note.strip():
         payload["director_note"] = note.strip()
-    if view["source"] == "resolved_beat":
-        # THE BEAT'S PROSE IS NOT SENT. `DESIGN_SPECIALIST_CONTRACT.md`: a
-        # hand receives its scoped world state and the work it was asked to
-        # settle, and nothing of the Director's account. It used to receive
-        # `resolved_event` on 100% of calls, 910 chars, declared AUTHORITATIVE
-        # over the instruction -- so 73% of specialist calls ran on narrative
-        # alone and every hand re-derived the beat's events privately. That
-        # derivation is what 90-97% of specialist output tokens were spent on.
-        #
-        # What replaces it is what was always meant to: `director_note` (how
-        # the Director wants this hand's part settled) and the numbered
-        # `changes_asserted` slice, each entry carrying its own `note`.
-        #
-        # Dialogue still reaches the hands that own a channel a speech act can
-        # write (`director_scopes.reads_dialogue`). It is not narration: it is
-        # the lines themselves, which is data those channels encode FROM.
-        # Saying a thing is not a physical action, so for `body`, `contact`
-        # and `objects` the transcript is material they cannot act on and can
-        # only echo -- and echoing the payload into the diff is this fan-out's
-        # measured failure mode. Measured over chat 78: 27% of the beat text
-        # every hand received, ~68 tokens a beat, on sheets whose correct
-        # answer was `{}`.
-        if reads_dialogue(name):
-            payload["dialogue_log"] = view["dialogue"]
-    else:
-        payload["player_declaration"] = view["declaration"]
+    # Both Director invocations now expose the same source: a causal ledger.
+    # No specialist receives a role-specific declaration wrapper or the raw
+    # input. Spoken data is included only for channels that can persist a
+    # social consequence.
+    if reads_dialogue(name) and view.get("dialogue"):
+        payload["dialogue_log"] = view["dialogue"]
     manifest = _specialist_manifest_slice(name, view)
     if manifest:
         payload["changes_asserted"] = manifest
-    spans = [_without_private_keys(span)
-             for span in _specialist_span_slice(name, view)]
-    if spans:
-        payload["spans"] = spans
+    internal_rows = [_without_private_keys(span)
+                     for span in _specialist_span_slice(name, view)]
+    if internal_rows:
+        ledgers = [_specialist_ledger(row) for row in internal_rows]
+        # OBJECT MATCHING COMES FROM THE WORLD, NOT FROM DIRECTOR PROSE.
+        # The Director supplies only a readable object_name. Deterministic
+        # code matches it against standing scene records and embeds the
+        # canonical candidates on that row. Director-authored ids and the
+        # private item_id never cross the specialist boundary. An unmatched
+        # name is simply new or unresolved; no fuzzy guess is fabricated.
+        queries = {}
+        for index, row in enumerate(ledgers):
+            query = str(row.get("object_name") or "").strip().casefold()
+            if query:
+                queries.setdefault(query, []).append(index)
+        matches = {index: [] for index in range(len(ledgers))}
+
+        def match(kind, key, display, aliases=()):
+            forms = {str(key).strip().casefold(),
+                     str(display).strip().casefold()}
+            forms.update(str(value).strip().casefold()
+                         for value in (aliases or []) if str(value).strip())
+            for query in sorted(forms & set(queries)):
+                found = {
+                    "kind": kind,
+                    "world_key": str(key),
+                    "world_name": str(display or key),
+                }
+                for index in queries[query]:
+                    if found not in matches[index]:
+                        matches[index].append(found)
+
+        for who in (sc.get("positions") or {}):
+            match("body", who, who)
+        for entity_id, entity in (sc.get("entities") or {}).items():
+            entity = entity if isinstance(entity, dict) else {}
+            match("entity", entity_id, entity.get("name") or entity_id,
+                  entity.get("aliases") or [])
+        for room_id, room in (sc.get("rooms") or {}).items():
+            room = room if isinstance(room, dict) else {}
+            match("room", room_id, room.get("name") or room_id,
+                  room.get("aliases") or [])
+        for who, attire in (sc.get("attire") or {}).items():
+            if not isinstance(attire, dict):
+                continue
+            for garment in attire.get("wearing") or []:
+                match("garment", garment, garment)
+        for index, found in matches.items():
+            if found:
+                ledgers[index]["world_matches"] = sorted(
+                    found, key=lambda row: (row["kind"], row["world_key"]))
+        payload["ledgers"] = ledgers
     # WHAT THE OTHER OWNERS OF THOSE SPANS ARE HOLDING, identity only. The
     # sheet already tells this hand WHO is settling the other half
     # (`co_hands/<hand>.txt`); without the rows that is a paragraph it cannot
@@ -913,6 +960,7 @@ def _specialist_payload(name, ctx, sc, view, extras):
             # this hand writes (stations, poses, facing) so it can see what
             # its own entries come to. Objective causality, not a mind.
             "sightlines": extras.get("sightlines"),
+            "simulation_clock": extras.get("clock"),
         })
         # The doors this beat reached for that no plan holds: the compiler's
         # needs. This hand renders the surface -- a stub with the exits the
@@ -964,6 +1012,8 @@ def _stage_state(out, stage):
 def _normalized_channel_value(channel, value):
     if channel == "destruction":
         return value if isinstance(value, dict) and value else None
+    if channel == "location":
+        return str(value or "")
     if channel in _LIST_DELEGATED:
         return value if isinstance(value, list) else []
     return value if isinstance(value, dict) else {}
@@ -989,7 +1039,7 @@ _EVENT_VERDICTS = frozenset({"encoded", "already_true", "not_mine",
 #: What a specialist says ABOUT its work, as opposed to the work. Everything
 #: else in a specialist response is one of its channels.
 _SPECIALIST_BOOKKEEPING = frozenset({"resolved_events", "phase_sources",
-                                     "notes"})
+                                     "results", "transforms", "notes"})
 
 #: Verdicts that are compatible with writing nothing. `already_true` MEANS the
 #: ledgers already carry it and `not_mine` means it belongs elsewhere, so an
@@ -1025,7 +1075,8 @@ def _granted_event_ids(name, view):
     for item in (_specialist_span_slice(name, view or {})
                  + _specialist_manifest_slice(name, view or {})):
         try:
-            number = int((item or {}).get("event_id") or 0)
+            number = int((item or {}).get("item_id")
+                         or (item or {}).get("event_id") or 0)
         except (TypeError, ValueError):
             continue
         if number > 0 and number not in granted:
@@ -1069,7 +1120,7 @@ def _resolved_event_verdicts(result, granted_ids):
         if not isinstance(entry, dict):
             continue
         try:
-            event_id = int(entry.get("event_id") or 0)
+            event_id = int(entry.get("item_id") or entry.get("event_id") or 0)
         except (TypeError, ValueError):
             continue
         status = str(entry.get("status") or "").strip().casefold()

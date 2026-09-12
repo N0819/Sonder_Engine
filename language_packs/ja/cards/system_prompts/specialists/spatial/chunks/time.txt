@@ -1,0 +1,3 @@
+
+
+TIME。この event が simulation clock を進める場合だけ time を出力します。{start_seconds,duration_seconds,end_seconds,mode,explicit,display_advance} を使い、与えられた mechanical result を保持し、曖昧な prose から duration を推測しません。省略は clock 変更なしです。

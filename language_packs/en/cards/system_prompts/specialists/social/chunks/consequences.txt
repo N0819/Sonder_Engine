@@ -1,0 +1,3 @@
+
+
+SCHEDULED CONSEQUENCES. consequences starts a future fuse, never this event's present outcome. Emit {what, where, due_seconds, witnessed?, originator?} only when the ledger explicitly sets a delayed consequence in motion. `where` must name a known place and due_seconds is time from now.

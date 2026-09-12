@@ -209,7 +209,10 @@ def test_a_follower_is_not_told_where_a_target_it_cannot_see_went(
 def test_prompts_define_following_as_voluntary_and_speed_bounded():
     from llm.prompts import DEFAULT_PROMPTS
 
-    assert "player.following" in DEFAULT_PROMPTS["director_interpret"]
+    assert "following_ops" in DEFAULT_PROMPTS["director_interpret"]
+    spatial_prompt = DEFAULT_PROMPTS["director_spatial"]
+    assert "voluntary persistent travel relation" in spatial_prompt
+    assert "grants no speed" in spatial_prompt
     character_prompt = DEFAULT_PROMPTS["character"]
     assert "self.following" in character_prompt
     assert "grants no speed" in character_prompt

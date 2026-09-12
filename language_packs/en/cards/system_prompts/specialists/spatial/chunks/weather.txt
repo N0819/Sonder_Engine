@@ -1,0 +1,3 @@
+
+
+WEATHER. Emit weather only when this event changes the scene-wide sky. `sky` and `precipitation` are setting-native names; operational axes are air, cloud, electrical, precipitation_kind, intensity, wind, and temperature. Omission means unchanged.

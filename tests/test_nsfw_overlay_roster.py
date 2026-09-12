@@ -56,15 +56,14 @@ def test_a_specialist_sheet_takes_the_overlay_only_when_the_roster_names_it(
             f"specialist {name!r} disagrees with the roster it was given")
 
 
-def test_the_prose_author_asks_the_roster_like_every_other_sheet(
+def test_the_causal_director_never_receives_a_content_style_overlay(
         card_with_roster):
-    """It appended the overlay unconditionally, so it could not be withheld
-    from `director_resolve_lean` at all -- the roster's entry was decorative."""
+    """It slices causality; it does not author content at either invocation."""
     card = card_with_roster(["director_body"])
     assert _overlay(card) not in prompts.prose_author_prompt(None)
 
     card = card_with_roster(["director_resolve_lean"])
-    assert _overlay(card) in prompts.prose_author_prompt(None)
+    assert _overlay(card) not in prompts.prose_author_prompt(None)
 
 
 def test_a_stored_prompt_body_answers_from_the_same_roster(card_with_roster):
@@ -100,11 +99,9 @@ def test_no_pack_carries_a_second_spelling_of_the_roster():
         assert "nsfw" not in spec, name
 
 
-def test_the_shipped_packs_overlay_the_same_sheets_they_always_did():
-    """The roster already named the three hands whose flag was set, plus the
-    prose author. Removing the flag was meant to change nothing shipped."""
+def test_the_shipped_packs_overlay_only_state_writing_hands():
     for pack in installed_language_packs(refresh=True).values():
         roster = set(pack.card("system_prompts")["nsfw_prompt_ids"])
-        assert {"director_body", "director_contact", "director_spatial",
-                "director_resolve_lean"} <= roster, pack.id
+        assert {"director_body", "director_contact", "director_spatial"} <= roster, pack.id
+        assert not {"director_interpret", "director_resolve_lean"} & roster
         assert not {"director_social", "director_objects"} & roster, pack.id

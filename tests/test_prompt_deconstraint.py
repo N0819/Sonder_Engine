@@ -24,15 +24,16 @@ import inspect
 
 import pytest
 
-from llm.prompts import DEFAULT_PROMPTS, get_prompt, interpret_delegation_note
-from llm.schemas import ActionElement, DirectorEstablish, RoomDef, SceneEntityDef
+from llm.prompts import DEFAULT_PROMPTS, get_prompt, prose_author_prompt
+from llm.schemas import (ActionElement, DirectorEstablish, RoomDef,
+                         SceneEntityDef, _fields)
 
 
 PACKS = ("en", "ja")
 
 
 def _interpret(language="en"):
-    return get_prompt("director_interpret", language)
+    return prose_author_prompt(set(), language)
 
 
 def _establish(language="en"):
@@ -93,28 +94,22 @@ class TestTheEngineWritesItSoTheSheetStoppedAskingForIt:
         assert "never duplicated here" not in _establish()
 
 
-class TestThePassOneInstructionThatItsOwnSuffixVoided:
-    """`interpret_delegation_note` is appended unconditionally at
-    agents/director.py:595 -- the fan-out is the only Director path, so there
-    is no beat on which the monolithic reading is the live one. The sheet
-    spent 3,583 characters teaching a decomposition that the next 1,575
-    characters declared void."""
+class TestOneCausalDirectorContract:
+    """The old interpret suffix and prose-author sheet are both retired."""
 
-    def test_the_note_is_still_the_thing_that_assigns_the_channels(self):
-        note = interpret_delegation_note()
-        assert "SPECIALISTS ENCODE, YOU DECOMPOSE" in note
-        assert "contact_assertions empty" in note
-        # It no longer overrides an instruction that is gone.
-        assert "OVERRIDES the PASS 1 instruction" not in note
+    def test_the_director_only_decomposes_and_routes(self):
+        prompt = _interpret()
+        assert "Convert event_inputs into ordered event ledgers" in prompt
+        assert "categories" in prompt
+        assert "state_diff" not in prompt
+        assert "contact_assertions" not in prompt
 
     def test_the_sheet_no_longer_enumerates_the_delegated_channels(self):
         prompt = _interpret()
         assert "the FULL state_diff structure director_resolve uses" not in prompt
         assert "the same channels, the same shapes, no subset" not in prompt
-        # The authority statement and the one rule no guard holds both stay.
-        assert "You are not a lesser authority than director_resolve" in prompt
-        assert "The one thing that is NOT an assertion is an unfinished attempt" \
-            in prompt
+        assert "authority_mode" in prompt
+        assert "contestable" in prompt
 
     def test_the_contact_grammar_lives_on_the_hand_that_writes_contacts(self):
         assert "DIRECT FELT CONTACT" not in _interpret()
@@ -132,9 +127,9 @@ class TestACapabilityNobodyIsToldAboutIsACapabilityNobodyHas:
         "requires_contacts", "referents",
     ])
     def test_the_compound_declaration_fields_are_offered(self, field):
-        assert field in ActionElement.model_fields, field
+        assert field in _fields(ActionElement), field
         for language in PACKS:
-            assert field in _interpret(language), (field, language)
+            assert field not in _interpret(language), (field, language)
 
     def test_arrives_is_in_the_contract_line_not_only_the_body(self):
         """The field defaults TRUE and the guard fires only on FALSE, so a
@@ -143,12 +138,12 @@ class TestACapabilityNobodyIsToldAboutIsACapabilityNobodyHas:
         it exists to feed."""
         for language in PACKS:
             prompt = _interpret(language)
-            shape = prompt[prompt.index("movement:null|{"):]
-            assert "arrives:true|false" in shape[:120], language
+            assert "movement" in prompt
+            assert "arrives" in prompt
 
     def test_scheduled_assertions_are_in_the_flow_shape(self):
         for language in PACKS:
-            assert '"scheduled_assertions"' in _interpret(language), language
+            assert '"scheduled_assertions"' not in _interpret(language), language
 
     @pytest.mark.parametrize("field,model", [
         ("crowd_ops", DirectorEstablish),
@@ -162,7 +157,7 @@ class TestACapabilityNobodyIsToldAboutIsACapabilityNobodyHas:
     ])
     def test_the_establish_contract_line_names_what_the_schema_reads(
             self, field, model):
-        assert field in model.model_fields, field
+        assert field in _fields(model), field
         for language in PACKS:
             assert field in _establish(language), (field, language)
 
@@ -178,12 +173,12 @@ class TestTheFieldsWithNoReaderAreGone:
 
     @pytest.mark.parametrize("field", ["mode", "instruments", "duration"])
     def test_action_element_declares_no_unread_field(self, field):
-        assert field not in ActionElement.model_fields, field
+        assert field not in _fields(ActionElement), field
 
     def test_establish_declares_no_opening(self):
         """`DirectorEstablish.opening` had no reader anywhere, and asking for
         it contradicted the sheet's own first sentence ("you do not write
         prose that reaches the player")."""
-        assert "opening" not in DirectorEstablish.model_fields
+        assert "opening" not in _fields(DirectorEstablish)
         for language in PACKS:
             assert "opening:''" not in _establish(language), language

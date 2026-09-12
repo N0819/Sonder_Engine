@@ -1,0 +1,3 @@
+
+
+LOCATION LABEL. Emit location as one string only when this event relocates the active scene to a genuinely different top-level place. Ordinary movement between rooms keeps it unchanged.

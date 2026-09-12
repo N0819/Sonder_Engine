@@ -446,157 +446,43 @@ class _Ctx:
     input = ""
 
 
-class TestBothHalvesOfTheDirectorCarryTheRuling:
-    """`director_interpret` is a structural mirror of `director_resolve`.
+class TestBothDirectorInvocationsCarryOneCausalLedger:
+    """Both invocation points share one live model contract."""
 
-    Both fan out to the same five specialists through
-    `director._run_specialists`. The ruling channel was built into the resolve
-    half only, so for a release the interpret half ran its hands with nothing
-    to transcribe -- the exact gap `ledger_notes` exists to close, on half the
-    Director's specialist work, and it was invisible because an absent ruling
-    is indistinguishable from "this beat settled nothing".
+    def test_both_schemas_accept_the_ledger(self):
+        from llm.schemas import DirectorInterpret, DirectorResolve, _fields
 
-    Pinned as a MIRROR rather than as two separate facts: the failure mode is
-    drift between the halves, so the assertion has to be that they agree.
-    """
-
-    def test_both_schemas_carry_the_field(self):
-        from llm.schemas import DirectorInterpret, DirectorResolve
         for model in (DirectorInterpret, DirectorResolve):
-            assert "ledger_notes" in model.model_fields, model.__name__
+            assert "ledgers" in _fields(model), model.__name__
 
-    def test_both_beat_views_expose_it_under_the_key_routing_reads(self):
-        """`_note_for` reads `view["ledger_notes"]`; if a view omits the key
-        the routing silently finds nothing for every hand."""
+    def test_both_prompts_publish_only_the_causal_work_item(self):
+        from llm.prompts import prose_author_prompt
+
+        text = prose_author_prompt(None)
+        for name in ("director_interpret", "director_resolve"):
+            assert '"ledgers"' in text, name
+            assert "resolution_notes" in text, name
+            assert "object_name" in text, name
+            assert "item_id" in text, name
+            assert "categories" in text, name
+            assert "state_diff" not in text, name
+            assert "changes_asserted" not in text, name
+            assert "ledger_notes" not in text, name
+
+    def test_one_span_can_address_several_hands(self):
         from agents import director
-        notes = {"spatial": "the player's step is a transit"}
-        interpret = director._interpret_beat_view(
-            _Ctx(), {"ledger_notes": notes, "sequence": []}, "Player")
-        assert interpret.get("ledger_notes") == notes
-        assert director._note_for(interpret["ledger_notes"], "spatial")
 
-    def test_blank_rulings_are_dropped_on_both_sides_by_one_normalizer(self):
-        from agents import director
-        raw = {"spatial": "  ", "body": "", "social": " a real ruling "}
-        view = director._interpret_beat_view(
-            _Ctx(), {"ledger_notes": raw, "sequence": []}, "Player")
-        assert view["ledger_notes"] == {"social": "a real ruling"}
-
-    def test_both_prompts_declare_the_field_in_the_shape_they_hand_over(self):
-        """The measured lesson: a field asked for in prose and absent from the
-        OUTPUT SHAPE does not exist as far as the model is concerned. On the
-        resolve side that cost every ruling on a live replay."""
-        from llm.prompts import (get_prompt_body, interpret_delegation_note,
-                                 prose_author_prompt)
-        # The ASSEMBLED text, not the body. director.py sends
-        # `get_prompt_body(...) + interpret_delegation_note(...)`, and the
-        # note gets the last word: it closed with an enumeration of what
-        # stays the author's that did not include ledger_notes, so the field
-        # was declared in the shape and excluded three lines later. Asserting
-        # on the body alone passed while the live Director emitted nothing.
-        interpret = get_prompt_body("director_interpret") + \
-            interpret_delegation_note()
-        resolve = prose_author_prompt(None)
-        for name, text in (("director_interpret", interpret),
-                           ("prose_author_sheet", resolve)):
-            assert "ledger_notes:{specialist:line}" in text, name
-            # and the hands' names, which the model otherwise guesses at --
-            # the ROSTER the engine dispatches (`SPECIALISTS`), not a literal:
-            # the sheet carried a retired hand for three days after its
-            # retirement and every ruling keyed to it reached nobody.
-            from agents.director import SPECIALISTS
-            assert "|".join(SPECIALISTS) in text, name
-            assert "offscreen" not in text.split("specialist is one of")[-1][:80], name
-
-    def test_both_schemas_carry_the_manifest_too(self):
-        """`ledger_notes` says WHICH HAND; `changes_asserted` says WHAT
-        CHANGED. Only the second can be dispatched on without reading prose,
-        and for a release interpret had only the first.
-
-        Measured 2026-09-09 over 416 captured rulings: the manifest was absent
-        from 69.2% of them and from 100% of 184 interpret outputs, because the
-        field did not exist on this half. Replayed through the real dispatch
-        predicate (`tools/dispatch_replay.py`), routing on categories alone
-        would have skipped 178 hands that had produced real work -- 96% of
-        them on beats carrying no manifest at all.
-        """
-        from llm.schemas import DirectorInterpret, DirectorResolve
-        for model in (DirectorInterpret, DirectorResolve):
-            assert "changes_asserted" in model.model_fields, model.__name__
-        assert (DirectorInterpret.model_fields["changes_asserted"].annotation
-                == DirectorResolve.model_fields["changes_asserted"].annotation), (
-            "one manifest type, or the halves drift apart field by field")
-
-    def test_the_interpret_view_exposes_the_manifest_routing_reads(self):
-        """`_ruling_for` reads `view["manifest"]`. The interpret view returned
-        a literal `[]`, so no interpret beat could address a hand by category
-        however well the author filled the field."""
-        from agents import director
-        from agents.director import _ruling_for
-        out = {"sequence": [], "ledger_notes": {},
-               "changes_asserted": [
-                   {"category": "attire", "subject": "Player",
-                    "change": "The player pulls her hood down."}]}
-        view = director._interpret_beat_view(_Ctx(), out, "Player")
-        assert view.get("manifest"), "the interpret view dropped the manifest"
-        addressed, named = _ruling_for("body", view)
-        assert "manifest" in addressed, addressed
-        assert "attire" in named, named
-
-    def test_the_engine_numbers_the_interpret_manifest_not_the_model(self):
-        """Same rule as resolve: ids are a dense sequence over exactly this
-        manifest, so a model-authored number could repeat, skip or reorder."""
-        from agents import director
-        out = {"sequence": [], "ledger_notes": {},
-               "changes_asserted": [
-                   {"category": "attire", "subject": "P", "change": "a",
-                    "event_id": 77},
-                   {"category": "poses", "subject": "P", "change": "b"}]}
-        view = director._interpret_beat_view(_Ctx(), out, "Player")
-        assert [i["event_id"] for i in view["manifest"]] == [1, 2]
-
-    def test_both_prompts_declare_the_work_item_in_the_shape(self):
-        """The measured lesson this class exists for, applied to whatever
-        carries the ruling: asked for in prose and absent from the OUTPUT
-        SHAPE, it does not exist as far as the model is concerned.
-
-        The field it names has changed. `changes_asserted` was retired on
-        2026-09-10 (DESIGN_SPECIALIST_CONTRACT.md 4d) and the work item is now
-        the categorized span, so the shape has to declare THAT -- the lesson
-        is about the shape, not about the field that happened to teach it."""
-        from llm.prompts import (get_prompt_body, interpret_delegation_note,
-                                 prose_author_prompt)
-        interpret = get_prompt_body("director_interpret") + \
-            interpret_delegation_note()
-        for _field in ("category", "note", "items:[]"):
-            assert _field in interpret, _field
-        assert "changes_asserted" not in interpret
-        assert "changes_asserted" not in prose_author_prompt(None)
-
-    def test_the_delegation_note_enumeration_names_no_retired_field(self):
-        """The note gets the last word and ends in a closed list of the
-        author's own fields. A field omitted there is a field the model is
-        right to leave out -- and a RETIRED field still listed there is one it
-        is right to keep writing, which is the same fault pointing the other
-        way."""
-        from llm.prompts import interpret_delegation_note
-        note = interpret_delegation_note()
-        assert "stays yours" in note, "the enumeration moved; re-pin this"
-        tail = note.split("stays yours")[-1]
-        assert "ledger_notes" in tail
-        assert "changes_asserted" not in tail
-
-    def test_no_enumeration_of_the_authors_output_omits_the_ruling(self):
-        """Every list of "what your output contains" has to contain it.
-
-        Three separate places had to name this field before a model would
-        write one: the schema, the output shape, and the delegation note. The
-        note is the one that bit -- appended last, ending in a closed list of
-        the author's own fields, with ledger_notes absent. A field declared in
-        one enumeration and omitted from another is a field that does not
-        exist, and the model is right to leave it out.
-        """
-        from llm.prompts import interpret_delegation_note
-        note = interpret_delegation_note()
-        assert "stays yours" in note, "the enumeration moved; re-pin this"
-        assert "ledger_notes" in note
+        out = {"ledgers": [{
+            "chrono_id": 1,
+            "item_id": 1,
+            "object_name": "coat",
+            "source_entity_id": "entity:1",
+            "kind": "action",
+            "event": "The entity removes and drops its coat.",
+            "resolution_notes": "The coat is no longer worn and is in room:1.",
+            "categories": ["attire", "entities", "positions"],
+        }]}
+        director.normalize_causal_ledger(out)
+        view = director._interpret_beat_view(_Ctx(), out, "entity:1")
+        assert set(view["spans"][0]["categories"]) == {
+            "attire", "entities", "positions"}

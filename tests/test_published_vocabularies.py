@@ -456,42 +456,13 @@ class TestBothRoomSizingHandsSeeTheWholeScale:
 # `public_evidence`, `charter_ops` and `contact_action_ops`. Both are checked
 # here; a paragraph that restates SPECIALISTS anywhere belongs in DELEGATIONS.
 
-def _prose_author_delegation(card) -> list:
-    """The prose author sheet's one DELEGATED CHANNELS paragraph.
-
-    Found by content rather than by index: the sheet is a list of blocks, and
-    a fragment inserted above this one would silently move it.
-    """
-    # Keyed on a CANONICAL CHANNEL IDENTIFIER, which every pack spells the
-    # same because that is what this class exists to assert. It used to key on
-    # `SOCIAL FABRIC`,
-    # one of five ALL-CAPS group labels -- and those labels were themselves
-    # the defect that made a Director at low effort file `geography` as a
-    # category (DESIGN_SPECIALIST_CONTRACT.md 4e): the sheet published two
-    # vocabularies for one set of things. The labels are the hand names now,
-    # so a detector cannot key on them any more -- and the block's English
-    # heading is not in the Japanese pack, which a heading-based fix found out.
-    return [text for _key, text in card["prose_author_sheet"]
-            if isinstance(text, str) and "remove_adjacent" in text]
-
-
-def _interpret_delegation(card) -> list:
-    """The note appended to `director_interpret` (agents/director.py).
-
-    It is a whole card fragment rather than a block of a sheet, so there is
-    exactly one of it by construction; the `SOCIAL FABRIC` check is kept so
-    both getters fail the same way if the paragraph is ever rewritten out.
-    """
-    text = str(card["interpret_delegation_note"])
+def _causal_delegation(card) -> list:
+    """The one causal prompt both Director invocation points execute."""
+    text = str(card["causal_director"])
     return [text] if "remove_adjacent" in text else []
 
 
-#: Every published paragraph that restates `SPECIALISTS`, by the stage whose
-#: author reads it.
-DELEGATIONS = {
-    "resolve": _prose_author_delegation,
-    "interpret": _interpret_delegation,
-}
+DELEGATIONS = {"causal": _causal_delegation}
 
 
 def _delegation_block(language: str, stage: str = "resolve") -> str:
@@ -510,7 +481,7 @@ def delegated_channels() -> list[str]:
 
 
 class TestEveryDelegatedChannelIsNamedAsDelegated:
-    def test_the_engine_owns_thirty_two(self):
+    def test_the_engine_owns_thirty_eight(self):
         """Bounds the tests below: a specialist that gains a channel moves
         this count, and the sheet has to move in the same commit. 31 until
         2026-09-04, when `offscreen_plan_ops` left the Director's diff with
@@ -521,7 +492,7 @@ class TestEveryDelegatedChannelIsNamedAsDelegated:
         the social hand took `charter_ops`: the Planner could dispatch an
         errand through a package and the Director, which owns objective
         causality and had just narrated the order, could not (PB13)."""
-        assert len(delegated_channels()) == 32
+        assert len(delegated_channels()) == 38
 
     @pytest.mark.parametrize("stage", sorted(DELEGATIONS))
     @pytest.mark.parametrize("language", LANGUAGES)

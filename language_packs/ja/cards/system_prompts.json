@@ -26,14 +26,15 @@
   "director_note": {
     "$text": "director_note.txt"
   },
+  "causal_director": {
+    "$text": "causal_director.txt"
+  },
   "nsfw_prompt_ids": [
     "background_react",
     "character",
     "director_body",
     "director_contact",
     "director_establish",
-    "director_interpret",
-    "director_resolve_lean",
     "director_spatial",
     "fill_appearance",
     "fill_character_psychology",
@@ -43,15 +44,9 @@
     "narrator",
     "scene_life"
   ],
-  "interpret_delegation_note": {
-    "$text": "interpret_delegation_note.txt"
-  },
   "prompts": {
     "greeting_interpret": {
       "$text": "prompts/greeting_interpret.txt"
-    },
-    "director_interpret": {
-      "$text": "prompts/director_interpret.txt"
     },
     "director_establish": {
       "$text": "prompts/director_establish.txt"
@@ -202,7 +197,9 @@
         "telling_ops",
         "ratified_claims",
         "contradicted_claims",
-        "charter_ops"
+        "charter_ops",
+        "claim_dispositions",
+        "consequences"
       ],
       "chunks": {
         "cast_changes": {
@@ -234,6 +231,12 @@
         },
         "charter_ops": {
           "$text": "specialists/social/chunks/charter_ops.txt"
+        },
+        "claim_dispositions": {
+          "$text": "specialists/social/chunks/claim_dispositions.txt"
+        },
+        "consequences": {
+          "$text": "specialists/social/chunks/consequences.txt"
         }
       }
     },
@@ -310,7 +313,11 @@
         "remove_adjacent",
         "stations",
         "poses",
-        "comms_ops"
+        "comms_ops",
+        "following_ops",
+        "location",
+        "time",
+        "weather"
       ],
       "chunks": {
         "positions": {
@@ -333,183 +340,27 @@
         },
         "comms_ops": {
           "$text": "specialists/spatial/chunks/comms_ops.txt"
+        },
+        "following_ops": {
+          "$text": "specialists/spatial/chunks/following_ops.txt"
+        },
+        "location": {
+          "$text": "specialists/spatial/chunks/location.txt"
+        },
+        "time": {
+          "$text": "specialists/spatial/chunks/time.txt"
+        },
+        "weather": {
+          "$text": "specialists/spatial/chunks/weather.txt"
         }
       }
     }
   },
   "prose_author_sheet": [
     [
-      "voices",
-      {
-        "$text": "prose_author_sheet/00_voices.txt"
-      }
-    ],
-    [
       null,
       {
-        "$text": "prose_author_sheet/01.txt"
-      }
-    ],
-    [
-      null,
-      {
-        "$text": "prose_author_sheet/02.txt"
-      }
-    ],
-    [
-      "obligations",
-      {
-        "$text": "prose_author_sheet/03_obligations.txt"
-      }
-    ],
-    [
-      null,
-      {
-        "$text": "prose_author_sheet/04.txt"
-      }
-    ],
-    [
-      "other_players",
-      {
-        "$text": "prose_author_sheet/05_other_players.txt"
-      }
-    ],
-    [
-      null,
-      {
-        "$text": "prose_author_sheet/06.txt"
-      }
-    ],
-    [
-      "comm",
-      {
-        "$text": "prose_author_sheet/07_comm.txt"
-      }
-    ],
-    [
-      null,
-      {
-        "$text": "prose_author_sheet/08.txt"
-      }
-    ],
-    [
-      "transit",
-      {
-        "$text": "prose_author_sheet/09_transit.txt"
-      }
-    ],
-    [
-      "travel",
-      {
-        "$text": "prose_author_sheet/10_travel.txt"
-      }
-    ],
-    [
-      "planning_need",
-      {
-        "$text": "prose_author_sheet/11_planning_need.txt"
-      }
-    ],
-    [
-      null,
-      {
-        "$text": "prose_author_sheet/12.txt"
-      }
-    ],
-    [
-      "hearsay",
-      {
-        "$text": "prose_author_sheet/13_hearsay.txt"
-      }
-    ],
-    [
-      "road",
-      {
-        "$text": "prose_author_sheet/14_road.txt"
-      }
-    ],
-    [
-      "planning_need",
-      {
-        "$text": "prose_author_sheet/15_planning_need.txt"
-      }
-    ],
-    [
-      null,
-      {
-        "$text": "prose_author_sheet/16.txt"
-      }
-    ],
-    [
-      "approach",
-      {
-        "$text": "prose_author_sheet/17_approach.txt"
-      }
-    ],
-    [
-      "due_events",
-      {
-        "$text": "prose_author_sheet/18_due_events.txt"
-      }
-    ],
-    [
-      null,
-      {
-        "$text": "prose_author_sheet/19.txt"
-      }
-    ],
-    [
-      "world_pressure",
-      {
-        "$text": "prose_author_sheet/20_world_pressure.txt"
-      }
-    ],
-    [
-      null,
-      {
-        "$text": "prose_author_sheet/21.txt"
-      }
-    ],
-    [
-      null,
-      {
-        "$text": "prose_author_sheet/22.txt"
-      }
-    ],
-    [
-      "residue",
-      {
-        "$text": "prose_author_sheet/23_residue.txt"
-      }
-    ],
-    [
-      null,
-      {
-        "$text": "prose_author_sheet/24.txt"
-      }
-    ],
-    [
-      "light",
-      {
-        "$text": "prose_author_sheet/25_light.txt"
-      }
-    ],
-    [
-      "size",
-      {
-        "$text": "prose_author_sheet/26_size.txt"
-      }
-    ],
-    [
-      "author_notes",
-      {
-        "$text": "prose_author_sheet/27_author_notes.txt"
-      }
-    ],
-    [
-      null,
-      {
-        "$text": "prose_author_sheet/28.txt"
+        "$text": "prose_author_sheet/00.txt"
       }
     ]
   ],

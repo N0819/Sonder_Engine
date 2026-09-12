@@ -1,0 +1,3 @@
+
+
+CLAIM DISPOSITIONS。event が outcome を確定した、入力に存在する claim_id だけを claim_dispositions に書きます。{claim_id,status:'realized'|'deferred'|'contested'|'rejected',reason?}。claim を作らず、話者だけから status を推測しません。

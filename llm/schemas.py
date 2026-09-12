@@ -1290,8 +1290,55 @@ class AssertedChange(LenientModel):
     note: str = ""
 
 
+class CausalLedgerEntry(LenientModel):
+    """One Director ruling, with no engine encoding mixed into it.
+
+    ``chrono_id`` orders the beat. ``source_entity_id`` and the adjacent
+    ``authority_mode`` identify the source without assigning it a special
+    role in the contract.
+    ``categories`` contains one or more exact specialist channel names; every
+    owner named there receives the same span. ``resolution_notes`` is the
+    Director's causal ruling. ``item_id`` is the small numeric join used by
+    independently produced transforms; ``object_name`` is what a specialist
+    uses to match the standing world record.
+    """
+    chrono_id: int = 0
+    item_id: int = 0
+    object_name: str = ""
+    source_entity_id: str = ""
+    authority_mode: str = "autonomous"
+    source_event_id: str = ""
+    kind: str = "event"
+    event: str = ""
+    observable: str = ""
+    commitment: str = "asserted"
+    targets: list[str] = Field(default_factory=list)
+    visibility: str = "overt"
+    conceal_from: list[str] = Field(default_factory=list)
+    volume: str = "normal"
+    movement: Optional[dict] = None
+    ability: str = ""
+    difficulty: str = ""
+    resolution_notes: str = ""
+    categories: list[str] = Field(default_factory=list)
+
+
+class CausalDirectorOutput(LenientModel):
+    """The only model-authored output shared by both Director invocations.
+
+    The much larger ``DirectorInterpret`` and ``DirectorResolve`` models below
+    remain compatibility readers for persisted variants. They are not the
+    grammar shown to a current Director call.
+    """
+    ledgers: list[CausalLedgerEntry] = Field(default_factory=list)
+
+
 class DirectorInterpret(LenientModel):
     kind: str = "mixed"
+    # Current causal Director contract. ``causal_ledger`` and the remaining
+    # fields are compatibility projections populated by deterministic code.
+    ledgers: list[CausalLedgerEntry] = Field(default_factory=list)
+    causal_ledger: list[CausalLedgerEntry] = Field(default_factory=list)
     # The ruling channel, mirroring DirectorResolve. `director_interpret` fans
     # out to the same five specialists (director.py's `_run_specialists`), so a
     # hand reading only the player's declaration was left to infer what the
@@ -2493,6 +2540,11 @@ class OmittedThought(LenientModel):
 
 
 class DirectorResolve(LenientModel):
+    # The resolve model's only current authored contract. Older fields below
+    # remain readable so stored variants and provider fixtures survive the
+    # migration, but new prompts ask only for this causal ledger.
+    ledgers: list[CausalLedgerEntry] = Field(default_factory=list)
+    causal_ledger: list[CausalLedgerEntry] = Field(default_factory=list)
     resolved_event: str = ""
     summary: str = ""
     dialogue_order: list[str] = Field(default_factory=list)
@@ -2670,6 +2722,8 @@ class ResolvedEvent(LenientModel):
     re-encode.
     """
     event_id: int = 0
+    # Current specialist contract. ``event_id`` remains for old responses.
+    item_id: int = 0
     _coerce_event_id = validator("event_id", pre=True, allow_reuse=True)(
         _manifest_event_number)
     # encoded      -- I put this in my channels this beat
@@ -2687,6 +2741,39 @@ class ResolvedEvent(LenientModel):
     reroute_to: str = ""
 
 
+class CausalTransform(LenientModel):
+    """Internal transform after code reattaches private ledger identity.
+
+    The patch contains only channels owned by that specialist. Several
+    transforms may share a chrono/item pair: they are complementary facts,
+    not competing answers. Deterministic code validates, orders and compiles
+    them after every specialist has returned.
+    """
+    chrono_id: int = 0
+    item_id: int = 0
+    # Compatibility with responses produced before the numeric join.
+    object_id: str = ""
+    patch: dict[str, Any] = Field(default_factory=dict)
+
+
+class LedgerPatchTransform(LenientModel):
+    """One model-authored patch; its ledger identity is positional."""
+    patch: dict[str, Any] = Field(default_factory=dict)
+
+
+class LedgerTransformResult(LenientModel):
+    """Specialist result aligned to the input ledger at the same index."""
+    transforms: list[LedgerPatchTransform] = Field(default_factory=list)
+    status: str = ""
+    reroute_to: str = ""
+
+
+class CausalSpecialistOutput(LenientModel):
+    """The current specialist wire contract, independent of its channels."""
+    results: list[LedgerTransformResult] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
 class DirectorBodySpecialist(LenientModel):
     """The body specialist's whole output: the four state_diff channels it
     owns under the orchestrated Director (design note 19), in exactly the
@@ -2699,6 +2786,8 @@ class DirectorBodySpecialist(LenientModel):
     conditions: dict[str, list[dict]] = Field(default_factory=dict)
     vitals: dict[str, Optional[dict]] = Field(default_factory=dict)
     overlays: dict[str, list] = Field(default_factory=dict)
+    results: list[LedgerTransformResult] = Field(default_factory=list)
+    transforms: list[CausalTransform] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
     # The numbered manifest slice this call was handed, echoed back
     # with a verdict per event (schemas.ResolvedEvent).
@@ -2713,9 +2802,7 @@ class DirectorBodySpecialist(LenientModel):
 
 class DirectorSocialSpecialist(LenientModel):
     """The social-fabric specialist: scene roster and record channels, in
-    StateDiff's own shapes (same contract as DirectorBodySpecialist).
-    `following_ops` is deliberately NOT here: following is actor-owned and
-    engine-projected (`_collect_following_ops`), so no model authors it."""
+    StateDiff's own shapes (same contract as DirectorBodySpecialist)."""
     cast_changes: list[dict] = Field(default_factory=list)
     introductions: list[dict] = Field(default_factory=list)
     world_facts: list = Field(default_factory=list)
@@ -2730,6 +2817,10 @@ class DirectorSocialSpecialist(LenientModel):
     charter_ops: list[dict] = Field(default_factory=list)
     ratified_claims: list[str] = Field(default_factory=list)
     contradicted_claims: list[str] = Field(default_factory=list)
+    claim_dispositions: list[dict] = Field(default_factory=list)
+    consequences: list[dict] = Field(default_factory=list)
+    results: list[LedgerTransformResult] = Field(default_factory=list)
+    transforms: list[CausalTransform] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
     # The numbered manifest slice this call was handed, echoed back
     # with a verdict per event (schemas.ResolvedEvent).
@@ -2745,6 +2836,8 @@ class DirectorContactSpecialist(LenientModel):
     substance_ops: list[dict] = Field(default_factory=list)
     containment: dict[str, Optional[dict]] = Field(default_factory=dict)
     scales: dict[str, float] = Field(default_factory=dict)
+    results: list[LedgerTransformResult] = Field(default_factory=list)
+    transforms: list[CausalTransform] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
     # The numbered manifest slice this call was handed, echoed back
     # with a verdict per event (schemas.ResolvedEvent).
@@ -2761,6 +2854,8 @@ class DirectorObjectsSpecialist(LenientModel):
     artifact_ops: list[ArtifactOp] = Field(default_factory=list)
     destruction: Optional[dict] = None
     sensory_events: list[dict] = Field(default_factory=list)
+    results: list[LedgerTransformResult] = Field(default_factory=list)
+    transforms: list[CausalTransform] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
     # The numbered manifest slice this call was handed, echoed back
     # with a verdict per event (schemas.ResolvedEvent).
@@ -2781,6 +2876,12 @@ class DirectorSpatialSpecialist(LenientModel):
     poses: dict[str, PoseEntry] = Field(default_factory=dict)
     # Voice channels opened, closed or installed this beat (spatial.comms).
     comms_ops: list[CommsOp] = Field(default_factory=list)
+    following_ops: list[dict] = Field(default_factory=list)
+    location: str = ""
+    time: Optional[dict] = None
+    weather: Optional[dict] = None
+    results: list[LedgerTransformResult] = Field(default_factory=list)
+    transforms: list[CausalTransform] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
     # The numbered manifest slice this call was handed, echoed back
     # with a verdict per event (schemas.ResolvedEvent).
@@ -3988,13 +4089,14 @@ SPECIALIST_CHANNELS = {
     "director_social": ("cast_changes", "introductions", "world_facts",
                         "public_evidence", "crowd_ops", "courier_ops",
                         "telling_ops", "ratified_claims", "contradicted_claims",
-                        "charter_ops"),
+                        "charter_ops", "claim_dispositions", "consequences"),
     "director_contact": ("contact_ops", "contact_action_ops",
                          "substance_ops", "containment", "scales"),
     "director_objects": ("entities", "remove_entities", "inventory_ops",
                          "artifact_ops", "destruction", "sensory_events"),
     "director_spatial": ("positions", "rooms", "remove_rooms",
-                         "remove_adjacent", "stations", "poses", "comms_ops"),
+                         "remove_adjacent", "stations", "poses", "comms_ops",
+                         "following_ops", "location", "time", "weather"),
 }
 
 def _specialist_channel_shapes():
@@ -5013,59 +5115,30 @@ class ValidationReport:
     warnings: list[str] = field(default_factory=list)
 
 OUTPUT_EXAMPLES = {
-    # EVERY KEY THIS STEP'S PROMPT ASKS FOR (A30, review 2026-09-07). An
-    # example is the object a failed call is told to imitate, and this file's
-    # own argument is that a key absent from it "reads as not part of the
-    # answer" -- so the five keys missing here were five a repaired interpret
-    # dropped, `state_assertions` (what the player says happens, happens THAT
-    # turn) and `ledger_notes` (the ruling that dispatches the hands at all)
-    # among them. `tests/test_output_examples_show_requested_keys.py` holds
-    # every example level with its own prompt's shape from now on.
+    # Both Director invocations share the same causal-ledger prompt and repair
+    # shape. Legacy interpret fields are populated by deterministic adapters.
     "director_interpret": {
-        "kind": "mixed",
-        "sequence": [],
-        "speech": None,
-        "speech_volume": "normal",
-        "private_thought": None,
-        "action": None,
-        "actions": [],
-        "movement": None,
-        "follow_op": None,
-        "contact_assertions": [],
-        # A `StateDiff` by the same authority resolve's is: the player's own
-        # declared, already-true state, in the diff's own channels. Empty
-        # here because the shape, not a worked beat, is what this example is.
-        "state_assertions": {},
-        # The ruling that dispatches the hands: one short line per specialist
-        # this declaration bears on, keyed by the hand or by a channel it
-        # owns. Omit a specialist the declaration does not bear on.
-        "ledger_notes": {},
-        # The other half of the ruling: one entry per persistent change the
-        # declaration asserts as already done, under the ledger it belongs in.
-        # Empty here for the same reason `ledger_notes` is -- this example is
-        # the SHAPE, not a worked beat -- but present, because a key absent
-        # from the object a repaired call imitates reads as no part of the
-        # answer, which is this table's whole argument.
-        "changes_asserted": [],
-        "other_players": {},
-        "location_query": None,
-        "flow": {
-            "reactors": [],
-            "addressed_to": [],
-            "dialogue_mode": False,
-            "needs_mapping": False,
-            "mapping_request": "",
-            "dice": [],
-            "tom_triggers": [],
-            "resolution_flags": {
-                "contested": False,
-                "possible_reactors": [],
-            },
-            "authority_claims": [],
-            "fiction_frame": {},
-            "generation_requests": [],
-        },
-        "notes": "",
+        "ledgers": [{
+            "chrono_id": 1,
+            "item_id": 1,
+            "object_name": "north door",
+            "source_entity_id": "persona:12",
+            "authority_mode": "world_author",
+            "source_event_id": "turn:9:primary:raw",
+            "kind": "action",
+            "event": "opens the north door",
+            "observable": "opens the north door",
+            "commitment": "asserted",
+            "targets": ["north_door"],
+            "visibility": "overt",
+            "conceal_from": [],
+            "volume": "normal",
+            "movement": None,
+            "ability": "",
+            "difficulty": "",
+            "resolution_notes": "The north door is open.",
+            "categories": ["rooms"],
+        }],
     },
     "director_establish": {
         # The one example that has to be a WORKED scene rather than a bare
@@ -5129,280 +5202,73 @@ OUTPUT_EXAMPLES = {
             "time_scale": "scene",
         },
     },
-    # This is the PROSE AUTHOR's example -- `director_resolve` is the step
-    # key its call runs under. It owns the beat's prose, its dialogue, the
-    # manifest and the eight `state_diff` channels no specialist owns; the
-    # other thirty-one belong to the five specialists, whose own examples are
-    # below. So it shows only channels out of that eight and nothing else:
-    # a channel in this example that the author no longer owns is an
-    # instruction to spend the beat encoding something a specialist
-    # is being asked for in the same fan-out, and whatever it writes there is
-    # replaced by the owner anyway.
+    # The Director decides causality and routing only. Engine code stamps the
+    # ids densely after validation; the worked values show the intended shape.
     "director_resolve": {
-        "resolved_event": (
-            "Maren turns from the water as you reach the lamp. \"You're "
-            "late,\" she says. \"The boat went out an hour ago.\""),
-        "summary": "Maren says the boat left an hour ago",
-        # THE BEAT'S WORK ITEMS. One span per persistent change, in the order
-        # they happened; the engine numbers them. `actor` is whose act it was,
-        # which is what the resolve half adds over interpret's -- a span here
-        # is anything the beat made true, by anyone.
-        "sequence": [
-            {"actor": "Maren", "attempt": "turns from the water to face you",
-             "category": "spatial",
-             "note": "she is facing you now; her back is no longer to the "
-                     "room"},
-            # TWO FAMILIES, AND THE SHAPE IS A LIST. Where the crate now
-            # stands is the objects hand's record and the blocked doorway is
-            # the spatial hand's, and neither is derived from the other, so
-            # the span goes to both and closes when both have settled it.
-            # A comma-joined string would route to nobody: the normalizer
-            # folds each NAME, and "objects, spatial" is not one.
-            {"actor": "Maren", "attempt": "wedges the crate against the door",
-             "category": ["objects", "spatial"],
-             "note": "the crate stands against the door; the way from Pier "
-                     "Head into the store is blocked"},
-        ],
-        "dialogue_order": ["Maren"],
-        "dialogue_log": [
-            {"speaker": "Maren",
-             "exact_quote": "You're late. The boat went out an hour ago.",
-             "volume": "normal", "intended_target": "{{PLAYER}}",
-             "tone": "flat"},
-        ],
-        "state_diff": {
-            "location": "Pier Head",
-            # THE SHAPE, NOT A PLACEHOLDER. This was `None`, and the resolve
-            # prompt describes the field in prose two thousand lines away
-            # ("Emit state_diff.time with start_seconds, duration_seconds,
-            # end_seconds, mode ('action'|'time_skip'), explicit (bool), and
-            # display_advance"). A model that reads the EXAMPLE sees a scalar
-            # and sends one -- live, GLM-5.2 sent a string and the turn died on
-            # `state_diff.time: value is not a valid dict`.
-            #
-            # Worse, this same example is the `required_json_example` handed to
-            # the repair attempt, so the repair was shown the identical `null`
-            # and had no way to converge. One malformed field killed the whole
-            # beat twice over. Same class as the `ratified_claims` defect, one
-            # step further: not described-but-never-shown, but described one
-            # way and SHOWN AS ANOTHER TYPE.
-            "time": {"start_seconds": 0, "duration_seconds": 60,
-                     "end_seconds": 60, "mode": "action",
-                     "explicit": False, "display_advance": ""},
-            # Written OVER the sky already blowing, so a beat reports what it
-            # noticed rather than restating the whole sky.
-            "weather": {"sky": "fog", "air": "thick",
-                        "cloud": "covered", "electrical": False,
-                        "precipitation": "none",
-                        "precipitation_kind": "none",
-                        "intensity": "none", "wind": "breeze",
-                        "temperature": "cold"},
-            "claim_dispositions": [],
-            # Set in motion OFFSCREEN, fired when the clock reaches it --
-            # never this beat's own outcome, which is the prose above.
-            "consequences": [
-                {"what": "the harbourmaster's office opens for the morning",
-                 "where": "quay_road", "due_seconds": 5400,
-                 "witnessed": False},
-            ],
-        },
-        # The manifest is where a change lands whose CHANNEL belongs to
-        # somebody else: the author narrated her turning, the body specialist
-        # owns `poses`, and this is how the two meet.
-        "changes_asserted": [
-            {"category": "pose", "subject": "Maren",
-             "change": "Maren has turned from the water to face you.",
-             # The instruction, not a second description: `change` says what is
-             # different, `note` says how the hand that owns `poses` should
-             # settle it. A key absent from the object a repaired call is told
-             # to imitate reads as not part of the answer.
-             "note": "She is standing, facing you now; her back is no longer "
-                     "to the room."},
-        ],
-        # THE RULING TO THE HANDS. One short line per specialist this beat
-        # settled, keyed by the hand or by a channel it owns -- the channel
-        # that DISPATCHES a hand at all. Absent from this example while the
-        # engine dispatched on it (A30): the author had a worked manifest
-        # entry to imitate and nothing showing the ruling that goes with it.
-        "ledger_notes": {
-            "spatial": "Maren now faces the party; her pose is turned from "
-                       "the water.",
-        },
-        # Interior, and deliberately not in the manifest above -- this ledger
-        # never commits and nothing perceives it. Shown so an honestly
-        # interior beat has somewhere to put what it withheld.
-        "thoughts_omitted": [],
-        # Only when this beat stops someone `travel_in_flight` already lists
-        # as under way; only when the beat opens, ticks, holds or resolves a
-        # standing pressure. Empty is the common, correct answer to both.
-        "travel_interrupted": [],
-        "world_pressure": [],
-        "dice": [],
-        "fiction_frame": {},
-        "obligations": [
-            {"op": "open", "who": "Merek", "what": "deliver the survey "
-             "report Captain Hale demanded", "kind": "demand"},
-        ],
-        "fact_adjudications": [
-            {"claim_id": "claim:0:event", "claim": "the crew on deck 12 "
-             "are dead", "subject": "deck 12 crew", "verdict": "confirmed",
-             "landing": "the medic confirms the deaths on-page"},
+        "ledgers": [
+            {
+                "chrono_id": 1,
+                "item_id": 1,
+                "object_name": "north door",
+                "source_entity_id": "character:17",
+                "authority_mode": "autonomous",
+                "source_event_id": "turn:9:character:17:0:action",
+                "event": "The crate is wedged against the north door.",
+                "resolution_notes": (
+                    "The crate remains at the doorway and the passage is "
+                    "blocked by it."),
+                "categories": ["entities", "positions", "rooms"],
+            },
         ],
     },
     "director_body": {
-        "attire": {
-            "Mara": {"add": [], "remove": ["wool coat"], "replace": None,
-                     "state": None, "conditions": {},
-                     "coverage": {}},
-        },
-        # TWO ROWS, because the difference between them is the one this
-        # table gets wrong. The cut does not act over time, so it declares
-        # NO cadence -- a field left out is a condition that never claimed
-        # to act, and that is the honest shape for most wounds. The cold
-        # does act, so it spells a real interval and says what one tick
-        # does. What this example must never show again is the third shape:
-        # `tick_interval_seconds: 0`, which is not "constantly" but a row
-        # the sweep can never fire on. It stood here for a long time, and
-        # 0 is the commonest authored value in the corpus.
-        "conditions": {
-            "mara_forearm_cut": [
-                {"condition_id": "mara_forearm_cut", "subject_id": "Mara",
-                 "kind": "wound", "severity": 0.2,
-                 "started_at_seconds": 0.0,
-                 "state": {"detail": "a shallow cut across the forearm"}},
-            ],
-            "mara_exposure": [
-                {"condition_id": "mara_exposure", "subject_id": "Mara",
-                 "kind": "cold_exposure", "severity": 0.3,
-                 "started_at_seconds": 0.0, "tick_interval_seconds": 60,
-                 "tick": {"vitals": {"stamina": -0.02},
-                          "percept": "the cold works further in"},
-                 "state": {"detail": "soaked through, no coat"}},
-            ],
-        },
-        "vitals": {},
-        "overlays": {},
+        "results": [{
+            "transforms": [{"patch": {"attire": {
+                "Mara": {"add": [], "remove": ["wool coat"]},
+            }}}],
+            "status": "encoded",
+        }],
         "notes": [],
     },
     "director_social": {
-        "cast_changes": [
-            {"who": "Merek", "status": "dormant",
-             "reason": "rode for the garrison"},
-        ],
-        "introductions": [{"who": "Mara", "learns": "Sable"}],
-        "world_facts": [],
-        # SHOWN POPULATED, for the reason the contact example gives below: an
-        # empty list teaches the shape of nothing, and this channel's shape is
-        # the part most easily got wrong. `source_id` must name a row the
-        # payload supplied -- actor, target, exact quote and sensory metadata
-        # are reattached by the engine after validation and are not
-        # model-authoritative -- and `kind` is ACTOR-DIRECTED: `request` means
-        # the actor requests.
-        "public_evidence": [
-            {"source_id": "sp_2", "salience": 0.6,
-             "speech_acts": [
-                 {"kind": "request", "content": "shelter until the thaw",
-                  "about": "Sable", "condition": "while she works"},
-             ]},
-        ],
-        "crowd_ops": [
-            {"op": "set", "crowd_id": "", "room": "market_square",
-             "band": "a few dozen", "composition": "market-goers",
-             "mood": "wary"},
-        ],
-        "courier_ops": [],
-        "telling_ops": [],
-        "ratified_claims": [],
-        "contradicted_claims": [],
-        # An order the beat GAVE to somebody the institution employs. Shown
-        # populated because the shape is the part most easily got wrong: the
-        # body as the beat names it, the place it is sent to, and the reason
-        # in the institution's words. What follows -- who covers the post,
-        # who notices -- is the simulation's answer on the beats after.
-        "charter_ops": [
-            {"op": "errand", "body": "Neris",
-             "to": "gatehouse", "purpose": "fetch the gate warden"},
-        ],
+        "results": [{
+            "transforms": [{"patch": {"introductions": [
+                {"who": "Mara", "learns": "Sable"},
+            ]}}],
+            "status": "encoded",
+        }],
         "notes": [],
     },
     "director_contact": {
-        "contact_ops": [
-            {"op": "add", "actor": "Mara", "actor_part": "hand",
-             "target": "Sable", "target_part": "shoulder",
-             "manner": "rest", "relation": "surface", "motion": "settled"},
-        ],
-        "contact_action_ops": [
-            {"op": "add", "actor": "Mara",
-             "contact_ref": {"actor": "Mara", "actor_part": "hand",
-                             "target": "Sable", "target_part": "shoulder"},
-             "action": "steady pressure", "intensity": "light",
-             "rhythm": "constant"},
-        ],
-        # Matter that landed somewhere is the commonest smell in play, and
-        # `scent` had to be SHOWN rather than only described: this was `[]`,
-        # and an empty list teaches the shape of nothing.
-        "substance_ops": [
-            {"op": "add", "source": "Mara", "source_part": "forearm",
-             "substance": "blood", "target": "lamp_room",
-             "placement": "room", "amount": "a few drops",
-             "amount_band": "small",
-             "scent": "wet iron"},
-        ],
-        "containment": {},
-        "scales": {},
+        "results": [{
+            "transforms": [{"patch": {"contact_ops": [{
+                "op": "add", "actor": "Mara", "actor_part": "hand",
+                "target": "Sable", "target_part": "shoulder",
+                "manner": "rest", "relation": "surface",
+                "motion": "settled",
+            }]}}],
+            "status": "encoded",
+        }],
         "notes": [],
     },
     "director_objects": {
-        "entities": {
-            "storm_lantern": {"name": "Storm Lantern", "kind": "object",
-                              "description": "a brass storm lantern",
-                              "aliases": [], "portable": True,
-                              "container": False, "interior_rooms": [],
-                              "state": {"lit": True},
-                              # A lit lamp is the smallest honest scent
-                              # example: the thing that emits light emits
-                              # something on the other channel too, and a
-                              # field shown as absent in the object a repair
-                              # is told to imitate reads as "not part of the
-                              # answer" -- what `ratified_claims` and
-                              # `state_diff.time` each cost a beat for.
-                              "scent": "hot brass and lamp oil"},
-        },
-        "remove_entities": [],
-        "inventory_ops": [],
-        "artifact_ops": [],
-        "destruction": None,
-        # A signal the beat MADE, as against a thing that goes on making
-        # one: `detail` is what the noise was LIKE and is the only part of
-        # it a body beyond the room ever receives.
-        "sensory_events": [
-            {"kind": "sound", "room": "lamp_room", "level": "loud",
-             "source": "storm_lantern",
-             "detail": "a sharp crack of hot glass"},
-        ],
+        "results": [{
+            "transforms": [{"patch": {"entities": {"storm_lantern": {
+                "name": "Storm Lantern", "kind": "object",
+                "description": "a brass storm lantern",
+                "state": {"lit": True},
+            }}}}],
+            "status": "encoded",
+        }],
         "notes": [],
     },
     "director_spatial": {
-        "positions": {"Mara": "lamp_room"},
-        "rooms": {},
-        "remove_rooms": [],
-        "remove_adjacent": [],
-        "stations": {"Mara": {"at": "the_lamp", "near": []}},
-        "poses": {},
-        # Equipment that carries a VOICE between places, which is a spatial
-        # fact about the rooms it joins rather than an object in one of them.
-        "comms_ops": [
-            # `mode` is one of the two the engine owns (`COMMS_MODES`:
-            # duplex both ways, broadcast one way from `source`). This
-            # example taught "voice", which `_clean_comms_channel` folds to
-            # duplex without a word -- an example teaching a value that only
-            # ever survived by being silently replaced (A30).
-            {"id": "gallery_intercom", "op": "open",
-             "name": "the gallery intercom",
-             "rooms": ["lamp_room", "gallery"], "carriers": [],
-             "mode": "duplex", "source": "", "private": False,
-             "live": True},
-        ],
+        "results": [{
+            "transforms": [{"patch": {
+                "positions": {"Mara": "lamp_room"},
+            }}],
+            "status": "encoded",
+        }],
         "notes": [],
     },
     "character": {
@@ -5701,7 +5567,118 @@ def semantic_output_errors(
     errors = []
     source_payload = source_payload or {}
 
+    def causal_ledger_errors():
+        """Validate that a causal answer is a partition of its exact input."""
+        found = []
+        ledgers = output.get("ledgers")
+        groups = source_payload.get("event_inputs") or []
+        supplied = any(
+            isinstance(group, dict) and bool(group.get("events"))
+            for group in groups
+        )
+        if supplied and not ledgers:
+            found.append("ledgers is empty despite nonempty event input")
+        if not isinstance(ledgers, list):
+            found.append("ledgers must be an array")
+            return found
+
+        sources = {}
+        for group in groups:
+            if not isinstance(group, dict):
+                continue
+            entity_id = str(group.get("entity_id") or "").strip()
+            event_ids = {
+                str(event.get("event_id") or "").strip()
+                for event in (group.get("events") or [])
+                if isinstance(event, dict)
+            }
+            sources[entity_id] = {
+                "authority_mode": str(
+                    group.get("authority_mode") or "").strip(),
+                "event_ids": event_ids,
+            }
+
+        item_ids = []
+        chrono_ids = []
+        allowed_categories = {
+            channel
+            for channels in SPECIALIST_CHANNELS.values()
+            for channel in channels
+        }
+        for index, ledger in enumerate(ledgers):
+            if not isinstance(ledger, dict):
+                found.append(f"ledgers.{index} must be an object")
+                continue
+            prefix = f"ledgers.{index}"
+            item_id = ledger.get("item_id")
+            chrono_id = ledger.get("chrono_id")
+            if not isinstance(item_id, int) or isinstance(item_id, bool) \
+                    or item_id <= 0:
+                found.append(f"{prefix}.item_id must be a positive integer")
+            else:
+                item_ids.append(item_id)
+            if not isinstance(chrono_id, int) or isinstance(chrono_id, bool) \
+                    or chrono_id <= 0:
+                found.append(f"{prefix}.chrono_id must be a positive integer")
+            else:
+                chrono_ids.append(chrono_id)
+
+            entity_id = str(ledger.get("source_entity_id") or "").strip()
+            source = sources.get(entity_id)
+            if source is None:
+                found.append(
+                    f"{prefix}.source_entity_id was not supplied in event_inputs")
+            else:
+                authority = str(ledger.get("authority_mode") or "").strip()
+                if authority != source["authority_mode"]:
+                    found.append(
+                        f"{prefix}.authority_mode does not match its source")
+                source_event_id = str(
+                    ledger.get("source_event_id") or "").strip()
+                if source_event_id not in source["event_ids"]:
+                    found.append(
+                        f"{prefix}.source_event_id was not supplied by its source")
+
+            if not str(ledger.get("event") or "").strip():
+                found.append(f"{prefix}.event is empty")
+            if not str(ledger.get("object_name") or "").strip():
+                found.append(f"{prefix}.object_name is empty")
+            if not str(ledger.get("resolution_notes") or "").strip():
+                found.append(f"{prefix}.resolution_notes is empty")
+            if str(ledger.get("kind") or "") not in {
+                    "speech", "action", "event"}:
+                found.append(f"{prefix}.kind is not speech, action, or event")
+            if str(ledger.get("commitment") or "") not in {
+                    "asserted", "contestable"}:
+                found.append(
+                    f"{prefix}.commitment is not asserted or contestable")
+            categories = ledger.get("categories")
+            if not isinstance(categories, list):
+                found.append(f"{prefix}.categories must be an array")
+            else:
+                unknown = sorted({str(value) for value in categories}
+                                 - allowed_categories)
+                if unknown:
+                    found.append(
+                        f"{prefix}.categories contains unknown channels: "
+                        + ", ".join(unknown))
+
+        if len(item_ids) != len(set(item_ids)):
+            found.append("ledger item_id values must be unique")
+        if item_ids and set(item_ids) != set(range(1, len(item_ids) + 1)):
+            found.append("ledger item_id values must be dense from 1")
+        if chrono_ids:
+            unique_chrono = sorted(set(chrono_ids))
+            if unique_chrono != list(range(1, unique_chrono[-1] + 1)):
+                found.append("ledger chrono_id values must be dense from 1")
+            if chrono_ids != sorted(chrono_ids):
+                found.append("ledgers must be ordered by chrono_id")
+        return found
+
     if step_key == "director_interpret":
+        if "event_inputs" in source_payload:
+            errors.extend(causal_ledger_errors())
+            return errors
         raw_input = str(
             source_payload.get("player_raw_input") or ""
         ).strip()
@@ -5733,6 +5710,10 @@ def semantic_output_errors(
         errors.extend(_unplaced_establish_entities(output))
 
     elif step_key == "director_resolve":
+        if "event_inputs" in source_payload:
+            errors.extend(causal_ledger_errors())
+            return errors
+
         # Only required when there was something to resolve. Doing nothing is
         # a legitimate thing for a mind to do -- a character may stand still,
         # stay silent, decline -- and an empty sequence is how that arrives.
@@ -5773,6 +5754,35 @@ def semantic_output_errors(
 
         if not isinstance(output.get("state_diff"), dict):
             errors.append("state_diff must be an object")
+
+    elif step_key in SPECIALIST_CHANNELS:
+        ledgers = source_payload.get("ledgers")
+        if isinstance(ledgers, list):
+            results = output.get("results")
+            if not isinstance(results, list):
+                errors.append("results must be an array")
+            elif len(results) != len(ledgers):
+                errors.append(
+                    "results must contain exactly one entry per input ledger "
+                    f"({len(results)} returned for {len(ledgers)})")
+            for index, result in enumerate(
+                    results if isinstance(results, list) else []):
+                if not isinstance(result, dict):
+                    continue
+                status = str(result.get("status") or "").strip().casefold()
+                transforms = result.get("transforms") or []
+                if status not in {
+                        "encoded", "already_true", "not_mine",
+                        "no_referent"}:
+                    errors.append(
+                        f"results.{index}.status is not a valid verdict")
+                if status == "encoded" and not transforms:
+                    errors.append(
+                        f"results.{index} says encoded without a transform")
+                if status != "encoded" and transforms:
+                    errors.append(
+                        f"results.{index} emits transforms but status is "
+                        f"{status or 'blank'}")
 
     elif step_key == "character":
         if not isinstance(output.get("sequence"), list):

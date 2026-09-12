@@ -2,20 +2,14 @@
 asks for.
 
 `OUTPUT_EXAMPLES` is not documentation. `llm_quality` hands it to the model as
-`required_json_example` on every repair and fallback call, and this file's own
-comments state the consequence twice: a key absent from the object a model is
-told to imitate "reads as not part of the answer", and `background_react`'s
-missing example steered a compliant model to return `{}` -- which validated,
-silently swallowing the reaction.
+`required_json_example` on every repair and fallback call. A key absent from
+the object a model is told to imitate reads as not part of the answer.
 
-Measured at head before this test: the interpret example showed neither
-`state_assertions` (what the player says happens, happens that turn) nor
-`ledger_notes` (the ruling that dispatches the specialists at all), nor
-`contact_assertions`, `follow_op` or `other_players`; the prose author's
-showed neither `ledger_notes`, `thoughts_omitted`, `travel_interrupted` nor
-`world_pressure`; establish's showed neither `weather`, `crowd_ops`,
-`comms_ops` nor `world_pressure`. Every one of them is a key the sheet asks
-for in the same breath, so a repaired call read it as no part of the answer.
+The causal Director deliberately has one output key at both invocation
+points: `ledgers`. Compatibility fields remain on the schemas for old
+checkpoints, but must not leak back into the prompt or example. Specialists
+likewise teach only transforms, receipts, and blocker notes; channel-specific
+patch shapes are supplied by their selected chunks.
 
 The check reads the PROMPT rather than a list kept here: a key is required in
 the example when the step's own sheet names it at the top level of its output
@@ -55,7 +49,7 @@ def _shape_keys(text):
                 if depth == 0:
                     break
             elif depth == 1 and ch == ":":
-                name = re.search(r"([A-Za-z_][A-Za-z0-9_]*)\s*$",
+                name = re.search(r'["\']?([A-Za-z_][A-Za-z0-9_]*)["\']?\s*$',
                                  text[start:i])
                 if name:
                     keys.add(name.group(1))
@@ -106,34 +100,32 @@ class TestEveryRequestedKeyIsShown:
         sheets = _sheets()
         interpret = _requested("director_interpret",
                                sheets["director_interpret"])
-        assert {"state_assertions", "ledger_notes", "contact_assertions",
-                "follow_op", "other_players"} <= interpret
+        assert interpret == {"ledgers"}
         resolve = _requested("director_resolve", sheets["director_resolve"])
-        assert {"ledger_notes", "thoughts_omitted", "travel_interrupted",
-                "world_pressure", "state_diff"} <= resolve
+        assert resolve == {"ledgers"}
 
 
-class TestASpecialistShowsEveryChannelItOwns:
-    """A specialist sheet carries no single output shape -- its core says
-    "one object holding exactly the channels the blocks below teach", and
-    each block ends with its own `Shape:` line. So the requirement is the
-    channel roster itself, plus the `notes` every core asks for."""
+class TestASpecialistShowsTheTransformEnvelope:
+    """Specialist examples teach the positional transform envelope.
+
+    Selected chunks teach the value nested under ``patch[channel]``; direct
+    top-level channel fields exist only to read legacy saved responses.
+    """
 
     @pytest.mark.parametrize("step_key", sorted(schemas.SPECIALIST_CHANNELS))
-    def test_every_channel_and_notes_are_shown(self, step_key, temp_db):
+    def test_transform_receipts_and_notes_are_shown(self, step_key, temp_db):
         example = schemas.OUTPUT_EXAMPLES.get(step_key) or {}
-        missing = sorted(
-            (set(schemas.SPECIALIST_CHANNELS[step_key]) | {"notes"})
-            - set(example))
+        missing = sorted({"results", "notes"} - set(example))
         assert not missing, f"{step_key}'s example omits {missing}"
+        result = example["results"][0]
+        assert {"transforms", "status"} <= set(result)
+        assert "item_id" not in result
 
 
-class TestAnExampleTeachesOnlyValuesTheEngineAccepts:
-    def test_the_comms_mode_is_one_the_engine_owns(self, temp_db):
-        """`mode: 'voice'` stood here and `_clean_comms_channel` folded it to
-        duplex without a word, so the example taught a value that only ever
-        survived by being replaced."""
-        from world.spatial import COMMS_MODES
-
-        for op in schemas.OUTPUT_EXAMPLES["director_spatial"]["comms_ops"]:
-            assert op["mode"] in COMMS_MODES
+class TestAnExampleTeachesOnlyChannelsTheHandOwns:
+    @pytest.mark.parametrize("step_key", sorted(schemas.SPECIALIST_CHANNELS))
+    def test_transform_patch_uses_an_owned_channel(self, step_key, temp_db):
+        owned = set(schemas.SPECIALIST_CHANNELS[step_key])
+        for result in schemas.OUTPUT_EXAMPLES[step_key]["results"]:
+            for transform in result["transforms"]:
+                assert set(transform["patch"]) <= owned

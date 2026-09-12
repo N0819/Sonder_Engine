@@ -184,7 +184,9 @@ def test_the_fanout_is_the_only_path_and_has_no_off_switch(temp_db,
         assert out["orchestration"]["enabled"] is True, value
 
     sheet = calls[0]["system"]
-    assert "DELEGATED CHANNELS -- SPECIALISTS ENCODE, YOU NARRATE" in sheet
+    assert "Convert event_inputs into ordered event ledgers" in sheet
+    assert "no narration" in sheet
+    assert "player_declaration" not in calls[0]["payload"]
     assert "CLOTHING TRACKING" not in sheet, (
         "the prose author loaded a delegated channel's machinery")
     assert any(c["step_key"].startswith("director_")
@@ -234,14 +236,9 @@ def test_every_delegated_block_has_exactly_one_owner():
     lean = DEFAULT_PROMPTS["director_resolve_lean"]
     for marker in owners:
         assert marker not in lean, marker
-    assert "DELEGATED CHANNELS" in lean
-    # The lean sheet still owns everything outside the delegated channels.
-    for marker in ("WORLD PRESSURE", "APPROACHING IS NOT ARRIVING",
-                   "SIZE CHANGES WHAT IS POSSIBLE",
-                   "WHAT LIGHT LETS THEM DO", "DESTINATION RESIDUE",
-                   "AUTHORITY APPRAISAL", "CONSEQUENCES ON THE CLOCK",
-                   "SPANS ARE THE WORK ITEMS"):
-        assert marker in lean, marker
+    assert "ordered event ledgers" in lean
+    assert "world-state encoding" in lean
+    assert '"ledgers"' in lean
 
 
 def test_a_preset_can_actually_replace_a_chunked_sheet(temp_db):
@@ -678,7 +675,8 @@ class TestTheInstructionRidesOnTheEvent:
         from llm.prompts import get_prompt
         from llm import prompts
         interpret = get_prompt("director_interpret", "en")
-        for _field in ("depends_on:[]", "category", "note", "items:[]"):
+        for _field in ("categories", "resolution_notes", "object_name",
+                       "item_id"):
             assert _field in interpret, _field
         assert "changes_asserted" not in interpret
         assert "changes_asserted" not in prompts._PROSE_AUTHOR_OUTPUT_SHAPE
@@ -688,8 +686,8 @@ class TestTheInstructionRidesOnTheEvent:
         `director_interpret`'s example is shape-only by its own stated
         convention, so the worked entry lives on the resolve side."""
         from llm.schemas import OUTPUT_EXAMPLES
-        entry = OUTPUT_EXAMPLES["director_resolve"]["changes_asserted"][0]
-        assert entry.get("note"), entry
+        entry = OUTPUT_EXAMPLES["director_resolve"]["ledgers"][0]
+        assert entry.get("resolution_notes"), entry
 
     def test_no_sheet_promises_the_hand_the_beats_prose(self):
         """The inversion `DESIGN_SPECIALIST_CONTRACT.md` is about, in the
@@ -709,10 +707,8 @@ class TestTheInstructionRidesOnTheEvent:
             sheet = specialist_prompt(name,
                                       director.SPECIALISTS[name]["channels"])
             assert "AUTHORITATIVE prose" not in sheet, name
-            assert "YOUR WHOLE JOB" in sheet, name
-            # Said out loud, because a hand told only "you don't get X" can
-            # reasonably infer it is being deprived of something it needs.
-            assert "nothing is being kept from you" in sheet, name
+            assert "causal ledger rows" in sheet, name
+            assert "Do not narrate" in sheet, name
 
     def test_the_beats_prose_is_not_in_the_payload(self):
         """The removal itself, at the seam that assembles what a hand is
@@ -742,7 +738,8 @@ class TestTheInstructionRidesOnTheEvent:
         from llm.prompts import specialist_prompt
         for name in director.SPECIALISTS:
             sheet = specialist_prompt(name, director.SPECIALISTS[name]["channels"])
-            assert "carries `note`" in sheet, name
+            assert "item_id" in sheet, name
+            assert "object_name" in sheet, name
 
 
 class TestASpanIsSettledOnlyWhenEveryOwnerHas:
@@ -916,9 +913,10 @@ class TestTheSpanIsTheWorkItem:
     def test_the_sheet_asks_for_them(self):
         from llm.prompts import get_prompt
         sheet = get_prompt("director_interpret", "en")
-        for _field in ("depends_on:[]", "category", "note", "items:[]"):
+        for _field in ("categories", "resolution_notes", "object_name",
+                       "item_id"):
             assert _field in sheet, _field
-        assert "AND SAY WHERE EACH SPAN LANDS" in sheet
+        assert "smallest useful speech, action, and event spans" in sheet
 
 
 class TestTheSheetAsksForNothingUnread:
@@ -943,10 +941,10 @@ class TestTheSheetAsksForNothingUnread:
     so a stored variant replayed from before this still resolves.
     """
 
-    def test_the_referent_role_is_two_values_carrying_one_bit(self):
+    def test_the_legacy_referent_enum_is_not_in_the_causal_contract(self):
         from llm.prompts import DEFAULT_PROMPTS
         sheet = DEFAULT_PROMPTS["director_interpret"]
-        assert "role:'plain|possessive'" in sheet
+        assert "role:'plain|possessive'" not in sheet
         assert "actor_possessive" not in sheet
 
     def test_possessive_still_renders(self):
@@ -1077,11 +1075,12 @@ class TestBothHalvesEmitWorkItems:
     def test_both_sheets_ask_for_the_field(self):
         from llm.prompts import get_prompt_body, prose_author_prompt
         _body = get_prompt_body("director_interpret")
-        for _field in ("category", "note", "items:[]"):
+        for _field in ("categories", "resolution_notes", "object_name",
+                       "item_id"):
             assert _field in _body, _field
         resolve = prose_author_prompt(None)
-        assert "sequence:[{actor,attempt,category,note}]" in resolve
-        assert "SPANS ARE THE WORK ITEMS" in resolve
+        assert '"ledgers"' in resolve
+        assert "A row may name several categories" in resolve
 
     def test_a_resolve_span_is_reconciled_by_its_actor(self):
         """An interpret span is the player's own and names no subject; a
@@ -1184,7 +1183,7 @@ class TestTheOpCarriesTheChunkId:
         for name in director.SPECIALISTS:
             sheet = specialist_prompt(name,
                                       director.SPECIALISTS[name]["channels"])
-            assert "from_event" in sheet, name
+            assert "chrono_id" in sheet, name
 
 
 class TestAnEncodedClaimNeedsSomethingEncoded:
@@ -1400,7 +1399,7 @@ def test_an_interpret_category_no_channel_answers_for_is_offered_to_all(
 
     `_CATEGORY_CHANNELS` is the whole map, and a category outside it is still
     never approximated to the nearest hand: that half of this test is the
-    original one and is unchanged, because guessing `weather` into somebody's
+    original one and is unchanged, because guessing `unknowable_flux` into somebody's
     ledger is how an engine invents vocabulary on the Director's behalf and
     gets it wrong quietly.
 
@@ -1425,7 +1424,8 @@ def test_an_interpret_category_no_channel_answers_for_is_offered_to_all(
             "speech": None, "action": None, "movement": None,
             "ledger_notes": {},
             "changes_asserted": [
-                {"category": "weather", "subject": "sky", "change": "it rains"},
+                {"category": "unknowable_flux", "subject": "sky",
+                 "change": "it changes"},
             ],
             "flow": {"reactors": [], "authority_claims": [], "dice": [],
                      "resolution_flags": {}, "fiction_frame": {}},
@@ -1609,6 +1609,15 @@ def test_specialist_failure_never_takes_the_beat_down(temp_db, monkeypatch):
 
     responses = {
         "director_resolve": {
+            "ledgers": [{
+                "chrono_id": 1, "item_id": 1,
+                "object_name": "wool coat",
+                "source_entity_id": "character:mara",
+                "authority_mode": "autonomous",
+                "kind": "action", "event": "Mara removes her wool coat.",
+                "resolution_notes": "The coat is no longer worn.",
+                "categories": ["attire"],
+            }],
             "resolved_event": "Mara pulls off her wool coat.",
             "summary": "Coat off.",
             "changes_asserted": [
@@ -1653,20 +1662,52 @@ def test_specialist_payload_is_the_body_slice_and_nothing_more(temp_db,
     calls = []
     responses = {
         "director_resolve": {
+            "ledgers": [{
+                "chrono_id": 1, "item_id": 1,
+                "object_name": "wool coat",
+                "source_entity_id": "character:mara",
+                "authority_mode": "autonomous",
+                "kind": "action", "event": "Mara removes her wool coat.",
+                "resolution_notes": "The coat is no longer worn.",
+                "categories": ["attire"],
+            }, {
+                "chrono_id": 2, "item_id": 2,
+                "object_name": "linen scarf",
+                "source_entity_id": "character:mara",
+                "authority_mode": "autonomous",
+                "kind": "action", "event": "Mara removes her linen scarf.",
+                "resolution_notes": "The scarf is no longer worn.",
+                "categories": ["attire"],
+            }],
             "resolved_event": "Mara pulls off her wool coat.",
             "summary": "Coat off.", "state_diff": {}, **_ruling("body"),
         },
-        "director_body": {"attire": {}, "conditions": {}, "vitals": {},
-                          "overlays": {}, "notes": []},
+        "director_body": {
+            "results": [{
+                "transforms": [
+                    {"patch": {"attire": {
+                        "Mara": {"remove": ["wool coat"]}}}},
+                    {"patch": {"attire": {
+                        "Mara": {"conditions": {"wool coat": "torn"}}}}},
+                ],
+                "status": "encoded",
+            }, {
+                "transforms": [{"patch": {"attire": {
+                    "Mara": {"remove": ["linen scarf"]}}}}],
+                "status": "encoded",
+            }],
+            "notes": [],
+        },
     }
     scene = json.loads(json.dumps(BASE_SCENE))
-    scene["attire"] = {"Mara": {"wearing": ["wool coat"]}}
+    scene["attire"] = {
+        "Mara": {"wearing": ["wool coat", "linen scarf"]}}
     monkeypatch.setattr(director, "_agent_json",
                         _fake_agent(calls, responses))
 
     ctx = _make_ctx(temp_db, scene=scene, interp=_action_interp(),
                     player_input="(I secretly hate this coat) I pull it off")
-    director.director_resolve(ctx, nonce=0)
+    out = director.director_resolve(ctx, nonce=0)
 
     spayload = next(c["payload"] for c in calls
                     if c["step_key"] == "director_body")
@@ -1676,7 +1717,26 @@ def test_specialist_payload_is_the_body_slice_and_nothing_more(temp_db,
     assert "resolved_event" not in spayload
     assert "attire" in spayload and "overlays" in spayload
     assert "active_awareness" in spayload and "simulation_clock" in spayload
-    assert spayload["declared_actions"]  # structured attempts, not prose
+    assert spayload["ledgers"]  # resolved causal ledgers, not raw input
+    assert "declared_actions" not in spayload
+    assert "player" not in spayload
+    assert "cast" not in spayload
+    assert len(spayload["ledgers"]) == 2
+    assert all("item_id" not in row for row in spayload["ledgers"])
+    assert all("chrono_id" not in row for row in spayload["ledgers"])
+    assert spayload["ledgers"][0]["world_matches"] == [{
+        "kind": "garment",
+        "world_key": "wool coat", "world_name": "wool coat",
+    }]
+    assert spayload["ledgers"][1]["world_matches"] == [{
+        "kind": "garment",
+        "world_key": "linen scarf", "world_name": "linen scarf",
+    }]
+    assert out["state_diff"]["attire"]["Mara"]["remove"] == [
+        "wool coat", "linen scarf"]
+    history = out["orchestration"]["transform_history"]
+    assert [row["item_id"] for row in history] == [1, 1, 2]
+    assert all(row["patch"] for row in history)
     # The room index is ids -> display names only -- no graph, no bodies.
     assert spayload["rooms"] == {"keeper_room": "Keeper's Room",
                                  "lamp_room": "Lamp Room"}
@@ -1913,6 +1973,19 @@ def test_interpret_dispatches_the_same_specialists(temp_db, monkeypatch):
     state_assertions BEFORE the deterministic validators."""
     calls = []
     interpret_out = {
+        "ledgers": [{
+            "chrono_id": 1,
+            "item_id": 1,
+            "object_name": "wool coat",
+            "source_entity_id": "The Stranger",
+            "authority_mode": "world_author",
+            "kind": "action",
+            "event": "pull off my wool coat",
+            "commitment": "asserted",
+            "targets": ["The Stranger"],
+            "resolution_notes": "The coat is removed from the source entity.",
+            "categories": ["attire"],
+        }],
         "kind": "action",
         "sequence": [{"type": "action", "attempt": "pull off my wool coat",
                       "commitment": "asserted", "targets": [],
@@ -1948,8 +2021,9 @@ def test_interpret_dispatches_the_same_specialists(temp_db, monkeypatch):
     body_calls = [c for c in calls if c["step_key"] == "director_body"]
     assert body_calls, "interpret must dispatch the shared body specialist"
     spayload = body_calls[0]["payload"]
-    assert spayload["source"] == "player_declaration"
-    assert "player_declaration" in spayload
+    assert spayload["source"] == "causal_ledger"
+    assert "player_declaration" not in spayload
+    assert spayload.get("ledgers") or spayload.get("changes_asserted")
     assert "resolved_event" not in spayload
     # Ownership: the specialist's channel replaced the interpret model's.
     assert out["state_assertions"]["attire"]["The Stranger"]["remove"] == \
@@ -2441,19 +2515,13 @@ NEVER_GATED_HEADINGS = (
 
 
 def test_prose_author_core_keeps_the_never_gated_blocks():
-    """THE CONSTRAINT ABOVE ALL OTHERS: the firewall, the manifest, the
-    player-authority contract, the dialogue-log duty and the delegation
-    contract load on EVERY beat -- the empty scope (a floor dispatch can
-    never even produce) still carries all of them, plus the world-pressure
-    OPENING duty, so an empty ledger can still be opened into. And the
-    gated headings are genuinely chunked: none of them survives into the
-    bare core."""
+    """The causal Director has one small invariant contract."""
     from llm.prompts import prose_author_prompt
 
     core = prose_author_prompt([])
-    for marker in NEVER_GATED_HEADINGS:
-        assert marker in core, marker
-    assert "op:'open', subject, note" in core  # the opening op teaching
+    assert "ordered event ledgers" in core
+    assert "no narration" in core
+    assert "categories" in core and "object_name" in core
     for name, heading in PROSE_DUTY_HEADINGS.items():
         assert heading not in core, (name, heading)
 
@@ -2471,9 +2539,8 @@ def test_prose_author_full_scope_is_the_registered_lean_sheet(monkeypatch):
     assert full == prompts.DEFAULT_PROMPTS["director_resolve_lean"]
     assert full == prompts.prose_author_prompt(list(
         reversed(prompts.PROSE_DUTY_CHUNKS)))
-    for heading in list(PROSE_DUTY_HEADINGS.values()) + list(
-            NEVER_GATED_HEADINGS):
-        assert heading in full, heading
+    for heading in PROSE_DUTY_HEADINGS.values():
+        assert heading not in full, heading
     assert prompts.prose_author_prompt(["light", "size"]) == \
         prompts.prose_author_prompt(["size", "light"])
 
@@ -2496,15 +2563,9 @@ def test_prose_scope_gates_out_duties_whose_subject_is_absent(temp_db,
                  "planning_need", "hearsay", "road", "due_events",
                  "world_pressure", "residue", "light"):
         assert PROSE_DUTY_HEADINGS[name] not in sheet, name
-    # A physical beat can move, split rooms, and change sizes: those duties
-    # stay loaded because structure cannot rule them out (fail open).
-    for name in ("approach", "comm", "size"):
-        assert PROSE_DUTY_HEADINGS[name] in sheet, name
-    for marker in NEVER_GATED_HEADINGS:
-        assert marker in sheet, marker
+    assert "ordered event ledgers" in sheet
     prose = out["orchestration"]["prose_scope"]
-    assert set(prose["granted"]) == {"approach", "comm", "size"}
-    assert "light" in prose["gated_out"]
+    assert prose == {"granted": [], "gated_out": []}
 
 
 def _sustained_interp():
@@ -2537,8 +2598,9 @@ def test_the_light_duty_loads_on_a_beat_that_can_move_the_sun(temp_db,
 
     ctx = _make_ctx(temp_db, scene=anchored, interp=_sustained_interp())
     out = director.director_resolve(ctx, nonce=0)
-    assert PROSE_DUTY_HEADINGS["light"] in _resolve_sheet(calls)
-    assert "light" in out["orchestration"]["prose_scope"]["granted"]
+    assert PROSE_DUTY_HEADINGS["light"] not in _resolve_sheet(calls)
+    assert out["orchestration"]["prose_scope"] == {
+        "granted": [], "gated_out": []}
 
     for scene, interp in ((json.loads(json.dumps(BASE_SCENE)),
                            _sustained_interp()),
@@ -2547,7 +2609,8 @@ def test_the_light_duty_loads_on_a_beat_that_can_move_the_sun(temp_db,
         ctx = _make_ctx(temp_db, scene=scene, interp=interp)
         out = director.director_resolve(ctx, nonce=0)
         assert PROSE_DUTY_HEADINGS["light"] not in _resolve_sheet(calls)
-        assert "light" in out["orchestration"]["prose_scope"]["gated_out"]
+        assert out["orchestration"]["prose_scope"] == {
+            "granted": [], "gated_out": []}
 
 
 def test_prose_scope_loads_a_block_when_its_subject_exists(temp_db,
@@ -2578,17 +2641,10 @@ def test_prose_scope_loads_a_block_when_its_subject_exists(temp_db,
     out = director.director_resolve(ctx, nonce=0)
 
     sheet = _resolve_sheet(calls)
-    for name in ("voices", "obligations", "world_pressure", "transit",
-                 "light"):
-        assert PROSE_DUTY_HEADINGS[name] in sheet, name
-    # A pure-dialogue beat in one known room still provably cannot move
-    # anyone, transmit to a remote listener, or change a size.
-    for name in ("approach", "comm", "size"):
-        assert PROSE_DUTY_HEADINGS[name] not in sheet, name
+    for heading in PROSE_DUTY_HEADINGS.values():
+        assert heading not in sheet
     prose = out["orchestration"]["prose_scope"]
-    assert {"voices", "obligations", "world_pressure", "transit",
-            "light"} <= set(prose["granted"])
-    assert {"approach", "comm", "size"} <= set(prose["gated_out"])
+    assert prose == {"granted": [], "gated_out": []}
 
 
 def test_prose_scope_comm_loads_when_minds_are_apart(temp_db, monkeypatch):
@@ -2606,8 +2662,9 @@ def test_prose_scope_comm_loads_when_minds_are_apart(temp_db, monkeypatch):
         monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {}))
         ctx = _make_ctx(temp_db, scene=scene, interp=_speech_interp())
         out = director.director_resolve(ctx, nonce=0)
-        assert PROSE_DUTY_HEADINGS["comm"] in _resolve_sheet(calls)
-        assert "comm" in out["orchestration"]["prose_scope"]["granted"]
+        assert PROSE_DUTY_HEADINGS["comm"] not in _resolve_sheet(calls)
+        assert out["orchestration"]["prose_scope"] == {
+            "granted": [], "gated_out": []}
 
 
 def test_prose_scope_fails_open_when_the_facts_cannot_be_read(temp_db,
@@ -2626,9 +2683,9 @@ def test_prose_scope_fails_open_when_the_facts_cannot_be_read(temp_db,
     out = director.director_resolve(ctx, nonce=0)
 
     sheet = _resolve_sheet(calls)
-    for heading in PROSE_DUTY_HEADINGS.values():
-        assert heading in sheet, heading
-    assert out["orchestration"]["prose_scope"]["gated_out"] == []
+    assert "ordered event ledgers" in sheet
+    assert out["orchestration"]["prose_scope"] == {
+        "granted": [], "gated_out": []}
 
 
 def test_prose_scope_fails_open_per_fact(temp_db, monkeypatch):
@@ -2647,10 +2704,9 @@ def test_prose_scope_fails_open_per_fact(temp_db, monkeypatch):
     ctx = _make_ctx(temp_db, interp=_action_interp())
     out = director.director_resolve(ctx, nonce=0)
 
-    assert PROSE_DUTY_HEADINGS["voices"] in _resolve_sheet(calls)
+    assert PROSE_DUTY_HEADINGS["voices"] not in _resolve_sheet(calls)
     prose = out["orchestration"]["prose_scope"]
-    assert "voices" in prose["granted"]
-    assert "light" in prose["gated_out"]  # the rest of the scope undisturbed
+    assert prose == {"granted": [], "gated_out": []}
 
 
 def test_prose_backstop_reports_a_duty_shipped_without_its_block(temp_db,
@@ -2680,12 +2736,12 @@ def test_prose_backstop_reports_a_duty_shipped_without_its_block(temp_db,
     assert PROSE_DUTY_HEADINGS["obligations"] not in _resolve_sheet(calls)
     # Fail-open: the ops shipped untouched.
     assert out["obligations"] and out["obligations"][0]["op"] == "open"
-    # And the misprediction is REPORTED, on both surfaces, and recorded.
+    # There is no prose-duty gate to mispredict: the legacy output is retained
+    # for compatibility without resurrecting that prompt architecture.
     notes = [n for n in ctx.engine_feedback if "'obligations' duty" in n]
-    assert notes and "orchestration scope" in notes[0]
-    assert any("'obligations' duty" in w for w in ctx.warnings)
-    assert any("obligations" in f
-               for f in out["orchestration"]["gate_flags"])
+    assert notes == []
+    assert not any("'obligations' duty" in w for w in ctx.warnings)
+    assert out["orchestration"].get("gate_flags", []) == []
 
 
 def test_prose_registries_are_level():
@@ -2696,13 +2752,9 @@ def test_prose_registries_are_level():
     tools/project_check.py, which enforces this same fact at check time."""
     from llm.prompts import PROSE_DUTY_CHUNKS
 
-    assert set(PROSE_DUTY_CHUNKS) == set(director._PROSE_DUTY_GATES)
-    assert set(director._PROSE_DUTY_SHIPPED) <= set(PROSE_DUTY_CHUNKS)
-    # The exact-payload gates deliberately carry no shipped audit; the
-    # audited set is exactly the prediction gates.
-    assert set(director._PROSE_DUTY_SHIPPED) == {
-        "voices", "obligations", "comm", "transit", "approach", "light",
-        "size"}
+    assert PROSE_DUTY_CHUNKS == ()
+    assert director._PROSE_DUTY_GATES == {}
+    assert director._PROSE_DUTY_SHIPPED == {}
 
 
 # ---------------------------------------------------------------------------
@@ -2726,19 +2778,11 @@ def test_prose_author_shape_carries_no_delegated_fields():
     for channel in director._DELEGATED_CHANNELS:
         assert not re.search(r"\b%s\b" % re.escape(channel),
                              _PROSE_AUTHOR_OUTPUT_SHAPE), channel
-    # What stays the prose author's own is still all there.
-    for kept in ("resolved_event", "summary", "dialogue_order",
-                 "dialogue_log", "state_diff", "time",
-                 "weather", "location", "claim_dispositions", "consequences",
-                 "obligations", "world_pressure", "fact_adjudications"):
-        assert kept in _PROSE_AUTHOR_OUTPUT_SHAPE, kept
-    # And the sheet actually ships the lean shape, not the monolithic one.
-    from llm.prompts import DEFAULT_PROMPTS
-    assert _PROSE_AUTHOR_OUTPUT_SHAPE in DEFAULT_PROMPTS[
-        "director_resolve_lean"]
+    assert "ledgers" in _PROSE_AUTHOR_OUTPUT_SHAPE
+    assert "resolved_event" not in _PROSE_AUTHOR_OUTPUT_SHAPE
 
 
-def test_interpret_always_gets_the_delegation_note_as_a_suffix(
+def test_interpret_and_resolve_use_the_same_causal_contract(
         temp_db, monkeypatch):
     """The interpret sheet's own PASS 1 block instructs "the FULL state_diff
     structure ... no subset", so without an override the stage model is
@@ -2770,17 +2814,11 @@ def test_interpret_always_gets_the_delegation_note_as_a_suffix(
 
     sheet = [c for c in calls if c["step_key"] == "director_interpret"
              ][0]["system"]
-    from llm.prompts import get_prompt_body
-    assert sheet.startswith(get_prompt_body("director_interpret"))
-    assert "SPECIALISTS ENCODE, YOU DECOMPOSE" in sheet
-    # English now has role-specific causal floors as well as the common
-    # language/schema policy.  Both must survive the call-site delegation
-    # suffix; their relative tail order is owned by prompt_policy.
+    from llm.prompts import get_prompt_body, prose_author_prompt
+    assert sheet == prose_author_prompt(set(), "en")
+    assert get_prompt_body("director_interpret") in sheet
+    assert "ordered event ledgers" in sheet
     assert "translate only its free-text human-language values." in sheet
-    assert "CONTESTABLE ONSET" in sheet
-    # The note must name the interpret spelling of the contact channel --
-    # that is the one whose name differs between the stages.
-    assert "contact_assertions" in sheet
 
 
 class TestTheHostCanFindTheSwitch:
@@ -3559,7 +3597,7 @@ def test_diff_application_is_order_independent_by_construction():
     end_state = {
         "attire", "conditions", "vitals", "overlays", "entities",
         "containment", "scales", "positions", "rooms", "stations", "poses",
-        "destruction",
+        "destruction", "location", "time", "weather",
     }
     # Op lists whose appliers read no other delegated channel's
     # mid-application state (commit-side ledgers of their own).
@@ -3586,6 +3624,7 @@ def test_diff_application_is_order_independent_by_construction():
         # `comms_ops` keeps above. Nothing decays and nothing carries over,
         # so there is no evolving state for it to walk.
         "sensory_events",
+        "following_ops", "claim_dispositions", "consequences",
     }
     # Op lists whose appliers walk evolving state sequentially. Two axes on
     # purpose: containment and scales APPLY as end-state upserts (so they
@@ -3637,15 +3676,13 @@ def test_diff_application_is_order_independent_by_construction():
 # Every delegated family must be REACHABLE by a category.
 # ---------------------------------------------------------------------------
 
-#: Channels a category deliberately cannot name, with the reason. Removal
-#: channels are reached through the family they remove from (an object
-#: destroyed is 'entities'/'destruction'; a sealed passage is 'adjacency');
-#: `following_ops` is engine-projected and no model authors it.
+#: Legacy manifest categories may still use a family alias. Current causal
+#: ledgers name exact channels, so every delegated channel is directly
+#: reachable and this table is compatibility documentation only.
 _UNREACHABLE_BY_DESIGN = {
     "remove_entities": "reached as 'entities'",
     "remove_rooms": "reached as 'rooms'",
     "remove_adjacent": "reached as 'adjacency'",
-    "following_ops": "engine-projected, never model-authored",
     "crowd_ops": "traffic ops surface, not a manifest category",
     "courier_ops": "traffic ops surface, not a manifest category",
     "telling_ops": "traffic ops surface, not a manifest category",
@@ -3693,7 +3730,7 @@ def test_every_delegated_family_is_reachable_by_a_category():
     Adding a delegated channel now costs a decision here: give it a
     category, or say in _UNREACHABLE_BY_DESIGN why it needs none.
     """
-    reachable = set(director._CATEGORY_CHANNELS.values())
+    reachable = set(director._DELEGATED_CHANNELS)
     for name, spec in director.SPECIALISTS.items():
         for channel in spec["channels"]:
             assert channel in reachable or channel in _UNREACHABLE_BY_DESIGN, (
@@ -3877,10 +3914,8 @@ def test_the_sheet_tells_every_hand_a_body_is_not_a_thing_it_keeps():
     from llm.prompts import specialist_prompt
 
     sheet = specialist_prompt("objects", ["entities"])
-    assert "A BODY IS NOT A THING YOU KEEP" in sheet
-    # The two facts that make the false blocker impossible to reach.
-    assert "payload.player" in sheet and "payload.cast" in sheet
-    assert "NOT a blocker" in sheet
+    assert "Use object_name and that row's world_matches" in sheet
+    assert "Do not narrate, reinterpret a row" in sheet
 
 
 # ---------------------------------------------------------------------------
@@ -4411,11 +4446,11 @@ class TestTwoKnownNamesInOneStringAreTwoNames:
         from llm.schemas import output_example
         for sheet in (DEFAULT_PROMPTS["director_interpret"],
                       prose_author_prompt(None, "en")):
-            assert "may name TWO" in sheet
-            assert "never one string with a comma" in sheet
-        worked = [e.get("category")
-                  for e in output_example("director_resolve").get("sequence")]
-        assert ["objects", "spatial"] in worked
+            assert "name several categories" in sheet
+            assert "exact channel names" in sheet.casefold()
+        worked = [e.get("categories") for e in
+                  output_example("director_resolve").get("ledgers")]
+        assert ["entities", "positions", "rooms"] in worked
 
 
 class TestAHandIsAnswerableForTheWorkItemsItGot:
@@ -4639,9 +4674,11 @@ class TestADialRefusesTheSpanAndTheRecordWithIt:
         payload = _specialist_payload(
             "spatial", ctx, json.loads(json.dumps(BASE_SCENE)), view,
             {"nonce": 0})
-        assert payload["spans"], payload.keys()
-        for span in payload["spans"]:
+        assert payload["ledgers"], payload.keys()
+        for span in payload["ledgers"]:
             assert not [k for k in span if str(k).startswith("_")], span
+            assert "item_id" not in span
+            assert "chrono_id" not in span
 
 
 class TestAHandSeesWhatItsCoOwnerHolds:
@@ -4944,8 +4981,9 @@ class TestTheBeatNumbersTheThingsItTouches:
         from llm.prompts import DEFAULT_PROMPTS, prose_author_prompt
         for sheet in (DEFAULT_PROMPTS["director_interpret"],
                       prose_author_prompt(None, "en")):
-            assert "NUMBER THE THINGS THE BEAT TOUCHES" in sheet
-            assert "SAME THING KEEPS THE SAME NUMBER" in sheet
+            assert "object_name" in sheet
+            assert "item_id" in sheet
+            assert "matching hint" in sheet
 
 
 class TestWhichRecordOfAThingIsAllowedToExist:

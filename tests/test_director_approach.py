@@ -189,26 +189,22 @@ def test_the_interpret_is_told_how_to_decide_it():
     from llm.prompts import DEFAULT_PROMPTS
 
     prompt = DEFAULT_PROMPTS["director_interpret"]
-    assert "arrives:true|false" in prompt
-    assert "SAYS WHETHER THE DECLARATION REACHES" in prompt
-    # Both sides of the line, by example.
-    assert "I walk to the bridge" in prompt
-    assert "I wander towards it" in prompt
-    assert "Judge the player's SENTENCE" in prompt
+    assert "movement" in prompt
+    assert "arrives" in prompt
+    assert "relocation" in prompt
+    assert "player" not in prompt.casefold()
 
 
 # --- and the Director is told, not merely clamped -----------------------------
 
 def test_the_prompt_states_the_rule_the_guard_enforces():
-    """The clamp keeps the world right; the prompt is what stops the PROSE
-    describing an interior nobody entered. Clamped state under narration that
-    already walked her through the door is the worse failure of the two."""
+    """The causal prompt stays out of spatial procedure; code owns the clamp."""
     from llm.prompts import DEFAULT_PROMPTS
 
     prompt = DEFAULT_PROMPTS["director_resolve_lean"]
-    assert "APPROACHING IS NOT ARRIVING, AND ARRIVING IS NOT ENTERING" in prompt
-    assert "`approach` has by definition not landed yet" in prompt
-    assert "Crossing a threshold is its own act" in prompt
+    assert "APPROACHING IS NOT ARRIVING" not in prompt
+    assert "state_diff" not in prompt
+    assert "resolution_notes" in prompt
 
 
 class TestAnApproachThatCanComplete:

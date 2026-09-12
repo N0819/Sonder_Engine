@@ -53,8 +53,13 @@ def _assembled_sheets(card):
                 str(spec["chunks"][channel]) for channel in spec["order"]))
         for name, spec in card["specialists"].items()
     }
-    sheets["director_resolve_lean"] = "".join(
+    causal_director = "".join(
         str(text) for _name, text in card["prose_author_sheet"])
+    sheets["director_resolve_lean"] = causal_director
+    # Compatibility view for prompt tooling and saved presets. Both runtime
+    # invocation points call ``prose_author_prompt``; this alias has no body
+    # of its own and therefore cannot drift from the one authored source.
+    sheets["director_interpret"] = causal_director
     return sheets
 
 
@@ -213,10 +218,6 @@ def prompt_fragment(name, language=None):
 
 def extra_parts_note(language=None):
     return prompt_fragment("extra_parts_note", language)
-
-
-def interpret_delegation_note(language=None):
-    return prompt_fragment("interpret_delegation_note", language)
 
 
 def _preset_override(pid, language=None):
@@ -394,8 +395,10 @@ def prose_author_prompt(scope, language=None):
         granted = set(duty_names if scope is None else scope)
         sheet = "".join(text for name, text in localized
                         if name is None or name in granted)
-    sheet += nsfw_overlay(
-        "director_resolve_lean", _prompt_card(language))
+    # The causal Director authors no prose, anatomy, or state records. Adult
+    # content rules belong to the scoped specialists that encode such spans;
+    # appending that overlay here would spend it on a model with no channel in
+    # which to apply it.
     return apply_prompt_policy(
         sheet, _language(language), "director_resolve_lean")
 
