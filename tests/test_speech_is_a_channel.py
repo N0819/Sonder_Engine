@@ -536,6 +536,82 @@ class TestAWordedRowReachesTheChannelEvenUnnamed:
         assert "A row carrying words always names speech" in sheet
 
 
+class TestNormalizationDoesNotEatTheRowsIdentity:
+    """THE ONE THAT COST THE WHOLE INTERPRET FAN-OUT.
+
+    `norm_sequence` rebuilds every sequence element from a fixed key set, and
+    `SPAN_FIELDS` was `("category", "note", "items")` -- so the causal row's
+    `item_id` was dropped between the Director answering and the hands being
+    dispatched. `compile_transforms` REJECTS a transform with no item_id, so
+    every interpret-stage specialist write was discarded by the engine that
+    had just asked for it.
+
+    Measured live 2026-09-12, turn 1: `{"reason": "missing item_id",
+    "chrono_id": 0}` against the spatial hand. And turn 3, a belt taken off
+    and dropped on a bench: the objects hand ran with no `object_name` to
+    match and no id to answer under, and the belt ended in no ledger at all
+    -- not worn, not carried, not on the bench, not an entity.
+
+    Resolve was never affected: its sequence does not pass through here.
+    """
+
+    row = {
+        "chrono_id": 1, "item_id": 1, "object_name": "Corin",
+        "source_entity_id": "persona:1", "source_event_id": "turn:4:raw",
+        "event": "works the belt off and drops it on the bench",
+        "observable": "removes a belt and drops it on a bench", "act": "",
+        "commitment": "asserted", "targets": ["Sera"], "visibility": "overt",
+        "conceal_from": [], "volume": "normal", "movement": None,
+        "ability": "", "difficulty": "",
+        "resolution_notes": "Corin's belt is on the bench.",
+        "categories": ["inventory_ops", "sensory_events"],
+    }
+
+    def _normalized_span(self):
+        from agents.common import norm_sequence
+        out = {"ledgers": [dict(self.row)]}
+        normalize_causal_ledger(out)
+        norm_sequence(out)
+        return _span_items(out)[0]
+
+    def test_the_join_id_survives_normalization(self):
+        assert self._normalized_span()["item_id"] == 1
+
+    def test_the_transform_that_was_thrown_away_now_compiles(self):
+        span = self._normalized_span()
+        diff, _history, rejected = compile_transforms(
+            [{"item_id": span["item_id"],
+              "patch": {"inventory_ops": [{"op": "drop",
+                                           "object_id": "belt"}]}}],
+            allowed_channels=("inventory_ops",), ledger_items=[span],
+            allowed_item_ids=[span["item_id"]], specialist="objects")
+        assert rejected == []
+        assert diff["inventory_ops"][0]["object_id"] == "belt"
+        assert diff["inventory_ops"][0]["from_event"] == 1
+
+    def test_the_matching_hint_survives(self):
+        """Without it `world_matches` has nothing to resolve, and the hand is
+        handed prose and asked to find the object in it."""
+        assert self._normalized_span()["object_name"] == "Corin"
+
+    def test_both_ledgers_survive_not_just_the_first(self):
+        """A span may name two, and only the LIST says so. Keeping the folded
+        singular alone silently halves the multi-hand routing."""
+        span = self._normalized_span()
+        assert len(span["categories"]) == 2
+        assert set(span_owners(span)) == {"objects"}
+
+    def test_the_actor_survives(self):
+        assert self._normalized_span()["actor"] == "persona:1"
+
+    def test_chronology_is_the_directors_not_the_positions(self):
+        from agents.common import norm_sequence
+        out = {"ledgers": [dict(self.row, chrono_id=4, item_id=4)]}
+        normalize_causal_ledger(out)
+        norm_sequence(out)
+        assert _span_items(out)[0]["event_id"] == 4
+
+
 class TestTheValidatorDoesNotKillABeatOverBookkeeping:
     """FOUND BY A LIVE RUN, not by a test. Beat 4 of the first real
     playthrough died outright:

@@ -4012,7 +4012,26 @@ def cut_short_speech(text, ratio=0.6):
 #: between the model and every reader, silently. That has now cost three
 #: fields in one day: `category` and `note` (no work item reached any hand at
 #: all), then `items`.
-SPAN_FIELDS = ("category", "note", "items")
+#: What survives normalization onto the built element, because `norm_sequence`
+#: rebuilds every element from a fixed key set and anything not named here is
+#: dropped on the floor.
+#:
+#: THE CAUSAL HALF WAS MISSING AND IT COST THE WHOLE INTERPRET FAN-OUT.
+#: `item_id` is the join `compile_transforms` needs, and a transform arriving
+#: without one is REJECTED ("missing item_id") -- so with the id stripped
+#: here, every specialist transform at the interpret stage was discarded by
+#: the engine that asked for it. Measured live 2026-09-12: the spatial hand
+#: answered a beat and its answer was thrown away, and the objects hand ran on
+#: a belt taken off and dropped, with no `object_name` to match and no id to
+#: return under, leaving the belt in no ledger anywhere. Resolve was unharmed
+#: because its sequence never passes through here.
+#:
+#: `categories` rides along beside the folded `category` because a span may
+#: name two ledgers and only the list says so; keeping just the singular one
+#: silently halves the multi-hand routing this contract is built on.
+SPAN_FIELDS = ("category", "categories", "note", "items",
+               "chrono_id", "item_id", "object_name", "act",
+               "source_entity_id", "actor", "from_declaration")
 
 
 def _restore_span_fields(source, clean, before):
