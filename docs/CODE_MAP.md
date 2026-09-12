@@ -47,7 +47,7 @@
 | `llm/prompts.py` | 547 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 4142 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
-| `llm/schemas.py` | 6196 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `llm/schemas.py` | 6271 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2434 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 398 |  | — |
@@ -659,10 +659,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
+| `semantic_output_errors()` | 5622 | 350 lines |
 | `preprocess_llm_output()` | 4753 | 336 lines |
-| `semantic_output_errors()` | 5622 | 281 lines |
 | `_lenient_coerce()` | 786 | 159 lines |
-| `validate_llm_output_strict()` | 6064 | 133 lines |
+| `validate_llm_output_strict()` | 6133 | 139 lines |
 | `canonicalize_prose_markup()` | 4558 | 102 lines |
 | `_uncross_concealed_speech()` | 4682 | 69 lines |
 | `_coerce_station_table()` | 85 | 65 lines |

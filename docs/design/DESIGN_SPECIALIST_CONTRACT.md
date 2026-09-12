@@ -1579,6 +1579,59 @@ the two shapes a real model produces are now recovered rather than fatal.
 never be able to cost a beat. Two correct rulings were thrown away to enforce
 precision on a provenance string.
 
+### 4q-bis. A GUARD MAY NOT DESTROY A BEAT IT CANNOT JUSTIFY
+
+Four beat-deaths in one afternoon, all from the validator, and the causes
+turned out to be three different faults wearing one coat.
+
+**Guarding a field nothing reads.** `source_event_id` had to match exactly.
+Nothing downstream consumes it; attribution is `source_entity_id`'s job and
+was checked separately and correct both times.
+
+**Holding a stricter vocabulary than the code downstream.** `categories` had
+to be exact channel names, while `manifest_category_targets` has accepted a
+hand name as a coarser-but-valid answer since 2026-09-09, and
+`_unrouted_rulings` already reports an unroutable one per span, non-fatally,
+to the next beat's author. The validator was duplicating an existing report
+and making it lethal. It also refused the pack's own aliases: `inventory`
+routes to `inventory_ops` and was being rejected.
+
+**Encoding a wrong model.** `source_entity_id` had to be an identity that
+SUPPLIED input. Not strictness — a false premise. Natural prose narrates other
+people, so a row's actor is often not its typist, and the field was doing two
+jobs at once.
+
+**The rule that came out of it:**
+
+> A check may be fatal only if nothing downstream reads the field, repairs it,
+> or already reports it.
+
+Everything demoted failed that test, and the sharpest case is the plainest:
+`item_id` uniqueness and positivity are REPAIRED by `normalize_causal_ledger`,
+the very next function to touch the output. The beat was being destroyed for
+something fixed one line later.
+
+    validator:  item_id values must be unique / dense from 1
+                ledgers must be ordered by chrono_id
+    normalizer: chrono=1 item=5 -> chrono=3 item=6 -> chrono=2 item=9
+
+Density is read by nobody — the join is id equality, not position — and
+`compile_transforms` sorts by `chrono_id` itself, so the ordering check is
+redundant with the compiler that runs immediately after it.
+
+Demoted to notes on `ValidationReport.warnings`, so the information survives
+without the beat dying for it: id positivity, id uniqueness, id density,
+chrono ordering, empty `object_name` (a matching hint — its absence degrades
+matching, not the ruling), and unroutable categories.
+
+Still fatal, and rightly: an empty `ledgers` against non-empty input, an empty
+`event`, an empty `resolution_notes`, a `commitment` outside its two values,
+and an actor the payload never names. That set is "the answer is malformed or
+says nothing", which is the only thing worth throwing a turn away for.
+
+Measured: a beat carrying EVERY demoted fault at once now validates, with nine
+notes and no errors, while all five fatal cases still fail.
+
 ### And the one that had disabled the interpret fan-out entirely
 
 The belt beat is the clearest thing four runs produced. *You work the belt off
