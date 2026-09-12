@@ -165,9 +165,18 @@ def test_current_director_rejects_invented_sources_and_unknown_channels():
     report = validate_llm_output_strict(
         "director_resolve", {"ledgers": [ledger]}, source_payload=payload)
     assert not report.valid
-    assert any("source_entity_id was not supplied" in error
+    # An invented source is still refused -- it is neither a supplied source
+    # nor an identity the payload names. (A KNOWN identity that supplied no
+    # input of its own IS accepted now; natural prose narrates other people,
+    # and their rows belong to them. See test_speech_is_a_channel.)
+    assert any("neither a supplied source nor a known identity" in error
                for error in report.errors)
-    assert any("unknown channels" in error for error in report.errors)
+    # An unroutable channel is REPORTED, not fatal: `_unrouted_rulings`
+    # already names it per span on the next beat, and losing one span beats
+    # losing the beat it was in. See
+    # test_speech_is_a_channel.TestAGuardMayNotDestroyABeatItCannotJustify.
+    assert any("nothing answers to" in str(note)
+               for note in report.warnings), report.warnings
 
 
 def test_recompiler_preserves_list_transforms_and_replaces_scalar_state():

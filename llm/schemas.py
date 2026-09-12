@@ -5624,8 +5624,31 @@ def semantic_output_errors(
     output: dict,
     *,
     source_payload: dict | None = None,
+    notes: list | None = None,
 ) -> list[str]:
+    """Everything that makes an answer UNUSABLE. Anything less goes to `notes`.
+
+    A FATAL CHECK DESTROYS A BEAT, which is the most expensive thing this
+    engine can lose, so one has to earn the right. The rule, learned the
+    hard way across four live beat-deaths in one afternoon:
+
+        a check may be fatal only if nothing downstream reads the field,
+        repairs it, or already reports it.
+
+    Everything demoted below failed that test. `item_id` uniqueness and
+    positivity are REPAIRED by `normalize_causal_ledger`, the very next
+    function to touch the output -- the beat was dying for something already
+    fixed a line later. Density is needed by nobody: the join is id equality,
+    not position. Ordering is REDUNDANT: `compile_transforms` sorts by
+    `chrono_id` itself. An unroutable category is already REPORTED, per-span
+    and non-fatally, by `_unrouted_rulings` -- and losing one span beats
+    losing the beat that span was in. `object_name` is a matching hint, so
+    its absence degrades matching rather than invalidating a ruling.
+
+    What stays fatal is the answer being malformed or saying nothing.
+    """
     errors = []
+    noted = notes if notes is not None else []
     source_payload = source_payload or {}
 
     def causal_ledger_errors():
@@ -5668,12 +5691,21 @@ def semantic_output_errors(
         }
         # The channels no hand owns because the ENGINE settles them. Spelled
         # here rather than imported: `agents` imports this module, so reading
-        # `director_scopes.ENGINE_CATEGORIES` back would close a cycle. The
-        # prompt does not ask for `speech` (see that constant's note) -- this
-        # is tolerance for a Director that reaches for it anyway, and
-        # rejecting the beat over a word the engine understands perfectly
-        # well is the failure this whole validator keeps being taught.
+        # `director_scopes.ENGINE_CATEGORIES` back would close a cycle.
         allowed_categories.add("speech")
+        # A HAND'S NAME IS A COARSER ANSWER TO "WHICH LEDGER", NOT A WRONG
+        # ONE. `manifest_category_targets` has accepted one for exactly that
+        # reason since 2026-09-09 -- it grants the hand its story's channels
+        # -- and this test did not, so the validator refused a vocabulary the
+        # router handles perfectly. Measured live: `categories: ["objects"]`
+        # and `["social"]` killed a beat whose routing would have been fine.
+        #
+        # Derived from the table this module already owns rather than
+        # duplicated, so the two cannot drift: the same failure the router's
+        # own docstring records ("one field's vocabulary was four times the
+        # other's, and nothing said so out loud"), one layer up.
+        allowed_categories.update(
+            role.split("director_", 1)[-1] for role in SPECIALIST_CHANNELS)
         for index, ledger in enumerate(ledgers):
             if not isinstance(ledger, dict):
                 found.append(f"ledgers.{index} must be an object")
@@ -5683,20 +5715,38 @@ def semantic_output_errors(
             chrono_id = ledger.get("chrono_id")
             if not isinstance(item_id, int) or isinstance(item_id, bool) \
                     or item_id <= 0:
-                found.append(f"{prefix}.item_id must be a positive integer")
+                noted.append(f"{prefix}.item_id was not a positive integer; "
+                             "the engine assigned one")
             else:
                 item_ids.append(item_id)
             if not isinstance(chrono_id, int) or isinstance(chrono_id, bool) \
                     or chrono_id <= 0:
-                found.append(f"{prefix}.chrono_id must be a positive integer")
+                noted.append(f"{prefix}.chrono_id was not a positive integer; "
+                             "the engine ordered it by position")
             else:
                 chrono_ids.append(chrono_id)
 
             entity_id = str(ledger.get("source_entity_id") or "").strip()
             source = sources.get(entity_id)
             if source is None:
-                found.append(
-                    f"{prefix}.source_entity_id was not supplied in event_inputs")
+                # A ROW BELONGS TO WHOSE CONDUCT IT IS, and that is not always
+                # whoever typed. Natural prose narrates other people -- `"Three,"
+                # she says` arrives inside the player's input -- and the contract
+                # asks the Director to attribute that row to Sera and mark it
+                # contestable rather than put her words in the player's mouth.
+                #
+                # Sera supplied no event_inputs group of her own, so an
+                # event_inputs-only test refused every correctly down-scoped row
+                # and killed the beat. Measured live: five rows, one paragraph.
+                # A KNOWN identity is therefore a valid actor; the provenance
+                # question (which input this came from) is `source_event_id`'s,
+                # and it has no group to check against when the actor is not
+                # itself a source.
+                if not (entity_id and entity_id in (
+                        source_payload.get("identity_index") or {})):
+                    found.append(
+                        f"{prefix}.source_entity_id is neither a supplied "
+                        "source nor a known identity")
             else:
                 # `authority_mode` IS NOT CHECKED, and is not asked for. It is
                 # the Director's working input -- how an asserted act is
@@ -5729,7 +5779,11 @@ def semantic_output_errors(
             if not str(ledger.get("event") or "").strip():
                 found.append(f"{prefix}.event is empty")
             if not str(ledger.get("object_name") or "").strip():
-                found.append(f"{prefix}.object_name is empty")
+                # A matching hint, not a ruling: without it `world_matches`
+                # resolves nothing and the hand works harder, but the row is
+                # still a valid causal statement.
+                noted.append(f"{prefix}.object_name is empty; the hand gets "
+                             "no world match for it")
             if not str(ledger.get("resolution_notes") or "").strip():
                 found.append(f"{prefix}.resolution_notes is empty")
             # THERE IS NO `kind`, deliberately. It said nothing `categories`
@@ -5749,20 +5803,35 @@ def semantic_output_errors(
                 unknown = sorted({str(value) for value in categories}
                                  - allowed_categories)
                 if unknown:
-                    found.append(
-                        f"{prefix}.categories contains unknown channels: "
-                        + ", ".join(unknown))
+                    # `_unrouted_rulings` already reports this per span, to
+                    # the Director, on the next beat -- with the one word
+                    # that reached nobody rather than the whole beat. Killing
+                    # the turn here reported the same thing by destroying
+                    # every OTHER span in it, including the ones that routed
+                    # perfectly. It also refused the pack's own aliases,
+                    # which the router resolves (`inventory` ->
+                    # `inventory_ops`) and this set does not list.
+                    noted.append(
+                        f"{prefix}.categories names channels nothing answers "
+                        "to: " + ", ".join(unknown))
 
+        # NONE OF THESE IS FATAL, and the measurement is why.
+        # `normalize_causal_ledger` renumbers a duplicate id on the very next
+        # pass; density is needed by nothing (the join is id equality, not
+        # position); and `compile_transforms` sorts by chrono_id itself, so
+        # an out-of-order answer is already ordered before anything reads it.
+        # Three checks that could destroy a beat and buy nothing.
         if len(item_ids) != len(set(item_ids)):
-            found.append("ledger item_id values must be unique")
+            noted.append("ledger item_id values repeat; the engine renumbered")
         if item_ids and set(item_ids) != set(range(1, len(item_ids) + 1)):
-            found.append("ledger item_id values must be dense from 1")
+            noted.append("ledger item_id values are not dense from 1")
         if chrono_ids:
             unique_chrono = sorted(set(chrono_ids))
             if unique_chrono != list(range(1, unique_chrono[-1] + 1)):
-                found.append("ledger chrono_id values must be dense from 1")
+                noted.append("ledger chrono_id values are not dense from 1")
             if chrono_ids != sorted(chrono_ids):
-                found.append("ledgers must be ordered by chrono_id")
+                noted.append("ledgers arrived out of chrono_id order; the "
+                             "recompiler sorts them")
         return found
 
     if step_key == "director_interpret":
@@ -6178,10 +6247,16 @@ def validate_llm_output_strict(
             errors=errors,
         )
 
+    # Two channels, deliberately. What makes an answer unusable fails the
+    # call; everything the engine can repair, order, or already reports
+    # elsewhere is a NOTE, so it reaches the warning log instead of
+    # destroying the beat it was found in.
+    semantic_notes = []
     semantic_errors = semantic_output_errors(
         step_key,
         output,
         source_payload=source_payload,
+        notes=semantic_notes,
     )
     semantic_errors = [
         _name_what_was_discarded(step_key, raw, error)
@@ -6192,5 +6267,5 @@ def validate_llm_output_strict(
         valid=not semantic_errors,
         output=output,
         errors=semantic_errors,
-        warnings=list(repairs),
+        warnings=list(repairs) + semantic_notes,
     )

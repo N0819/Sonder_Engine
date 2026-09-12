@@ -536,6 +536,200 @@ class TestAWordedRowReachesTheChannelEvenUnnamed:
         assert "A row carrying words always names speech" in sheet
 
 
+class TestARowBelongsToWhoseConductItIs:
+    """FOUND BY THE PARAGRAPH RUN, and it is a firewall-shaped gap.
+
+    Natural prose narrates other people. Given a paragraph where the player
+    writes Sera arriving and speaking -- `"Three," she says` -- the Director
+    attributed EVERY row to `persona:1`, so the compiled `speech` channel held
+    four things in the player's mouth that the player never said: two of
+    Sera's lines, a narrative sentence about what Sera told him, and a stage
+    direction.
+
+    The model was obeying its instructions. The contract said only
+    `source_entity_id, source_event_id: copy from the causing input` -- which
+    literally means "attribute every row to whoever typed it". The monolith
+    had carried the rule ("A volitional ACTION or line the player narrates FOR
+    another character is not the player's to complete -- down-scope it") and
+    it went out with the monolith.
+    """
+
+    def test_the_contract_says_a_row_belongs_to_its_actor(self):
+        from llm.prompts import get_prompt_body
+        sheet = get_prompt_body("director_resolve_lean", "en")
+        assert "WHOSE CONDUCT THE ROW IS, not whose input it came from" in sheet
+
+    def test_the_contract_says_another_bodys_conduct_is_contestable(self):
+        """An input's author states their own conduct and only CLAIMS anyone
+        else's -- which is what keeps a narrated NPC line out of that NPC's
+        mouth until they answer for themselves."""
+        from llm.prompts import get_prompt_body
+        sheet = get_prompt_body("director_resolve_lean", "en")
+        assert "only claims anyone else's" in sheet.casefold()
+
+    def test_a_narrated_characters_row_is_not_refused(self):
+        """AND THE FIX FOR THE FIX. Telling the Director to attribute a row to
+        its actor is useless if the validator then refuses it: at interpret
+        the only entity supplying input is the player, so every correctly
+        down-scoped row was rejected and the beat died --
+
+            director_interpret failed JSON validation:
+            ledgers.0.source_entity_id was not supplied in event_inputs; ...
+
+        -- five rows, one paragraph. `source_entity_id` was doing two jobs:
+        WHO TYPED (provenance, which is `source_event_id`'s question) and
+        WHOSE CONDUCT (attribution). A known identity is a valid actor
+        whether or not it supplied a group of its own.
+        """
+        payload = {
+            "event_inputs": [{
+                "entity_id": "persona:1", "authority_mode": "world_author",
+                "events": [{"event_id": "turn:2:primary:raw"}]}],
+            "identity_index": {"persona:1": "Corin", "character:1": "Sera"},
+        }
+        sera_speaks = {
+            "chrono_id": 1, "item_id": 1, "object_name": "Sera",
+            "source_entity_id": "character:1",
+            "source_event_id": "turn:2:primary:raw",
+            "event": "Three.", "commitment": "contestable",
+            "resolution_notes": "Sera has said there were three.",
+            "categories": ["speech"],
+        }
+        assert schemas.semantic_output_errors(
+            "director_interpret", {"ledgers": [sera_speaks]},
+            source_payload=payload) == []
+
+    def test_an_identity_nobody_has_heard_of_is_still_refused(self):
+        """The widening must not become a hole: an actor the payload never
+        names is the Director inventing a person."""
+        payload = {
+            "event_inputs": [{
+                "entity_id": "persona:1", "authority_mode": "world_author",
+                "events": [{"event_id": "e1"}]}],
+            "identity_index": {"persona:1": "Corin"},
+        }
+        invented = {
+            "chrono_id": 1, "item_id": 1, "object_name": "x",
+            "source_entity_id": "character:99", "source_event_id": "e1",
+            "event": "Three.", "commitment": "asserted",
+            "resolution_notes": "n", "categories": ["speech"],
+        }
+        assert schemas.semantic_output_errors(
+            "director_interpret", {"ledgers": [invented]},
+            source_payload=payload)
+
+    @pytest.mark.parametrize("category", sorted(SPECIALISTS))
+    def test_a_hand_name_is_a_coarser_answer_not_a_wrong_one(self, category):
+        """`manifest_category_targets` has accepted a hand name since
+        2026-09-09 -- it grants that hand its story's channels -- and this
+        validator did not, so a beat died on `categories: ["objects"]` whose
+        routing would have been perfectly fine. The validator and the router
+        must not hold two different vocabularies; that exact drift is what
+        the router's own docstring was written about."""
+        payload = {
+            "event_inputs": [{
+                "entity_id": "persona:1", "authority_mode": "world_author",
+                "events": [{"event_id": "e1"}]}],
+            "identity_index": {"persona:1": "Corin"},
+        }
+        row = {"chrono_id": 1, "item_id": 1, "object_name": "x",
+               "source_entity_id": "persona:1", "source_event_id": "e1",
+               "event": "e", "commitment": "asserted",
+               "resolution_notes": "n", "categories": [category]}
+        assert schemas.semantic_output_errors(
+            "director_interpret", {"ledgers": [row]},
+            source_payload=payload) == []
+        from agents.director import manifest_category_targets
+        assert manifest_category_targets(category)
+
+    def test_a_row_attributed_elsewhere_still_compiles(self):
+        """The engine must carry the down-scoped row, not just ask for it."""
+        row = _row(1, 1, "speech", "Three.",
+                   source_entity_id="character:1", commitment="contestable")
+        built = speech_transforms([row])
+        assert len(built) == 1
+        assert built[0]["patch"]["speech"][0]["source_entity_id"] \
+            == "character:1"
+        assert built[0]["patch"]["speech"][0]["commitment"] == "contestable"
+
+
+class TestAGuardMayNotDestroyABeatItCannotJustify:
+    """The rule four live beat-deaths in one afternoon paid for:
+
+        a check may be fatal only if nothing downstream reads the field,
+        repairs it, or already reports it.
+
+    Every demotion below failed that test. `item_id` uniqueness and
+    positivity are REPAIRED by `normalize_causal_ledger` on the very next
+    pass -- the beat was dying for something fixed a line later. Density is
+    read by nobody; the join is id equality, not position. Ordering is
+    REDUNDANT with `compile_transforms`, which sorts by chrono itself. An
+    unroutable category is already REPORTED per-span by `_unrouted_rulings`,
+    and losing one span beats losing the beat it was in. `object_name` is a
+    matching hint, so its absence degrades matching, not the ruling.
+    """
+
+    payload = {
+        "event_inputs": [{"entity_id": "persona:1",
+                          "authority_mode": "world_author",
+                          "events": [{"event_id": "e1"}]}],
+        "identity_index": {"persona:1": "Corin", "character:1": "Sera"},
+    }
+
+    @staticmethod
+    def _row(**over):
+        row = {"chrono_id": 1, "item_id": 1, "object_name": "x",
+               "source_entity_id": "persona:1", "source_event_id": "e1",
+               "event": "e", "commitment": "asserted",
+               "resolution_notes": "n", "categories": ["poses"]}
+        row.update(over)
+        return row
+
+    def _report(self, *ledgers):
+        return schemas.validate_llm_output_strict(
+            "director_interpret", {"ledgers": list(ledgers)},
+            source_payload=self.payload)
+
+    def test_a_beat_carrying_every_demoted_fault_still_survives(self):
+        report = self._report(
+            self._row(item_id=5, chrono_id=3, object_name="",
+                      categories=["geography"]),
+            self._row(item_id=5, chrono_id=1, categories=["inventory"]),
+            self._row(item_id=0, chrono_id=0),
+        )
+        assert report.valid, report.errors
+        assert report.errors == []
+
+    def test_and_says_so_rather_than_swallowing_it(self):
+        """Demoted, not deleted: the information still reaches the log."""
+        report = self._report(self._row(item_id=5), self._row(item_id=5))
+        assert any("renumbered" in str(w) for w in report.warnings), \
+            report.warnings
+
+    def test_the_packs_own_alias_no_longer_kills_a_beat(self):
+        """`inventory` is the alias the router resolves to `inventory_ops`;
+        the validator's channel list does not carry aliases, so it was
+        refusing a word the engine understands."""
+        report = self._report(self._row(categories=["inventory"]))
+        assert report.valid
+        from agents.director import manifest_category_targets
+        assert manifest_category_targets("inventory")
+
+    @pytest.mark.parametrize("fault,over", [
+        ("an empty event", {"event": ""}),
+        ("no ruling at all", {"resolution_notes": ""}),
+        ("a commitment nothing means", {"commitment": "maybe"}),
+        ("an invented person", {"source_entity_id": "character:99"}),
+    ])
+    def test_what_stays_fatal_stays_fatal(self, fault, over):
+        """The answer being malformed or saying nothing. Demoting these would
+        make the validator decorative."""
+        assert not self._report(self._row(**over)).valid, fault
+
+    def test_answering_nothing_at_all_is_still_fatal(self):
+        assert not self._report().valid
+
+
 class TestNormalizationDoesNotEatTheRowsIdentity:
     """THE ONE THAT COST THE WHOLE INTERPRET FAN-OUT.
 
@@ -675,8 +869,11 @@ class TestTheValidatorDoesNotKillABeatOverBookkeeping:
     def test_recovery_is_not_a_hole(self):
         """The reasons a beat SHOULD be refused still refuse it."""
         assert self._errors(self._ledger(source_entity_id="character:99"))
-        assert self._errors(self._ledger(categories=["geography"]))
         assert self._errors(self._ledger(event=""))
+        # `categories=["geography"]` is NO LONGER fatal -- it is reported as
+        # a note, because `_unrouted_rulings` already reports it per span and
+        # losing one span beats losing the beat. See
+        # TestAGuardMayNotDestroyABeatItCannotJustify.
 
     def test_the_second_live_shape_a_rebuilt_turn_number(self):
         """The third run died the same way on a different mangling: handed
