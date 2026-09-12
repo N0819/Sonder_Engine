@@ -29,6 +29,8 @@ from agents import composer
 from agents.director import (
     ENGINE_CATEGORIES,
     SPECIALISTS,
+    span_owners,
+    _span_items,
     declared_speech_transforms,
     normalize_causal_ledger,
     speech_transforms,
@@ -40,15 +42,22 @@ from world.causality import LIST_CHANNELS, compile_transforms
 
 
 def _row(chrono_id, item_id, kind, event, **over):
+    """A ledger row. `kind` is the TEST's shorthand, not a field -- there is
+    no `kind` on a row. "speech" means the words were given, "communication"
+    means only a verb was, and anything else is an ordinary act."""
     row = {
         "chrono_id": chrono_id, "item_id": item_id, "object_name": "Sera",
-        "source_entity_id": "persona:1", "authority_mode": "world_author",
-        "source_event_id": "turn:9:primary:raw", "kind": kind, "event": event,
+        "source_entity_id": "persona:1",
+        "source_event_id": "turn:9:primary:raw", "event": event,
         "observable": "", "commitment": "asserted", "targets": ["Sera"],
         "visibility": "overt", "conceal_from": [], "volume": "normal",
         "movement": None, "ability": "", "difficulty": "",
         "resolution_notes": "", "categories": ["speech"],
     }
+    if kind == "communication":
+        row["act"] = "ask"
+    elif kind != "speech":
+        row["categories"] = []
     row.update(over)
     return row
 
@@ -101,11 +110,14 @@ class TestWordsAndDescriptionsAreDifferentActs:
         assert out["causal_ledger"][0]["act"] == "explain"
         assert out["sequence"][0]["act"] == "explain"
 
-    def test_a_communication_with_no_verb_still_renders(self):
+    def test_a_described_row_with_no_verb_still_renders(self):
         """`act` is the one field a described row adds, so a Director that
-        omits it must not produce an empty predicate."""
-        out = _projected(_row(1, 1, "communication", "that the boat left"))
-        assert out["sequence"][0]["act"] == "say"
+        writes a proposition and forgets the verb must not produce an empty
+        predicate. It cannot be told apart from a quote in that case, so it
+        renders as one -- but it renders."""
+        out = _projected(_row(1, 1, "communication", "that the boat left",
+                              act=""))
+        assert out["sequence"][0]["type"] == "speech"
         assert _heard(out["sequence"][0]).strip()
 
 
@@ -139,8 +151,8 @@ class TestTheChannelCompiles:
                 _row(4, 4, "communication", "about the boat", act="ask")]
         built = speech_transforms(rows)
         assert len(built) == 2
-        assert [t["patch"]["speech"][0]["mode"] for t in built] \
-            == ["quote", "described"]
+        assert [bool(t["patch"]["speech"][0].get("act")) for t in built] \
+            == [False, True]
 
     def test_a_spoken_row_with_nothing_said_mints_no_line(self):
         """A row the Director failed to fill is not a silence. Minting from
@@ -149,7 +161,20 @@ class TestTheChannelCompiles:
 
     def test_the_speaker_is_an_engine_identity_not_a_display_name(self):
         built = speech_transforms([_row(1, 1, "speech", "Hello.")])
-        assert built[0]["patch"]["speech"][0]["speaker"] == "persona:1"
+        row = built[0]["patch"]["speech"][0]
+        assert row["source_entity_id"] == "persona:1"
+
+    def test_the_channel_carries_the_row_not_a_copy_of_it(self):
+        """One line, one record. A reshaped copy beside the ledger row is a
+        second representation of the same fact, and the two can drift."""
+        row = speech_transforms(
+            [_row(1, 1, "speech", "Hello.")])[0]["patch"]["speech"][0]
+        assert row["event"] == "Hello."
+        assert row["object_name"] == "Sera"
+        assert row["resolution_notes"] == ""
+        # ...minus the Director's own working input, which is not a hand's
+        # and not the world's.
+        assert "authority_mode" not in row
 
     def test_the_compiled_channel_carries_the_beats_chronology(self):
         built = speech_transforms([_row(2, 2, "speech", "second"),
@@ -157,7 +182,7 @@ class TestTheChannelCompiles:
         diff, _history, rejected = compile_transforms(
             built, allowed_channels=("speech",), specialist="engine")
         assert rejected == []
-        assert [row["text"] for row in diff["speech"]] == ["first", "second"]
+        assert [row["event"] for row in diff["speech"]] == ["first", "second"]
         assert [row["from_event"] for row in diff["speech"]] == [1, 2]
 
     def test_three_sources_do_not_collide_in_chronology(self):
@@ -176,9 +201,41 @@ class TestTheChannelCompiles:
             interpret + resolve + declared,
             allowed_channels=("speech",), specialist="engine")
         assert rejected == []
-        assert [row["text"] for row in diff["speech"]] \
+        assert [row["event"] for row in diff["speech"]] \
             == ["player", "world", "cast"]
         assert [row["from_event"] for row in diff["speech"]] == [1, 2, 3]
+
+    def test_one_line_from_two_producers_lands_once(self):
+        """MEASURED LIVE. Both the resolve ledger and the character's own
+        declaration carry the beat's speech, so both carried Sera's "All
+        three?" -- once as `character:1`, once as the display name `Sera` --
+        and the channel held it twice. The words are the only thing the two
+        agree on, so they are the key."""
+        directors = speech_transforms(
+            [_row(1, 1, "speech", "All three?",
+                  source_entity_id="character:1", targets=["Corin"])])
+        declared = declared_speech_transforms(
+            {"Sera": [{"text": '"All three?"'}]}, chrono_offset=1,
+            already=[t["patch"]["speech"][0]["event"] for t in directors])
+        assert declared == []
+
+        # ...and a line the Director's rows did NOT carry still gets in.
+        other = declared_speech_transforms(
+            {"Sera": [{"text": "Sealed how?"}]}, chrono_offset=1,
+            already=[t["patch"]["speech"][0]["event"] for t in directors])
+        assert len(other) == 1
+
+    def test_the_directors_row_is_the_one_that_survives(self):
+        """It carries the delivery facts -- targets, concealment, volume --
+        that a `char_speech` entry has none of."""
+        directors = speech_transforms(
+            [_row(1, 1, "speech", "All three?",
+                  source_entity_id="character:1", targets=["Corin"],
+                  conceal_from=["Bryn"], volume="mutter")])
+        row = directors[0]["patch"]["speech"][0]
+        assert row["targets"] == ["Corin"]
+        assert row["conceal_from"] == ["Bryn"]
+        assert row["volume"] == "mutter"
 
     def test_a_declared_line_with_no_text_is_skipped(self):
         assert declared_speech_transforms({"Sera": [{"text": ""}]}) == []
@@ -196,6 +253,33 @@ class TestSpeechIsTheEnginesOwnCategory:
 
     def test_the_category_is_declared_engine_owned(self):
         assert "speech" in ENGINE_CATEGORIES
+
+    def test_the_category_is_what_routes_a_row_to_the_recompiler(self):
+        """The category does the work, exactly as it does for every other
+        channel -- and it may sit beside a hand's channel in the same list,
+        so one line reaches the recompiler AND the social ledger. Measured on
+        the first live run: the Director filed spoken rows under
+        `telling_ops`, which is correct for a telling; naming `speech` too is
+        what puts the words in the world."""
+        both = _row(1, 1, "speech", "Hello.",
+                    categories=["speech", "telling_ops"])
+        assert len(speech_transforms([both])) == 1
+        assert "social" in span_owners(_span_items(
+            _projected(both))[0])
+
+        unnamed = _row(1, 1, "speech", "Hello.", categories=["telling_ops"])
+        assert speech_transforms([unnamed]) == []
+
+    def test_the_contract_does_not_ask_for_the_speech_category(self):
+        """AND IT MUST NOT. `telling_ops` is the right answer for a line that
+        lands in the social ledger; instructing the Director to write `speech`
+        instead would divert exactly those spans away from the social hand to
+        no hand at all. The word is tolerated, never requested."""
+        from llm.prompts import get_prompt_body
+        sheet = get_prompt_body("director_resolve_lean", "en")
+        assert "categories" in sheet          # the field is still taught
+        assert "settles speech" not in sheet
+        assert "name it on every speech" not in sheet
 
     def test_a_speech_span_is_not_reported_as_unrouted(self):
         """`speech` reaches no hand on purpose. Reporting it would tell the
@@ -215,17 +299,32 @@ class TestSpeechIsTheEnginesOwnCategory:
 
 
 class TestThePromptTeachesTheDistinction:
-    def test_the_contract_names_both_spoken_kinds(self):
+    def test_the_contract_teaches_the_verb_as_the_distinction(self):
+        """No `kind`, no flag: a verb is supplied exactly when the words are
+        not, and that is the whole of it."""
         from llm.prompts import get_prompt_body
         sheet = get_prompt_body("director_resolve_lean", "en")
-        assert "communication" in sheet
+        assert "Omit it when you have the line itself" in sheet
         # The rule that keeps a description out of quotation marks.
         assert "never invent a quote" in sheet
+
+    def test_the_contract_asks_for_neither_kind_nor_authority_on_a_row(self):
+        from llm.prompts import get_prompt_body
+        sheet = get_prompt_body("director_resolve_lean", "en")
+        shape = sheet[sheet.index('{"ledgers"'):]
+        assert '"kind"' not in shape
+        assert '"authority_mode"' not in shape
 
     def test_the_contract_says_where_the_words_go(self):
         from llm.prompts import get_prompt_body
         sheet = get_prompt_body("director_resolve_lean", "en")
-        assert "words exactly as spoken" in sheet
+        assert "the words ALONE" in sheet
+        # AND WITHOUT WHAT SURROUNDS THEM. The live run's Director packed the
+        # attribution into the row -- `"The wells are sealed," you tell her.`
+        # -- and the renderer wraps a speech body in quotes, so the page would
+        # have read: You says: ""The wells are sealed," you tell her."
+        assert "without the attribution around them" in sheet
+        assert "one row per line" in sheet
 
 
 class TestTheDirectorCanConstructAnUnnamedTarget:
@@ -305,6 +404,50 @@ class TestTheDirectorCanConstructAnUnnamedTarget:
         # Unmatched is ABSENT, never a fabricated guess.
         assert "nothing anyone has heard of" not in row["target_matches"]
 
+    def test_authority_mode_never_reaches_a_hand(self):
+        """It is the DIRECTOR's working input -- how an asserted act is judged
+        contestable -- and the answer already arrived as `commitment`. Handing
+        a hand the reasoning beside the ruling invites it to re-derive the
+        ruling, and a hand that disagrees with the Director about whether
+        something happened is what the fan-out cannot reconcile."""
+        from agents.director import _span_items, _specialist_payload
+
+        out = {"ledgers": [_row(1, 1, "action", "hauls the door open",
+                                categories=["rooms"])]}
+        normalize_causal_ledger(out)
+        # It IS on the engine's own ledger, where the floors want it.
+        assert out["causal_ledger"][0]["authority_mode"]
+
+        view = {"source": "causal_ledger", "ledger_notes": {}, "dialogue": [],
+                "manifest": [], "spans": _span_items(out),
+                "declared_actions": {}, "dice": [], "player": "You",
+                "cast": [], "declaration": {}, "prose": ""}
+
+        class _Ctx:
+            def __getattr__(self, name):
+                raise AttributeError(name)
+
+        # `spatial` builds from the scene alone, so it can be driven here end
+        # to end. Every other hand goes through the same one-line strip, so
+        # the choke point below is what actually covers all five.
+        payload = _specialist_payload("spatial", _Ctx(), self.scene, view,
+                                      {"nonce": 0})
+        rows = payload.get("ledgers") or []
+        assert rows
+        for row in rows:
+            assert "authority_mode" not in row
+            assert "item_id" not in row
+
+    def test_the_strip_is_one_choke_point_for_every_hand(self):
+        """Whatever a hand's payload adds, this is the only door a ledger row
+        goes through -- so testing it is testing all five."""
+        from agents.director import _specialist_ledger
+
+        stripped = _specialist_ledger(
+            {"event": "x", "authority_mode": "world_author",
+             "item_id": 3, "chrono_id": 2, "targets": ["Sera"]})
+        assert stripped == {"event": "x", "targets": ["Sera"]}
+
     def test_the_contract_tells_the_director_the_index_is_there(self):
         from llm.prompts import get_prompt_body
         sheet = get_prompt_body("director_resolve_lean", "en")
@@ -315,6 +458,173 @@ class TestTheDirectorCanConstructAnUnnamedTarget:
         from agents.director import SPECIALISTS as _hands
         for name in _hands:
             assert "target_matches" in specialist_prompt(name, (), "en"), name
+
+
+class TestAWordedRowReachesTheChannelEvenUnnamed:
+    """FROM THE SECOND LIVE RUN, and it is why the category alone is not
+    enough. Handed a beat with three quoted lines, the Director filed all
+    three under `public_evidence` -- a defensible ledger for a thing said in
+    a market -- and named `speech` on none of them.
+
+    Under a category-only rule the words sat in `event` and reached nothing:
+    no channel row, no `dialogue_log`, so no concealment enforced on the line
+    the player had deliberately lowered their voice for, and nothing anywhere
+    remembering that a word had been said. These are those exact rows.
+    """
+
+    @staticmethod
+    def _live(event, categories, **over):
+        row = {"chrono_id": 1, "item_id": 1, "object_name": "Sera",
+               "source_entity_id": "persona:1", "source_event_id": "e1",
+               "event": event, "observable": "speaks to Sera",
+               "commitment": "asserted", "targets": ["Sera"],
+               "visibility": "overt", "conceal_from": [], "volume": "normal",
+               "act": "", "resolution_notes": "n", "categories": categories}
+        row.update(over)
+        return row
+
+    def test_a_quoted_line_filed_as_public_evidence_is_still_speech(self):
+        quoted = self._live('"The wells are sealed."', ["public_evidence"])
+        out = _projected(quoted)
+        assert out["sequence"][0]["type"] == "speech"
+        assert len(speech_transforms([quoted])) == 1
+
+    def test_the_concealment_on_that_line_survives_with_it(self):
+        """The one that mattered: the player dropped their voice so a
+        bystander would not hear, and an unrecovered row enforces nothing."""
+        hushed = self._live('"Somebody did that on purpose."',
+                            ["public_evidence"], volume="quiet",
+                            conceal_from=["character:2"])
+        row = speech_transforms([hushed])[0]["patch"]["speech"][0]
+        assert row["conceal_from"] == ["character:2"]
+        assert row["volume"] == "quiet"
+
+    def test_a_described_row_is_recovered_by_its_verb(self):
+        """Beat 3 named `rooms` and still had `act: asks`."""
+        asked = self._live("what she saw at the gate last night", ["rooms"],
+                           act="asks")
+        assert _projected(asked)["sequence"][0]["type"] == "communication"
+        assert len(speech_transforms([asked])) == 1
+
+    def test_recovery_does_not_swallow_ordinary_acts(self):
+        """The row beside them in the same beat. An act with no words and no
+        verb stays an act -- otherwise the recovery is just a leak."""
+        acted = self._live("You straighten and find Sera across the stalls.",
+                           ["positions", "poses"], observable="straightens")
+        assert _projected(acted)["sequence"][0]["type"] == "action"
+        assert speech_transforms([acted]) == []
+
+    def test_a_written_notice_is_not_a_spoken_line(self):
+        """The quote must OPEN the row. An act that merely contains one --
+        nailing up a board, reading a label aloud is not what this is -- must
+        not mint dialogue, because inventing a line nobody said is the one
+        error worse than losing one."""
+        notice = self._live('nails up a board reading "the wells are sealed"',
+                            ["artifact_ops"], observable="nails up a board")
+        assert _projected(notice)["sequence"][0]["type"] == "action"
+        assert speech_transforms([notice]) == []
+
+    def test_the_category_still_wins_over_the_shape(self):
+        """A Director that says `speech` is believed whatever the event looks
+        like -- recovery is the fallback, never the authority."""
+        plain = self._live("the wells are sealed", ["speech"])
+        assert _projected(plain)["sequence"][0]["type"] == "speech"
+
+    def test_the_category_is_still_what_the_contract_asks_for(self):
+        from llm.prompts import get_prompt_body
+        sheet = get_prompt_body("director_resolve_lean", "en")
+        assert "A row carrying words always names speech" in sheet
+
+
+class TestTheValidatorDoesNotKillABeatOverBookkeeping:
+    """FOUND BY A LIVE RUN, not by a test. Beat 4 of the first real
+    playthrough died outright:
+
+        RuntimeError: director_resolve failed JSON validation:
+        ledgers.1.source_event_id was not supplied by its source
+
+    Every row was correct -- right entity, right authority, right causality.
+    The contract asks for several rows per source event, so the model split
+    one declaration into three and numbered them: handed
+    `turn:4:character:1` it wrote `turn:4:character:1:0:action`. A whole beat
+    was lost on the shape of a provenance string.
+
+    The two `communication`/`speech` cases are the same class and were mine:
+    the validator's closed sets would have rejected every described-speech
+    beat the moment the new kind was used.
+    """
+
+    payload = {"event_inputs": [{
+        "entity_id": "character:1", "authority_mode": "autonomous",
+        "events": [{"event_id": "turn:4:character:1"}],
+    }]}
+
+    @staticmethod
+    def _ledger(source_event_id="turn:4:character:1", **over):
+        row = {"chrono_id": 1, "item_id": 1, "object_name": "Sera",
+               "source_entity_id": "character:1",
+               "authority_mode": "autonomous",
+               "source_event_id": source_event_id, "kind": "action",
+               "event": "glances at the belt", "observable": "glances",
+               "commitment": "asserted", "targets": [],
+               "visibility": "overt", "conceal_from": [], "volume": "normal",
+               "movement": None, "ability": "", "difficulty": "",
+               "resolution_notes": "She has looked at the belt.",
+               "categories": []}
+        row.update(over)
+        return row
+
+    def _errors(self, *ledgers, payload=None):
+        return schemas.semantic_output_errors(
+            "director_resolve", {"ledgers": list(ledgers)},
+            source_payload=payload or self.payload)
+
+    def test_the_beat_that_died_now_survives(self):
+        assert self._errors(
+            self._ledger(),
+            self._ledger("turn:4:character:1:0:action", item_id=2, chrono_id=2),
+            self._ledger("turn:4:character:1:1:speech", item_id=3, chrono_id=3),
+        ) == []
+
+    def test_a_described_speech_row_is_a_valid_kind(self):
+        assert self._errors(self._ledger(kind="communication")) == []
+
+    def test_the_engine_owned_category_is_accepted(self):
+        assert self._errors(self._ledger(categories=["speech"])) == []
+
+    def test_a_source_with_one_event_is_never_ambiguous(self):
+        """Whatever was written, there is only one event it can mean."""
+        assert self._errors(self._ledger("something else entirely")) == []
+
+    def test_recovery_is_not_a_hole(self):
+        """The reasons a beat SHOULD be refused still refuse it."""
+        assert self._errors(self._ledger(source_entity_id="character:99"))
+        assert self._errors(self._ledger(categories=["geography"]))
+        assert self._errors(self._ledger(event=""))
+
+    def test_the_second_live_shape_a_rebuilt_turn_number(self):
+        """The third run died the same way on a different mangling: handed
+        `turn:2:character:2:0:action`, the model wrote `turn:4:...` -- it
+        rebuilt the id from its own idea of the turn rather than copying, so
+        nothing matched by prefix. The shared TAIL picks the right one of the
+        entity's two events, which is the discrimination a reader makes."""
+        payload = {"event_inputs": [{
+            "entity_id": "character:2", "authority_mode": "autonomous",
+            "events": [{"event_id": "turn:2:character:2:0:action"},
+                       {"event_id": "turn:2:character:2:1:speech"}]}]}
+        for written in ("turn:4:character:2:0:action",
+                        "turn:4:character:2:1:speech"):
+            assert self._errors(
+                self._ledger(written, source_entity_id="character:2"),
+                payload=payload) == [], written
+
+    def test_a_genuinely_ambiguous_id_is_still_reported(self):
+        """Two candidate events and a string matching neither: guessing would
+        attribute causality the model never stated."""
+        two = {"event_inputs": [{
+            "entity_id": "character:1", "authority_mode": "autonomous",
+            "events": [{"event_id": "turn:4:a"}, {"event_id": "turn:4:b"}]}]}
+        assert self._errors(self._ledger("turn:4:zzz"), payload=two)
 
 
 class TestTheAddresseeReachesTheDialogueLog:

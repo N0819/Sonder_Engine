@@ -504,6 +504,15 @@ def _specialist_ledger(item):
     visible = dict(visible)
     visible.pop("item_id", None)
     visible.pop("chrono_id", None)
+    # AUTHORITY IS THE DIRECTOR'S WORKING INPUT, NOT A HAND'S.
+    #
+    # It is how an asserted act is judged contestable or not, and that
+    # judgement is made before a row is routed anywhere -- the answer arrives
+    # as `commitment`, which is on the row. Passing the reasoning along with
+    # the ruling invites a hand to re-derive the ruling, and a hand that
+    # disagrees with the Director about whether something happened is the one
+    # thing the fan-out has no way to reconcile.
+    visible.pop("authority_mode", None)
     return visible
 
 

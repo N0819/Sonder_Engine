@@ -2352,7 +2352,82 @@ def _beat_item_refs(listed):
     return rows
 
 
-def normalize_causal_ledger(out):
+#: Quote marks the contract itself mandates ("preserve quoted words exactly"),
+#: in the forms a model actually emits. NOT a vocabulary guess -- punctuation
+#: is structure, and this is only ever a RECOVERY: the category is the signal,
+#: and this is how a row that carries words but forgot to say so still reaches
+#: the channel instead of vanishing.
+_QUOTE_MARKS = ('"', "“", "”", "«", "»", "「",
+                "」", "‘", "’")
+
+
+def _spoken_key(text):
+    """One line's identity for de-duplication: its words, and nothing else.
+
+    Quote marks and spacing differ between the Director's row and a
+    character's declaration for the same utterance, and the speaker differs
+    too -- `character:1` against the display name `Sera` -- so the words are
+    the only thing the two agree on.
+    """
+    stripped = str(text or "").strip().strip("\"'\u201c\u201d\u2018\u2019")
+    return " ".join(stripped.casefold().split())
+
+
+def row_is_spoken(entry):
+    """Does this ledger row put words into the world?
+
+    THE CATEGORY IS THE SIGNAL. `speech` in `categories` says so outright, and
+    that is what the contract asks for.
+
+    THE REST IS RECOVERY, and it is here because the first live run needed it.
+    Handed a beat with three quoted lines, the Director filed all three under
+    `public_evidence` -- a defensible ledger for a thing said in a market --
+    and named `speech` on none of them. Under a category-only rule the words
+    were right there in `event` and reached nothing: no channel row, no
+    `dialogue_log`, so no concealment enforced on the line the player had
+    lowered their voice for, and no memory that anyone had spoken.
+
+    So two structural tells stand in when the word is missing. An `act` is
+    only ever written for a spoken row whose words were withheld. And a
+    quotation mark is punctuation the contract already requires; it is not a
+    word list, and it is checked only after the category has failed to say
+    what the row plainly is.
+    """
+    if not isinstance(entry, dict):
+        return False
+    if "speech" in (entry.get("categories") or []):
+        return True
+    if str(entry.get("act") or "").strip():
+        return True
+    # THE QUOTE MUST OPEN THE ROW, not merely appear in it. The contract asks
+    # a spoken row for the words alone, so a line begins with its own quote --
+    # while `nails up a board reading "the wells are sealed"` is a carpentry
+    # act that happens to contain one. Minting speech from that would put a
+    # sentence in somebody's mouth that nobody said, and inventing dialogue
+    # is the one error worse than losing a line. Losing one is what the
+    # category is there to prevent, and the contract now asks for it outright.
+    return str(entry.get("event") or "").lstrip().startswith(_QUOTE_MARKS)
+
+
+def authority_by_entity(event_inputs):
+    """entity_id -> the authority mode the engine handed that source.
+
+    The Director is not asked to echo this back (see the contract): it is the
+    input it judges `commitment` WITH, and an echo can only agree or be
+    wrong. The engine knows what it sent, so the engine fills it in.
+    """
+    modes = {}
+    for group in event_inputs or []:
+        if not isinstance(group, dict):
+            continue
+        entity_id = str(group.get("entity_id") or "").strip()
+        mode = str(group.get("authority_mode") or "").strip()
+        if entity_id and mode:
+            modes[entity_id] = mode
+    return modes
+
+
+def normalize_causal_ledger(out, authority=None):
     """Make the Director's ledgers authoritative for legacy sequence readers.
 
     Positive model-authored ``chrono_id`` values preserve chronology across
@@ -2396,21 +2471,39 @@ def normalize_causal_ledger(out):
         object_name = str(entry.get("object_name") or "").strip()
         source_entity_id = str(entry.get("source_entity_id") or "").strip()
         source_event_id = str(entry.get("source_event_id") or "").strip()
-        kind = str(entry.get("kind") or "event").strip().casefold()
+        act = str(entry.get("act") or "").strip()
+        # WHAT THIS ROW IS, DERIVED -- there is no `kind` field, deliberately.
+        #
+        # It said nothing `categories` and `source_entity_id` were not already
+        # saying. A row is SPOKEN because it names the `speech` category; it
+        # is an EVENT because the world or the dice caused it rather than an
+        # actor; otherwise it is an act. A fourth thing to keep consistent
+        # with the first three is a fourth thing to get wrong.
+        spoken = row_is_spoken({**entry, "categories": categories})
+        worldly = str(entry.get("authority_mode") or "").strip().casefold() \
+            in ("world", "mechanical")
         note = str(entry.get("resolution_notes") or "").strip()
         normalized = {
             "chrono_id": chrono_id,
             "item_id": item_id,
             "object_name": object_name,
             "source_entity_id": source_entity_id,
-            "authority_mode": str(entry.get("authority_mode") or "autonomous"),
+            # Filled by the engine from what it handed this source, never
+            # read back off the row. It stays on the INTERNAL ledger because
+            # the deterministic floors want it; `_specialist_ledger` strips
+            # it before any hand sees it.
+            "authority_mode": (
+                (authority or {}).get(source_entity_id)
+                or str(entry.get("authority_mode") or "").strip()
+                or "autonomous"),
             "source_event_id": source_event_id,
-            "kind": kind,
             "event": event,
-            # Only a `communication` row carries one: the verb for an act
-            # whose words were never supplied ("asks", "explains"). A
-            # `speech` row needs no verb because it has the line itself.
-            "act": str(entry.get("act") or "").strip(),
+            # THE ONLY THING THAT SEPARATES A QUOTE FROM A DESCRIPTION, and
+            # it needs no flag: a verb is supplied exactly when the words
+            # were not. "asks", "explains", "warns" -- the row says what the
+            # act WAS because it cannot say what was said. A row with the
+            # line itself has no use for a verb and carries none.
+            "act": act,
             "observable": str(entry.get("observable") or "").strip(),
             "commitment": str(entry.get("commitment") or "asserted"),
             "targets": [str(value) for value in entry.get("targets") or []],
@@ -2439,7 +2532,7 @@ def normalize_causal_ledger(out):
             "note": note,
             "items": [{"id": item_id, "name": object_name}],
         }
-        if kind == "speech":
+        if spoken and not act:
             projected.update({
                 "type": "speech", "text": event,
                 "volume": normalized["volume"],
@@ -2459,7 +2552,7 @@ def normalize_causal_ledger(out):
                 "intended_target": (normalized["targets"][0]
                                     if normalized["targets"] else None),
             })
-        elif kind == "communication":
+        elif spoken:
             # SAYING A THING AND SAYING WHAT YOU SAID ARE DIFFERENT ACTS.
             # "I ask her what happened" supplies a proposition and no words;
             # `"What happened?"` supplies the words. Both are speech and only
@@ -2475,7 +2568,7 @@ def normalize_causal_ledger(out):
             # is `act` + `content`, so that is what the row projects to.
             projected.update({
                 "type": "communication",
-                "act": str(entry.get("act") or "").strip() or "say",
+                "act": act or "say",
                 "content": event,
                 "volume": normalized["volume"],
                 "visibility": normalized["visibility"],
@@ -2484,7 +2577,10 @@ def normalize_causal_ledger(out):
                 "intended_target": (normalized["targets"][0]
                                     if normalized["targets"] else None),
             })
-        elif kind == "action":
+        elif worldly:
+            projected.update({"type": "event", "description": event,
+                              "attempt": event})
+        else:
             projected.update({
                 "type": "action", "attempt": event,
                 "observable": normalized["observable"],
@@ -2493,9 +2589,6 @@ def normalize_causal_ledger(out):
                 "conceal_from": normalized["conceal_from"],
                 "targets": normalized["targets"],
             })
-        else:
-            projected.update({"type": "event", "description": event,
-                              "attempt": event})
         if categories:
             projected["category"] = categories[0]
         sequence.append(projected)
@@ -2577,8 +2670,6 @@ def causal_world_index(sc, here=None):
     return out
 
 
-#: The two ledger kinds that put words (or a proposition) into the world.
-SPOKEN_KINDS = frozenset({"speech", "communication"})
 
 
 def speech_transforms(ledger, *, chrono_offset=0):
@@ -2615,29 +2706,30 @@ def speech_transforms(ledger, *, chrono_offset=0):
     for entry in ledger or []:
         if not isinstance(entry, dict):
             continue
-        kind = str(entry.get("kind") or "").strip().casefold()
-        if kind not in SPOKEN_KINDS:
+        # THE CATEGORY IS THE ROUTING, exactly as it is for every other
+        # channel. A row addressed to `speech` is one the engine settles
+        # itself, and it may name `telling_ops` in the same breath -- one
+        # span, two ledgers, which is the rule this contract already runs on.
+        # `row_is_spoken` also recovers a row that carries words and forgot
+        # to say so; see its note for the beat that needed it.
+        if not row_is_spoken(entry):
             continue
-        text = str(entry.get("event") or "").strip()
-        if not text:
+        if not str(entry.get("event") or "").strip():
             # A spoken row with nothing said is not a silence -- a silence is
             # the absence of a row. It is a row the Director failed to fill,
             # and minting an empty line from it would put a body on the page
             # opening its mouth to say "".
             continue
-        quoted = kind == "speech"
-        row = {
-            "speaker": str(entry.get("source_entity_id") or ""),
-            "mode": "quote" if quoted else "described",
-            "text": text,
-            "targets": [str(value) for value in entry.get("targets") or []],
-            "volume": str(entry.get("volume") or "normal"),
-            "visibility": str(entry.get("visibility") or "overt"),
-            "conceal_from": [str(value)
-                             for value in entry.get("conceal_from") or []],
-        }
-        if not quoted:
-            row["act"] = str(entry.get("act") or "").strip() or "say"
+        # THE ROW ITSELF, not a record derived from it. Two representations of
+        # one line are two things that can disagree, and the channel exists so
+        # that what was said is kept the way what was done is kept.
+        #
+        # `authority_mode` is the one field dropped, because it is the
+        # Director's own working input -- how an asserted act is judged
+        # contestable -- and says nothing once the ruling is made. `chrono_id`
+        # and `item_id` go because the compiler re-stamps them.
+        row = {key: value for key, value in entry.items()
+               if key not in ("authority_mode", "chrono_id", "item_id")}
         try:
             chrono_id = int(entry.get("chrono_id") or 0)
         except (TypeError, ValueError):
@@ -2654,7 +2746,8 @@ def speech_transforms(ledger, *, chrono_offset=0):
     return transforms
 
 
-def declared_speech_transforms(declared, *, chrono_offset=0):
+def declared_speech_transforms(declared, *, chrono_offset=0,
+                               already=()):
     """A character's OWN declared lines, on the same channel.
 
     Not the Director's rows and not a second authority over them: this is the
@@ -2664,9 +2757,21 @@ def declared_speech_transforms(declared, *, chrono_offset=0):
     always been.
 
     They follow the Director's rows in chronology because that is what they
-    are: a reaction is caused by the beat it answers. `speaker` is the
-    character's engine identity where the caller knows it.
+    are: a reaction is caused by the beat it answers.
+
+    In the ROW's own vocabulary, not a second one: a line is a line whoever
+    said it, and a channel whose entries arrive from two producers in two
+    shapes is a channel every reader has to branch on.
+
+    ``already`` is the words the Director's own rows already put in the
+    channel. Both producers see the same beat, so both can carry the same
+    line -- measured live, Sera's "All three?" arrived once as
+    `character:1` from the resolve ledger and once as `Sera` from her
+    declaration, and the channel held it twice. The Director's row wins
+    because it carries the delivery facts (targets, concealment, volume)
+    that a `char_speech` entry does not; this fills only what it missed.
     """
+    spoken_already = {_spoken_key(text) for text in already or ()}
     transforms = []
     order = 0
     for speaker, lines in (declared or {}).items():
@@ -2674,22 +2779,25 @@ def declared_speech_transforms(declared, *, chrono_offset=0):
             if not isinstance(line, dict):
                 continue
             text = str(line.get("text") or "").strip()
-            if not text:
+            if not text or _spoken_key(text) in spoken_already:
                 continue
             order += 1
             transforms.append({
                 "chrono_id": int(chrono_offset) + order,
                 "item_id": int(chrono_offset) + order,
                 "patch": {"speech": [{
-                    "speaker": str(speaker or ""),
-                    "mode": "quote",
-                    "text": text,
+                    "source_entity_id": str(speaker or ""),
+                    "object_name": str(speaker or ""),
+                    # No `act`: a character declared the words themselves, so
+                    # there is a line and no verb standing in for one.
+                    "event": text,
                     "targets": [str(value)
                                 for value in line.get("targets") or []],
                     "volume": str(line.get("volume") or "normal"),
                     "visibility": str(line.get("visibility") or "overt"),
                     "conceal_from": [
                         str(value) for value in line.get("conceal_from") or []],
+                    "categories": ["speech"],
                 }]},
             })
     return transforms

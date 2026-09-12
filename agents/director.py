@@ -252,6 +252,7 @@ from .director_evidence import (
     item_survivors,
     normalize_causal_ledger,
     causal_world_index,
+    authority_by_entity,
     speech_transforms,
     declared_speech_transforms,
     span_colocations,
@@ -342,6 +343,7 @@ from .director_fanout import (
     co_hand_view,
     _without_private_keys,
     _specialist_payload,
+    _specialist_ledger,
     _anchor_names,
     _beat_rooms,
     _stage_container,
@@ -1148,7 +1150,7 @@ def director_interpret(ctx, nonce):
         _interpret_model_payload,
         max_tokens=None,   # the configured ceiling; see complete_validated_json
     )
-    normalize_causal_ledger(out)
+    normalize_causal_ledger(out, authority_by_entity(_event_inputs))
     _all_causal_sequence = list(out.get("sequence") or [])
     if ctx.extra_players:
         _extra_ids = {
@@ -4305,7 +4307,8 @@ def director_resolve(ctx, nonce, _corrections=None):
         temperature=0.5,
         max_tokens=None,   # the configured ceiling; see complete_validated_json
     )
-    normalize_causal_ledger(out)
+    normalize_causal_ledger(out, authority_by_entity(
+        _model_payload.get("event_inputs")))
 
     # WORLD PRESSURE must-tick floor (F5), enforced. The ledger + prompt rule
     # ask the resolve to tick or hold every open pressure; commit warns on
@@ -4765,9 +4768,18 @@ def director_resolve(ctx, nonce, _corrections=None):
     _director_span = max(
         [int(t.get("chrono_id") or 0)
          for t in _interpret_speech + _resolve_speech], default=0)
+    # A character's declaration fills only what the Director's own rows
+    # missed. Both producers see the same beat, so both can carry the same
+    # line -- measured live, Sera's "All three?" landed twice, once as
+    # `character:1` from the resolve ledger and once as `Sera` from her own
+    # declaration. The Director's row wins because it carries the delivery
+    # facts a `char_speech` entry has none of.
+    _already = [row["patch"]["speech"][0].get("event")
+                for row in _interpret_speech + _resolve_speech]
     _spoken = (_interpret_speech + _resolve_speech
                + declared_speech_transforms(char_speech,
-                                            chrono_offset=_director_span))
+                                            chrono_offset=_director_span,
+                                            already=_already))
     if _spoken:
         _speech_diff, _speech_history, _speech_rejected = compile_transforms(
             _spoken, allowed_channels=("speech",), specialist="engine")

@@ -21,6 +21,17 @@ routes on — "not a wrong answer, no answer". Every interpret beat in a Japanes
 story addresses its hands by note alone, which is the state English was in
 before this change.
 
+**Widened 2026-09-12 by the causal contract's own churn, and the drift is now
+in the opposite direction too.** `causal_director.txt` in `language_packs/ja`
+still asks for two fields English has retired — `kind`, and `authority_mode`
+on the row — and does not list the `speech` category English added. Neither
+breaks a beat: the engine ignores `kind`, overwrites `authority_mode` from the
+group it handed out, and `row_is_spoken` recovers a worded row that never
+names the category. So a Japanese story still plays, and plays entirely on the
+recovery path — which is a fallback holding up a contract rather than a
+contract. Re-translate the whole sheet when the mandate lifts; patching the
+three fields would leave a sheet written against two different designs.
+
 Suspended under the owner's mandate of 2026-09-09: finish optimizing, testing
 and debugging the English pipeline first, because a translation written against
 a prompt that is still moving is work done twice. Two switches carry it, both
