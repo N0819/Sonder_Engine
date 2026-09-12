@@ -653,6 +653,129 @@ class TestARowBelongsToWhoseConductItIs:
         assert built[0]["patch"]["speech"][0]["commitment"] == "contestable"
 
 
+class TestANonEventIsNotARow:
+    """MEASURED ON THE PARAGRAPH RUN. Five of one beat's ten rows described
+    things that did not happen, and carried live categories doing it:
+
+        Sera does not disagree...           -> social, ratified_claims
+        Corin does not turn around...       -> poses
+        Sera does not turn around...        -> poses
+        A period of silence passes...       -> speech
+        Sera is the intended recipient...   -> social, world_facts
+
+    A silence filed as speech. Two bodies NOT turning dispatching the spatial
+    hand to encode a posture that never changed. And one row that is not an
+    event at all, only a restatement of who was addressed.
+
+    The pressure came from the omission detector (see the sibling class):
+    told it had dropped a sentence, the Director covered every clause,
+    including the ones describing absence.
+    """
+
+    def test_the_contract_says_a_row_is_something_that_happened(self):
+        from llm.prompts import get_prompt_body
+        sheet = get_prompt_body("director_resolve_lean", "en")
+        assert "A row is something that HAPPENED" in sheet
+
+    def test_it_names_the_shapes_absence_takes(self):
+        """Stated as a class with instances marked as such, not as a list to
+        match against -- silence and stillness are the two the run produced,
+        and 'nothing changing' is the parent that covers the rest."""
+        from llm.prompts import get_prompt_body
+        sheet = get_prompt_body("director_resolve_lean", "en").casefold()
+        for shape in ("silence", "stillness", "not answering",
+                      "nothing changing"):
+            assert shape in sheet, shape
+
+    def test_it_also_refuses_a_row_that_only_restates(self):
+        """`Sera is the intended recipient of Corin's directive` is not an
+        event; it is the addressee, which `targets` already carries."""
+        from llm.prompts import get_prompt_body
+        sheet = get_prompt_body("director_resolve_lean", "en")
+        assert "only restates who or where" in sheet
+
+
+class TestTheCoverageDetectorNoLongerBuysARepairCall:
+    """A LEXICAL TEST CANNOT GRADE A CONTRACT THAT PARAPHRASES.
+
+    `_uncovered_declarations` looks for the input's significant tokens in the
+    interpretation. That held while the Director echoed the player's wording.
+    The causal contract requires the opposite -- objective observable spans --
+    so a faithful paraphrase reads as a dropped declaration.
+
+    Measured: 3 flags across 2 repair calls, 0 of them real.
+
+        "Sera finds you before you find her"     -> a row, reworded
+        "The light has moved while you were..."  -> a row, reworded
+        "Neither of you says anything..."        -> a NEGATIVE, no event
+
+    The detection stays as a warning, because a partial slice is still worth
+    knowing about and nothing else sees one. What stops is spending a model
+    call on it and teaching the Director to widen.
+    """
+
+    def test_a_causal_output_reports_instead_of_repairing(self):
+        import agents.director as director
+
+        calls = []
+
+        def _no_calls(role, step_key, *a, **k):
+            calls.append(step_key)
+            return {}
+
+        ctx = _FakeCtx("Sera finds you before you find her.")
+        out = {"causal_ledger": [{"chrono_id": 1, "item_id": 1,
+                                  "event": "Sera comes around the trestle"}],
+               "sequence": [{"type": "action",
+                             "attempt": "Sera comes around the trestle"}],
+               "flow": {}}
+        original = director._agent_json
+        director._agent_json = _no_calls
+        try:
+            director._reconcile_interpretation(ctx, out, {"rooms": {}})
+        finally:
+            director._agent_json = original
+
+        assert "interpret_repair" not in calls, calls
+        assert out["interpret_reconciliation"]["uncovered"]
+        assert any("interpret coverage" in w for w in ctx.warnings), \
+            ctx.warnings
+
+    def test_the_legacy_shape_does_not_take_the_early_return(self):
+        """Gated, not deleted. The detector's premise still holds for an
+        output that echoed the player's wording, so a legacy shape falls
+        through to the repair seam instead of stopping at the report."""
+        import agents.director as director
+
+        ctx = _FakeCtx("Sera finds you before you find her.")
+        out = {"sequence": [{"type": "action", "attempt": "unrelated"}],
+               "flow": {}}
+        original = director._agent_json
+        director._agent_json = lambda *a, **k: {}
+        try:
+            director._reconcile_interpretation(ctx, out, {"rooms": {}})
+        except Exception:
+            pass          # the seam wants a fuller ctx; the GATE is the test
+        finally:
+            director._agent_json = original
+
+        assert out["interpret_reconciliation"]["uncovered"]
+        assert not any("interpret coverage" in w for w in ctx.warnings), \
+            ctx.warnings
+
+
+class _FakeCtx(dict):
+    """The three things `_reconcile_interpretation` touches."""
+
+    def __init__(self, player_input):
+        super().__init__(input=player_input)
+        self.warnings = []
+        self.language = "en"
+
+    def add_warning(self, text):
+        self.warnings.append(str(text))
+
+
 class TestAGuardMayNotDestroyABeatItCannotJustify:
     """The rule four live beat-deaths in one afternoon paid for:
 
