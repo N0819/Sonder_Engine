@@ -665,27 +665,40 @@ def _specialist_payload(name, ctx, sc, view, extras):
         # canonical candidates on that row. Director-authored ids and the
         # private item_id never cross the specialist boundary. An unmatched
         # name is simply new or unresolved; no fuzzy guess is fabricated.
+        # AND THE SAME RESOLUTION FOR WHAT THE ACT WAS AIMED AT. `targets`
+        # already reached every hand, but as bare strings while `object_name`
+        # beside them arrived resolved -- so a hand could see
+        # `targets: ["north_door", "Sera"]` and have no way to tell a room id
+        # from a body from a word the Director invented. Asking it to guess
+        # is asking it to read prose for identity, which is the one thing
+        # this whole seam exists to stop. One index, both fields.
         queries = {}
-        for index, row in enumerate(ledgers):
-            query = str(row.get("object_name") or "").strip().casefold()
+
+        def want(text):
+            query = str(text or "").strip().casefold()
             if query:
-                queries.setdefault(query, []).append(index)
-        matches = {index: [] for index in range(len(ledgers))}
+                queries.setdefault(query, set())
+            return query
+
+        row_queries = []
+        for row in ledgers:
+            row_queries.append((
+                want(row.get("object_name")),
+                [want(target) for target in row.get("targets") or []],
+            ))
 
         def match(kind, key, display, aliases=()):
             forms = {str(key).strip().casefold(),
                      str(display).strip().casefold()}
             forms.update(str(value).strip().casefold()
                          for value in (aliases or []) if str(value).strip())
-            for query in sorted(forms & set(queries)):
-                found = {
-                    "kind": kind,
-                    "world_key": str(key),
-                    "world_name": str(display or key),
-                }
-                for index in queries[query]:
-                    if found not in matches[index]:
-                        matches[index].append(found)
+            found = {
+                "kind": kind,
+                "world_key": str(key),
+                "world_name": str(display or key),
+            }
+            for query in forms & set(queries):
+                queries[query].add(tuple(sorted(found.items())))
 
         for who in (sc.get("positions") or {}):
             match("body", who, who)
@@ -702,10 +715,27 @@ def _specialist_payload(name, ctx, sc, view, extras):
                 continue
             for garment in attire.get("wearing") or []:
                 match("garment", garment, garment)
-        for index, found in matches.items():
+        def candidates(query):
+            return sorted(
+                (dict(entry) for entry in queries.get(query) or ()),
+                key=lambda found: (found["kind"], found["world_key"]))
+
+        for index, (name_query, target_queries) in enumerate(row_queries):
+            found = candidates(name_query) if name_query else []
             if found:
-                ledgers[index]["world_matches"] = sorted(
-                    found, key=lambda row: (row["kind"], row["world_key"]))
+                ledgers[index]["world_matches"] = found
+            aimed = {}
+            for position, query in enumerate(target_queries):
+                resolved = candidates(query) if query else []
+                if resolved:
+                    aimed[str((ledgers[index].get("targets")
+                               or [])[position])] = resolved
+            if aimed:
+                # Keyed by the Director's own spelling, so the hand can look
+                # up the target it was handed rather than re-derive it. An
+                # unmatched target is simply absent: new or unresolved, and
+                # never a fabricated guess.
+                ledgers[index]["target_matches"] = aimed
         payload["ledgers"] = ledgers
     # WHAT THE OTHER OWNERS OF THOSE SPANS ARE HOLDING, identity only. The
     # sheet already tells this hand WHO is settling the other half

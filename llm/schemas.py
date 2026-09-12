@@ -1310,6 +1310,10 @@ class CausalLedgerEntry(LenientModel):
     source_event_id: str = ""
     kind: str = "event"
     event: str = ""
+    # The verb of a `communication` row -- an act whose words were never
+    # supplied ("asks", "explains"). A `speech` row needs none: it has the
+    # line itself.
+    act: str = ""
     observable: str = ""
     commitment: str = "asserted"
     targets: list[str] = Field(default_factory=list)
@@ -2364,6 +2368,15 @@ class StateDiff(LenientModel):
     # player interpretation and character decisions. The resolve model does
     # not author these. {op:start|stop,follower,target?,reason?,turn?}.
     following_ops: list[dict] = Field(default_factory=list)
+    # WHAT WAS SAID THIS BEAT, in the beat's own chronology. Compiled by the
+    # engine from the Director's ledger rows, never authored by a hand: no
+    # entry in `SPECIALIST_CHANNELS` claims it, so `_run_specialists` can
+    # neither grant nor overwrite it. `speaker` is an engine identity
+    # (`persona:12`, `character:75`), not a display name, which is what lets
+    # a line be joined to a body without matching casefolded prose.
+    # {speaker,mode:'quote'|'described',text,targets,volume,visibility,
+    #  conceal_from,from_event}.
+    speech: list[dict] = Field(default_factory=list)
     # Within-room position: {name: {at: anchor_id|None, near: [names],
     # cover: anchor_id|true|None}}. The
     # sibling of `positions` at the grain below the room -- at the bed, at the

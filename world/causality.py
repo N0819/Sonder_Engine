@@ -24,9 +24,32 @@ LIST_CHANNELS = frozenset({
     "inventory_ops", "artifact_ops", "sensory_events", "remove_rooms",
     "remove_adjacent", "comms_ops", "following_ops", "claim_dispositions",
     "consequences",
+    # A LINE SPOKEN IS AN EVENT OF THE BEAT, on the same rail as a noise.
+    # `speech` is the one channel NO specialist owns: words have exactly two
+    # legitimate origins -- the player's raw input, which only the Director
+    # reads, and a character's own declaration -- and a hand asked for a
+    # `speech` patch would be a third. So the engine compiles this channel
+    # from the Director's own ledger rows (`director_evidence.
+    # speech_transforms`) and no model is ever asked to author a line.
+    #
+    # It is here rather than beside `dialogue_log` so that what was said is
+    # ordered by the same chronology as what was done. A parallel list has
+    # its own order and drifts from the beat's; a compiled channel is stamped
+    # `from_event` by `_stamp_from_event` like every other row.
+    "speech",
 })
 
 LIST_MAP_CHANNELS = frozenset({"conditions", "overlays"})
+
+#: Channels whose record is ONE READING, not a set of independently held
+#: fields. `_merge_record` deep-merges, which is right for a sky -- a beat
+#: reports the cloud it noticed without restating the wind -- and wrong for a
+#: clock, whose fields are derived from each other. Deep-merging two clocks
+#: takes `start_seconds` from the first transform and `end_seconds` from the
+#: second and produces a reading where neither equals start + duration. A
+#: later reading of an atomic channel is simply the reading; the one it
+#: replaced is still in `history` like every other superseded value.
+ATOMIC_CHANNELS = frozenset({"time"})
 
 
 def _merge_record(previous: Any, current: Any) -> Any:
@@ -120,6 +143,10 @@ def _merge_channel(compiled: dict, channel: str, value: Any) -> None:
             if not isinstance(rows, list):
                 continue
             target.setdefault(str(object_id), []).extend(deepcopy(rows))
+        return
+
+    if channel in ATOMIC_CHANNELS:
+        compiled[channel] = deepcopy(value)
         return
 
     if isinstance(value, dict):
@@ -225,6 +252,14 @@ def compile_transforms(
             chrono_id = 0
         object_name = str((meta or {}).get("object_name") or "").strip()
         patch = raw.get("patch")
+        # ORDERED SO THE REPORTED REASON IS THE ACTUAL ONE. A transform with
+        # no id at all used to be rejected as "item has no valid chronology"
+        # -- true, but downstream of the real fault, and the rejection report
+        # exists so the next beat can be told what actually went wrong.
+        if not item_id and not legacy_object_id:
+            rejected.append({"reason": "missing item_id",
+                             "chrono_id": chrono_id})
+            continue
         if item_ids is not None and item_id not in item_ids:
             rejected.append({"reason": "item_id was not granted",
                              "item_id": item_id})
@@ -236,10 +271,6 @@ def compile_transforms(
         if chrono_ids is not None and chrono_id not in chrono_ids:
             rejected.append({"reason": "chrono_id was not granted",
                              "chrono_id": chrono_id, "item_id": item_id})
-            continue
-        if not item_id and not legacy_object_id:
-            rejected.append({"reason": "missing item_id",
-                             "chrono_id": chrono_id})
             continue
         if not isinstance(patch, dict) or not patch:
             rejected.append({"reason": "empty patch", "chrono_id": chrono_id,
@@ -272,7 +303,16 @@ def compile_transforms(
             # by the specialist. They, not free-text object_name, define
             # same-object conflicts. Ordered operation channels append and
             # therefore have no replacement conflict to report.
-            targets = list(value) if isinstance(value, dict) else []
+            #
+            # LIST_MAP_CHANNELS ARE ORDERED OPERATIONS TOO, and were being
+            # read as replacements because their value happens to be a dict.
+            # `conditions` and `overlays` are dict-of-LISTS: `_merge_channel`
+            # extends them, so a second transform on the same body adds a
+            # condition beside the first and supersedes nothing. Reporting a
+            # fold there claimed a transform had been overridden when both
+            # were kept -- the opposite of what `supersedes` is read for.
+            targets = ([] if channel in LIST_MAP_CHANNELS
+                       else list(value) if isinstance(value, dict) else [])
             for target in targets:
                 previous = last_touch.get((channel, str(target)))
                 if previous is not None:
@@ -283,7 +323,13 @@ def compile_transforms(
                         "prior_item_id": previous[1],
                     })
             _merge_channel(compiled, channel, stamped)
-            if isinstance(value, dict):
+            # Provenance for the channels where a key holds ONE record, so
+            # the key genuinely came from one event. An append channel's rows
+            # already carry their own `from_event` (`_stamp_from_event`), and
+            # attributing the whole list to the last chrono would credit an
+            # earlier row to a later event -- which is exactly backwards for a
+            # reader whose job is to remove what a blocked phase caused.
+            if isinstance(value, dict) and channel not in LIST_MAP_CHANNELS:
                 sources = compiled.setdefault("phase_sources", {})
                 for key in value:
                     sources[f"{channel}.{key}"] = str(chrono_id)
