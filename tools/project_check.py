@@ -956,32 +956,37 @@ def check_nsfw_overlay_roster(errors: list[str]) -> None:
                 "it differently")
 
 
-#: Blocks of the orchestrated prose author's sheet that must NEVER be
-#: gateable: every-beat authority/firewall contract material. Each marker
-#: must appear in the CORE (the segments that load on every scope,
-#: including the empty one) -- a marker migrating into a gated chunk is
-#: exactly the quality regression the scoping was forbidden to introduce.
+#: The former prose-author sheet is now the causal Director's one ungated
+#: contract. These markers hold the model boundary level without preserving
+#: retired player/character, whole-beat prose, or state-encoding instructions.
 PROSE_AUTHOR_NEVER_GATED = (
-    "KNOWLEDGE FIREWALL",
-    "SPANS ARE THE WORK ITEMS",
-    "PLAYER-ASSERTED FACTS",
-    "DIALOGUE LOG — MANDATORY",
-    "PLAYER AUTHORITY CONTRACT",
-    "DELEGATED CHANNELS",
-    "WORLD PRESSURE — OPENING",   # opening a process is undecidable
+    "event_inputs",
+    "authority_mode",
+    "chrono_id",
+    "item_id",
+    "object_name",
+    "resolution_notes",
+    "categories",
     "Output STRICT JSON",
+)
+
+CAUSAL_DIRECTOR_FORBIDDEN = (
+    "player_declaration",
+    "changes_asserted",
+    "ledger_notes",
+    "resolved_event",
+    "state_diff",
 )
 
 
 def check_prose_author_chunks(errors: list[str]) -> None:
-    """The prose author's sheet scoping, held level the same way the
-    specialists' is (design note 19): prompts.PROSE_AUTHOR_SHEET names the
-    chunks, agents/director._PROSE_DUTY_GATES grants them, and
-    agents/director._PROSE_DUTY_SHIPPED audits the gated-out ones. A chunk
-    with no gate never loads on the orchestrated path (silent drop); a gate
-    with no chunk grants nothing; an audit for a name that is not a chunk
-    audits nothing. And the never-gated contract blocks must live in the
-    CORE -- the firewall is an invariant, not an optimization target."""
+    """Hold the one causal Director prompt to its deliberately small shape.
+
+    The compatibility names remain because presets and diagnostics still call
+    this the prose-author sheet. It must now contain exactly one ungated core,
+    share no old duty registry, publish the causal join fields, and never
+    regress to the retired prose/manifest/state-diff contract.
+    """
     sys.path.insert(0, str(ROOT))
     try:
         from llm import prompts
@@ -1007,20 +1012,23 @@ def check_prose_author_chunks(errors: list[str]) -> None:
             f"agents/director._PROSE_DUTY_SHIPPED audits {orphan!r}, which "
             "is not a prose-duty chunk -- the audit can never fire")
 
+    named = sorted({str(name) for name, _text in sheet if name is not None})
+    if named:
+        errors.append(
+            "the causal Director sheet still has gated prose duties: "
+            + ", ".join(named))
+
     core = "".join(text for name, text in sheet if name is None)
-    gated = "".join(text for name, text in sheet if name)
     for marker in PROSE_AUTHOR_NEVER_GATED:
         if marker not in core:
             errors.append(
                 f"never-gated prose-author block {marker!r} is missing "
                 "from the sheet's core -- it must load on every beat")
-    for marker in ("KNOWLEDGE FIREWALL", "SPANS ARE THE WORK ITEMS",
-                   "DIALOGUE LOG — MANDATORY", "PLAYER AUTHORITY CONTRACT"):
-        if marker in gated:
+    for marker in CAUSAL_DIRECTOR_FORBIDDEN:
+        if marker in core:
             errors.append(
-                f"never-gated prose-author block {marker!r} appears inside "
-                "a gated chunk -- a beat could load a second, gateable "
-                "spelling of an every-beat contract")
+                f"causal Director core still names retired surface "
+                f"{marker!r}")
 
     full = "".join(text for _name, text in sheet)
     if prompts.DEFAULT_PROMPTS.get("director_resolve_lean") != full:

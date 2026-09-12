@@ -12,14 +12,14 @@ commit: `travel_interrupted` (asked by name and shape in
 `CourierOp.freight` -- consumed by `world/charter_runtime.load_caravan_freight`
 and `exchange_caravan_freight`, and asked for in NO prompt in either pack.
 
-Two bars, because the stages publish their shape two different ways and one
-rule over both would be dishonest:
+Three bars, because the stages publish their shape in different ways and one
+rule over all of them would be dishonest:
 
-  * THE TEMPLATE BAR, for the prose author and the character. Both sheets end
-    in one self-contained `Output STRICT JSON {...}` field list, and that
-    list -- not the surrounding prose -- is what a model fills in. Naming a
-    field only in the prose is exactly the defect above, so prose does not
-    count here.
+  * THE CAUSAL-DIRECTOR BAR. Both invocation points publish the same single
+    live field, `ledgers`. Their other schema fields are checkpoint
+    compatibility readers and must stay out of the model contract.
+  * THE TEMPLATE BAR, for the character. Its sheet ends in one
+    self-contained `Output STRICT JSON {...}` field list.
   * THE SHEET BAR, for the five specialists. Their sheets have no single
     template: each granted chunk states its own channel and `Shape:` line, so
     the assembled sheet as a whole IS the publication, and a field named
@@ -41,6 +41,7 @@ divergence ledger's job (tests/test_prompt_card_split.py).
 
 from __future__ import annotations
 
+import json
 import re
 import typing
 
@@ -53,9 +54,11 @@ from llm.prompts import DEFAULT_PROMPTS
 #: step key -> the prompt id whose body the stage is actually sent. The prose
 #: author's sheet is ASSEMBLED (`director_resolve_lean`), not stored, which is
 #: why the id and the step key differ for exactly one entry.
-TEMPLATE_STAGES = {
+TEMPLATE_STAGES = {"character": "character"}
+
+CAUSAL_DIRECTOR_STAGES = {
+    "director_interpret": "director_interpret",
     "director_resolve": "director_resolve_lean",
-    "character": "character",
 }
 
 SHEET_STAGES = ("director_body", "director_contact", "director_objects",
@@ -69,60 +72,6 @@ _SHAPE_MARKER = "Output STRICT JSON"
 #: entry that has gone stale (the field is published now, or no longer exists),
 #: so this cannot decay into a mute allowlist.
 UNPUBLISHED = {
-    # RETIRED, NOT MISSING. `changes_asserted` was the Director's second
-    # decomposition of its own beat, and the work list is now the categorized
-    # span (`DESIGN_SPECIALIST_CONTRACT.md` 4a) -- so no sheet asks for it and
-    # no template should name it. The FIELD stays on both Director models
-    # because a stored variant replayed from before the migration carries one
-    # and nothing else, and reconciliation still reads it for exactly that
-    # case. A field nothing asks for and something still reads is what this
-    # list is for.
-    "director_resolve.changes_asserted":
-        "RETIRED, NOT MISSING. It was the Director's second decomposition of "
-        "its own beat; the work list is now the categorized span of "
-        "`sequence` (DESIGN_SPECIALIST_CONTRACT.md 4a), so no sheet asks for "
-        "it and no template should name it. The FIELD stays on both Director "
-        "models because a stored variant replayed from before the migration "
-        "carries one and nothing else, and reconciliation still reads it for "
-        "exactly that case.",
-
-    # --- prose author -----------------------------------------------------
-    # A DELEGATED CHANNEL. `public_evidence` belongs to the social specialist
-    # (director_scopes._DELEGATED_CHANNELS), and run 20 measured what happens
-    # when the prose author's template lists a channel it does not own: 18
-    # discarded emissions in 14 beats, pure output-token latency. Its absence
-    # is asserted directly by test_director_orchestration's
-    # test_prose_author_shape_carries_no_delegated_fields.
-    "director_resolve.public_evidence":
-        "delegated to the social specialist; a delegated channel must have no "
-        "field in the prose author's shape at all",
-    # DECLARED, NOT ASKED. The engine rolls the dice itself from the interpret
-    # flow's DiceSpec under a deterministic seed and overwrites the field
-    # wholesale (agents/director.py:3441), and nothing reads the resolve-side
-    # `fiction_frame` -- the payload builder reads the INTERPRET flow's copy.
-    # The fields stay on the model because LenientModel drops undeclared keys
-    # and persisted variants, archives and traces carry historical values.
-    "director_resolve.dice":
-        "engine-rolled and overwritten wholesale (director.py:3441); declared "
-        "only so the round trip keeps stored history",
-    "director_resolve.fiction_frame":
-        "no reader touches the resolve-side copy; declared only so the round "
-        "trip keeps stored history",
-    # ENGINE-AUTHORED. The model never writes these; they are declared because
-    # LenientModel's round trip would otherwise discard them on the way into
-    # the persisted variant.
-    "director_resolve.travel":
-        "engine-authored: what the travel continuation did this beat, read by "
-        "commit.py to retire or keep each standing approach record",
-    "director_resolve.routed_to_background":
-        "engine-authored: the hand-off of a Director-written line to the "
-        "background stage",
-    "director_resolve.sequence_dispositions":
-        "engine-authored: deterministic causal verdicts composed from claim "
-        "dispositions and phase dependencies",
-    "director_resolve.orchestration":
-        "engine-authored: the dispatch record for the beat (design note 19)",
-
     # --- character --------------------------------------------------------
     # RETIRED 2026-08-30, both groups, and both kept on the model with empty
     # defaults so stored variants parse and old turns replay. The reasoning
@@ -226,8 +175,17 @@ def _template(step, pid):
         "stage stopped publishing an output template -- which is the defect "
         "this file guards -- or the marker was reworded and this test needs "
         "to learn the new one.")
-    end = body.find("\n", index)
-    return body[index:] if end < 0 else body[index:end]
+    # Templates may put the JSON object on the marker line or immediately
+    # below it. Stop at the following paragraph, not at the first newline.
+    return body[index:].split("\n\n", 1)[0]
+
+
+@pytest.mark.parametrize("step", sorted(CAUSAL_DIRECTOR_STAGES))
+def test_causal_director_publishes_only_its_ledger(step):
+    """Compatibility fields parse old checkpoints; they are not live output."""
+    template = _template(step, CAUSAL_DIRECTOR_STAGES[step])
+    published = set(json.loads(template[template.index("{"):]))
+    assert published == {"ledgers"}
 
 
 @pytest.mark.parametrize("step", sorted(TEMPLATE_STAGES))
@@ -249,18 +207,11 @@ def test_the_output_template_names_every_field_the_stage_owns(step):
 
 
 @pytest.mark.parametrize("step", SHEET_STAGES)
-def test_every_specialist_field_is_asked_for_somewhere_in_its_sheet(step):
-    model = schemas.SCHEMA_MAP[step]
-    unpublished = [
-        path for path, name in _field_paths(model)
-        if not _names(DEFAULT_PROMPTS[step], name)
-        and f"{step}.{path}" not in UNPUBLISHED
-    ]
-    assert not unpublished, (
-        f"{step}: {unpublished} are fields no chunk of the assembled sheet "
-        "names. `CourierOp.freight` sat here -- a whole economy path "
-        "(world/charter_runtime.load_caravan_freight) fed by a field no "
-        "prompt asked for. Publish it in BOTH packs or record why not.")
+def test_every_specialist_publishes_the_transform_envelope(step):
+    sheet = DEFAULT_PROMPTS[step]
+    for name in ("results", "transforms", "patch", "status", "notes"):
+        assert _names(sheet, name), f"{step} does not publish {name}"
+    assert "Do not emit item_id or chrono_id" in sheet
 
 
 def test_the_unpublished_ledger_has_no_stale_entries():
@@ -275,11 +226,6 @@ def test_the_unpublished_ledger_has_no_stale_entries():
         template = _template(step, pid)
         for name in (schemas._fields(schemas.SCHEMA_MAP[step]) or {}):
             live[f"{step}.{name}"] = _names(template, name)
-    for step in SHEET_STAGES:
-        body = DEFAULT_PROMPTS[step]
-        for path, name in _field_paths(schemas.SCHEMA_MAP[step]):
-            live[f"{step}.{path}"] = _names(body, name)
-
     unknown = sorted(key for key in UNPUBLISHED if key not in live)
     assert not unknown, (
         f"{unknown} are listed as deliberately unpublished but are not fields "
@@ -300,19 +246,12 @@ def test_every_ledger_entry_gives_a_reason():
             f"{key} is listed as unpublished with no usable reason")
 
 
-def test_the_two_fields_this_file_was_written_for_are_published():
-    """The regression, stated as itself.
-
-    Both were asked for BY NAME AND SHAPE in a prose-duty chunk of the prose
-    author's own sheet -- `travel_interrupted` in 10_travel.txt, which is the
-    only way a walk already under way can be stopped, and `thoughts_omitted`
-    in 04.txt, which is the only thing that tells an honestly interior beat
-    apart from a beat that lost its changes -- and neither appeared in the
-    template that follows them.
-    """
+def test_retired_resolve_fields_are_not_reintroduced_to_the_director():
+    """Runtime-owned compatibility fields must not regrow the old prompt."""
     template = _template("director_resolve", "director_resolve_lean")
-    assert "travel_interrupted" in template
-    assert "thoughts_omitted" in template
+    assert "travel_interrupted" not in template
+    assert "thoughts_omitted" not in template
+    assert "state_diff" not in template
 
 
 def test_caravan_freight_is_published_to_the_hand_that_writes_it():

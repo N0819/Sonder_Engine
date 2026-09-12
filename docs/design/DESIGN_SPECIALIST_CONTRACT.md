@@ -1,43 +1,42 @@
-# The specialist contract: hands resolve instructions, not narrative
+# The causal ledger and specialist contract
 
-**BUILT 2026-09-10.** The Director emits one list of categorized, numbered,
-annotated spans; the hands receive their scene-scoped ledgers and their work
-items and nothing of the beat; each record names the chunk it resolves. What
-remains open is section 6 (record-shaped channels) and section 6a (the
-room-mint agent), both registered in
-[`UNBUILT.md`](../UNBUILT.md) §1.1, which is the authority on status rather
-than this header. The measurements are real and dated; the target is the
-owner's, stated 2026-09-09. This note exists because
-`DESIGN_NARROW_MODEL_INTERFACE.md` — including the sections added the same day
-— has been optimizing *around* the gap described here rather than at it.
+**BUILT 2026-09-12.** This opening section is the current contract. The later
+sections retain the measurements and intermediate designs that led to it; when
+they describe whole-beat prose, manifest ids, `ledger_notes`, model-authored
+world ids, or reconciliation repair as current behavior, they are historical.
+Maintained execution detail lives in [`PIPELINE.md`](../guides/PIPELINE.md).
 
 ## 1. The contract
 
 > A specialist receives:
 >
-> 1. **The slice of persistent world state relevant to its task**, scoped to
->    the scene for efficiency — the ledgers it owns and what it needs to read
->    them against.
-> 2. **One or more work items.** Each is a dissected chunk of player or
->    character input, carrying a **chronological id** and a **note in natural
->    language saying how the Director thinks it should resolve** — authorship,
->    not schema.
-> 3. **Nothing else.** Not the beat's prose, not the Director's account of what
->    happened, not the other hands' work.
+> 1. **One or more ordered event ledgers.** The Director may split one source
+>    event into several rows. Every row carries its source entity and authority
+>    mode, the causal event, an object name when useful, resolution notes, and
+>    one or more exact specialist categories.
+> 2. **The slice of persistent world state relevant to those rows.** An
+>    `object_name` is matched against objects already in that view and the
+>    resulting world keys are attached to the row as `world_matches`.
+> 3. **No recompiler identity.** `chrono_id` and numeric `item_id` are private
+>    routing data. Dispatch strips them, and a specialist correlates its output
+>    to its ordered inputs by array position.
 >
-> The specialist is almost purely mechanical: it renders those work items onto
-> the world through its own toolset — meaning **the structured output format
-> its code reads**, not a tool-calling loop. A hand's channel vocabulary IS its
-> toolset: `contact_ops` with its `op`/`relation`/`motion` fields, `attire`
-> records, `inventory_ops`, and so on. That half is already built; the hand
-> emits ops today and deterministic code applies them.
+> A specialist renders each row onto the world through its own structured
+> channels. It returns exactly one positional result for each input row. That
+> result may contain zero transforms, or several necessary `{patch: ...}`
+> transforms; one event is not artificially limited to one state change.
 >
-> The chronological ids exist for exactly one reason — the hands run in
-> parallel and finish out of order, so the ids are how code puts the results
-> back into beat order, and the order events reach perception.
+> The five hands run in parallel. Deterministic code restores the private ids,
+> validates channel ownership, sorts every transform by `chrono_id`, and folds
+> conflicts by the actual world key inside each patch. Every transform is used:
+> later transforms form current state while the complete stamped sequence
+> remains the object's history.
 >
-> The Director never learns the ledger rules, because it never writes a ledger.
-> The specialists are how the Director resolves its intents onto the world.
+> The Director therefore owns causal decomposition and routing, not engine
+> encoding. Both former Director phases use this same operation. The later call
+> receives autonomous declarations, dialogue, mechanical outcomes, and world
+> pressure; it does not receive already-applied asserted human input and cannot
+> execute it twice.
 
 **The Director does not author prose at all.** It outputs events; the
 specialists push them to the world. `resolved_event` is not a smaller part of

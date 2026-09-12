@@ -481,6 +481,15 @@ def _step_json_schema(step_key: str, wire_variant=None):
         from llm import schemas
 
         model_cls = (schemas.SCHEMA_MAP or {}).get(step_key)
+        # Current Director and specialist calls have deliberately tiny wire
+        # contracts. Their historical full models remain in SCHEMA_MAP so
+        # archives and fixtures can still be read, but advertising those
+        # obsolete fields to constrained providers recreates the prompt bloat
+        # at the grammar layer and invites the models to write dead channels.
+        if step_key in {"director_interpret", "director_resolve"}:
+            model_cls = schemas.CausalDirectorOutput
+        elif step_key in (schemas.SPECIALIST_CHANNELS or {}):
+            model_cls = schemas.CausalSpecialistOutput
         if model_cls is not None:
             # Pydantic 2 renamed ``schema`` to ``model_json_schema``. The
             # project supports both majors, so use the public method exposed

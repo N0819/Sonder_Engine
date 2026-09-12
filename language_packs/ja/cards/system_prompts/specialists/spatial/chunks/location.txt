@@ -1,0 +1,3 @@
+
+
+LOCATION LABEL。この event が active scene を本当に別の top-level place へ移す場合だけ location を一つの文字列で出力します。同じ場所の rooms 間の通常移動では変更しません。

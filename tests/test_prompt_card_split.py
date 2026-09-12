@@ -15,7 +15,8 @@ regenerated. A later prompt edit is legitimate and must cost one line in
 discipline `tools/project_check.py` applies to `translation_exceptions.json`.
 That is what keeps this test meaningful after the monolith is gone: the
 reference is immutable, and drift from it is ENUMERATED rather than
-re-baselined. An accidental whitespace strip has no ledger line, so it is red.
+re-baselined. A deliberate whole-subtree replacement may use one ancestor
+entry; that is the honest unit for retiring a split prompt.
 """
 
 from __future__ import annotations
@@ -48,7 +49,10 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 120   # +5 (2026-09-10): `co_hands/<hand>.txt`, one shared
+PART_COUNT = 97    # -31 +8 (2026-09-12): causal Director plus new hand chunks
+                   # serves both invocation points and replaces the 29-part
+                   # prose-author sheet.
+                   # +5 (2026-09-10): `co_hands/<hand>.txt`, one shared
                    # chunk per hand telling a DIFFERENT hand what that
                    # one settles, loaded when a span was handed to
                    # both. Five files, not twenty: the explanation of
@@ -119,6 +123,12 @@ def _expected_divergence() -> dict:
     return ledger
 
 
+def _explained(path: str, ledger: dict) -> bool:
+    """An entry may name one leaf or an intentionally replaced subtree."""
+    return any(path == key or path.startswith(key + ".")
+               or path.startswith(key + "[") for key in ledger)
+
+
 @pytest.mark.parametrize("language", LANGUAGES)
 def test_assembled_card_matches_the_pre_split_reference(language):
     """The refactor moved text; it did not change text.
@@ -138,14 +148,16 @@ def test_assembled_card_matches_the_pre_split_reference(language):
 
     unexplained_missing = sorted(
         _dotted(path) for path in before if path not in after)
-    unexplained_missing = [p for p in unexplained_missing if p not in ledger]
+    unexplained_missing = [p for p in unexplained_missing
+                           if not _explained(p, ledger)]
     assert not unexplained_missing, (
         f"{language}: leaves the pre-split card had and the assembled card "
         f"does not: {unexplained_missing[:8]}")
 
     unexplained_added = sorted(
         _dotted(path) for path in after if path not in before)
-    unexplained_added = [p for p in unexplained_added if p not in ledger]
+    unexplained_added = [p for p in unexplained_added
+                         if not _explained(p, ledger)]
     assert not unexplained_added, (
         f"{language}: leaves the assembled card has and the pre-split card "
         f"did not: {unexplained_added[:8]}")
@@ -155,7 +167,7 @@ def test_assembled_card_matches_the_pre_split_reference(language):
         if path not in after:
             continue
         dotted = _dotted(path)
-        if after[path] != value and dotted not in ledger:
+        if after[path] != value and not _explained(dotted, ledger):
             changed.append(dotted)
     assert not changed, (
         f"{language}: {len(changed)} leaves differ from the pre-split card, "
@@ -171,9 +183,9 @@ def test_the_card_still_loads_and_publishes_every_prompt(language):
 
     pack = installed_language_packs()[language]
     card = pack.card(CARD)
-    assert len(card["prompts"]) == 38
+    assert len(card["prompts"]) == 37
     assert len(card["specialists"]) == 5
-    assert len(card["prose_author_sheet"]) == 29
+    assert len(card["prose_author_sheet"]) == 1
     # Fragments resolve AFTER assembly, so the loaded card must carry none.
     # (The loaded card is deeply frozen, so walk it rather than serialize it.)
     unresolved = [_dotted(path) for path, value in _leaves(card)
@@ -314,45 +326,29 @@ def test_no_assembled_sheet_id_has_a_part_file(language):
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
-def test_the_prose_author_tail_is_a_reference_not_a_second_copy(language):
-    """`prose_author_sheet[28][1]` is the output shape by REFERENCE (B27).
-
-    It used to be a second copy of the same bytes, held equal by a test --
-    two leaves free to drift, with an assertion standing where a single
-    source belonged. It had already cost a beat: `ledger_notes` was declared
-    in the standalone shape and in the sheet's copy as two separate edits,
-    and the resolve prompt reads the SHEET, so an edit to one alone leaves
-    the model unaware of the field. The reference resolves at card load, so
-    the assembled sheet is unchanged and the drift is gone by construction.
-
-    The reference must be the WHOLE leaf: a sheet segment that wrapped it in
-    words of its own would be a third spelling of the shape. The class this
-    instance belongs to -- no two prose leaves of a card hold the same text --
-    is `tests/test_one_leaf_per_prompt_contract.py`.
-    """
+def test_both_director_invocations_reference_one_causal_prompt(language):
+    """Interpret and resolve have one contract, not synchronized copies."""
     raw = raw_card(language)
-    assert raw["prose_author_sheet"][28][1] == (
-        "{{fragment:prose_author_output_shape}}")
+    reference = "{{fragment:causal_director}}"
+    assert raw["prose_author_sheet"] == [[None, reference]]
+    assert "director_interpret" not in raw["prompts"]
 
     from language_runtime import installed_language_packs
+    from llm.prompts import get_prompt_body
 
     card = installed_language_packs()[language].card(CARD)
-    resolved = card["prose_author_sheet"][28][1]
-    assert resolved == card["prose_author_output_shape"]
-    assert "{{fragment" not in resolved
+    resolved = card["prose_author_sheet"][0][1]
+    assert resolved == card["causal_director"]
+    assert resolved == get_prompt_body("director_resolve_lean", language)
+    assert resolved == get_prompt_body("director_interpret", language)
 
 
-def test_the_assembled_prose_author_sheet_still_carries_the_output_shape():
-    """The move was only a move, at the end the model actually reads (B27).
+def test_the_assembled_director_sheet_carries_the_causal_output_shape():
+    from llm.prompts import DEFAULT_PROMPTS
 
-    English only, because `DEFAULT_PROMPTS` is the English card. The assembled
-    sheet ends with the policy suffix rather than the shape, so this is `in`
-    rather than an equality on the tail.
-    """
-    from llm.prompts import DEFAULT_PROMPTS, _PROSE_AUTHOR_OUTPUT_SHAPE
-
-    assert _PROSE_AUTHOR_OUTPUT_SHAPE in DEFAULT_PROMPTS[
-        "director_resolve_lean"]
+    sheet = DEFAULT_PROMPTS["director_resolve_lean"]
+    assert '"ledgers"' in sheet
+    assert '"state_diff"' not in sheet
 
 
 def test_a_missing_part_file_fails_the_load_rather_than_shortening_a_prompt(
@@ -451,15 +447,10 @@ def test_canonical_part_path_covers_exactly_the_five_prose_shapes():
     assert not is_part_leaf(("character_block_keys", 0, 0))
 
 
-def test_the_sheet_is_named_index_first_because_the_index_is_the_identity():
-    """`planning_need` is the gate name at BOTH 11 and 15, and 12 of the 29
-    segments have no name at all. Naming key-first would collide and would
-    not sort into assembly order."""
+def test_the_compatibility_sheet_has_one_canonical_part():
     card = raw_card("en")
     keys = [entry[0] for entry in card["prose_author_sheet"]]
-    assert keys[11] == keys[15] == "planning_need"
-    assert keys.count(None) == 12
+    assert keys == [None]
     names = [rel for leaf, rel, _text in part_plan(card)
              if leaf[0] == "prose_author_sheet"]
-    assert names == sorted(names), "the sheet's files must sort into join order"
-    assert len(set(names)) == 29
+    assert names == ["prose_author_sheet/00.txt"]

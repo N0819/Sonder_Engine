@@ -104,11 +104,6 @@ SPECIALISTS = {
     "social": {
         "step_key": "director_social",
         "role": "director_social",
-        # `following_ops` belongs to this family in the corpus table but is
-        # NOT owned here: following is actor-owned and engine-projected
-        # (`_collect_following_ops` overwrites the channel deterministically
-        # every resolve), so no model authors it -- a specialist "owning" it
-        # would own a channel whose content is discarded.
         # ...and, since 2026-09-04, the world's traffic: crowds, couriers,
         # tellings and the hearsay verdict, which the retired offscreen hand
         # carried. A crowd is a charter projection already and a courier is
@@ -118,7 +113,7 @@ SPECIALISTS = {
         "channels": ("cast_changes", "introductions", "world_facts",
                      "public_evidence", "crowd_ops", "courier_ops",
                      "telling_ops", "ratified_claims", "contradicted_claims",
-                     "charter_ops"),
+                     "charter_ops", "claim_dispositions", "consequences"),
         # This channel is step metadata rather than StateDiff, so its list
         # shape cannot be derived from StateDiff's annotations below.
         "list_channels": ("public_evidence",),
@@ -144,7 +139,8 @@ SPECIALISTS = {
         "step_key": "director_spatial",
         "role": "director_spatial",
         "channels": ("positions", "rooms", "remove_rooms",
-                     "remove_adjacent", "stations", "poses", "comms_ops"),
+                     "remove_adjacent", "stations", "poses", "comms_ops",
+                     "following_ops", "location", "time", "weather"),
     },
 }
 
@@ -384,6 +380,10 @@ _CHANNEL_GATES = {
     # SPEAKING can also key a mic, which is the ordinary way an intercom gets
     # used. Fails open across both, per the rule this table follows.
     "comms_ops": lambda f: f["physical_beat"] or f["speech_present"],
+    "following_ops": lambda f: f["physical_beat"],
+    "location": lambda f: f["physical_beat"],
+    "time": lambda _f: True,
+    "weather": lambda _f: True,
     # The world's traffic: gated on its subjects EXISTING, which is what
     # makes this family cold in practice (0 fires in 2,243 beats) while
     # staying genuinely dispatchable the moment a crowd stands in a room or
@@ -396,6 +396,8 @@ _CHANNEL_GATES = {
     "telling_ops": lambda f: f["reports_carried"] or f["crowds_present"],
     "ratified_claims": lambda f: f["unratified_claims_present"],
     "contradicted_claims": lambda f: f["unratified_claims_present"],
+    "claim_dispositions": lambda _f: True,
+    "consequences": lambda _f: True,
 }
 
 
@@ -598,28 +600,9 @@ def _shipped_bodiless_definition(sd):
 #: residue) read the very list their duty is about and cannot mispredict,
 #: and `road`'s op channels are already audited by the specialist-channel
 #: half (its gate facts are a superset of the offscreen dispatch gates).
-_PROSE_DUTY_SHIPPED = {
-    "voices": lambda out, sd: (
-        "a bodiless (ubiquitous) voice was defined"
-        if _shipped_bodiless_definition(sd) else None),
-    "obligations": lambda out, sd: (
-        "obligation ops shipped" if out.get("obligations") else None),
-    "comm": lambda out, sd: (
-        "a medium:'comm' line shipped"
-        if any(isinstance(d, dict)
-               and str(d.get("medium") or "").strip().lower() == "comm"
-               for d in out.get("dialogue_log") or []) else None),
-    "transit": lambda out, sd: (
-        "transit/moving-room state was encoded"
-        if _shipped_transit_state(sd) else None),
-    "approach": lambda out, sd: (
-        "a body was relocated" if sd.get("positions") else None),
-    "light": lambda out, sd: (
-        "a room was set dim or dark"
-        if _shipped_darkened_room(sd) else None),
-    "size": lambda out, sd: (
-        "a size change was encoded" if sd.get("scales") else None),
-}
+# The causal Director has no conditional prose duties. Kept as an empty
+# compatibility export for diagnostics that import the registry.
+_PROSE_DUTY_SHIPPED = {}
 
 
 #: The gate facts, in the order the record carries them.

@@ -20,7 +20,7 @@ from agents.director import (
 )
 from story.character_schema import default_character_data, default_persona_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
-from llm.prompts import DEFAULT_PROMPTS, interpret_delegation_note
+from llm.prompts import DEFAULT_PROMPTS
 from llm.schemas import validate_llm_output
 from world.spatial import apply_contact_ops
 
@@ -68,24 +68,19 @@ def test_interpret_schema_and_prompt_carry_exact_contact_assertions():
     on the hand that writes it.
 
     The interpret sheet taught the full contact grammar for its own
-    `contact_assertions`, and `interpret_delegation_note` -- appended
-    unconditionally at agents/director.py:595, there being no monolithic
-    Director path left -- then told the same model to leave that channel
-    empty because a specialist re-encodes it. 1,890 characters of instruction
-    followed by an instruction voiding them, on every beat. The grammar moved
-    to the contact specialist's own sheet, which is the sheet whose output
-    actually reaches `_validated_player_contact_assertions`.
+    `contact_assertions`; the causal contract now routes `contact_ops` and
+    leaves the grammar solely on the contact specialist, whose output reaches
+    `_validated_player_contact_assertions`.
     """
     parsed, warnings = validate_llm_output(
         "director_interpret", {"contact_assertions": [_assertion()]})
 
     assert not warnings
     assert parsed["contact_assertions"][0]["target_part"] == "cervix"
-    # The interpret contract still NAMES the channel -- the specialist's
-    # answer is merged into it -- and the delegation note still says who fills
-    # it in.
-    assert "contact_assertions" in DEFAULT_PROMPTS["director_interpret"]
-    assert "contact_assertions empty" in interpret_delegation_note()
+    # The causal Director names only the routed channel; its specialist owns
+    # the contact grammar and the compatibility field remains schema-only.
+    assert "contact_ops" in DEFAULT_PROMPTS["director_interpret"]
+    assert "contact_assertions" not in DEFAULT_PROMPTS["director_interpret"]
 
     contact = DEFAULT_PROMPTS["director_contact"]
     assert "coarse visibility region" in contact

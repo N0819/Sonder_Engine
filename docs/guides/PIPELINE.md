@@ -320,38 +320,31 @@ it in a way nothing in this repository will catch.
 
 ### `director_interpret`
 
-Parses the player declaration into structured speech/action sequence, authority claims, likely reactors, mapping need, and resolution flags. It also determines the later plan shape.
+This is the first invocation of the shared causal Director. Its model input is
+an `event_inputs` array grouped by `{entity_id, authority_mode, events}` plus
+small identity, object-name, position, and contact indexes. The prompt does one
+job: split prose into ordered event-ledger rows and decide causal commitment.
+It does not write narration or any engine state shape.
 
-This stage should preserve player wording and distinguish attempted actions from asserted facts.
+Each row carries `chrono_id`, a private numeric `item_id`, `object_name`, source
+identity and authority, an objective event, a short `resolution_notes` ruling,
+and zero or more exact state channel categories. One occurrence can become
+several rows when several objects need distinct treatment; rows from the same
+occurrence may share a `chrono_id`. A row can name several categories and is
+therefore routed to several specialists.
 
-Exact quoted speech and described communicative meaning are different sequence
-types. `speech` is licensed only by words the player actually supplied;
-`communication` carries an authored act and proposition (ask, explain, warn,
-report) without inventing a quotation. It follows the same hearing,
-concealment, memory, public-evidence and Charter-carrier paths as speech, but a
-partial hearing channel receives only that somebody spoke indistinctly.
+Compatibility code projects those ledgers into the older `sequence`, movement,
+dice, and flow surfaces still read by onset perception and plan construction.
+Quoted speech remains exact, described communication remains unquoted, and
+contestable actions remain attempts. When the causal prompt does not choose a
+reactor set, deterministic spatial reach supplies the present cast members who
+can perceive the onset; awareness and presence gates still remove minds that
+cannot act.
 
-An interruptible compound act is represented as phases rather than one prose
-blob. `phase_id` identifies a phase, `depends_on` names the phases that must
-have completed, and `participants` / `requires_contacts` state structural
-prerequisites. `referents` binds exact occurrences of ambiguous pronouns to
-canonical entities; every observer renderer substitutes only the label that
-observer is entitled to use.
-
-**`flow.reactors` is load-bearing well beyond reaction eligibility, and that is
-easy to miss.** It decides who gets a character step, and it is *also*
-`perception_act`'s entire perceiver list — pass 1 iterates the cast and skips
-anyone not in it, with no spatial or sensory reasoning of its own. So a present,
-awake, watching character omitted here perceives the act never; their whole
-account of the beat is `perception_outcome`, and they take no part in it.
-
-Measured across the stored corpus before alpha 6.9, **435 of 551 beats (79%)
-where two or more characters received an outcome view had at least one of those
-witnesses missing from `reactors`** — usually just the ones the beat was not
-addressed to. The prompt clause has been sharpened accordingly (reactors is
-permission to respond, not a requirement, and explicitly not "who was
-addressed"). The underlying conflation — one field answering both "who
-perceived this" and "who may act on it" — is not fixed: `docs/UNBUILT.md`.
+Specialists run inside this stage for asserted changes that must exist in the
+onset preview. Their transforms land in `state_assertions` (contact in
+`contact_assertions`) before the ordinary deterministic validators. These
+assertions are previewed for reaction and later merged once at resolution.
 
 ### `compile_world_context`
 
@@ -650,109 +643,46 @@ relationships.
 
 ### `director_resolve`
 
-Combines the player declaration, character declarations, reaction declarations, objective state, mechanics, and deterministic checks into one resolved event and state diff.
+This is the second invocation of exactly the same causal prompt and schema.
+Its `event_inputs` contain autonomous declarations, mechanical outcomes, world
+pressures, and only the still-contestable rows from human-controlled entities.
+Asserted human input is deliberately absent because interpret already applied
+it to the onset preview; feeding it back here would execute it twice.
 
-The Director owns objective causality but does not own character private psychology or narration.
+The Director again returns one or more event ledgers, not prose or a
+`state_diff`. Categories dispatch the five channel owners (`body`, `social`,
+`contact`, `objects`, `spatial`). A specialist may receive several ordered
+rows, and one row may reach several specialists. Dispatch strips `item_id`;
+each specialist instead returns exactly one positional result per input row,
+containing zero or more `{patch:{channel:value}}` transforms and a verdict.
+`object_name` and row-local `world_matches` let it use the keys of objects that
+already exist in its scoped world view. No Director-invented object id is used
+as world identity.
 
-After the model adjudicates contested outcomes, the engine settles every player
-sequence phase against the onset scene. A dependency that did not complete, a
-missing participant, or a required contact that was not standing makes the
-phase `blocked`; otherwise it is `executed`, `attempted`, or `realized`.
-These engine-authored `sequence_dispositions` govern perception and event-order
-admission. Specialists associate each phased change with its source event in
-`state_diff.phase_sources`, keyed by channel path or list index. The causal
-floor drops changes belonging to blocked phases and consumes the sidecar before
-persistence; it never tries to infer a prose-to-state correspondence.
+After every parallel call finishes, deterministic code zips each result to the
+hidden input row and restores its private `item_id` and `chrono_id`. The pure
+recompiler in `world/causality.py` validates channel ownership, sorts every
+transform by chronology, merges current state using the channel's semantics,
+and retains the full stamped patch in `transform_history`. Later transforms on
+the same real world key become that object's current state; earlier transforms
+remain its history. List/operation channels preserve all entries. Network
+completion order never affects the result.
 
-The resulting chronology is structural: root/onset player events, character
-reactions and interaction, then surviving player continuation/completion
-events. Ending contact also invalidates a standing pose only when its support,
-constraint, relation, or detail was contact-bound; non-contact spatial facts
-remain standing.
+The compiled channels form the stage `state_diff`; the old direct specialist
+fields and old Director prose/manifest surfaces remain read-compatible only for
+saved outputs and fixtures. Current ledgers do not run the old prose-to-diff
+repair or the old name-based item fold.
 
-Every persistent physical change asserted by the resolved event is repeated in
-`changes_asserted` and checked against its own structured diff category before
-commit. Contact entries carry the same actor, actor part, target, and target part
-as their `contact_ops` relation. Matching only a participant is insufficient:
-one hand-on-hip operation cannot prove a separately asserted interior contact
-was encoded. Legacy endpoint-free contact manifests use an op-specific
-part/manner match and fail toward one idempotent repair when underspecified.
-The additive repair merge retains `contact_ops`; detection without that merge
-would report the divergence while still committing the stale relation.
-Substance entries likewise carry their material, target, placement, and
-enclosing interior. Reconciliation treats a completed deposit/removal as its
-own evidence category and retains `substance_ops` through additive repair.
-Completed `character_material_effects` are separately source-locked and
-topology-validated after resolve, so Director omission cannot erase an output
-the acting body itself declared.
-Body arrangement is the third spatial grain: positions choose the room,
-stations choose the anchor/nearness, and `poses` records posture, support,
-relative arrangement, and physical constraint. A touched pose is a complete
-snapshot rather than a partial merge, so obsolete `beneath`/`pinned` fields do
-not survive a later rise. Pose changes have their own manifest/audit category.
+Existing deterministic floors still run on the compiled diff: movement and
+approach validation, phase prerequisite pruning, contact/containment checks,
+and commit normalization. `sequence_dispositions` still controls which phased
+events can reach perception. The engine then constructs `beat_events` and
+commits the diff once.
 
-A station is decoration on the position ledger, never a mover. `stations.at`
-names an anchor and the anchor belongs to a room, so resolving it as room
-membership let a threshold anchor — the back office's name for the door
-through to the lobby — read as being inside the back office, and the
-near-group repair then carried everyone standing near that body in with them.
-Where nobody is travelling, that repair may only settle which of the rooms
-the group ALREADY occupies wins, the player's above all; where the player IS
-travelling the anchor is the party's destination and still names it.
-
-A declared walk CONTINUES. A beat that says nothing about movement no longer
-abandons the journey: `_travel_continues` advances the mover one edge along
-the passable route (two beats for a `far`/`remote` edge), writing the leg
-into `state_diff.positions` BEFORE every movement backstop so restraint, the
-passable-route check and approach semantics all judge it exactly as they
-judge a declared move. The leg is computed before the resolve is called and
-handed to the prose author as `travel_in_flight`, so the scenery changes on
-the page rather than behind it. An INTERRUPTION is what must be established,
-not continuation: the Director asserts it in `travel_interrupted`, under a
-deterministic floor (no passable route, carried, already arrived) it cannot
-argue with. `out['travel']` records what happened and `persist/commit.py` retires or
-keeps each standing `scene.approach` record from it, so the ledger and the
-committed position are written from one answer.
-
-Both Director stages stay ONE step each and fan out inside themselves
-(design note 19). This is the only Director path; there is no monolithic
-sheet and no setting that returns one. A deterministic dispatch keyed on the stage author's own ruling — a
-`ledger_notes` line naming the hand or one of its channels, or a
-`changes_asserted` entry in one of its categories — decides which hands run,
-and the scene-state gates compute each addressed hand's channel SCOPE
-(dispatch is `bool(scope)`; a hand the ruling never reached has an empty one,
-and at interpret only the notes address, since that view carries no
-manifest), the stage model runs with a lean instruction sheet (same role, step key, schema, and
-payload), and each dispatched specialist — `body`, `social`, `contact`,
-`objects`, `spatial` (the `offscreen` hand was retired 2026-09-04; its traffic channels are `social`'s), with sheets assembled per beat from its
-granted channels' chunks (`prompts.specialist_prompt`) — reads the finished
-beat and owns its channels. The specialist calls never stream (structured
-output only; results merge in canonical order, never completion order; a
-failed call costs exactly its own channels; Aborted propagates). They run in
-PARALLEL by default — they hold disjoint channels of the same finished beat
-and have nothing to say to each other, so the beat costs its slowest hand
-rather than their sum. `director_fanout_mode: sequential` runs them one at a
-time for a provider that will not take concurrent requests; it is not a
-fallback to the removed monolith, since the same hands run with the same
-scopes and assemble in the same order, and a beat still dispatches only
-the hands the ruling addressed, each a 1-4k sheet against the single sheet's
-~21k. The SAME specialist definitions serve both stages: resolve's
-instances read the resolved prose and own `state_diff` channels;
-interpret's read the player's structured declaration (never the raw input)
-and own the same channels of `state_assertions` (contact under
-`contact_assertions`), merged BEFORE the deterministic validators. Assembly
-is ownership per granted channel; every deterministic seam above — the
-movement backstop above all — judges the merged result. Scope gates fail
-open per channel, a single backstop reports any channel that ships content
-outside every served scope through `tell_director`, a note keyed by a name
-no hand answers to is reported as unrouted rather than guessed at, and the
-dispatch/scope record (per hand: `addressed_by`, `gated`, `scope`; granted
-vs served vs produced overall) persists on the step under `orchestration`.
-`gated` is `null` — and the five world-view facts absent from `facts` — on a
-beat whose ruling reached no hand: the gates decide how much sheet an
-ADDRESSED hand loads, so with none addressed they were never asked, and
-asking would have built crowds, couriers, notices, carried reports and
-unratified hearsay for a beat with no payload to carry them.
+Specialists never stream and normally run in parallel.
+`director_fanout_mode: sequential` changes only provider concurrency. Failure
+is isolated per hand; an aborted turn still propagates. Scope and compilation
+diagnostics remain under `orchestration`.
 
 ### `background_react`
 

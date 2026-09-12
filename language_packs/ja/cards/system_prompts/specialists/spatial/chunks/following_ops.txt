@@ -1,0 +1,3 @@
+
+
+FOLLOWING。following_ops は自発的で持続する移動関係です。追従を開始するとき {op:'start',follower,target,reason?}、終了するとき {op:'stop',follower,reason?} を出力します。following は速度を与えず、一ビートだけの position snapshot ではありません。

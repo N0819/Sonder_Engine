@@ -1,1 +1,0 @@
-{{fragment:prose_author_output_shape}}

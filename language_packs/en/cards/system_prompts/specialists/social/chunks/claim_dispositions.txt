@@ -1,0 +1,3 @@
+
+
+CLAIM DISPOSITIONS. Use claim_dispositions only for a supplied claim_id whose outcome is settled by this event. Emit {claim_id,status:'realized'|'deferred'|'contested'|'rejected',reason?}. Do not invent a claim or infer a status from who said it.

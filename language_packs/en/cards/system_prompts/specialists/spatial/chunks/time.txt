@@ -1,0 +1,3 @@
+
+
+TIME. Emit time only when this event advances the simulation clock. Use {start_seconds,duration_seconds,end_seconds,mode,explicit,display_advance}; preserve a supplied mechanical result and do not infer a duration from vague prose. Omission means no clock change.

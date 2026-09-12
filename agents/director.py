@@ -33,12 +33,9 @@ from story.character_schema import (
 from core.db import get_setting, q, wget
 from mind.memory import lorebook_manifest
 from world.paradox import paradox_visible_to
-from language_runtime import apply_prompt_policy
 from llm.prompts import (
     PROSE_DUTY_CHUNKS,
     get_prompt,
-    get_prompt_body,
-    interpret_delegation_note,
     prose_author_prompt,
     specialist_prompt,
 )
@@ -253,6 +250,7 @@ from .director_evidence import (
     single_span_attributions,
     span_mint_rooms,
     item_survivors,
+    normalize_causal_ledger,
     span_colocations,
     span_pairings,
     span_records,
@@ -295,6 +293,7 @@ from .director_evidence import (
     _fold_derived_manifest_events,
     _state_diff_channels,
 )
+from world.causality import compile_transforms
 from .director_scopes import (
     CHANNEL_STAGES,
     SPECIALISTS,
@@ -1074,27 +1073,107 @@ def director_interpret(ctx, nonce):
         "variant_seed": nonce,
     }
 
-    # Orchestrated interpret (design note 19): the same sheet plus the
-    # delegation note as a SUFFIX -- the monolithic sheet stays
-    # byte-identical (and a stable cache prefix), and the note overrides
-    # the sheet's own PASS 1 "full structure, no subset" instruction so the
-    # stage model stops authoring the channels the dispatched specialists
-    # will replace anyway (run 20: every such emission was discarded at
-    # assembly, pure output-token latency). One read of the setting serves
-    # the prompt and the dispatch below, so they cannot disagree about
-    # which path this beat is on.
-    payload = _extension_director_payload(ctx, payload, phase="interpret")
+    # The SAME causal contract resolve uses. Raw declarations are simply event
+    # inputs that still need slicing; later calls receive already structured
+    # events. Authority is carried beside each identity instead of being
+    # embedded in separate player/character instructions.
+    _primary_id = getattr(ctx.chat, "persona_id", None) \
+        if not isinstance(ctx.chat, dict) else ctx.chat.get("persona_id")
+    _primary_id = f"persona:{_primary_id}" if _primary_id is not None \
+        else "persona:primary"
+    _event_inputs = []
+    if str(ctx.input or "").strip():
+        _event_inputs.append({
+            "entity_id": _primary_id,
+            "authority_mode": player_authority(chat["id"])["mode"],
+            "events": [{
+                "type": "raw_input",
+                "event_id": f"turn:{ctx.turn.id}:primary:raw",
+                "raw_text": str(ctx.input),
+            }],
+        })
+    for extra in ctx.extra_players:
+        if extra.get("idle") or not str(extra.get("input") or "").strip():
+            continue
+        _event_inputs.append({
+            "entity_id": f"persona:{extra.get('persona_id')}",
+            "authority_mode": player_authority(chat["id"])["mode"],
+            "events": [{
+                "type": "raw_input",
+                "event_id": f"turn:{ctx.turn.id}:persona:"
+                            f"{extra.get('persona_id')}:raw",
+                "raw_text": str(extra.get("input") or ""),
+            }],
+        })
+    _interpret_model_payload = {
+        "event_inputs": _event_inputs,
+        "identity_index": {
+            _primary_id: pers.get("name") or persona_name(pers),
+            **{f"character:{row['id']}": row["name"] for row in cast_info},
+            **{f"persona:{extra.get('persona_id')}": extra.get("name")
+               for extra in ctx.extra_players},
+        },
+        "object_index": {
+            "rooms": {
+                str(rid): str((room or {}).get("name") or rid)
+                for rid, room in (sc.get("rooms") or {}).items()
+            },
+            "entities": {
+                str(eid): str((entity or {}).get("name") or eid)
+                for eid, entity in (sc.get("entities") or {}).items()
+            },
+        },
+        "standing_relations": {
+            "positions": sc.get("positions") or {},
+            "contacts": sc.get("contacts") or [],
+        },
+        "variant_seed": nonce,
+    }
+    _interpret_model_payload = _extension_director_payload(
+        ctx, _interpret_model_payload, phase="interpret")
 
     out = _agent_json(
         "director",
         "director_interpret",
-        apply_prompt_policy(
-            get_prompt_body("director_interpret", ctx.language)
-            + interpret_delegation_note(ctx.language),
-            ctx.language, "director_interpret"),
-        payload,
+        prose_author_prompt(set(), ctx.language),
+        _interpret_model_payload,
         max_tokens=None,   # the configured ceiling; see complete_validated_json
     )
+    normalize_causal_ledger(out)
+    _all_causal_sequence = list(out.get("sequence") or [])
+    if ctx.extra_players:
+        _extra_ids = {
+            f"persona:{extra.get('persona_id')}": str(extra.get("persona_id"))
+            for extra in ctx.extra_players
+        }
+        out["sequence"] = [
+            row for row in _all_causal_sequence
+            if str(row.get("actor") or "") == _primary_id
+        ]
+        _other = out.setdefault("other_players", {})
+        for entity_id, persona_id in _extra_ids.items():
+            rows = [row for row in _all_causal_sequence
+                    if str(row.get("actor") or "") == entity_id]
+            if rows:
+                _other[persona_id] = {"sequence": rows}
+        out["_all_causal_sequence"] = _all_causal_sequence
+    for _entry in out.get("causal_ledger") or []:
+        if isinstance(_entry, dict) and isinstance(_entry.get("movement"), dict):
+            out["movement"] = dict(_entry["movement"])
+            break
+    _flow = out.setdefault("flow", {})
+    if isinstance(_flow, dict):
+        _flow.setdefault("dice", [
+            {
+                "actor": entry.get("source_entity_id"),
+                "attempt": entry.get("event"),
+                "ability": entry.get("ability"),
+                "difficulty": entry.get("difficulty"),
+            }
+            for entry in out.get("causal_ledger") or []
+            if isinstance(entry, dict) and entry.get("ability")
+            and entry.get("difficulty")
+        ])
 
     # Warning-only re-normalization; strict validation already ran inside
     # _agent_json (see director_establish above).
@@ -2577,35 +2656,9 @@ def _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
 #: a light doused mid-beat in a fully-lit scene (light); a size change cast
 #: on a beat the gate read as speech-only cannot happen (size gates on
 #: physical_beat, and a spell is a declared action).
-_PROSE_DUTY_GATES = {
-    "voices": lambda f: f["bodiless_present"],
-    "obligations": lambda f: (f["obligations_pending"]
-                              or f["speech_present"]),
-    "other_players": lambda f: f["other_players_declared"],
-    "comm": lambda f: f["minds_apart"] or f["physical_beat"],
-    "transit": lambda f: f["transit_capable"],
-    # Exact presence, not a prediction: the payload either lists somebody
-    # under way or it does not, and it is empty on the great majority of
-    # beats -- so this is one of the few duties that genuinely costs nothing
-    # when it is not needed.
-    "travel": lambda f: f["travel_in_flight"],
-    "planning_need": lambda f: f["planning_needs_present"],
-    # Exact presence, like planning_need: the payload either carries the
-    # room's notes or it does not, and it does not on most beats.
-    "author_notes": lambda f: f["author_notes_present"],
-    "hearsay": lambda f: f["unratified_claims_present"],
-    "road": lambda f: f["road_subjects_present"],
-    "approach": lambda f: f["physical_beat"],
-    "due_events": lambda f: f["due_events_present"],
-    "world_pressure": lambda f: f["pressure_ledger_open"],
-    "residue": lambda f: f["residue_present"],
-    # A beat that can move the sun can change every outdoor room's light
-    # before the author writes it (a night's sleep, an afternoon in the
-    # square): the duty loads on a sustained act in an anchored day, the
-    # one prediction the interpret stage's own closed vocabulary affords.
-    "light": lambda f: f["scene_not_fully_lit"] or f["sun_can_move"],
-    "size": lambda f: f["scales_active"] or f["physical_beat"],
-}
+# The causal Director has one invariant prompt and no optional prose chunks.
+# This name remains as an empty compatibility export for project diagnostics.
+_PROSE_DUTY_GATES = {}
 
 
 def _true_on_error(read):
@@ -2893,6 +2946,10 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
     # The two share one id space (spans 1..N, the manifest continuing past the
     # ceiling), so this is a union and never a renumbering.
     for name, state in jobs:
+        state["ledger_items"] = [
+            _without_private_keys(row)
+            for row in _specialist_span_slice(name, view)
+        ]
         state["event_ids"] = _granted_event_ids(name, view)
     results = {}
     if len(jobs) > 1 and not fanout_is_parallel():
@@ -2959,6 +3016,119 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
             continue
         spec = SPECIALISTS[name]
         state["ran"] = True
+        # New specialists return chronological transforms, not a pre-merged
+        # mini-diff. Compile them only after every parallel call has finished;
+        # network completion order can therefore never become world order.
+        # The model never sees or emits item_id. Its ``results`` array is
+        # positionally aligned with the ordered ledger slice it received; the
+        # engine restores the private id here, before compilation. Legacy
+        # top-level transforms remain readable for saved fixtures/presets.
+        positional = result.get("results")
+        alignment_errors = []
+        receipts = []
+        if isinstance(positional, list):
+            raw_transforms = []
+            ledger_items = state.get("ledger_items") or []
+            if len(positional) != len(ledger_items):
+                alignment_errors.append(
+                    "returned %d positional result(s) for %d ledger row(s)"
+                    % (len(positional), len(ledger_items)))
+            for index, ledger in enumerate(ledger_items):
+                if index >= len(positional):
+                    continue
+                row = positional[index]
+                if not isinstance(row, dict):
+                    alignment_errors.append(
+                        f"result {index + 1} is not an object")
+                    continue
+                try:
+                    item_id = int((ledger or {}).get("item_id") or 0)
+                except (TypeError, ValueError):
+                    item_id = 0
+                emitted = 0
+                transforms = row.get("transforms") or []
+                if not isinstance(transforms, list):
+                    alignment_errors.append(
+                        f"result {index + 1} transforms is not a list")
+                    transforms = []
+                for transform in transforms:
+                    patch = transform.get("patch") \
+                        if isinstance(transform, dict) else None
+                    if isinstance(patch, dict) and patch:
+                        try:
+                            patch, dropped = \
+                                schemas.validated_state_diff_channels(patch)
+                        except Exception as exc:
+                            alignment_errors.append(
+                                f"result {index + 1} has an invalid patch: "
+                                f"{exc}")
+                            continue
+                        if dropped:
+                            alignment_errors.append(
+                                f"result {index + 1} dropped invalid patch "
+                                "channel(s): " + ", ".join(dropped))
+                        if not patch:
+                            alignment_errors.append(
+                                f"result {index + 1} contains an empty transform")
+                            continue
+                        raw_transforms.append({
+                            "item_id": item_id,
+                            "patch": patch,
+                        })
+                        emitted += 1
+                    else:
+                        alignment_errors.append(
+                            f"result {index + 1} contains an empty transform")
+                status = str(row.get("status") or "").strip().casefold()
+                if status == "encoded" and not emitted:
+                    alignment_errors.append(
+                        f"result {index + 1} says encoded without a transform")
+                    continue
+                if status:
+                    receipt = {"item_id": item_id, "status": status}
+                    reroute = str(row.get("reroute_to") or "").strip()
+                    if reroute:
+                        receipt["reroute_to"] = reroute
+                    receipts.append(receipt)
+        else:
+            raw_transforms = result.get("transforms") or []
+        if raw_transforms:
+            compiled, history, rejected = compile_transforms(
+                raw_transforms,
+                allowed_channels=spec["channels"],
+                ledger_items=state.get("ledger_items") or (),
+                allowed_item_ids=state.get("event_ids") or (),
+                specialist=name,
+            )
+            for channel, value in compiled.items():
+                if channel == "phase_sources":
+                    merged_sources = dict(result.get("phase_sources") or {})
+                    merged_sources.update(value)
+                    result["phase_sources"] = merged_sources
+                else:
+                    result[channel] = value
+            state["transform_history"] = history
+            if isinstance(positional, list):
+                accepted_items = {
+                    int(entry.get("item_id") or 0) for entry in history
+                }
+                receipts = [
+                    receipt for receipt in receipts
+                    if receipt.get("status") != "encoded"
+                    or int(receipt.get("item_id") or 0) in accepted_items
+                ]
+            if rejected:
+                state["transforms_rejected"] = rejected
+                for rejection in rejected:
+                    ctx.add_warning(
+                        f"{name} specialist transform rejected: "
+                        f"{rejection.get('reason')}")
+        if isinstance(positional, list):
+            result["resolved_events"] = receipts
+        if alignment_errors:
+            state["result_alignment_errors"] = alignment_errors
+            for error in alignment_errors:
+                ctx.add_warning(f"{name} specialist result alignment: {error}")
         replaced, outside, filled, dropped = [], [], [], []
         for channel in spec["channels"]:
             container, key = _stage_container(out, stage, channel)
@@ -3067,6 +3237,20 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
                 ctx.tell_director(f"{name} specialist: {note}")
 
     record["events_addressed"] = _index_addressed_events(dispatch)
+    _hand_order = {name: index for index, name in enumerate(SPECIALISTS)}
+    record["transform_history"] = sorted(
+        [
+            dict(entry)
+            for name, state in dispatch.items()
+            for entry in (state.get("transform_history") or [])
+            if isinstance(entry, dict)
+        ],
+        key=lambda entry: (
+            int(entry.get("chrono_id") or 0),
+            _hand_order.get(str(entry.get("specialist") or ""), 999),
+            int(entry.get("response_order") or 0),
+        ),
+    )
 
 
 _PUBLIC_SPEECH_ACTS = frozenset({
@@ -3289,6 +3473,86 @@ def _strip_unreached_placement(sc, sd, subject):
             or same_subject(sc, key, name)
         ]:
             table.pop(key, None)
+
+
+def _causal_event_inputs(ctx, interp, declarations, dice, pressures):
+    """Build the role-neutral event stream consumed by the causal Director.
+
+    Already asserted human-controlled events are deliberately absent: they
+    entered the preview world during interpret and sending them through
+    resolve would ask a model to decide them twice. Only contestable events
+    from those sources remain. Autonomous sources contribute their declared
+    events because resolve is their first causal pass.
+    """
+    groups = []
+
+    def add_group(entity_id, authority_mode, events):
+        rows = [dict(event) for event in (events or [])
+                if isinstance(event, dict)]
+        if rows:
+            groups.append({
+                "entity_id": str(entity_id),
+                "authority_mode": str(authority_mode),
+                "events": rows,
+            })
+
+    primary_id = getattr(ctx.chat, "persona_id", None) \
+        if not isinstance(ctx.chat, dict) else ctx.chat.get("persona_id")
+    primary_id = f"persona:{primary_id}" if primary_id is not None \
+        else "persona:primary"
+    unresolved = [
+        event for event in (interp.get("sequence") or [])
+        if isinstance(event, dict)
+        and str(event.get("commitment") or "").casefold() == "contestable"
+    ]
+    add_group(primary_id, interp.get("authority_mode") or "world_author",
+              unresolved)
+
+    other = interp.get("other_players") or {}
+    for extra in ctx.extra_players:
+        entry = other.get(str(extra.get("persona_id"))) or {}
+        unresolved = [
+            event for event in (entry.get("sequence") or [])
+            if isinstance(event, dict)
+            and str(event.get("commitment") or "").casefold() == "contestable"
+        ]
+        add_group(f"persona:{extra.get('persona_id')}",
+                  entry.get("authority_mode") or "world_author", unresolved)
+
+    for declaration in declarations or []:
+        if not isinstance(declaration, dict):
+            continue
+        entity_id = declaration.get("char_id")
+        entity_id = f"character:{entity_id}" if entity_id is not None \
+            else str(declaration.get("name") or "autonomous:unknown")
+        add_group(entity_id, "autonomous", declaration.get("sequence") or [])
+
+    # Mechanical outcomes and due processes are events from engine-owned
+    # entities, not special prose duties.
+    for index, result in enumerate(dice or []):
+        add_group(f"engine:dice:{index}", "mechanical", [{
+            "type": "outcome",
+            "event_id": str(result.get("event_id") or f"dice:{index}"),
+            "attempt": result.get("attempt"),
+            "outcome": result.get("outcome"),
+            "margin": result.get("margin"),
+        }])
+    for pressure in pressures or []:
+        if not isinstance(pressure, dict) or not pressure.get(
+                "must_tick_this_beat"):
+            continue
+        add_group(f"world_pressure:{pressure.get('id')}", "world", [{
+            "type": "due_process",
+            "event_id": str(pressure.get("id") or ""),
+            "description": pressure.get("subject"),
+            "note": pressure.get("note"),
+        }])
+    for index, summary in enumerate(interp.get("due_authored_events") or []):
+        add_group(f"authored_event:{index}", "world", [{
+            "type": "due_event", "event_id": f"due:{index}",
+            "description": str(summary),
+        }])
+    return groups
 
 
 def director_resolve(ctx, nonce, _corrections=None):
@@ -3964,35 +4228,62 @@ def director_resolve(ctx, nonce, _corrections=None):
         reports_rows=payload.get("carried_reports"),
         unratified_rows=payload.get("unratified_claims"),
     )
-    # The prose author's OWN scope (same mechanism as the specialists'
-    # channel scopes, same facts, same fail-open): which conditional
-    # prose-duty blocks this beat can have work for. The sheet is
-    # assembled from the core plus exactly those chunks; the scope is
-    # persisted below and audited by the same backstop.
-    _prose_scope = _prose_author_scope(ctx, sc, payload, _orch_facts, p_name)
+    # One causal Director contract, with no prose-author duty sheet. The large
+    # payload above remains an internal staging cache for deterministic floors
+    # and specialist entitlements; the Director sees only events, authority,
+    # identity joins, and the small amount of standing context needed to settle
+    # causality. In particular, asserted input from a human-controlled entity
+    # is absent from event_inputs because it already entered the preview world.
+    _prose_scope = set()
     _resolve_prompt = prose_author_prompt(_prose_scope, ctx.language)
-
-    # AFTER the prose-author scope is computed, deliberately: which conditional
-    # duty blocks this beat can have work for is an engine judgement about the
-    # beat, and an extension that could widen it would be buying prompt chunks
-    # rather than contributing context. The retries below inherit this payload.
-    payload = _extension_director_payload(ctx, payload, phase="resolve")
-    # The second pass, when an extension refused the first answer. Delivered on
-    # the channel the stage's own retries already use, so the Director reads a
-    # campaign violation exactly the way it reads a player-authority one --
-    # attributed, specific, and about THIS beat.
+    _primary_persona_id = getattr(ctx.chat, "persona_id", None) \
+        if not isinstance(ctx.chat, dict) else ctx.chat.get("persona_id")
+    _identity_index = {
+        (f"persona:{_primary_persona_id}"
+         if _primary_persona_id is not None else "persona:primary"): p_name,
+    }
+    _identity_index.update({
+        f"character:{d.get('char_id')}": str(d.get("name") or "")
+        for d in decls if d.get("char_id") is not None
+    })
+    _model_payload = {
+        "event_inputs": _causal_event_inputs(
+            ctx, interp, decls, dice, payload.get("world_pressure") or []),
+        "identity_index": _identity_index,
+        "object_index": {
+            "rooms": {
+                str(rid): str((room or {}).get("name") or rid)
+                for rid, room in (resolve_sc.get("rooms") or {}).items()
+            },
+            "entities": {
+                str(eid): str((entity or {}).get("name") or eid)
+                for eid, entity in (resolve_sc.get("entities") or {}).items()
+            },
+        },
+        "standing_relations": {
+            "positions": resolve_sc.get("positions") or {},
+            "contacts": resolve_sc.get("contacts") or [],
+        },
+        "variant_seed": nonce,
+    }
+    _model_payload = _extension_director_payload(
+        ctx, _model_payload, phase="resolve")
     if _corrections:
-        payload = {**payload, "campaign_violations": _corrections,
-                   "correction_notes": _campaign_correction_note(_corrections)}
+        _model_payload = {
+            **_model_payload,
+            "campaign_violations": _corrections,
+            "correction_notes": _campaign_correction_note(_corrections),
+        }
 
     out = _agent_json(
         "director",
         "director_resolve",
         _resolve_prompt,
-        payload,
+        _model_payload,
         temperature=0.5,
         max_tokens=None,   # the configured ceiling; see complete_validated_json
     )
+    normalize_causal_ledger(out)
 
     # WORLD PRESSURE must-tick floor (F5), enforced. The ledger + prompt rule
     # ask the resolve to tick or hold every open pressure; commit warns on
@@ -4004,7 +4295,32 @@ def director_resolve(ctx, nonce, _corrections=None):
     # pressures. Runs BEFORE the player-act authority retry below so player
     # authority always gets the last word.
     _pressures = payload.get("world_pressure") or []
-    _must_tick = [p for p in _pressures if p.get("must_tick_this_beat")]
+    if out.get("causal_ledger"):
+        _ledger_by_source = {
+            str(entry.get("source_entity_id") or ""): entry
+            for entry in out.get("causal_ledger") or []
+            if isinstance(entry, dict)
+        }
+        out["world_pressure"] = [
+            {
+                "op": "tick",
+                "id": str(pressure.get("id") or ""),
+                "subject": str(pressure.get("subject") or ""),
+                "note": str(
+                    _ledger_by_source[
+                        f"world_pressure:{pressure.get('id')}"
+                    ].get("resolution_notes") or "advanced by due process"
+                ),
+            }
+            for pressure in _pressures
+            if isinstance(pressure, dict)
+            and f"world_pressure:{pressure.get('id')}" in _ledger_by_source
+        ]
+    # Current causal-ledger outputs route a due process to specialists and the
+    # engine records its lifecycle below. The old prose retry remains only for
+    # legacy provider outputs during migration.
+    _must_tick = [] if out.get("causal_ledger") else [
+        p for p in _pressures if p.get("must_tick_this_beat")]
 
     def _unticked_pressures(res_out):
         ops = res_out.get("world_pressure")
@@ -4048,7 +4364,7 @@ def director_resolve(ctx, nonce, _corrections=None):
             "director",
             "director_resolve",
             _resolve_prompt,
-            {**payload, "correction_notes": _wp_note},
+            {**_model_payload, "correction_notes": _wp_note},
             temperature=0.3,
             max_tokens=None,   # the configured ceiling; see complete_validated_json
         )
@@ -4258,7 +4574,7 @@ def director_resolve(ctx, nonce, _corrections=None):
             "director",
             "director_resolve",
             _resolve_prompt,
-            {**payload, "correction_notes": _note},
+            {**_model_payload, "correction_notes": _note},
             temperature=0.0,
             max_tokens=None,   # the configured ceiling; see complete_validated_json
         )
@@ -4394,7 +4710,8 @@ def director_resolve(ctx, nonce, _corrections=None):
     # Following is actor-owned. Never trust director_resolve to invent or end
     # it: project only the player's interpreted decision and each NPC's own
     # character result into the objective diff.
-    sd["following_ops"] = _collect_following_ops(ctx, sc, interp, p_name)
+    sd["following_ops"] = list(sd.get("following_ops") or []) + \
+        _collect_following_ops(ctx, sc, interp, p_name)
     resolved_contact_ops = _drop_momentary_contact_adds(
         sd.get("contact_ops"),
         report=lambda note: ctx.add_warning(f"resolved contact: {note}"),
@@ -5265,8 +5582,14 @@ def director_resolve(ctx, nonce, _corrections=None):
     # warn-only restraint backstop): deterministic placeholder floor,
     # gated omission audit, bounded Director self-repair, warnings for
     # whatever remains unencoded. See the seam's block comment above.
-    _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
-                          tracked_names)
+    if not out.get("causal_ledger"):
+        # Compatibility only: old outputs made prose authoritative and needed
+        # a prose-vs-diff repair call. Current outputs carry explicit causal
+        # spans and specialist transforms, so asking a model to rediscover a
+        # missing transform from generated prose would recreate the discarded
+        # architecture and may re-run the source event.
+        _reconcile_resolution(ctx, out, sc, interp, char_actions, dice,
+                              tracked_names)
 
     # LAST, and the order is the whole fix. This guard DELETES a position, and
     # a deletion is indistinguishable from an omission: the reconciliation pass
@@ -5311,6 +5634,35 @@ def director_resolve(ctx, nonce, _corrections=None):
         ctx.add_warning(
             f"dropped {_channel} change sourced from blocked phase "
             f"{_event_id}")
+
+    # Cross-hand identity recompilation. In the current contract each hand's
+    # positional response was rejoined to the Director's private item_id and
+    # chrono_id before `compile_transforms` merged it. Actual object identity
+    # comes from engine keys inside the specialist patches, so every transform
+    # survives in history and later transforms on the same object become its
+    # chronological state. The old name-pairing fold remains only for archived
+    # outputs that predate event ledgers.
+    if out.get("ledgers"):
+        _history = list(
+            (out.get("orchestration") or {}).get("transform_history") or [])
+        _folded = sum(len(row.get("supersedes") or []) for row in _history)
+        _considered = len(_span_items(out))
+    else:
+        _survivors = item_survivors(
+            out.get("state_diff") or {}, _span_items(out), sc,
+            channel_owner=_CHANNEL_SPECIALISTS,
+        )
+        _folded = apply_item_transforms(
+            out.get("state_diff") or {}, _survivors)
+        _considered = len(_survivors)
+        _history = list(
+            (out.get("orchestration") or {}).get("transform_history") or [])
+    if out.get("orchestration") is not None:
+        out.setdefault("orchestration", {})["recompiler"] = {
+            "items_considered": _considered,
+            "same_channel_folds": _folded,
+            "history_entries": len(_history),
+        }
 
     # Orchestration's scope backstop runs on the FINAL output -- after the
     # reconciliation seam, whose repair can itself recover a delegated
