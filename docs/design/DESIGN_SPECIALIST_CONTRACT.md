@@ -1434,38 +1434,50 @@ feedback the old rule claimed as its reason for existing.
 ## 4q. SPEECH IS A CHANNEL, AND IT IS THE ONE NO HAND OWNS
 
 **The defect.** The causal ledger row had nowhere to put words. `kind` was
-`speech|action|event`; `event` was specified as "short objective occurrence";
-`normalize_causal_ledger` projected `text = event`; and `composer._render_event`
-wraps a speech percept's body in literal quotation marks. So a Director obeying
-its own prompt turned *I ask Sera what happened to the boat* into
+`speech|action|event`, `event` was specified as "short objective occurrence",
+`normalize_causal_ledger` projected `text = event`, and
+`composer._render_event` wraps a speech percept's body in literal quotation
+marks. Run end to end, a Director obeying its own prompt turned *I ask Sera
+what happened to the boat* into
 
     You says: "asks Sera what happened to the boat"
 
 — a description of the act, delivered as the act's own words. Measured by
-running a compliant row end to end, not inferred.
+running a compliant row through the real renderer, not inferred.
 
 Two things had gone at once. The row lost the WORDS, and the contract lost the
-DISTINCTION. The engine has always had two element types and still has both
-render paths: `type:"speech"` carries `text` and is quoted, `type:"communication"`
-carries `act`+`content` and renders as indirect speech that invents no
-quotation. The `kind` enum could reach only the first, so every described act
-became a fabricated quote. The cross-check that settles it is that
-`prompt_policy.json` deleted the `director_interpret` line teaching the
-`communication` shape and KEPT the narrator line forbidding exactly what the
-Director was then forced to do.
+DISTINCTION. The engine has always had two render paths and still has both:
+`type:"speech"` carries `text` and is quoted, `type:"communication"` carries
+`act`+`content` and renders as indirect speech that invents no quotation. The
+contract could reach only the first. The cross-check that settles it is that
+`prompt_policy.json` deleted the line teaching the `communication` shape and
+KEPT the narrator line forbidding exactly what the Director was then forced to
+do.
 
-**What speech is now.** A list channel — `world/causality.LIST_CHANNELS`,
-`StateDiff.speech` — compiled by the same resolver as every state change, so
-what was SAID and what was DONE share one chronology instead of two that drift.
-`_stamp_from_event` stamps `from_event` on it like any other row.
+**What tells them apart is a verb, and nothing else.** `act` is supplied
+exactly when the line is not — "asks", "explains", "warns" say what the act
+WAS because the row cannot say what was said. A row carrying the words has no
+use for a verb and carries none. No `kind`, no flag, no fourth element type:
+one field's presence is the whole distinction.
 
-**And it is the one channel no specialist owns.** A channel is a thing a model
-writes, so a `speech` channel on a hand means a hand authoring dialogue. Words
-have exactly two legitimate origins — the player's raw input, which only the
-Director reads, and a character agent's own declaration — and a hand is neither.
-The fan-out's own measurements say what happens when a hand is handed prose: it
-echoes the payload into the diff. So the engine assembles the channel from three
-sources and no model is ever asked for a line:
+**Speech is a category, and the category is the routing.** A row naming
+`speech` in `categories` goes to `compile_transforms` like any other channel —
+ordered by `chrono_id`, stamped `from_event` — so what was SAID and what was
+DONE share one chronology instead of two that drift. It may name `telling_ops`
+in the same list, and should: one span, two ledgers, which is the
+multi-category rule this contract already runs on. Measured on the first live
+run, the Director filed spoken rows under `telling_ops` alone, which is
+correct for a telling and left the words nowhere; the prompt now lists
+`engine: speech` beside the five hands so the line reaches both.
+
+**And it is the one channel in no hand's channel list.** A channel is a thing
+a model writes, so a `speech` channel owned by a specialist means a hand
+authoring dialogue. Words have exactly two legitimate origins — the player's
+raw input, which only the Director reads, and a character agent's own
+declaration — and a hand is neither. The fan-out's own measurements say what
+happens when a hand is handed prose: it echoes the payload into the diff. So
+the engine assembles the channel from three sources and no model is asked for
+a line:
 
 | source | who wrote the words | chronology |
 |---|---|---|
@@ -1475,35 +1487,103 @@ sources and no model is ever asked for a line:
 
 Offset rather than interleaved because each ledger numbers from 1: interpret
 slices the player's declaration and resolve never sees it again
-(`_causal_event_inputs` withholds an already-asserted human event on purpose, so
-resolve is not asked to decide it twice). Characters last, because a reaction is
-caused by the beat it answers.
+(`_causal_event_inputs` withholds an already-asserted human event on purpose,
+so resolve is not asked to decide it twice). Characters last, because a
+reaction is caused by the beat it answers.
 
-`speaker` is an engine identity (`persona:12`, `character:75`), never a display
-name — which is what lets a line join to a body without matching casefolded
-prose, the way `dialogue_log` still has to.
+**The channel holds the ROW, not a record derived from it.** Two
+representations of one line are two things that can disagree, and this
+codebase keeps finding that pair. `source_entity_id` is the speaker —
+`persona:12`, `character:75`, an engine identity rather than a display name,
+so a line joins to a body without matching casefolded prose.
 
-**`speech` therefore reaches no hand, and that is not a routing failure.**
-`ENGINE_CATEGORIES` in `director_scopes` says so, and `_unrouted_rulings` /
-`unnamed_work` read it — otherwise the report would tell the next beat's author
-that the word it used routes nowhere and invite it to pick another one. A
-genuinely unknown category is still reported; that is the whole point of the
-exemption being a named set of one rather than a loosened test.
+`ENGINE_CATEGORIES` in `director_scopes` is what keeps `speech` out of the
+unrouted report without loosening it: a genuinely unknown category is still
+reported, because that report is the only thing that tells the next beat's
+author a word reached nobody.
 
-**The addressee, which went with it.** Resolve authors no `dialogue_log` any
-more, so every row is re-minted from a declaration — and both re-mint sites
-hardcoded `intended_target: None`. Two readers depend on that field:
-`spatial_frames` snaps orientation from it (who turned to face whom), and the
-unanswered-address percept — "T says nothing", D6, the whole of subtext — is
-keyed on it. It was None on every line of every beat. The ledger row already
-carried `targets`, so the projection and both re-mints now take the addressee
-from the declaration that named it.
+### The two fields that went away
+
+**`kind` said nothing `categories` and `source_entity_id` were not already
+saying.** A row is SPOKEN because it names the `speech` category, an EVENT
+because the world or the dice caused it rather than an actor
+(`authority_mode` `world`/`mechanical`), and an act otherwise. A fourth field
+to keep consistent with the other three is a fourth field to get wrong.
+
+**`authority_mode` is the Director's working input, not a row's content.** It
+is how an asserted act is judged contestable or not, and the answer comes back
+as `commitment`. The Director needs it; nothing downstream does. So it is not
+asked for, not validated, filled by the engine from the group it handed out
+(`authority_by_entity`), and stripped by `_specialist_ledger` before any hand
+sees it. Handing a hand the reasoning alongside the ruling invites it to
+re-derive the ruling, and a hand that disagrees with the Director about
+whether something happened is the one thing the fan-out cannot reconcile.
+
+### The addressee, which had gone with the prose author
+
+Resolve authors no `dialogue_log` any more, so every row is re-minted from a
+declaration — and both re-mint sites hardcoded `intended_target: None`. Two
+readers depend on that field: `spatial_frames` snaps orientation from it (who
+turned to face whom), and the unanswered-address percept — "T says nothing",
+D6, the whole of subtext — is keyed on it. It was None on every line of every
+beat. The ledger row already carried `targets`, so the projection and both
+re-mints now take the addressee from the declaration that named it.
+
+### Targets, and the world index that makes them nameable
+
+`targets` already reached every hand, but as bare strings beside an
+`object_name` that arrived resolved — so a hand could not tell a room id from
+a body from a word the Director invented. One index now serves both;
+`target_matches` is keyed by the Director's own spelling, and a target that
+matches nothing is absent rather than guessed at.
+
+That resolution can only find what the Director actually wrote, so the
+Director gets `world_index`: each room's name, exits and contents, what each
+body wears, and the anchors a body can stand at. Placement only — no state,
+because a Director that can read what a condition says is a Director being
+invited to resolve it, and resolving belongs to the hands.
+
+### What a live run found that no test did
+
+Beat 4 of the first real playthrough died outright:
+
+    RuntimeError: director_resolve failed JSON validation:
+    ledgers.1.source_event_id was not supplied by its source
+
+Every row was correct — right entity, right authority, right causality. The
+contract asks for several rows per source event, so the model split one
+declaration into three and numbered them: handed `turn:4:character:1` it wrote
+`turn:4:character:1:0:action`. A whole beat was lost on the shape of a
+bookkeeping string, by an exact-membership test.
+
+A prefix rule fixed that, and the NEXT run died on the same field in a
+different shape:
+
+    supplied  turn:2:character:2:0:action   turn:2:character:2:1:speech
+    written   turn:4:character:2:0:action
+
+The model rebuilt the id from its own idea of the turn number instead of
+copying it, so nothing matched by prefix either. Two runs, two deaths, one
+inert field — nothing downstream consumes `source_event_id`; the attribution
+that means something is `source_entity_id`, and that is checked separately and
+matched both times.
+
+`_resolved_source_event` now decides by the longest shared TAIL, which is the
+discrimination a reader makes: the entity is already known, so the only
+question is which of ITS events a row came from, and `:0:action` picks one
+candidate and only one. An exact hit still stands, a source with one event is
+unambiguous whatever was written, and a genuine tie is still reported — but
+the two shapes a real model produces are now recovered rather than fatal.
+
+**The rule this keeps re-teaching:** a guard on a field nothing reads should
+never be able to cost a beat. Two correct rulings were thrown away to enforce
+precision on a provenance string.
 
 **Still open.** `dialogue_log` remains a second projection of the same sources
 rather than a projection OF this channel. It cannot disagree with the channel
-today — both are built from `char_speech` and the interpret sequence — but the
-two representations are the kind this codebase keeps finding, and collapsing the
-log into a read of `state_diff.speech` is the finish.
+today — both are built from `char_speech` and the interpret sequence — but it
+is exactly the pair this codebase keeps finding, and collapsing the log into a
+read of `state_diff.speech` is the finish.
 
 ## 5. What already exists to build on
 

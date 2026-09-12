@@ -457,6 +457,16 @@ _CHANNEL_SPECIALISTS = {}
 #: the `speech` channel (`director_evidence.speech_transforms`), because a
 #: hand asked to author dialogue is a hand inventing lines nobody said.
 #:
+#: A TOLERANCE, NOT AN INSTRUCTION -- and the prompt deliberately does not ask
+#: for it. `speech_transforms` keys off the row's `kind`, so the channel is
+#: built whether or not the Director ever writes this word. Asking for it was
+#: measured to be worse than silent: on the first live run the Director filed
+#: its spoken rows under `telling_ops`, which is CORRECT -- a telling is a
+#: social record and that is the hand that keeps it -- and an instruction to
+#: write `speech` instead would have diverted exactly those spans away from
+#: the social hand to no hand at all. So the word is accepted where a Director
+#: reaches for it and never requested.
+#:
 #: Kept here beside `_CHANNEL_SPECIALISTS` because this is the module that
 #: owns the ownership table, and a second table saying who owns what is the
 #: failure this file already carries three notes about.

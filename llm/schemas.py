@@ -1308,11 +1308,11 @@ class CausalLedgerEntry(LenientModel):
     source_entity_id: str = ""
     authority_mode: str = "autonomous"
     source_event_id: str = ""
-    kind: str = "event"
     event: str = ""
-    # The verb of a `communication` row -- an act whose words were never
-    # supplied ("asks", "explains"). A `speech` row needs none: it has the
-    # line itself.
+    # The verb of a spoken row whose WORDS were never supplied ("asks",
+    # "explains"). Its presence is the whole distinction between a quote and
+    # a description -- a verb is supplied exactly when the line is not -- so
+    # no `kind` and no flag is needed to tell them apart.
     act: str = ""
     observable: str = ""
     commitment: str = "asserted"
@@ -5571,6 +5571,54 @@ def _unplaced_establish_entities(output: dict) -> list[str]:
             "in, even one the party has left" % ", ".join(sorted(missing)[:6])]
 
 
+def _resolved_source_event(written, event_ids):
+    """The supplied event id a written one MEANS, or None if unrecoverable.
+
+    Only the entity's OWN supplied ids are candidates; the caller has already
+    established that the entity itself matched, and the entity is the
+    attribution that means anything. This picks which of that entity's events
+    a row came from.
+
+    Three ways, in order of how much they assume. An exact hit stands. A
+    source with one event has an unambiguous answer whatever was written. And
+    otherwise the longest shared TAIL decides, provided one candidate wins it
+    outright -- which is what recovers the two shapes live runs actually
+    produce:
+
+      supplied  turn:2:character:2:0:action   turn:2:character:2:1:speech
+      written   turn:4:character:2:0:action
+
+    The model rebuilt the id from its own idea of the turn number. Nothing
+    matches by prefix, but the tail `:0:action` picks one candidate and only
+    one, which is the same discrimination a reader would make.
+    """
+    written = str(written or "").strip()
+    known = [str(value).strip() for value in event_ids or ()
+             if str(value).strip()]
+    if written and written in known:
+        return written
+    if len(set(known)) == 1:
+        return known[0]
+    if not written or not known:
+        return None
+
+    def shared_tail(candidate):
+        length = 0
+        for left, right in zip(reversed(written), reversed(candidate)):
+            if left != right:
+                break
+            length += 1
+        return length
+
+    scored = sorted(((shared_tail(value), value) for value in set(known)),
+                    reverse=True)
+    if scored[0][0] <= 0:
+        return None
+    if len(scored) > 1 and scored[1][0] == scored[0][0]:
+        return None
+    return scored[0][1]
+
+
 def semantic_output_errors(
     step_key: str,
     output: dict,
@@ -5618,6 +5666,14 @@ def semantic_output_errors(
             for channels in SPECIALIST_CHANNELS.values()
             for channel in channels
         }
+        # The channels no hand owns because the ENGINE settles them. Spelled
+        # here rather than imported: `agents` imports this module, so reading
+        # `director_scopes.ENGINE_CATEGORIES` back would close a cycle. The
+        # prompt does not ask for `speech` (see that constant's note) -- this
+        # is tolerance for a Director that reaches for it anyway, and
+        # rejecting the beat over a word the engine understands perfectly
+        # well is the failure this whole validator keeps being taught.
+        allowed_categories.add("speech")
         for index, ledger in enumerate(ledgers):
             if not isinstance(ledger, dict):
                 found.append(f"ledgers.{index} must be an object")
@@ -5642,13 +5698,31 @@ def semantic_output_errors(
                 found.append(
                     f"{prefix}.source_entity_id was not supplied in event_inputs")
             else:
-                authority = str(ledger.get("authority_mode") or "").strip()
-                if authority != source["authority_mode"]:
-                    found.append(
-                        f"{prefix}.authority_mode does not match its source")
+                # `authority_mode` IS NOT CHECKED, and is not asked for. It is
+                # the Director's working input -- how an asserted act is
+                # judged contestable -- and the answer comes back as
+                # `commitment`. The engine fills the field from this same
+                # source group, so a model echoing it could only ever agree
+                # or be wrong, and neither was worth failing a beat over.
                 source_event_id = str(
                     ledger.get("source_event_id") or "").strip()
-                if source_event_id not in source["event_ids"]:
+                # A DERIVED PROVENANCE STRING IS NOT A CAUSAL ERROR.
+                #
+                # This was an exact-membership test, and it killed a whole
+                # beat in the first live run. The contract asks for several
+                # rows per source event ("several objects may produce several
+                # rows at the same chrono_id"), and a model splitting one
+                # event into three rows numbers them: handed
+                # `turn:4:character:1`, it wrote
+                # `turn:4:character:1:0:action`. Every row was correct --
+                # right entity, right authority, right causality -- and the
+                # turn was lost on the shape of a bookkeeping string.
+                #
+                # The words are right there. The entity already matched, so
+                # its supplied ids are known; recover the one the row means
+                # and only report when recovery is genuinely ambiguous.
+                if _resolved_source_event(source_event_id,
+                                          source["event_ids"]) is None:
                     found.append(
                         f"{prefix}.source_event_id was not supplied by its source")
 
@@ -5658,9 +5732,12 @@ def semantic_output_errors(
                 found.append(f"{prefix}.object_name is empty")
             if not str(ledger.get("resolution_notes") or "").strip():
                 found.append(f"{prefix}.resolution_notes is empty")
-            if str(ledger.get("kind") or "") not in {
-                    "speech", "action", "event"}:
-                found.append(f"{prefix}.kind is not speech, action, or event")
+            # THERE IS NO `kind`, deliberately. It said nothing `categories`
+            # and `source_entity_id` were not already saying: a row is SPOKEN
+            # because it names the `speech` category, an EVENT because the
+            # world or the dice caused it rather than an actor, and an act
+            # otherwise. A fourth field to keep consistent with the other
+            # three is a fourth field to get wrong.
             if str(ledger.get("commitment") or "") not in {
                     "asserted", "contestable"}:
                 found.append(
