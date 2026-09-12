@@ -1431,6 +1431,80 @@ handed its own whole string back. Under `any` it is told the ONE word that
 reached nobody -- `geography` rather than `"body, geography"` -- which is the
 feedback the old rule claimed as its reason for existing.
 
+## 4q. SPEECH IS A CHANNEL, AND IT IS THE ONE NO HAND OWNS
+
+**The defect.** The causal ledger row had nowhere to put words. `kind` was
+`speech|action|event`; `event` was specified as "short objective occurrence";
+`normalize_causal_ledger` projected `text = event`; and `composer._render_event`
+wraps a speech percept's body in literal quotation marks. So a Director obeying
+its own prompt turned *I ask Sera what happened to the boat* into
+
+    You says: "asks Sera what happened to the boat"
+
+— a description of the act, delivered as the act's own words. Measured by
+running a compliant row end to end, not inferred.
+
+Two things had gone at once. The row lost the WORDS, and the contract lost the
+DISTINCTION. The engine has always had two element types and still has both
+render paths: `type:"speech"` carries `text` and is quoted, `type:"communication"`
+carries `act`+`content` and renders as indirect speech that invents no
+quotation. The `kind` enum could reach only the first, so every described act
+became a fabricated quote. The cross-check that settles it is that
+`prompt_policy.json` deleted the `director_interpret` line teaching the
+`communication` shape and KEPT the narrator line forbidding exactly what the
+Director was then forced to do.
+
+**What speech is now.** A list channel — `world/causality.LIST_CHANNELS`,
+`StateDiff.speech` — compiled by the same resolver as every state change, so
+what was SAID and what was DONE share one chronology instead of two that drift.
+`_stamp_from_event` stamps `from_event` on it like any other row.
+
+**And it is the one channel no specialist owns.** A channel is a thing a model
+writes, so a `speech` channel on a hand means a hand authoring dialogue. Words
+have exactly two legitimate origins — the player's raw input, which only the
+Director reads, and a character agent's own declaration — and a hand is neither.
+The fan-out's own measurements say what happens when a hand is handed prose: it
+echoes the payload into the diff. So the engine assembles the channel from three
+sources and no model is ever asked for a line:
+
+| source | who wrote the words | chronology |
+|---|---|---|
+| interpret ledger | the player, sliced by the Director | 1..N |
+| resolve ledger | autonomous and world speech | offset past interpret |
+| `char_speech` | the character agent itself | after both |
+
+Offset rather than interleaved because each ledger numbers from 1: interpret
+slices the player's declaration and resolve never sees it again
+(`_causal_event_inputs` withholds an already-asserted human event on purpose, so
+resolve is not asked to decide it twice). Characters last, because a reaction is
+caused by the beat it answers.
+
+`speaker` is an engine identity (`persona:12`, `character:75`), never a display
+name — which is what lets a line join to a body without matching casefolded
+prose, the way `dialogue_log` still has to.
+
+**`speech` therefore reaches no hand, and that is not a routing failure.**
+`ENGINE_CATEGORIES` in `director_scopes` says so, and `_unrouted_rulings` /
+`unnamed_work` read it — otherwise the report would tell the next beat's author
+that the word it used routes nowhere and invite it to pick another one. A
+genuinely unknown category is still reported; that is the whole point of the
+exemption being a named set of one rather than a loosened test.
+
+**The addressee, which went with it.** Resolve authors no `dialogue_log` any
+more, so every row is re-minted from a declaration — and both re-mint sites
+hardcoded `intended_target: None`. Two readers depend on that field:
+`spatial_frames` snaps orientation from it (who turned to face whom), and the
+unanswered-address percept — "T says nothing", D6, the whole of subtext — is
+keyed on it. It was None on every line of every beat. The ledger row already
+carried `targets`, so the projection and both re-mints now take the addressee
+from the declaration that named it.
+
+**Still open.** `dialogue_log` remains a second projection of the same sources
+rather than a projection OF this channel. It cannot disagree with the channel
+today — both are built from `char_speech` and the interpret sequence — but the
+two representations are the kind this codebase keeps finding, and collapsing the
+log into a read of `state_diff.speech` is the finish.
+
 ## 5. What already exists to build on
 
 This is a rewire of proven mechanisms, not a green field. **The output half of

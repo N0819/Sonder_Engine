@@ -251,6 +251,9 @@ from .director_evidence import (
     span_mint_rooms,
     item_survivors,
     normalize_causal_ledger,
+    causal_world_index,
+    speech_transforms,
+    declared_speech_transforms,
     span_colocations,
     span_pairings,
     span_records,
@@ -322,6 +325,7 @@ from .director_scopes import (
     _ruling_for,
     _unrouted_rulings,
     unnamed_work,
+    ENGINE_CATEGORIES,
     _dispatch_specialists,
 )
 from .director_fanout import (
@@ -1123,6 +1127,11 @@ def director_interpret(ctx, nonce):
                 for eid, entity in (sc.get("entities") or {}).items()
             },
         },
+        # WHERE EVERYTHING IS, so a target the input never named can
+        # still be constructed. `object_index` above is identity;
+        # this is placement, and "the man by the door" is a question
+        # about a room rather than about a list of names.
+        "world_index": causal_world_index(sc, here=p_room),
         "standing_relations": {
             "positions": sc.get("positions") or {},
             "contacts": sc.get("contacts") or [],
@@ -3657,7 +3666,13 @@ def director_resolve(ctx, nonce, _corrections=None):
         speeches = [{"text": e["text"], "volume": e.get("volume", "normal"),
                      "tone": e.get("tone", ""),
                      "visibility": e.get("visibility", "overt"),
-                     "conceal_from": e.get("conceal_from") or []}
+                     "conceal_from": e.get("conceal_from") or [],
+                     # WHO IT WAS SAID TO, carried from the declaration. The
+                     # `dialogue_log` re-mint below is the only producer of
+                     # that field now that resolve authors no log, and it
+                     # used to hardcode None -- which cost `spatial_frames`
+                     # its orientation snap on every line of every beat.
+                     "targets": e.get("targets") or []}
                     for e in sequence if e.get("type") == "speech" and e.get("text")]
         if speeches:
             char_speech.setdefault(name, []).extend(speeches)
@@ -3687,7 +3702,8 @@ def director_resolve(ctx, nonce, _corrections=None):
                                      "volume": e.get("volume", "normal"),
                                      "tone": e.get("tone", ""),
                                      "visibility": e.get("visibility", "overt"),
-                                     "conceal_from": e.get("conceal_from") or []})
+                                     "conceal_from": e.get("conceal_from") or [],
+                                     "targets": e.get("targets") or []})
             if not speeches and dk.get("speech"):
                 speeches.append({"text": dk["speech"], "volume": "normal", "tone": "",
                                   "visibility": "overt", "conceal_from": []})
@@ -4260,6 +4276,12 @@ def director_resolve(ctx, nonce, _corrections=None):
                 for eid, entity in (resolve_sc.get("entities") or {}).items()
             },
         },
+        # WHERE EVERYTHING IS, so a target the input never named can
+        # still be constructed. `object_index` above is identity;
+        # this is placement, and "the man by the door" is a question
+        # about a room rather than about a list of names.
+        "world_index": causal_world_index(
+            resolve_sc, here=room_of(resolve_sc, p_name)),
         "standing_relations": {
             "positions": resolve_sc.get("positions") or {},
             "contacts": resolve_sc.get("contacts") or [],
@@ -4712,6 +4734,47 @@ def director_resolve(ctx, nonce, _corrections=None):
     # character result into the objective diff.
     sd["following_ops"] = list(sd.get("following_ops") or []) + \
         _collect_following_ops(ctx, sc, interp, p_name)
+
+    # WHAT WAS SAID, COMPILED LIKE EVERYTHING ELSE THAT HAPPENED.
+    #
+    # Speech is the one channel no specialist owns, and deliberately: a hand
+    # asked for a `speech` patch is a hand inventing lines. So the engine
+    # assembles it from the three places words legitimately come from and
+    # sends them through the SAME resolver every state change goes through --
+    # which is the whole point of it being a channel rather than a list
+    # beside one. `compile_transforms` orders by `chrono_id` and stamps
+    # `from_event`, so what was said and what was done end up in one
+    # chronology instead of two that can drift apart.
+    #
+    # The three sources, and why they are three: interpret sliced the
+    # player's declaration and resolve never sees it again (see
+    # `_causal_event_inputs` -- an already-asserted human event is withheld
+    # on purpose, so resolve is not asked to decide it twice), resolve's own
+    # ledger carries autonomous and world speech, and a character's declared
+    # lines are the character's own and were never the Director's to write.
+    #
+    # Each ledger numbers its chronology from 1, so they are offset rather
+    # than interleaved: the player spoke, then the world answered, then the
+    # cast did. Characters last because a reaction is caused by the beat it
+    # answers.
+    _interpret_speech = speech_transforms(interp.get("causal_ledger") or [])
+    _interpret_span = max(
+        (int(t.get("chrono_id") or 0) for t in _interpret_speech), default=0)
+    _resolve_speech = speech_transforms(
+        out.get("causal_ledger") or [], chrono_offset=_interpret_span)
+    _director_span = max(
+        [int(t.get("chrono_id") or 0)
+         for t in _interpret_speech + _resolve_speech], default=0)
+    _spoken = (_interpret_speech + _resolve_speech
+               + declared_speech_transforms(char_speech,
+                                            chrono_offset=_director_span))
+    if _spoken:
+        _speech_diff, _speech_history, _speech_rejected = compile_transforms(
+            _spoken, allowed_channels=("speech",), specialist="engine")
+        sd["speech"] = list(_speech_diff.get("speech") or [])
+        for _rejection in _speech_rejected:
+            ctx.add_warning("speech transform rejected: %s"
+                            % _rejection.get("reason"))
     resolved_contact_ops = _drop_momentary_contact_adds(
         sd.get("contact_ops"),
         report=lambda note: ctx.add_warning(f"resolved contact: {note}"),
@@ -5505,6 +5568,24 @@ def director_resolve(ctx, nonce, _corrections=None):
         retagged.append(d)
     dlog = retagged
 
+    # WHO THE PLAYER WAS TALKING TO, recovered from the declaration rather
+    # than dropped. `player_speech_lines` yields bare strings, so the
+    # addressee has to be looked up against the element the line came from --
+    # keyed on the quote body, which is the same key the concealment
+    # backstop above already matches on.
+    _player_addressee = {}
+    for _element in interp.get("sequence") or []:
+        if not isinstance(_element, dict) or _element.get("type") != "speech":
+            continue
+        _body = _quote_body(str(_element.get("text") or ""))
+        if not _body:
+            continue
+        _aimed = _element.get("intended_target")
+        if _aimed is None:
+            _targets = _element.get("targets") or []
+            _aimed = _targets[0] if _targets else None
+        _player_addressee.setdefault(_body, _aimed)
+
     for line in player_speech_lines(interp):
         body = _quote_body(line)
         if body and (p_name.casefold(), body) not in existing_keys:
@@ -5512,7 +5593,8 @@ def director_resolve(ctx, nonce, _corrections=None):
                 (p_name.casefold(), body), ("overt", [], interp.get("speech_volume", "normal")))
             dlog.append({"speaker": p_name, "exact_quote": line,
                          "volume": vol,
-                         "intended_target": None, "tone": "",
+                         "intended_target": _player_addressee.get(body),
+                         "tone": "",
                          "visibility": vis, "conceal_from": cf})
             existing_keys.add((p_name.casefold(), body))
 
@@ -5522,7 +5604,8 @@ def director_resolve(ctx, nonce, _corrections=None):
             if body and (str(cname).casefold(), body) not in existing_keys:
                 dlog.append({"speaker": cname, "exact_quote": s["text"],
                              "volume": s.get("volume", "normal"),
-                             "intended_target": None, "tone": s.get("tone", ""),
+                             "intended_target": (s.get("targets") or [None])[0],
+                             "tone": s.get("tone", ""),
                              "visibility": s.get("visibility", "overt"),
                              "conceal_from": s.get("conceal_from") or []})
                 existing_keys.add((str(cname).casefold(), body))

@@ -486,6 +486,11 @@ _SUBJECT_OP_CHANNELS = {
     "comms_ops": ("id", "name", "rooms", "carriers"),
     "crowd_ops": ("crowd_id", "who", "room"),
     "telling_ops": ("speaker", "listener"),
+    # A line said this beat. `speaker` is an engine identity and `targets`
+    # names who it was aimed at; `text` is the words and names nothing, so
+    # it is deliberately not a subject key -- the same rule `sensory_events`
+    # follows for `detail`.
+    "speech": ("speaker", "targets"),
     "courier_ops": ("courier_id", "sender", "addressee", "listener", "by",
                     "from_room", "to_room"),
     "artifact_ops": ("artifact_id", "poster", "room", "reader", "by"),
@@ -2402,6 +2407,10 @@ def normalize_causal_ledger(out):
             "source_event_id": source_event_id,
             "kind": kind,
             "event": event,
+            # Only a `communication` row carries one: the verb for an act
+            # whose words were never supplied ("asks", "explains"). A
+            # `speech` row needs no verb because it has the line itself.
+            "act": str(entry.get("act") or "").strip(),
             "observable": str(entry.get("observable") or "").strip(),
             "commitment": str(entry.get("commitment") or "asserted"),
             "targets": [str(value) for value in entry.get("targets") or []],
@@ -2437,6 +2446,43 @@ def normalize_causal_ledger(out):
                 "visibility": normalized["visibility"],
                 "conceal_from": normalized["conceal_from"],
                 "targets": normalized["targets"],
+                # WHO IT WAS AIMED AT, and it has to be here. Resolve no
+                # longer authors `dialogue_log`, so every row is re-minted
+                # from a declaration -- and that re-mint hardcodes
+                # `intended_target: None`. Without this the addressee is lost
+                # on every line of every beat, which costs two things that
+                # both read it: `spatial_frames` stops snapping orientation
+                # (who turned to face whom), and the unanswered-address
+                # percept -- "T says nothing", the whole of subtext -- can
+                # never fire, because `perception._unanswered_addresses`
+                # reads `intended_target` off this element.
+                "intended_target": (normalized["targets"][0]
+                                    if normalized["targets"] else None),
+            })
+        elif kind == "communication":
+            # SAYING A THING AND SAYING WHAT YOU SAID ARE DIFFERENT ACTS.
+            # "I ask her what happened" supplies a proposition and no words;
+            # `"What happened?"` supplies the words. Both are speech and only
+            # one may be rendered inside quotation marks -- `_render_event`
+            # wraps a `speech` percept's body in literal quotes, so routing a
+            # described act through that path puts a sentence in the player's
+            # mouth that the player never wrote.
+            #
+            # This branch is why the distinction survives the causal
+            # contract. `communication_percept` and `communication_surface`
+            # have always been here and render indirect speech ("asks what
+            # happened") without inventing a quotation; the shape they read
+            # is `act` + `content`, so that is what the row projects to.
+            projected.update({
+                "type": "communication",
+                "act": str(entry.get("act") or "").strip() or "say",
+                "content": event,
+                "volume": normalized["volume"],
+                "visibility": normalized["visibility"],
+                "conceal_from": normalized["conceal_from"],
+                "targets": normalized["targets"],
+                "intended_target": (normalized["targets"][0]
+                                    if normalized["targets"] else None),
             })
         elif kind == "action":
             projected.update({
@@ -2457,6 +2503,196 @@ def normalize_causal_ledger(out):
     out["causal_ledger"] = ledger
     out["sequence"] = sequence
     return out
+
+
+def causal_world_index(sc, here=None):
+    """What the Director needs to NAME A TARGET THE INPUT DID NOT NAME.
+
+    The causal contract asks for `targets`, and deterministic code then
+    resolves each one against the world for the hands
+    (`_specialist_payload`'s `target_matches`). That resolution can only find
+    what the Director actually wrote, so a Director shown nothing but an
+    id->name list writes "the belt" and "the man by the door" and neither
+    resolves -- the words are right and the world was never shown to it.
+
+    So this is the smallest index that lets an unnamed target be constructed:
+    where each body and thing IS, what a body is WEARING, and what a room
+    HOLDS and OPENS ONTO. Identity and place only. No state, no minds, no
+    lore, no ledger values -- a Director that can see what a condition says
+    is a Director being invited to resolve it, and resolving is the hands'.
+
+    Grouped by room rather than handed over flat, because "the man by the
+    door" is a question about one room and a flat map makes the Director
+    re-derive the grouping every beat.
+    """
+    sc = sc if isinstance(sc, dict) else {}
+    positions = sc.get("positions") or {}
+    rooms = sc.get("rooms") or {}
+    entities = sc.get("entities") or {}
+
+    def display(key):
+        record = entities.get(key)
+        if isinstance(record, dict) and record.get("name"):
+            return str(record["name"])
+        return str(key)
+
+    index = {}
+    for room_id, room in rooms.items():
+        room = room if isinstance(room, dict) else {}
+        index[str(room_id)] = {
+            "name": str(room.get("name") or room_id),
+            "exits": sorted(
+                str(edge.get("to")) for edge in room.get("adjacent") or []
+                if isinstance(edge, dict) and edge.get("to")),
+            "holds": [],
+        }
+    for key, room_id in positions.items():
+        room = index.get(str(room_id))
+        if room is None:
+            continue
+        room["holds"].append({"id": str(key), "name": display(key),
+                              "kind": "entity" if key in entities else "body"})
+    for room in index.values():
+        room["holds"].sort(key=lambda row: (row["kind"], row["id"]))
+
+    worn = {}
+    for who, attire in (sc.get("attire") or {}).items():
+        if not isinstance(attire, dict):
+            continue
+        wearing = [str(item) for item in attire.get("wearing") or []]
+        if wearing:
+            worn[str(who)] = wearing
+
+    out = {"rooms": index}
+    if worn:
+        out["worn"] = worn
+    # The anchors a body can be AT -- a bench, a hearth, a counter. The grain
+    # below the room, and the one that makes a positional description
+    # ("behind the counter") name something the engine holds.
+    stations = sc.get("stations") or {}
+    if stations:
+        out["stations"] = stations
+    if here:
+        out["here"] = str(here)
+    return out
+
+
+#: The two ledger kinds that put words (or a proposition) into the world.
+SPOKEN_KINDS = frozenset({"speech", "communication"})
+
+
+def speech_transforms(ledger, *, chrono_offset=0):
+    """The Director's spoken rows, as `speech` channel transforms.
+
+    THE ENGINE BUILDS THESE, AND THAT IS THE POINT. A channel is a thing a
+    model writes, so a `speech` channel owned by a specialist would mean a
+    hand authoring dialogue -- and the one rule this engine has never bent is
+    that the player's declared line is never silently replaced and a
+    character's lines are that character's own. Words have exactly two
+    legitimate origins: the raw input, which only the Director reads, and a
+    character agent's declaration. A hand would be a third, and the fan-out's
+    own measurements say what happens when a hand is handed prose -- it
+    echoes the payload back into the diff.
+
+    So the words come off the Director's ledger row and go straight to the
+    causality resolver. `compile_transforms` then orders them by `chrono_id`
+    and stamps `from_event` exactly as it does a noise or a garment, which is
+    the whole reason this is a channel instead of a list beside one: what was
+    SAID and what was DONE end up in one chronology rather than two that can
+    disagree.
+
+    `speaker` is `source_entity_id` -- `persona:12`, `character:75` -- and
+    not a display name, so a line joins to a body by identity instead of by
+    matching casefolded prose.
+
+    ``chrono_offset`` places a later Director invocation's rows after an
+    earlier one's. Interpret slices the player's declaration and resolve
+    never sees it again (`_causal_event_inputs` withholds an already-asserted
+    human event on purpose), so the beat's spoken rows come from two ledgers
+    that each number from 1 and must not collide.
+    """
+    transforms = []
+    for entry in ledger or []:
+        if not isinstance(entry, dict):
+            continue
+        kind = str(entry.get("kind") or "").strip().casefold()
+        if kind not in SPOKEN_KINDS:
+            continue
+        text = str(entry.get("event") or "").strip()
+        if not text:
+            # A spoken row with nothing said is not a silence -- a silence is
+            # the absence of a row. It is a row the Director failed to fill,
+            # and minting an empty line from it would put a body on the page
+            # opening its mouth to say "".
+            continue
+        quoted = kind == "speech"
+        row = {
+            "speaker": str(entry.get("source_entity_id") or ""),
+            "mode": "quote" if quoted else "described",
+            "text": text,
+            "targets": [str(value) for value in entry.get("targets") or []],
+            "volume": str(entry.get("volume") or "normal"),
+            "visibility": str(entry.get("visibility") or "overt"),
+            "conceal_from": [str(value)
+                             for value in entry.get("conceal_from") or []],
+        }
+        if not quoted:
+            row["act"] = str(entry.get("act") or "").strip() or "say"
+        try:
+            chrono_id = int(entry.get("chrono_id") or 0)
+        except (TypeError, ValueError):
+            chrono_id = 0
+        try:
+            item_id = int(entry.get("item_id") or 0)
+        except (TypeError, ValueError):
+            item_id = 0
+        transforms.append({
+            "chrono_id": max(chrono_id, 1) + int(chrono_offset),
+            "item_id": max(item_id, 1) + int(chrono_offset),
+            "patch": {"speech": [row]},
+        })
+    return transforms
+
+
+def declared_speech_transforms(declared, *, chrono_offset=0):
+    """A character's OWN declared lines, on the same channel.
+
+    Not the Director's rows and not a second authority over them: this is the
+    same `char_speech` structure that already floors `dialogue_log`, so the
+    channel and the log cannot disagree about what a character said -- they
+    are two projections of one source, which is what `dialogue_log` has
+    always been.
+
+    They follow the Director's rows in chronology because that is what they
+    are: a reaction is caused by the beat it answers. `speaker` is the
+    character's engine identity where the caller knows it.
+    """
+    transforms = []
+    order = 0
+    for speaker, lines in (declared or {}).items():
+        for line in lines or []:
+            if not isinstance(line, dict):
+                continue
+            text = str(line.get("text") or "").strip()
+            if not text:
+                continue
+            order += 1
+            transforms.append({
+                "chrono_id": int(chrono_offset) + order,
+                "item_id": int(chrono_offset) + order,
+                "patch": {"speech": [{
+                    "speaker": str(speaker or ""),
+                    "mode": "quote",
+                    "text": text,
+                    "targets": [str(value)
+                                for value in line.get("targets") or []],
+                    "volume": str(line.get("volume") or "normal"),
+                    "visibility": str(line.get("visibility") or "overt"),
+                    "conceal_from": [
+                        str(value) for value in line.get("conceal_from") or []],
+                }]},
+            })
+    return transforms
 
 
 def _span_items(out):

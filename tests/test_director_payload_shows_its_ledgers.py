@@ -126,6 +126,11 @@ LEDGERS = {
     "cast_changes": (None, "the roster is chat_chars; the hand gets `cast`"),
     "introductions": (None, "the recognition ledger is a table"),
     "world_facts": (None, "the world store, not the scene"),
+    # Compiled by the ENGINE, not by any hand (`ENGINE_CATEGORIES`), so no
+    # specialist is ever shown a standing ledger of it -- there is none to
+    # show. What was said is over when the beat is, like `sensory_events`.
+    "speech": (None, "the beat's own record of what was said; no hand writes "
+                     "it and nothing stands after the beat"),
     "public_evidence": (None, "describes THIS beat; there is no standing "
                               "ledger of it to show"),
     # --- contact ----------------------------------------------------------

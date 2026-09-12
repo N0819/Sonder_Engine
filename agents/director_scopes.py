@@ -446,6 +446,22 @@ _CHANNEL_GATES = {
 #: dispatch: a split that routes a repair to nobody.
 _CHANNEL_SPECIALISTS = {}
 
+#: THE CATEGORIES THE ENGINE SETTLES ITSELF, and therefore the ones that
+#: correctly reach no hand.
+#:
+#: Every other category resolves to a specialist, so a category that resolves
+#: to nobody is a change the engine cannot deliver -- which is exactly what
+#: `_unrouted_rulings` and `unnamed_work` exist to report. `speech` is the one
+#: category for which "no hand" is the right answer rather than a failure: the
+#: words come off the Director's own ledger row and are compiled straight into
+#: the `speech` channel (`director_evidence.speech_transforms`), because a
+#: hand asked to author dialogue is a hand inventing lines nobody said.
+#:
+#: Kept here beside `_CHANNEL_SPECIALISTS` because this is the module that
+#: owns the ownership table, and a second table saying who owns what is the
+#: failure this file already carries three notes about.
+ENGINE_CATEGORIES = frozenset({"speech"})
+
 
 def _default_channel_gate(facts):
     return facts["physical_beat"]
@@ -910,7 +926,8 @@ def unnamed_work(view):
                  + list((view or {}).get("spans") or [])):
         if not isinstance(item, dict):
             continue
-        names = _work_item_categories(item)
+        names = [name for name in _work_item_categories(item)
+                 if name not in ENGINE_CATEGORIES]
         if names and not any(manifest_category_targets(c) for c in names):
             orphans.append(item)
     return orphans
@@ -1046,6 +1063,12 @@ def _unrouted_rulings(view):
         if not isinstance(item, dict):
             continue
         for category in _work_item_categories(item):
+            # `speech` reaches no hand ON PURPOSE (see `ENGINE_CATEGORIES`):
+            # the engine compiles it. Reporting it here would tell the next
+            # beat's author that the word it used routes nowhere and invite
+            # it to pick another one.
+            if category in ENGINE_CATEGORIES:
+                continue
             if not manifest_category_targets(category):
                 if category not in unrouted:
                     unrouted.append(category)
