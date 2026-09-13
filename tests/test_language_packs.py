@@ -555,7 +555,10 @@ def test_no_prompt_card_names_a_character_or_vehicle_from_one_story():
         # so reading the file would search 14 KB of structure and find
         # nothing -- a tripwire that passes because it stopped looking.
         body = json.dumps(raw_card(pack.id), ensure_ascii=False)
-        assert len(body) > 200_000, (
+        # The character agent deliberately moved from a 65 KB explanatory
+        # sheet to a compact kernel.  Keep this comfortably above the ~14 KB
+        # reference-only index without making prompt bloat a test invariant.
+        assert len(body) > 100_000, (
             f"{pack.id} card source is {len(body)} characters -- this grep is "
             "reading structure, not prose, and would pass on anything")
         found = [name for name in _STORY_INSTANCE_NAMES if name in body]
@@ -599,7 +602,7 @@ def test_the_conditions_shape_a_prompt_shows_is_the_shape_declared():
             continue
         blob = "\n".join(
             body for _path, body in _raw_string_leaves(raw_card(pack.id)))
-        assert len(blob) > 200_000, (
+        assert len(blob) > 100_000, (
             f"{pack.id} card source is {len(blob)} characters -- this scan is "
             "reading structure, not prose")
         assert not singular.search(blob), (

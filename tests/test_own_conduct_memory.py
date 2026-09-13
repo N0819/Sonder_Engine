@@ -239,3 +239,59 @@ class TestDurableDialogueMarkersBeginAtWords:
     def test_inflection_at_the_marker_end_still_matches(self):
         assert _durable_dialogue_category(
             "I promised you a lantern and you will have one") == "promise"
+
+
+def test_a_free_form_self_reported_affect_cannot_kill_the_commit(
+        temp_db, monkeypatch):
+    """FOUND BY A TEN-BEAT LIVE RUN, and it lost every beat in it.
+
+    `active_state.affect` is the character's own SELF-REPORT.
+    `affect.resolve_affect` takes it only as `proposed=`, beside `mood`, and
+    computes the authoritative value from the previous affect, this beat's
+    appraisal, the baseline and elapsed time. The memory encoder falls back
+    to that self-report for a character with no resolved affect yet, and read
+    `.get("surface").get("valence")` straight off it.
+
+    One model emitted `affect` in four shapes across one story --
+    `{valence,arousal}`, `{surface:"tense"}`, `{}`, `{surface:{...}}` -- and
+    the second raised `'str' object has no attribute 'get'` inside
+    `prepare_memory_commit`, which `commit.py` re-raises as a failed commit.
+    Every beat of the run died there.
+
+    No schema layer was going to catch it: `CharacterActiveState.affect` is
+    typed `dict` and never reaches inside, so `{"surface": "tense"}` is a
+    perfectly valid value. A self-report has to be read as untrusted at the
+    point of use.
+    """
+    shapes = [
+        {"valence": 0.2, "arousal": 0.4},          # flat, no surface
+        {"surface": "tense", "undercurrent": "flat"},   # THE crash
+        {},
+        {"surface": {"valence": -0.3, "arousal": 0.7}},  # the good one
+        "tense",                                    # not even a dict
+    ]
+    for shape in shapes:
+        chat_id, char_id, cast = _story(temp_db)
+        captured = _capture_batch(monkeypatch)
+        ctx = _ctx(chat_id, char_id, cast, {
+            "salience": 0.4,
+            "sequence": [{"type": "speech", "text": "Three, then."}],
+            "active_state": {"mood": "steady", "affect": shape},
+        })
+        prepare_memory_commit(ctx)
+        assert _self_rows(captured), shape
+
+    # ...and the well-formed one is still actually READ, so the guard did not
+    # buy safety by throwing the value away.
+    chat_id, char_id, cast = _story(temp_db)
+    captured = _capture_batch(monkeypatch)
+    ctx = _ctx(chat_id, char_id, cast, {
+        "salience": 0.4,
+        "sequence": [{"type": "speech", "text": "Three, then."}],
+        "active_state": {
+            "mood": "steady",
+            "affect": {"surface": {"valence": -0.3, "arousal": 0.7}}},
+    })
+    prepare_memory_commit(ctx)
+    row = _self_rows(captured)[0]
+    assert float(row.get("valence")) == -0.3, row

@@ -3106,6 +3106,111 @@ class MemoryEffect(LenientModel):
     disposition: str = "integrated"
     changed: str = ""
 
+
+def _canonical_character_row(value, aliases):
+    """Copy unambiguous JSON-only spellings onto canonical character keys."""
+    if not isinstance(value, dict):
+        return value
+    out = dict(value)
+    for target, sources in aliases.items():
+        if out.get(target) not in (None, ""):
+            continue
+        for source in sources:
+            if out.get(source) not in (None, ""):
+                out[target] = out[source]
+                break
+    return out
+
+
+def _canonical_mind_hypothesis(value):
+    return _canonical_character_row(value, {
+        "about_entity": ("about", "target_entity", "target"),
+        "claim": ("reading", "inference", "inferred", "what"),
+        "kind": ("type",),
+    })
+
+
+def _canonical_relationship_update(value):
+    out = _canonical_character_row(value, {
+        "target_entity": ("target", "target_name", "subject"),
+    })
+    if not isinstance(out, dict):
+        return out
+    axis = str(out.get("axis") or "").strip().casefold()
+    if axis in {"trust", "warmth", "fear", "respect", "suspicion"}:
+        key = f"{axis}_delta"
+        if key not in out and out.get("delta") is not None:
+            out[key] = out.get("delta")
+    return out
+
+
+def _canonical_kernel_intention(value):
+    return _canonical_character_row(value, {
+        "op": ("operation",),
+        "id": ("intention_id", "intent_id"),
+    })
+
+
+def _canonical_kernel_decision(value):
+    out = _canonical_character_row(value, {
+        "hinge": ("why", "reason", "decisive_fact"),
+    })
+    if not isinstance(out, dict) or out.get("hinge") not in (None, ""):
+        return out
+    # Observed from JSON-object-only GLM: a punctuation key whose value still
+    # labels itself ``hinge is: ...``. No other decision field can own that
+    # value, so retaining it is safer than paying for a rewrite of the beat.
+    for key, item in out.items():
+        if str(key).strip() or not isinstance(item, str):
+            continue
+        text = item.strip()
+        if text.casefold().startswith("hinge"):
+            out["hinge"] = text.split(":", 1)[-1].strip() or text
+            break
+    return out
+
+
+def _canonical_kernel_active_state(value):
+    if not isinstance(value, dict) or "hedonic" in value:
+        return value
+    out = dict(value)
+    # Same JSON punctuation slip as the decision hinge, but the contained
+    # ``released`` flag makes ownership unambiguous and preserves a true
+    # discharge rather than silently defaulting it away.
+    for key, item in out.items():
+        if (str(key).strip() in {"", ","} and isinstance(item, dict)
+                and "released" in item):
+            out["hedonic"] = item
+            break
+    return out
+
+
+def _canonical_character_kernel_output(value):
+    """Lift the one impossible nesting of the top-level physical effects.
+
+    ``updates`` has no direct ``effects`` lane; its only similarly named lane
+    is ``updates.memory.effects``. A model that closes the updates object one
+    brace late has therefore expressed the top-level field unambiguously. The
+    raw replay is retained by the audit, while runtime accepts the same object
+    without asking a model to regenerate its already-good reasoning.
+    """
+    if not isinstance(value, dict):
+        return value
+    updates = value.get("updates")
+    if not isinstance(updates, dict):
+        return value
+    out = dict(value)
+    out_updates = dict(updates)
+    changed = False
+    for key in ("effects", "interaction", "salience"):
+        if key not in out and key in out_updates:
+            out[key] = out_updates.pop(key)
+            changed = True
+    if not changed:
+        return value
+    out["updates"] = out_updates
+    return out
+
 class MindHypothesis(LenientModel):
     about_entity: str
     kind: str
@@ -3124,6 +3229,17 @@ class MindHypothesis(LenientModel):
         lambda cls, v: _clamp_float(v, 0.0, 1.0, 0.5)
     )
 
+    if _PYDANTIC_V2:
+        from pydantic import model_validator as _model_validator
+
+        _canonicalize = _model_validator(mode="before")(
+            classmethod(lambda cls, value: _canonical_mind_hypothesis(value)))
+    else:
+        from pydantic import root_validator as _root_validator
+
+        _canonicalize = _root_validator(pre=True, allow_reuse=True)(
+            lambda cls, value: _canonical_mind_hypothesis(value))
+
 class RelationshipUpdate(LenientModel):
     target_entity: str
     trust_delta: float = Field(default=0.0, ge=-0.2, le=0.2)
@@ -3138,6 +3254,18 @@ class RelationshipUpdate(LenientModel):
                               pre=True, allow_reuse=True)(
         lambda cls, v: _clamp_float(v, -0.2, 0.2, 0.0)
     )
+
+    if _PYDANTIC_V2:
+        from pydantic import model_validator as _model_validator
+
+        _canonicalize = _model_validator(mode="before")(
+            classmethod(
+                lambda cls, value: _canonical_relationship_update(value)))
+    else:
+        from pydantic import root_validator as _root_validator
+
+        _canonicalize = _root_validator(pre=True, allow_reuse=True)(
+            lambda cls, value: _canonical_relationship_update(value))
 
 class GoalImpact(LenientModel):
     # Which field a name-keyed map's KEY belongs in. `serves` is this item's
@@ -3448,6 +3576,171 @@ class InteractionControl(LenientModel):
     _clamp_urgency = validator("urgency", pre=True, allow_reuse=True)(
         lambda cls, v: _clamp_float(v, 0.0, 1.0, 0.0)
     )
+
+
+class CharacterKernelWant(LenientModel):
+    """One live pull, named locally for this call's decision join."""
+    id: str
+    want: str
+    urgency: float = Field(default=0.5, ge=0.0, le=1.0)
+    serves: str = "situational"
+    conflicts_with: Optional[str] = None
+
+    _clamp_urgency = validator("urgency", pre=True, allow_reuse=True)(
+        lambda cls, v: _clamp_float(v, 0.0, 1.0, 0.5)
+    )
+
+
+class CharacterKernelDecision(LenientModel):
+    """The small inspectable residue of deliberation, not a thought transcript."""
+    # Required even when the answer is ``""``.  These four keys are the
+    # join between the live pulls and the chosen conduct; silently defaulting
+    # a mis-nested decision made a rich appraisal compile into an empty beat
+    # in the first database replay of the kernel.
+    enact: str
+    suppress: str
+    hinge: str
+    uncertainty: str
+
+    if _PYDANTIC_V2:
+        from pydantic import model_validator as _model_validator
+
+        _canonicalize = _model_validator(mode="before")(
+            classmethod(lambda cls, value: _canonical_kernel_decision(value)))
+    else:
+        from pydantic import root_validator as _root_validator
+
+        _canonicalize = _root_validator(pre=True, allow_reuse=True)(
+            lambda cls, value: _canonical_kernel_decision(value))
+
+
+class CharacterKernelActiveState(LenientModel):
+    # The object itself is required as a structural checksum.  Values may be
+    # empty, but a brace slip cannot move wants/decision under ``affect`` and
+    # then pass merely because every missing sibling had a default.
+    mood: Any
+    affect: dict
+    wants: list[CharacterKernelWant]
+    active_concerns: list[str]
+    # The stable models validate these after compilation. Keeping their
+    # provider-facing bodies open avoids repeating two mature ledgers in the
+    # wire grammar merely to ask for coping_mode/released on this beat.
+    stress: dict
+    hedonic: dict
+
+    if _PYDANTIC_V2:
+        from pydantic import model_validator as _model_validator
+
+        _canonicalize = _model_validator(mode="before")(
+            classmethod(
+                lambda cls, value: _canonical_kernel_active_state(value)))
+    else:
+        from pydantic import root_validator as _root_validator
+
+        _canonicalize = _root_validator(pre=True, allow_reuse=True)(
+            lambda cls, value: _canonical_kernel_active_state(value))
+
+
+class CharacterKernelState(LenientModel):
+    # Appraisal is already shown compactly in the prompt and normalized by
+    # CharacterOutput after compilation. The quality regression was the
+    # collapsed cognitive update list, not missing numeric grammar here.
+    appraisal: dict
+    active: CharacterKernelActiveState
+    decision: CharacterKernelDecision
+
+
+class CharacterKernelIntentionUpdate(LenientModel):
+    op: str
+    id: str = ""
+    intent: str = ""
+    why: str = ""
+    evidence: list[EvidenceRef] = Field(default_factory=list)
+
+    _coerce_evidence = validator("evidence", pre=True, allow_reuse=True)(
+        lambda cls, v: _coerce_evidence_refs(v))
+
+    if _PYDANTIC_V2:
+        from pydantic import model_validator as _model_validator
+
+        _canonicalize = _model_validator(mode="before")(
+            classmethod(lambda cls, value: _canonical_kernel_intention(value)))
+    else:
+        from pydantic import root_validator as _root_validator
+
+        _canonicalize = _root_validator(pre=True, allow_reuse=True)(
+            lambda cls, value: _canonical_kernel_intention(value))
+
+
+class CharacterKernelProjectUpdate(LenientModel):
+    op: str
+    id: str = ""
+    project: str = ""
+    about: str = ""
+    satisfied_when: str = ""
+    why: str = ""
+
+
+class CharacterKernelDriveUpdate(LenientModel):
+    essence: str
+    expression: str
+    taboo: str
+    because: str
+
+
+class CharacterKernelMemoryUpdates(LenientModel):
+    keep: list[RememberLine]
+    reinterpret: list[MemoryDispute]
+    effects: list[MemoryEffect]
+
+
+class CharacterKernelUpdates(LenientModel):
+    """Independent cognitive apertures; emptiness in one cannot hide another."""
+    # Each lane is required, while the arrays may be empty.  This makes the
+    # sweep inspectable without imposing a quota or confusing absence with a
+    # deliberate "nothing changed" answer.
+    intentions: list[CharacterKernelIntentionUpdate]
+    projects: list[CharacterKernelProjectUpdate]
+    drive: Optional[CharacterKernelDriveUpdate] = Field(...)
+    beliefs: list[BeliefUpdate]
+    associations: list[AssociationUpdate]
+    people: list[MindHypothesis]
+    relationships: list[RelationshipUpdate]
+    memory: CharacterKernelMemoryUpdates
+
+
+class CharacterKernelOutput(LenientModel):
+    """Small provider-facing contract for one subjective character decision.
+
+    ``agents.character_kernel`` expands this nested contract into the stable
+    ``CharacterOutput`` interface consumed by commit and simulation. Cognitive
+    faculties stay independently named and typed: collapsing them into one
+    heterogeneous list made list order into priority and erased the memory
+    rows at its tail in paired live replays.
+    """
+    state: CharacterKernelState
+    sequence: list[dict]
+    manifest: dict
+    updates: CharacterKernelUpdates
+    effects: list[dict]
+    interaction: InteractionControl
+    salience: float = Field(ge=0.0, le=1.0)
+
+    _clamp_salience = validator("salience", pre=True, allow_reuse=True)(
+        lambda cls, v: _clamp_float(v, 0.0, 1.0, 0.5)
+    )
+
+    if _PYDANTIC_V2:
+        from pydantic import model_validator as _model_validator
+
+        _canonicalize = _model_validator(mode="before")(
+            classmethod(
+                lambda cls, value: _canonical_character_kernel_output(value)))
+    else:
+        from pydantic import root_validator as _root_validator
+
+        _canonicalize = _root_validator(pre=True, allow_reuse=True)(
+            lambda cls, value: _canonical_character_kernel_output(value))
 
 class CharacterOutput(LenientModel):
     observations_used: list[EvidenceRef] = Field(default_factory=list)
@@ -3885,6 +4178,7 @@ SCHEMA_MAP = {
     "resolve_repair": ResolveRepairOutput,
     "interpret_repair": InterpretRepairOutput,
     "narrator": NarratorOutput,
+    "character_kernel": CharacterKernelOutput,
     "character": CharacterOutput,
     "background_react": BackgroundReactOutput,
     "scene_life": SceneLifeOutput,
@@ -5324,6 +5618,52 @@ OUTPUT_EXAMPLES = {
         },
         "salience": 0.5,
     },
+    "character_kernel": {
+        "state": {
+            "appraisal": {
+                "goal_relevance": "", "expectation": "", "emotion": "",
+                "uncertainty": "", "novelty": 0.0,
+                "controllability": 0.5, "coping_potential": 0.5,
+                "norm_compatibility": 0.0, "self_congruence": 0.0,
+                "intrinsic_pleasantness": 0.0, "present_evidence": [],
+                "memory_modulation": {
+                    "evidence": [], "familiarity": 0.0, "expectation": "",
+                    "anticipatory_emotion": "", "coping_effect": 0.0,
+                    "somatic_echo": 0.0, "threat_bias": 0.0, "why": "",
+                },
+                "somatic_impact": {
+                    "pain": 0.0, "pleasure": 0.0, "why": "",
+                    "evidence": [],
+                },
+                "goal_impacts": [],
+            },
+            "active": {
+                "mood": "", "affect": {}, "wants": [],
+                "active_concerns": [], "stress": {}, "hedonic": {},
+            },
+            "decision": {
+                "enact": "", "suppress": "", "hinge": "",
+                "uncertainty": "",
+            },
+        },
+        "sequence": [],
+        "manifest": {"surface_demeanor": "", "tells": []},
+        "updates": {
+            "intentions": [], "projects": [], "drive": None,
+            "beliefs": [], "associations": [], "people": [],
+            "relationships": [],
+            "memory": {"keep": [], "reinterpret": [], "effects": []},
+        },
+        "effects": [],
+        "interaction": {
+            "addresses": [],
+            "expects_response": False,
+            "yields_floor": True,
+            "urgency": 0.0,
+            "conversation_complete_for_me": False,
+        },
+        "salience": 0.5,
+    },
     "narrator": {
         # Handed to the model on every repair and fallback call, so it must
         # match the live contract exactly -- an example carrying a stale shape
@@ -5943,12 +6283,32 @@ def semantic_output_errors(
                         f"results.{index} emits transforms but status is "
                         f"{status or 'blank'}")
 
-    elif step_key == "character":
+    elif step_key in {"character", "character_kernel"}:
         if not isinstance(output.get("sequence"), list):
             errors.append("sequence must be an array")
 
         if not isinstance(output.get("interaction"), dict):
             errors.append("interaction must be an object")
+
+        if step_key == "character_kernel":
+            if not isinstance(output.get("state"), dict):
+                errors.append("state must be an object")
+            if not isinstance(output.get("updates"), dict):
+                errors.append("updates must be an object")
+            if not isinstance(output.get("effects"), list):
+                errors.append("effects must be an array")
+            updates = (output.get("updates")
+                       if isinstance(output.get("updates"), dict) else {})
+            for index, update in enumerate(updates.get("intentions") or []):
+                if not isinstance(update, dict):
+                    continue
+                op = str(update.get("op") or "").strip().casefold()
+                if op == "add" and not str(update.get("intent") or "").strip():
+                    errors.append(
+                        f"updates.intentions.{index}.intent is required for add")
+                elif op != "add" and not str(update.get("id") or "").strip():
+                    errors.append(
+                        f"updates.intentions.{index}.id is required for {op or 'this operation'}")
 
     # NARRATION IS NOT VALIDATED HERE ANY MORE. A narrator answer blocks on
     # being parseable JSON of the declared shape and on nothing else: no

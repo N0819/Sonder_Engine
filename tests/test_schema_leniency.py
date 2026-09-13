@@ -1410,10 +1410,9 @@ class TestAnUnboundedListIsWhereASamplerLocks:
         from llm.prompts import get_prompt
 
         text = get_prompt("character")
-        # Reworded when the deliberation fields were retired: `serves` is now
-        # stated on the WANT, which is the field that still carries it.
-        assert "`serves` names the aims it advances, in that field's own" in text
-        assert "do not list your traits" in text
+        assert "Each want names what it serves" in text
+        assert "`serves` is `drive`, a steering intention id, a project id" in text
+        assert "Drives and traits are pressure, not premises" in text
 
 
 class TestAModelThatAnswersThenKeepsTalking:

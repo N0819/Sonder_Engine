@@ -36,7 +36,7 @@ class TestWantsAreNotDerivedFromTheSheet:
         either: wants are not computed from psychology fields."""
         prompt = DEFAULT_PROMPTS["character"]
         assert "Derive 2-3 beat wants from your drive" not in prompt
-        assert "WANTS AND GOALS" in prompt, (
+        assert "WANTS AND CHOICE" in prompt, (
             "the wants rule itself must survive -- the fix is how wants "
             "arise, not whether they exist")
 

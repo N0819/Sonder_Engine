@@ -1,5 +1,6 @@
 """Tests for pure memory helper functions."""
 
+import json
 from tests.helpers import patch_seam
 from mind.memory import (
     _default_category,
@@ -387,21 +388,57 @@ class TestAMemoryCarriesTheMoodItWasFormedIn:
     everything downstream that reads affect.
     """
 
-    def test_the_resolved_affect_is_preferred_over_the_self_report(self):
-        import inspect
+    # BEHAVIOURAL, NOT SOURCE-GREPPED. These asserted the ORDER OF TWO
+    # LITERAL EXPRESSIONS inside `prepare_memory_commit`, so the rule held
+    # only while nobody reworded the code implementing it -- and the moment
+    # the read was hardened against a free-form self-report (see
+    # test_own_conduct_memory), the assertion failed while the RULE was
+    # untouched. A test of an invariant should survive a refactor of the
+    # thing that keeps it.
 
-        from persist import commit
-        src = inspect.getsource(commit.prepare_memory_commit)
-        i_resolved = src.index('_surface = (((st.get("active_state")')
-        i_raw = src.index('_surface = (active_state.get("affect")')
-        assert i_resolved < i_raw, (
-            "the stored resolved affect must be consulted first; the raw "
-            "self-report is only the fallback for a character's first beat")
+    def test_the_resolved_affect_is_preferred_over_the_self_report(
+            self, temp_db, monkeypatch):
+        from tests.test_own_conduct_memory import (
+            _capture_batch, _ctx, _self_rows, _story)
+        from persist.commit import prepare_memory_commit
 
-    def test_the_self_report_still_covers_a_first_beat(self):
-        """A character with no resolved affect yet has only their own report."""
-        import inspect
+        chat_id, char_id, cast = _story(temp_db)
+        captured = _capture_batch(monkeypatch)
+        # The stored state carries the RESOLVED affect; the answer carries a
+        # contradicting self-report. The memory must take the resolved one.
+        temp_db.q("UPDATE chat_chars SET state=? WHERE chat_id=? AND char_id=?",
+                  (json.dumps({"active_state": {"affect": {"surface": {
+                      "valence": -0.6, "arousal": 0.2}}}}), chat_id, char_id))
+        # The cast rows carry `cstate`, and `_story` read them before the
+        # update above -- so refetch, or the stored state never arrives.
+        cast = temp_db.q(
+            "SELECT ch.*,cc.state AS cstate,cc.status FROM chat_chars cc "
+            "JOIN characters ch ON ch.id=cc.char_id WHERE cc.chat_id=?",
+            (chat_id,))
+        ctx = _ctx(chat_id, char_id, cast, {
+            "salience": 0.4,
+            "sequence": [{"type": "speech", "text": "Three, then."}],
+            "active_state": {"affect": {"surface": {
+                "valence": 0.9, "arousal": 0.9}}},
+        })
+        prepare_memory_commit(ctx)
+        row = _self_rows(captured)[0]
+        assert float(row.get("valence")) == -0.6, row
 
-        from persist import commit
-        src = inspect.getsource(commit.prepare_memory_commit)
-        assert "if not _surface:" in src
+    def test_the_self_report_still_covers_a_first_beat(self, temp_db,
+                                                       monkeypatch):
+        """A character with no resolved affect yet has only their own."""
+        from tests.test_own_conduct_memory import (
+            _capture_batch, _ctx, _self_rows, _story)
+        from persist.commit import prepare_memory_commit
+
+        chat_id, char_id, cast = _story(temp_db)
+        captured = _capture_batch(monkeypatch)
+        ctx = _ctx(chat_id, char_id, cast, {
+            "salience": 0.4,
+            "sequence": [{"type": "speech", "text": "Three, then."}],
+            "active_state": {"affect": {"surface": {
+                "valence": 0.5, "arousal": 0.3}}},
+        })
+        prepare_memory_commit(ctx)
+        assert float(_self_rows(captured)[0].get("valence")) == 0.5

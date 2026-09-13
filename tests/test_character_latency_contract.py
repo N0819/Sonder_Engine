@@ -34,6 +34,51 @@ def test_provider_schema_drops_annotations_not_constraints():
     assert offered.get("$defs") or offered.get("definitions")
 
 
+def test_runtime_character_schema_is_the_seven_field_typed_kernel():
+    from llm import llm_quality
+
+    offered = llm_quality._step_json_schema("character_kernel")
+    wire = json.dumps(offered, separators=(",", ":"))
+
+    # The first 665-byte experiment made every cognitive row an untyped item
+    # in one list. Paired GLM-5.2 replays then treated list order as priority:
+    # the memory rows at the tail disappeared. This remains smaller than the
+    # old CharacterOutput grammar while giving each faculty a typed aperture.
+    assert len(wire) < 6000
+    assert set(offered["properties"]) == {
+        "state", "sequence", "manifest", "updates", "effects",
+        "interaction", "salience",
+    }
+    for retired in (
+        "active_state", "appraisal", "belief_updates", "mind_model_updates",
+        "relationship_updates", "memory_effects", "contact_ops",
+        "material_effects",
+    ):
+        assert retired not in offered["properties"]
+
+    definitions = offered.get("$defs") or offered.get("definitions") or {}
+    updates_ref = offered["properties"]["updates"].get("$ref", "")
+    updates_name = updates_ref.rsplit("/", 1)[-1]
+    update_fields = set(definitions[updates_name]["properties"])
+    assert update_fields == {
+        "intentions", "projects", "drive", "beliefs", "associations",
+        "people", "relationships", "memory",
+    }
+
+
+def test_runtime_character_prompt_has_a_small_operational_ceiling():
+    from llm.prompts import character_prompt
+
+    prompt = character_prompt({
+        "self": {"name": "Vessel"}, "memory": {},
+        "perception": {}, "decision": {},
+    })
+
+    # This was 65,440 authored characters and roughly 48 KB even after gates.
+    # The ceiling includes the universal language/schema policy.
+    assert len(prompt) < 18_000
+
+
 def test_compact_character_wire_is_experimental_and_complete():
     from llm import llm_quality
 
@@ -71,7 +116,7 @@ def test_runtime_prompt_moves_identity_behind_the_stable_prefix():
         # the other half of this pair until the deliberation fields were
         # retired; llm.prompts uses the same pair to place the identity line.
         output = next(i for i, line in enumerate(lines)
-                      if '"appraisal"' in line
+                      if '"state"' in line
                       and '"sequence"' in line)
 
         assert identity > len(lines) // 2

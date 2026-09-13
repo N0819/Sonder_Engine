@@ -565,10 +565,10 @@ strain from a beat aimed at them, and no memory of having chosen to stay quiet.
 
 A single character decision using that character’s scrubbed view and structured
 observations, memory context, private character data, relationships, learned
-beliefs/associations, and its own interoception/body state. It appraises
-goal impact, novelty, control, coping, norm/self compatibility, stress, and
-current-event pain/pleasure, then proposes several response candidates before
-declaring one behavior. Present and remembered evidence occupy separate
+beliefs/associations, and its own interoception/body state. The authored
+character card is passed intact. It appraises goal impact, novelty, control,
+coping, norm/self compatibility, stress, and current-event pain/pleasure, then
+declares one behavior. Present and remembered evidence occupy separate
 grounded lanes; a memory may produce a capped, labelled body/threat echo but
 cannot become current somatic fact. An exceptional private
 `{type: "ponder", query, why}` item is removed from the public declaration,
@@ -577,24 +577,41 @@ its next character turn without replacing normal recall. Pain and pleasure are
 independent and do not require survival mode. Multiple independent character
 steps may run in parallel.
 
-The decision contract is large, but latency work must not narrow the mind it
-describes. The provider receives a constraint-equivalent JSON Schema with
-annotation-only metadata removed; local validation still uses the complete
-Pydantic model. The name-bearing identity line is placed immediately before
-the output shape so the long authored contract before it is a reusable cache
-prefix. Immutable per-turn reads (scene, transformations, simulation clock,
+The provider-facing decision is `CharacterKernelOutput`, seven fields:
+`state`, `sequence`, `manifest`, independently typed cognitive `updates`,
+completed self-owned `effects`, `interaction`, and `salience`. `updates` keeps
+aims, beliefs, associations, readings of people, relationships, and memory's
+keep/reinterpret/effect functions as separate named apertures; combining them
+in one heterogeneous list made its order an accidental priority. A compact
+`state.decision` joins temporary want ids and carries the enacted pull,
+suppressed counterpull, one-clause hinge, and remaining uncertainty without a
+prose thought transcript. `agents/character_kernel.py` is the pure boundary:
+it compiles those lanes into the stable `CharacterOutput` lanes
+that affect, memory, theory-of-mind, following, contact and substance already
+consume. Legacy answers pass through the compiler unchanged. This shrinks the
+operating prompt and provider grammar without shrinking the character card or
+removing a cognitive product.
+
+Observation and memory identifiers are call-local handles (`oN`, `mN`, `sN`)
+on the provider wire. The adapter restores their canonical ids before the
+existing grounding guard runs. At memory commit, current observation citations
+on the commit-local character result are rebound to the stable episode key
+minted from that character's witnessed beat; if no episode is minted, no
+nonexistent memory is cited and the transient id remains.
+
+The name-bearing identity line is placed immediately before the output shape
+so the authored contract before it remains a reusable cache prefix. Immutable
+per-turn reads (scene, transformations, simulation clock,
 all-cast name map and unanswered-question history) are reused through
 `ctx._extra.character_turn_snapshot`. Memory-context construction runs under a
 parent-copied context while the main thread assembles independent lore,
 relationship and frame projections, and is joined before anything
 memory-dependent is built.
 
-`considered_responses` and the compatibility fields `observations_used`,
-`speech`, `action` and `actions` remain in the production wire contract. Their
-removal is an experiment only (`wire_variant="compact"`), measured by
-`tools/character_wire_ab.py` across cognition, agency, knowledge-firewall and
-synthetic social-memory situations; an absent downstream reader is not
-evidence that deliberation scratch does no cognitive work.
+The historical `CharacterOutput` schema and its aliases remain the archive and
+downstream compatibility contract, not the provider grammar. The hinge is
+deliberation residue rather than a thought transcript; conducted action and
+the enacted/suppressed want preserve the decision downstream readers use.
 
 `self.embodiment_capabilities` contains conditional facts hidden from ordinary
 observers but necessarily known by their owner. When a chosen completed process

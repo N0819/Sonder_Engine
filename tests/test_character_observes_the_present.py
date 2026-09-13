@@ -122,17 +122,12 @@ def test_the_prompt_says_which_one_to_cite():
     # retired. The property under test is the same: the prompt states WHICH id
     # to cite, and states why the two kinds must not be confused.
     assert "EVIDENCE IS THE ID OF THE THING ITSELF" in source
-    assert 'id of the form "current:<perceiver>:<n>"' in source
-    # The distinction, not just the id format. Reframed 2026-09-01: this
-    # asserted the ban ("Never cite a memory where the present is meant"),
-    # which sat one clause away from the field that answers it. The prompt now
-    # states the field, so the property is pinned to the field -- a memory
-    # section says what memory is and how it is organised, and the two kinds
-    # stay distinct because each arrives labelled, not because a sentence
-    # forbids the mix-up.
-    assert "memory_effects says which way each one reached you" in source
-    assert "use=recognition|comparison|answering_the_past|anticipation" in source
-    assert "cite an id under the use it arrived by" in source
+    # Long database/current ids are now compacted for the call and restored by
+    # the host.  Their source row, not a memorable prefix, carries temporality.
+    assert "short `oN` handles, memories `mN`, and summaries `sN`" in source
+    assert "cite only an exact supplied handle" in source
+    assert "row of origin" in source
+    assert "restores canonical IDs after the call" in source
 
 
 def test_legacy_present_citations_normalize_without_touching_real_ids():
