@@ -9,7 +9,7 @@
 | `agents/__init__.py` | 100 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
 | `agents/background.py` | 1751 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
 | `agents/character.py` | 4443 | Private character decision agent. | `agents.character_kernel`, `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
-| `agents/character_kernel.py` | 408 |  | — |
+| `agents/character_kernel.py` | 464 |  | — |
 | `agents/common.py` | 10861 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 4886 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 5898 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.paradox`, `world.spatial`, `world.survival` |
@@ -46,9 +46,9 @@
 | `llm/llm_quality.py` | 1017 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 545 | Default system prompts and prompt preset access. | `core.db` |
-| `llm/providers.py` | 4142 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
+| `llm/providers.py` | 4179 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
-| `llm/schemas.py` | 6631 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `llm/schemas.py` | 6660 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2434 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 398 |  | — |
@@ -247,14 +247,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_chosen_wants()` | 218 | 66 lines |
-| `compact_character_evidence()` | 104 | 42 lines |
-| `_compile_named_updates()` | 331 | 40 lines |
-| `compile_character_kernel()` | 373 | 36 lines |
-| `bind_current_evidence_to_memory()` | 182 | 34 lines |
-| `expand_character_evidence()` | 148 | 32 lines |
-| `_compile_rows()` | 305 | 24 lines |
-| `_recover_folded_top_level()` | 68 | 20 lines |
+| `_chosen_wants()` | 274 | 66 lines |
+| `expand_character_evidence()` | 189 | 43 lines |
+| `compact_character_evidence()` | 105 | 42 lines |
+| `_compile_named_updates()` | 387 | 40 lines |
+| `_rewrite_evidence_container()` | 149 | 38 lines |
+| `bind_current_evidence_to_memory()` | 234 | 38 lines |
+| `compile_character_kernel()` | 429 | 36 lines |
+| `_compile_rows()` | 361 | 24 lines |
 
 ### `agents/common.py`
 
@@ -648,14 +648,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_chat_complete_once()` | 2791 | 297 lines |
-| `chat_complete()` | 2504 | 139 lines |
-| `async _chat_complete_async_once()` | 3259 | 114 lines |
-| `async chat_complete_async()` | 3168 | 90 lines |
-| `_sse_openai()` | 2354 | 86 lines |
-| `async _sse_openai_async()` | 3374 | 70 lines |
-| `_sse_anthropic()` | 2441 | 62 lines |
-| `_embed_request()` | 3702 | 59 lines |
+| `_chat_complete_once()` | 2788 | 297 lines |
+| `chat_complete()` | 2501 | 139 lines |
+| `async _chat_complete_async_once()` | 3296 | 114 lines |
+| `async chat_complete_async()` | 3205 | 90 lines |
+| `_sse_openai()` | 2351 | 86 lines |
+| `async _sse_openai_async()` | 3411 | 70 lines |
+| `_sse_anthropic()` | 2438 | 62 lines |
+| `_embed_request()` | 3739 | 59 lines |
 
 ### `llm/research_providers.py`
 
@@ -673,12 +673,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `semantic_output_errors()` | 5962 | 370 lines |
-| `preprocess_llm_output()` | 5047 | 336 lines |
+| `semantic_output_errors()` | 5991 | 370 lines |
+| `preprocess_llm_output()` | 5076 | 336 lines |
 | `_lenient_coerce()` | 786 | 159 lines |
-| `validate_llm_output_strict()` | 6493 | 139 lines |
-| `canonicalize_prose_markup()` | 4852 | 102 lines |
-| `_uncross_concealed_speech()` | 4976 | 69 lines |
+| `validate_llm_output_strict()` | 6522 | 139 lines |
+| `canonicalize_prose_markup()` | 4881 | 102 lines |
+| `_uncross_concealed_speech()` | 5005 | 69 lines |
 | `_coerce_station_table()` | 85 | 65 lines |
 | `_coerce_list_valued_map()` | 152 | 57 lines |
 

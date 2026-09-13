@@ -2221,10 +2221,7 @@ def _delta_reasoning(delta):
     without stripping -- a trace arrives in fragments and the whitespace
     between them is part of it.
     """
-    if not isinstance(delta, dict):
-        return ""
-    return "".join(_flatten_text(value) for key, value in delta.items()
-                   if _is_reasoning_key(key))
+    return _reasoning_carrier_text(delta, strip=False)
 
 
 def _reasoning_only_error(prov_name, model, reasoning, max_tokens=None):
@@ -3087,9 +3084,14 @@ def _chat_complete_once(
     return guard_response(content)
 
 def _flatten_text(value, depth=0):
-    """Every string inside a nested JSON value, joined. Providers wrap a
-    trace as a string, a list of blocks, or a list of dicts of blocks, and
-    the shape is not the question being asked here."""
+    """Text payload inside one reasoning carrier, excluding block metadata.
+
+    NanoGPT's OpenAI stream sends a fragment both as a plain ``reasoning``
+    string and as a ``reasoning_details`` block shaped like
+    ``{type: 'reasoning.text', text: '...', format: 'unknown'}``. Flattening
+    every string in that block printed its type and format as prose. A block's
+    content keys carry the trace; its other strings describe the wire format.
+    """
     if depth > 6:
         return ""
     if isinstance(value, str):
@@ -3100,9 +3102,48 @@ def _flatten_text(value, depth=0):
         return "\n".join(p for p in (_flatten_text(v, depth + 1)
                                      for v in value) if p)
     if isinstance(value, dict):
-        return " ".join(p for p in (_flatten_text(v, depth + 1)
-                                    for v in value.values()) if p)
+        payload = [
+            _flatten_text(value[key], depth + 1)
+            for key in ("text", "content", "summary", "value")
+            if key in value
+        ]
+        payload = [part for part in payload if part]
+        if payload:
+            return "".join(payload)
+        nested = [
+            _flatten_text(item, depth + 1)
+            for key, item in value.items()
+            if _is_reasoning_key(key)
+        ]
+        return "\n".join(part for part in nested if part)
     return ""
+
+
+def _reasoning_carrier_text(message, *, strip):
+    """Read one alias carrier, never concatenate duplicate encodings.
+
+    Multiple reasoning-like keys on one OpenAI delta are alternate encodings
+    of the same fragment, not consecutive thoughts. Prefer a direct scalar
+    carrier; fall back to a structured block when it is the only form.
+    """
+    if not isinstance(message, dict):
+        return ""
+    candidates = []
+    for key, value in message.items():
+        if not _is_reasoning_key(key):
+            continue
+        rendered = _flatten_text(value)
+        if rendered:
+            candidates.append((value, rendered))
+    if not candidates:
+        return ""
+    direct = next(
+        (rendered for value, rendered in candidates
+         if isinstance(value, str)),
+        None,
+    )
+    answer = direct if direct is not None else candidates[0][1]
+    return answer.strip() if strip else answer
 
 
 def _reasoning_text(message):
@@ -3119,11 +3160,7 @@ def _reasoning_text(message):
     keys on the typed failure, never saw them and both grants were lost
     whole.
     """
-    if not isinstance(message, dict):
-        return ""
-    chunks = [_flatten_text(value) for key, value in message.items()
-              if _is_reasoning_key(key)]
-    return "\n".join(c for c in chunks if c).strip()
+    return _reasoning_carrier_text(message, strip=True)
 
 
 def _approx_tokens(text):
