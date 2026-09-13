@@ -13,6 +13,7 @@ still pass through unchanged.
 
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 
 
@@ -145,6 +146,46 @@ def compact_character_evidence(payload):
     return compacted, handle_to_id
 
 
+def _rewrite_evidence_container(item, rewrite_token, rewrite_scalar):
+    """Rewrite every id inside an evidence container, whatever its shape.
+
+    An evidence container names ids, and a writer spells them three ways: a
+    bare id, a list of ids, or rows carrying ``event_id``. Only the row form
+    was ever traversed, so the other two passed through untouched. Measured
+    over 20 stored beats of the owner's stories replayed through glm-5.2: 88
+    bare strings and 37 lists of strings against 4 row lists, leaving 152 of
+    206 ids as call-local handles that name nothing outside the request that
+    issued them. `schemas._evidence_slot` then files a bare `o7` as a real
+    `event_id` and a joined `o5,o6,o7` -- commas fail its id pattern -- as
+    prose `fact`, so both spellings become provenance that resolves to
+    nothing. The old contract cited canonical ids directly and never met this.
+
+    A row's own ``event_id`` takes the scalar rewrite: a structured row names
+    one event, so it must not become a list.
+    """
+    if isinstance(item, str):
+        return rewrite_token(item)
+    if isinstance(item, list):
+        out = []
+        for entry in item:
+            new = _rewrite_evidence_container(
+                entry, rewrite_token, rewrite_scalar)
+            if isinstance(entry, str) and isinstance(new, list):
+                out.extend(new)
+            else:
+                out.append(new)
+        return out
+    if isinstance(item, dict):
+        for key, sub in list(item.items()):
+            if key == "event_id":
+                item[key] = rewrite_scalar(sub)
+            else:
+                item[key] = _rewrite_evidence_container(
+                    sub, rewrite_token, rewrite_scalar)
+        return item
+    return item
+
+
 def expand_character_evidence(raw, handle_to_id):
     """Restore compact evidence handles in a model answer.
 
@@ -158,6 +199,16 @@ def expand_character_evidence(raw, handle_to_id):
     def expand_scalar(value):
         return handles.get(str(value or "").strip(), value)
 
+    def expand_token(value):
+        """One citation, which may be the several a joined run names."""
+        text = str(value or "").strip()
+        if text in handles:
+            return handles[text]
+        parts = [part for part in re.split(r"[,;\s]+", text) if part]
+        if len(parts) > 1 and all(part in handles for part in parts):
+            return [handles[part] for part in parts]
+        return value
+
     def visit(value, *, evidence_row=False):
         if isinstance(value, dict):
             for key, item in list(value.items()):
@@ -168,7 +219,8 @@ def expand_character_evidence(raw, handle_to_id):
                 elif key in _EVIDENCE_ID_LIST_KEYS and isinstance(item, list):
                     value[key] = [expand_scalar(entry) for entry in item]
                 elif key in _EVIDENCE_CONTAINER_KEYS:
-                    visit(item, evidence_row=True)
+                    value[key] = _rewrite_evidence_container(
+                        item, expand_token, expand_scalar)
                 else:
                     visit(item, evidence_row=evidence_row)
         elif isinstance(value, list):
@@ -192,6 +244,9 @@ def bind_current_evidence_to_memory(raw, memory_ref):
         return raw
     stable = str(memory_ref).strip()
 
+    def restable(value):
+        return stable if str(value or "").startswith("current:") else value
+
     def visit(value, *, evidence_row=False):
         if isinstance(value, dict):
             for key, item in list(value.items()):
@@ -204,7 +259,8 @@ def bind_current_evidence_to_memory(raw, memory_ref):
                         for entry in item
                     ]
                 elif key in _EVIDENCE_CONTAINER_KEYS:
-                    visit(item, evidence_row=True)
+                    value[key] = _rewrite_evidence_container(
+                        item, restable, restable)
                 else:
                     visit(item, evidence_row=evidence_row)
         elif isinstance(value, list):
