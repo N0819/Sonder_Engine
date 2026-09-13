@@ -532,3 +532,82 @@ class TestAFieldFoldedIntoUpdatesIsStillTheField:
         assert compiled["memory_effects"][0]["memory_ref"] == "event:abc"
         # `type` is the lane discriminator and is consumed by the compile
         assert compiled["follow_op"] == {"op": "stop"}
+
+
+class TestEveryEvidenceSpellingNamesTheSameId:
+    """Provenance was lost on every lane but one, and nothing said so.
+
+    The compact wire hands the model short handles (`o7`) and the engine
+    restores canonical ids after the call. That restoration only ever
+    traversed evidence written as rows carrying `event_id`. Measured over 20
+    stored beats of the owner's stories replayed through glm-5.2, the compact
+    contract drew 88 bare strings and 37 lists of strings against 4 row lists:
+    152 of 206 ids stayed call-local handles. `relationship_updates` was the
+    one lane unaffected, because it cites `trigger_event_ids`, which the
+    traversal did list -- 29 of 29 canonical against 0 of 152 elsewhere.
+
+    It is silent twice over. `schemas._evidence_slot` files a bare `o7` as a
+    real `event_id`, and a joined `o5,o6,o7` fails its id pattern on the
+    commas and is filed as prose `fact`. Both become provenance pointing at
+    nothing. The 65 KB contract cited canonical ids directly and never met it.
+    """
+
+    HANDLES = {"o5": "current:77:5", "o6": "current:77:6",
+               "o7": "current:77:7", "m1": "event:deadbeef"}
+
+    def _expand(self, row):
+        out = expand_character_evidence({"mind_model_updates": [row]},
+                                        self.HANDLES)
+        return out["mind_model_updates"][0]
+
+    def test_a_bare_string_is_a_citation(self):
+        assert self._expand({"evidence": "o7"})["evidence"] == "current:77:7"
+
+    def test_a_list_of_strings_is_a_citation(self):
+        assert self._expand(
+            {"evidence": ["o5", "o6"]})["evidence"] == [
+                "current:77:5", "current:77:6"]
+
+    def test_a_row_carrying_event_id_still_works(self):
+        row = self._expand(
+            {"evidence": [{"event_id": "o7", "fact": "she spoke"}]})
+        assert row["evidence"][0]["event_id"] == "current:77:7"
+        assert row["evidence"][0]["fact"] == "she spoke"
+
+    def test_a_joined_run_names_every_id_in_it(self):
+        """Writers join handles into one string. Commas fail the id pattern
+        downstream, so the whole run is filed as prose unless it is split."""
+        assert self._expand({"evidence": "o5,o6,o7"})["evidence"] == [
+            "current:77:5", "current:77:6", "current:77:7"]
+        assert self._expand({"evidence": ["o5, o6", "m1"]})["evidence"] == [
+            "current:77:5", "current:77:6", "event:deadbeef"]
+
+    def test_prose_is_not_an_id_and_is_left_alone(self):
+        """`fact` is a legitimate evidence slot; only ids are rewritten."""
+        prose = "the sound from the east corridor"
+        assert self._expand({"evidence": prose})["evidence"] == prose
+
+    def test_an_unissued_handle_passes_through(self):
+        """The expansion stays fail-safe: a handle that was never issued is
+        left as written rather than dropped or guessed at."""
+        assert self._expand({"evidence": "o99"})["evidence"] == "o99"
+
+    def test_a_partial_run_is_not_split(self):
+        """Splitting on a run that is not wholly handles would shred prose."""
+        mixed = "o5 and something she said"
+        assert self._expand({"evidence": mixed})["evidence"] == mixed
+
+    def test_the_episode_rekey_reaches_the_same_spellings(self):
+        """`bind_current_evidence_to_memory` shares the blind spot: a belief
+        citing this beat must point at the episode minted for it, whichever
+        way the citation was spelled."""
+        for row, expected in (
+                ({"evidence": "current:77:7"}, "event:MINTED"),
+                ({"evidence": ["current:77:5", "event:old"]},
+                 ["event:MINTED", "event:old"]),
+                ({"evidence": [{"event_id": "current:77:7"}]},
+                 [{"event_id": "event:MINTED"}]),
+        ):
+            out = bind_current_evidence_to_memory(
+                {"belief_updates": [dict(row)]}, "event:MINTED")
+            assert out["belief_updates"][0]["evidence"] == expected
