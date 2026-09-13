@@ -353,6 +353,24 @@ def test_kernel_recovers_self_labelled_values_from_punctuation_keys():
         "released": True}
 
 
+def test_kernel_canonicalizes_goal_impact_lane_and_aim_id():
+    raw = _kernel_shell()
+    raw["state"]["appraisal"].pop("goal_impacts")
+    raw["state"]["appraisal"]["goals_impacts"] = [{
+        "id": "i1", "impact": 0.4, "why": "the door opens",
+    }]
+
+    report = validate_llm_output_strict("character_kernel", raw)
+    compiled, warnings = compile_character_kernel(report.output)
+    stable, schema_warnings = validate_llm_output("character", compiled)
+
+    assert report.valid is True
+    assert warnings == []
+    assert schema_warnings == []
+    assert stable["appraisal"]["goal_impacts"][0]["serves"] == "i1"
+    assert "goals_impacts" not in stable["appraisal"]
+
+
 def test_kernel_rejects_a_misnested_decision_instead_of_defaulting_it_away():
     raw = _kernel_shell()
     raw["state"]["active"]["decision"] = raw["state"].pop("decision")

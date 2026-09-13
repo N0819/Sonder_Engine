@@ -38,3 +38,28 @@ def test_the_readers_still_differ_only_in_how_they_join():
     blocks = {"reasoning_details": [{"text": "first"}, {"text": "second"}]}
     assert providers._delta_reasoning(blocks) == "first\nsecond"
     assert providers._reasoning_text(blocks) == "first\nsecond"
+
+
+def test_duplicate_plain_and_structured_reasoning_carriers_are_one_fragment():
+    delta = {
+        "reasoning": "Hinami said yes. ",
+        "reasoning_details": [{
+            "type": "reasoning.text",
+            "text": "Hinami said yes. ",
+            "format": "unknown",
+        }],
+        "content": "",
+    }
+
+    assert providers._delta_reasoning(delta) == "Hinami said yes. "
+    assert providers._reasoning_text(delta) == "Hinami said yes."
+
+
+def test_structured_reasoning_uses_text_not_wire_metadata():
+    delta = {"reasoning_details": [{
+        "type": "reasoning.text",
+        "text": "check the door",
+        "format": "unknown",
+    }]}
+
+    assert providers._delta_reasoning(delta) == "check the door"

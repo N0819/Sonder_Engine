@@ -34,7 +34,7 @@ self.project_review が現れるのは本物の境界に達した一ビートだ
 
 `fading` を伴う意図は、その回数だけ成果を生んでいません。現在が支える場合にだけ進行・放棄・維持を選びます。
 
-現在の証拠：現在の観察が判断に関わるなら、性格上の既定反応に消させず評価へ反映してください。これは情報規則であり、慎重さの規則ではありません。差し迫った脅威、機会、負傷、失敗、期限への対応は人物が決めます。
+現在の証拠：現在の観察が判断に関わるなら、性格上の既定反応に消させず評価へ反映してください。これは情報規則であり、慎重さの規則ではありません。差し迫った脅威、機会、負傷、失敗、期限への対応は人物が決めます。`state.appraisal.goal_impacts`は、実質的に助けられた、または損なわれた各目的を`{serves,impact,certainty,agency:'self|other|world',intentionality,why,evidence}`で示します。
 
 場所とその用途：`perception.here_affords`は今見える用途、`memory.recalled_places`は記憶された用途です。どちらも行動を強制せず、記憶は現在の知覚ではありません。
 
@@ -96,13 +96,13 @@ self.project_review が現れるのは本物の境界に達した一ビートだ
 
 関係：`{target_entity,trust_delta,warmth_delta,fear_delta,respect_delta,suspicion_delta,trigger_event_ids}`を使います。瞬間的感情ではなく持続する関係だけを記録します。証拠に関係を決定的に変える断絶・救助・裏切りが明示されない限り、全deltaは必ず±0.05以内です。ゼロでないholder→subject差分は正確なイベントhandleを持ちます。普遍的評判値はありません。
 
-連絡の終了：`self.standing_contacts`には自分の身体に関わる不透明な`contact_ref`があります。シーケンスが実際に終えた接触だけを`{type:'contact',op:'remove',contact_ref}`で終了し、接触を再構成しないでください。
+連絡の終了：`self.standing_contacts`には自分の身体に関わる不透明な`contact_ref`があります。シーケンスが両端を実際に離した接触だけを`{type:'contact',op:'remove',contact_ref}`で終了します。同じ両端の握り方や様態が変わっただけなら同じ接触が続きます。接触を再構成しないでください。
 
 口を動かしながら話す：`self.speaking_now`は自分で感じる制約です。明瞭な発話が重要なら、先に頭を上げる、離れる、動作を終える、障害物を除く等をシーケンスで行い、その後に話します。それ以外は黙るか、実際の障害を声へ反映します。
 
 あなたが完了する物質的効果：確立済みの身体・装備と完了したシーケンスが物質を放出・堆積した場合だけ`{type:'material',op:'release|deposit|add',source_part,substance,target?,placement?,target_interior?,target_part?,amount?,detail?}`を出します。`source_part`は現在の出口です。物質を捏造、接触化、削除しないでください。
 
-シーケンス：順序付きで、発話`{type:'speech',text,volume,tone,visibility,conceal_from}`、行動`{type:'action',attempt,observable,visibility,conceal_from,targets}`、任意の私的想起要求`{type:'ponder',query,why}`を使います。発話textは話された言葉だけ、身振りは隣接する行動にします。observableは動機や内面を含まない文字通りの外面です。ponderは具体的で次の判断に関わる疑問に限り、最大一つです。
+シーケンス：順序付きで、発話`{type:'speech',text,volume,tone,visibility,conceal_from}`、行動`{type:'action',attempt,observable,visibility,conceal_from,targets}`、任意の私的想起要求`{type:'ponder',query,why}`を使います。発話textは話された言葉だけ、身振りは隣接する行動にします。`attempt`と`observable`は同じ動きを表し、observableはその動機や内面を含まない文字通りの外面です。ponderは具体的で次の判断に関わる疑問に限り、最大一つです。
 
 割り込み：すでに届けられた他者の行為を本当に途中で遮るときだけ、発話または行動に`interrupts:'<name>'`を付けます。
 

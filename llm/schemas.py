@@ -3144,6 +3144,12 @@ def _canonical_relationship_update(value):
     return out
 
 
+def _canonical_goal_impact(value):
+    return _canonical_character_row(value, {
+        "serves": ("id", "goal_id", "intent_id"),
+    })
+
+
 def _canonical_kernel_intention(value):
     return _canonical_character_row(value, {
         "op": ("operation",),
@@ -3182,6 +3188,14 @@ def _canonical_kernel_active_state(value):
                 and "released" in item):
             out["hedonic"] = item
             break
+    return out
+
+
+def _canonical_kernel_appraisal(value):
+    out = _canonical_character_row(
+        value, {"goal_impacts": ("goals_impacts",)})
+    if isinstance(out, dict):
+        out.pop("goals_impacts", None)
     return out
 
 
@@ -3293,6 +3307,17 @@ class GoalImpact(LenientModel):
     _intentionality = validator(
         "intentionality", pre=True, allow_reuse=True
     )(lambda cls, value: _clamp_float(value, 0.0, 1.0, 0.0))
+
+    if _PYDANTIC_V2:
+        from pydantic import model_validator as _model_validator
+
+        _canonicalize = _model_validator(mode="before")(
+            classmethod(lambda cls, value: _canonical_goal_impact(value)))
+    else:
+        from pydantic import root_validator as _root_validator
+
+        _canonicalize = _root_validator(pre=True, allow_reuse=True)(
+            lambda cls, value: _canonical_goal_impact(value))
 
 
 class SomaticImpact(LenientModel):
@@ -3648,6 +3673,10 @@ class CharacterKernelState(LenientModel):
     appraisal: dict
     active: CharacterKernelActiveState
     decision: CharacterKernelDecision
+
+    _canonicalize_appraisal = validator(
+        "appraisal", pre=True, allow_reuse=True)(
+        lambda cls, value: _canonical_kernel_appraisal(value))
 
 
 class CharacterKernelIntentionUpdate(LenientModel):
