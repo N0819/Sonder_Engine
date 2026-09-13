@@ -78,6 +78,12 @@ from world.place_purpose import (affords_here, felt_needs, here_affords,
 from mind.psychology_runtime import cognitive_absorption
 from mind.theory_of_mind import mind_models_for_payload, sheet_capacity
 
+from .character_kernel import (
+    compact_character_evidence,
+    compile_character_kernel,
+    expand_character_evidence,
+)
+
 from .common import (
     _agent_json,
     _books,
@@ -4215,80 +4221,34 @@ def character_step(ctx, cid, nonce):
         payload, language=ctx.language).replace("{name}", character_name(sh))
     if _carried_reports:
         _cprompt += (
-            "\n\nCARRIED REPORTS: carried_reports contains what you know about "
-            "events elsewhere, and each one records how you came by it. "
-            "`provenance:'witnessed_surface'` is something you saw yourself and "
-            "have carried from where you saw it. `provenance:'told'` is "
-            "something SOMEONE SAID TO YOU — `told_by` names them, and "
-            "`retellings` counts how many mouths it passed through before "
-            "yours. A told claim is already vaguer than the truth and gets "
-            "vaguer the further it has come: treat it as what a person told "
-            "you rather than as what happened, and let how much you trust that "
-            "person decide how far you act on it. Any of them may be stale. Do "
-            "not sharpen, complete, or infer details beyond the stored claim — "
-            "what is missing is missing from the story you were given, and "
-            "filling it back in would be knowing something nobody told you. "
-            "Nobody else knows one merely because you carry it; they learn only "
-            "if you say it on-page."
+            "\n\nCARRIED REPORTS: `carried_reports` is knowledge you physically "
+            "carry. `witnessed_surface` was seen; `told` is only a claim from "
+            "`told_by`, weakened by `retellings`. It may be stale. Do not add "
+            "missing detail, and nobody else learns it unless you communicate it."
         )
     if _window_open:
         # The base contract never documents drive_shift; the instruction to emit
         # one exists ONLY inside an engine-opened rupture window, so a drive can
         # never flip-flop turn to turn.
         _cprompt += (
-            "\n\nDRIVE RUPTURE (window OPEN this beat): a shattering, drive-level "
-            "event has cracked what you live for (see self.rupture.why). This event "
-            "has ALREADY changed you -- the only question is how the change surfaces. "
-            "Denial is a phase, not a stable end: even if you cling to the old drive, "
-            "show the crack in your behavior NOW (a ritual performed wrong, a "
-            "signature line that dies mid-sentence, a rule reached for and found "
-            "hollow). And if your core is genuinely remade, emit drive_shift "
-            "{essence, expression, taboo, because}: essence = the new deepest thing "
-            "you live for, expression = how it shows, taboo = what you now cannot "
-            "do; `because` must name the rupture event. WORKED EXAMPLE: a magistrate "
-            "whose drive was 'the law is the only shelter' watches the court execute "
-            "the clerk she vouched for. She emits drive_shift {\"essence\": "
-            "\"protect the person in front of me, not the rule\", \"expression\": "
-            "\"quietly bends procedure to shield people\", \"taboo\": \"never again "
-            "hand someone over to process\", \"because\": \"the court executed the "
-            "clerk I vouched for\"} -- and her sequence THIS beat already shows it: "
-            "she pockets the arrest warrant instead of filing it. A shift is rare "
-            "and irreversible -- do not shift for a survivable wound; but do not "
-            "play untouched calm either. NEVER announce the change in dialogue; it "
-            "shows only in what you do and come to want.")
+            "\n\nDRIVE RUPTURE: the rupture has ALREADY changed you. "
+            "Show the crack in conduct now. If it truly remakes you, emit `updates.drive` "
+            "as `{essence,expression,taboo,because}` and enact the new drive this "
+            "beat. A shift is rare, irreversible, and shown rather than announced.")
         if _rupture_forced:
             _cprompt += (
-                "\n\nRUPTURE -- FORCED RESOLUTION: this window has now stayed open "
-                "several beats and you have kept deferring. Deferral is over. THIS "
-                "beat you must LAND it, one way or the other, visibly on the page -- "
-                "passive, untouched, wait-and-see calm is NOT an available option "
-                "anymore; the strain has been on you far too long for that. Choose "
-                "exactly one and enact it in your sequence this beat: (A) emit "
-                "drive_shift {essence, expression, taboo, because} AND let your "
-                "action/speech this beat already do the new thing -- not a promise "
-                "to change, the change itself; or (B) if your core genuinely holds, "
-                "stop merely enduring and REAFFIRM it in a concrete, costly act your "
-                "pre-rupture self would recognize as doubling down -- a line said, a "
-                "hand that acts, a refusal made real. Do not simply describe the "
-                "strain again. Resolve it.")
+                "\n\nRUPTURE -- FORCED RESOLUTION: deferral is over; untouched calm is "
+                "NOT an available option. This beat either enact `updates.drive`, "
+                "or reaffirm the old drive through a concrete costly act.")
     if _crisis:
         _cprompt += (
-            "\n\nCRISIS (self.crisis -- your drive is under extreme strain): what "
-            "you live for is under sustained assault and your composure is FAILING. "
-            "Your manifest must show it: surface_demeanor cracks at the seams, and "
-            "your tells escalate from subtle to VISIBLE (subtlety <= 0.4) -- a "
-            "voice that breaks mid-sentence, a hand that will not stay still, a "
-            "pause held one beat too long. You need not change what you live for, "
-            "but you can no longer look untouched. Do NOT announce the strain in "
-            "dialogue; it leaks through the body.")
+            "\n\nCRISIS: `self.crisis` means composure is failing. Show it in "
+            "`manifest` with a visible tell (`subtlety <= 0.4`); do not explain it "
+            "in dialogue.")
     if _recent_tells:
         _cprompt += (
-            "\n\nTELL VARIETY: self.recent_tells lists the physical cues you have "
-            "already shown in recent beats. Do NOT reuse any of them -- or a "
-            "near-identical variant -- as this beat's tell; find a DIFFERENT "
-            "part of the body and a different gesture. A body under the same "
-            "pressure finds new ways to betray it: the eyes, the hands, the "
-            "breath, the set of the shoulders, the voice are not one cue.")
+            "\n\nTELL VARIETY: do not repeat or paraphrase `self.recent_tells`; "
+            "use a different physical cue and body area.")
         # `channel` is NOT the variety axis and this line used to say it was,
         # naming the six body regions the sheet published before 2026-09-01.
         # The field is the SENSE a cue arrives by (`seen|heard`,
@@ -4299,13 +4259,9 @@ def character_step(ctx, cid, nonce):
         # is what `cue` carries.
     if _tell_grounds:
         _cprompt += (
-            "\n\nTELL PAYOFF: self.tell_grounds lists physical cues you have "
-            "recently shown and, for each, the private ground it betrayed "
-            "(`because`). These are debts the story has planted: when the scene "
-            "gives a natural opening, let a ground SURFACE -- in what you do, "
-            "choose, or say -- so an observant witness's banked suspicion can pay "
-            "off. Never contradict a ground already shown, and never announce it "
-            "as exposition; it emerges through behavior.")
+            "\n\nTELL PAYOFF: `self.tell_grounds` records what prior cues betrayed. "
+            "When a natural opening exists, let one surface through behavior; do "
+            "not contradict or explain it.")
     # The routing seam. LAST thing before the model sees the payload, so an
     # extension edits what is actually sent rather than something the engine
     # then rebuilds. Total: any failure leaves the payload exactly as assembled
@@ -4313,14 +4269,25 @@ def character_step(ctx, cid, nonce):
     # context and echoed in the turn's commit results.
     payload = _extension_character_payload(ctx, cid, payload, sh)
 
+    # The model needs the evidence rows and their provenance, not database- or
+    # observer-sized identifiers.  Short handles are private to this call and
+    # restored before any existing grounding, repetition, or commit reader
+    # sees the answer.  Extensions run first so their public hook continues to
+    # receive the canonical payload shape.
+    _wire_payload, _evidence_handles = compact_character_evidence(payload)
+
     out = _agent_json(
         role,
-        "character",
+        "character_kernel",
         _cprompt,
-        payload,
+        _wire_payload,
         temperature=character_temperature(sh),
         sampler=character_sampler(sh) or None,
     )
+    out = expand_character_evidence(out, _evidence_handles)
+    out, _kernel_warnings = compile_character_kernel(out)
+    for _warning in _kernel_warnings:
+        ctx.add_warning(f"character {character_name(sh)}: {_warning}")
 
     # Deterministic decision-continuity screen. Semantic similarity is a review
     # trigger, not proof of bad repetition -- an invited continuation,

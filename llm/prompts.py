@@ -464,13 +464,11 @@ def _relocate_character_identity(text):
     identity = lines.pop(identity_index)
     # Protocol keys stay English in every translated pack.  Detect the output
     # contract by its shape rather than by an authored-language heading.
-    # Anchored on two keys that are both still ASKED FOR. `response_candidates`
-    # was half of this pair until the deliberation fields were retired; with it
-    # gone the match failed silently and fell through to len(lines), which
-    # appends the identity line after the contract instead of before it.
+    # Anchored on two keys in the compact contract.  This stays language-free:
+    # protocol keys remain English in every translated pack.
     output_index = next(
         (index for index, line in enumerate(lines)
-         if '"appraisal"' in line
+         if '"state"' in line
          and '"sequence"' in line),
         len(lines),
     )

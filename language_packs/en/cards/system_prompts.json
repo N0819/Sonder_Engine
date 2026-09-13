@@ -471,12 +471,6 @@
       ]
     ],
     [
-      "Running is a GAIT,",
-      [
-        "perception.sprint_reach"
-      ]
-    ],
-    [
       "An exit may carry `onward_exits_visible`",
       [
         "perception.spatial_frame{}.onward_exits_visible"

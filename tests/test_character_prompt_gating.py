@@ -147,12 +147,12 @@ def test_the_paragraphs_that_are_invitations_are_never_gated():
     0 of 14 live banks have ever held a project, and that is the argument for
     keeping the invitation, not for removing it."""
     out = character_prompt(EMPTY, base=BASE)
-    for heading in ("PROJECTS:", "WANTS AND GOALS:",
+    for heading in ("PROJECTS:", "WANTS AND CHOICE:",
                     "SELF/WORLD BELIEF LEARNING:", "ASSOCIATIVE LEARNING:",
                     "READING A MEMORY DIFFERENTLY:", "WHEN TO PONDER:"):
         assert heading in out, heading
     gated = {marker for marker, _ in CHARACTER_BLOCK_KEYS}
-    assert not (gated & {"PROJECTS:", "WANTS AND GOALS:",
+    assert not (gated & {"PROJECTS:", "WANTS AND CHOICE:",
                          "SELF/WORLD BELIEF LEARNING:",
                          "ASSOCIATIVE LEARNING:"})
 
@@ -167,8 +167,11 @@ def test_the_firewall_paragraphs_are_never_gated():
     # Renamed 2026-08-30 with their paragraphs: the evidence lanes became one
     # id rule when the citation arrays were retired, and SEQUENCES was reframed
     # from a form to return into the mechanism a body acts through.
+    # Renamed 2026-09-13 in the miniaturized contract: HOW THIS GOES became
+    # DELIBERATION and WANTS AND GOALS became WANTS AND CHOICE. Same
+    # paragraphs, same property -- neither may be gated out of the prompt.
     for heading in ("WHAT YOU KNOW is", "MEMORY IS PAST:",
-                    "EVIDENCE IS THE ID OF THE THING ITSELF.", "HOW THIS GOES:",
+                    "EVIDENCE IS THE ID OF THE THING ITSELF.", "DELIBERATION:",
                     "SEQUENCES ARE HOW YOU ACT."):
         assert heading in out, heading
 

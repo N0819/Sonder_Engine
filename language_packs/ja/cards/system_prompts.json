@@ -471,12 +471,6 @@
       ]
     ],
     [
-      "走ることは歩法の一種、",
-      [
-        "perception.sprint_reach"
-      ]
-    ],
-    [
       "出口は`onward_exits_visible`を伴うことがある",
       [
         "perception.spatial_frame{}.onward_exits_visible"

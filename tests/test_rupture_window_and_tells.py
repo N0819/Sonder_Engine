@@ -269,7 +269,7 @@ def test_recent_tells_fed_with_variety_rule(temp_db, monkeypatch):
     assert "TELL VARIETY" not in captured["system"]
 
 
-def test_open_rupture_window_prompts_with_worked_example(temp_db, monkeypatch):
+def test_open_rupture_window_prompts_with_compact_contract(temp_db, monkeypatch):
     captured = _run_character_step(temp_db, monkeypatch, {
         "interior": {"drive_rupture": {
             "turn": 1, "why": "the court executed the clerk",
@@ -280,8 +280,8 @@ def test_open_rupture_window_prompts_with_worked_example(temp_db, monkeypatch):
     system = captured["system"]
     assert "DRIVE RUPTURE" in system
     assert "ALREADY changed you" in system
-    assert "WORKED EXAMPLE" in system
-    assert "drive_shift" in system
+    assert "{essence,expression,taboo,because}" in system
+    assert "`updates.drive`" in system
     # freshly opened (turns_open 0): optional, not yet forced
     assert captured["payload"]["self"]["rupture"]["forced"] is False
     assert "FORCED RESOLUTION" not in system

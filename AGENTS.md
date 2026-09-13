@@ -235,6 +235,18 @@ human-controlled input. The older `changes_asserted`/`ledger_notes`, whole-beat
 prose, resolved-event echo and reconciliation-repair orchestration below are
 read compatibility for archived outputs, not the current model contract.
 
+**CURRENT CHARACTER CONTRACT (2026-09-12).** Authored character cards remain
+intact and are still supplied as data. The model emits the seven-field
+`CharacterKernelOutput`; its `updates` object keeps aims, learning, readings,
+relationships and memory functions in independently typed lanes rather than a
+single order-sensitive list. `agents/character_kernel.py` restores compact
+evidence handles and purely compiles those updates/effects into the established
+`CharacterOutput` lanes. `persist/commit_memory.py` then binds current evidence
+to the stable episode memory minted from the same witnessed beat. Route compact
+wire, evidence-id, or compilation changes through those files and
+`tests/test_character_kernel.py`; do not push persistence ownership back into
+the prompt.
+
 | Change | Primary files | Usually inspect too |
 |---|---|---|
 | Causal input interpretation | `agents/director.py` (`director_interpret`, `director_resolve`, `_causal_event_inputs`, `_run_specialists`) | `agents/director_fanout.py`, `agents/director_evidence.py`, `world/causality.py`, `llm/schemas.py`, `llm/prompts.py`, `tests/test_causal_director.py`, `tests/test_director_orchestration.py` |

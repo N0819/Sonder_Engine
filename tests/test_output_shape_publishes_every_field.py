@@ -54,7 +54,7 @@ from llm.prompts import DEFAULT_PROMPTS
 #: step key -> the prompt id whose body the stage is actually sent. The prose
 #: author's sheet is ASSEMBLED (`director_resolve_lean`), not stored, which is
 #: why the id and the step key differ for exactly one entry.
-TEMPLATE_STAGES = {"character": "character"}
+TEMPLATE_STAGES = {"character_kernel": "character"}
 
 CAUSAL_DIRECTOR_STAGES = {
     "director_interpret": "director_interpret",
@@ -72,45 +72,6 @@ _SHAPE_MARKER = "Output STRICT JSON"
 #: entry that has gone stale (the field is published now, or no longer exists),
 #: so this cannot decay into a mute allowlist.
 UNPUBLISHED = {
-    # --- character --------------------------------------------------------
-    # RETIRED 2026-08-30, both groups, and both kept on the model with empty
-    # defaults so stored variants parse and old turns replay. The reasoning
-    # and the measurements are in
-    # tests/data/prompt_cards_presplit/EXPECTED_DIVERGENCE.json under
-    # `prompts.character`.
-    "character.observations_used":
-        "evidence arrays retired 2026-08-30; perception isolates the character "
-        "by construction, so the citation had no reader",
-    "character.present_evidence_used":
-        "evidence arrays retired 2026-08-30 (see EXPECTED_DIVERGENCE)",
-    "character.memory_evidence_used":
-        "evidence arrays retired 2026-08-30 (see EXPECTED_DIVERGENCE)",
-    "character.considered_responses":
-        "deliberation field retired 2026-08-30: filled 59% of the time across "
-        "384 results and read by nothing",
-    "character.response_candidates":
-        "deliberation field retired 2026-08-30: every reader took only the "
-        "selected entry, and both used parts are now derived",
-    # MIRRORS, not channels. agents/common._sync_sequence_mirrors recomputes
-    # all three FROM `sequence` after validation; a model that writes them
-    # instead is tolerated (readers fall back) but never asked, because
-    # `sequence` plus a mirror of it was adjudicated, perceived and narrated
-    # twice on the real validated path (collapse_duplicate_events).
-    "character.speech":
-        "derived from `sequence` by _sync_sequence_mirrors; asking for both "
-        "duplicates one declared act",
-    "character.action":
-        "derived from `sequence` by _sync_sequence_mirrors",
-    "character.actions":
-        "derived from `sequence` by _sync_sequence_mirrors",
-    # PUBLISHED CONDITIONALLY, and that is the design. agents/character.py
-    # appends the drive_shift instruction ONLY inside an engine-opened rupture
-    # window, so a drive cannot flip-flop turn to turn; the base contract
-    # documenting it would be the flip-flop.
-    "character.drive_shift":
-        "asked only inside an engine-opened rupture window "
-        "(agents/character.py), never in the base contract",
-
     # --- specialists ------------------------------------------------------
     # `director_objects.entities.ubiquitous` stood here as an OPEN residual
     # until 2026-09-01 and is now published in both packs

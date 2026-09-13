@@ -299,7 +299,9 @@ def test_the_prompt_states_an_occasion_and_not_only_prohibitions():
     block = prompts.DEFAULT_PROMPTS["character"]
     line = next(l for l in block.splitlines()
                 if "READING A MEMORY DIFFERENTLY" in l)
-    for occasion in ("disguise", "lied", "staged"):
+    # "lie" rather than "lied": the occasion is what must be named, not one
+    # inflection of it -- the contract says "lies" (2026-09-13).
+    for occasion in ("disguise", "lie", "staged"):
         assert occasion in line.casefold(), occasion
 
 

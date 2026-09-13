@@ -183,7 +183,7 @@ _AGENTS_DIR = Path(__file__).resolve().parents[1] / "agents"
 _STAGE_STEP_KEYS = {
     "director.py": ["director_establish", "director_interpret",
                     "director_resolve"],
-    "character.py": ["character"],
+    "character.py": ["character_kernel"],
     "background.py": ["background_react"],
     "narration.py": ["narrator"],
 }

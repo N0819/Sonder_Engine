@@ -166,10 +166,16 @@ class TestTheAnswerCouldNotBeHeardEither:
     def test_the_field_the_prompt_names_is_the_field_the_model_has(self):
         """Prompt and schema disagreeing about a field name is the alpha 7.2
         lore-generator bug. This one cost a whole tier of psychology."""
-        from llm import prompts
-        from llm.schemas import CharacterOutput
+        import typing
 
-        assert "project_ops" in prompts.DEFAULT_PROMPTS["character"]
+        from llm import prompts, schemas
+        from llm.schemas import CharacterKernelOutput, CharacterOutput
+
+        assert "`updates.projects`" in prompts.DEFAULT_PROMPTS["character"]
+        kernel_fields = schemas._fields(CharacterKernelOutput)
+        update_model = typing.get_type_hints(CharacterKernelOutput)["updates"]
+        assert "updates" in kernel_fields
+        assert "projects" in schemas._fields(update_model)
         assert "project_ops" in CharacterOutput().dict()
 
     def test_what_commit_reads_is_what_validation_keeps(self):

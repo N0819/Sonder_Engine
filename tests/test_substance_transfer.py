@@ -86,7 +86,7 @@ class TestSchemaAndPromptContract:
         assert "exactly one standing relation:'interior' contact" in resolve
         character = DEFAULT_PROMPTS["character"]
         assert "MATERIAL EFFECTS YOU COMPLETE" in character
-        assert "active_state.hedonic.released" in character
+        assert "state.active.hedonic.released" in character
         assert "character_material_effects" in resolve
 
     def test_embodiment_capabilities_are_available_to_their_owner(self):

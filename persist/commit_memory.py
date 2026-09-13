@@ -705,18 +705,6 @@ def prepare_memory_commit(ctx, *, scene=None):
             ctx.reaction_results.get(ccid),
             ctx.character_results.get(ccid)) or {}
         own_result = _normalize_character_output(own_result)
-        # Place claims are re-keyed onto their place ONCE, up here, before
-        # ANYTHING reads mind_model_updates. The inference memory minted for a
-        # claim (below) and the hypothesis it is merged under (further down,
-        # via apply_mind_model_updates) must share one subject key: minting
-        # from the raw updates while merging the rekeyed ones stamped the
-        # memory's entities[0] with a subject that never exists in
-        # mind_models, so reconcile_inference_confidence could never find the
-        # live hypothesis and demoted the row as abandoned from the start.
-        _mm_updates = own_result.get("mind_model_updates") or []
-        if _mm_updates:
-            _mm_updates = rekey_place_claims(
-                _mm_updates, _rekey_place_names, protected=_rekey_protected)
         active_state = own_result.get("active_state") or {}
         mood = str(active_state.get("mood") or "")
         # The character's blended surface affect this beat carries the numeric
@@ -746,10 +734,36 @@ def prepare_memory_commit(ctx, *, scene=None):
         # should be: how you felt while it was happening, before the beat's own
         # appraisal moved you. The self-report is kept as the fallback for a
         # character with no resolved affect yet (their first beat).
-        _surface = (((st.get("active_state") or {}).get("affect") or {})
-                    .get("surface") or {})
+        def _numeric_surface(value):
+            """A resolved surface, or nothing. NEVER a crash.
+
+            Takes the AFFECT VALUE, not its holder: the stored state keeps it
+            under `active_state.affect` and the answer keeps it at `affect`,
+            and a helper that guessed the hop silently found neither -- every
+            memory then took the self-report the caller below is careful to
+            prefer against.
+
+            The stored value is engine-written and always the right shape.
+            The fallback below is the character's own SELF-REPORT, which is
+            free-form by design -- `resolve_affect` takes it only as
+            `proposed=`, beside `mood`. Measured on the ten-beat character
+            run: one model emitted `affect` in four different shapes across
+            the same story -- `{valence,arousal}`, `{surface:"tense"}`, `{}`,
+            and `{surface:{...}}` -- and `.get("surface").get("valence")` on
+            the second killed the commit, and with it the whole beat.
+            `CharacterActiveState.affect` is typed `dict` and does not reach
+            inside, so no schema layer was ever going to catch this: a
+            self-report has to be read as untrusted at the point of use.
+            """
+            surface = value.get("surface") if isinstance(value, dict) else None
+            return surface if isinstance(surface, dict) else {}
+
+        _stored_as = st.get("active_state")
+        _surface = _numeric_surface(
+            (_stored_as or {}).get("affect") if isinstance(_stored_as, dict)
+            else None)
         if not _surface:
-            _surface = (active_state.get("affect") or {}).get("surface") or {}
+            _surface = _numeric_surface(active_state.get("affect"))
         try:
             _mem_valence = float(_surface.get("valence") or 0.0)
             _mem_arousal = float(_surface.get("arousal") or 0.0)
@@ -987,6 +1001,7 @@ def prepare_memory_commit(ctx, *, scene=None):
             # marker check below is the backstop, not the mechanism.
             if _is_empty_view(episode_content):
                 episode_content = ""
+        _episode_key = ""
         if episode_content:
             # WHY `turn.id` AND NOT A COPY-STABLE IDENTITY. The property this
             # mint is relied on for is stability across a RE-RUN, not across a
@@ -1011,6 +1026,7 @@ def prepare_memory_commit(ctx, *, scene=None):
             # strands the support refs of every existing summary the first time
             # its turn is re-run. `tests/test_branch_memory_integrity.py` pins
             # both halves.
+            _episode_key = _stable_event_key(turn.id, ccid, "episode")
             _episode_row = {
                 "chat_id": cid, "char_id": ccid, "turn_id": turn.id,
                 "turn_idx": turn.idx, "kind": "episodic", "category": "episode",
@@ -1018,7 +1034,7 @@ def prepare_memory_commit(ctx, *, scene=None):
                 "content": episode_content, "location": room_name,
                 "emotional_context": mood,
                 "valence": _mem_valence, "arousal": _mem_arousal,
-                "event_key": _stable_event_key(turn.id, ccid, "episode"),
+                "event_key": _episode_key,
             }
             if _episode_entities:
                 _episode_row["entities"] = _episode_entities
@@ -1026,6 +1042,25 @@ def prepare_memory_commit(ctx, *, scene=None):
                 _episode_row["gist"] = _episode_gist
             pending_memories.append(_episode_row)
         pending_memories.extend(side_memories)
+
+        # Observation ids exist only for the character call.  Once this same
+        # witnessed material becomes an episode, the durable consequences of
+        # the decision cite that stable memory instead.  Work on the merged,
+        # commit-local result, never the turn's archived model answer.  If the
+        # composer found no event worth remembering, no row exists and the
+        # transient ids correctly remain transient.
+        if own_result and _episode_key:
+            from agents.character_kernel import bind_current_evidence_to_memory
+            bind_current_evidence_to_memory(own_result, _episode_key)
+
+        # Place claims are re-keyed onto their place ONCE, after evidence has
+        # been attached to this beat's committed episode and before ANYTHING
+        # reads mind_model_updates.  The inference memory minted below and the
+        # hypothesis merged later must share one subject key.
+        _mm_updates = own_result.get("mind_model_updates") or []
+        if _mm_updates:
+            _mm_updates = rekey_place_claims(
+                _mm_updates, _rekey_place_names, protected=_rekey_protected)
         if own_result:
             # Ponder is a private, deliberate retrieval request for the NEXT
             # character turn. The character stage removed it from the public
