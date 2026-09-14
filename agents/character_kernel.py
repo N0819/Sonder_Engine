@@ -130,7 +130,11 @@ def compact_character_evidence(payload):
     def visit(value):
         if isinstance(value, dict):
             for key, item in list(value.items()):
-                if key == "observation_id":
+                # `line_ref` is a cue's pointer AT an observation
+                # (`perception.impossible_knowledge`), so it takes the same
+                # handle as the observation it names: one id, one handle,
+                # whichever key carries it.
+                if key in ("observation_id", "line_ref"):
                     value[key] = handle(item, "o")
                 elif key == "memory_ref":
                     value[key] = handle(item, "m")

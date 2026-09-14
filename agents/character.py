@@ -28,6 +28,8 @@ from story.character_schema import (
     character_standing_intentions,
     effective_drive,
     character_public_history,
+    persona_name,
+    persona_public_history,
     character_sampler,
     character_senses,
     character_temperature,
@@ -65,6 +67,7 @@ from story.scene import (
     persona_of,
     transformed_sheet,
     private_knowledge_for,
+    own_private_history,
     sheet_state,
 )
 from llm.schemas import validate_llm_output
@@ -78,6 +81,8 @@ from world.place_purpose import (affords_here, felt_needs, here_affords,
 from mind.psychology_runtime import cognitive_absorption
 from mind.theory_of_mind import mind_models_for_payload, sheet_capacity
 
+from .impossible_knowledge import (aired_in_story, folded_tokens,
+                                   impossible_knowledge_cues)
 from .character_kernel import (
     compact_character_evidence,
     compile_character_kernel,
@@ -862,6 +867,125 @@ def _positions_key(sc, forms):
         if str(key).strip().casefold() in folded:
             return str(key)
     return forms[0] if forms else ""
+
+
+def _spoken_lines_of(result):
+    """The spoken and written lines of one declared result, in order."""
+    out = []
+    for element in (result or {}).get("sequence") or []:
+        if not isinstance(element, dict):
+            continue
+        if element.get("type") not in ("speech", "communication"):
+            continue
+        text = str(element.get("text") or element.get("content") or "").strip()
+        if text:
+            out.append(text)
+    if not out and str((result or {}).get("speech") or "").strip():
+        out.append(str(result["speech"]).strip())
+    return out
+
+
+def _flatten_strings(value, out):
+    if isinstance(value, str):
+        out.append(value)
+    elif isinstance(value, dict):
+        for item in value.values():
+            _flatten_strings(item, out)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            _flatten_strings(item, out)
+    return out
+
+
+def _impossible_knowledge(ctx, cid, sh, sc, observations, knowledge, label,
+                          shared):
+    """`perception.impossible_knowledge` for THIS mind on this beat.
+
+    Gathers what the pure rule needs from the turn -- this mind's own
+    private history with its `known_by`, every line another mind spoke this
+    beat, the observations this mind was handed, and every text whose words
+    have a channel -- and asks `impossible_knowledge_cues`. Presence is the
+    signal, like its siblings: the list is omitted when nothing was said
+    that nobody could have known.
+
+    The public corpus is every NAME the story carries (cast keys, the
+    player's), every public history, every room and entity, and the lore
+    this mind may read: a word in any of them has a channel, so it is never
+    a cue. Subtracting only; nothing here reaches the mind that its own view
+    did not already carry.
+    """
+    chat = ctx.chat
+    me = character_name(sh)
+    own = own_private_history(chat, me, ctx.turn.frame_id)
+    if not own:
+        return []
+    pers = persona_of(chat)
+    p_identity = (pers.get("identity") or {}) if isinstance(pers, dict) else {}
+    p_name = persona_name(pers)
+    p_keys = {p_name} | {str(a).strip() for a in (p_identity.get("aliases")
+                                                  or []) if str(a or "").strip()}
+    public = list(p_keys) + [persona_public_history(pers)]
+    speaker_keys = {p_name: set(p_keys)}
+    names_by_id = {}
+    for row in ctx.cast or []:
+        sheet = normalized_character_of_row(row)
+        if sheet is None:
+            continue
+        keys = character_scene_keys(sheet)
+        public.extend(keys)
+        public.append(character_public_history(sheet))
+        if keys:
+            speaker_keys[keys[0]] = set(keys)
+            names_by_id[int(row["id"])] = keys[0]
+    for rid, room in ((sc or {}).get("rooms") or {}).items():
+        public.append(str(rid))
+        public.append(str((room or {}).get("name") or ""))
+    for eid, entity in ((sc or {}).get("entities") or {}).items():
+        public.append(str(eid))
+        if isinstance(entity, dict):
+            public.append(str(entity.get("name") or ""))
+    _flatten_strings(knowledge, public)
+
+    lines = []
+    for text in _spoken_lines_of(ctx.get("director_interpret")):
+        lines.append((p_name, text))
+    own_lines = []
+    for sid, result in (ctx.character_results or {}).items():
+        try:
+            sid = int(sid)
+        except (TypeError, ValueError):
+            continue
+        if sid == cid:
+            own_lines.extend(_spoken_lines_of(result))
+            continue
+        speaker = str((result or {}).get("name") or names_by_id.get(sid)
+                      or "").strip()
+        if not speaker:
+            continue
+        for text in _spoken_lines_of(result):
+            lines.append((speaker, text))
+    if not lines:
+        return []
+    delivered = []
+    for obs in observations or []:
+        if not isinstance(obs, dict):
+            continue
+        text = (obs.get("observed") or {}).get("text") if isinstance(
+            obs.get("observed"), dict) else None
+        delivered.append((obs.get("observation_id"), text or ""))
+
+    said_myself = set()
+    for text in own_lines:
+        said_myself |= folded_tokens(text)
+
+    def already_aired(token):
+        return token in said_myself or aired_in_story(
+            chat.id, ctx.turn.frame_id, ctx.turn.idx, token, cache=shared)
+
+    return impossible_knowledge_cues(
+        own_entries=own, lines=lines, delivered=delivered,
+        public_texts=public, speaker_keys=speaker_keys,
+        already_aired=already_aired, label=label)
 
 
 def _player_silence_note(sc, chat, sh, spoke, quiet_beats=0, label=None):
@@ -4023,6 +4147,13 @@ def character_step(ctx, cid, nonce):
         isinstance(want, dict) and want.get("suppressed")
         for want in ((active or {}).get("wants") or []))
 
+    # A line this beat that named what only this mind knows. Computed from
+    # the mind's own private history and the words its view already carries,
+    # subtracting every word with a channel; absent when nothing was said
+    # that nobody could have known. See agents/impossible_knowledge.py.
+    _impossible = _impossible_knowledge(
+        ctx, cid, sh, sc, observations, knowledge, _contact_label, shared)
+
     payload = {
         "self": _self,
         "perception": {
@@ -4086,6 +4217,12 @@ def character_step(ctx, cid, nonce):
             # with the least context.
             "sprint_reach": sprint_offers(sc, char_room, stored_state,
                                           destination=_goal_destination),
+            # A speaker who named something only this mind knows: the line,
+            # by the id of the observation that carried it, and the private
+            # matter it touched. Knowledge that reached them through no
+            # channel is itself an event to appraise. Present only when one
+            # fired.
+            **({"impossible_knowledge": _impossible} if _impossible else {}),
         },
         "memory": memory_context,
         "relationships": relationships,

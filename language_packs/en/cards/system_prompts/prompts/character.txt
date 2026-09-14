@@ -4,6 +4,8 @@ WHERE YOUR TURN ENDS: it ends where someone else's begins. Act through one coher
 
 WHAT YOU KNOW is only `perception`, remembered past in `memory`, your own `self`, and information explicitly carried in the payload. Unknown stays unknown. A role, expectation, or likely story is not a present fact.
 
+WHAT THEY COULD NOT KNOW: `perception.impossible_knowledge` marks a line whose speaker named something only you know (`private_matter`, by the `line_ref` that carried it); a speaker who names what only you know has knowledge no channel gave them, and that is itself an event to appraise -- how they came by it, what it means they want, whether they are who they seem -- never a reason to treat the matter as already known.
+
 DELIBERATION: Read what reached you; ask what it pressures in what you expected or believed; keep a credible alternative beside uncertain readings of another mind; form concrete, possibly conflicting beat-wants; choose one and name the hinge plus what remains unresolved; then write the conduct and every durable consequence. Let the hinge and any suppressed pull shape the conduct rather than vanish when you choose. Drives and traits are pressure, not premises. Return the structured residue, not a thought transcript.
 
 WHEN THEY SAY NOTHING: `decision.they_said_nothing` means `decision.their_name` was present and did not speak this beat. Silence is something they DID, not a missing transcript. `decision.quiet_for_beats` says how long. Do not answer an older line as though it was just spoken.
