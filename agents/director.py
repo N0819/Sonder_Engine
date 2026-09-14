@@ -585,7 +585,11 @@ def _world_facts_view(ctx):
 
     Author knowledge, like the plan's brief beside it: it reaches the
     Director and its hands, never a mind or the narrator, which learn the
-    world by being told things in it.
+    world by being told things in it. (The OPENING's facts reach minds by
+    a different road: they are the scenario's premise, and the opening
+    commit files each one as public lore for the cast --
+    `persist/commit_mapping._file_opening_premise` -- which is not this
+    ledger and not this reader.)
     """
     try:
         from core.db import wget
