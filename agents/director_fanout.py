@@ -465,13 +465,48 @@ def _anchor_names(sc, whos, ctx=None, view=None):
             continue
         anchors = effective_anchors(sc, room) or {}
         named = {
-            str(aid): (str((anchor or {}).get("desc") or "").strip()
-                       or str(aid).replace("_", " "))
+            str(aid): _anchor_payload_desc(sc, room, aid, anchor)
             for aid, anchor in anchors.items() if str(aid).strip()
         }
         if named:
             out[room] = named
     return out
+
+
+def _anchor_payload_desc(sc, room, aid, anchor):
+    """What one anchor is called in the hand's vocabulary.
+
+    AN IMPLICIT DOORWAY SAYS WHERE IT LEADS. The derived `door:<room>`
+    anchors describe themselves by barrier alone ("the open doorway"), and
+    three rooms' worth of them read identically in one payload -- the hand
+    was shown `door:passage` under the sickroom and under the yard, both
+    "the doorway", and recorded a shoulder set against the scullery's back
+    door as a contact with `door:passage` (scratch play 2026-09-14, chat 4
+    turn 11), a door in a room the actor was not in. The edge's own authored
+    name is the description when somebody wrote one ("the back door to the
+    yard"); otherwise the barrier phrase says which room it opens onto.
+    Authored anchors are untouched."""
+    anchor = anchor if isinstance(anchor, dict) else {}
+    desc = (str(anchor.get("desc") or "").strip()
+            or str(aid).replace("_", " "))
+    if not anchor.get("implicit"):
+        return desc
+    try:
+        from world.spatial import door_anchor_id, effective_adjacent
+        for edge in effective_adjacent(sc, room) or ():
+            if not isinstance(edge, dict) or not edge.get("to"):
+                continue
+            if door_anchor_id(edge["to"]) != str(aid):
+                continue
+            name = str(edge.get("name") or "").strip()
+            if name:
+                return name
+            far = ((sc.get("rooms") or {}).get(str(edge["to"])) or {})
+            far_name = str((far or {}).get("name") or edge["to"]).strip()
+            return f"{desc} to {far_name}"
+    except Exception:
+        return desc
+    return desc
 
 
 def _without_private_keys(item):

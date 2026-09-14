@@ -6124,6 +6124,21 @@ class TestWhichEventMovedThem:
         out["state_assertions"] = {"positions": {"Corin": "box"}}
         assert director.mover_cut_events(out) == {}
 
+    def test_a_declared_element_citing_its_raw_input_still_answers_its_own_id(self):
+        """The ledger stamps the player's own elements with the raw input's
+        id under `from_declaration` ("turn:1:primary:raw"), which no stream
+        is keyed on; the element's own phase id is the cut. Measured (scratch
+        play 2026-09-14, chat 4 turn 12): preferring the citation sent every
+        player cut to the last-action heuristic and two bedside lines were
+        graded from the scullery."""
+        out = self._out()
+        for element in out["sequence"]:
+            element["from_declaration"] = "turn:1:primary:raw"
+        out["state_assertions"] = {"positions": {"Corin": "box"},
+                                   "phase_sources": {"positions.Corin": 1}}
+        assert director.mover_cut_events(out) == {
+            "Corin": "turn:1:player:0:action"}
+
     def test_only_position_paths(self):
         """A sidecar entry for another channel says nothing about where a body
         was standing."""

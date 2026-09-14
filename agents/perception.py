@@ -5994,6 +5994,30 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                     _as_of_scenes[pending] = cached
                 return cached
 
+            def _sight_as_of(counterparty, at_index, _observer=name,
+                             _senses=p.get("sense_card")):
+                """Sight to a counterparty AS IT STOOD WHEN THE EVENT
+                HAPPENED. The beat-wide map (`_saw_across_beat`) answers
+                yes if either end of the beat could see, which is right for
+                a beat nobody crossed and wrong for an event after a move:
+                measured (scratch play 2026-09-14, chat 4 turn 2) a nurse
+                walked from the sickroom to the scullery, the patient then
+                clenched his fingers in the quilt, and her view carried the
+                gesture as SIGHT through a shut door and two rooms, because
+                she had seen him when the beat began. Where either body
+                moved this beat, the scene at the event's moment decides."""
+                if not movement_cuts or not (
+                        _observer in movement_cuts
+                        or counterparty in movement_cuts):
+                    return visual.get(counterparty, False)
+                moment = _as_of(at_index)
+                then = sc if moment is None else moment[0]
+                if room_of(then, _observer) is None:
+                    return visual.get(counterparty, False)
+                return composer._sense_graded(
+                    visual_level_between(then, _observer, counterparty,
+                                         _senses),
+                    "sight", _senses) != "none"
             def _channel_as_of(counterparty, at_index, _observer=name,
                                _spatial=spatial):
                 standing = _spatial.get(counterparty)
@@ -6063,7 +6087,7 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                                 target_room=sp_room,
                                 sound=_field)
                     can_see = _in_plain_view(
-                        rel, visual.get(speaker, False))
+                        rel, _sight_as_of(speaker, at_index))
                     display = _attributed_label(
                         speaker, name, recognized=recognized,
                         display_map=display_map,
@@ -6128,7 +6152,7 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                     if rel is None:
                         order += 1
                         continue
-                    can_see = _in_plain_view(rel, visual.get(actor, False))
+                    can_see = _in_plain_view(rel, _sight_as_of(actor, at_index))
                     display = _attributed_label(
                         actor, name, recognized=recognized,
                         display_map=display_map,
@@ -6165,7 +6189,7 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                 # let it rule; this pass skipped unseen and rear-arc actors
                 # before the call, so the hearing percept the composer mints
                 # for the rear arc was dead on every outcome beat.
-                can_see = _in_plain_view(rel, visual.get(actor, False))
+                can_see = _in_plain_view(rel, _sight_as_of(actor, at_index))
                 legs = _legs_of_actor(sc, crossed_legs, actor)
                 if legs and not _channel_to_every_leg(
                         sc, prev_scene, name, p.get("room"), legs,

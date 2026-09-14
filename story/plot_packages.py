@@ -1238,6 +1238,8 @@ def _shape_plan_creature(op):
         "boldness": op.get("boldness"),
         "kill_ceiling": max(0, min(6, int(op.get("kill_ceiling") or 1))),
         "rule": _text(op.get("rule"), 600),
+        "look": _text(op.get("look"), 300),
+        "noun": _text(op.get("noun"), 32),
         "voice": voice,
         "spoor": {"body": _text(spoor.get("body"), 80),
                   "stock": _text(spoor.get("stock"), 80),
@@ -1273,6 +1275,18 @@ def _creature_charter(cid, op):
     }
     if op.get("boldness") is not None:
         creature["boldness"] = op["boldness"]
+    if op.get("look"):
+        # WHAT A BODY SEES OF IT. A charter body's sketch is composed from
+        # the charter's `looks` tables, which a creature has none of, and
+        # `land_snapshot` falls back to `creature.look` -- which no brief
+        # could set. The thing in the well-house (scratch play 2026-09-14,
+        # chat 4) reached the scene as "Creature_in_the_well_0" with an
+        # empty look, so the first sight of it would have been a name.
+        creature["look"] = op["look"]
+    if op.get("noun"):
+        # And the word for it: without one, a stranger's eye reaches for
+        # "person" (`common.presence_figures_for_room`).
+        creature["noun"] = op["noun"]
     return {
         "key": key,
         "name": op["name"],
@@ -2477,6 +2491,12 @@ OPERATION_FIELDS = {
         "kill_ceiling?": "how many it may take in one window (default 1)",
         "boldness?": "0 timid, 1 brazen (default 0.5)",
         "rule?": "the one sentence that governs it, for the Director",
+        "look?": "what a body SEES of it at full sight, as a short "
+                 "description a stranger's eye would compose -- the only "
+                 "appearance it will ever have; without it the first sight "
+                 "of it is its name",
+        "noun?": "the common noun a stranger's eye reaches for in place of "
+                 "'person'; without it the engine says 'figure'",
         "voice?": "{moving|attacking|feeding|idle: {level, sound}} -- HOW IT "
                   "IS HEARD DOING EACH THING. `level` is the loudness rung "
                   "(faint | audible | loud | deafening | thunderous | "

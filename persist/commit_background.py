@@ -404,7 +404,7 @@ def presence_has_an_identity(scene, name, record=None):
     verdict = presence_personhood(scene, name, record)
     if verdict == "person":
         return True
-    if verdict == "thing":
+    if verdict in ("thing", "creature"):
         return False
     return bool((record or {}).get("dialogue_turns"))
 
@@ -529,6 +529,11 @@ def _presence_speech_verdict(scene, name, record=None):
         return "person"
     if nature in ("thing", "voice"):
         return "thing"
+    if nature == "creature":
+        # A charter creature (`charter_runtime.background_presence_records`):
+        # it acts and is seen, and its name is withheld like a person's, but
+        # it has a voice (`creature.voice`: sounds), never a line.
+        return "creature"
 
     eid, ent = _presence_scene_entity(scene, name, record)
     if ent is None:
@@ -585,7 +590,11 @@ def _merge_presence_record(target, other):
     # An id denotes exactly one body: whichever side knows it, keep it.
     if other.get("entity_id") and not target.get("entity_id"):
         target["entity_id"] = other["entity_id"]
-    if other.get("nature") and not target.get("nature"):
+    if other.get("nature") and (
+            not target.get("nature") or other.get("charter_refs")):
+        # A charter-derived record is an aperture on the registry, and the
+        # registry is the authority on what its body IS: a record minted
+        # "person" before its charter said creature follows the charter.
         target["nature"] = other["nature"]
     for ref in (other.get("charter_refs") or []):
         if ref not in target.setdefault("charter_refs", []):

@@ -4198,6 +4198,31 @@ def presence_view(cid, place, name, frame_id=None, figures=None, *,
         body = state["bodies"].get(body_key) or {}
         if str(body.get("place") or "") != str(place or ""):
             continue
+        # A CREATURE HAS NO SOCIAL AFFORDANCES. `opportunities` opens a
+        # greeting or a conversation for any pair the beat brings together,
+        # and `action_instances` then offers the reactor "converse with the
+        # small composed woman" for a thing that hunts her (scratch play
+        # 2026-09-14, chat 4 turn 10). What the voice needs of a creature is
+        # what it IS -- its look, the word for it, what it hunts, how it
+        # sounds, what it senses -- which is the charter's own block, handed
+        # over whole and nothing else.
+        from world.charter_creature import normalize_creature
+        creature = normalize_creature(shared.get("creature"))
+        if creature:
+            berth = str(body.get("berth") or "")
+            out.append({
+                "charter": charter_key,
+                "body": body_key,
+                "creature": {
+                    k: creature[k] for k in (
+                        "look", "noun", "prey", "voice", "senses",
+                        "can_open_doors", "footprint")
+                    if creature.get(k) not in (None, "", [], {})},
+                "home": {"room": berth,
+                         "at_home": bool(berth) and berth == str(place or "")},
+                **({"look": creature["look"]} if creature.get("look") else {}),
+            })
+            continue
         answers = []
         mine = [p for p in plans if p["charter"] == charter_key
                 and p["body"] == body_key]
@@ -4410,6 +4435,20 @@ def background_presence_records(cid, *, places=None, names=None,
             _creature = normalize_creature(state.get("creature"))
             if _creature and _creature.get("look"):
                 sketch["appearance"] = _creature["look"]
+        # WHAT THE BODY IS. A creature's charter says so in its `creature`
+        # block, and the record carries it as `nature` -- the field the
+        # speech gate, the reactor and the stranger label already read for
+        # a thing or a voice -- so nothing downstream has to walk the
+        # registry to learn that this presence is not a person. Its authored
+        # `noun` rides the sketch for the label. Measured (scratch play
+        # 2026-09-14, chat 4 turn 10): with `nature: "person"` the well-house
+        # thing was handed to the background reactor as "a person with no
+        # character sheet", offered a conversation, and given eyes.
+        from world.charter_creature import normalize_creature as _norm
+        _kind = _norm(state.get("creature"))
+        nature = "creature" if _kind else "person"
+        if _kind and _kind.get("noun"):
+            sketch["noun"] = _kind["noun"]
         berth = str(body.get("berth") or "")
         if berth:
             # Where this body SLEEPS -- the fact that makes a room private
@@ -4418,7 +4457,7 @@ def background_presence_records(cid, *, places=None, names=None,
             sketch["home_room"] = berth
         out[display] = {
             "dialogue_turns": [], "mention_turns": [],
-            "addressed_turns": [], "nature": "person",
+            "addressed_turns": [], "nature": nature,
             "charter_refs": [{"charter": charter_key, "body": body_key}],
             "sketch": sketch,
         }

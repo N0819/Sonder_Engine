@@ -80,7 +80,7 @@ from world.spatial_frames import (infer_companion_carry, infer_vehicle_zones,
 # this block is published surface while extensions port against `ext_api: 1`,
 # and removing a re-export is an API change that belongs to one deliberate
 # decision covering every facade in the tree, not to a tidy-up.
-from persist.commit_common import (_keys_str, _stable_event_key, _clamp,
+from persist.commit_common import (_address_index, _keys_str, _stable_event_key, _clamp,
     _normalize_character_output, _player_name_or_none, _monotonic_elapsed,
     _ADDRESS_ARTICLES, _form_in, _address_forms, _names_heard_in,
     _known_name_roster, _registered_name_roster, _resolve_roster_name,
@@ -176,7 +176,7 @@ from persist.commit_scene_state import (_anchor_current_room, sync_anchored_book
     compose_beat_scene, composed_beat_for)
 from persist.commit_mechanics import (commit_transit_sweep, commit_world_event_spine,
     commit_information_carriers, commit_cast_changes)
-from persist.commit_memory import (RECENT_TELLS_CAP, _durable_dialogue_category,
+from persist.commit_memory import (_names_spoken_by, RECENT_TELLS_CAP, _durable_dialogue_category,
     _cited_memory_ids, _marked_for_memory, _quote_body, _is_player,
     _salience_of, _own_sequence_memory, _inference_memory_text,
     _intent_names_term, _interior_relations_of,

@@ -771,3 +771,25 @@ def test_a_creature_that_can_take_a_body_asks_for_harm_authority(temp_db):
 
     assert operation_harms({"op": "plan_creature", "kill_ceiling": 1})
     assert not operation_harms({"op": "plan_creature", "kill_ceiling": 0})
+
+
+def test_a_planned_creature_carries_what_a_body_sees_of_it():
+    """Scratch play 2026-09-14, chat 4: the thing in the well-house reached
+    the scene as "Creature_in_the_well_0" with an empty look, because no
+    brief could set one. `look` is the creature's only appearance."""
+    from story.plot_packages import _creature_charter, _shape_plan_creature
+    op = _shape_plan_creature({"op": "plan_creature", "name": "Well Thing",
+                               "lair": "well_house",
+                               "look": "a long pale jointed thing, glistening"})
+    assert op["look"] == "a long pale jointed thing, glistening"
+    charter = _creature_charter(0, op)
+    assert charter["creature"]["look"] == "a long pale jointed thing, glistening"
+    bare = _creature_charter(0, _shape_plan_creature(
+        {"op": "plan_creature", "name": "Well Thing", "lair": "well_house"}))
+    assert "look" not in bare["creature"]
+    # And the word for it (`noun`), the same way: authored or absent.
+    named = _creature_charter(0, _shape_plan_creature(
+        {"op": "plan_creature", "name": "Well Thing", "lair": "well_house",
+         "noun": "thing"}))
+    assert named["creature"]["noun"] == "thing"
+    assert "noun" not in bare["creature"]
