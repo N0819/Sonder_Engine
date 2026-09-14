@@ -12,7 +12,7 @@
 | `agents/character_kernel.py` | 464 |  | — |
 | `agents/common.py` | 10837 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 4946 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
-| `agents/director.py` | 6344 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.paradox`, `world.spatial`, `world.survival` |
+| `agents/director.py` | 6348 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 477 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 3392 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
 | `agents/director_fanout.py` | 1431 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
@@ -74,14 +74,14 @@
 | `persist/chat_archive.py` | 1274 | Typed, atomic chat archive export/import service and HTTP routes. | `core.db`, `llm.schemas`, `mind.memory`, `persist.checkpoints`, `story.character_schema`, `story.room_conversation` |
 | `persist/chat_delete.py` | 42 |  | `core.db` |
 | `persist/checkpoints.py` | 1579 | Whole-chat snapshots and checkpoint restore orchestration. | `core.db`, `mind.memory` |
-| `persist/commit.py` | 815 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
+| `persist/commit.py` | 817 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
 | `persist/commit_attire.py` | 1694 | The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff. | `persist.commit_common`, `story`, `story.attire`, `world.spatial` |
 | `persist/commit_background.py` | 4577 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial`, `world.survival` |
 | `persist/commit_common.py` | 713 | Leaf helpers shared across commit domains: scalar utilities, name/address roster, entity-id canonicalisation. | `core.db`, `mind.memory`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `persist/commit_destruction.py` | 414 | Single- and multi-book destruction cascades, retirement, and latency-gated news. | `core.db`, `mind.memory`, `persist.commit_common`, `world.mechanics`, `world.spatial`, `world.spatial_frames` |
 | `persist/commit_entities.py` | 568 | world_entities projection of the scene commit, awareness gate, disguise supersession. | `core.db`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `persist/commit_ledgers.py` | 465 | Pending-obligation and world-pressure debt ledgers. | `core.db`, `core.pipeline_context`, `persist.commit_common` |
-| `persist/commit_mapping.py` | 760 | Lore/book mapping commit: book ops, lore ops, canon fallback ops, offscreen-event normaliser. | `core.db`, `core.frames`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.provenance_text`, `world.spatial` |
+| `persist/commit_mapping.py` | 903 | Lore/book mapping commit: book ops, lore ops, canon fallback ops, offscreen-event normaliser. | `core.db`, `core.frames`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.provenance_text`, `world.spatial` |
 | `persist/commit_mechanics.py` | 469 | Transit/news sweeps, the world-event spine, information carriers, cast changes. | `core.db`, `persist.commit_common`, `persist.commit_scene_state`, `story.character_schema`, `story.scene`, `world.mechanics` |
 | `persist/commit_memory.py` | 1994 | Pre-lock memory preparation: per-mind memories and the psychology deltas riding with them. | `core.db`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_background`, `persist.commit_common`, `persist.commit_place_graph`, `story.character_schema`, `world.charter`, `world.comfort`, `world.exposure`, `world.spatial`, `world.stimulation`, `world.survival` |
 | `persist/commit_memory_write.py` | 354 | The durable memory write and its out-of-band consolidation twin. | `core.db`, `mind.memory`, `persist.commit_memory`, `story.character_schema`, `story.scene` |
@@ -183,7 +183,7 @@
 | `world/paradox.py` | 655 |  | `core.db`, `core.frames`, `story.character_schema`, `world.spatial` |
 | `world/place_purpose.py` | 554 |  | `mind.theory_of_mind`, `world.comfort`, `world.spatial`, `world.survival` |
 | `world/planned_entities.py` | 364 |  | `core.db` |
-| `world/planning_needs.py` | 379 |  | — |
+| `world/planning_needs.py` | 382 |  | — |
 | `world/region_events.py` | 461 |  | — |
 | `world/regions.py` | 586 |  | `world.spatial` |
 | `world/routines.py` | 257 |  | `world.day_cycle` |
@@ -286,14 +286,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 4011 | 2300 lines |
-| `director_interpret()` | 1103 | 858 lines |
-| `_reconcile_resolution()` | 2384 | 558 lines |
-| `_run_specialists()` | 3153 | 432 lines |
+| `director_resolve()` | 4015 | 2300 lines |
+| `director_interpret()` | 1107 | 858 lines |
+| `_reconcile_resolution()` | 2388 | 558 lines |
+| `_run_specialists()` | 3157 | 432 lines |
 | `director_establish()` | 379 | 187 lines |
-| `_reconcile_interpretation()` | 1963 | 172 lines |
-| `_specialist_repairs()` | 2197 | 133 lines |
-| `_ground_public_evidence()` | 3713 | 112 lines |
+| `_reconcile_interpretation()` | 1967 | 172 lines |
+| `_specialist_repairs()` | 2201 | 133 lines |
+| `_ground_public_evidence()` | 3717 | 112 lines |
 
 ### `agents/director_contact.py`
 
@@ -950,14 +950,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_commit_all_locked()` | 473 | 343 lines |
-| `commit_crowds()` | 286 | 149 lines |
-| `commit_authored_events()` | 232 | 30 lines |
-| `commit_narration_person()` | 200 | 29 lines |
-| `_prepare_turn_commit()` | 450 | 12 lines |
-| `commit_offscreen_epoch()` | 264 | 11 lines |
-| `commit_all()` | 437 | 11 lines |
-| `commit_offscreen_plans()` | 277 | 7 lines |
+| `_commit_all_locked()` | 475 | 343 lines |
+| `commit_crowds()` | 288 | 149 lines |
+| `commit_authored_events()` | 234 | 30 lines |
+| `commit_narration_person()` | 202 | 29 lines |
+| `_prepare_turn_commit()` | 452 | 12 lines |
+| `commit_offscreen_epoch()` | 266 | 11 lines |
+| `commit_all()` | 439 | 11 lines |
+| `commit_offscreen_plans()` | 279 | 7 lines |
 
 ### `persist/commit_attire.py`
 
@@ -1039,14 +1039,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `commit_mapping()` | 529 | 207 lines |
-| `_apply_mapping_book_ops()` | 100 | 106 lines |
-| `_drop_needs_the_beat_answers()` | 405 | 83 lines |
-| `prepare_mapping_commit()` | 208 | 62 lines |
-| `_answering_bodies()` | 352 | 51 lines |
-| `_setting_fact_needs()` | 272 | 47 lines |
-| `_attach_committed_surface()` | 490 | 37 lines |
-| `_file_engine_provenance()` | 70 | 28 lines |
+| `commit_mapping()` | 667 | 212 lines |
+| `_apply_mapping_book_ops()` | 142 | 106 lines |
+| `_drop_needs_the_beat_answers()` | 543 | 83 lines |
+| `prepare_mapping_commit()` | 250 | 76 lines |
+| `_setting_fact_needs()` | 404 | 53 lines |
+| `_answering_bodies()` | 490 | 51 lines |
+| `_file_opening_premise()` | 355 | 47 lines |
+| `_attach_committed_surface()` | 628 | 37 lines |
 
 ### `persist/commit_mechanics.py`
 
@@ -2249,14 +2249,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_need()` | 115 | 57 lines |
-| `_fold_need()` | 229 | 27 lines |
-| `record_planning_needs()` | 271 | 26 lines |
-| `drain_planning_needs()` | 328 | 25 lines |
-| `schedule_planning_needs()` | 355 | 25 lines |
-| `planning_need()` | 174 | 17 lines |
-| `fill_planning_need()` | 299 | 14 lines |
-| `normalize_planning_needs()` | 193 | 12 lines |
+| `normalize_need()` | 118 | 57 lines |
+| `_fold_need()` | 232 | 27 lines |
+| `record_planning_needs()` | 274 | 26 lines |
+| `drain_planning_needs()` | 331 | 25 lines |
+| `schedule_planning_needs()` | 358 | 25 lines |
+| `planning_need()` | 177 | 17 lines |
+| `fill_planning_need()` | 302 | 14 lines |
+| `normalize_planning_needs()` | 196 | 12 lines |
 
 ### `world/region_events.py`
 

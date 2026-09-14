@@ -904,7 +904,7 @@ fidelity payload ([`UNBUILT.md`](../UNBUILT.md) §3.4, S3-A6).
 5. cast status/state
 6. paradox checks
 7. spatial-frame reconciliation
-8. typed records: the Director's typed introductions; the beat's planning needs onto the frame's ledger with the committed surface attached, a containment room's need dropped; the Director's `world_facts` as `setting_fact` needs. No lore is filed here since 2026-09-03 -- the room `layout` filing is retired and the fallback fact writer with it (`persist/commit_mapping.py`, no model)
+8. typed records: the Director's typed introductions; the beat's planning needs onto the frame's ledger with the committed surface attached, a containment room's need dropped; the Director's `world_facts` as `setting_fact` needs. No lore is filed here since 2026-09-03 -- the room `layout` filing is retired and the fallback fact writer with it (`persist/commit_mapping.py`, no model) -- with one exception since 2026-09-14: at the OPENING, each `setting_fact` need is also delivered to the cast as a `common`, explicitly public entry in the story's canon book (`_file_opening_premise`; the need carries the entry's uid and the entry's provenance names the need), because what the establish stage states is the scenario's premise and everyone standing in the opening already holds it. A later beat's facts stay need-only
 9. off-screen plan ops — Director-adjudicated, character-grounded reactive plans
 10. crowd ops, then every crowd that has somewhere to be. After the scene
     domain, so a crowd op naming a room this beat created finds it in the
