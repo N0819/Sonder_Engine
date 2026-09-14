@@ -182,8 +182,14 @@ def test_the_two_positions_really_do_grade_differently():
     defect and no need for any of this."""
     beside = spatial_rel_between(BEFORE, "Hinami", "The Doctor")
     away = spatial_rel_between(AFTER, "Hinami", "The Doctor")
-    assert hear_level(beside, "normal") != "none"
-    assert hear_level(away, "normal") == "none", (
+    assert hear_level(beside, "normal") == "full"
+    # RECALIBRATED 2026-09-14: on the real ladder the committed scene's
+    # `audible` surf is a kettle's worth of noise (50 dB(A) at a pace, 36
+    # at Hinami's cell) and a real normal voice thirty paces off arrives at
+    # 37.6 -- under the `full` margin and inside the fragment one. The line
+    # is not delivered; it is caught in pieces. Before, on the compressed
+    # ladder, the surf and the voice shared a rung and it was `none`.
+    assert hear_level(away, "normal") == "fragment", (
         "chat 122's committed relation: same room, open barrier, and the "
         "surf's noise floor over a signal measured from the dune")
 
@@ -283,11 +289,17 @@ def test_the_line_he_spoke_beside_her_reaches_her(temp_db):
 def test_the_line_he_spoke_from_up_the_beach_does_not(temp_db):
     """The other half, and the reason this is a correction rather than a
     loosening: the second line really was delivered from the dune, and the
-    surf really does drown it. A fix that delivered both would have bought
-    the first line by throwing away the geometry."""
+    surf really does take it. A fix that delivered both would have bought
+    the first line by throwing away the geometry.
+
+    RECALIBRATED 2026-09-14: on the real ladder the surf takes the WORDS
+    and leaves the pieces (`test_the_two_positions_really_do_grade_
+    differently`), so the line arrives as something she cannot make out
+    and never verbatim."""
     out = perception_outcome(_beat(temp_db), "n0")
     view = (out["views"] or {}).get("player") or ""
-    assert "kitsune" not in view, view
+    assert "But here's the thing, Hinami: kitsune." not in view, view
+    assert "cannot make out" in view, view
 
 
 def test_the_dropped_line_says_so(temp_db):
@@ -295,8 +307,17 @@ def test_the_dropped_line_says_so(temp_db):
     dropping three lines; the only alarm in the turn came from the narrator,
     after it had invented a replacement. A line that reaches no view is
     either a refusal worth stating or a fault, and silence cannot tell them
-    apart."""
+    apart.
+
+    RECALIBRATED 2026-09-14: neither line is dropped any more -- the first
+    arrives whole and the second in pieces -- so what this pins is the
+    principle's other face: a line that DID reach a view files no
+    "reached no view" warning. The dropped-line warning itself is pinned
+    on a beat that still drops one
+    (`test_played_scene_classes`, the Hob Tarry beat)."""
     ctx = _beat(temp_db)
-    perception_outcome(ctx, "n0")
-    warnings = [w for w in (ctx.warnings or []) if "reached no view" in w]
-    assert any("kitsune" in w for w in warnings), ctx.warnings
+    out = perception_outcome(ctx, "n0")
+    view = (out["views"] or {}).get("player") or ""
+    assert "Okinawa! Japan" in view and "cannot make out" in view, view
+    assert not [w for w in (ctx.warnings or []) if "reached no view" in w], (
+        ctx.warnings)

@@ -663,9 +663,13 @@ def test_attention_does_not_beat_air_that_is_working():
     """
     entry = {"volume": "normal", "text": "Get down here.",
              "intended_target": "Alice", "speaker": "Bram"}
-    for answered in ({"barrier": "wall", "signal": 0.04, "noise": 18.0},
+    # RECALIBRATED 2026-09-14: the noise that refuses a normal voice at
+    # these gains is 1000.0 (70 dB, a machine in the room) on the real
+    # ladder, where 18.0 (52.6 dB) did it on the compressed one; a real
+    # voice at -14 dB is 49 and is caught in pieces against 52.6.
+    for answered in ({"barrier": "wall", "signal": 0.04, "noise": 1000.0},
                      {"barrier": "closed_door", "door_gain": 0.2,
-                      "noise": 18.0}):
+                      "noise": 1000.0}):
         assert composer.hear_level(answered, "normal") == "none"
         assert composer.line_hear_level(entry, answered, "Alice") == "none"
     # Nothing placed the pair: the device is the only explanation.
