@@ -127,6 +127,8 @@ from persist.commit_mapping import (
     _fact_is_covered, _setting_fact_needs, _attach_committed_surface,
     GENERATED_SOURCE_PREFIX, _file_engine_provenance,
     SETTING_FACT_SUBJECT_CHARS, _describe_need,
+    OPENING_PREMISE_SOURCE_PREFIX, OPENING_PREMISE_KNOWLEDGE_TAG,
+    premise_entry_uid, _opening_premise, _file_opening_premise,
     NEED_SUBJECT_WORDS, _need_words, _reads_as_prose, _answering_bodies,
     _drop_needs_the_beat_answers)
 from persist.commit_background import (BACKGROUND_PROMOTION_DIALOGUE_THRESHOLD,
