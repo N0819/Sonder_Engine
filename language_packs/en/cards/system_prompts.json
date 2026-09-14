@@ -499,6 +499,12 @@
       [
         "perception.spatial_frame.ground_fully_known"
       ]
+    ],
+    [
+      "WHAT THEY COULD NOT KNOW:",
+      [
+        "perception.impossible_knowledge"
+      ]
     ]
   ],
   "prose_author_output_shape": {
