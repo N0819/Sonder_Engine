@@ -149,6 +149,15 @@ def members_of(charter, place):
         key for key, body in (charter.get("bodies") or {}).items()
         if str((body or {}).get("place") or "") == room
         and not body_of_an_authored_mind(charter, key, body)
+        # A PERSON THE AUTHOR NAMED IS NEVER GROUND. A featured resident
+        # carries `resident_seed_id` whoever seeded it; the planner's
+        # landlady is not a mind's body (`body_of_an_authored_mind` since
+        # 2026-09-14) but she was featured to be SEEN, and folding her into
+        # "the crowd answered together" when the player asked her by name
+        # (scratch play 2026-09-14, chat 7 turn 3) is the same deletion
+        # `presence_figures_for_room` was built against. The crowd is the
+        # institution's unnamed mass; the named stand out of it.
+        and not str((body or {}).get("resident_seed_id") or "").strip()
         and key not in known)
 
 

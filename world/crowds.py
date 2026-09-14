@@ -47,6 +47,9 @@ CROWDS_WORLD_KEY = "crowds"
 
 #: How many, coarsely. Ordered; the index is the rank.
 BANDS = ("a handful", "a dozen or so", "a few dozen", "a throng")
+#: How each band reads in front of its composition: the two that are
+#: measures of a noun take "of", the two that are counts stand alone.
+BAND_JOIN = {"a handful": "a handful of", "a throng": "a throng of"}
 
 #: How big the room is. Ordered; the index is the rank. Imported rather than
 #: restated: `RoomDef.size` is a free string and 66 of the live corpus's rooms
@@ -666,7 +669,11 @@ def describe(crowd, room_size):
     band = normalize_band(crowd.get("band"))
     composition = str(crowd.get("composition") or "people").strip()
     packed = density(band, room_size)
-    phrase = "%s %s" % (band, composition)
+    # A BAND JOINS ITS NOUN THE WAY ENGLISH JOINS IT. "a dozen or so
+    # cousins" stands; "a handful cousins" does not (scratch play
+    # 2026-09-14, chat 7 turn 3, "a handful cousins and mistress"). The
+    # join belongs to the band, and BANDS is the engine's own closed set.
+    phrase = "%s %s" % (BAND_JOIN.get(band, band), composition)
     if packed == CRUSH:
         phrase += ", packed shoulder to shoulder"
     elif packed == PACKED:
