@@ -88,6 +88,8 @@ from world.spatial import (
     speech_articulation_impediment,
     ARTICULATION_STIFLED,
     sprint_reach,
+    _interior_entry_room,
+    _unique_entity_keyed,
 )
 
 from .common import (
@@ -251,6 +253,8 @@ from .director_evidence import (
     span_mint_rooms,
     item_survivors,
     normalize_causal_ledger,
+    causal_scene_room_ids,
+    causal_contact_rows,
     causal_world_index,
     authority_by_entity,
     speech_transforms,
@@ -867,6 +871,235 @@ def _interpret_scene_entities(sc, contextual_rooms):
     return kept
 
 
+def _addressed_characters(rows, cast):
+    """Cast ids a spoken row targets, in row order, each once.
+
+    Targets are identity handles (`character:<id>`); the cast roster says
+    which of those are this story's characters. Presence is not decided
+    here: `runtime.build_plan` already drops a reactor who cannot perceive
+    the beat, and that gate applies to these as to any other."""
+    known = set()
+    for member in cast or []:
+        try:
+            known.add(int(member["id"]))
+        except (KeyError, TypeError, ValueError, IndexError):
+            continue
+    out = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        if "speech" not in {str(c) for c in row.get("categories") or []}:
+            continue
+        for target in row.get("targets") or []:
+            target = str(target or "").strip()
+            if not target.startswith("character:"):
+                continue
+            try:
+                cid = int(target.split(":", 1)[1])
+            except ValueError:
+                continue
+            if cid in known and cid not in out:
+                out.append(cid)
+    return out
+
+
+def _final_movement(rows):
+    """The beat's relocation: the LAST movement row that arrives.
+
+    Rows are in chronological order, so the last arrival is where the body
+    ends; an earlier one is a room passed through. A trailing row that does
+    not arrive (a move refused or interrupted) never replaces an arrival
+    already made.
+    """
+    final = None
+    for row in rows or []:
+        if not isinstance(row, dict) or not isinstance(row.get("movement"), dict):
+            continue
+        movement = row["movement"]
+        if movement.get("arrives") is False and final is not None:
+            continue
+        final = dict(movement)
+    return final
+
+
+def _canonicalize_interior_movements(sc, out, identity_index=None):
+    """Resolve an entered entity to its existing interior, when it has one.
+
+    The causal Director sees entity ids and their ``interior_rooms``.  It may
+    still return the entity id as the destination.  That is the right signal
+    when no inside exists yet, but an entity with an established entry room
+    must reuse it rather than asking the spatial hand to mint a second one.
+    """
+    seen = set()
+    identity_index = identity_index if isinstance(identity_index, dict) else {}
+    movements = []
+    for collection in (out.get("ledgers"), out.get("causal_ledger"),
+                       out.get("sequence")):
+        for row in collection if isinstance(collection, list) else []:
+            movement = row.get("movement") if isinstance(row, dict) else None
+            if isinstance(movement, dict) and id(movement) not in seen:
+                seen.add(id(movement))
+                movements.append((movement, str(
+                    row.get("source_entity_id") or row.get("actor") or "")))
+    movement = out.get("movement")
+    if isinstance(movement, dict) and id(movement) not in seen:
+        movements.append((movement, ""))
+
+    for movement, source_id in movements:
+        mover = str(movement.get("mover") or "self").strip()
+        mover_id = source_id if mover.casefold() in ("", "self") else mover
+        display = str(identity_index.get(mover_id) or "").strip()
+        if display:
+            # The causal contract speaks in stable identity ids; the spatial
+            # ledgers speak in scene subjects.  Resolve the join before a hand
+            # writes a position.  Live, NanoGPT correctly placed Hinami in a
+            # freshly authored TARDIS room, and the validator rejected it only
+            # because the movement still called her ``persona:10``.
+            movement["mover"] = display
+        target = str(movement.get("to_room") or "").strip()
+        if not target:
+            continue
+        entity_id, entity = _unique_entity_keyed(sc, target)
+        if not entity_id:
+            continue
+        entry = _interior_entry_room(sc, str(entity_id), entity)
+        if not entry:
+            # An entity id in ``to_room`` means "enter this entity" to the
+            # spatial hand.  Canonicalising aliases here gives it one holder.
+            movement["to_room"] = str(entity_id)
+            continue
+        movement["to_room"] = str(entry)
+
+
+def _bodies_without_interiors(sc, identity_index):
+    """Identity forms whose bodies are not rooms the world already holds.
+
+    A person's name in an event is ordinary staging, never a request to
+    treat that person's body as a room, so a cast or player body joins the
+    interior roster only when the world has ALREADY made it one -- a room
+    carrying it as `parent_entity`, or an `interior_rooms` entry. A body
+    interior is minted by the spatial hand at reveal or entry, under its
+    sheet's own clause; nothing here reads prose for it. (This replaced a
+    regex over "inside"/"into"/"within", which named three English
+    prepositions and whatever Japanese markers its author remembered, and
+    would have missed the fourth phrasing of the same act.)
+    """
+    identity_index = identity_index if isinstance(identity_index, dict) else {}
+    rooms = (sc or {}).get("rooms") or {}
+    entities = (sc or {}).get("entities") or {}
+    parents = {str(room.get("parent_entity") or "") for room in rooms.values()
+               if isinstance(room, dict)}
+    excluded = set()
+    for identity_id, display in identity_index.items():
+        forms = {str(identity_id).strip(), str(display).strip()} - {""}
+        has_interior = any(
+            form in parents
+            or bool((entities.get(form) or {}).get("interior_rooms"))
+            for form in forms)
+        if not has_interior:
+            excluded.update(forms)
+    return excluded
+
+
+def _settle_minted_interior_movements(sc, out, player_name):
+    """Point a movement declaration at the interior the spatial hand made."""
+    assertions = out.get("state_assertions")
+    if not isinstance(assertions, dict):
+        assertions = out.get("state_diff")
+    if not isinstance(assertions, dict):
+        return
+    minted = assertions.get("rooms")
+    placed = assertions.get("positions")
+    if not isinstance(minted, dict) or not isinstance(placed, dict):
+        return
+
+    def placed_room(subject):
+        for key, room_id in placed.items():
+            if str(key).casefold() == str(subject).casefold() \
+                    or same_subject(sc, str(key), str(subject)):
+                return str(room_id)
+        return ""
+
+    movements = []
+    for collection in (out.get("ledgers"), out.get("causal_ledger"),
+                       out.get("sequence")):
+        for row in collection if isinstance(collection, list) else []:
+            movement = row.get("movement") if isinstance(row, dict) else None
+            if isinstance(movement, dict):
+                movements.append(movement)
+    if isinstance(out.get("movement"), dict):
+        movements.append(out["movement"])
+
+    for movement in movements:
+        target = str(movement.get("to_room") or "").strip()
+        entity_id, _entity = _unique_entity_keyed(sc, target)
+        if not entity_id:
+            continue
+        mover = str(movement.get("mover") or "self").strip()
+        subject = player_name if mover.casefold() in ("", "self") else mover
+        room_id = placed_room(subject)
+        room = minted.get(room_id)
+        if not isinstance(room, dict) \
+                or str(room.get("parent_entity") or "") != str(entity_id):
+            continue
+        movement["to_room"] = room_id
+
+
+def _resolve_identity_handles(patch, identity_index):
+    """Spell every identity handle in a hand's patch as the scene subject.
+
+    The causal rows carry stable ids (`persona:2`, `character:58`) and the
+    hands write scene ledgers under display subjects; the join is handed to
+    every hand as `identity_index`, and a hand still sometimes copies the id
+    through. Measured (scratch play 2026-09-14, chat 2 turn 5): the contact
+    hand wrote `actor: "persona:2"` for the player's boot against the crate,
+    and the player-authority guard discarded it as "a contact assertion that
+    did not involve the player". The join is deterministic and belongs to the
+    engine, so it is made here once, for every record slot and key a hand
+    writes a subject into, before any validator reads it.
+    """
+    index = {str(k): str(v) for k, v in (identity_index or {}).items()
+             if str(v or "").strip()}
+    if not index or not isinstance(patch, dict):
+        return patch
+
+    def fix(value):
+        if isinstance(value, str):
+            return index.get(value.strip(), value)
+        if isinstance(value, list):
+            return [fix(item) for item in value]
+        if isinstance(value, dict):
+            return {index.get(str(key).strip(), key) if isinstance(key, str)
+                    else key: fix(item) for key, item in value.items()}
+        return value
+
+    return fix(patch)
+
+
+def _hydrate_existing_entity_patch(sc, patch):
+    """Give a partial existing-entity transform the one required join field.
+
+    ``StateDiff`` also creates entities, so its full entity definition rightly
+    requires ``name``.  A specialist transform is additionally an update: it
+    is entirely sufficient for the objects hand to say only that an existing
+    TARDIS hatch became open.  Before validating that patch as a StateDiff,
+    restore the standing entity's name by its canonical key.  New entities
+    remain subject to the full schema and are still dropped when nameless.
+    """
+    if not isinstance(patch, dict) or not isinstance(patch.get("entities"), dict):
+        return patch
+    hydrated = copy.deepcopy(patch)
+    entities = hydrated["entities"]
+    for key, incoming in list(entities.items()):
+        if not isinstance(incoming, dict) or str(incoming.get("name") or "").strip():
+            continue
+        entity_id, standing = _unique_entity_keyed(sc, str(key))
+        if not entity_id or not isinstance(standing, dict):
+            continue
+        incoming["name"] = str(standing.get("name") or entity_id)
+    return hydrated
+
+
 def director_interpret(ctx, nonce):
     from persist.commit import presence_name_items
     chat = ctx.chat
@@ -1111,32 +1344,48 @@ def director_interpret(ctx, nonce):
                 "raw_text": str(extra.get("input") or ""),
             }],
         })
+    _interpret_identities = {
+        _primary_id: pers.get("name") or persona_name(pers),
+        **{f"character:{row['id']}": row["name"] for row in cast_info},
+        **{f"persona:{extra.get('persona_id')}": extra.get("name")
+           for extra in ctx.extra_players},
+    }
+    _acting_names = [
+        _interpret_identities.get(str(group.get("entity_id")))
+        for group in _event_inputs if isinstance(group, dict)
+    ]
+    _causal_rooms = causal_scene_room_ids(
+        sc, _acting_names, fallback_room=p_room)
+    _causal_index = causal_world_index(
+        sc, here=p_room, room_ids=_causal_rooms,
+        include_entity_interiors=True,
+        exclude_entity_interiors=_bodies_without_interiors(
+            sc, _interpret_identities))
     _interpret_model_payload = {
         "event_inputs": _event_inputs,
-        "identity_index": {
-            _primary_id: pers.get("name") or persona_name(pers),
-            **{f"character:{row['id']}": row["name"] for row in cast_info},
-            **{f"persona:{extra.get('persona_id')}": extra.get("name")
-               for extra in ctx.extra_players},
-        },
+        "identity_index": _interpret_identities,
         "object_index": {
             "rooms": {
                 str(rid): str((room or {}).get("name") or rid)
-                for rid, room in (sc.get("rooms") or {}).items()
+                for rid, room in (_causal_index.get("rooms") or {}).items()
             },
             "entities": {
                 str(eid): str((entity or {}).get("name") or eid)
-                for eid, entity in (sc.get("entities") or {}).items()
+                for eid, entity in (_causal_index.get("entities") or {}).items()
             },
         },
         # WHERE EVERYTHING IS, so a target the input never named can
         # still be constructed. `object_index` above is identity;
         # this is placement, and "the man by the door" is a question
         # about a room rather than about a list of names.
-        "world_index": causal_world_index(sc, here=p_room),
+        "world_index": _causal_index,
         "standing_relations": {
-            "positions": sc.get("positions") or {},
-            "contacts": sc.get("contacts") or [],
+            "positions": {
+                str(subject): str(room_id)
+                for subject, room_id in (sc.get("positions") or {}).items()
+                if str(room_id) in (_causal_index.get("rooms") or {})
+            },
+            "contacts": causal_contact_rows(sc, _causal_rooms),
         },
         "variant_seed": nonce,
     }
@@ -1150,7 +1399,8 @@ def director_interpret(ctx, nonce):
         _interpret_model_payload,
         max_tokens=None,   # the configured ceiling; see complete_validated_json
     )
-    normalize_causal_ledger(out, authority_by_entity(_event_inputs))
+    normalize_causal_ledger(
+        out, authority_by_entity(_event_inputs), _interpret_identities)
     _all_causal_sequence = list(out.get("sequence") or [])
     if ctx.extra_players:
         _extra_ids = {
@@ -1168,10 +1418,17 @@ def director_interpret(ctx, nonce):
             if rows:
                 _other[persona_id] = {"sequence": rows}
         out["_all_causal_sequence"] = _all_causal_sequence
-    for _entry in out.get("causal_ledger") or []:
-        if isinstance(_entry, dict) and isinstance(_entry.get("movement"), dict):
-            out["movement"] = dict(_entry["movement"])
-            break
+    # WHERE A BODY ENDS IS ITS LAST ARRIVAL. A beat that walks through two
+    # rooms writes two movement rows in order; taking the FIRST put the
+    # player in the room they passed through. Measured (scratch play
+    # 2026-09-14, chat 3 turn 5): "crossed the hall alone and let himself
+    # into the study" -- rows hall then study, the spatial hand placed him
+    # in the study, `movement` said hall, and the commit left him in the
+    # hall while the page described the study he never reached.
+    _last_movement = _final_movement(out.get("causal_ledger"))
+    if _last_movement is not None:
+        out["movement"] = _last_movement
+    _canonicalize_interior_movements(sc, out, _interpret_identities)
     _flow = out.setdefault("flow", {})
     if isinstance(_flow, dict):
         _flow.setdefault("dice", [
@@ -1373,6 +1630,8 @@ def director_interpret(ctx, nonce):
             "notices": _inotices(),
             "movement": out.get("movement"),
             "movers": {p_name: {"exits": _egocentric_exits(sc, p_name)}},
+            "identity_index": _interpret_identities,
+            "entity_interiors": _causal_index.get("entities") or {},
             "planning_needs": [],
             "author_notes": payload.get("author_notes"),
             "sightlines": _sightlines_view(sc, ctx, p_name),
@@ -1384,6 +1643,7 @@ def director_interpret(ctx, nonce):
     else:
         _iextras = {"nonce": nonce, "clock": clock}
     _run_specialists(ctx, out, sc, _idispatch, _iview, _iextras, "interpret")
+    _settle_minted_interior_movements(sc, out, p_name)
 
     _declared_actions = [
         item for item in (out.get("sequence") or [])
@@ -1435,6 +1695,16 @@ def director_interpret(ctx, nonce):
 
     fl["reactors"] = normalize_character_refs(
         reactors + _list(fl.get("reactor_refs")), ctx.cast)
+    # A LINE'S ADDRESSEE IS ASKED. `flow.reactors` is the Director's pacing
+    # judgement and it stays one; but a present character a spoken row
+    # TARGETS was spoken to, and a beat that does not ask them what they
+    # answer has decided their silence for them. Measured (scratch play
+    # 2026-09-14, chat 2 turns 15-16): "Mrs Marrow. Come down." targeted
+    # character:2 and the Director named only character:3, so the woman the
+    # line was for was never run and the page read "no answer came".
+    for _cid in _addressed_characters(out.get("ledgers"), ctx.cast):
+        if _cid not in fl["reactors"]:
+            fl["reactors"].append(_cid)
     fl["tom_triggers"] = normalize_character_refs(
         tom_triggers + _list(fl.get("tom_trigger_refs")), ctx.cast)
     fl.pop("reactor_refs", None)
@@ -2898,9 +3168,11 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
     specialist emitted OUTSIDE its scope -- despite its sheet carrying no
     block for it -- is under-grant evidence: never discarded (fail-open, it
     merges wherever the author left the channel empty) and always reported.
-    A specialist that FAILS leaves the author's channels standing untouched
-    and never kills the beat; the scope backstop reports its granted scope
-    as unserved rather than letting the failure pass silently."""
+    A specialist that FAILS ordinarily leaves the author's channels standing
+    untouched. The exception is a required entity-interior mint: an open view
+    of no room has no truthful fail-open representation, so the post-fan-out
+    integrity floor raises before perception instead of inviting placeholder
+    prose about an interior nobody authored."""
     record = {"enabled": True, "stage": stage, "specialists": dispatch,
               # Before any hand merges: what the author itself put in the
               # delegated channels, which is the scope backstop's subject.
@@ -3099,6 +3371,9 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
                     patch = transform.get("patch") \
                         if isinstance(transform, dict) else None
                     if isinstance(patch, dict) and patch:
+                        patch = _hydrate_existing_entity_patch(sc, patch)
+                        patch = _resolve_identity_handles(
+                            patch, extras.get("identity_index"))
                         try:
                             patch, dropped = \
                                 schemas.validated_state_diff_channels(patch)
@@ -3295,6 +3570,104 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
             int(entry.get("response_order") or 0),
         ),
     )
+    # A MISSING ROOM IS A WRONG SCENE, NOT A LEAK, AND A WRONG SCENE IS THE
+    # SENTENCE'S JOB (AGENTS.md, "a check may be fatal only if nothing
+    # downstream reads the field, repairs it, or already reports it"). The
+    # scope backstop above already reports an unserved span, and the next
+    # beat's author receives the report; killing the beat here would throw
+    # away every hand's committed work -- the contact ledger, the door state,
+    # the speech -- for one hand's omission. Fail-open, loudly, like every
+    # other specialist failure.
+    try:
+        _require_complete_entity_interiors(out, sc, view, extras, stage)
+    except RuntimeError as exc:
+        ctx.add_warning(f"{stage}: {exc}")
+
+
+def _require_complete_entity_interiors(out, sc, view, extras, stage):
+    """Refuse an orphaned or omitted interior before perception can read it.
+
+    The specialist call itself has already exhausted
+    ``complete_validated_json``'s repair/provider ladder. At this boundary a
+    missing room is therefore not recoverable state; continuing would make
+    the narrator conceal the hole with invented vagueness. Existing legacy
+    orphan references are tolerated until touched, but no beat may introduce
+    another one.
+    """
+    diff = _stage_state(out, stage)
+    written_rooms = diff.get("rooms") if isinstance(diff.get("rooms"), dict) \
+        else {}
+    available_rooms = set((sc.get("rooms") or {}).keys()) | set(written_rooms)
+    written_entities = diff.get("entities") \
+        if isinstance(diff.get("entities"), dict) else {}
+    for entity_id, patch in written_entities.items():
+        if not isinstance(patch, dict) or "interior_rooms" not in patch:
+            continue
+        standing = (sc.get("entities") or {}).get(str(entity_id)) or {}
+        old_refs = {str(room_id) for room_id in
+                    (standing.get("interior_rooms") or [])}
+        new_refs = {str(room_id) for room_id in
+                    (patch.get("interior_rooms") or [])} - old_refs
+        missing = sorted(new_refs - available_rooms)
+        if missing:
+            raise RuntimeError(
+                "entity interior integrity: %s introduced room reference(s) "
+                "that were not minted: %s" %
+                (entity_id, ", ".join(missing)))
+
+    entity_interiors = extras.get("entity_interiors") or {}
+    rows = (view or {}).get("spans") or []
+    required = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        categories = {str(value) for value in row.get("categories") or []}
+        if not ({"rooms", "spatial"} & categories):
+            continue
+        queries = [str(row.get("object_name") or "").strip().casefold()]
+        movement = row.get("movement")
+        if isinstance(movement, dict):
+            queries.append(str(movement.get("to_room") or "").strip().casefold())
+        queries.extend(str(target).strip().casefold()
+                       for target in row.get("targets") or [])
+        matched = ""
+        for query in filter(None, queries):
+            for entity_id, entity in entity_interiors.items():
+                if not isinstance(entity, dict) or entity.get("interior_rooms"):
+                    continue
+                forms = {
+                    str(entity_id).strip().casefold(),
+                    str(entity.get("name") or "").strip().casefold(),
+                    *(str(alias).strip().casefold()
+                      for alias in entity.get("aliases") or []),
+                } - {""}
+                if query in forms:
+                    matched = str(entity_id)
+                    break
+            if matched:
+                break
+        if matched:
+            required.add(matched)
+
+    satisfied_parents = {
+        str(room.get("parent_entity") or "")
+        for room in (sc.get("rooms") or {}).values() if isinstance(room, dict)
+    } | {
+        str(room.get("parent_entity") or "")
+        for room in written_rooms.values() if isinstance(room, dict)
+    }
+    missing = sorted(required - satisfied_parents)
+    if missing:
+        spatial = (((out.get("orchestration") or {}).get("specialists") or {})
+                   .get("spatial") or {})
+        cause = str(spatial.get("error") or "").strip()
+        if not cause and spatial.get("result_alignment_errors"):
+            cause = "; ".join(str(value) for value in
+                              spatial["result_alignment_errors"][:3])
+        detail = f"; spatial failure: {cause}" if cause else ""
+        raise RuntimeError(
+            "required visible entity interior was not minted after the "
+            "spatial specialist ladder: " + ", ".join(missing) + detail)
 
 
 _PUBLIC_SPEECH_ACTS = frozenset({
@@ -3597,6 +3970,42 @@ def _causal_event_inputs(ctx, interp, declarations, dice, pressures):
             "description": str(summary),
         }])
     return groups
+
+
+def _beat_event_sentences(out, identity_index=None):
+    """The beat as one plain sentence per ledger row, in the rows' order.
+
+    A spoken row is the words with their speaker; every other row is its
+    objective `event` with its actor named unless the event already opens
+    with them. Identity ids are shown by their display name. No verb is
+    invented for a row and no row is folded into another, so what memory
+    files is what the Director ruled and nothing the template made up.
+    """
+    identity_index = identity_index if isinstance(identity_index, dict) else {}
+    rows = out.get("ledgers") or out.get("causal_ledger") or []
+    parts = []
+    for row in rows if isinstance(rows, list) else []:
+        if not isinstance(row, dict):
+            continue
+        event = " ".join(str(row.get("event") or "").split())
+        if not event:
+            continue
+        source_id = str(row.get("source_entity_id") or "").strip()
+        actor = str(identity_index.get(source_id) or source_id).strip()
+        categories = {str(value) for value in row.get("categories") or []}
+        act = str(row.get("act") or "").strip()
+        if "speech" in categories and not act:
+            parts.append(f'{actor} says: "{event}"' if actor
+                         else f'"{event}"')
+            continue
+        if act:
+            parts.append(f"{actor} {act}: {event}" if actor else event)
+            continue
+        if actor and event.casefold().startswith(actor.casefold()):
+            parts.append(event)
+        else:
+            parts.append(f"{actor}: {event}" if actor else event)
+    return parts
 
 
 def director_resolve(ctx, nonce, _corrections=None):
@@ -4297,29 +4706,46 @@ def director_resolve(ctx, nonce, _corrections=None):
         f"character:{d.get('char_id')}": str(d.get("name") or "")
         for d in decls if d.get("char_id") is not None
     })
+    _resolve_event_inputs = _causal_event_inputs(
+        ctx, interp, decls, dice, payload.get("world_pressure") or [])
+    _resolve_actor_names = [
+        _identity_index.get(str(group.get("entity_id")))
+        for group in _resolve_event_inputs if isinstance(group, dict)
+    ]
+    _resolve_causal_rooms = causal_scene_room_ids(
+        resolve_sc, _resolve_actor_names,
+        fallback_room=room_of(resolve_sc, p_name))
+    _resolve_causal_index = causal_world_index(
+        resolve_sc, here=room_of(resolve_sc, p_name),
+        room_ids=_resolve_causal_rooms, include_entity_interiors=True,
+        exclude_entity_interiors=_bodies_without_interiors(
+            resolve_sc, _identity_index))
     _model_payload = {
-        "event_inputs": _causal_event_inputs(
-            ctx, interp, decls, dice, payload.get("world_pressure") or []),
+        "event_inputs": _resolve_event_inputs,
         "identity_index": _identity_index,
         "object_index": {
             "rooms": {
                 str(rid): str((room or {}).get("name") or rid)
-                for rid, room in (resolve_sc.get("rooms") or {}).items()
+                for rid, room in (_resolve_causal_index.get("rooms") or {}).items()
             },
             "entities": {
                 str(eid): str((entity or {}).get("name") or eid)
-                for eid, entity in (resolve_sc.get("entities") or {}).items()
+                for eid, entity in (_resolve_causal_index.get("entities") or {}).items()
             },
         },
         # WHERE EVERYTHING IS, so a target the input never named can
         # still be constructed. `object_index` above is identity;
         # this is placement, and "the man by the door" is a question
         # about a room rather than about a list of names.
-        "world_index": causal_world_index(
-            resolve_sc, here=room_of(resolve_sc, p_name)),
+        "world_index": _resolve_causal_index,
         "standing_relations": {
-            "positions": resolve_sc.get("positions") or {},
-            "contacts": resolve_sc.get("contacts") or [],
+            "positions": {
+                str(subject): str(room_id)
+                for subject, room_id in (resolve_sc.get("positions") or {}).items()
+                if str(room_id) in (_resolve_causal_index.get("rooms") or {})
+            },
+            "contacts": causal_contact_rows(
+                resolve_sc, _resolve_causal_rooms),
         },
         "variant_seed": nonce,
     }
@@ -4340,8 +4766,10 @@ def director_resolve(ctx, nonce, _corrections=None):
         temperature=0.5,
         max_tokens=None,   # the configured ceiling; see complete_validated_json
     )
-    normalize_causal_ledger(out, authority_by_entity(
-        _model_payload.get("event_inputs")))
+    normalize_causal_ledger(
+        out, authority_by_entity(_model_payload.get("event_inputs")),
+        _identity_index)
+    _canonicalize_interior_movements(resolve_sc, out, _identity_index)
 
     # WORLD PRESSURE must-tick floor (F5), enforced. The ledger + prompt rule
     # ask the resolve to tick or hold every open pressure; commit warns on
@@ -4710,6 +5138,8 @@ def director_resolve(ctx, nonce, _corrections=None):
         "material_effects": character_material_effects,
         "notices": payload.get("notices") or [],
         "movement": _mv_for_context,
+        "identity_index": _identity_index,
+        "entity_interiors": _resolve_causal_index.get("entities") or {},
         "movers": {
             str(d.get("name")): {
                 "exits": d.get("exits"),
@@ -4734,6 +5164,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     # interpret stage's spatial hand authored a moment ago.
     _run_specialists(ctx, out, resolve_sc, _orch_dispatch, _orch_view,
                      _orch_extras, "resolve")
+    _settle_minted_interior_movements(resolve_sc, out, p_name)
     # Kept for the reconciliation seam below: when it detects an
     # omission in a delegated channel, the CHANNEL'S OWNER is re-asked
     # with the same beat view and entitlement slice, never the prose
@@ -5342,21 +5773,36 @@ def director_resolve(ctx, nonce, _corrections=None):
     # for why the order is load-bearing.
 
     if not out.get("resolved_event"):
-        parts = []
-        p_action = interp.get("action") or {}
-        if interp.get("speech"):
-            parts.append(f"{p_name} speaks")
-        if p_action.get("attempt"):
-            parts.append(f"{p_name} attempts to {p_action['attempt']}")
-        for cname in char_speech:
-            parts.append(f"{cname} speaks")
-        for cname, cacts in char_actions.items():
-            for cact in cacts:
-                parts.append(f"{cname} attempts to {cact.get('attempt', '')}")
+        # THE BEAT'S RECORD, FROM THE BEAT'S OWN ROWS. `resolved_event` is
+        # no longer a field the causal contract writes, so this fallback
+        # runs on every beat, and what it writes is what the memory layer
+        # files as the beat's `event` (`commit_memory`) and what
+        # `perception._inverted_motion_check` reads as the objective event.
+        # The template it replaced knew only who spoke and what was
+        # attempted, and glued a whole declaration onto "attempts to":
+        # measured on chat 123 turn 9, every character in the scene was
+        # filed as remembering "Hinami attempts to Hinami's tails sway a bit
+        # in interest.. The Doctor attempts to Pull the TARDIS door open
+        # wide..." A row is what the beat established, in order, and each
+        # one already says who did it -- so the sentence is the rows.
+        parts = _beat_event_sentences(out, _identity_index)
+        if not parts:
+            p_action = interp.get("action") or {}
+            if interp.get("speech"):
+                parts.append(f"{p_name} speaks")
+            if p_action.get("attempt"):
+                parts.append(f"{p_name} attempts to {p_action['attempt']}")
+            for cname in char_speech:
+                parts.append(f"{cname} speaks")
+            for cname, cacts in char_actions.items():
+                for cact in cacts:
+                    parts.append(f"{cname} attempts to {cact.get('attempt', '')}")
         for d in dice:
             parts.append(f"{d.get('actor', 'someone')} "
                          f"({d['roll']}+{d['modifier']} vs {d['dc']}: {d['outcome']})")
-        out["resolved_event"] = ". ".join(parts) if parts else "Nothing notable occurs."
+        out["resolved_event"] = " ".join(
+            part if part[-1:] in ".!?\"" else part + "."
+            for part in parts) if parts else "Nothing notable occurs."
 
     if not out.get("summary"):
         out["summary"] = (out.get("resolved_event") or "")[:200]

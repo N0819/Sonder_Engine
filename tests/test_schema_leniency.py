@@ -1540,3 +1540,28 @@ class TestACitationTheEngineNeverIssued:
         # And the rule they inherit is the one the cases above pin.
         assert schemas._coerce_event_citation("turn:1:player:1:action") == 0
         assert schemas._coerce_event_citation("3") == 3
+
+
+def test_a_record_serialised_into_its_own_slot_is_the_record():
+    """Gemini-driven scratch play, 2026-09-14, chat 2 turns 5-6: a hand wrote
+    `entities.oil_lantern` as the STRING '{"state": {"lit": false}}' and a
+    station as '{"at": "cabin_bench", "near": ["Bram Toll"]}'. The short
+    spelling rule filed each in its subject slot, so the lantern's name became
+    the JSON and it stayed lit."""
+    from llm.schemas import validated_state_diff_channels
+    clean, dropped = validated_state_diff_channels({
+        "entities": {"oil_lantern": '{"name": "oil lantern", "state": {"lit": false}}',
+                     "tin_of_lozenges": {"name": "tin_of_lozenges"}},
+        "stations": {"Tamsin Reyle": '{"at": "cabin_bench", "near": ["Bram Toll"]}'},
+        "poses": {"Tamsin Reyle": '{"posture": "sitting", "support": "cabin_bench"}'},
+    })
+    assert dropped == []
+    assert clean["entities"]["oil_lantern"]["state"] == {"lit": False}
+    assert clean["entities"]["oil_lantern"]["name"] == "oil lantern"
+    assert clean["entities"]["tin_of_lozenges"]["name"] == "tin of lozenges"
+    assert clean["stations"]["Tamsin Reyle"] == {"at": "cabin_bench", "near": ["Bram Toll"]}
+    assert clean["poses"]["Tamsin Reyle"]["posture"] == "sitting"
+    assert clean["poses"]["Tamsin Reyle"]["support"] == "cabin_bench"
+    # A plain string is still the short spelling of the subject.
+    clean, _ = validated_state_diff_channels({"poses": {"Bram Toll": "sitting"}})
+    assert clean["poses"]["Bram Toll"]["posture"] == "sitting"

@@ -59,3 +59,25 @@ def test_checkpoint_blob_and_live_world_agree():
 def test_no_remap_leaves_the_rows_untouched():
     rows = {"focus_entity": "entity_lamp"}
     assert _remap_world_values(dict(rows), {}) == rows
+
+
+def test_a_name_that_equals_a_remapped_id_is_not_rewritten():
+    """An entity keyed by its own display name keeps that name across a
+    branch. Chat 123 (branched from 122, 2026-09-12): `entities["The TARDIS"]`
+    with `name: "The TARDIS"` came out keyed by a fresh hex id AND named by
+    it, and every view since read "facing the 06182eadaf9947fa"."""
+    from web.app import _deep_remap_ids
+
+    remap = {"The TARDIS": "06182eadaf9947fa"}
+    scene = {
+        "entities": {"The TARDIS": {"name": "The TARDIS", "kind": "vehicle",
+                                    "aliases": ["TARDIS"]}},
+        "positions": {"The TARDIS": "tide_strand"},
+        "contacts": [{"actor": "The Doctor", "target": "The TARDIS"}],
+    }
+    out = _deep_remap_ids(scene, remap)
+    assert set(out["entities"]) == {"06182eadaf9947fa"}
+    assert out["entities"]["06182eadaf9947fa"]["name"] == "The TARDIS"
+    # Every id-bearing slot still moves with the key.
+    assert out["positions"] == {"06182eadaf9947fa": "tide_strand"}
+    assert out["contacts"][0]["target"] == "06182eadaf9947fa"

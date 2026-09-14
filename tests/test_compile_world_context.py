@@ -162,6 +162,20 @@ def test_an_unplanned_destination_is_a_room_need(temp_db, no_retrieval):
     assert need["status"] == "open" and need["filed_turn"] == 4
 
 
+def test_a_room_minted_by_spatial_this_beat_is_not_a_writers_room_need(
+        temp_db, no_retrieval):
+    ctx = _ctx(temp_db, interp={
+        "sequence": [], "flow": {},
+        "movement": {"to_room": "box_inside", "why": "steps inside"},
+        "state_assertions": {"rooms": {
+            "box_inside": {"name": "The Box Interior",
+                           "parent_entity": "box"}}},
+    })
+    out = mapping.compile_world_context(ctx, nonce=0)
+    assert out["movement"] == {"to_room": "box_inside", "status": "known"}
+    assert out["planning_needs"] == []
+
+
 def test_a_planned_destination_carries_the_plan_and_no_need(temp_db, no_retrieval, monkeypatch):
     from world import structure
     monkeypatch.setattr(structure, "planned_context", lambda cid, query: {
@@ -302,12 +316,12 @@ def test_world_context_reads_the_compiler_or_a_retired_stage(temp_db):
 
 
 def test_the_director_payloads_carry_needs_and_no_proposal(temp_db, monkeypatch):
-    """The prose author and the spatial hand receive `planning_needs`; the
-    mapping proposal field is gone with the model that authored it."""
+    """The spatial hand receives `planning_needs`; the mapping proposal and
+    old prose-author gate are gone with the model that authored them."""
     import inspect
     from agents import director, director_fanout
     src = inspect.getsource(director) + inspect.getsource(director_fanout)
     assert "mapping_scene_proposal" not in src
     assert '"planning_needs"' in src
-    assert "planning_need" in director._PROSE_DUTY_GATES
+    assert director._PROSE_DUTY_GATES == {}
     assert "mapping_proposal" not in director._PROSE_DUTY_GATES

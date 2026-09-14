@@ -372,6 +372,74 @@ class TestTheDirectorCanConstructAnUnnamedTarget:
         index = causal_world_index(scene)
         assert set(index) <= {"rooms", "worn", "stations", "here"}
 
+    def test_the_causal_scene_is_the_actors_sight_aperture(self):
+        from agents.director import causal_scene_room_ids, causal_world_index
+        scene = {
+            **self.scene,
+            "rooms": {
+                **self.scene["rooms"],
+                "distant_cellar": {"name": "Distant Cellar", "adjacent": []},
+            },
+            "positions": {
+                **self.scene["positions"], "sealed_chest": "distant_cellar",
+            },
+            "entities": {
+                **self.scene["entities"],
+                "sealed_chest": {"name": "sealed chest"},
+            },
+        }
+        aperture = causal_scene_room_ids(scene, ["Sera"])
+        index = causal_world_index(
+            scene, here="forge", room_ids=aperture,
+            include_entity_interiors=True)
+
+        assert aperture == {"forge", "square"}
+        assert "anvil" in index["entities"]
+        assert index["entities"]["anvil"]["interior_rooms"] == []
+        assert "sealed_chest" not in index["entities"]
+        assert "distant_cellar" not in index["rooms"]
+
+    def test_a_room_behind_a_wall_is_not_in_the_aperture(self):
+        from agents.director import causal_scene_room_ids
+        scene = {
+            **self.scene,
+            "rooms": {
+                "forge": {"name": "The Forge", "adjacent": [
+                    {"to": "square", "barrier": "wall"}]},
+                "square": self.scene["rooms"]["square"],
+            },
+        }
+        assert causal_scene_room_ids(scene, ["Sera"]) == {"forge"}
+
+    def test_a_body_interior_is_opt_in_to_the_causal_entity_roster(self):
+        from agents.director import causal_world_index
+        scene = {
+            **self.scene,
+            "entities": {**self.scene["entities"],
+                         "Sera": {"name": "Sera", "interior_rooms": []}},
+        }
+        hidden = causal_world_index(
+            scene, room_ids={"forge"}, include_entity_interiors=True,
+            exclude_entity_interiors={"Sera"})
+        assert "Sera" not in hidden.get("entities", {})
+        mentioned = causal_world_index(
+            scene, room_ids={"forge"}, include_entity_interiors=True)
+        assert "Sera" in mentioned["entities"]
+
+    def test_standing_relations_are_scoped_to_the_same_aperture(self):
+        from agents.director import causal_contact_rows
+        scene = {
+            **self.scene,
+            "contacts": [
+                {"actor": "Sera", "target": "anvil"},
+                {"actor": "Bryn", "target": "remote cart"},
+            ],
+            "positions": {
+                **self.scene["positions"], "remote cart": "square"},
+        }
+        assert causal_contact_rows(scene, {"forge"}) == [
+            {"actor": "Sera", "target": "anvil"}]
+
     def test_an_empty_scene_is_an_empty_index_not_a_crash(self):
         from agents.director import causal_world_index
         assert causal_world_index({}) == {"rooms": {}}
@@ -617,6 +685,31 @@ class TestARowBelongsToWhoseConductItIs:
         assert schemas.semantic_output_errors(
             "director_interpret", {"ledgers": [invented]},
             source_payload=payload)
+
+    def test_a_unique_display_name_is_renormalized_without_a_repair_call(self):
+        """Identity is a join code already owns, not a reason to rerun prose."""
+        payload = {
+            "event_inputs": [{
+                "entity_id": "persona:10", "authority_mode": "world_author",
+                "events": [{"event_id": "e1"}],
+            }],
+            "identity_index": {"persona:10": "Hinami"},
+        }
+        row = {
+            "chrono_id": 1, "item_id": 1, "object_name": "TARDIS",
+            "source_entity_id": "Hinami", "source_event_id": "e1",
+            "event": "opens the doors", "commitment": "asserted",
+            "resolution_notes": "The doors are open.",
+            "categories": ["entities"],
+        }
+        assert schemas.semantic_output_errors(
+            "director_interpret", {"ledgers": [row]},
+            source_payload=payload) == []
+        output = {"ledgers": [row]}
+        normalize_causal_ledger(
+            output, {"persona:10": "world_author"}, payload["identity_index"])
+        assert output["ledgers"][0]["source_entity_id"] == "persona:10"
+        assert output["sequence"][0]["actor"] == "persona:10"
 
     @pytest.mark.parametrize("category", sorted(SPECIALISTS))
     def test_a_hand_name_is_a_coarser_answer_not_a_wrong_one(self, category):

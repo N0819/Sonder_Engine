@@ -243,3 +243,49 @@ def patch_provider_seam(monkeypatch, attr, replacement):
     test that does care names its module.
     """
     return patch_seam(monkeypatch, "llm.providers", attr, replacement)
+
+
+class SSEFake:
+    """A blocking-style fake response (`.status_code`, `.json()`, `.text`)
+    served as the OpenAI SSE stream the provider layer now always reads.
+
+    Every OpenAI-style call streams since 2026-09-14 (the silence clock in
+    `providers._sse_openai` needs to see activity), so a test that fakes
+    `_session().post` answers `stream=True` with this and keeps its canned
+    completion unchanged."""
+
+    def __init__(self, response):
+        self._response = response
+        self.status_code = getattr(response, "status_code", 200)
+        self.text = getattr(response, "text", "")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def close(self):
+        pass
+
+    def iter_lines(self):
+        import json as _json
+        payload = self._response.json()
+        choice = (payload.get("choices") or [{}])[0] or {}
+        message = choice.get("message") or {}
+        delta = {key: value for key, value in message.items() if key != "role"}
+        chunk = {"choices": [{"delta": delta,
+                              "finish_reason": choice.get("finish_reason")}]}
+        if payload.get("model"):
+            chunk["model"] = payload["model"]
+        yield ("data: " + _json.dumps(chunk)).encode("utf-8")
+        if payload.get("usage") is not None:
+            yield ("data: " + _json.dumps(
+                {"choices": [], "usage": payload["usage"]})).encode("utf-8")
+        yield b"data: [DONE]"
+
+
+def streamed(response, stream=None):
+    """The response a fake `post` should return: the stream shape when the
+    caller asked to stream, the blocking shape otherwise."""
+    return SSEFake(response) if stream else response

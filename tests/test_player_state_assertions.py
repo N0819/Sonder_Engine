@@ -118,32 +118,14 @@ class TestItValidatesShapeAndNothingElse:
         got, _ = _said({"poses": {}, "rooms": {}, "world_facts": []})
         assert got == {}
 
-    def test_declaring_a_place_makes_the_place(self):
-        """A DECLARED PLACE EXISTS. Putting a body somewhere is the strongest
-        possible assertion that the somewhere is there, and the engine already
-        reasons this way for a declared movement destination
-        (`commit.py:2134`) — an asserted position is the same claim by a
-        shorter route.
-
-        REFUSING it is the failure mode, not the fix. A position naming an
-        unknown room merges cleanly, commits, and leaves the body standing
-        nowhere: no exception, no warning, a corrupt scene that persists, with
-        no room for perception to describe and no adjacency for movement to
-        walk. Dropping it instead would just be the engine telling the player
-        their alcove is not real.
-        """
+    def test_a_position_cannot_create_a_place(self):
+        """Spatial must author the room before a body can stand there."""
         notes = []
         got = validated_player_state_assertions(
             _scene(), {"positions": {"Hinami": "hidden_alcove"}}, "Hinami",
             notes.append)
-        assert got["positions"] == {"Hinami": "hidden_alcove"}
-        minted = got["rooms"]["hidden_alcove"]
-        assert minted["name"] == "Hidden Alcove"
-        # A way back, or the place falls out of the world: a room with no
-        # edges reads as `separated`/`far` to every perceiver.
-        assert minted["adjacent"] == [
-            {"to": "room_a", "barrier": "open", "distance": "near"}]
-        assert any("minted it" in n for n in notes)
+        assert got == {}
+        assert any("spatial hand must create" in n for n in notes)
 
     def test_an_authored_room_is_never_overwritten_by_the_stub(self):
         """The stub is a floor, not a ceiling: a room the same assertion
@@ -154,13 +136,11 @@ class TestItValidatesShapeAndNothingElse:
         assert got["rooms"]["alcove"]["desc"] == "A shallow recess."
         assert notes == []
 
-    def test_other_channels_ride_along_with_a_minted_place(self):
-        """One declaration, one act: ducking into an alcove and crouching
-        there arrive together."""
+    def test_an_unknown_position_does_not_take_other_channels_with_it(self):
         got, _ = _said({"positions": {"Hinami": "nook"},
                         "poses": {"Hinami": {"posture": "crouching"}}})
-        assert got["positions"] == {"Hinami": "nook"}
-        assert "nook" in got["rooms"]
+        assert "positions" not in got
+        assert "rooms" not in got
         assert got["poses"]["Hinami"]["posture"] == "crouching"
 
     def test_validating_does_not_touch_the_scene(self):

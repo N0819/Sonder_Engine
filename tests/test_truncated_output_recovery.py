@@ -28,6 +28,7 @@ import pytest
 
 from llm import llm_quality
 from llm import providers
+from tests.helpers import streamed
 
 
 # A cut-off object in each of the two shapes json.decoder produces, both taken
@@ -424,7 +425,8 @@ class TestTheProviderSaysWhyItStopped:
 
         monkeypatch.setattr(
             providers, "_session",
-            lambda: type("S", (), {"post": lambda *a, **k: FakeResp()})())
+            lambda: type("S", (), {"post": lambda *a, **k: streamed(
+                FakeResp(), k.get("stream"))})())
 
         token = providers.last_finish_reason.set("length")
         try:

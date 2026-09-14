@@ -543,3 +543,23 @@ def test_apostrophes_do_not_open_a_protected_span():
                           "aliases": []}],
     )
     assert "Hinami" not in out
+
+
+def test_the_scrub_uses_the_observers_own_label_for_a_dim_stranger():
+    """One label per (observer, body) per beat. The display map had chosen
+    "an indistinct figure" for a stranger in dim light; the scrub rewrote
+    his name with a full-sight epithet of its own and the composer then
+    prefixed the map's label: "An indistinct figure the slight young man
+    early twenties shifts on the bench" (scratch play 2026-09-14, chat 2)."""
+    from agents.common import _scrub_unknown_identities
+    src = [{"name": "Bram Toll", "aliases": [],
+            "appearance": "A slight young man, early twenties, with wet hair."}]
+    text, _ = _scrub_unknown_identities(
+        "Bram shifts on the bench, satchel clutched to his chest.",
+        allowed_forms=["Tamsin Reyle"], unknown_sources=src,
+        labels={"Bram Toll": "an indistinct figure"})
+    assert text.startswith("an indistinct figure shifts on the bench")
+    text, _ = _scrub_unknown_identities(
+        "Bram shifts on the bench.", allowed_forms=["Tamsin Reyle"],
+        unknown_sources=src)
+    assert "Bram" not in text and "young man" in text

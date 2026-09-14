@@ -754,8 +754,8 @@ class TestAuthoredDescriptionsAreSpliced:
                  "sources": ["brass hand lamp"], "openings": ["the opening"],
                  "self": None}
         assert composer.render_light_shape(shape) == (
-            "The light from the brass hand lamp and the opening thins to "
-            "half-light at the low arch.")
+            "The light from the brass hand lamp and the opening reaches "
+            "the low arch as half-light.")
 
     def test_a_way_out_agrees_in_number_with_a_plural_desc(self):
         rows = [{"desc": "broad salt-crusted stone steps", "state": "bare"}]
@@ -1002,3 +1002,30 @@ def test_several_sounds_in_one_beat_keep_their_order():
               {"room": "hall", "detail": "a drag of footfalls"}]
     out = composer.ambient_percepts(events, "hall", order_key=500_000)
     assert [p.order_key for p in out] == [500_000, 500_001]
+
+
+def test_a_line_the_noise_takes_is_still_seen_spoken_within_reach(monkeypatch):
+    """Seen speaking, unheard. On a deck graded drowned a woman spoke at a
+    man's ear twice and his view carried nothing (scratch play 2026-09-14,
+    chat 2 turns 2-3). The words stay refused; that speech happened does
+    not, when the speaker is in sight within reach."""
+    monkeypatch.setattr(composer, "line_hear_level",
+                        lambda *a, **k: "none")
+    entry = {"speaker": "Tamsin Reyle", "text": "Is someone waiting for it?",
+             "volume": "normal", "intended_target": "Bram Toll"}
+    rel = {"tier": "within_reach", "barrier": "open", "same_room": True}
+    p = composer.speech_percept(entry, rel, "Bram Toll",
+                                display="the tall woman", can_see=True,
+                                proximity="within_reach")
+    assert p is not None and p.channel == "sight" and p.fidelity == "fragment"
+    assert "waiting" not in str(p.data)
+    line = composer._render_percept(p) if hasattr(composer, "_render_percept") \
+        else composer.render_view([p], mode="character", full_render=True).text
+    assert "cannot make out" in line and "waiting" not in line
+    # Out of sight, or across the room, nothing is delivered at all.
+    assert composer.speech_percept(entry, rel, "Bram Toll",
+                                   display="the tall woman", can_see=False,
+                                   proximity="within_reach") is None
+    assert composer.speech_percept(entry, dict(rel, tier="across"), "Bram Toll",
+                                   display="the tall woman", can_see=True,
+                                   proximity="across") is None

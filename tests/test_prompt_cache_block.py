@@ -11,6 +11,7 @@ import importlib
 import json
 
 from llm import providers
+from tests.helpers import streamed
 
 
 def test_system_prompt_marked_cacheable_when_enabled():
@@ -117,9 +118,10 @@ class _FakeSession:
         self.payload = payload
         self.bodies = []
 
-    def post(self, url, headers=None, json=None, timeout=None, **kw):
+    def post(self, url, headers=None, json=None, timeout=None, stream=None,
+             **kw):
         self.bodies.append(json)
-        return _FakeResponse(self.payload)
+        return streamed(_FakeResponse(self.payload), stream)
 
 
 def _capture(monkeypatch, prov, model, payload):

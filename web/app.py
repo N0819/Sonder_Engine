@@ -1032,7 +1032,20 @@ def _build_world_id_remap(blob, protected_ids=None):
     return remap
 
 def _deep_remap_ids(obj, remap):
-    """Recursively remap exact string matches and dict keys."""
+    """Recursively remap exact string matches and dict keys.
+
+    A `name` IS THE FICTION'S WORD FOR A THING, NEVER AN ENGINE HANDLE, so a
+    string stored under that key is left as written even when it equals an
+    id being remapped. The spatial hand keys a new entity by its display
+    name as often as by a slug -- chat 122 held `entities["The TARDIS"]`
+    with `name: "The TARDIS"` -- and the exact-match remap rewrote the name
+    along with the key. Measured on chat 123 (branched from 122 at turn 9,
+    2026-09-12): every one of six non-cast entities came out of the branch
+    with `name == "06182eadaf9947fa"`-shaped hex, and every perception view
+    from then on read "facing the 06182eadaf9947fa", "the noise from the
+    06182eadaf9947fa dies away", which the narrator had to launder back
+    into "the TARDIS" from context on every beat.
+    """
     if not remap:
         return obj
     if isinstance(obj, str):
@@ -1041,6 +1054,9 @@ def _deep_remap_ids(obj, remap):
         new = {}
         for k, v in obj.items():
             nk = remap.get(k, k) if isinstance(k, str) else k
+            if k == "name" and isinstance(v, str):
+                new[nk] = v
+                continue
             new[nk] = _deep_remap_ids(v, remap)
         return new
     if isinstance(obj, list):

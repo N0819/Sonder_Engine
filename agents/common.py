@@ -45,7 +45,6 @@ from story.scene import (get_scene, persona_of, NON_AWAKE_GATED,
 from llm.schemas import normalize_speech_volume
 from world.spatial import (
     _body_interior_holder,
-    derived_room_name,
     ambient_scope,
     containment_conceals,
     detail_resolves_between,
@@ -3672,10 +3671,37 @@ def _room_notes_for_view(rdata, room_id, ctx, scene=None):
     the engine wrote about its own retrieval, and neither may deliver it. See
     `story/provenance_text`.
     """
-    notes = (rdata or {}).get("notes") if isinstance(rdata, dict) else None
-    if notes:
-        return strip_engine_provenance(notes)
+    prose = room_prose(rdata)
+    if prose:
+        return prose
     return _room_notes_from_lore(room_id, ctx, scene)
+
+
+def room_prose(rdata):
+    """The room's description as a MIND receives it, from the record alone.
+
+    ONE SPELLING of "its `notes`, else its `desc`, else its `description`",
+    for every reader that has the room record in hand. `_room_notes_for_view`
+    delivers it for the room a body stands in; `perception._visible_openings`
+    delivers it for a lit room seen through an open boundary -- and until
+    2026-09-14 that second reader took `notes` alone, so a room the spatial
+    hand had just minted with a `desc` and no `notes` arrived through the
+    doorway as a bare name. Measured on chat 123 turn 9: the TARDIS door
+    opened on a "vast, impossibly proportioned chamber" the hand had written
+    forty words for, and the player was told "Through the third open doorway
+    is TARDIS Interior." and nothing else.
+
+    Every return runs through `strip_engine_provenance` for the reason
+    `_room_notes_from_lore` gives: a description the engine wrote for a room
+    it had no canon for may carry the reason it was written.
+    """
+    if not isinstance(rdata, dict):
+        return ""
+    for field in ("notes", "desc", "description"):
+        text = rdata.get(field)
+        if text:
+            return strip_engine_provenance(str(text))[:600]
+    return ""
 
 
 def _room_notes_from_lore(room_id, ctx, scene=None):
@@ -3697,14 +3723,7 @@ def _room_notes_from_lore(room_id, ctx, scene=None):
     if not room_id:
         return ""
     sc = scene if scene is not None else get_scene(ctx.chat.id, ctx.chat)
-    rdata = (sc.get("rooms") or {}).get(room_id)
-    if not isinstance(rdata, dict):
-        return ""
-    for field in ("notes", "desc", "description"):
-        text = rdata.get(field)
-        if text:
-            return strip_engine_provenance(str(text))[:600]
-    return ""
+    return room_prose((sc.get("rooms") or {}).get(room_id))
 
 # A stage direction written INSIDE a speech element: "*leans in* Sit down."
 # Bounded and single-line on purpose: an unpaired asterisk in ordinary prose
@@ -4031,7 +4050,7 @@ def cut_short_speech(text, ratio=0.6):
 #: silently halves the multi-hand routing this contract is built on.
 SPAN_FIELDS = ("category", "categories", "note", "items",
                "chrono_id", "item_id", "object_name", "act",
-               "source_entity_id", "actor", "from_declaration")
+               "source_entity_id", "actor", "from_declaration", "movement")
 
 
 def _restore_span_fields(source, clean, before):
@@ -5282,7 +5301,8 @@ def _act_surface_admission(surface, *, actor, observer, forms_by_body,
     return trimmed, cut
 
 
-def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources):
+def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources,
+                              labels=None):
     """Deterministic identity floor for perception view prose.
 
     The knows_identity/_unknown_actor_label gate used to be enforced only
@@ -5321,7 +5341,15 @@ def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources):
         name = str(src.get("name") or "").strip()
         if not name or name.casefold() in allowed:
             continue
-        label = _unknown_actor_label(
+        # ONE LABEL PER (OBSERVER, BODY) PER BEAT: where the observer's own
+        # display map has already chosen what to call this body -- "an
+        # indistinct figure" for a stranger in dim light -- the scrub uses
+        # that, never a full-sight epithet of its own. Measured (scratch play
+        # 2026-09-14, chat 2 turn 1): the map said "an indistinct figure",
+        # this rewrote "Bram" to "the slight young man early twenties", and
+        # the page read "An indistinct figure the slight young man early
+        # twenties shifts on the bench".
+        label = (labels or {}).get(name) or _unknown_actor_label(
             name, src.get("appearance"), aliases=src.get("aliases"))
         # A NAME'S OWN PARTS ARE SPELLINGS OF THE BODY IT NAMES. The forms
         # were the full name and the authored aliases, so a Director writing
@@ -8903,6 +8931,11 @@ def _dedupe_view_sentences(text):
 # _resolve_narration_person guards against a lone token flipping the whole
 # campaign's established person.
 
+#: An HTML-style tag: `<i>`, `</i>`, `<em>` -- the italics the narrator is
+#: allowed, and nothing a voice detector should read as a word.
+_MARKUP_TAG_RE = re.compile(r"</?[A-Za-z][A-Za-z0-9]*[^<>]*>")
+
+
 def _narrative_outside_quotes(text):
     """`text` with quoted dialogue removed, in the ACTIVE story pack's quote
     marks. Everything a speaker says is somebody else's grammar: a "you" inside
@@ -8919,7 +8952,14 @@ def _narrative_outside_quotes(text):
     read. Rare and decisive -- 11 of 2163 live player turns change verdict, and
     one of them latched a whole story into first person.
     """
-    narrative = _ling("_NARRATION_DOUBLED_QUOTE_RE").sub('"', str(text or ""))
+    # MARKUP IS NOT A WORD. The narrator may italicise ("<i>...Murrow...
+    # tonight...</i>" for a line heard in pieces), and the tag name `i`
+    # matched the first-person pronoun: a third-person page with no "I" in
+    # it was reported as first person (scratch play 2026-09-14, chat 2 turn
+    # 1: "2 first / 0 second / 0 third"). Tags are stripped before either
+    # detector reads the voice.
+    narrative = _MARKUP_TAG_RE.sub(" ", str(text or ""))
+    narrative = _ling("_NARRATION_DOUBLED_QUOTE_RE").sub('"', narrative)
     narrative = _ling("_NARRATION_QUOTE_RE").sub(" ", narrative)
     narrative = _ling("_NARRATION_SQUOTE_RE").sub(" ", narrative)
     return _ling("_NARRATION_DANGLING_QUOTE_RE").sub(" ", narrative)
@@ -10227,8 +10267,16 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
     # keep every real line and add one more from the narrator. This happened
     # when a reaction-loop act vanished from perception and the narrator
     # guessed both the missing motion and a fresh NPC line.
+    # AN ELLIPSIS IS ONE MARK HOWEVER IT IS TYPED. The view writes a heard
+    # fragment "...there... pawing..." and the narrator sets it
+    # "…there… pawing…"; compared byte for byte, a line the view
+    # delivered read as invented (scratch play 2026-09-14, chat 2 turn 6).
+    # Both sides fold to the three-dot spelling before the comparison.
+    def _fold_marks(text):
+        return re.sub(r"\s+", " ", str(text).replace("\u2026", "...")).casefold()
+
     allowed_quotes = {
-        re.sub(r"\s+", " ", quote.casefold()).rstrip(".,!?…;:")
+        _fold_marks(quote).rstrip(".,!?;:")
         for quote in view_quotes
     }
     # INVENTED MEANS THE VIEW NEVER DELIVERED IT, NOT THAT THE VIEW DID NOT
@@ -10242,10 +10290,10 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
     # words the view delivers unquoted and prose rightly quotes. So the
     # comparison is against WHAT THE VIEW DELIVERED: a span whose words are
     # in the view verbatim came from the view, however the view marked them.
-    delivered = re.sub(r"\s+", " ", view_text.casefold())
+    delivered = _fold_marks(view_text)
     for match in quote_pattern.finditer(prose):
         quote = re.sub(r"\s+", " ", match.group(1).strip())
-        normalized = quote.casefold().rstrip(".,!?…;:")
+        normalized = _fold_marks(quote).rstrip(".,!?;:")
         if (normalized and normalized not in allowed_quotes
                 and normalized not in delivered):
             warnings.append(
@@ -10693,103 +10741,31 @@ def validated_player_state_assertions(sc, raw, player_name, report=None):
                    f"{channel}")
     clean = {key: value for key, value in clean.items() if value}
 
-    # A DECLARED PLACE EXISTS, and the failure-proofing is to MINT it rather
-    # than to refuse the position. Putting a body somewhere is the strongest
-    # possible assertion that the somewhere is there -- `prepare_scene_commit`
-    # already reasons exactly this way for a declared movement destination
-    # (commit.py:2134), and an asserted position is the same claim by a
-    # shorter route.
-    #
-    # Refusing it is the failure mode, not the fix: a position naming an
-    # unknown room merges cleanly, commits, and leaves the body standing
-    # nowhere -- no exception, no warning, a corrupt scene that persists, with
-    # no room for perception to describe and no adjacency for movement to
-    # walk. Dropping the position instead would just be the engine telling the
-    # player their alcove is not real, which is the second-guessing this whole
-    # channel exists to stop.
-    #
-    # The stub is deliberately minimal -- a name and an edge home. Mapping and
-    # the Director furnish it; what matters here is that the place is on the
-    # map and reachable, because an unreachable room is how an interior falls
-    # out of the world.
-    # ...BUT A PLACE NAMED AFTER A PERSON IS A RELATION TO THEM, NOT A PLACE.
-    # The mint above asks whether the room exists and never whether the string
-    # is a place at all, so a posture, a station or a hold written into
-    # `positions` becomes a room and exiles the body into it. Measured live
-    # (chat 95 t55): `positions: {"Hinami": "prone on Mirelle Sulmirath's
-    # palm"}` minted a room of that name "with a way back to
-    # private_session_room", and from that beat Hinami stood alone in it while
-    # Mirelle stood in the session room. Contacts are pruned between bodies in
-    # different rooms, so EVERY contact between them was dropped for the next
-    # four turns -- including the interior contact of a swallow, which is what
-    # `place_enclosed_bodies` needs to put her inside at all. The interior
-    # rooms the Director correctly declared were never occupied, and both
-    # minds were told about two people in two different places.
-    #
-    # The test is structural and reads the scene rather than English: does the
-    # asserted room name a body the scene already knows. A real new place is
-    # named for itself; a place named for somebody is `contained`, `contacts`,
-    # `stations` or a pose, each of which has its own ledger and none of which
-    # is this one. Rooms the beat DECLARES are exempt by the check above --
-    # `mirelle_esophagus` arrives in `state_diff.rooms` with a `parent_entity`,
-    # which is how an interior is supposed to enter the world.
-    #
-    # The position is dropped with it, deliberately: leaving it pointed at a
-    # room that was refused is the corrupt-scene failure this whole block
-    # exists to prevent. The body stays where it was, and the report names the
-    # ledger that does hold the fact.
-    def _names_a_body(room, scene):
-        scene = scene if isinstance(scene, dict) else {}
-        low = str(room or "").casefold()
-        subjects = set(scene.get("positions") or {})
-        subjects |= set(scene.get("attire") or {})
-        for entity in (scene.get("entities") or {}).values():
-            if isinstance(entity, dict) and entity.get("name"):
-                subjects.add(str(entity["name"]))
-        for subject in subjects:
-            token = str(subject or "").strip().casefold()
-            if len(token) > 2 and token in low and token != low:
-                return str(subject)
-        return ""
-
+    # Spatial owns place creation. A position may name an existing room or a
+    # room authored in this same diff; anything else would leave a body in a
+    # room with no geometry, light, scale, or reliable identity. Earlier code
+    # papered over that omission by minting a blank stub here. Besides being
+    # low fidelity, it also turned poses such as "on Mara's palm" into rooms.
+    # Refuse only the bad position and let the provider repair ladder ask the
+    # spatial hand for a complete room.
     positions = clean.get("positions")
     if isinstance(positions, dict) and positions:
-        rooms = dict((sc or {}).get("rooms") or {})
-        minted = dict(clean.get("rooms") or {})
+        rooms = (sc or {}).get("rooms") or {}
+        declared = clean.get("rooms") or {}
         refused = []
         for who, room in positions.items():
-            if not room or room in rooms or room in minted:
+            if not room or room in rooms or room in declared:
                 continue
-            named = _names_a_body(room, sc)
-            if named:
-                refused.append(who)
-                if report:
-                    report(f"asserted position put {who!r} in {room!r}, which "
-                           f"names {named!r} rather than a place -- a relation "
-                           "to a body is `contained`, `contacts`, `stations` "
-                           "or a pose, never a room. Left them where they "
-                           "were; state it in the ledger that holds it.")
-                continue
-            origin = ((sc or {}).get("positions") or {}).get(who)
-            minted[room] = {
-                "name": derived_room_name(room),
-                "desc": "",
-                "adjacent": ([{"to": origin, "barrier": "open",
-                               "distance": "near"}]
-                             if origin and origin in rooms
-                             and origin != room else []),
-                "notes": "",
-            }
+            refused.append(who)
             if report:
-                report(f"asserted position put {who!r} in {room!r}, which did "
-                       "not exist; minted it with a way back to "
-                       f"{origin!r}. Describe it if it matters.")
+                report(
+                    f"asserted position put {who!r} in unknown room {room!r}; "
+                    "left them where they were. The spatial hand must create "
+                    "and describe a destination before placing anyone there.")
         for who in refused:
             positions.pop(who, None)
         if not positions:
             clean.pop("positions", None)
-        if minted:
-            clean["rooms"] = minted
     return clean
 
 

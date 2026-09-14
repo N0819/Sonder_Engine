@@ -109,7 +109,9 @@ def _coerce_station_table(value):
         if not name:
             continue
         if isinstance(station, str):
-            station = {"at": station.strip() or None}
+            folded = _record_folded_into_string(station)
+            station = folded if folded is not None else {
+                "at": station.strip() or None}
         elif isinstance(station, (list, tuple)):
             station = {"near": list(station)}
         if not isinstance(station, dict):
@@ -677,10 +679,39 @@ def _coerce_member(value, declared_type):
     # with no answerable subject slot is left to fail rather than guessed at.
     if _expects_object(declared_type) and isinstance(
             value, (str, int, float, bool)) and not isinstance(value, bool):
+        folded = _record_folded_into_string(value)
+        if folded is not None:
+            return _coerce_member(folded, declared_type)
         slot = _subject_slot(declared_type)
         if slot:
             return {slot: value}
     return _as_declared_scalar(value, declared_type)
+
+
+def _record_folded_into_string(value):
+    """The record a model serialised INTO a string where the record belongs,
+    or None when the string is a plain value.
+
+    Measured on a Gemini-driven scratch play (2026-09-14, chat 2 turns 5-6):
+    `entities.oil_lantern` arrived as the STRING `{"state": {"lit": false}}`,
+    `stations["Tamsin Reyle"]` as `{"at":"cabin_bench","near":[...]}` and a
+    pose as its whole six-field object in quotes. The short-spelling rule
+    then filed each one in its subject slot -- the lantern's NAME became
+    `{"state": {"lit": false}}`, the lantern stayed lit in a cabin the story
+    had put out, and the player's view read `You are {"posture":"sitting",
+    ...}`. A string that parses as a JSON object where an object was
+    declared is that object; nothing else about it is a plain value.
+    """
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not (text.startswith("{") and text.endswith("}")):
+        return None
+    try:
+        parsed = json.loads(text)
+    except ValueError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
 
 
 def _subject_slot(model, fields=None):
@@ -6049,7 +6080,18 @@ def semantic_output_errors(
                 "authority_mode": str(
                     group.get("authority_mode") or "").strip(),
                 "event_ids": event_ids,
+                "events": {
+                    str(event.get("event_id") or "").strip(): event
+                    for event in (group.get("events") or [])
+                    if isinstance(event, dict)
+                },
             }
+        identity_index = source_payload.get("identity_index") or {}
+        identity_forms = {}
+        for identity_id, display in identity_index.items():
+            form = str(display or "").strip().casefold()
+            if form:
+                identity_forms.setdefault(form, []).append(str(identity_id))
 
         item_ids = []
         chrono_ids = []
@@ -6075,6 +6117,7 @@ def semantic_output_errors(
         # other's, and nothing said so out loud"), one layer up.
         allowed_categories.update(
             role.split("director_", 1)[-1] for role in SPECIALIST_CHANNELS)
+
         for index, ledger in enumerate(ledgers):
             if not isinstance(ledger, dict):
                 found.append(f"ledgers.{index} must be an object")
@@ -6111,8 +6154,9 @@ def semantic_output_errors(
                 # question (which input this came from) is `source_event_id`'s,
                 # and it has no group to check against when the actor is not
                 # itself a source.
-                if not (entity_id and entity_id in (
-                        source_payload.get("identity_index") or {})):
+                display_matches = identity_forms.get(entity_id.casefold()) or []
+                if not (entity_id and (entity_id in identity_index
+                                       or len(display_matches) == 1)):
                     found.append(
                         f"{prefix}.source_entity_id is neither a supplied "
                         "source nor a known identity")
@@ -6183,6 +6227,8 @@ def semantic_output_errors(
                     noted.append(
                         f"{prefix}.categories names channels nothing answers "
                         "to: " + ", ".join(unknown))
+
+
 
         # NONE OF THESE IS FATAL, and the measurement is why.
         # `normalize_causal_ledger` renumbers a duplicate id on the very next
@@ -6311,6 +6357,127 @@ def semantic_output_errors(
                     errors.append(
                         f"results.{index} emits transforms but status is "
                         f"{status or 'blank'}")
+                if step_key != "director_spatial" or index >= len(ledgers):
+                    continue
+                ledger = ledgers[index] if isinstance(ledgers[index], dict) \
+                    else {}
+                categories = {
+                    str(channel) for channel in ledger.get("categories") or []
+                }
+                if "rooms" not in categories:
+                    continue
+                movement = ledger.get("movement")
+                arrives = isinstance(movement, dict) \
+                    and movement.get("arrives", True)
+                queries = []
+                queries.append(str(ledger.get("object_name") or ""))
+                if arrives:
+                    queries.append(str(movement.get("to_room") or ""))
+                queries.extend(str(target) for target in ledger.get("targets") or [])
+                queries = [query.strip().casefold() for query in queries
+                           if query.strip()]
+                entity_id, entity = None, None
+                for query in queries:
+                    for candidate_id, candidate in (
+                            source_payload.get("entity_interiors") or {}).items():
+                        if not isinstance(candidate, dict):
+                            continue
+                        forms = {
+                            str(candidate_id).strip().casefold(),
+                            str(candidate.get("name") or "").strip().casefold(),
+                            *(str(alias).strip().casefold()
+                              for alias in candidate.get("aliases") or []),
+                            *(str(room_id).strip().casefold()
+                              for room_id in candidate.get("interior_rooms") or []),
+                        }
+                        forms.discard("")
+                        if query in forms:
+                            entity_id, entity = str(candidate_id), candidate
+                            break
+                    if entity_id:
+                        break
+                if not entity_id:
+                    continue
+
+                mover = ""
+                if arrives:
+                    mover = str(movement.get("mover") or "self").strip()
+                    identities = source_payload.get("identity_index") or {}
+                    if mover.casefold() in ("", "self"):
+                        source_id = str(
+                            ledger.get("source_entity_id") or "").strip()
+                        mover = str(identities.get(source_id)
+                                    or source_payload.get("player") or "").strip()
+                    else:
+                        mover = str(identities.get(mover) or mover).strip()
+                patches = [
+                    transform.get("patch")
+                    for transform in transforms
+                    if isinstance(transform, dict)
+                    and isinstance(transform.get("patch"), dict)
+                ]
+                written_rooms = {}
+                written_positions = {}
+                for patch in patches:
+                    room_patch = patch.get("rooms")
+                    if isinstance(room_patch, dict):
+                        written_rooms.update({
+                            str(room_id): room
+                            for room_id, room in room_patch.items()
+                            if isinstance(room, dict)
+                        })
+                    position_patch = patch.get("positions")
+                    if isinstance(position_patch, dict):
+                        written_positions.update({
+                            str(subject): str(room_id)
+                            for subject, room_id in position_patch.items()
+                        })
+                interior_rooms = [
+                    str(room_id) for room_id in entity.get("interior_rooms") or []
+                    if str(room_id).strip()
+                ]
+                standing_room = str((source_payload.get("positions") or {}).get(
+                    mover) or "")
+                if interior_rooms:
+                    if arrives and status == "already_true" \
+                            and standing_room not in interior_rooms:
+                        errors.append(
+                            f"results.{index} says movement into {entity_id} "
+                            "is already true, but the mover is not in its interior")
+                    if arrives and status == "encoded" \
+                            and written_positions.get(mover) not in interior_rooms:
+                        errors.append(
+                            f"results.{index} does not place {mover or 'the mover'} "
+                            f"in an existing interior of {entity_id}")
+                    continue
+
+                created = [
+                    room_id for room_id, room in written_rooms.items()
+                    if str(room.get("parent_entity") or "") == entity_id
+                ]
+                if status != "encoded":
+                    errors.append(
+                        f"results.{index} must mint an interior for {entity_id}; "
+                        "the entity has none")
+                    continue
+                if not created:
+                    errors.append(
+                        f"results.{index} does not create a room parented to "
+                        f"{entity_id}")
+                    continue
+                created_room = written_rooms[created[0]]
+                missing_detail = [
+                    field for field in ("name", "desc", "light", "size")
+                    if not created_room.get(field)
+                ]
+                if missing_detail:
+                    errors.append(
+                        f"results.{index} creates a thin interior for {entity_id}; "
+                        "missing " + ", ".join(missing_detail))
+                if arrives and written_positions.get(mover) not in created:
+                    errors.append(
+                        f"results.{index} creates an interior for {entity_id} "
+                        f"but does not place {mover or 'the mover'} inside it")
 
     elif step_key in {"character", "character_kernel"}:
         if not isinstance(output.get("sequence"), list):
@@ -6508,8 +6675,29 @@ def validated_state_diff_channels(raw):
         kept = {key: value for key, value in raw.items()
                 if key not in channels}
         model = StateDiff(**kept)
-        return _dump_unset(model), sorted(channels)
-    return _dump_unset(model), []
+        return _entity_names_are_words(_dump_unset(model)), sorted(channels)
+    return _entity_names_are_words(_dump_unset(model)), []
+
+
+def _entity_names_are_words(clean):
+    """An entity whose `name` is its own slug id is named by that id's words.
+
+    An id is a handle the engine holds, never a word of the story
+    (`composer._no_engine_ids`), and a hand that mints `tin_of_lozenges` and
+    names it `tin_of_lozenges` (Gemini, scratch play 2026-09-14, chat 2 turn
+    5) has handed the page an underscore. The words of the slug are the one
+    name the record carries, so they are the name.
+    """
+    entities = clean.get("entities") if isinstance(clean, dict) else None
+    if not isinstance(entities, dict):
+        return clean
+    for key, record in entities.items():
+        if not isinstance(record, dict):
+            continue
+        name = str(record.get("name") or "").strip()
+        if name == str(key) and "_" in name:
+            record["name"] = name.replace("_", " ")
+    return clean
 
 
 def _dump_unset(model):

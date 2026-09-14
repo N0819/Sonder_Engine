@@ -326,6 +326,11 @@ small identity, object-name, position, and contact indexes. The prompt does one
 job: split prose into ordered event-ledger rows and decide causal commitment.
 It does not write narration or any engine state shape.
 
+Its world index is the union of the acting bodies' immediate sight apertures:
+their rooms and physically visible adjacent rooms. Room rows expose exits;
+entities in that slice expose only identity, placement, and existing interior
+room ids. A disconnected room or entity is absent.
+
 Each row carries `chrono_id`, a private numeric `item_id`, `object_name`, source
 identity and authority, an objective event, a short `resolution_notes` ruling,
 and zero or more exact state channel categories. One occurrence can become
@@ -345,6 +350,19 @@ Specialists run inside this stage for asserted changes that must exist in the
 onset preview. Their transforms land in `state_assertions` (contact in
 `contact_assertions`) before the ordinary deterministic validators. These
 assertions are previewed for reaction and later merged once at resolution.
+Opening or uncovering an entity is spatial work when its inside does not yet
+exist: the spatial hand creates and furnishes a room parented to that entity
+before outcome perception, without waiting for entry. Entry reuses an existing
+interior and puts the mover there. Character and player bodies are excluded
+from the ordinary entity-interior roster unless the event explicitly names
+that body as the interior holder (for example, ``inside Sera`` or ``Sera's
+interior``). Merely mentioning or spatially relating to a person does not opt
+their body into room minting; their anatomy is not ambient map topology. A position naming neither an existing room
+nor a room created in the same diff is refused; no low-detail fallback room is
+minted. Specialist fail-open holds here as everywhere: after the specialist's
+repair/provider ladder, a required interior with no fully parented room—or a
+new `interior_rooms` reference naming no standing or same-diff room—is reported
+as a stage warning and the beat continues with every other hand's work.
 
 ### `compile_world_context`
 
