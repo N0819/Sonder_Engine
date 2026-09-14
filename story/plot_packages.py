@@ -1237,6 +1237,11 @@ def _shape_plan_creature(op):
         "can_open_doors": bool(op.get("can_open_doors", False)),
         "boldness": op.get("boldness"),
         "kill_ceiling": max(0, min(6, int(op.get("kill_ceiling") or 1))),
+        # WHEN IT IS ABROAD. `charter_creature.is_active` reads
+        # `active_phases` and an empty list means every hour, so a creature
+        # planned "after dark" with no way to say so climbed the Stair in
+        # the afternoon at clock zero (scratch play 2026-09-14, chat 7).
+        "active_phases": _phase_names(op.get("active_phases")),
         "rule": _text(op.get("rule"), 600),
         "look": _text(op.get("look"), 300),
         "noun": _text(op.get("noun"), 32),
@@ -1245,6 +1250,19 @@ def _shape_plan_creature(op):
                   "stock": _text(spoor.get("stock"), 80),
                   "tracks": _text(spoor.get("tracks"), 80)},
     }
+
+
+def _phase_names(raw):
+    """The day phases a brief names, in the engine's own vocabulary
+    (`day_cycle.PHASE_NAMES`); anything else is dropped rather than stored
+    as a phase no clock will ever stand in."""
+    from world.day_cycle import PHASE_NAMES
+    out = []
+    for item in (raw or ()) if isinstance(raw, (list, tuple)) else ():
+        word = str(item or "").strip().casefold()
+        if word in PHASE_NAMES and word not in out:
+            out.append(word)
+    return out
 
 
 def _creature_charter(cid, op):
@@ -1275,6 +1293,8 @@ def _creature_charter(cid, op):
     }
     if op.get("boldness") is not None:
         creature["boldness"] = op["boldness"]
+    if op.get("active_phases"):
+        creature["active_phases"] = list(op["active_phases"])
     if op.get("look"):
         # WHAT A BODY SEES OF IT. A charter body's sketch is composed from
         # the charter's `looks` tables, which a creature has none of, and
@@ -2489,6 +2509,12 @@ OPERATION_FIELDS = {
                       "that cannot open one",
         "can_open_doors?": "true if a shut door does not stop it",
         "kill_ceiling?": "how many it may take in one window (default 1)",
+        "active_phases?": "[the phases of the day it is abroad, from the "
+                          "engine's own eight: night, pre-dawn, dawn, "
+                          "morning, midday, afternoon, dusk, evening]. "
+                          "Empty means ANY hour, and the premise saying "
+                          "'after dark' is not saying it here: a thing that "
+                          "climbs out after dark is [night, pre-dawn]",
         "boldness?": "0 timid, 1 brazen (default 0.5)",
         "rule?": "the one sentence that governs it, for the Director",
         "look?": "what a body SEES of it at full sight, as a short "

@@ -476,11 +476,24 @@ def errands(bodies, needs, upkeeps, watch, places, reach, seed=0,
         target = None
         held = (needs or {}).get(key) or {}
         short_of_people = wants_company(held)
+        # A NIGHT OUT GOES SOMEWHERE. The body's own room is the nearest
+        # room it can reach, so a crew whose loft was itself a commons was
+        # sent to the loft every social phase and never once crossed the
+        # quay to the inn the plan said they drank in (scratch play
+        # 2026-09-14, chat 7: three evenings, no crew in the taproom, no
+        # word carried between the two houses). In the social phases,
+        # where you stand is not where you go. The working day keeps its
+        # own-room answer: measured on twin_towns(40) in famine, sending
+        # every rolled body elsewhere by day scattered the people who were
+        # picking each other up, and a quarter of catastrophe formed no
+        # signed tie where it had formed nine.
+        here = str(body.get("place") or "")
+        elsewhere = [p for p in (commons or ()) if str(p) != here]
         if social:
             if short_of_people:
                 target = _nearest(reach, key, _occupied(
-                    commons, bodies, key), seed)
-            target = target or _nearest(reach, key, commons or (), seed)
+                    elsewhere, bodies, key), seed)
+            target = target or _nearest(reach, key, elsewhere, seed)
             if target is not None:
                 out[key] = target
             continue

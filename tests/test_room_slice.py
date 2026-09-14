@@ -174,7 +174,11 @@ class TestTheSlice:
         row = room_slice(cid, None, "annex_hall")
         assert row["status"] == "planned" and row["description"] == ""
         assert row["planned_stub"]["purpose"] == "a way through"
-        assert {e["to"]: e["status"] for e in row["exits"]} == {"lobby": "live"}
+        # The store declared its way into the hall, and a planned doorway
+        # has two sides (`plant_structure`, 2026-09-14): the hall carries
+        # the way back as a planned exit.
+        assert {e["to"]: e["status"] for e in row["exits"]} == {
+            "lobby": "live", "annex_store": "planned"}
         store = room_slice(cid, None, "annex_store")
         assert {e["to"]: e["status"] for e in store["exits"]} == {"annex_hall": "planned"}
 

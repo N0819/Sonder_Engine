@@ -70,3 +70,24 @@ def test_an_existing_stored_blank_is_left_to_the_reader_floor():
     merged = merge_scene_with_diff(sc, {"rooms": {"landing": {"adjacent": []}}})
     assert merged["rooms"]["landing"]["name"] == ""
     assert room_display_name(merged["rooms"]["landing"], "landing") == "Landing"
+
+
+def test_a_planned_room_nobody_named_is_planted_under_the_placeholder(temp_db):
+    """The Charter Planner landed `net_loft` and `the_stair` with no name at
+    all (scratch play 2026-09-14, chat 7) and `plant_structure` wrote the id
+    into the name column, so the page read "net_loft". A nameless room is
+    planted under the placeholder, the one spelling the engine shows."""
+    import time
+    from world.structure import plant_structure, registry_rows
+
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Nameless", "", time.time()))
+    plant_structure(cid, {"key": "cove", "max_planned": 4, "grammar": []}, {
+        "net_loft": {"purpose": "nets", "adjacent": [], "frontier": []},
+        "the_stair": {"name": "", "purpose": "steps", "adjacent": [], "frontier": []},
+        "quay": {"name": "The Quay", "purpose": "", "adjacent": [], "frontier": []},
+    })
+    rows = registry_rows(cid)
+    assert rows["net_loft"]["name"] == "Net Loft"
+    assert rows["the_stair"]["name"] == "The Stair"
+    assert rows["quay"]["name"] == "The Quay"

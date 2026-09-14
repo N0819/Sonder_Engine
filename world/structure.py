@@ -17,7 +17,8 @@ import threading
 
 from world.charter_model import integer as _integer
 from world.regions import normalize_region_id
-from world.spatial import normalize_room_id, room_name_words, room_words_answer
+from world.spatial import (derived_room_name, normalize_room_id,
+                           room_name_words, room_words_answer)
 
 
 STRUCTURES_KEY = "structures"
@@ -463,7 +464,11 @@ def plant_structure(cid, structure, rooms, *, owning_book_id=None,
         if not isinstance(raw, dict):
             continue
         normalized[str(uid)] = {
-            "name": str(raw.get("name") or uid),
+            # A ROOM NOBODY NAMED WEARS THE PLACEHOLDER, never its id: the
+            # Charter Planner landed "net_loft" and "the_stair" nameless
+            # (scratch play 2026-09-14, chat 7) and the id became the name
+            # the page showed. `derived_room_name` is the one spelling.
+            "name": str(raw.get("name") or derived_room_name(uid)),
             "purpose": str(raw.get("purpose") or ""),
             "structure": structure["key"],
             "access": str(raw.get("access") or ""),
@@ -485,6 +490,30 @@ def plant_structure(cid, structure, rooms, *, owning_book_id=None,
         }
     if len(normalized) > structure["max_planned"]:
         raise ValueError("planned rooms exceed structure.max_planned")
+    # AN EDGE IS ONE DOORWAY HOWEVER MANY SIDES DECLARE IT (the fringe's
+    # own rule, `materialize_planned_fringe`), and the plan is where it is
+    # settled. The Charter Planner declared the Stair's steps from the
+    # Stair's side only (scratch play 2026-09-14, chat 7): the scene put the
+    # creature one room below the player and no edge led back down to it,
+    # so nothing it did could reach her, the aperture never held it, and
+    # the Director minted a "cliff" for the steps she could see. A planned
+    # room whose spec names a neighbour is that neighbour's neighbour too.
+    for uid, spec in list(normalized.items()):
+        for edge in spec.get("adjacent") or ():
+            other = str(edge.get("to") or "")
+            back = normalized.get(other)
+            if back is None or other == uid:
+                continue
+            if any(str(e.get("to")) == uid for e in back.get("adjacent") or ()):
+                continue
+            reciprocal = {"to": uid, **{k: v for k, v in edge.items()
+                                        if k in ("barrier", "distance") and v}}
+            # The way back down a way up: a vertical edge reverses; a
+            # bearing is the declaring side's and is not copied.
+            vertical = str(edge.get("vertical") or "")
+            if vertical in ("up", "down"):
+                reciprocal["vertical"] = "down" if vertical == "up" else "up"
+            back.setdefault("adjacent", []).append(reciprocal)
     # A PLAN DOES NOT RE-MINT A SPENT IDENTITY EITHER (review 2026-09-07,
     # Section I residual on B8/A55, rework). The registry's own rule is that a
     # projection revives a retired row only where the room's live existence
