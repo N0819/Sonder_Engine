@@ -1679,9 +1679,17 @@ def declare_charter_figures(ctx, interp, sc, figure_rows, decls, nonce):
         cid, presences, sc, names=names, frame_id=ctx.turn.frame_id)
     rooms = {str(r.get("name") or ""): str(r.get("room") or "")
              for r in figure_rows if isinstance(r, dict)}
+    creatures = {str(r.get("name") or "") for r in figure_rows
+                 if isinstance(r, dict) and r.get("creature")}
 
     def rank(name):
+        # Addressed first, then any creature in the aperture -- a thing that
+        # hunts is never the body the cap leaves unasked (the well's thing
+        # sorted behind three pot-girls, then behind the yard's own lads,
+        # scratch play 2026-09-14, chat 6 turns 5-6) -- then the player's
+        # own room, then names.
         return (0 if name.casefold() in addressed else 1,
+                0 if name in creatures else 1,
                 0 if rooms.get(name) == p_room else 1, name.casefold())
 
     refs_of = {str(r.get("name") or ""): (str(r.get("charter") or ""),
