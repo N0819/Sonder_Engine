@@ -1731,8 +1731,22 @@ def _bind_minted_entities_to_present_figures(sc, sd, figures, *,
                    if _bare_person_name(f.get("name")) in bare_labels
                    or any(_bare_person_name(a) in bare_labels
                           for a in (f.get("aliases") or ()))]
+        # THE BODY'S OWN KEY FIRST. A mint whose id IS a figure's body key
+        # (or its plan uid) is that figure whatever it was called: the
+        # opening Director, handed the present figures, minted
+        # `the_thing_in_blackwater_pound_0` under the name "The thing in
+        # Blackwater pound" while the body's display was
+        # "The_thing_in_blackwater_pound_0", so no name matched and the
+        # creature stood twice -- once in the registry, once as a scene
+        # entity that the commit then defaulted into the player's kitchen
+        # (scratch play 2026-09-14, chat 5 turns 0-1).
+        by_key = [f for f in name_pool if str(eid).casefold() in {
+            str(f.get("body") or "").casefold(),
+            str(f.get("plan") or "").casefold()} - {""}]
         chosen, how, ambiguous = None, "", False
-        if len(by_name) == 1:
+        if len(by_key) == 1:
+            chosen, how = by_key[0], "body"
+        elif len(by_name) == 1:
             chosen, how = by_name[0], "name"
         elif len(by_name) > 1:
             continue  # two bodies answer to the name; refuse to guess
@@ -1764,6 +1778,22 @@ def _bind_minted_entities_to_present_figures(sc, sd, figures, *,
             continue
         display = str(chosen.get("name") or "")
         if not display:
+            continue
+        if chosen.get("creature"):
+            # A CREATURE IS THE CHARTER'S TO STAND, NEVER THE SCENE'S. A
+            # bound person keeps its entity as the body's render; a creature
+            # bound the same way becomes a scene body the offscreen runtime
+            # can no longer move (`lay_charter_bodies` leaves a body the
+            # scene stands, and the placement routing skips it). The mint
+            # is dropped; its position and station stay in the diff and are
+            # routed to the registry at commit.
+            entities.pop(eid, None)
+            if minted in positions and str(eid) not in positions:
+                positions[str(eid)] = positions.pop(minted)
+            bindings.append({"entity_id": str(eid), "minted_name": minted,
+                             "bound_to": display, "room": room, "by": how,
+                             "ambiguous": ambiguous, "dropped": True,
+                             "plan": str(chosen.get("plan") or "")})
             continue
         ent["name"] = display
         aliases = [str(a) for a in (ent.get("aliases") or []) if str(a or "")]

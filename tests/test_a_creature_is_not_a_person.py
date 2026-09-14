@@ -144,3 +144,70 @@ class TestTheStrangerLabelIsNotAPerson:
             "The figure", "shifts its weight, eyes on the light.") == \
             "The figure shifts its weight, eyes on the light."
         assert _observable_predicate("The figure", "waits...").endswith("...")
+
+
+class TestACutLookEndsOnTheThingsNoun:
+    LOOK = ("long, black-slick and eel-jointed, with a flat head, no eyes to "
+            "speak of, and hands")
+
+    def test_the_head_noun_closes_a_cut_description(self):
+        from agents.common import _unknown_actor_label
+        label = _unknown_actor_label("Thing_0", self.LOOK, head_noun="shape")
+        assert label.startswith("the long") and label.endswith(" shape")
+
+    def test_a_noun_already_in_the_description_is_not_doubled(self):
+        from agents.common import _unknown_actor_label
+        assert _unknown_actor_label(
+            "Thing_0", "a pale shape in the reeds", head_noun="shape") \
+            == "the pale shape in the reeds"
+
+    def test_no_look_at_all_is_the_noun(self):
+        from agents.common import _unknown_actor_label
+        assert _unknown_actor_label("Thing_0", "", head_noun="shape") == "the shape"
+
+    def test_the_display_map_reads_the_noun_off_the_body(self):
+        from agents.composer import assign_stranger_labels
+        labels = assign_stranger_labels([
+            ("Thing_0", self.LOOK, [], "shape", None, "shape")])
+        assert labels["Thing_0"].endswith(" shape")
+
+
+class TestAMintOfAPresentCreatureIsDropped:
+    FIGURES = [
+        {"name": "The_thing_0", "role": "", "posts": [], "room": "pound",
+         "charter": "well", "body": "the_thing_0",
+         "creature": {"hunts": ["figure"]}},
+        {"name": "Innkeeper Tam", "role": "innkeeper", "posts": ["inn"],
+         "room": "pound", "charter": "inn", "body": "b1"},
+    ]
+
+    def _floor(self):
+        from agents.director import _bind_minted_entities_to_present_figures
+        return _bind_minted_entities_to_present_figures
+
+    def test_a_mint_under_the_bodys_own_key_is_that_body(self):
+        """Chat 5 turn 0: the opening Director minted the creature under its
+        body key with a name the display never matched, and the creature
+        stood twice."""
+        sd = {"entities": {"the_thing_0": {
+                  "name": "The thing in the pound", "kind": "figure",
+                  "description": "long and black-slick"}},
+              "positions": {"the_thing_0": "pound"}}
+        bound = self._floor()({"entities": {}}, sd, self.FIGURES)
+        assert bound == [{"entity_id": "the_thing_0",
+                          "minted_name": "The thing in the pound",
+                          "bound_to": "The_thing_0", "room": "pound",
+                          "by": "body", "ambiguous": False, "dropped": True,
+                          "plan": ""}]
+        assert sd["entities"] == {}
+        assert sd["positions"] == {"the_thing_0": "pound"}
+
+    def test_a_person_minted_under_its_key_binds_and_stays(self):
+        sd = {"entities": {"b1": {"name": "the innkeeper", "kind": "person",
+                                   "description": "a stout man"}},
+              "positions": {"b1": "pound"}}
+        bound = self._floor()({"entities": {}}, sd, self.FIGURES)
+        assert bound[0]["by"] == "body" and not bound[0].get("dropped")
+        assert sd["entities"]["b1"]["name"] == "Innkeeper Tam"
+        assert sd["entities"]["b1"]["charter_ref"] == {"charter": "inn",
+                                                        "body": "b1"}
