@@ -825,4 +825,63 @@ def scene_room_id(scene, target) -> str:
         return ""
     hits = [str(rid) for rid, rdef in rooms.items()
             if folded in room_spellings(rid, rdef)]
-    return hits[0] if len(hits) == 1 else ""
+    if len(hits) == 1:
+        return hits[0]
+    if hits:
+        return ""
+    # A ROOM ANSWERS TO ITS NAME'S WORDS. The whole-spelling fold above is
+    # exact, and a destination is written the way a person says it: "Cope's
+    # yard" for the room the scene keys `copes_boatyard` and names "Cope's
+    # Boatyard" (scratch play 2026-09-14, chat 5, turn 27 -- the compiler
+    # filed a need, the Director refused the walk as unplanned, commit
+    # minted an empty "Copes Yard" beside the real one, and the page had
+    # her walk into the inn instead). The words decide when the spelling
+    # does not: every word of the destination is a word of the room's name
+    # or the tail of one ("yard" of "boatyard"), and exactly one room
+    # answers. Two rooms answering is the same refusal as above.
+    want = room_name_words(target)
+    if not want:
+        return ""
+    matched = [str(rid) for rid, rdef in rooms.items()
+               if any(room_words_answer(want, room_name_words(form))
+                      for form in ((rdef or {}).get("name") if isinstance(rdef, dict) else None, rid))]
+    return matched[0] if len(matched) == 1 else ""
+
+
+#: Words a room's name carries that name nothing: the article, the
+#: conjunction, the preposition. Not a vocabulary of English -- the
+#: closed set of function words a place name is built around.
+_ROOM_NAME_FILLER = frozenset({"the", "a", "an", "of", "and"})
+
+
+def room_name_words(text) -> tuple:
+    """The content words of a room's spelling, folded, possessives joined.
+
+    "Cope's Boatyard", the id `copes_boatyard` and the id `cope_s_boatyard`
+    (what `normalize_room_id` makes of the name) all come back as
+    ("copes", "boatyard"): an apostrophe is dropped before the split, and a
+    lone "s" the split leaves behind is joined to the word before it.
+    """
+    raw = re.sub(r"[\u2019']", "", str(text or "").casefold())
+    words = []
+    for word in re.split(r"[^a-z0-9]+", raw):
+        if not word:
+            continue
+        if word == "s" and words:
+            words[-1] += "s"
+            continue
+        if word in _ROOM_NAME_FILLER:
+            continue
+        words.append(word)
+    return tuple(words)
+
+
+def room_words_answer(want, held) -> bool:
+    """Every wanted word is a word of the held name or the tail of one."""
+    if not want or not held:
+        return False
+    for word in want:
+        if not any(h == word or (len(word) >= 3 and h.endswith(word))
+                   for h in held):
+            return False
+    return True

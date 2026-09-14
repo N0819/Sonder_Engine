@@ -74,7 +74,7 @@ class TestOneDecayerPerStore:
         `NEWS_DECAY_PER_HOUR` was not the news decay rate. An authored rate
         that does not mean what it says fails silently."""
         from world.charter import decay_minds, decay_news
-        from world.charter_news import NEWS_DECAY_PER_HOUR
+        from world.charter_news import news_decay_rate
 
         key = "news:upkeep_out_of_band:u1@1.0000"
         minds = {"a": {key: {"kind": "news", "body": key,
@@ -86,8 +86,11 @@ class TestOneDecayerPerStore:
         minds = decay_minds(minds, 10.0)
         minds = decay_news(minds, 10.0, {key})
 
+        # The rate is the claim's own kind's (`news_decay_rate`, the owner's
+        # 2026-09-14 ruling that news fades by what it is); the property
+        # here is that it fades at THAT rate and no other.
         assert abs(minds["a"][key]["strength"]
-                   - (1.0 - NEWS_DECAY_PER_HOUR * 10.0)) < 1e-9
+                   - (1.0 - news_decay_rate(minds["a"][key]) * 10.0)) < 1e-9
 
 
 class TestTheRegisterHoldsPeople:
@@ -430,10 +433,13 @@ class TestVolitionReadsHistory:
 
         assert offers(bodies, minds, {}, practices, {}, {}, 24.0)["a"]
 
-        decay_news(minds, 1_000.0, set(minds["a"]))
+        # A grievance is kept for months now (owner's ruling 2026-09-14,
+        # `NEWS_DECAY_GRIEVANCE_PER_HOUR`), so the lapse is measured over a
+        # year rather than six weeks; the property is unchanged.
+        decay_news(minds, 24.0 * 365, set(minds["a"]))
 
         assert not offers(bodies, minds, {}, practices, {}, {},
-                          1_024.0).get("a")
+                          24.0 * 365 + 24.0).get("a")
 
     def test_recognising_a_promise_is_not_being_party_to_one(self):
         """`charter_commitment`'s docstring: each record "names who inside

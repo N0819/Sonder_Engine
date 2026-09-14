@@ -99,9 +99,55 @@ CHECKABLE = {
 #: What a fresh witnessing is worth. Full: you saw it.
 WITNESS_STRENGTH = 1.0
 
-#: News fades faster than a face. You forget that the road was out before you
-#: forget the man who told you.
-NEWS_DECAY_PER_HOUR = 0.014
+#: HOW NEWS FADES, BY WHAT IT IS. The owner's ruling (2026-09-14): some
+#: things never fade, and the basic things that do should fade much more
+#: slowly than they did. One rate, 0.014 an hour, had a firsthand claim
+#: gone in 66 hours and a told one in 30 -- word said in the taproom at
+#: dusk was out of every head by the next evening, and "the low water took
+#: Ivo Corrie" faded like "the road is out". The kinds are the closed set
+#: this module witnesses (`WITNESSABLE`, `CHECKABLE`) plus what the evidence
+#: pass files (`figure_speech`, `figure_action`, `consequence`) and what the
+#: creatures leave (`sighting`), so this is a schema and not a word list.
+#:
+#: ``NEWS_NEVER_FADES``: a body found, a sighting of what hunts, an
+#: incident, a mobilisation -- what a village keeps for years.
+#: ``NEWS_DECAY_GRIEVANCE_PER_HOUR``: harm done to somebody, an accusation,
+#: a promise broken -- remembered for months, and a body's reason to round
+#: on the offender cools with it (`charter_practice` reads the claim as the
+#: grievance, so a claim that never faded would be a quarrel that never
+#: ended). ``NEWS_DECAY_BASIC_PER_HOUR``: the road, the stock, an upkeep --
+#: a state of the world that changes back; about six days firsthand.
+#: Everything else, what somebody said or did or traded, fades at
+#: ``NEWS_DECAY_PER_HOUR``: about nineteen days firsthand, nine told. All
+#: four are the owner's numbers.
+NEWS_DECAY_PER_HOUR = 0.002
+NEWS_DECAY_BASIC_PER_HOUR = 0.006
+NEWS_DECAY_GRIEVANCE_PER_HOUR = 0.0005
+NEWS_NEVER_FADES = frozenset({
+    "body_recovered", "incident", "sighting", "mobilisation_called",
+})
+NEWS_GRIEVANCE_KINDS = frozenset({
+    "harm_done", "accusation", "commitment_defaulted",
+    "commitment_repudiated", "commitment_disputed",
+})
+NEWS_DECAY_BASIC_KINDS = frozenset({
+    "stock_empty", "stock_low", "stock_restored", "stock_surplus",
+    "stock_taken", "upkeep_out_of_band", "upkeep_restored", "body_unable",
+    "post_filled_again", "mobilisation_lapsed",
+})
+
+
+def news_decay_rate(claim) -> float:
+    """What one news claim loses an hour, by its event kind: 0.0 for a kind
+    that never fades."""
+    kind = str((claim or {}).get("event_kind") or "")
+    if kind in NEWS_NEVER_FADES:
+        return 0.0
+    if kind in NEWS_GRIEVANCE_KINDS:
+        return NEWS_DECAY_GRIEVANCE_PER_HOUR
+    if kind in NEWS_DECAY_BASIC_KINDS:
+        return NEWS_DECAY_BASIC_PER_HOUR
+    return NEWS_DECAY_PER_HOUR
 
 FIRSTHAND_PROVENANCE = frozenset({
     "witnessed_surface", "charter_witness", "witnessed_speech",
@@ -465,13 +511,15 @@ def decay_news(minds, hours, keys=None):
     hours = max(0.0, float(hours))
     if keys is not None and not keys:
         return minds
-    loss = NEWS_DECAY_PER_HOUR * hours
     for holder, claims in (minds or {}).items():
         held = ([s for s in keys if s in claims] if keys is not None
                 else [s for s, c in claims.items() if c.get("kind") == "news"])
         for subject in held:
             claim = claims[subject]
-            strength = float(claim.get("strength") or 0.0) - loss
+            rate = news_decay_rate(claim)
+            if rate <= 0.0:
+                continue            # kept for as long as the head is
+            strength = float(claim.get("strength") or 0.0) - rate * hours
             if strength < PERSONAL_FLOOR:
                 del claims[subject]
             else:

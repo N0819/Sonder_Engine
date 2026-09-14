@@ -374,7 +374,13 @@ class TestTheMeasuredInstitution:
 
         assert set(_labels(year)) == {"familiar"}
         assert year["ties"] == {}
-        assert len(year["judgments"]) <= 8
+        # Re-measured 2026-09-14 when news stopped fading in a day
+        # (`charter_news.news_decay_rate`: aid given is ordinary news and
+        # now lives ~19 days firsthand instead of ~3): the same year holds
+        # 24 judgment holders, still every one of them `familiar` and not
+        # one signed tie. The evidence layer got stronger exactly as the
+        # docstring anticipated; the labels did not move.
+        assert len(year["judgments"]) <= 24
 
     def test_a_famine_is_what_it_takes_to_earn_a_signed_label(self):
         """And the other half of the same honesty: with `RESEARCH.md` §1.7.6

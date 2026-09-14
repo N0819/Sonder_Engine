@@ -17,7 +17,7 @@ import threading
 
 from world.charter_model import integer as _integer
 from world.regions import normalize_region_id
-from world.spatial import normalize_room_id
+from world.spatial import normalize_room_id, room_name_words, room_words_answer
 
 
 STRUCTURES_KEY = "structures"
@@ -1060,9 +1060,22 @@ def planned_context(cid, query):
         keys.discard("")
         exact = folded in keys
         if not exact and not any(key in folded for key in keys):
-            continue
+            # THE THIRD TIER IS THE NAME'S WORDS (`spatial.room_name_words`,
+            # the same fold `scene_room_id` makes for a live room): a
+            # destination written the way a person says it -- "Cope's
+            # yard" for the plan's "Cope's Boatyard" -- has every word in
+            # the room's name or the tail of one. Ranked below both tiers
+            # above and unique or refused, like them.
+            wanted = room_name_words(query)
+            if not wanted or not any(
+                    room_words_answer(wanted, room_name_words(form))
+                    for form in (name, uid, *keys)):
+                continue
+            tier = 2
+        else:
+            tier = 0 if exact else 1
         rows.append({
-            "_exact": exact,
+            "_tier": tier,
             "room_uid": uid, "name": name,
             "purpose": str(spec.get("purpose") or ""),
             "structure": str(spec.get("structure") or ""),
@@ -1091,14 +1104,14 @@ def planned_context(cid, query):
     # query really is two candidates. Two EXACT hits stay refused too: one
     # room's uid equalling another's name is a genuine collision this cannot
     # break by guessing.
-    exact = [r for r in rows if r.pop("_exact")]
-    for row in rows:
-        row.pop("_exact", None)
-    if len(exact) == 1:
-        return exact[0]
-    if exact:
-        return None
-    return rows[0] if len(rows) == 1 else None
+    for tier in (0, 1, 2):
+        hits = [r for r in rows if r.get("_tier") == tier]
+        if not hits:
+            continue
+        for row in rows:
+            row.pop("_tier", None)
+        return hits[0] if len(hits) == 1 else None
+    return None
 
 
 def prepare_frontier_expansion(cid, scene):
