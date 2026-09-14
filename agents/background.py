@@ -555,6 +555,12 @@ def _background_react(ctx, nonce):
     _voiced = {str(r.get("name") or "").casefold()
                for r in ((manager or {}).get("reactions") or [])}
     names = [n for n in names if str(n).casefold() not in _voiced]
+    # A body that DECLARED before resolve (`declare_charter_figures`) has had
+    # its voice this beat; the Director resolved it. It is not a bystander.
+    _declared = {str(d.get("name") or "").casefold()
+                 for d in (dr.get("charter_declarations") or [])
+                 if isinstance(d, dict)}
+    names = [n for n in names if str(n).casefold() not in _declared]
     # Addressees exceeding the ceiling means the address was to a crowd, and
     # the legible degradation is to answer as one (§C3) -- through the
     # derived crowd from Part B, never by silently dropping an addressee.
@@ -1572,6 +1578,189 @@ def _presence_label_fn(ctx, *presence_names):
     return label
 
 
+#: How many onscreen charter bodies get a voice call in one beat. The same
+#: hard ceiling as the reactor's `max_reactors`; addressed bodies first,
+#: then the player's own room, then the rest of the aperture. An owner
+#: number, not a law.
+CHARTER_VOICES_PER_BEAT = 3
+
+
+def _provisional_beat(ctx, interp, decls, p_name):
+    """The declared beat, in the shape `_react_one` reads a RESOLVED beat.
+
+    Before resolve there is no `resolved_event`; what the world holds is what
+    the player and the cast declared. `_beat_for_presence` prefers the
+    audible dialogue at the presence's room and falls back to the prose
+    only for a presence standing in the beat's room, so the prose here is
+    the observables, each led by its actor's name (the label function
+    rewrites names the presence may not use)."""
+    dialogue, observables = [], []
+    rows = interp.get("ledgers") or interp.get("causal_ledger") or []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if "speech" in (row.get("categories") or []) and row.get("event"):
+            targets = [str(t) for t in (row.get("targets") or [])
+                       if isinstance(t, str)]
+            dialogue.append({
+                "speaker": p_name,
+                "exact_quote": '"%s"' % str(row["event"]).strip().strip('"'),
+                "volume": row.get("volume") or "normal", "tone": "",
+                "visibility": row.get("visibility") or "overt",
+                "conceal_from": list(row.get("conceal_from") or []),
+                "intended_target": next(
+                    (t for t in targets
+                     if t != p_name and ":" not in t), None),
+            })
+        elif row.get("observable"):
+            observables.append("%s %s" % (p_name, str(row["observable"])))
+    for d in decls or ():
+        name = str((d or {}).get("name") or "").strip()
+        for e in (d or {}).get("sequence") or ():
+            if not isinstance(e, dict):
+                continue
+            if e.get("type") == "speech" and e.get("text"):
+                targets = [str(t) for t in (e.get("targets") or [])]
+                dialogue.append({
+                    "speaker": name,
+                    "exact_quote": '"%s"' % str(e["text"]).strip().strip('"'),
+                    "volume": e.get("volume") or "normal",
+                    "tone": e.get("tone") or "",
+                    "visibility": e.get("visibility") or "overt",
+                    "conceal_from": list(e.get("conceal_from") or []),
+                    "intended_target": targets[0] if targets else None,
+                })
+            elif e.get("type") == "action" and (
+                    e.get("observable") or e.get("attempt")):
+                observables.append("%s %s" % (
+                    name, e.get("observable") or e.get("attempt")))
+    flow = interp.get("flow") if isinstance(interp.get("flow"), dict) else {}
+    return {"resolved_event": " ".join(observables).strip(),
+            "dialogue_log": dialogue, "public_evidence": [],
+            "state_diff": {}, "flow": flow, "routed_to_background": []}
+
+
+def declare_charter_figures(ctx, interp, sc, figure_rows, decls, nonce):
+    """One voice call per onscreen charter body, BEFORE the causal author.
+
+    The owner's rule (2026-09-14): off screen a charter body is pure code;
+    on screen it is played by a model, and the Director resolves what it did.
+    The voice is the reactor's own (`_react_one`, with the presence view --
+    for a creature, its creature block -- as its whole sheet), fed the
+    DECLARED beat instead of a resolved one, and its answer comes back as a
+    declaration in the character shape: a sequence of speech and action
+    elements carrying phase ids, so the hands can write the body's outcome
+    and the perception stream can carry it. ``sc`` is the resolve scene with
+    the figures already laid (`common.lay_charter_figures`). Returns the
+    declarations; a silent body returns nothing, and the post-resolve
+    reactor, which skips every body voiced here, may still give it a
+    bystander's line.
+    """
+    from agents.common import assign_event_ids
+    names = [str(r.get("name") or "").strip() for r in (figure_rows or ())
+             if str((r or {}).get("name") or "").strip()]
+    if not names:
+        return []
+    cid = ctx.chat.id
+    p_name = persona_name(persona_of(ctx.chat))
+    beat = _provisional_beat(ctx, interp, decls, p_name)
+    addressed = {str(d.get("intended_target") or "").casefold()
+                 for d in beat["dialogue_log"] if d.get("intended_target")}
+    addressed |= {str(r).strip().casefold()
+                  for r in (beat["flow"].get("addressed_to_refs") or [])
+                  if isinstance(r, str) and not r.strip().isdigit()}
+    p_room = _player_room(ctx, sc)
+    roster = {n.casefold() for n in _registered_name_roster(ctx.chat, ctx.cast)}
+    roster |= {(e.get("name") or "").casefold()
+               for e in (ctx.extra_players or [])}
+    presences = _fold_duplicate_presences(
+        wget(cid, "background_presences", {}) or {}, sc)
+    presences = with_charter_presences(
+        cid, presences, sc, names=names, frame_id=ctx.turn.frame_id)
+    rooms = {str(r.get("name") or ""): str(r.get("room") or "")
+             for r in figure_rows if isinstance(r, dict)}
+
+    def rank(name):
+        return (0 if name.casefold() in addressed else 1,
+                0 if rooms.get(name) == p_room else 1, name.casefold())
+
+    out = []
+    for index, name in enumerate(
+            sorted(names, key=rank)[:CHARTER_VOICES_PER_BEAT]):
+        rec = presence_record_for(presences, name, sc)[1] or {}
+        present_others = _present_others(
+            ctx, sc, presence_room(sc, name, rec),
+            _presence_recognizes(ctx, name))
+        entry = _react_one(ctx, beat, name, present_others, roster, sc, rec,
+                           nonce, player_addressed=name.casefold() in addressed)
+        if not entry:
+            continue
+        sequence = []
+        if entry.get("action"):
+            sequence.append({
+                "type": "action", "attempt": entry["action"],
+                "observable": entry["action"], "visibility": "overt",
+                "conceal_from": [], "targets": [], "commitment": "asserted"})
+        line = entry.get("dialogue_log_entry") or {}
+        if line.get("exact_quote"):
+            target = str(line.get("intended_target") or "").strip()
+            sequence.append({
+                "type": "speech",
+                "text": _quote_body(str(line["exact_quote"])),
+                "volume": line.get("volume") or "normal",
+                "tone": line.get("tone") or "",
+                "visibility": line.get("visibility") or "overt",
+                "conceal_from": list(line.get("conceal_from") or []),
+                "targets": [target] if target else []})
+        if not sequence:
+            continue
+        out.append({**entry, "char_id": None, "is_figure": True,
+                    "sequence": assign_event_ids(
+                        sequence, f"turn:{ctx.turn.id}:figure:{index}"),
+                    "sensory_events": _creature_noise(
+                        cid, rec, entry, frame_id=ctx.turn.frame_id)})
+    return out
+
+
+def _creature_noise(cid, rec, entry, *, frame_id=None):
+    """The sound a creature's declared act makes, from its own voice table.
+
+    The model chose the act and named its activity; how loud that activity
+    is, and what it sounds like, is the charter's (`creature.voice`, the
+    same rungs the offscreen `charter_noises` channel speaks). "The
+    creature announces itself before it is seen, and that is most of what
+    dread is" -- and on the first onscreen beats (scratch play 2026-09-14,
+    chat 4 turns 16-17) a thing that dragged itself toward the player in
+    the dark made no sound at all, because nothing turned its act into a
+    `sensory_events` row. One row, in the row's own shape; nothing for a
+    person, for an activity the voice table lacks, or for a body placed
+    nowhere."""
+    activity = str((entry or {}).get("activity") or "").strip().casefold()
+    room = str((entry or {}).get("room") or "").strip()
+    refs = [r for r in ((rec or {}).get("charter_refs") or ())
+            if isinstance(r, dict) and r.get("charter")]
+    if not activity or not room or not refs:
+        return []
+    try:
+        from world.charter_creature import normalize_creature
+        from world.charter_runtime import registry_for
+        registry = registry_for(cid, frame_id) or {}
+        state = ((registry.get("items") or {}).get(
+            str(refs[0]["charter"])) or {}).get("state") or {}
+        creature = normalize_creature(state.get("creature"))
+    except Exception:
+        return []
+    if not creature:
+        return []
+    voice = (creature.get("voice") or {}).get(activity)
+    if not isinstance(voice, dict) or not voice.get("level"):
+        return []
+    return [{"kind": "sound", "room": room,
+             "level": str(voice["level"]),
+             "source": str((entry or {}).get("name") or ""),
+             "detail": str(voice.get("sound") or "").strip()}]
+
+
 def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce,
                player_addressed=False):
     """One presence's single reactive beat, or None if it stays silent.
@@ -1755,4 +1944,5 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce,
             "action": action, "room": here or "",
             "heard_address": addressed_by,
             "charter_act": out.get("charter_act"),
-            "charter_offers": charter_offers}
+            "charter_offers": charter_offers,
+            "activity": str(out.get("activity") or "").strip().casefold()}

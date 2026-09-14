@@ -3934,6 +3934,54 @@ def apply_figure_acts(state, plans, charter_key):
     return state, records
 
 
+def _scene_placing_charter_actors(registry, scene, rows):
+    """A COPY of ``scene`` that stands each evidence ACTOR the scene cannot
+    place, where that actor is one of the registry's own unbound bodies, at
+    the body's registry place under the name the evidence uses.
+
+    Reception is a spatial question, and an actor with no room reaches
+    nobody. Since 2026-09-14 a charter body in the player's aperture is
+    voiced BEFORE resolve (`agents.background.declare_charter_figures`) and
+    its act rides `public_evidence` under its own display name -- a name
+    the committed scene never holds, because a charter body is a placement
+    and not a position. Measured the first beat it ran (scratch play,
+    chat 4 turn 16): "the scene places 'Creature_in_the_well_0' nowhere".
+    Only the named actors are laid, so nothing else about reception moves.
+    """
+    from world.spatial import room_of
+    wanted = {str(r.get("actor") or "").strip() for r in (rows or ())
+              if isinstance(r, dict) and str(r.get("actor") or "").strip()}
+    missing = {a for a in wanted if not room_of(scene or {}, a)}
+    if not missing:
+        return scene
+    positions = dict((scene or {}).get("positions") or {})
+    index = identity_index(registry)
+    laid = False
+    for charter_key, item in sorted((registry.get("items") or {}).items()):
+        state = item["state"]
+        bindings = state.get("bindings") or {}
+        names = index.display(charter_key) or {}
+        for body_key, body in sorted((state.get("bodies") or {}).items()):
+            if body_key in bindings:
+                continue
+            # Every spelling the body answers to: a creature charter has no
+            # naming law, so its display is the capitalised key and the
+            # index has no entry for it.
+            forms = {str(f).casefold() for f in (
+                body_key, body.get("name"), names.get(body_key)) if f}
+            place = str(body.get("place") or "")
+            for actor in sorted(missing):
+                if (actor.casefold() in forms and place
+                        and actor not in positions):
+                    positions[actor] = place
+                    laid = True
+    if not laid:
+        return scene
+    out = dict(scene or {})
+    out["positions"] = positions
+    return out
+
+
 def ingest_public_evidence(cid, evidence_rows, scene, *, turn_id,
                            frame_id=None, labels=None, inventory_ops=None,
                            figures=None):
@@ -3962,6 +4010,7 @@ def ingest_public_evidence(cid, evidence_rows, scene, *, turn_id,
 
     rows = [row for row in (evidence_rows or ()) if isinstance(row, dict)]
     shared = registry_for(cid, frame_id)
+    scene = _scene_placing_charter_actors(shared, scene or {}, rows)
     plans = plan_figure_acts(shared, rows, inventory_ops, scene, figures) \
         if figures else []
     if not rows and not plans:

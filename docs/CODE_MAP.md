@@ -7,12 +7,12 @@
 | Module | Lines | Purpose | Local dependencies |
 |---|---:|---|---|
 | `agents/__init__.py` | 100 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
-| `agents/background.py` | 1758 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
+| `agents/background.py` | 1948 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
 | `agents/character.py` | 4580 | Private character decision agent. | `agents.character_kernel`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/character_kernel.py` | 468 |  | — |
-| `agents/common.py` | 10855 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
+| `agents/common.py` | 10902 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 4946 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
-| `agents/director.py` | 6410 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.paradox`, `world.spatial`, `world.survival` |
+| `agents/director.py` | 6458 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 477 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 3435 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
 | `agents/director_fanout.py` | 1466 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
@@ -27,7 +27,7 @@
 | `agents/loops.py` | 1400 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/mapping.py` | 649 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `mind.memory`, `story.scene`, `world.spatial` |
 | `agents/narration.py` | 2621 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
-| `agents/perception.py` | 6367 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
+| `agents/perception.py` | 6376 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
 | `agents/runtime.py` | 1673 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 103 | Step and active-variant persistence helpers. | `core.db`, `persist.steps` |
 | `agents/story_planner.py` | 1327 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
@@ -49,7 +49,7 @@
 | `llm/prompts.py` | 545 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 4337 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
-| `llm/schemas.py` | 6848 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `llm/schemas.py` | 6857 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2434 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 398 |  | — |
@@ -77,7 +77,7 @@
 | `persist/checkpoints.py` | 1579 | Whole-chat snapshots and checkpoint restore orchestration. | `core.db`, `mind.memory` |
 | `persist/commit.py` | 817 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
 | `persist/commit_attire.py` | 1694 | The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff. | `persist.commit_common`, `story`, `story.attire`, `world.spatial` |
-| `persist/commit_background.py` | 4586 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial`, `world.survival` |
+| `persist/commit_background.py` | 4608 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial`, `world.survival` |
 | `persist/commit_common.py` | 713 | Leaf helpers shared across commit domains: scalar utilities, name/address roster, entity-id canonicalisation. | `core.db`, `mind.memory`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `persist/commit_destruction.py` | 414 | Single- and multi-book destruction cascades, retirement, and latency-gated news. | `core.db`, `mind.memory`, `persist.commit_common`, `world.mechanics`, `world.spatial`, `world.spatial_frames` |
 | `persist/commit_entities.py` | 568 | world_entities projection of the scene commit, awareness gate, disguise supersession. | `core.db`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
@@ -164,7 +164,7 @@
 | `world/charter_promote.py` | 612 |  | `world.charter_commitment`, `world.charter_feel`, `world.charter_politics`, `world.charter_social` |
 | `world/charter_roster.py` | 134 |  | `world.charter_model` |
 | `world/charter_run.py` | 1528 |  | `world`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_enrol`, `world.charter_feel`, `world.charter_figure`, `world.charter_harm`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
-| `world/charter_runtime.py` | 4911 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics`, `world.spatial` |
+| `world/charter_runtime.py` | 4960 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics`, `world.spatial` |
 | `world/charter_social.py` | 865 |  | `world.charter_politics` |
 | `world/charter_space.py` | 213 |  | `world.spatial` |
 | `world/charter_surface.py` | 364 |  | — |
@@ -222,14 +222,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_react_one()` | 1575 | 184 lines |
-| `_background_react()` | 446 | 176 lines |
-| `scene_life()` | 1055 | 157 lines |
-| `_demanded_presences()` | 848 | 138 lines |
+| `_react_one()` | 1764 | 185 lines |
+| `_background_react()` | 446 | 182 lines |
+| `scene_life()` | 1061 | 157 lines |
+| `_demanded_presences()` | 854 | 138 lines |
 | `_beat_for_presence()` | 192 | 84 lines |
-| `_present_others()` | 1448 | 82 lines |
-| `managed_presences()` | 703 | 78 lines |
-| `_filtered_player_declaration()` | 113 | 77 lines |
+| `_present_others()` | 1454 | 82 lines |
+| `declare_charter_figures()` | 1643 | 80 lines |
+| `managed_presences()` | 709 | 78 lines |
 
 ### `agents/character.py`
 
@@ -261,14 +261,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `norm_sequence()` | 4093 | 289 lines |
-| `_check_narrator_fidelity()` | 10151 | 247 lines |
+| `norm_sequence()` | 4140 | 289 lines |
+| `_check_narrator_fidelity()` | 10198 | 247 lines |
 | `presence_figures_for_room()` | 2128 | 222 lines |
-| `_unknown_actor_label()` | 4929 | 164 lines |
-| `_scrub_invented_dialogue()` | 8664 | 151 lines |
+| `_unknown_actor_label()` | 4976 | 164 lines |
+| `_scrub_invented_dialogue()` | 8711 | 151 lines |
 | `observer_body_regions()` | 1659 | 140 lines |
-| `_check_quote_attribution()` | 9714 | 139 lines |
-| `_scrub_unknown_identities()` | 5318 | 133 lines |
+| `_check_quote_attribution()` | 9761 | 139 lines |
+| `_scrub_unknown_identities()` | 5365 | 133 lines |
 
 ### `agents/composer.py`
 
@@ -287,7 +287,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 4073 | 2304 lines |
+| `director_resolve()` | 4102 | 2323 lines |
 | `director_interpret()` | 1161 | 862 lines |
 | `_reconcile_resolution()` | 2446 | 558 lines |
 | `_run_specialists()` | 3215 | 432 lines |
@@ -472,14 +472,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_composer_outcome_views()` | 5572 | 796 lines |
-| `_composer_standing_percepts()` | 4452 | 284 lines |
-| `perception_outcome()` | 2994 | 268 lines |
-| `_composer_act_views()` | 5065 | 251 lines |
-| `perception_act()` | 2533 | 214 lines |
-| `_outcome_event_stream()` | 694 | 168 lines |
-| `_source_channels()` | 1217 | 142 lines |
-| `_scent_sources_for()` | 4151 | 130 lines |
+| `_composer_outcome_views()` | 5581 | 796 lines |
+| `_composer_standing_percepts()` | 4461 | 284 lines |
+| `perception_outcome()` | 3003 | 268 lines |
+| `_composer_act_views()` | 5074 | 251 lines |
+| `perception_act()` | 2542 | 214 lines |
+| `_outcome_event_stream()` | 694 | 177 lines |
+| `_source_channels()` | 1226 | 142 lines |
+| `_scent_sources_for()` | 4160 | 130 lines |
 
 ### `agents/runtime.py`
 
@@ -685,12 +685,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `semantic_output_errors()` | 6022 | 506 lines |
-| `preprocess_llm_output()` | 5107 | 336 lines |
+| `semantic_output_errors()` | 6031 | 506 lines |
+| `preprocess_llm_output()` | 5116 | 336 lines |
 | `_lenient_coerce()` | 817 | 159 lines |
-| `validate_llm_output_strict()` | 6710 | 139 lines |
-| `canonicalize_prose_markup()` | 4912 | 102 lines |
-| `_uncross_concealed_speech()` | 5036 | 69 lines |
+| `validate_llm_output_strict()` | 6719 | 139 lines |
+| `canonicalize_prose_markup()` | 4921 | 102 lines |
+| `_uncross_concealed_speech()` | 5045 | 69 lines |
 | `_coerce_station_table()` | 85 | 67 lines |
 | `_coerce_list_valued_map()` | 154 | 57 lines |
 
@@ -988,14 +988,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `track_background_presences()` | 1647 | 792 lines |
-| `pick_voice_demand()` | 3244 | 421 lines |
-| `promote_background_character()` | 3811 | 393 lines |
+| `track_background_presences()` | 1669 | 792 lines |
+| `pick_voice_demand()` | 3266 | 421 lines |
+| `promote_background_character()` | 3833 | 393 lines |
 | `_fold_duplicate_presences()` | 750 | 143 lines |
-| `schedule_auto_promotion()` | 4464 | 123 lines |
-| `descriptor_bindings()` | 2869 | 118 lines |
-| `select_auto_promotion()` | 4243 | 92 lines |
-| `addressed_rooms()` | 3155 | 87 lines |
+| `schedule_auto_promotion()` | 4486 | 123 lines |
+| `descriptor_bindings()` | 2891 | 118 lines |
+| `select_auto_promotion()` | 4265 | 92 lines |
+| `addressed_rooms()` | 3177 | 87 lines |
 
 ### `persist/commit_common.py`
 
@@ -2013,7 +2013,7 @@
 | `_plan_lived_location()` | 1798 | 181 lines |
 | `_prepare_cast_histories()` | 1034 | 172 lines |
 | `_generate_lived_location()` | 2039 | 154 lines |
-| `presence_view()` | 4151 | 153 lines |
+| `presence_view()` | 4200 | 153 lines |
 | `hearing_for_creatures()` | 2864 | 112 lines |
 | `schedule_charter_ticks()` | 3227 | 107 lines |
 

@@ -1442,6 +1442,28 @@ def _valid_pending_reply(record, turn_idx):
     return pr
 
 
+def beat_reactions(ctx):
+    """Every background-authored beat this turn, in the reactor's shape: the
+    post-resolve reactions plus the onscreen charter bodies' declarations
+    made before resolve (`director_resolve.charter_declarations`), which
+    carry the same fields -- name, dialogue_log_entry, action, room,
+    charter_act, charter_offers -- so one reader files conduct, lands
+    charter acts and appends the recent tail for both."""
+    br = ctx.get("background_react") or {}
+    br = dict(br) if isinstance(br, dict) else {}
+    reactions = [r for r in (br.get("reactions") or []) if isinstance(r, dict)]
+    if not reactions and (br.get("dialogue_log_entry") or br.get("action")):
+        reactions = [dict(br)]
+    figures = [d for d in ((ctx.get("director_resolve") or {})
+                           .get("charter_declarations") or [])
+               if isinstance(d, dict)
+               and (d.get("dialogue_log_entry") or d.get("action"))]
+    if figures:
+        br["reactions"] = reactions + figures
+        br.setdefault("fired", True)
+    return br
+
+
 def _background_fired_reactions(br):
     """Normalize a background_react result into a list of fired reaction dicts
     ({name, dialogue_log_entry, action}) -- tolerating both the ensemble
@@ -1928,7 +1950,7 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     # continuous, rather than being invisible to bookkeeping (it is otherwise
     # merged only for rendering, in agents/perception.py). Each speaker was
     # force-set to its gate-picked name in background_react.
-    br = ctx.get("background_react") or {}
+    br = beat_reactions(ctx)
     for _r in _background_fired_reactions(br):
         br_raw = str((_r.get("dialogue_log_entry") or {}).get("speaker") or "").strip()
         br_name = entity_id_to_name.get(br_raw, br_raw)
