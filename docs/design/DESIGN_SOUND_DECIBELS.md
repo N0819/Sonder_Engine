@@ -7,6 +7,9 @@ Written after the owner asked for "a db system so that incredibly loud noises
 can travel very far". §§ 2-4 are built as written except where § 5a says
 otherwise; every constant is marked built or still proposed in § 5, and what
 was registered rather than taken is in `docs/UNBUILT.md` § 1.125.
+**Recalibrated 2026-09-14** (§ 5c): the emission ladders are real sound
+pressure levels at one pace and the fragment margin a real one; what that
+left mixed is `docs/UNBUILT.md` § 1.159.
 
 ## 1. What was true before, measured in the source
 
@@ -273,6 +276,66 @@ which is `AMBIENT["enclosed"]` and did not move — so a `catastrophic` event
 still reaches exactly 51 medium rooms of open doorways and no further. What
 changed is what an open room can HEAR of it: audible in 43 → 48 of those
 rooms in fair weather, 37 → 43 in light rain.
+
+### 5c. The ladders re-authored as real levels (2026-09-14)
+
+**The § 5 table above is the 2026-09-05 state and is kept as the record of
+it.** Every emission rung was on a compressed scale (§ 5a measured the
+factor at 0.358), which meant a standing source and a voice could not be
+told apart by level: `audible` held a normal voice's own power, `loud` a
+loud voice's. Played 2026-09-14 (two fresh stories, 22 turns): a hearth
+fire authored `audible` masked a line spoken AT the hearth from five paces
+(signal 0.08 against noise 1.83, `none`, "she offered no reply" four beats
+running); a launch engine authored `loud` refused a raised line one pace off
+from every cell of a 4x3 deck; a whisper at arm's reach beside that engine
+had no rung under conversation but the one the fire also sat on. The
+2026-09-14 repair first lowered `audible` 12 → 4 and added
+`WITHIN_REACH_SIGNAL_GAIN`; the recalibration replaces the first of those
+and keeps the second (it handles the pair the field could not place).
+
+**Now authored in dB at ONE PACE, powers derived** (`SPEECH_ONE_PACE_DB`,
+`SOUND_ONE_PACE_DB`, `one_pace_power`; `DB_REF` 40 is now only the
+power↔level conversion constant and has no calibration role):
+
+| | at one pace, dB(A) | at the cell | real-world basis |
+|---|---|---|---|
+| mutter | **38** | 41.0 | under the breath, 35-45; under 39.4 so an aside dies across a large room's width in a still room, which four tests of measured halls hold |
+| whisper | **35** | 38.0 | 30-35; the upper figure, since the engine's whisper is speech made for a listener |
+| normal | **60** | 63.0 | conversational speech at a metre |
+| loud | **70** | 73.0 | a raised voice, 65-75 |
+| shout | **82** | 85.0 | shouting, 80-88 |
+| faint | **40** | 43.0 | a clock, a dripping tap |
+| audible | **50** | 53.0 | a hearth fire, a kettle, a refrigerator |
+| loud | **80** | 83.0 | an engine at idle, a mill, a workshop; the low end of 80-85 |
+| deafening | **100** | 103.0 | a klaxon, a siren, a jackhammer |
+| thunderous | **120** | 123.0 | thunder overhead, an artillery piece some way off (was 85) |
+| catastrophic | **140** | 143.0 | an explosion, a structure coming down (was 100) |
+| `FRAGMENT_SNR` | **1/16, -12.04 dB** | | speech reception: half the sentences at -5 to -8 dB SNR in steady noise, a few words by -12; was 0.8, -0.97 dB, which refused a raised line beside a real engine from every cell of the deck |
+| `FULL_SNR`, `HEAR_FLOOR`, `AMBIENT`, `WEATHER_NOISE`, `APERTURE_PASS`, `WALL_LOSS_DB`, `FLOOR_CEILING_LOSS_DB`, `FAR_FIELD_ENTRY_DB`, the impact ladder's four lower rungs | unmoved | | |
+
+**The top two rungs moved although the brief said keep them, and it was
+forced.** They were declared as "23 and 38 dB over `deafening`" on a ladder
+whose `deafening` was 61.8; with a real `deafening` at 100, 85 and 100 put
+`thunderous` under it and `catastrophic` level with it, and the ladder must
+be monotone (`_one_level_down` steps a failing source one rung down; the
+far field's reach is asserted to grow rung by rung). Re-authored at the
+levels of the things they name, which is their old offsets over the new
+`deafening` to the decibel. Reach on a 300-room chain of medium rooms and
+open doorways: `loud` 26, `deafening` 56, `thunderous` 91, `catastrophic`
+128 (were 29 and 51 for the top two).
+
+**What is now MIXED, stated rather than hidden** (`docs/UNBUILT.md`
+§ 1.159): the aperture and partition losses, the ambient floors and the
+weather table are still the compressed numbers calibrated against the old
+ladder. Their direction is known — an opening passes a real voice more
+readily than a real opening would (a shut door at 6 dB against a real 25
+lets a normal line three paces behind it through `full`; four shut doors
+pass a real shout down a run of four rooms; a downpour at 37 dB costs a
+real voice nothing at four paces). Two tests pin the door cases as strict
+expected failures so the day the losses go real they are updated rather
+than silently right. And the far field now admits a standing `loud`
+source, since 83 clears 70: an engine is heard across a level, which is
+the § 1.125 question the ladder has answered rather than the owner.
 
 ## 6. What argues against it
 

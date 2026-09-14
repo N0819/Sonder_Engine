@@ -128,10 +128,12 @@ def test_an_ordinary_quiet_beat_mints_nothing():
                for p in _standing(sc, "Q", prev_standing={other}))
 
 
-def _small_hall(level):
-    """A small hall with one machine in it. `loud` grades it unevenly;
-    `deafening` drowns every cell, which is EVEN -- and not a silence."""
-    return scene({"r": room("the Hall", size="small", anchors=ANCHORS)},
+def _small_hall(level, size="small"):
+    """A hall with one machine in it. RECALIBRATED 2026-09-14: `loud` is a
+    real engine and drowns every cell of a SMALL hall, so the uneven case
+    is a medium one (a `din` at the hearth, drowned elsewhere); `deafening`
+    drowns every cell of either, which is EVEN -- and not a silence."""
+    return scene({"r": room("the Hall", size=size, anchors=ANCHORS)},
                  {"Q": "r", "gen": "r"},
                  entities={"gen": {"name": "the generator", "kind": "machine",
                                    "sound_source": level}},
@@ -143,7 +145,7 @@ def test_a_room_that_went_even_by_filling_up_is_not_a_silence():
     """A room goes even two ways, and `sound_shape` answers None for both.
     The generator drowning every cell is not the generator stopping, and
     the word the room's own cells agree on is what separates them."""
-    loud = _small_hall("loud")
+    loud = _small_hall("loud", size="medium")
     assert sound_shape(loud, "Q") is not None
     key = _soundscape_key(loud, "Q")
 

@@ -238,13 +238,33 @@ def test_a_shout_through_a_closed_door_and_a_normal_voice_through_it():
                {"S": {"at": "c"}, "L": {"at": "w"}})
     rel = spatial_rel_between(sc, "L", "S")
     assert "signal" in rel and "noise" in rel
-    assert levels(sc, "S", "L") == {"mutter": "none", "whisper": "none",
-                                    "normal": "fragment", "loud": "full",
-                                    "shout": "full"}
+    heard = levels(sc, "S", "L")
+    assert {v: heard[v] for v in ("mutter", "whisper", "loud", "shout")} == {
+        "mutter": "none", "whisper": "none", "loud": "full", "shout": "full"}
+    # The normal voice is the registered mixed-scale case
+    # (`test_a_closed_door_holds_a_normal_voice_registered`): it was the
+    # edge rule's `fragment` on the compressed ladder and is `full` on the
+    # real one against a door still priced at 6 dB.
     sc = scene(two_rooms("closed_door"), {"S": "a", "L": "b"},
                {"S": {"at": "door:b"}, "L": {"at": "door:a"}})
     assert levels(sc, "S", "L")["normal"] == "full"
     assert levels(sc, "S", "L")["whisper"] == "none"
+
+
+@pytest.mark.xfail(strict=True, reason=(
+    "REGISTERED 2026-09-14 (docs/UNBUILT.md): the emission ladders are real "
+    "levels and the aperture table is still the compressed one, so a shut "
+    "door priced at 6 dB passes a real normal voice `full` across two "
+    "rooms. Passes -- and must then lose this marker -- the day "
+    "APERTURE_PASS['closed_door'] is a real door."))
+def test_a_closed_door_holds_a_normal_voice_registered():
+    """Far walls of two medium rooms through a shut door: a normal line
+    ought to be a fragment at most, as it was before the recalibration and
+    as a real 25 dB door would make it (63 - 25 - 22.8 = 15 against the
+    27.0 floor: none)."""
+    sc = scene(two_rooms("closed_door"), {"S": "a", "L": "b"},
+               {"S": {"at": "c"}, "L": {"at": "w"}})
+    assert levels(sc, "S", "L")["normal"] != "full"
 
 
 def test_round_a_corner_through_an_open_door_reaches_and_through_the_wall_does_not():
@@ -359,10 +379,15 @@ GENERATOR = {"gen": {"name": "generator", "kind": "machine",
 
 def test_a_loud_generator_masks_a_normal_voice():
     """Listener at the hearth, speaker beside them, a loud generator at the
-    east window three paces off: noise 4.58 against a normal voice's 6.0
-    -> fragment; the same pair with no generator -> full; loud and shout
-    clear it. Speaker at the west wall (path 5.2) with the generator on:
-    normal none."""
+    east window three paces off. RECALIBRATED 2026-09-14: the generator is
+    a real engine, 80 dB(A) at a pace, and reads 73.5 dB at the hearth --
+    a normal voice one pace off (60) is 13.5 dB under it and is `none`, a
+    raised voice (70) is caught in pieces, and a shout (82) clears it. The
+    same pair with no generator is `full`. Speaker at the west wall (path
+    5.2) with the generator on: normal none, loud none, shout a fragment.
+    On the compressed ladder the same engine read 44.6 dB and a normal
+    voice beside the listener was a fragment; that engine was as loud as a
+    loud voice, which is the defect the recalibration retired."""
     quiet = scene(hall(), {"S": "hall", "L": "hall"},
                   {"L": {"at": "south"}, "S": {"near": ["L"]}})
     noisy = scene(hall(), {"S": "hall", "L": "hall", "gen": "hall"},
@@ -370,12 +395,13 @@ def test_a_loud_generator_masks_a_normal_voice():
                    "S": {"near": ["L"]}}, GENERATOR)
     assert levels(quiet, "S", "L")["normal"] == "full"
     assert levels(noisy, "S", "L") == {"mutter": "none", "whisper": "none",
-                                       "normal": "fragment", "loud": "full",
+                                       "normal": "none", "loud": "fragment",
                                        "shout": "full"}
     far = scene(hall(), {"S": "hall", "L": "hall", "gen": "hall"},
                 {"gen": {"at": "east"}, "L": {"at": "south"},
                  "S": {"at": "west"}}, GENERATOR)
     assert levels(far, "S", "L")["normal"] == "none"
+    assert levels(far, "S", "L")["loud"] == "none"
     assert levels(far, "S", "L")["shout"] == "fragment"
 
 
@@ -418,7 +444,12 @@ def test_two_normal_voices_at_once_mask_each_other():
                {"A": {"at": "w"}, "B": {"at": "e"}, "L": {"near": ["A"]}})
     both = sound_field(sc, "L", speakers={"A": "normal", "B": "normal"})
     assert both.level_of("L", "speech:A") == "full"
-    assert both.level_of("L", "speech:B") == "none"
+    # RECALIBRATED 2026-09-14: B's voice across the room arrives 8 dB under
+    # A's beside the listener (52 against 60), and pieces of a second voice
+    # are caught down to a sixteenth of the room (`FRAGMENT_SNR` -12 dB) --
+    # which is what a listener at a party does with the conversation behind
+    # them. It was `none` at the old -1 dB margin.
+    assert both.level_of("L", "speech:B") == "fragment"
 
 
 # ---------------------------------------------------------------------------
@@ -441,7 +472,22 @@ def test_outdoors_and_weather_raise_the_floor():
     n_storm = spatial_rel_between(storm, "L", "S")["noise"]
     assert n_in < n_out < n_storm
     assert levels(inside, "S", "L")["normal"] == "full"
-    assert levels(storm, "S", "L")["normal"] != "full"
+    # RECALIBRATED 2026-09-14: the storm's floor is 42.0 dB on the weather
+    # table, which is still the compressed one (a real gale with heavy rain
+    # is 60-70 dB(A)), so a real normal voice (63 at the cell, 47.6 across
+    # the hall) is still `full` in it; what the storm costs is the quiet
+    # end of the ladder -- a whisper beside you, `full` indoors, is caught
+    # in pieces in the gale. The weather table is registered with the
+    # aperture table in `docs/UNBUILT.md`.
+    assert levels(storm, "S", "L")["normal"] == "full"
+    beside_in = scene(hall(), {"S": "hall", "L": "hall"},
+                      {"S": {"at": "west"}, "L": {"near": ["S"]}})
+    beside_storm = scene(hall(), {"S": "hall", "L": "hall"},
+                         {"S": {"at": "west"}, "L": {"near": ["S"]}},
+                         weather=storm["weather"])
+    beside_storm["rooms"]["hall"]["exposure"] = "open"
+    assert levels(beside_in, "S", "L")["whisper"] == "full"
+    assert levels(beside_storm, "S", "L")["whisper"] == "fragment"
 
 
 def test_a_road_is_a_road_you_can_walk_and_talk_down():
@@ -474,13 +520,33 @@ def test_a_road_is_a_road_you_can_walk_and_talk_down():
 
     fair = road()
     assert levels(fair, "A", "B")["normal"] == "full"
-    # Rain you can talk through until it is heavy: at four paces a normal
-    # voice survives light and moderate rain and is cut down by a downpour.
+    # Rain you can talk through until it is heavy. RECALIBRATED 2026-09-14:
+    # a real normal voice at four paces (63 - 12.3 = 50.7 dB) clears the
+    # downpour's 37.0 dB floor too, because the weather table is still on
+    # the compressed scale (real heavy rain is 55-65 dB(A)). So the
+    # downpour no longer cuts an ordinary voice at four paces; it cuts the
+    # quiet end of the ladder, and the table is registered with the
+    # apertures in `docs/UNBUILT.md`.
     for intensity, expected in (("light", "full"), ("moderate", "full"),
-                                ("heavy", "fragment")):
+                                ("heavy", "full")):
         wet = road({"sky": "rain", "precipitation": "rain",
                     "intensity": intensity, "wind": "calm"})
         assert levels(wet, "A", "B")["normal"] == expected, intensity
+    downpour = road({"sky": "rain", "precipitation": "rain",
+                     "intensity": "heavy", "wind": "calm"})
+    assert spatial_rel_between(downpour, "B", "A")["noise"] \
+        > spatial_rel_between(fair, "B", "A")["noise"]
+    # What four paces of downpour DOES cost on this table: the quiet end.
+    # A mutter (38 at a pace) at four paces is a fragment either way and a
+    # whisper is gone either way, so the cost shows at one pace, where the
+    # whisper beside you goes from whole to pieces.
+    near_fair = road()
+    near_fair["stations"]["B"] = {"cell": [2, 4]}
+    near_wet = road({"sky": "rain", "precipitation": "rain",
+                     "intensity": "heavy", "wind": "calm"})
+    near_wet["stations"]["B"] = {"cell": [2, 4]}
+    assert levels(near_fair, "A", "B")["whisper"] == "full"
+    assert levels(near_wet, "A", "B")["whisper"] == "fragment"
     # And a still yard is now no noisier than a porch, which is the claim:
     # the difference between them is what the sky can reach them with.
     porch = road()
@@ -906,7 +972,15 @@ def test_a_raised_voice_across_one_opening_is_at_worst_a_fragment():
     rel = spatial_rel_between(sc, "L", "S")
     assert rel.get("open_edge") is True
     assert rel.get("signal") is not None          # the field DID place them
-    assert sound_field_hear_level("shout", rel["signal"], rel["noise"]) == "none"
+    # RECALIBRATED 2026-09-14: against a real engine (78.3 dB at the
+    # listener) the field refuses a `loud` call across the archway (73 at
+    # the cell, 16.7 of path: 10 dB under the fragment margin) and lets a
+    # shout through in pieces; before, it refused the shout. The floor is
+    # the same sentence either way: one opening away, a raised voice is at
+    # worst a fragment.
+    assert sound_field_hear_level("loud", rel["signal"], rel["noise"]) == "none"
+    assert sound_field_hear_level("shout", rel["signal"], rel["noise"]) \
+        == "fragment"
     assert hear_level(rel, "shout") == "fragment"
     assert hear_level(rel, "loud") == "fragment"
     # Only a RAISED voice: an ordinary one still follows the field.
@@ -1012,14 +1086,46 @@ def test_the_decibel_tables_are_exact_conversions_of_the_powers():
     assert FRAGMENT_SNR_DB == pytest.approx(db_ratio(FRAGMENT_SNR))
     assert HEAR_FLOOR_DB == db_of_power(HEAR_FLOOR)
 
-    # The two new rungs, declared in dB and reaching where nothing did.
+    # RECALIBRATED 2026-09-14: the ladders are authored as real sound
+    # pressure levels AT ONE PACE and the powers derived, so the one-pace
+    # table is the number a reader checks against the world and the cell
+    # table is that plus the one-pace spreading loss.
+    from world.spatial import (one_pace_power, SOUND_ONE_PACE_DB,
+                               SPEECH_ONE_PACE_DB, spreading_loss_db,
+                               VOICE_ONE_PACE_DB)
+    one_pace = spreading_loss_db(1.0)
+    for word, level in SPEECH_ONE_PACE_DB.items():
+        assert SPEECH_POWER[word] == one_pace_power(level)
+        assert SPEECH_DB[word] == pytest.approx(level + one_pace)
+    for word, level in SOUND_ONE_PACE_DB.items():
+        assert SOUND_POWER[word] == one_pace_power(level)
+        assert SOUND_DB[word] == pytest.approx(level + one_pace)
+    assert VOICE_ONE_PACE_DB == pytest.approx(SPEECH_ONE_PACE_DB["normal"])
+    assert SPEECH_ONE_PACE_DB == {"mutter": 38.0, "whisper": 35.0,
+                                  "normal": 60.0, "loud": 70.0, "shout": 82.0}
+    assert SOUND_ONE_PACE_DB == {"faint": 40.0, "audible": 50.0, "loud": 80.0,
+                                 "deafening": 100.0, "thunderous": 120.0,
+                                 "catastrophic": 140.0}
+    # The ladder is monotone, which is what lets `_one_level_down` step a
+    # failing source QUIETER and the far field's reach grow rung by rung.
+    # The top two rungs were 85 and 100 while `deafening` was 61.8; a real
+    # `deafening` is 100, so they moved to the levels of the things they
+    # name (thunder, an explosion) -- which is, to the decibel, their old
+    # offsets over the new `deafening`.
     assert SOUND_LEVELS[-2:] == ("thunderous", "catastrophic")
-    assert SOUND_DB["thunderous"] == pytest.approx(85.0)
-    assert SOUND_DB["catastrophic"] == pytest.approx(100.0)
-    assert SOUND_POWER["catastrophic"] == pytest.approx(power_of_db(100.0))
-    # ... and they are the only rungs the far field admits.
+    assert [SOUND_DB[w] for w in SOUND_LEVELS] == sorted(
+        SOUND_DB[w] for w in SOUND_LEVELS)
+    # The voice ladder: two quiet volumes under `normal`, two raised ones
+    # over it. A mutter is VOICED and a whisper is breath, so the mutter is
+    # the louder of the two -- the order the world has, and the reverse of
+    # the compressed ladder's (0.6 against 1.0), which put the quietest
+    # word on the louder voice.
+    assert SPEECH_DB["whisper"] < SPEECH_DB["mutter"] < SPEECH_DB["normal"] \
+        < SPEECH_DB["loud"] < SPEECH_DB["shout"]
+    # The far field admits a standing `loud` source and up: an engine, a
+    # mill, a klaxon are heard across a level, a hearth fire is not.
     assert [w for w in SOUND_LEVELS if SOUND_DB[w] >= FAR_FIELD_ENTRY_DB] \
-        == ["thunderous", "catastrophic"]
+        == ["loud", "deafening", "thunderous", "catastrophic"]
 
 
 def test_the_two_quantisers_agree_over_randomised_levels():
@@ -1163,15 +1269,26 @@ def test_an_event_reads_its_level_word_its_number_and_its_old_intensity():
     # ruling). The same four words say something different about a one-off
     # noise than about a thing that stands there making one: a generator is
     # defined by whether you can talk over it, and a crowbar on a bulkhead
-    # is not. The two far rungs are shared and unmoved, because they are
-    # impacts either way and their reach is measured.
-    assert EVENT_DB["loud"] > SOUND_DB["loud"]
-    assert EVENT_DB["deafening"] > SOUND_DB["deafening"]
+    # is not. The two far rungs are shared, so they moved together on
+    # 2026-09-14 when the emission ladder went to real levels.
+    #
+    # RECALIBRATED 2026-09-14: the impact ladder's four lower rungs are
+    # untouched (45 / 58 / 72 / 80 at the cell) while the emission ladder
+    # is now real (an engine at 83), so the 2026-09-06 relation between the
+    # two -- impact over emission at every word -- is no longer the case at
+    # `loud` and `deafening`. Nothing compares the two ladders to each
+    # other, and the point of the ruling is what is pinned: a `loud` IMPACT
+    # clears the far-field entry, and a real impact ladder is registered
+    # for the owner in `docs/UNBUILT.md`.
+    from world.spatial import FAR_FIELD_ENTRY_DB
+    assert EVENT_DB["loud"] >= FAR_FIELD_ENTRY_DB > EVENT_DB["audible"]
+    assert EVENT_DB["loud"] == pytest.approx(72.0)
+    assert EVENT_DB["deafening"] == pytest.approx(80.0)
     assert EVENT_DB["thunderous"] == SOUND_DB["thunderous"]
     assert EVENT_DB["catastrophic"] == SOUND_DB["catastrophic"]
-    # A running thing keeps the ladder it always had, so every masking
-    # answer the engine has given about ambient machinery is unchanged.
-    assert SOUND_DB["loud"] == pytest.approx(56.02, abs=0.01)
+    # A running `loud` thing is a real engine at a pace: 80 dB(A), 83 at
+    # its own cell.
+    assert SOUND_DB["loud"] == pytest.approx(83.01, abs=0.01)
 
 
 # ---------------------------------------------------------------------------
@@ -1241,11 +1358,19 @@ def test_a_wall_passes_a_catastrophic_event_and_refuses_a_shout():
     assert "r4" not in heard, "it should not carry forever either"
 
     # A voice never crosses one, at any volume -- which is what makes the
-    # wall a wall rather than a slow door.
+    # wall a wall rather than a slow door. RECALIBRATED 2026-09-14: that
+    # sentence is held by KIND (`far_field_sources` drops speech; see
+    # `test_no_speech_crosses_the_far_field_at_any_volume_or_distance`) and
+    # no longer by arithmetic -- on the real ladder a raised voice's LEVEL
+    # (73 and 85 at the cell) would clear the compressed 16 dB wall if it
+    # were flooded, while the three ordinary volumes still die against it.
+    # The mixed scale is registered in `docs/UNBUILT.md`.
+    from world.spatial import RAISED_VOLUMES
     for volume, level in SPEECH_DB.items():
         reached = room_sound_flood(sc, "r0", level)
-        assert not distant_level_word(reached.get("r1", {}).get("db", -999.0),
-                                      floor), volume
+        crossed = bool(distant_level_word(
+            reached.get("r1", {}).get("db", -999.0), floor))
+        assert crossed == (volume in RAISED_VOLUMES), volume
     assert WALL_LOSS_DB == 16.0
 
 
@@ -1280,12 +1405,20 @@ def test_the_far_field_terminates_on_audibility_and_has_no_hop_cap():
     from world.spatial import (AMBIENT_DB, FRAGMENT_SNR_DB, HEAR_FLOOR_DB,
                                room_sound_flood, SOUND_DB,
                                _inaudible_everywhere_db)
-    sc = chain(100)
+    # RECALIBRATED 2026-09-14: on the real ladder the top rungs are thunder
+    # (120 at a pace) and an explosion (140), and they reach 91 and 128
+    # medium rooms of open doorways where 85 and 100 reached 29 and 51; a
+    # running engine (`loud`, 80) is heard 26 rooms down the line and a
+    # klaxon (`deafening`, 100) 56. The chain is three hundred rooms so the
+    # claim -- the flood stops of its own arithmetic -- is still a claim.
+    sc = chain(300)
     reach = {level: len(room_sound_flood(sc, "r0", SOUND_DB[level]))
              for level in SOUND_LEVELS}
-    assert reach["catastrophic"] > reach["thunderous"] > reach["deafening"]
-    assert reach["catastrophic"] == 51 and reach["thunderous"] == 29
-    assert reach["catastrophic"] < 100, (
+    assert reach["catastrophic"] > reach["thunderous"] > reach["deafening"] \
+        > reach["loud"] > reach["audible"] >= reach["faint"]
+    assert reach == {"faint": 1, "audible": 2, "loud": 26, "deafening": 56,
+                     "thunderous": 91, "catastrophic": 128}
+    assert reach["catastrophic"] < 300, (
         "the flood must stop of its own arithmetic, not run out of rooms")
     # The cut is the quietest floor the model has at the `fragment` margin,
     # or the absolute floor -- whichever is higher.
@@ -1378,14 +1511,18 @@ def test_no_speech_crosses_the_far_field_at_any_volume_or_distance():
     `far_field_sources` has no `speakers` parameter and drops the kind --
     and no setting of any constant can open it.
 
-    Belt and braces, both stated: a shout is 60.8 dB against an entry of 70,
-    so the loudest voice there is would not qualify even if the kind check
-    were removed. And the record the far field returns has no key for
-    content: it is built field by field from a closed set."""
+    Braces alone, since 2026-09-14, and stated: a real shout is 85 dB at its
+    cell against an entry of 70, so the loudest voice there is WOULD qualify
+    by level if the kind check were removed -- which is exactly why the
+    refusal is by construction and not by a constant. And the record the far
+    field returns has no key for content: it is built field by field from a
+    closed set."""
     from world.spatial import (distant_sounds, FAR_FIELD_ENTRY_DB,
                                far_field_sources, SPEECH_DB)
     sc = chain(3)
     sc["positions"] = {"Ada": "r0", "Bel": "r2"}
+    assert max(SPEECH_DB.values()) >= FAR_FIELD_ENTRY_DB, (
+        "the level no longer holds the line; the kind check must")
     for volume in SPEECH_DB:
         speakers = {"Ada": volume}
         sources, _n = sound_sources(sc, speakers=speakers)
@@ -1393,7 +1530,6 @@ def test_no_speech_crosses_the_far_field_at_any_volume_or_distance():
         # The field's own source list carries the voice; the far field's
         # does not, and cannot be asked to.
         assert far_field_sources(sc) == []
-        assert max(SPEECH_DB.values()) < FAR_FIELD_ENTRY_DB
 
     # An event that TRIES to smuggle a line through the channel carries it
     # nowhere: the record has room for a character and no room for words.
@@ -1429,11 +1565,15 @@ def test_a_running_thing_delivers_a_direction_and_no_description_of_itself():
 
 
 def test_an_ordinary_beat_walks_no_graph_at_all(monkeypatch):
-    """COST. Nothing under `FAR_FIELD_ENTRY_DB` enters the far field, and
-    the loudest thing an ordinary beat holds is a shout at 60.8 dB against
-    an entry of 70. So on an ordinary beat `distant_sounds` returns before
-    it builds a graph -- proved by making the graph impossible to build and
-    watching nothing fail."""
+    """COST. Nothing under `FAR_FIELD_ENTRY_DB` enters the far field, and no
+    voice ever does, so on a beat of conversation beside a hearth or a
+    kettle `distant_sounds` returns before it builds a graph -- proved by
+    making the graph impossible to build and watching nothing fail.
+
+    RECALIBRATED 2026-09-14: a running `loud` source is a real engine (83
+    at its cell) and clears the entry, so a beat with an engine in it walks
+    the graph -- once, on a cached graph -- which is the cost of an engine
+    being heard across a level. Before, only the two far rungs entered."""
     from world.spatial import distant_sounds
     import world.spatial_sound_field as field_module
 
@@ -1448,12 +1588,12 @@ def test_an_ordinary_beat_walks_no_graph_at_all(monkeypatch):
         return real(*a, **k)
 
     monkeypatch.setattr(field_module, "far_field_graph", counted)
-    for level in ("faint", "audible", "loud", "deafening"):
+    for level in ("faint", "audible"):
         sc["entities"]["gen"]["sound_source"] = level
         assert distant_sounds(sc, "L", room="r9",
                               events=crash("r0", "audible")) == []
     assert calls == [], "the far field built a graph on an ordinary beat"
-    sc["entities"]["gen"]["sound_source"] = "thunderous"
+    sc["entities"]["gen"]["sound_source"] = "loud"
     assert distant_sounds(sc, "L", room="r9")
     assert calls, "the far field did not run when something was loud"
 
@@ -1465,8 +1605,13 @@ def test_a_distant_sound_is_graded_by_the_room_it_arrives_in():
     from world.spatial import distant_sounds, DISTANT_LEVELS
     quiet = chain(60)
     ladder, levels_db = [], []
+    # RECALIBRATED 2026-09-14: a `catastrophic` event is a real explosion
+    # (143 at the cell) and is `overwhelming` in every one of sixty rooms;
+    # a `deafening` impact (80, the impact ladder's own unmoved rung) walks
+    # all three words in twenty-two.
+    impact = crash(level="deafening")
     for i in range(1, 60):
-        heard = distant_sounds(quiet, "L", room="r%d" % i, events=crash())
+        heard = distant_sounds(quiet, "L", room="r%d" % i, events=impact)
         if not heard:
             break
         ladder.append(heard[0]["level"])
@@ -1482,7 +1627,7 @@ def test_a_distant_sound_is_graded_by_the_room_it_arrives_in():
     # with it without moving it a pace.
     from world.spatial import AMBIENT_DB, distant_level_word
     open_air = chain(60, exposure="open")
-    quieter = [distant_sounds(open_air, "L", room="r%d" % i, events=crash())
+    quieter = [distant_sounds(open_air, "L", room="r%d" % i, events=impact)
                for i in range(1, len(ladder) + 1)]
     quieter = [row[0]["level"] if row else None for row in quieter]
     rung = {None: -1, **{w: i for i, w in enumerate(DISTANT_LEVELS)}}
@@ -1545,33 +1690,52 @@ def test_every_barrier_in_the_table_is_on_one_scale():
     crossed one wall and NOTHING crossed two, which made a collapsing roof
     two rooms away silent (`docs/UNBUILT.md` § 1.125).
 
-    The compression is derived here rather than asserted, from the speech
-    ladder against the levels a real voice has, and it comes out the same
-    from two independent spans. Every barrier is then checked against its
-    own real-world value scaled by it. A future edit that reaches for a
-    physical number and forgets to compress it fails this.
+    THE SCALE MOVED UNDER THIS TEST ON 2026-09-14, and the test now pins the
+    state that left: the EMISSION LADDERS are real sound pressure levels
+    (a whisper 35 dB(A) at a metre, ordinary speech 60, a shout 82 -- the
+    spans a real voice has, checked against independent figures below, not
+    against the table's own numbers), while the aperture and partition
+    losses are still the compressed ones calibrated against the old ladder,
+    0.358 of their real transmission values. So the model is MIXED, with a
+    known direction: an opening passes a real voice more readily than a
+    real opening would. That is registered for the owner in
+    `docs/UNBUILT.md` rather than taken here, because moving the losses is
+    one decision for every doorway in every story. This test fails the day
+    either half moves, so the next edit meets the mixed state knowingly:
+    if the losses go real, delete the compression and assert k near 1.
     """
     from world.spatial import (APERTURE_LOSS_DB, FLOOR_CEILING_LOSS_DB,
-                               SPEECH_DB, WALL_LOSS_DB)
+                               SPEECH_ONE_PACE_DB, WALL_LOSS_DB)
 
-    # A whisper is ~30 dBA at a metre, ordinary speech ~60, a shout ~88.
-    k_wide = (SPEECH_DB["shout"] - SPEECH_DB["whisper"]) / (88.0 - 30.0)
-    k_narrow = (SPEECH_DB["shout"] - SPEECH_DB["normal"]) / (88.0 - 60.0)
-    assert abs(k_wide - k_narrow) < 0.01, (k_wide, k_narrow)
-    assert 0.30 < k_wide < 0.42, k_wide
+    # The voice, against figures no table here supplies: a whisper is 30-35
+    # dB(A) at a metre, ordinary speech 55-65, a raised voice 65-75, a
+    # shout 80-88.
+    assert 30.0 <= SPEECH_ONE_PACE_DB["whisper"] <= 35.0
+    assert 55.0 <= SPEECH_ONE_PACE_DB["normal"] <= 65.0
+    assert 65.0 <= SPEECH_ONE_PACE_DB["loud"] <= 75.0
+    assert 80.0 <= SPEECH_ONE_PACE_DB["shout"] <= 88.0
+    span = SPEECH_ONE_PACE_DB["shout"] - SPEECH_ONE_PACE_DB["whisper"]
+    assert 45.0 <= span <= 58.0, span         # a real voice's span, not 20.8
 
+    # The losses, still on the compressed scale of 2026-09-05.
+    k = 0.358
     real = {"open": 0.0, "open_door": 2.0, "bars": 2.0, "membrane": 5.0,
             "closed_door": 25.0, "window": 28.0, "one_way_window": 28.0}
     for barrier, engine_db in APERTURE_LOSS_DB.items():
         if barrier not in real:
             continue
-        assert abs(engine_db - real[barrier] * k_wide) <= 4.0, (
-            barrier, engine_db, real[barrier] * k_wide)
-    # The two that were raw, and are not any more.
-    assert abs(WALL_LOSS_DB - 45.0 * k_wide) <= 4.0, WALL_LOSS_DB
-    assert abs(FLOOR_CEILING_LOSS_DB - 50.0 * k_wide) <= 4.0
+        assert abs(engine_db - real[barrier] * k) <= 4.0, (
+            barrier, engine_db, real[barrier] * k)
+    assert abs(WALL_LOSS_DB - 45.0 * k) <= 4.0, WALL_LOSS_DB
+    assert abs(FLOOR_CEILING_LOSS_DB - 50.0 * k) <= 4.0
     # A floor is heavier than a wall, as concrete is heavier than plaster.
     assert FLOOR_CEILING_LOSS_DB > WALL_LOSS_DB
+    # The consequence, measured so it is a fact and not a fear: a normal
+    # line at the far wall of the next room, through a shut door, is `full`
+    # (63 at the cell, 6.0 for the door, 22.8 of path against a 27.0 floor).
+    sc = scene(two_rooms("closed_door"), {"S": "a", "L": "b"},
+               {"S": {"at": "c"}, "L": {"at": "w"}})
+    assert levels(sc, "S", "L")["normal"] == "full"
 
 
 # ---------------------------------------------------------------------------
@@ -1843,11 +2007,12 @@ def test_a_room_that_declares_no_quiet_hears_byte_for_byte_what_it_did():
                                _inaudible_everywhere_db)
     for exposure in ("enclosed", "sheltered", "open"):
         assert AMBIENT[exposure] >= HEAR_FLOOR
+    from world.spatial import FRAGMENT_SNR, FULL_SNR
     for signal in (0.001, 0.01, 0.049, 0.05, 0.06, 0.1, 1.0, 40.0):
         for exposure in ("enclosed", "sheltered", "open"):
             noise = AMBIENT[exposure]
-            expected = ("full" if signal >= 2.0 * noise
-                        else "fragment" if signal >= 0.8 * noise
+            expected = ("full" if signal >= FULL_SNR * noise
+                        else "fragment" if signal >= FRAGMENT_SNR * noise
                         and signal >= HEAR_FLOOR else "none")
             assert quantise_hearing(signal, noise) == expected, (signal, exposure)
     # The far field's termination is the same story: unchanged with no word.
@@ -1919,7 +2084,15 @@ def test_a_shout_down_a_long_run_is_heard_and_a_normal_voice_is_not():
         rel = spatial_rel_between(_run(hops), "L", "S")
         assert rel.get("signal") is not None, hops
         assert hear_level(rel, "shout") != "none", hops
-        assert hear_level(rel, "normal") == "none", hops
+    # RECALIBRATED 2026-09-14: a real normal voice (60 dB(A) at a pace)
+    # down a straight run of open doorways in a still building (27.0 dB
+    # floor) is heard whole to four rooms and in pieces at five -- 63 at
+    # the cell less 33.4 of path and doorways is 29.6, over the floor by
+    # less than the `full` margin. Before, it was `none` from two rooms.
+    # What the test is FOR is unchanged: the answer falls with distance.
+    words = [hear_level(spatial_rel_between(_run(h), "L", "S"), "normal")
+             for h in (2, 3, 4, 5)]
+    assert words == ["full", "full", "full", "fragment"]
 
     # ...and the gain FALLS with distance, which is the whole complaint.
     gains = [spatial_rel_between(_run(h), "L", "S")["signal"]
@@ -1933,6 +2106,24 @@ def test_a_closed_door_ends_a_shout_where_open_doorways_carry_it():
     what stands in its way. "The castle hears every shout" stays impossible
     because a castle has doors."""
     assert hear_level(spatial_rel_between(_run(4), "L", "S"), "shout") != "none"
+    # The bound is arithmetic: four walls end it (16 dB each on the far
+    # field, and no cell path at all on the near one).
+    walled = spatial_rel_between(_run(4, "wall"), "L", "S")
+    assert hear_level(walled, "shout") == "none"
+    # Four shut doors ought to as well, and do not: the registered
+    # mixed-scale case, pinned as a strict expected failure below so the
+    # day a door is priced as a door this test is updated rather than
+    # silently right.
+    shut = spatial_rel_between(_run(4, "closed_door"), "L", "S")
+    assert hear_level(shut, "shout") == "full"
+
+
+@pytest.mark.xfail(strict=True, reason=(
+    "REGISTERED 2026-09-14 (docs/UNBUILT.md): four shut doors at the "
+    "compressed 6 dB each pass a real shout (85 at the cell) down a run of "
+    "four rooms at 33.4 dB over a 27.0 floor. A real door is 25 dB and "
+    "would end it at the second."))
+def test_four_closed_doors_end_a_shout_registered():
     shut = spatial_rel_between(_run(4, "closed_door"), "L", "S")
     assert hear_level(shut, "shout") == "none"
 

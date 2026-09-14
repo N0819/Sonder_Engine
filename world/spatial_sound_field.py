@@ -87,10 +87,13 @@ from world.spatial_senses import _material_shifted_barrier, _SOUND_WALK_BARRIERS
 #: denomination (`DESIGN_SOUND_DECIBELS.md` § 5): the old ladder topped out
 #: at 12.5x a normal voice, so a cannon, a collapsing roof, a dragon and a
 #: ship's horn had no rung and could reach no further than a shouting man.
-#: They are the only two levels over `FAR_FIELD_ENTRY_DB`, which is what
-#: makes "an incredibly loud noise travels very far" a property of the
-#: LADDER rather than of a special case somewhere. An authored `db` number
-#: on an entity or an event reaches anything the words do not.
+#: Since the 2026-09-14 recalibration every rung is a real sound pressure
+#: level (`SOUND_ONE_PACE_DB`), and which rungs clear `FAR_FIELD_ENTRY_DB`
+#: is read off that table rather than stated here -- a running engine
+#: does, a hearth fire does not -- which is what makes "an incredibly loud
+#: noise travels very far" a property of the LADDER rather than of a
+#: special case somewhere. An authored `db` number on an entity or an
+#: event reaches anything the words do not.
 SOUND_LEVELS = ("faint", "audible", "loud", "deafening", "thunderous",
                 "catastrophic")
 
@@ -114,9 +117,9 @@ SPEECH_VOLUMES = ("mutter", "whisper", "normal", "loud", "shout")
 # sets is a dB number, every threshold is a dB MARGIN, every loss is a
 # SUBTRACTION, and the far field (§ far field, below) is dB arithmetic end to
 # end. What that buys is that the dynamic range stops being unwieldy: a
-# whisper and a collapsing roof are 60 dB apart, one small number, where
-# linearly they are a factor of thirty thousand -- and a ladder that reaches
-# an artillery piece stops needing five-digit literals.
+# whisper and a collapsing roof are 105 dB apart, one small number, where
+# linearly they are a factor of thirty thousand million -- and a ladder
+# that reaches an artillery piece stops needing fifteen-digit literals.
 #
 # POWERS STILL ADD IN POWER. Decibels are logarithms and logarithms do not
 # sum; two incoherent sources at the same cell make a level of
@@ -131,13 +134,21 @@ SPEECH_VOLUMES = ("mutter", "whisper", "normal", "loud", "shout")
 # sits; every comparison in the model is a DIFFERENCE of two levels, so the
 # reference falls out of all of them but two -- the absolute floor
 # (`HEAR_FLOOR_DB`) and the far field's entry (`FAR_FIELD_ENTRY_DB`) -- and
-# both are stated in the same denomination beside the ladder they gate. 40
-# is chosen so an ordinary speaking voice reads about 51 dB at one pace,
-# which is roughly what one measures, and so the ladder's own numbers are
-# the ones `DESIGN_SOUND_DECIBELS.md` § 5 tabulates.
+# both are stated in the same denomination beside the ladder they gate.
+#
+# SINCE 2026-09-14 THE LADDERS ARE AUTHORED IN dB AND THE POWERS DERIVED,
+# and the dB numbers are real ones: a sound pressure level in dB(A) at one
+# pace, the distance every masking sentence in this module is written
+# against ("could I hear someone beside me"). `DB_REF` is then only the
+# power<->level conversion constant -- it says which linear power the
+# number 40 dB names -- and has no calibration role: change it and every
+# power moves together, every level stays, and nothing the model answers
+# changes. It was 40 when the ladders were linear tables converted to
+# levels, and it stays 40 so that the powers on disk, in traces and in the
+# older tests remain the same numbers.
 
-#: Where the ladder sits. See above: arbitrary, cancels everywhere but the
-#: two absolute gates, and moving it moves those two with it.
+#: The power<->level conversion constant. See above: it no longer sets
+#: where the ladder sits, because the ladder is authored in dB.
 DB_REF = 40.0
 
 
@@ -204,70 +215,151 @@ def _at_least(level_db: float, threshold_db: float) -> bool:
     return level_db >= threshold_db - _DB_EPS
 
 
+def spreading_loss_db(length: float) -> float:
+    """`10*log10(1 + L^2)`: what a path of `length` costs a sound, in dB.
+    The linear model's `1 / (1 + L^2)` written as the loss it is. Path
+    length, never straight distance -- the whole difference from light."""
+    length = float(length or 0.0)
+    return 10.0 * math.log10(1.0 + length * length)
+
+
+#: The spreading loss at a path of ONE cell: 3.01 dB. The yardstick every
+#: masking rule is stated against ("could I hear someone beside me"), and
+#: the distance every ladder below is authored at.
+_ONE_PACE_LOSS_DB = spreading_loss_db(1.0)
+
+
+def one_pace_power(db) -> float:
+    """The power a source holds AT ITS OWN CELL so that it reads `db` one
+    pace off. The flood charges a one-cell path `_ONE_PACE_LOSS_DB`, so a
+    level authored at one pace -- which is where the world's tables measure
+    a voice, a kettle and an engine -- sits that much higher at the cell.
+    Every rung of `SPEECH_POWER` and `SOUND_POWER` is written through this,
+    which is what lets `VOICE_ONE_PACE_DB` be exactly the number on the
+    table and not the number less three."""
+    return power_of_db(float(db) + _ONE_PACE_LOSS_DB)
+
+
 # ---------------------------------------------------------------------------
 # Constants the OWNER sets (DESIGN_SOUND_FIELD.md § 6, DESIGN_SOUND_DECIBELS.md
-# § 5). Every one is named, owner-visible, and carries the table beside it.
-# The § 6 proposal is recorded where a value differs from it, with the
-# measured reason.
+# § 5 and § 5c). Every one is named, owner-visible, and carries the table
+# beside it, with the real-world basis of each number.
 #
-# THE LINEAR TABLES ARE THE ONES WRITTEN DOWN AND THE dB TABLES ARE DERIVED
-# FROM THEM, not the other way round, for one reason: a dB literal
-# round-trips back to a power that differs in the last bits (12.0 becomes
-# 12.000000000000007), and the near field's flood multiplies those factors
-# together and breaks ties on the product. Deriving in this direction makes
-# the dB tables EXACT conversions of the arithmetic that shipped, which is
-# what "no behaviour change" has to mean. The two rungs that are NOT a
-# conversion -- `thunderous`, `catastrophic` -- are declared in dB, where
-# they were designed, and their powers derived.
+# THE dB TABLES ARE THE ONES WRITTEN DOWN AND THE POWERS ARE DERIVED FROM
+# THEM (since 2026-09-14; it was the other way round while the ladders were
+# converted linear tables, for tie-break exactness against arithmetic that
+# had already shipped -- a reason that stopped applying the day the numbers
+# were meant to change). A rung is a sound pressure level at ONE PACE, so a
+# reader can check it against any decibel chart, and `one_pace_power` puts
+# it on the cell.
+#
+# WHY THE OLD LADDERS WERE REPLACED RATHER THAN NUDGED. They were compressed:
+# whisper->shout spanned 20.8 dB against 55 in the world (a factor of 0.36,
+# measured in `DESIGN_SOUND_DECIBELS.md` § 5a), so every rung sat within a
+# few decibels of its neighbours and a standing source and a voice could not
+# be told apart by level. Played 2026-09-14 (two fresh stories, 22 turns;
+# `PLAY_2026_09_14` in the session report): a hearth fire authored `audible`
+# held the same power as a normal voice, so it masked a line spoken AT the
+# hearth from five paces off (signal 0.08 against noise 1.83, `none`, and
+# the page said "she offered no reply" four beats running); a launch engine
+# authored `loud` shared its power with a loud voice, so a raised line one
+# pace off on the deck was `none`; and a whisper at arm's reach beside that
+# engine had no rung under conversation but the one the fire also sat on.
+# Real levels put twenty decibels between a fire and a voice and ten between
+# a voice and a shout, and the verdicts follow from the numbers instead of
+# from a table tuned to them.
 # ---------------------------------------------------------------------------
 
-#: Power of a speaking body at its own cell, by the line's volume word.
+#: A speaking body's level ONE PACE OFF, by the line's volume word, in dB(A)
+#: -- the figures any acoustics reference gives for speech at a metre.
 #:
-#:   § 6 proposed   mutter 1 | whisper 1.5 | normal 6 | loud 14 | shout 30
-#:   set here       mutter 0.6 | whisper 1 | normal 12 | loud 40 | shout 120
+#:   mutter   38   speech under the breath: 35-45 dB(A) at a metre. The
+#:                 owner's brief said ~45; 38 is taken because a mutter is
+#:                 what the word means in a story -- an aside that reaches
+#:                 the body beside you and not the room -- and the sentence
+#:                 it has to satisfy is measured: across a large room's
+#:                 width (a path of 5.8) in a still room (27 dB floor) it is
+#:                 gone. At 45 it crossed that width `full`; at 40 it
+#:                 crossed as a fragment that carried the numbers of the
+#:                 secret it was muttered to keep ("...nation... seventeen...
+#:                 nineteen...", `test_masked_floor_leaks`, the hole 1,364
+#:                 live mutters rode). Under 39.4 it dies at the far wall;
+#:                 38 is that with half a decibel of slack, and is `full` to
+#:                 three paces, a fragment to four
+#:   whisper  35   a whisper is 30-35 dB(A) at a metre; the upper figure,
+#:                 because the engine's `whisper` is speech MADE for a
+#:                 listener and the lower one is a breath. Five under a
+#:                 mutter: the difference between breath and voice
+#:   normal   60   conversational speech at a metre, the textbook 60 dB(A)
+#:   loud     70   a raised voice, addressing a room: 65-75
+#:   shout    82   shouting, 80-88 dB(A) at a metre; the middle of the
+#:                 owner's stated 80-85
 #:
-#: Why the proposal was not kept: measured against § 6's OWN sentences with
-#: inverse-square decay, a 4:1 normal-to-whisper ratio cannot both carry a
-#: normal voice across a medium room as `full` (path 7 corner to corner ->
-#: 6/50 = 0.12) and fade a whisper to a fragment at three cells (1.5/10 =
-#: 0.15 sits ABOVE it). The sentences need the ratio a real voice has -- a
-#: whisper is tens of decibels under conversation, not a quarter of it -- so
-#: the ladder is widened and the § 9.3 table in the note is computed on these.
-SPEECH_POWER = {"mutter": 0.6, "whisper": 1.0, "normal": 12.0,
-                "loud": 40.0, "shout": 120.0}
+#: The § 6 proposal (`mutter 1 | whisper 1.5 | normal 6 | loud 14 | shout
+#: 30`, linear) and the 2026-09-04 table that replaced it (`0.6 | 1 | 12 |
+#: 40 | 120`) are in `DESIGN_SOUND_FIELD.md` § 6a; the second gave the
+#: ladder the ORDER a real voice has and not its span, which is the defect
+#: the header of this section records.
+SPEECH_ONE_PACE_DB = {"mutter": 38.0, "whisper": 35.0, "normal": 60.0,
+                      "loud": 70.0, "shout": 82.0}
 
-#: The same ladder in dB at one pace -- mutter 37.8 | whisper 40.0 |
-#: normal 50.8 | loud 56.0 | shout 60.8. Derived, so it cannot drift from
-#: the powers the flood multiplies.
-#:
-#: `DESIGN_SOUND_DECIBELS.md` § 5 tabulated `mutter 28, whisper 30, normal
-#: 51, loud 56, shout 61` and called it an exact conversion. The top three
-#: are exact (at `DB_REF` 40); the bottom two are not, and cannot be: a
-#: normal voice is twelve times a whisper in power, which is 10.8 dB, and
-#: the note's table puts 21 dB between them. Its quiet rungs were converted
-#: against a different reference than its loud ones. The ratios are what the
-#: model behaves by, so the ratios are what survived, and § 5 was corrected
-#: to this table rather than this table to § 5.
+#: The same, as the power at the speaker's own cell -- what the flood
+#: spreads. Derived, so it cannot drift from the table above.
+SPEECH_POWER = {volume: one_pace_power(db)
+                for volume, db in SPEECH_ONE_PACE_DB.items()}
+
+#: The speech ladder as a level AT THE CELL -- the one-pace table plus the
+#: one-pace loss: mutter 41.0 | whisper 38.0 | normal 63.0 | loud 73.0 |
+#: shout 85.0. This is the number `sound_field_hear_level` adds a path's
+#: gain to; `SPEECH_ONE_PACE_DB` is the number a reader compares to the
+#: world.
 SPEECH_DB = {volume: db_of_power(power)
              for volume, power in SPEECH_POWER.items()}
 
-#: Power of a running entity at its own cell, by `sound_source`. Tied to the
-#: speech ladder rung for rung -- `audible` IS a normal voice, `loud` IS a
-#: loud one -- so "a loud generator masks a normal voice" means exactly what
-#: it says in numbers.
+#: A running entity's level ONE PACE OFF, by `sound_source`, in dB(A).
+#: Measured against the speech ladder because that is what a standing
+#: noise IS to a story -- whether you can talk over it -- and in real
+#: decibels the two ladders are comparable by construction.
 #:
-#:   § 6 proposed   faint 2 | audible 6 | loud 14 | deafening 40
-#:   set here       faint 1 | audible 12 | loud 40 | deafening 150
+#:   faint         40   a ticking clock, a dripping tap, a candle's gutter:
+#:                      35-45 dB(A); a quiet room is 30-40, so `faint` is
+#:                      what you notice only when nothing else is happening
+#:   audible       50   a hearth fire, a kettle coming up, a refrigerator:
+#:                      45-55 dB(A) at a metre. Ten under a voice, so a
+#:                      normal line beside it is `full`
+#:   loud          80   an engine at idle, a mill, a busy workshop, a
+#:                      vacuum cleaner: 75-85 dB(A) at a metre. The bottom
+#:                      of the owner's stated 80-85, taken because the
+#:                      composer's noise words are derived from the fragment
+#:                      margin and 80 is where a raised voice one pace off
+#:                      is still caught in pieces beside the machine
+#:   deafening    100   a klaxon, a siren, a jackhammer, a chainsaw: 95-110
+#:                      dB(A); a room you cannot use
+#:   thunderous   120   thunder overhead, an artillery piece some way off,
+#:                      the foot of a waterfall, a jet passing low: 115-125
+#:   catastrophic 140   an explosion, a structure coming down, a jet engine
+#:                      at close range: 135-150, the threshold of pain
 #:
-#: The top two rungs are the decibel work's (2026-09-05) and are DECLARED in
-#: dB, because they were never a conversion of anything: `thunderous` 85 and
-#: `catastrophic` 100 are 23 and 38 dB over `deafening`, which is where a
-#: cannon, a collapsing roof and a ship's horn live and where the old ladder
-#: had no rung at all.
-SOUND_POWER = {"faint": 1.0, "audible": 4.0, "loud": 40.0,
-               "deafening": 150.0,
-               "thunderous": power_of_db(85.0),
-               "catastrophic": power_of_db(100.0)}
+#: THE TOP TWO RUNGS MOVED, and it was forced rather than chosen. They were
+#: declared 85 and 100 on 2026-09-05 as "23 and 38 dB over `deafening`",
+#: on a ladder whose `deafening` was 61.8; on a real ladder `deafening` is
+#: 100, so 85 and 100 would have put `thunderous` UNDER it and
+#: `catastrophic` level with it. The ladder must be monotone -- `_one_level
+#: _down` steps a failing source one rung down and would have made a
+#: failing thunder LOUDER, and the far field's reach is asserted to grow
+#: rung by rung -- so the two were re-authored at the real levels of the
+#: things they name, which is also, to the decibel, their old offsets over
+#: the new `deafening`. Their far-field reach grew with them (measured on a
+#: 300-room chain of medium rooms and open doorways: 91 and 128 rooms
+#: against the 29 and 51 the old levels reached); an explosion heard across
+#: a whole scene is what an explosion is.
+SOUND_ONE_PACE_DB = {"faint": 40.0, "audible": 50.0, "loud": 80.0,
+                     "deafening": 100.0, "thunderous": 120.0,
+                     "catastrophic": 140.0}
+
+#: The same, as the power at the source's cell. Derived.
+SOUND_POWER = {level: one_pace_power(db)
+               for level, db in SOUND_ONE_PACE_DB.items()}
 
 #: THE SAME FOUR WORDS MEAN SOMETHING ELSE ABOUT A ONE-OFF NOISE, and the
 #: owner's 2026-09-06 ruling -- untie the noise ladder from the voice ladder
@@ -277,30 +369,35 @@ SOUND_POWER = {"faint": 1.0, "audible": 4.0, "loud": 40.0,
 #: rope pulled and left, a klaxon. What such a thing IS, to a story, is how
 #: it sits against a voice -- whether you can talk over it, whether you have
 #: to raise your voice, whether the room is unusable -- so measuring it
-#: against the speech ladder is not the error, it is the definition, and
-#: every masking answer the engine has given about ambient machinery stands.
+#: against the speech ladder is not the error, it is the definition.
 #:
 #: A `sensory_event` is an IMPACT. A crowbar on a bulkhead, a slammed hatch,
 #: a dropped spanner, a detonation overhead: the sound is over before anyone
 #: could talk over it, and what matters about it is HOW FAR IT WENT.
-#: Measured against conversation it was absurd -- a hammer blow on steel at
-#: 56.0 dB against a normal voice's 50.8, where the real gap is nearer forty
-#: -- and 29 dB of range between `loud` and a quiet room's 27.0 floor is
-#: what killed every noise inside the room that made it. Measured on the
-#: descent story (chat 117): a `loud` clang in a 20-pace plant room arrived
-#: at its own doorway at 30.0 dB, under the next room's floor across any
-#: barrier at all, so a creature two rooms off could never hear anything a
-#: player did whatever the geometry said.
+#: Measured against conversation on the compressed ladder it was absurd -- a
+#: hammer blow on steel at 56.0 dB against a normal voice's 50.8, where the
+#: real gap is nearer forty -- and 29 dB of range between `loud` and a
+#: quiet room's 27.0 floor is what killed every noise inside the room that
+#: made it. Measured on the descent story (chat 117): a `loud` clang in a
+#: 20-pace plant room arrived at its own doorway at 30.0 dB, under the next
+#: room's floor across any barrier at all, so a creature two rooms off could
+#: never hear anything a player did whatever the geometry said.
 #:
-#:   emission   faint 40.0 | audible 50.8 | loud 56.0 | deafening 61.8
-#:   impact     faint 45.0 | audible 58.0 | loud 72.0 | deafening 80.0
+#:   emission (cell)  faint 43.0 | audible 53.0 | loud 83.0 | deafening 103.0
+#:   impact   (cell)  faint 45.0 | audible 58.0 | loud 72.0 | deafening 80.0
 #:
-#: The two far rungs are shared and unmoved: `thunderous` and `catastrophic`
-#: are impacts by nature, their reach is measured (about thirty and about
-#: fifty medium rooms of open doorways), and nothing in this ruling is a
-#: reason to move a number that was checked.
+#: The impact ladder is UNTOUCHED by the 2026-09-14 recalibration: its four
+#: lower rungs were authored in dB on 2026-09-06 at the source cell, not at
+#: one pace, and are kept byte for byte. Two consequences are stated rather
+#: than hidden. The emission ladder now sits ABOVE the impact ladder at
+#: `loud` and `deafening` (an engine at 83 against a hammer blow at 72),
+#: where on 2026-09-06 the relation was the reverse; nothing in the model
+#: compares the two ladders to each other, so no verdict turns on it, and a
+#: real impact ladder (a slammed door is 80-90 at a metre, a hammer on steel
+#: over 100) is a separate recalibration registered in `docs/UNBUILT.md`.
+#: And the two far rungs are shared, so they moved with `SOUND_POWER`.
 #:
-#: `loud` at 72 now clears `FAR_FIELD_ENTRY_DB` (70), which is the point: a
+#: `loud` at 72 clears `FAR_FIELD_ENTRY_DB` (70), which is the point: a
 #: hammer on a bulkhead walks the room graph and is heard across a level,
 #: while `audible` 58 and `faint` 45 stay near-field things. An event whose
 #: level is a bare number, or which carries an authored `db`, is unaffected.
@@ -311,13 +408,14 @@ EVENT_POWER = {"faint": power_of_db(45.0),
                "thunderous": SOUND_POWER["thunderous"],
                "catastrophic": SOUND_POWER["catastrophic"]}
 
-#: The impact ladder in dB -- faint 45.0 | audible 58.0 | loud 72.0 |
-#: deafening 80.0 | thunderous 85.0 | catastrophic 100.0.
+#: The impact ladder in dB at the cell -- faint 45.0 | audible 58.0 |
+#: loud 72.0 | deafening 80.0 | thunderous 123.0 | catastrophic 143.0.
 EVENT_DB = {level: db_of_power(power) for level, power in EVENT_POWER.items()}
 
-#: The source ladder in dB at one pace -- faint 40.0 | audible 50.8 |
-#: loud 56.0 | deafening 61.8 | thunderous 85.0 | catastrophic 100.0. The
-#: same correction `SPEECH_DB` records applies to § 5's `faint 30`.
+#: The source ladder as a level AT THE CELL -- the one-pace table plus the
+#: one-pace loss: faint 43.0 | audible 53.0 | loud 83.0 | deafening 103.0 |
+#: thunderous 123.0 | catastrophic 143.0. Compared against
+#: `FAR_FIELD_ENTRY_DB` at the cell, like the impact ladder.
 SOUND_DB = {level: db_of_power(power) for level, power in SOUND_POWER.items()}
 
 #: What crosses an aperture, by the barrier's class AFTER its material shift
@@ -539,20 +637,48 @@ CROWD_SOUND = {"a handful": "faint", "a dozen or so": "audible",
 
 #: The absolute floor under `fragment`: a signal quieter than this is not
 #: heard however quiet the room. § 6 proposed 0.3, which sat above a normal
-#: voice at five cells; set with AMBIENT so a whisper's fragment survives to
-#: four cells and dies at five.
+#: voice at five cells; set with AMBIENT on 2026-09-04 so a whisper's
+#: fragment survives to four cells and dies at five.
+#:
+#: 27.0 dB, and unmoved by the 2026-09-14 recalibration. It is NOT the
+#: ear's threshold in the physiological sense (that is 0 dB SPL by
+#: definition); it is the floor of an ordinary quiet room, which is what it
+#: was set to, and `quantise_hearing_db` explains why the two are one
+#: number here: YOU CANNOT HEAR BELOW THE ROOM YOU ARE STANDING IN, so the
+#: absolute limit the model needs is the quietest room it prices, and a
+#: room declared quieter (`QUIET_SCALE`) lowers it with the room.
 HEAR_FLOOR = 0.05
-#: `full` when signal >= FULL_SNR * noise. Kept as § 6 proposed.
+#: `full` when signal >= FULL_SNR * noise. Kept as § 6 proposed: +3 dB over
+#: the noise. Real speech-in-noise data puts near-complete sentence
+#: intelligibility for a familiar voice at a signal-to-noise ratio of 0 to
+#: +5 dB in steady noise; +3 is the middle of that band.
 FULL_SNR = 2.0
-#: `fragment` when signal >= FRAGMENT_SNR * noise (and >= HEAR_FLOOR). Kept.
-FRAGMENT_SNR = 0.8
+#: `fragment` when signal >= FRAGMENT_SNR * noise (and >= HEAR_FLOOR).
+#:
+#: MOVED 2026-09-14 from 0.8 (-0.97 dB) to 1/16 (-12.04 dB), WITH THE
+#: LADDERS, because it was the number that made the deck's verdict wrong
+#: whatever the ladders said. At -1 dB, "caught in pieces" ended where the
+#: voice was four fifths of the room, and no real listener is that deaf: the
+#: speech reception threshold (half the sentences understood) sits near -5
+#: to -8 dB SNR in steady noise for normal hearing, intelligibility falls to
+#: a few words by about -12, and against a masker that does not share
+#: speech's spectrum -- an engine, wind, water -- the effective margin is
+#: several decibels better again. So a voice is FOLLOWED at +3 over the
+#: room and CAUGHT IN PIECES down to a sixteenth of it, two rungs of the
+#: six-decibel step the rest of this module is built on. Measured on the
+#: 4x3 deck with a real 80 dB engine: a raised line one pace off is
+#: `fragment` from every cell of the deck (-3 to -10 dB), where at -1 dB
+#: it was `none` from every cell; a normal line at arm's reach is a
+#: `fragment` three paces from the machine and `none` at two, which is the
+#: distance at which people on a launch stop talking and start shouting.
+FRAGMENT_SNR = 0.0625
 
 #: The three in dB. The two ratios become MARGINS over the noise -- `full`
-#: at +3.01 dB, `fragment` at -0.97 dB -- which is the form they were always
-#: in and the form that says what they mean: a voice is followed when it is
-#: twice the room, and caught in pieces when it is four fifths of it. The
-#: absolute floor is a LEVEL and so is the one number the reference does not
-#: cancel out of.
+#: at +3.01 dB, `fragment` at -12.04 dB -- which is the form they were
+#: always in and the form that says what they mean: a voice is followed when
+#: it is twice the room, and caught in pieces when it is a sixteenth of it.
+#: The absolute floor is a LEVEL and so is the one number the reference does
+#: not cancel out of.
 FULL_SNR_DB = db_ratio(FULL_SNR)
 FRAGMENT_SNR_DB = db_ratio(FRAGMENT_SNR)
 HEAR_FLOOR_DB = db_of_power(HEAR_FLOOR)
@@ -563,29 +689,21 @@ HEAR_FLOOR_DB = db_of_power(HEAR_FLOOR)
 #: a body has for a room's loudness, "could I hear someone beside me" --
 #: derived from the two SNR thresholds above, not set beside them:
 #:
-#:   quiet    a normal voice one pace off is `full`      noise <= 6.0 / FULL_SNR     (3.0)
-#:   din      ... is a `fragment`                        noise <= 6.0 / FRAGMENT_SNR (7.5)
+#:   quiet    a normal voice one pace off is `full`      noise <= 60 - FULL_SNR_DB      (57.0 dB)
+#:   din      ... is a `fragment`                        noise <= 60 - FRAGMENT_SNR_DB  (72.0 dB)
 #:   drowned  ... is `none`                              above that
 #:
-#: where 6.0 is SPEECH_POWER["normal"] at a path of one cell, 12 / (1 + 1).
-#: Move FULL_SNR or FRAGMENT_SNR and the words move with them.
+#: where 60 is `SPEECH_ONE_PACE_DB["normal"]`. In the world: a hearth fire
+#: (50 at a pace) leaves the hearth `quiet`; an engine (80) is `drowned`
+#: at the machine and a `din` within three paces of it. Move FULL_SNR or
+#: FRAGMENT_SNR and the words move with them.
 NOISE_WORDS = ("quiet", "din", "drowned")
+#: A normal voice ONE PACE OFF as a power: the cell power over the one-pace
+#: loss, which is exactly `one_pace_power(60)` unwound.
 VOICE_ONE_PACE = SPEECH_POWER["normal"] / 2.0
-#: The same yardstick as a level: 47.8 dB, a normal voice at one pace.
+#: The same yardstick as a level: 60.0 dB, a normal voice at one pace, and
+#: the same number as `SPEECH_ONE_PACE_DB["normal"]` by construction.
 VOICE_ONE_PACE_DB = db_of_power(VOICE_ONE_PACE)
-
-
-def spreading_loss_db(length: float) -> float:
-    """`10*log10(1 + L^2)`: what a path of `length` costs a sound, in dB.
-    The linear model's `1 / (1 + L^2)` written as the loss it is. Path
-    length, never straight distance -- the whole difference from light."""
-    length = float(length or 0.0)
-    return 10.0 * math.log10(1.0 + length * length)
-
-
-#: The spreading loss at a path of ONE cell: 3.01 dB. The yardstick every
-#: masking rule is stated against ("could I hear someone beside me").
-_ONE_PACE_LOSS_DB = spreading_loss_db(1.0)
 
 
 def noise_word(noise: float) -> str:
@@ -1972,11 +2090,13 @@ def beat_sensory_events(scene: dict, turn_idx) -> list:
 # only about rooms beyond it. That is what "they agree at the boundary"
 # has to mean between a cell model and a room model, and it is pinned.
 #
-# AND IT COSTS NOTHING ON AN ORDINARY BEAT. Nothing under
-# `FAR_FIELD_ENTRY_DB` enters it, and the loudest thing an ordinary beat
-# holds -- a shout, at 60.8 dB -- is nine decibels under that. No source
-# qualifies, `distant_sounds` returns before it builds anything, and no
-# graph is walked at all.
+# AND IT COSTS NOTHING ON A QUIET BEAT. Nothing under `FAR_FIELD_ENTRY_DB`
+# enters it and no voice ever does (`far_field_sources` drops speech by
+# kind), so a beat of conversation beside a hearth walks no graph at all:
+# `distant_sounds` returns before it builds anything. A beat with a running
+# engine or a klaxon in it (`loud` and up on the real ladder, since
+# 2026-09-14) walks the room graph once per such source, which is a
+# Dijkstra over a few dozen rooms on a cached graph.
 
 #: What a solid partition passes. THE ONE GENUINELY NEW NUMBER
 #: (`DESIGN_SOUND_DECIBELS.md` § 5): a wall used to pass NOTHING, which was
@@ -1986,29 +2106,38 @@ def beat_sensory_events(scene: dict, turn_idx) -> list:
 #:
 #: RESOLVED 2026-09-05, AND IT WAS A UNIT, NOT A JUDGEMENT. 45 was entered
 #: as the real-world transmission loss of a masonry wall, and every other
-#: number in this table is on a DIFFERENT SCALE: the aperture losses are
-#: derived from `APERTURE_PASS`, which was calibrated against the near
-#: field's own sentences, and `SPEECH_POWER`'s ladder was widened to match
-#: "the ratio a real voice has" only in ORDER, not in span.
+#: number in this table was then on a DIFFERENT SCALE: the aperture losses
+#: are derived from `APERTURE_PASS`, which was calibrated against the near
+#: field's own sentences, and the speech ladder of the day had "the ratio a
+#: real voice has" only in ORDER, not in span -- whisper->shout was 20.8 dB
+#: against 58 in the world, a compression of 0.358, and every aperture sat
+#: on that scale (window 10.0 against a real 28 scaled to 10.0, exactly;
+#: open_door 0.5 against 0.7; membrane 3.0 against 1.8; closed_door 6.0
+#: against 9.0). A real 45 dB wall, compressed, is 16, and that is what
+#: shipped.
 #:
-#: Measured, and the two spans agree to three decimals: whisper->shout is
-#: 20.8 dB here against 58 dB in the world, and normal->shout is 10.0
-#: against 28 -- a compression of 0.358 either way. Every aperture in the
-#: table is already on that compressed scale (window 10.0 against a real 28
-#: scaled to 10.0, exactly; open_door 0.5 against 0.7; membrane 3.0 against
-#: 1.8; closed_door 6.0 against 9.0). Only `wall` and `floor/ceiling` were
-#: raw. So they were not a physical choice standing beside game numbers --
-#: they were the same physical number in the wrong denomination, which is
-#: why they behaved like a bunker: a real 45 dB wall, compressed, is 16.
+#: THE 2026-09-14 RECALIBRATION LEFT THIS TABLE WHERE IT WAS, and the model
+#: is therefore mixed: the emission ladders are real levels and the aperture
+#: and partition losses are the compressed ones calibrated against the old
+#: ladder. Stated rather than hidden, because it has a direction: an
+#: opening or a wall passes a real voice more readily than a real one would.
+#: A closed door at 6.0 dB against a real solid door's 25 lets a normal line
+#: three paces behind it through `full` (63 - 6 - 10 = 47 against the 27.0
+#: floor), and a `thunderous` event crosses more walls at 16 than thunder
+#: crosses at 45. Moving the losses to real transmission values is one
+#: decision with a measured consequence for every doorway in every story,
+#: and it is registered for the owner in `docs/UNBUILT.md` rather than taken
+#: here; `tests/test_sound_field.py::test_every_barrier_in_the_table_is_on_
+#: one_scale` pins the mixed state so the next edit meets it knowingly.
 #:
-#: WHAT THE FIX BUYS, measured through medium rooms against the 27.0 dB
-#: floor. Before: only `catastrophic` crossed one wall and NOTHING crossed
-#: two, so a collapsing roof two rooms away was silent. After: `thunderous`
-#: carries through two walls and through a floor-and-wall, `catastrophic`
-#: through three, `deafening` crosses one and dies at two, and a `loud`
-#: event still crosses nothing. A shout still dies against a wall (60.8 -
-#: 16 - 21.6 = 23.2, under the floor), which is the sentence this number
-#: had to keep.
+#: WHAT 16 BOUGHT on the old ladder, measured through medium rooms against
+#: the 27.0 dB floor: before, only `catastrophic` crossed one wall and
+#: NOTHING crossed two, so a collapsing roof two rooms away was silent;
+#: after, `thunderous` carried through two walls, `catastrophic` through
+#: three, `deafening` crossed one and a `loud` event none. On the real
+#: ladder the same wall passes more: an 83 dB engine is heard through one
+#: wall of the next room (83 - 16 - 21.6 = 45.4 against 27.0) and a
+#: `deafening` klaxon through two.
 WALL_LOSS_DB = 16.0
 
 #: A floor or a ceiling: an edge that goes up or down and is a wall rather
@@ -2023,12 +2152,16 @@ FLOOR_CEILING_LOSS_DB = 18.0
 #: fails toward LESS reach, which is the direction every guard here fails.
 _UNKNOWN_BARRIER_LOSS_DB = WALL_LOSS_DB
 
-#: The level a source must reach at one pace before the far field is built
-#: at all. Above `deafening` (61.8) and below `thunderous` (85), so exactly
-#: the two new rungs and an authored `db` reach it, and NOTHING an ordinary
-#: beat contains does -- a shout is 60.8. That is not a performance guard
-#: bolted on: it is the same sentence as "incredibly loud noises travel very
-#: far", read from the other end.
+#: The level a source must hold at its cell before the far field is built
+#: at all. Set 2026-09-05 above the old `deafening` (61.8) so that only the
+#: two far rungs reached it; on the real ladder (2026-09-14) it admits a
+#: standing `loud` source (83 at the cell: an engine, a mill), `deafening`
+#: and the two far rungs, and on the impact ladder `loud` (72) and up -- a
+#: hearth fire (53) and a kettle stay near-field things you meet at the
+#: door. A voice never enters, at any volume, and not because of this number
+#: (a shout is 85 at its cell): `far_field_sources` refuses speech by kind.
+#: That is not a performance guard bolted on: it is the same sentence as
+#: "incredibly loud noises travel very far", read from the other end.
 FAR_FIELD_ENTRY_DB = 70.0
 
 #: How a sound from beyond the near field ARRIVES, by its margin over the
@@ -2277,12 +2410,12 @@ def far_field_sources(scene: dict, *, turn_idx=None, crowds=None,
     """This beat's sources loud enough to enter the far field.
 
     `speakers` is not a parameter and never will be: A VOICE IS NOT A FAR
-    FIELD SOURCE, AT ANY VOLUME. The threshold alone would do it -- a shout
-    is 60.8 dB against an entry of 70 -- but the threshold is a constant and
-    a constant can be moved, and what this refuses is not a loudness. It is
-    the claim that a body two streets away heard a sentence. So speech is
-    excluded by CONSTRUCTION, at the only door it could come through, and no
-    setting of the constants can open it.
+    FIELD SOURCE, AT ANY VOLUME. The threshold does not do it -- a real
+    shout is 85 dB at its cell against an entry of 70, and until 2026-09-14
+    it only happened to (60.8) -- and what this refuses is not a loudness.
+    It is the claim that a body two streets away heard a sentence. So
+    speech is excluded by CONSTRUCTION, at the only door it could come
+    through, and no setting of the constants can open it.
     """
     out = []
     sources, _notices = sound_sources(scene, turn_idx=turn_idx, crowds=crowds,
