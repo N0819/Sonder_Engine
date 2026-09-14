@@ -2926,9 +2926,13 @@ def cast_scene_context(cast_rows):
         })
     return result
 
-def private_knowledge_for(chat, viewer_name, frame_id=None):
-    vn = (viewer_name or "").lower().strip()
-    out = []
+def _cast_private_histories(chat, frame_id=None):
+    """`(owner name, private_history entries)` per cast row, frame-aware.
+
+    The one read of the ledger both `private_knowledge_for` and
+    `own_private_history` project: the frame override wins over the base
+    row's state, and a state that carries no ledger falls back to the card.
+    """
     rows = q(
         "SELECT COALESCE(cc.sheet,ch.sheet) AS sheet, "
         "COALESCE(ccf.state, cc.state) AS state "
@@ -2946,10 +2950,39 @@ def private_knowledge_for(chat, viewer_name, frame_id=None):
         entries = st.get("private_history")
         if entries is None:
             entries = character_private_history(sh)
-        owner = character_name(sh)
+        yield character_name(sh), [
+            e for e in (entries or [])
+            if isinstance(e, dict) and e.get("content")]
+
+
+def own_private_history(chat, viewer_name, frame_id=None):
+    """THIS mind's own private-history entries, `known_by` intact.
+
+    `private_knowledge_for` hands the character the CONTENT of what it knows;
+    this hands the engine the ledger of whom each entry was shared with, which
+    is what a reader needs to ask whether somebody ELSE could have had it
+    (`agents/impossible_knowledge.py`). Only the viewer's own rows: another
+    mind's `known_by` is a fact about another mind's secrets.
+    """
+    vn = (viewer_name or "").lower().strip()
+    out = []
+    for owner, entries in _cast_private_histories(chat, frame_id):
+        if owner.lower() != vn:
+            continue
         for e in entries:
-            if not isinstance(e, dict) or not e.get("content"):
-                continue
+            out.append({
+                "content": str(e["content"]),
+                "known_by": [str(x).strip() for x in (e.get("known_by") or [])
+                             if str(x or "").strip()],
+            })
+    return out
+
+
+def private_knowledge_for(chat, viewer_name, frame_id=None):
+    vn = (viewer_name or "").lower().strip()
+    out = []
+    for owner, entries in _cast_private_histories(chat, frame_id):
+        for e in entries:
             kb = [str(x).lower().strip() for x in (e.get("known_by") or [])]
             if owner.lower() == vn:
                 out.append({"about": e.get("about") or owner,

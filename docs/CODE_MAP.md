@@ -8,8 +8,8 @@
 |---|---:|---|---|
 | `agents/__init__.py` | 100 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
 | `agents/background.py` | 1751 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
-| `agents/character.py` | 4443 | Private character decision agent. | `agents.character_kernel`, `agents.common`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
-| `agents/character_kernel.py` | 464 |  | — |
+| `agents/character.py` | 4580 | Private character decision agent. | `agents.character_kernel`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
+| `agents/character_kernel.py` | 468 |  | — |
 | `agents/common.py` | 10837 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 4946 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 6344 | Scene establishment, player interpretation, and objective resolution. | `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.paradox`, `world.spatial`, `world.survival` |
@@ -23,6 +23,7 @@
 | `agents/director_scopes.py` | 1204 |  | `agents.director_lingua`, `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 706 |  | `agents.common`, `story.character_schema`, `story.scene`, `world.background_claims` |
 | `agents/dramaturge.py` | 348 |  | `core.db`, `core.logging_utils` |
+| `agents/impossible_knowledge.py` | 228 |  | `agents.common`, `core.db`, `story.character_schema` |
 | `agents/loops.py` | 1400 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/mapping.py` | 614 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `mind.memory`, `story.scene`, `world.spatial` |
 | `agents/narration.py` | 2621 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
@@ -117,7 +118,7 @@
 | `story/room_research.py` | 376 |  | `core.db` |
 | `story/room_slice.py` | 556 |  | `story.attire` |
 | `story/room_tools.py` | 1699 |  | `story.plot_packages`, `story.room_research`, `story.room_slice` |
-| `story/scene.py` | 2973 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.day_cycle`, `world.spatial` |
+| `story/scene.py` | 3006 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.day_cycle`, `world.spatial` |
 | `web/__init__.py` | 6 |  | — |
 | `web/app.py` | 7529 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `agents.story_planner`, `core`, `core.db`, `core.frames`, `core.paths`, `dressing.ambience`, `dressing.backdrops`, `llm`, `llm.prompts`, `llm.providers`, `mind.memory`, `persist.chat_archive`, `persist.chat_delete`, `persist.checkpoints`, `persist.commit`, `persist.steps`, `story`, `story.character_schema`, `story.dialogue_colors`, `story.importers`, `story.scene`, `web`, `web.auth_routes`, `web.room_routes`, `web.world_routes`, `world`, `world.survival` |
 | `web/auth_routes.py` | 279 | Typed host-authentication HTTP routes and cookie transport. | `web` |
@@ -234,27 +235,27 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_step()` | 3223 | 1221 lines |
-| `_annotate_known_exits()` | 2563 | 469 lines |
-| `_ground_observation_citations()` | 1538 | 322 lines |
-| `_unanswered_question_note()` | 556 | 237 lines |
-| `_destination_from_goals()` | 2129 | 109 lines |
-| `_recent_self_moves()` | 274 | 98 lines |
-| `sprint_offers()` | 3067 | 97 lines |
-| `strip_beat_reissues()` | 1059 | 82 lines |
+| `character_step()` | 3347 | 1234 lines |
+| `_annotate_known_exits()` | 2687 | 469 lines |
+| `_ground_observation_citations()` | 1662 | 322 lines |
+| `_unanswered_question_note()` | 561 | 237 lines |
+| `_destination_from_goals()` | 2253 | 109 lines |
+| `_recent_self_moves()` | 279 | 98 lines |
+| `sprint_offers()` | 3191 | 97 lines |
+| `_impossible_knowledge()` | 900 | 89 lines |
 
 ### `agents/character_kernel.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_chosen_wants()` | 274 | 66 lines |
-| `expand_character_evidence()` | 189 | 43 lines |
-| `compact_character_evidence()` | 105 | 42 lines |
-| `_compile_named_updates()` | 387 | 40 lines |
-| `_rewrite_evidence_container()` | 149 | 38 lines |
-| `bind_current_evidence_to_memory()` | 234 | 38 lines |
-| `compile_character_kernel()` | 429 | 36 lines |
-| `_compile_rows()` | 361 | 24 lines |
+| `_chosen_wants()` | 278 | 66 lines |
+| `compact_character_evidence()` | 105 | 46 lines |
+| `expand_character_evidence()` | 193 | 43 lines |
+| `_compile_named_updates()` | 391 | 40 lines |
+| `_rewrite_evidence_container()` | 153 | 38 lines |
+| `bind_current_evidence_to_memory()` | 238 | 38 lines |
+| `compile_character_kernel()` | 433 | 36 lines |
+| `_compile_rows()` | 365 | 24 lines |
 
 ### `agents/common.py`
 
@@ -416,6 +417,17 @@
 | `_call()` | 78 | 16 lines |
 | `_file()` | 203 | 14 lines |
 | `system_block()` | 133 | 4 lines |
+
+### `agents/impossible_knowledge.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `impossible_knowledge_cues()` | 91 | 74 lines |
+| `aired_in_story()` | 182 | 47 lines |
+| `naming_tokens()` | 59 | 30 lines |
+| `_spoken_texts()` | 167 | 13 lines |
+| `folded_tokens()` | 54 | 3 lines |
+| `_tokens()` | 50 | 2 lines |
 
 ### `agents/loops.py`
 
