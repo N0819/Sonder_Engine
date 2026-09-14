@@ -412,7 +412,20 @@ def body_of_an_authored_mind(charter, body_key, body=None):
         return True
     if body is None:
         body = ((charter or {}).get("bodies") or {}).get(body_key) or {}
-    return bool(str((body or {}).get("resident_seed_id") or "").strip())
+    seed = str((body or {}).get("resident_seed_id") or "").strip()
+    # A RESERVATION IS A MIND'S ONLY WHEN A MIND HOLDS IT. Two callers seed
+    # a featured resident: a registered character's card (`cast:<id>`,
+    # chat 95 above), whose own agent plays the body, and the Charter
+    # Planner's brief (`authored:<hash>`, `charter_generate._featured_rows`),
+    # which names a person nobody plays -- the landlady, the minister, the
+    # skipper the story asked the town to have. Reading every seed as a mind
+    # made the planner's people invisible off screen: no presence record,
+    # no figure, no voice, in every story of the 2026-09-14 campaign (Hester
+    # and Amos on chat 5, Mother Pascoe and the whole crew on chat 7), while
+    # the extras the institution grew around them were seen and spoken.
+    # A named extra is an extra; only a mind's body is withheld from the
+    # background stage, because a mind's own agent is already playing it.
+    return seed.startswith("cast:")
 
 
 #: How many autobiographical rows one body may carry. This was 16, chosen when

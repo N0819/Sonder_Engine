@@ -2947,6 +2947,23 @@ def _redact_concealed_from_event(event_text, concealed_for_this_perceiver):
     return " ".join(kept) if kept else _REDACTED_NOTICE
 
 
+def identity_bearing_sources(sources):
+    """The act sources that carry an IDENTITY an observer may or may not
+    have earned -- every one but a crowd's chorus.
+
+    A chorus is the crowd answering as one, named by its composition
+    (`background._chorus_entry`: "cousins and mistress"). Filed into the
+    identity roster, that composition was scrubbed from every view of an
+    observer who "did not recognise" it, and the scrub's per-word forms
+    took the word "and" with it: "a chapel of dark slate the unfamiliar
+    person granite" (scratch play 2026-09-14, chat 7 turn 3). A crowd has
+    no name to withhold; its act is delivered like any other and its
+    composition is prose.
+    """
+    return [s for s in (sources or ()) if isinstance(s, dict)
+            and not s.get("chorus")]
+
+
 def _background_beats(ctx, scene):
     """Every background presence that spoke or ACTED this beat, each with the
     room it stands in. Cached per turn; empty when the stage did not fire.
@@ -2998,7 +3015,13 @@ def _background_beats(ctx, scene):
         room = str(r.get("room") or "").strip() or presence_room(
             scene, name, presence_record_for(records, name, scene)[1] or {})
         beats.append({"name": name, "entry": entry, "room": room or None,
-                      "action": str(r.get("action") or "").strip()})
+                      "action": str(r.get("action") or "").strip(),
+                      # A CHORUS IS NOT A PERSON. `background._chorus_entry`
+                      # answers an address to a crowd as one entry named by
+                      # the crowd's composition ("cousins and mistress");
+                      # carried so the outcome stage can deliver the act
+                      # without treating the composition as an identity.
+                      "chorus": bool(r.get("chorus"))})
     ctx["_background_beats_cache"] = beats
     return beats
 
@@ -3123,7 +3146,8 @@ def perception_outcome(ctx, nonce):
     # Every presence that spoke OR acted -- an act needs a channel to its
     # observer exactly as a line does, and only a source has one.
     for _b in _bg_beats:
-        sources.append({"name": _b["name"], "room": _b["room"]})
+        sources.append({"name": _b["name"], "room": _b["room"],
+                        "chorus": bool(_b.get("chorus"))})
     for c in ctx.cast:
         d = _settled_character_result(ctx, c["id"])
         # One memoised normalization for the name and the room lookup (C14).
@@ -5909,7 +5933,7 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
         {"name": nm, "appearance": ap, "aliases": cast_aliases.get(nm) or []}
         for nm, ap in appearances.items()
     ]
-    for s in sources:
+    for s in identity_bearing_sources(sources):
         if s.get("name") and all(r["name"] != s["name"] for r in ident_roster):
             ident_roster.append(
                 {"name": s["name"], "appearance": None, "aliases": []})

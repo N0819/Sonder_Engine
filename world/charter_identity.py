@@ -358,6 +358,12 @@ def _stored_name_components(body, profile):
     # `display_name` applies under the same test.
     assembled = bool(given or family)
     parts = name.split()
+    if len(parts) == 1 and not (given or family):
+        # ONE WORD IS ONE COMPONENT. A body the planner named "Kitto" or
+        # "Dan" has a given name and no family name; filling both fields
+        # from the one word rendered "Cousin Kitto Kitto" and "Cousin Dan
+        # Dan" on every line of a story (scratch play 2026-09-14, chat 7).
+        return parts[0], ""
     if parts and not (given and family):
         if profile["name_format"] == "{given} {family}":
             given = given or " ".join(parts[:-1]) or parts[0]
