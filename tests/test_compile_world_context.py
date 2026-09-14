@@ -325,3 +325,31 @@ def test_the_director_payloads_carry_needs_and_no_proposal(temp_db, monkeypatch)
     assert '"planning_needs"' in src
     assert director._PROSE_DUTY_GATES == {}
     assert "mapping_proposal" not in director._PROSE_DUTY_GATES
+
+
+def test_a_vehicle_moving_toward_no_room_raises_a_room_need(temp_db, no_retrieval):
+    """Scratch play 2026-09-14, chat 2: a ferry established in transit with an
+    ETA and no destination room crossed for twenty beats and could never
+    dock, because an arrival is scheduled only for a named destination."""
+    scene = {
+        "rooms": {"deck": {"name": "Deck", "adjacent": []},
+                  "lake": {"name": "Lake", "adjacent": []}},
+        "positions": {"Wren": "deck", "launch": "lake"},
+        "entities": {"launch": {"name": "the launch", "kind": "vehicle",
+                                "interior_rooms": ["deck"],
+                                "state": {"transit": {
+                                    "phase": "in_transit", "route_room": "lake",
+                                    "eta_seconds": 7200}}}},
+    }
+    ctx = _ctx(temp_db, scene=scene, interp={"movement": None, "flow": {}})
+    out = mapping.compile_world_context(ctx, nonce=0)
+    needs = [n for n in out.get("planning_needs", [])
+             if n.get("reason") == "transit_destination_unplanned"]
+    assert len(needs) == 1 and needs[0]["kind"] == "room"
+    assert needs[0]["surface"]["vehicle"] == "launch"
+    # Named and held: nothing to plan.
+    scene["entities"]["launch"]["state"]["transit"]["destination_room"] = "lake"
+    ctx = _ctx(temp_db, scene=scene, interp={"movement": None, "flow": {}})
+    out = mapping.compile_world_context(ctx, nonce=0)
+    assert not [n for n in out.get("planning_needs", [])
+                if n.get("reason") == "transit_destination_unplanned"]
