@@ -1920,6 +1920,7 @@ def _presence_bodies(ctx, sc, rooms, chatter):
                 # name, and without this the identity strip deletes the
                 # description whole (`common._unknown_actor_label`).
                 "role": row.get("role") or "",
+                **({"noun": row["noun"]} if row.get("noun") else {}),
                 "aliases": [],
                 # Its dealt surface, when the registry has one, so the
                 # display map can compose a silhouette at dim light and a
@@ -2571,6 +2572,7 @@ def perception_act(ctx, nonce):
     # WHERE THE BEAT FOUND THEM, before the declaration below is previewed
     # onto the scene: the room half of the walk this beat may contain (PA1).
     p_room_at_start = room_of(sc, p_name)
+    origin_sc = sc          # the beat's opening scene: where every act began
     sc = preview_player_state_assertions(
         sc, (interp.get("onset_state_assertions")
              if interp.get("onset_state_assertions") is not None
@@ -2752,7 +2754,8 @@ def perception_act(ctx, nonce):
     return _stage_player_room(_composer_act(
         ctx, sc, interp, perceivers, known, p_name, p_visible,
         p_disguise_known, p_disguise_conceals, p_disguise_terms, co_present,
-        amap, speech_elems, action, onset_legs, p_room=p_room), ctx)
+        amap, speech_elems, action, onset_legs, p_room=p_room,
+        origin_sc=origin_sc, origin_room=p_room_at_start), ctx)
 
 def _touch_only_sources(scene, perceiver_name, spatial_to_sources,
                         visual_channel_to_sources):
@@ -5074,8 +5077,62 @@ def _composer_act(ctx, sc, *args, **kwargs):
 def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                         p_disguise_known, p_disguise_conceals,
                         p_disguise_terms, co_present, amap, speech_elems,
-                        action, onset_legs=(), *, p_room):
+                        action, onset_legs=(), *, p_room, origin_sc=None,
+                        origin_room=None):
     onset_sequence = sequence_onset_elements(interp.get("sequence") or [])
+    # WHERE EACH ONSET EVENT HAPPENED. The stage resolves the player's room
+    # ONCE against the previewed scene, so `p_room` is where the beat LEAVES
+    # her; every event was graded there, and the lamp she took off the
+    # kitchen table before walking out was refused "cannot see" by the man
+    # sitting at that table (scratch play 2026-09-14, chat 5 turn 8). The
+    # declaration carries its own order: the element that moved her is the
+    # cut (`mover_cut_events`, the same rule the outcome pass and the
+    # movement cuts read), everything before it happened where the beat
+    # found her, everything from it on where it left her.
+    _beat_origin = str(origin_room or "")
+    _beat_dest = str(p_room or "")
+    _moved = bool(_beat_origin and _beat_dest and _beat_origin != _beat_dest)
+    _cut_index = None
+    if _moved:
+        try:
+            from agents.director import mover_cut_events
+            _told = str(mover_cut_events(interp).get(p_name) or "")
+        except Exception:
+            _told = ""
+        for _i, _e in enumerate(onset_sequence):
+            if not isinstance(_e, dict):
+                continue
+            if _told and str(_e.get("event_id") or "") == _told:
+                _cut_index = _i
+                break
+        if _cut_index is None:
+            for _i, _e in enumerate(onset_sequence):
+                if isinstance(_e, dict) and isinstance(_e.get("movement"), dict):
+                    _cut_index = _i
+                    break
+
+    def _event_room(idx):
+        """The room an onset event happened in, or None when the beat
+        cannot say (no move, or a move with no element to pin it to)."""
+        if not _moved or _cut_index is None:
+            return None
+        return _beat_origin if idx < _cut_index else _beat_dest
+    # THE SOUNDS THE PLAYER MADE THIS BEAT REACH THE CAST NOW, not a stage
+    # later. A world-author declaration that opens a sluice ("the by-wash
+    # took the run with a roar you could feel through your boots") is a
+    # `sensory_events` row in the beat's onset assertions, and this pass
+    # graded none of them: the cast declared into a silent world and the
+    # bargee begged for the sluice she had just thrown (scratch play
+    # 2026-09-14, chat 5 turn 3). Same rows, same normaliser and the same
+    # field the outcome pass reads them through.
+    _onset = (interp.get("onset_state_assertions")
+              if interp.get("onset_state_assertions") is not None
+              else interp.get("state_assertions"))
+    _onset = _onset if isinstance(_onset, dict) else {}
+    act_sounds = [dict(record, desc=record["detail"]) for record in (
+        normalize_sensory_event(event, rooms=sc.get("rooms") or {})
+        for event in (_onset.get("sensory_events") or [])
+        if isinstance(event, dict)) if record and record.get("detail")]
     if speech_elems and not any(
             isinstance(e, dict) and e.get("type") == "speech"
             for e in onset_sequence):
@@ -5132,6 +5189,7 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
     # from there, not from the room left behind.
     arrival_room = _declared_arrival_room(sc, interp, actor_body.get("room"))
     arrival_rels = {}
+    origin_rels = {}
     clean_views, observations, ledger, company = {}, {}, {}, {}
     for p in perceivers:
         pid = str(p["id"])
@@ -5176,8 +5234,27 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                 body_descriptions=body_descriptions,
                 self_forms=self_forms,
                 self_pronouns=p.get("pronouns"),
-                sound=_sound_field_for(ctx, sc, name, p.get("room")),
+                sound=_sound_field_for(ctx, sc, name, p.get("room"),
+                                       events=act_sounds),
                 prev_standing=prev_standing)
+            if act_sounds:
+                percepts.extend(_gated_ambient_percepts(
+                    _authored_prose_gate(
+                        ctx, "perception_act", name, known, identity_space),
+                    act_sounds, p.get("room")))
+                _afar = heard_events(
+                    sc, name, act_sounds, room=p.get("room"),
+                    turn_idx=getattr(ctx.turn, "idx", None),
+                    crowds=ctx.get("_sound_crowds"))
+                if _afar:
+                    _here = str(p.get("room") or "")
+                    percepts.extend(_gated_ambient_percepts(
+                        _authored_prose_gate(
+                            ctx, "perception_act", name, known,
+                            identity_space),
+                        [{**event, "room": _here, "room_id": _here,
+                          "source_room": _here} for event, _level in _afar],
+                        p.get("room")))
             rel = p.get("spatial_to_actor") or {}
             vis = p.get("visual_channel_to_actor", False)
             can_see = _in_plain_view(rel, vis)
@@ -5193,16 +5270,43 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                 onset's own is (`perception_act`), so a line graded at the
                 declared destination is graded by the same reader that
                 grades one at the origin -- one beat, one field.
+
+                SIGHT AT THE ORIGIN IS READ OFF THE OPENING SCENE. `_vis`
+                is the beat-wide channel, computed on the preview with the
+                actor already at the destination, so an act at the origin
+                -- the lamp taken off the table before she walked out --
+                was refused "cannot see" by the man sitting at that table
+                (scratch play 2026-09-14, chat 5 turn 8). Where the beat
+                moved the actor, the origin's sight is graded on the scene
+                the beat opened with.
                 """
                 if room == actor_body.get("room") or not room:
                     return _rel, _in_plain_view(_rel, _vis)
+                if (_moved and room == _beat_origin
+                        and origin_sc is not None):
+                    cached = origin_rels.get(_name)
+                    if cached is None:
+                        alt = spatial_rel_between(
+                            origin_sc, _name, p_name,
+                            observer_room=_p.get("room"),
+                            target_room=_beat_origin,
+                            sound=_sound_field_for(
+                                ctx, origin_sc, _name, _p.get("room"),
+                                events=act_sounds))
+                        alt_vis = _sight_reaches(
+                            origin_sc, _name, p_name, _p.get("sense_card"),
+                            rel=alt)
+                        cached = (alt, _in_plain_view(alt, alt_vis))
+                        origin_rels[_name] = cached
+                    return cached
                 cached = arrival_rels.get((_name, room))
                 if cached is None:
                     alt = spatial_rel_between(
                         sc, _name, p_name, observer_room=_p.get("room"),
                         target_room=room,
                         sound=_sound_field_for(ctx, sc, _name,
-                                               _p.get("room")))
+                                               _p.get("room"),
+                                               events=act_sounds))
                     alt_vis = _sight_reaches(sc, _name, p_name,
                                              _p.get("sense_card"), rel=alt)
                     cached = (alt, _in_plain_view(alt, alt_vis))
@@ -5213,8 +5317,9 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                 if not isinstance(event, dict):
                     continue
                 if event.get("type") == "speech":
-                    said_rel, said_seen = _spoken_from(_speech_room_for(
-                        sc, event, arrival_room, actor_body.get("room")))
+                    said_rel, said_seen = _spoken_from(
+                        _event_room(idx) or _speech_room_for(
+                            sc, event, arrival_room, actor_body.get("room")))
                     speech_rel = said_rel if continuity else {
                         **said_rel, "open_group_continuity": False}
                     speech_rel = _with_comm_channel(
@@ -5278,7 +5383,15 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                             **{key: value for key, value in display_map.items()},
                             name: "you", p_name: display,
                         })
-                    if onset_legs and not _channel_to_every_leg(
+                    # WHERE THE ACT WAS MADE (`_event_room`): before the
+                    # cut, where the beat found her; from it on, where it
+                    # left her.
+                    act_room = _event_room(idx)
+                    # The moving element itself is the crossing: it answers
+                    # to every leg, as before. Anything the order places in
+                    # one room is graded in that room.
+                    anchored = act_room is not None and idx != _cut_index
+                    if onset_legs and not anchored and not _channel_to_every_leg(
                             sc, None, name, p.get("room"), onset_legs,
                             p.get("sense_card")):
                         note_step_decision(
@@ -5288,10 +5401,12 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                             "channel did not stand in all of them"
                             % len(onset_legs))
                         continue
+                    act_rel, act_seen = (_spoken_from(act_room) if anchored
+                                         else (rel, can_see))
                     percept = composer.act_percept(
-                        sc, event, name, p_name, rel, display=display,
-                        can_see=can_see,
-                        sight=_sight_detail(sc, name, p_name, rel),
+                        sc, event, name, p_name, act_rel, display=display,
+                        can_see=act_seen,
+                        sight=_sight_detail(sc, name, p_name, act_rel),
                         self_forms=self_forms,
                         self_pronouns=p.get("pronouns"),
                         other_forms=tuple(

@@ -4263,10 +4263,17 @@ def presence_view(cid, place, name, frame_id=None, figures=None, *,
                 "charter": charter_key,
                 "body": body_key,
                 "creature": {
-                    k: creature[k] for k in (
+                    **{k: creature[k] for k in (
                         "look", "noun", "prey", "voice", "senses",
                         "can_open_doors", "footprint")
-                    if creature.get(k) not in (None, "", [], {})},
+                       if creature.get(k) not in (None, "", [], {})},
+                    # The one sentence that governs it (the package's
+                    # `rule`), which is the only account of WHEN it acts:
+                    # without it the voice climbed out onto the stones
+                    # while the by-wash it may not cross was roaring
+                    # (scratch play 2026-09-14, chat 5 turn 3).
+                    **({"rule": str((shared.get("law") or {}).get("purpose"))}
+                       if (shared.get("law") or {}).get("purpose") else {})},
                 "home": {"room": berth,
                          "at_home": bool(berth) and berth == str(place or "")},
                 **({"look": creature["look"]} if creature.get("look") else {}),

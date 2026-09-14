@@ -1684,10 +1684,24 @@ def declare_charter_figures(ctx, interp, sc, figure_rows, decls, nonce):
         return (0 if name.casefold() in addressed else 1,
                 0 if rooms.get(name) == p_room else 1, name.casefold())
 
+    refs_of = {str(r.get("name") or ""): (str(r.get("charter") or ""),
+                                          str(r.get("body") or ""))
+               for r in figure_rows if isinstance(r, dict)
+               and r.get("charter") and r.get("body")}
     out = []
     for index, name in enumerate(
             sorted(names, key=rank)[:CHARTER_VOICES_PER_BEAT]):
-        rec = presence_record_for(presences, name, sc)[1] or {}
+        # THE RECORD BY ITS PERMANENT IDENTITY FIRST. A ledger record minted
+        # under another spelling (the opening Director's name for the body,
+        # chat 5 turns 0-2) is the same body; found by name alone the voice
+        # ran with no nature, no look and no earned past, and the reactor
+        # after resolve voiced the body a second time under the record's
+        # name. The record's own name is then the name every seam speaks.
+        rec = _record_by_refs(presences, refs_of.get(name))
+        if rec is None:
+            rec = presence_record_for(presences, name, sc)[1] or {}
+        elif str(rec.get("name") or "").strip():
+            name = str(rec["name"]).strip()
         present_others = _present_others(
             ctx, sc, presence_room(sc, name, rec),
             _presence_recognizes(ctx, name))
@@ -1720,6 +1734,22 @@ def declare_charter_figures(ctx, interp, sc, figure_rows, decls, nonce):
                     "sensory_events": _creature_noise(
                         cid, rec, entry, frame_id=ctx.turn.frame_id)})
     return out
+
+
+def _record_by_refs(presences, ref):
+    """The presence record carrying this charter identity, or None."""
+    if not ref or not ref[0] or not ref[1]:
+        return None
+    charter, body = ref
+    for rec in (presences or {}).values():
+        if not isinstance(rec, dict):
+            continue
+        for row in rec.get("charter_refs") or ():
+            if (isinstance(row, dict)
+                    and str(row.get("charter") or "") == charter
+                    and str(row.get("body") or "") == body):
+                return rec
+    return None
 
 
 def _creature_noise(cid, rec, entry, *, frame_id=None):

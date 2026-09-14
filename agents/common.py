@@ -2235,15 +2235,19 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
         "the unfamiliar person" (scratch play 2026-09-14, chat 4 turn 9).
         Its own authored `noun` is the word, and a creature that authored
         none is the compositor's unnamed shape -- less, never a face."""
+        return _creature_noun_for(refs) or next(
+            (noun for noun in (charter_crowd.member_noun(
+                by_key.get(charter_key) or {}, body_key)
+                for charter_key, body_key in sorted(refs)) if noun), "")
+
+    def _creature_noun_for(refs):
+        """The word for a creature body, or "" for a person's."""
         from world.charter_creature import normalize_creature
-        for charter_key, body_key in sorted(refs):
-            charter = by_key.get(charter_key) or {}
-            creature = normalize_creature(charter.get("creature"))
+        for charter_key, _body_key in sorted(refs):
+            creature = normalize_creature(
+                (by_key.get(charter_key) or {}).get("creature"))
             if creature:
                 return creature.get("noun") or _text("creature_noun")
-            noun = charter_crowd.member_noun(charter, body_key)
-            if noun:
-                return noun
         return ""
 
     def _surface_for(refs):
@@ -2309,6 +2313,9 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
                 "appearance") or "") or _noun_for(refs)),
             "role": _noun_for(refs),
         }
+        creature_noun = _creature_noun_for(refs)
+        if creature_noun:
+            row["noun"] = creature_noun
         if surface:
             from world.charter_surface import appearance_text
             row["surface"] = surface
@@ -2420,7 +2427,13 @@ def lay_charter_figures(ctx, sc, rooms):
                 sc.setdefault("positions", {})[name] = row["room"]
             rows.append({"name": name, "room": row["room"],
                          "role": row.get("role") or "",
-                         "appearance": row.get("appearance") or ""})
+                         "appearance": row.get("appearance") or "",
+                         # The permanent identity, so the voice can find the
+                         # body's ledger record however the record is named.
+                         **({"charter": placed["charter"],
+                             "body": placed["body"]}
+                            if placed and placed.get("charter")
+                            and placed.get("body") else {})})
     if placements:
         lay_charter_bodies(sc, placements, keys=keys)
     return rows
@@ -2469,6 +2482,9 @@ def _creature_stance(cid, charter_key, frame_id=None):
                  if isinstance(v, dict) and v.get("level")}
         if voice:
             out["voice"] = voice
+        rule = str(((state.get("law") or {}).get("purpose")) or "").strip()
+        if rule:
+            out["rule"] = rule
         level = hunger.get("level")
         floor = hunger.get("floor")
         if level is not None:
@@ -4986,7 +5002,7 @@ def scene_figures(chat, cast, scene, recognized=None):
 
 
 def _unknown_actor_label(actor_name, appearance_text=None, aliases=None, *,
-                         role="", surface=None, sight="full"):
+                         role="", surface=None, sight="full", head_noun=None):
     # Every unrecognized actor used to render as the exact same generic
     # "the unfamiliar person" -- two strangers in one scene (or the same
     # stranger across a perceiver's dialogue and action lines) were
@@ -5146,8 +5162,18 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None, *,
             words = words[:-1]
         description = _label_safe(
             " ".join(words).rstrip(".;:").lower()).rstrip(".;:").strip()
+        # A CUT DESCRIPTION ENDS ON THE THING'S OWN NOUN. `head_noun` is what
+        # a stranger's eye calls the body in place of "person" (a creature's
+        # authored `noun`); a look cut to its first words is adjectives
+        # with nothing to hang on -- "the long black-slick" (scratch play
+        # 2026-09-14, chat 5 turn 1) -- so the noun closes it.
+        noun = " ".join(str(head_noun or "").split()).casefold()
+        if description and noun and noun not in description.casefold().split():
+            description = f"{description} {noun}"
         if description:
             return _text("unknown_actor", description=description)
+    if head_noun:
+        return _text("unknown_actor", description=str(head_noun).strip())
     return _text("unknown_actor_fallback")
 
 def _delivery_ok(relation, scene, observer_name, source_name, channel,

@@ -463,16 +463,20 @@ def assign_stranger_labels(bodies):
     observer who can see two ensigns and tell them apart no other way has
     exactly that.
     """
-    rows = [tuple(body) + (None,) * (5 - len(tuple(body))) for body in bodies]
-    rows = [(name, appearance, aliases, role or "", surface)
-            for name, appearance, aliases, role, surface in rows]
+    rows = [tuple(body) + (None,) * (6 - len(tuple(body))) for body in bodies]
+    # The optional sixth element is the body's head noun -- what a
+    # stranger's eye calls a creature in place of "person" -- which closes
+    # a cut description (`_unknown_actor_label`).
+    rows = [(name, appearance, aliases, role or "", surface, noun or "")
+            for name, appearance, aliases, role, surface, noun in rows]
     labels = {}
-    for name, appearance, aliases, role, surface in rows:
+    for name, appearance, aliases, role, surface, noun in rows:
         labels[str(name)] = _unknown_actor_label(
-            name, appearance, aliases, role=role, surface=surface)
+            name, appearance, aliases, role=role, surface=surface,
+            head_noun=noun or None)
     words = {str(name): _descriptor_words(name, appearance, aliases, role,
                                           surface=surface)
-             for name, appearance, aliases, role, surface in rows}
+             for name, appearance, aliases, role, surface, _noun in rows}
     for cap in (6, 8, 10, 14):
         collided = _collided_names(labels)
         if not collided:
@@ -577,7 +581,8 @@ def observer_display_map(scene, observer_name, co_present, known,
         if level == "full":
             strangers.append(
                 (name, body.get("appearance"), body.get("aliases") or [],
-                 str(body.get("role") or ""), body.get("surface")))
+                 str(body.get("role") or ""), body.get("surface"),
+                 str(body.get("noun") or "")))
         elif level == "none":
             out[name] = _unfamiliar_person()
         else:
