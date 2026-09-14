@@ -45,6 +45,21 @@ Housekeeping tables not described below: `schema_meta` (the migration version), 
   player's declaration lives on `turns`, everyone else's lives here.
 - `turns`: the primary player's declaration in sequence, plus the beat's
   `frame_id`.
+- `llm_blobs`, `llm_capture`: the debug capture (`persist/llm_capture.py`),
+  off by default. One `llm_capture` row per PROVIDER CALL of a turn -- the
+  Director's specialist sub-calls and the Writers' Room's calls included --
+  keyed by `turn_id` and ordered by `seq`; the sheet, each top-level payload
+  key, the response and the reasoning are stored once each by SHA-256 in
+  `llm_blobs` (`body` NULL in `hash_only` mode). Beside what was sent and
+  what came back, the row carries HOW the call was shaped: `response_format`
+  (the type the provider layer actually put on the wire -- `json_schema`,
+  `json_object` or empty -- after the staged 400 ladder), `reasoning_effort`,
+  `max_tokens` and `finish_reason`, all read from `providers.request_shape`
+  at the moment the exchange is noted. DIAGNOSTIC state, deliberately outside
+  the fiction's carriage: no checkpoint snapshots it, no archive exports it,
+  and a branch does not copy it -- a turn's capture is deleted with the turn
+  (`ON DELETE CASCADE`) and pruned to `RETAIN_TURNS` per chat. Read through
+  `GET /api/turns/{tid}/debug` (`persist/pipeline_trace.export_turn_debug`).
 - `room_messages`: the Writers' Room thread (`story/room_conversation.py`),
   one line per row, per story and era (`frame_id` NULL is the present),
   stamped with the beat it was said at. AUTHOR-SIDE state: a branch carries

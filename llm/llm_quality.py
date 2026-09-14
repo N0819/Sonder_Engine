@@ -555,6 +555,13 @@ def note_provider_exchange(*, role, system, payload, response, ok,
             "duration": time.time() - started,
             "ok": bool(ok),
             "error": str(error or "")[:400],
+            # HOW the call was shaped and how it stopped: `response_format`
+            # type, reasoning effort, `max_tokens` as sent, and the finish
+            # reason. Read here, on the thread that made the call, because
+            # the provider stashes them per context exactly as it does the
+            # reasoning trace above. A call that never reached the wire
+            # reads empty, which is the honest answer.
+            **providers.request_shape(),
         })
     except Exception:
         pass

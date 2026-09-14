@@ -97,13 +97,13 @@ def room_call(role, system, payload, *, max_tokens=None, phase="",
             role=role, system=system, payload=payload, response=None,
             started=started, duration=time.time() - started, ok=False,
             error="%s: %s" % (type(exc).__name__, exc), phase=phase,
-            requested=_requested(role))
+            requested=_requested(role), **_shape())
         raise
     record_room_exchange(
         role=role, system=system, payload=payload, response=raw,
         reasoning=_reasoning(), started=started,
         duration=time.time() - started, ok=True, phase=phase,
-        requested=_requested(role))
+        requested=_requested(role), **_shape())
     return raw
 
 
@@ -114,6 +114,16 @@ def _requested(role):
         return str((providers.agent_models().get(role) or {}).get("model") or "")
     except Exception:
         return ""
+
+
+def _shape():
+    """How the call was shaped and how it stopped (`providers.request_shape`),
+    read on the thread that made it, for the same reason `_reasoning` is."""
+    try:
+        from llm import providers
+        return providers.request_shape()
+    except Exception:
+        return {}
 
 
 def _reasoning():
