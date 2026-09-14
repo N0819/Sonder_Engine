@@ -1425,12 +1425,23 @@ def director_interpret(ctx, nonce):
     ]
     _causal_rooms = causal_scene_room_ids(
         sc, _acting_names, fallback_room=p_room)
+    _interpret_figures = _figures_in_view(ctx, _causal_rooms)
+    # A CHARTER FIGURE'S HANDLE IS ITS NAME, in the interpret exactly as in
+    # the resolve (`_identity_index` below): without it the only person a
+    # target could name was the registered character, and "a step toward
+    # him" on a quay where he was not standing was read as a step toward a
+    # man two rooms away in the chapel (scratch play 2026-09-14, chat 7
+    # turn 8).
+    _interpret_identities.update({
+        str(_fig.get("name")): str(_fig.get("name"))
+        for _fig in _interpret_figures if _fig.get("name")
+    })
     _causal_index = causal_world_index(
         sc, here=p_room, room_ids=_causal_rooms,
         include_entity_interiors=True,
         exclude_entity_interiors=_bodies_without_interiors(
             sc, _interpret_identities),
-        figures=_figures_in_view(ctx, _causal_rooms))
+        figures=_interpret_figures)
     _interpret_model_payload = {
         "event_inputs": _event_inputs,
         "identity_index": _interpret_identities,
@@ -3697,16 +3708,27 @@ def _require_complete_entity_interiors(out, sc, view, extras, stage):
         categories = {str(value) for value in row.get("categories") or []}
         if not ({"rooms", "spatial"} & categories):
             continue
+        # THE THING ENTERED OR OPENED, never everything the span touches.
+        # A span's `targets` name whatever it involves -- the lantern held
+        # up to light a porch door (scratch play 2026-09-14, chat 7 turn
+        # 11) -- and reading them here demanded an interior for the
+        # lantern, the spatial hand refused to mint one, and its whole
+        # reply, the walk into the chapel included, was thrown away. An
+        # interior is owed to the entity a body goes INTO or the entity the
+        # span is ABOUT, which are `movement.to_room` and `object_name`.
         queries = [str(row.get("object_name") or "").strip().casefold()]
         movement = row.get("movement")
         if isinstance(movement, dict):
             queries.append(str(movement.get("to_room") or "").strip().casefold())
-        queries.extend(str(target).strip().casefold()
-                       for target in row.get("targets") or [])
         matched = ""
         for query in filter(None, queries):
             for entity_id, entity in entity_interiors.items():
                 if not isinstance(entity, dict) or entity.get("interior_rooms"):
+                    continue
+                # A THING A HAND CARRIES HAS NO INSIDE TO AUTHOR. What is
+                # portable and not a container is a lamp, a bag, a tool;
+                # what a body can be inside is neither.
+                if entity.get("portable") and not entity.get("container"):
                     continue
                 forms = {
                     str(entity_id).strip().casefold(),
