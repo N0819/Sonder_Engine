@@ -515,6 +515,14 @@ def export_turn_debug(turn_id: int, *, include_content: bool = True) -> dict:
             "duration": float(row.get("duration") or 0.0),
             "ok": bool(row.get("ok", 1)),
             "error": row.get("error") or "",
+            # HOW the call was shaped: what the provider layer actually put
+            # on the wire, not what the engine meant to send. A hung call
+            # is readable only if this says whether a grammar was on it.
+            "request": {
+                "response_format": row.get("response_format") or "",
+                "reasoning_effort": row.get("reasoning_effort") or "",
+                "max_tokens": row.get("max_tokens"),
+            },
             "sent": {"system": row.get("system"),
                      "system_sha256": row.get("system_hash"),
                      "payload": payload,
@@ -522,7 +530,8 @@ def export_turn_debug(turn_id: int, *, include_content: bool = True) -> dict:
             "received": {"output": response,
                          "output_sha256": row.get("response_hash"),
                          "reasoning": row.get("reasoning"),
-                         "reasoning_sha256": row.get("reasoning_hash")},
+                         "reasoning_sha256": row.get("reasoning_hash"),
+                         "finish_reason": row.get("finish_reason") or ""},
         })
 
     for step in q("SELECT id,key,label,ord FROM steps WHERE turn_id=? "

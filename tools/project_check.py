@@ -2530,6 +2530,10 @@ BACKGROUND_SAFE_CONTEXTVARS = {
         "so an inherited value is unreachable rather than stale",
     "last_finish_reason":
         "an OUTPUT slot, same as last_reasoning",
+    "last_request_shape":
+        "an OUTPUT slot, same as last_reasoning: cleared at the start of "
+        "every completion and written at its POST, so a job's first call "
+        "overwrites whatever it inherited before any recorder reads it",
     "read_timeout_override":
         "a knob a caller sets around its own call and resets after; it names "
         "no turn, holds no sink, and cancels nothing",

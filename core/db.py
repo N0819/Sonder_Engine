@@ -159,7 +159,7 @@ def parse_scoped_world_key(key):
 #: runs from the root. `or` rather than a default argument, so an empty
 #: `ENGINE_DB=` falls through to the anchored path instead of naming the cwd.
 DB = os.environ.get("ENGINE_DB") or os.path.join(INSTALL_ROOT, "engine.db")
-SCHEMA_VERSION = 39
+SCHEMA_VERSION = 40
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -628,7 +628,16 @@ CREATE TABLE IF NOT EXISTS llm_capture(
     system_hash   TEXT,
     payload_hashes TEXT NOT NULL DEFAULT '{}',
     response_hash TEXT,
-    reasoning_hash TEXT
+    reasoning_hash TEXT,
+    -- HOW the call was shaped, beside what it sent: the `response_format`
+    -- type the provider layer put on the wire ('json_schema', 'json_object'
+    -- or ''), the reasoning effort sent, the `max_tokens` sent, and the
+    -- finish reason the provider returned. Empty means the call never
+    -- posted or the provider did not say (persist/llm_capture.py).
+    response_format TEXT NOT NULL DEFAULT '',
+    reasoning_effort TEXT NOT NULL DEFAULT '',
+    max_tokens    INTEGER,
+    finish_reason TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_llm_capture_turn ON llm_capture(turn_id, seq);
 
@@ -1945,6 +1954,22 @@ END""",
     INSERT INTO lore_fts(rowid, content, keys)
     VALUES (new.id, new.content, new.keys);
 END""",
+    ],
+    # v39 -> v40
+    [
+        # The debug capture records HOW a call was shaped. The row held
+        # what was sent (sheet and payload hashes), what came back, the
+        # model and the duration -- and not the request's `response_format`
+        # type, the reasoning effort, the `max_tokens` or the finish reason,
+        # all of which the provider layer knew and dropped. Two specialist
+        # calls hung for 22 minutes on 2026-09-14 and nobody could prove
+        # afterwards whether a grammar was on the wire. Rows written before
+        # this column existed read empty, which is the honest reading: the
+        # shape was not recorded, not "no format was sent".
+        "ALTER TABLE llm_capture ADD COLUMN response_format TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE llm_capture ADD COLUMN reasoning_effort TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE llm_capture ADD COLUMN max_tokens INTEGER",
+        "ALTER TABLE llm_capture ADD COLUMN finish_reason TEXT NOT NULL DEFAULT ''",
     ],
 ]
 

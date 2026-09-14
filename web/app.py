@@ -721,6 +721,72 @@ def _begin_pipeline_or_409(chat_id: int, frame_id):
             "for the aborted response before retrying.",
         )
 
+#: Handed to a drain sink after the pipeline generator's last event: the
+#: reader's signal that the run is over, error included.
+_DRAIN_DONE = object()
+
+
+def _drain_on_own_thread(gen, sink):
+    """Run `gen` (run_pipeline's generator) to completion on ONE dedicated
+    thread in ONE stable context, handing each event to `sink` and
+    `_DRAIN_DONE` last. Returns the thread, already started.
+
+    The one place a pipeline is driven from a route, whether or not anyone
+    is listening: `_stream` reads the sink's queue into a streaming
+    response, `_detach` passes a sink that discards, and the pipeline runs
+    identically under both -- every stage persists its own step row, so
+    a run nobody watched is as complete as one that was streamed. The
+    contextvar reasoning is `_stream`'s, below.
+    """
+    def run():
+        try:
+            for evt in gen:
+                sink(evt)
+            # The other half of the stale-snapshot instrumentation. This runs on
+            # the PIPELINE thread, after the generator (commit included) is
+            # exhausted and before the response can close -- so this is the
+            # data_version the client's very next read must be at or above.
+            try:
+                from core.db import data_version as _dv_fn
+                _pipeline_logger.info(
+                    "turn_committed data_version=%s thread=%s",
+                    _dv_fn(), threading.get_ident())
+            except Exception:
+                pass
+        except Exception as exc:
+            _pipeline_logger.exception("Pipeline stream failed")
+            sink({
+                "type": "error",
+                "error": str(exc),
+                "error_type": type(exc).__name__,
+                "fatal": True,
+            })
+        finally:
+            sink(_DRAIN_DONE)
+
+    context = contextvars.copy_context()
+    thread = threading.Thread(target=lambda: context.run(run))
+    thread.start()
+    return thread
+
+
+def _detach(gen):
+    """Run a pipeline with no client attached.
+
+    A turn submitted over `_stream` whose client disconnects mid-turn keeps
+    running to completion, which is right; what was missing was the
+    other half -- a way to submit a turn WITHOUT holding a connection open
+    for the minutes it takes, and come back for it. Same drain thread, same
+    context discipline, same slot: `run_pipeline`'s own `finally` releases
+    the (chat, frame) entry in `ABORTS` when the generator is exhausted,
+    exactly as it does under a streamed response, so `turn_status` reads
+    the run's liveness from the one registry every other route consults.
+    The events are dropped, not buffered: every stage persists its own
+    step row, and `GET /api/turns/{tid}/pipeline` is the reader for those.
+    """
+    _drain_on_own_thread(gen, lambda evt: None)
+
+
 def _stream(gen):
     """Drains `gen` (run_pipeline's generator) to completion on ONE
     dedicated thread running in ONE stable context, relaying each event
@@ -750,37 +816,8 @@ def _stream(gen):
     pipeline via plain `for event in _run_pipeline(...)` iteration.
     """
     evt_queue = queue.Queue()
-    DONE = object()
-
-    def run():
-        try:
-            for evt in gen:
-                evt_queue.put(evt)
-            # The other half of the stale-snapshot instrumentation. This runs on
-            # the PIPELINE thread, after the generator (commit included) is
-            # exhausted and before the response can close -- so this is the
-            # data_version the client's very next read must be at or above.
-            try:
-                from core.db import data_version as _dv_fn
-                _pipeline_logger.info(
-                    "turn_committed data_version=%s thread=%s",
-                    _dv_fn(), threading.get_ident())
-            except Exception:
-                pass
-        except Exception as exc:
-            _pipeline_logger.exception("Pipeline stream failed")
-            evt_queue.put({
-                "type": "error",
-                "error": str(exc),
-                "error_type": type(exc).__name__,
-                "fatal": True,
-            })
-        finally:
-            evt_queue.put(DONE)
-
-    context = contextvars.copy_context()
-    thread = threading.Thread(target=lambda: context.run(run))
-    thread.start()
+    DONE = _DRAIN_DONE
+    thread = _drain_on_own_thread(gen, evt_queue.put)
 
     def w():
         # Batched drain: one blocking get(), then everything already queued.
@@ -6175,7 +6212,14 @@ def mem_del(mid: int):
 
 # ============================ TURNS & PIPELINE ============================
 @app.post("/api/chats/{cid}/turns")
-def turn_new(cid: int, body: dict = Body(...)):
+def turn_new(cid: int, body: dict = Body(...), detach: int = 0):
+    """Submit a turn. Streams the pipeline's events by default; with
+    `?detach=1` (or `"detach": true` in the body) it claims the slot,
+    creates the turn row exactly as the streaming path does, starts the
+    same drain thread, and answers `{"turn_id", "running": true}` at once
+    -- poll `GET /api/turns/{tid}/status` for the rest. A plain `= 0`
+    default rather than `Query(0)` for the reason `_era` gives: tests call
+    this function directly."""
     frame_id = body.get("frame_id")
     frame_id = int(frame_id) if frame_id is not None else None
     if frame_id is not None:
@@ -6232,7 +6276,61 @@ def turn_new(cid: int, body: dict = Body(...)):
         # a later request isn't wrongly rejected as "already running".
         ABORTS.pop((cid, frame_id), None)
         raise
+    if _truthy(detach) or _truthy(body.get("detach")):
+        _detach(run_pipeline(cid, tid, abort=abort, frame_id=frame_id))
+        return {"turn_id": tid, "running": True}
     return _stream(run_pipeline(cid, tid, abort=abort, frame_id=frame_id))
+
+
+def _truthy(value) -> bool:
+    """A flag as a query string or a JSON body spells it: 1, true, yes, on."""
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
+@app.get("/api/turns/{tid}/status")
+def turn_status(tid: int):
+    """Is the pipeline for this turn still running, and what has it saved.
+
+    `running` is read from the same registry every other route consults --
+    `ABORTS`, keyed by (chat, frame), the slot `_begin_pipeline_or_409`
+    claims and `run_pipeline` releases -- and no second one. The slot names
+    a FRAME, not a turn, so it is joined to this turn the way the engine's
+    own gates do: a pipeline runs only against the frame's latest turn
+    (`turn_new` mints a new latest; reroll, rerun and resume pass
+    `_require_latest`), so a busy slot whose latest turn is this one is
+    this turn running, and a busy slot whose latest turn is a newer one is
+    a newer turn running and this one finished.
+
+    `steps` are the stage keys that have SAVED so far -- a step row with an
+    active variant, in plan order -- and `committed` says whether `commit`
+    is among them, which is what "the turn is done" means. A 404 after a
+    detached submit is an answer too: the run aborted or failed before any
+    stage saved, and `run_pipeline` discarded the stepless row.
+    """
+    turn = q("SELECT id,chat_id,frame_id FROM turns WHERE id=?", (tid,),
+             one=True)
+    if not turn:
+        raise HTTPException(404, "Turn not found")
+    chat_id, frame_id = turn["chat_id"], turn["frame_id"]
+    latest = _latest_turn_in_frame(chat_id, frame_id)
+    running = ((chat_id, frame_id) in ABORTS
+               and bool(latest and latest["id"] == tid))
+    steps = [r["key"] for r in q(
+        "SELECT s.key FROM steps s WHERE s.turn_id=? AND EXISTS("
+        "SELECT 1 FROM variants v WHERE v.step_id=s.id AND v.active=1) "
+        "ORDER BY s.ord, s.id", (tid,))]
+    return {
+        "turn_id": int(tid),
+        "chat_id": int(chat_id),
+        "frame_id": frame_id,
+        "running": running,
+        "steps": steps,
+        "committed": "commit" in steps,
+    }
 
 @app.post("/api/chats/{cid}/abort")
 def chat_abort(cid: int, frame_id: int | None = Query(None)):
