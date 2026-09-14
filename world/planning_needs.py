@@ -67,6 +67,15 @@ NEED_REASONS = (
     # need for the Writers' Room to file with provenance and a gate, and it
     # is filed by nobody else (`persist/commit_mapping`).
     "setting_fact",
+    # A vehicle set moving with an ETA and no destination room is a journey
+    # to nowhere: `mechanics._schedule_new_arrivals` schedules an arrival
+    # only for a transit that names one, so nothing ever docks and the
+    # player's declared arrival has no room to land in. Measured (scratch
+    # play 2026-09-14, chat 2): a ferry established `in_transit, eta 7200,
+    # route_room lake_murrow` crossed for twenty beats, the player wrote the
+    # hull nudging the Murrow jetty at turn 13, and every later page put her
+    # in the cabin she had left.
+    "transit_destination_unplanned",
 )
 
 NEED_STATUSES = ("open", "filled", "closed")

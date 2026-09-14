@@ -160,6 +160,37 @@ def contained_interior_holder(target, scene):
     return holder
 
 
+def _transit_destination_needs(scene, planned_for, *, turn_idx, frame_id):
+    """A room need for every vehicle moving toward no room.
+
+    A transit that names no `destination_room`, or names one the scene does
+    not hold and no plan reserves, can never dock (`mechanics` schedules an
+    arrival only for a named destination). The need makes the journey's end
+    a place somebody has to plan; the vehicle keeps moving meanwhile."""
+    from world.planning_needs import planning_need
+    needs = []
+    rooms = (scene or {}).get("rooms") or {}
+    for eid, ent in ((scene or {}).get("entities") or {}).items():
+        state = ent.get("state") if isinstance(ent, dict) else None
+        transit = state.get("transit") if isinstance(state, dict) else None
+        if not isinstance(transit, dict):
+            continue
+        phase = str(transit.get("phase") or "").strip().casefold()
+        if phase not in ("in_transit", "arriving"):
+            continue
+        destination = str(transit.get("destination_room") or "").strip()
+        if destination and (destination in rooms or planned_for(destination)):
+            continue
+        needs.append(planning_need(
+            "room", "transit_destination_unplanned",
+            subject=destination or str(ent.get("name") or eid),
+            surface={"vehicle": str(eid),
+                     "route_room": str(transit.get("route_room") or ""),
+                     "eta_seconds": str(transit.get("eta_seconds") or "")},
+            turn_idx=turn_idx, frame_id=frame_id))
+    return needs
+
+
 def classify_movement(interp, scene, *, planned_for):
     """Where the beat is going, and whether the world has it.
 
@@ -502,6 +533,10 @@ def compile_world_context(ctx, nonce):
                 turn_idx=turn_idx, frame_id=frame_id))
         except ValueError as exc:
             ctx.add_warning(f"generation request not recorded: {exc}")
+    for need in _transit_destination_needs(scene, planned_for,
+                                           turn_idx=turn_idx,
+                                           frame_id=frame_id):
+        needs.append(need)
     # One need per identity: the same door reached twice in one beat, under
     # whatever reasons, is one need (the first reason is kept).
     unique, seen = [], set()
