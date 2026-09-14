@@ -1793,6 +1793,21 @@ def compose_beat_scene(ctx):
     if _held:
         target_room = _held
 
+    # ...UNLESS THE WALK WAS REFUSED. `state_diff.movement_refused` is the
+    # Director's engine-authored record that a body named there did not
+    # move (`_refuse_movement`); a journey that did not happen has no
+    # arrival to give a room to. Minting on the declaration alone put an
+    # empty "Copes Yard" beside the scene's "Cope's Boatyard" for a walk
+    # the same beat had refused (scratch play 2026-09-14, chat 5, turn 27).
+    _refused_rooms = {
+        str(r.get("to_room") or "")
+        for r in ((diff or {}).get("movement_refused") or [])
+        if isinstance(r, dict)}
+    if target_room and not _held and (
+            target_room in _refused_rooms
+            or str((mv or {}).get("to_room") or "") in _refused_rooms):
+        target_room = None
+
     if target_room and not _held:
         # A DECLARED DESTINATION ALWAYS EXISTS. Going somewhere is the
         # strongest possible assertion that it is there -- stronger than

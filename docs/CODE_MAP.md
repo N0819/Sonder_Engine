@@ -88,7 +88,7 @@
 | `persist/commit_memory_write.py` | 354 | The durable memory write and its out-of-band consolidation twin. | `core.db`, `mind.memory`, `persist.commit_memory`, `story.character_schema`, `story.scene` |
 | `persist/commit_place_graph.py` | 336 | Per-mind durable place graph and per-beat spatial experience. | `world.spatial` |
 | `persist/commit_room_registry.py` | 566 | Room identity across frames: registry projection, mint dedup, renames, retirement, exit pruning. | `core.db`, `persist.commit_common`, `story.character_schema`, `world.spatial` |
-| `persist/commit_scene_state.py` | 2651 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `core.pipeline_context`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.beat_ledger`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.weather` |
+| `persist/commit_scene_state.py` | 2666 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `core.pipeline_context`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.beat_ledger`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.weather` |
 | `persist/llm_capture.py` | 455 |  | `core.db` |
 | `persist/pipeline_trace.py` | 635 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `core.db` |
 | `persist/steps.py` | 150 |  | `core.db` |
@@ -153,7 +153,7 @@
 | `world/charter_model.py` | 894 |  | `world.charter_chatter`, `world.charter_figure`, `world.charter_harm`, `world.charter_mark` |
 | `world/charter_move.py` | 644 |  | `world.charter_needs`, `world.charter_space` |
 | `world/charter_needs.py` | 615 |  | `world.charter_model` |
-| `world/charter_news.py` | 517 |  | `world.charter_mind`, `world.charter_model`, `world.charter_talk` |
+| `world/charter_news.py` | 565 |  | `world.charter_mind`, `world.charter_model`, `world.charter_talk` |
 | `world/charter_observe.py` | 645 |  | `world.charter_figure`, `world.charter_identity`, `world.charter_mind`, `world.spatial` |
 | `world/charter_ops.py` | 336 |  | `world.charter_harm` |
 | `world/charter_place.py` | 502 |  | `world.charter_identity`, `world.charter_model`, `world.charter_move`, `world.spatial` |
@@ -189,7 +189,7 @@
 | `world/regions.py` | 586 |  | `world.spatial` |
 | `world/routines.py` | 257 |  | `world.day_cycle` |
 | `world/scene_memo.py` | 191 |  | — |
-| `world/spatial.py` | 342 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_light_field`, `world.spatial_lint`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_scent_field`, `world.spatial_senses`, `world.spatial_sound_field`, `world.spatial_substance`, `world.spatial_transit` |
+| `world/spatial.py` | 343 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_light_field`, `world.spatial_lint`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_scent_field`, `world.spatial_senses`, `world.spatial_sound_field`, `world.spatial_substance`, `world.spatial_transit` |
 | `world/spatial_barriers.py` | 849 |  | `world.spatial_orientation` |
 | `world/spatial_contact_migration.py` | 332 |  | `story.character_schema`, `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_contacts.py` | 1933 |  | `world.spatial_containment`, `world.spatial_identity`, `world.spatial_transit` |
@@ -197,7 +197,7 @@
 | `world/spatial_fov.py` | 1644 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_frames.py` | 1276 |  | `core.db`, `core.frames`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial` |
 | `world/spatial_geometry.py` | 2089 |  | `story.character_schema`, `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
-| `world/spatial_identity.py` | 828 |  | — |
+| `world/spatial_identity.py` | 887 |  | — |
 | `world/spatial_light.py` | 472 |  | `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity` |
 | `world/spatial_light_field.py` | 1306 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_lint.py` | 444 |  | `world.spatial_barriers`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_orientation` |
@@ -211,7 +211,7 @@
 | `world/spatial_substance.py` | 1128 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_transit.py` | 525 |  | `world.spatial_barriers`, `world.spatial_identity` |
 | `world/stimulation.py` | 239 |  | `story`, `world.spatial` |
-| `world/structure.py` | 1619 |  | `world.charter_model`, `world.regions`, `world.spatial` |
+| `world/structure.py` | 1632 |  | `world.charter_model`, `world.regions`, `world.spatial` |
 | `world/subjects.py` | 505 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
 | `world/survival.py` | 489 |  | `core.db` |
 | `world/weather.py` | 1278 |  | — |
@@ -1115,8 +1115,8 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `compose_beat_scene()` | 1421 | 646 lines |
-| `prepare_scene_commit()` | 2069 | 462 lines |
+| `compose_beat_scene()` | 1421 | 661 lines |
+| `prepare_scene_commit()` | 2084 | 462 lines |
 | `_fold_duplicate_mints()` | 767 | 118 lines |
 | `derive_borne_containment()` | 921 | 113 lines |
 | `_advance_day_cycle()` | 70 | 111 lines |
@@ -1873,14 +1873,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `check_reports()` | 360 | 92 lines |
-| `claim_from_report()` | 179 | 44 lines |
-| `report_from_claim()` | 225 | 38 lines |
-| `_native_news_phrase()` | 265 | 30 lines |
-| `decay_news()` | 454 | 26 lines |
-| `news_claim()` | 310 | 24 lines |
-| `charter_hours_of()` | 141 | 23 lines |
-| `witness()` | 336 | 22 lines |
+| `check_reports()` | 406 | 92 lines |
+| `claim_from_report()` | 225 | 44 lines |
+| `report_from_claim()` | 271 | 38 lines |
+| `_native_news_phrase()` | 311 | 30 lines |
+| `decay_news()` | 500 | 28 lines |
+| `news_claim()` | 356 | 24 lines |
+| `charter_hours_of()` | 187 | 23 lines |
+| `witness()` | 382 | 22 lines |
 
 ### `world/charter_observe.py`
 
@@ -2414,9 +2414,9 @@
 | `scene_names_body()` | 343 | 73 lines |
 | `room_of()` | 92 | 68 lines |
 | `_live_subject_spellings()` | 444 | 52 lines |
+| `scene_room_id()` | 807 | 42 lines |
 | `room_of_record()` | 162 | 37 lines |
 | `_positions_lookup()` | 10 | 28 lines |
-| `same_subject()` | 216 | 28 lines |
 
 ### `world/spatial_light.py`
 
@@ -2583,14 +2583,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `claim_frontier_spaces()` | 1307 | 207 lines |
-| `prepare_frontier_expansion()` | 1104 | 147 lines |
+| `claim_frontier_spaces()` | 1320 | 207 lines |
+| `prepare_frontier_expansion()` | 1117 | 147 lines |
 | `plant_structure()` | 447 | 142 lines |
 | `materialize_planned_fringe()` | 591 | 112 lines |
 | `mint_frontier()` | 341 | 104 lines |
+| `planned_context()` | 1040 | 75 lines |
 | `planned_room_brief()` | 850 | 62 lines |
-| `planned_context()` | 1040 | 62 lines |
-| `structure_warnings()` | 1546 | 61 lines |
+| `structure_warnings()` | 1559 | 61 lines |
 
 ### `world/subjects.py`
 

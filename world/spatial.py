@@ -60,7 +60,8 @@ from world.spatial_identity import (
     ROOM_NAME_DERIVED, derived_room_name, is_derived_room_name,
     room_name_is_placeholder, normalize_room_id,
     normalize_scene_subjects, room_display_name, room_of, room_of_record,
-    room_spellings, same_subject, scene_names_body, scene_room_id,
+    room_name_words, room_spellings, room_words_answer, same_subject,
+    scene_names_body, scene_room_id,
 )
 
 
