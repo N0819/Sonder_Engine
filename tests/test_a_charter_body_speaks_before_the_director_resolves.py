@@ -212,3 +212,26 @@ class TestTheCommitReadsBothVoices:
         br = {"fired": False, "reactions": []}
         assert beat_reactions({"background_react": br,
                                "director_resolve": {}}) == br
+
+
+class TestEvidenceFindsAnActorByItsDisplayName:
+    def test_a_role_prefixed_display_name_is_placed(self, temp_db):
+        """Chat 5 turn 21: the sawyer spoke as "Apprentice Barrowbrookdale"
+        and the evidence pass placed him nowhere, because the display map
+        deals a name on subscription and the lookup used `.get`."""
+        from world.charter_runtime import (_scene_placing_charter_actors,
+                                           identity_index, save_registry)
+        cid = _chat(temp_db)
+        charter = _well_thing()
+        charter["creature"] = None
+        save_registry(cid, {"well": charter})
+        from world.charter_runtime import registry_for
+        registry = registry_for(cid)
+        shown = identity_index(registry).display("well")["thing_0"]
+        assert shown
+        scene = {"rooms": {"yard": {"name": "Yard"}}, "positions": {},
+                 "entities": {}}
+        placed = _scene_placing_charter_actors(
+            registry, scene, [{"actor": shown, "kind": "speech"}])
+        assert placed["positions"] == {shown: "yard"}
+        assert scene["positions"] == {}
