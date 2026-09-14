@@ -38,6 +38,9 @@ FULL = {
     },
     "perception": {
         "here_affords": ["rest"],
+        "impossible_knowledge": [{"speaker": "the stranger",
+                                  "line_ref": "current:1:0",
+                                  "private_matter": "x"}],
         "sprint_reach": [{"rooms": 3}],
         "corridor_sight": [{"terminus": "dead_end"}],
         "spatial_frame": {
