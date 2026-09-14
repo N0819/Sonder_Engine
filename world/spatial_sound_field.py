@@ -1326,8 +1326,18 @@ def sound_sources(scene: dict, *, turn_idx=None, crowds=None, events=None,
                    or event.get("room_id") or "")
         if not room or room not in rooms:
             continue
+        # A SOUND IS MADE WHERE ITS SOURCE STANDS. An event names its
+        # `source`; where that is a body the scene places (a character, or
+        # a charter body laid for the beat), the sound starts at that body's
+        # cell, not at the room's centre. Measured (scratch play 2026-09-14,
+        # chat 4 turn 18): a creature dragging itself at the well-house door
+        # was priced from the yard's centre, seven cells from the listener
+        # at the open back door, and fell under the floor there.
+        source = str(event.get("source") or "").strip()
+        cell = (body_cell(scene, source) if source and
+                room_of(scene, source) == room else None)
         out.append({"id": "event:%d" % idx, "kind": "event", "room": room,
-                    "cell": room_centre(scene, room),
+                    "cell": cell or room_centre(scene, room),
                     "power": _event_power(event), "level": None,
                     "holder": None, "beat": "steady"})
     for name, volume in sorted((speakers or {}).items()):
@@ -1416,11 +1426,29 @@ def duct_step_scale(scene, rooms) -> dict:
     return {rid: DUCT_STEP for rid in (rooms or ()) if is_duct(scene, rid)}
 
 
+def _still_night(scene, scoped) -> bool:
+    """Dark sky over the room and no wind reaching it. The phase is the one
+    the scene carries (`day_phase`, what the light field reads); a scene
+    with none is not a night."""
+    phase = str((scene or {}).get("day_phase") or "").strip()
+    if not phase:
+        return False
+    from world.day_cycle import sun_light
+    from world.weather import normalize_weather
+    if sun_light(phase, normalize_weather((scene or {}).get("weather"))
+                 or None) != "dark":
+        return False
+    scoped = scoped if isinstance(scoped, dict) else {}
+    if scoped.get("wind_reaches") and str(scoped.get("wind") or "") in WIND_NOISE:
+        return False
+    return True
+
+
 def _ambient_floor(scene, room_id) -> float:
     """AMBIENT[exposure] plus the weather the room can hear (§ 4.6)."""
     from world import weather as _weather
-    floor = AMBIENT.get(_weather.room_exposure(scene, room_id),
-                        AMBIENT["enclosed"])
+    exposure = _weather.room_exposure(scene, room_id)
+    floor = AMBIENT.get(exposure, AMBIENT["enclosed"])
     # THE DECLARED QUIET SCALES THE PLACE'S OWN FLOOR AND NOTHING ELSE.
     # The weather below is added AFTER, because rain on a dead room is
     # still rain -- what the word says is that the room contributes no
@@ -1432,6 +1460,19 @@ def _ambient_floor(scene, room_id) -> float:
         scoped = _weather.weather_for_room(scene, room_id)
     except Exception:
         scoped = {}
+    # A STILL NIGHT IN THE OPEN IS HUSHED. `AMBIENT["open"]` is the open
+    # air by day (§ 1.120: open air is not itself a noise; the weather is
+    # counted separately), and a night with no wind on it is quieter than
+    # any room with a fire and a clock -- about 25 dB(A) against a quiet
+    # room's 30. Owner's retune 2026-09-14: a "faint" creature dragging
+    # itself a few paces off in a dead fen night was refused at the day
+    # floor, and a listener at an open door hears that. The same lever a
+    # declared `quiet` uses (`QUIET_SCALE["hushed"]`, -6 dB), applied only
+    # where the sky is dark and no wind reaches the room, so the day floors
+    # and every pinned reach stand.
+    if (not quiet and exposure != "enclosed"
+            and _still_night(scene, scoped)):
+        floor *= QUIET_SCALE["hushed"]
     if scoped:
         if scoped.get("audible"):
             floor += WEATHER_NOISE.get(str(scoped.get("intensity") or ""),
