@@ -65,7 +65,10 @@ NEED_REASONS = (
     # thing works, what a people hold true -- in `state_diff.world_facts`.
     # The Director owns causality, not the setting bible: the fact is a
     # need for the Writers' Room to file with provenance and a gate, and it
-    # is filed by nobody else (`persist/commit_mapping`).
+    # is filed by nobody else (`persist/commit_mapping`) -- except that at
+    # the OPENING the fact is the scenario's premise, which every cast
+    # member already holds, so it is delivered to them as public knowledge
+    # and the need's `surface.entry_uid` names the entry it was delivered as.
     "setting_fact",
 )
 
