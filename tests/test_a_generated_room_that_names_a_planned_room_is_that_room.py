@@ -64,3 +64,31 @@ def test_a_landed_room_of_the_same_name_is_not_merged(temp_db):
     assert "lock_side" not in out["rooms"]
     assert any(uid.endswith("lock_side") and uid != "lock_side"
                for uid in out["rooms"])
+
+
+def test_an_unnamed_generated_room_matches_the_plans_room_by_its_words(temp_db):
+    """Chat 6: the planner minted `lamb_flag_yard` and `lamb_flag_taproom`
+    with no names at all for the plan's "The Lamb and Flag Yard" and "The
+    Taproom"; the content words are the same set."""
+    cid = _chat(temp_db)
+    temp_db.qi("INSERT INTO room_registry(chat_id,room_uid,name,aliases,payload) "
+               "VALUES(?,?,?,?,?)",
+               (cid, "inn_yard", "The Lamb and Flag Yard",
+                json.dumps(["The Lamb and Flag Yard"]), json.dumps({"planned": {}})))
+    temp_db.qi("INSERT INTO room_registry(chat_id,room_uid,name,aliases,payload) "
+               "VALUES(?,?,?,?,?)",
+               (cid, "taproom", "The Taproom", json.dumps(["The Taproom"]),
+                json.dumps({"planned": {}})))
+    town = {"structure": {"key": "lamb_flag"},
+            "rooms": {"lamb_flag_yard": {"name": "lamb_flag_yard", "adjacent": []},
+                      "lamb_flag_taproom": {"name": "lamb_flag_taproom", "adjacent": []},
+                      "lamb_flag_cellar": {"name": "lamb_flag_cellar", "adjacent": []}},
+            "charters": {"inn": {"key": "inn", "upkeeps": {}, "priority": [],
+                                 "posts": {},
+                                 "bodies": {"kit": {"place": "lamb_flag_taproom",
+                                                    "berth": "lamb_flag_cellar"}}}}}
+    out = _remap_generated_town(cid, town, {"items": {}})
+    charter = next(iter(out["charters"].values()))
+    assert charter["bodies"]["kit"]["place"] == "taproom"
+    assert "lamb_flag_yard" not in out["rooms"] and "lamb_flag_taproom" not in out["rooms"]
+    assert charter["bodies"]["kit"]["berth"] in out["rooms"]

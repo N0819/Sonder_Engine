@@ -1586,7 +1586,14 @@ def _merge_generated_rooms_by_name(cid, town, pinned):
     A pinned room is the author's by id and is never merged."""
     import json as _json
     from core.db import q
-    by_form = {}
+    import re as _re
+    stop = {"the", "a", "an", "of", "and", "s"}
+
+    def _tokens(text):
+        return frozenset(t for t in _re.split(r"[^a-z0-9]+", str(text or "").casefold())
+                         if t and t not in stop)
+
+    by_form, by_tokens = {}, {}
     for row in q("SELECT room_uid, name, aliases, created_turn_id FROM "
                  "room_registry WHERE chat_id=? AND retired_turn_id IS NULL",
                  (cid,)):
@@ -1596,10 +1603,34 @@ def _merge_generated_rooms_by_name(cid, town, pinned):
             aliases = _json.loads(row["aliases"] or "[]")
         except Exception:
             aliases = []
-        for form in [row["name"], *(aliases if isinstance(aliases, list) else [])]:
+        forms = [row["name"], *(aliases if isinstance(aliases, list) else [])]
+        for form in forms:
             key = " ".join(str(form or "").split()).casefold()
             if key and key not in by_form:
                 by_form[key] = str(row["room_uid"])
+        # A ROOM ANSWERS TO ITS NAME'S WORDS IN ANY ORDER OR SPELLING: the
+        # Charter Planner minted "lamb_flag_yard" with no name at all for
+        # the plan's "The Lamb and Flag Yard" (scratch play 2026-09-14,
+        # chat 6), and the folded forms never met. The content words are
+        # the same set, and that set is the match.
+        for form in [row["name"], row["room_uid"], *(aliases if isinstance(aliases, list) else [])]:
+            toks = _tokens(form)
+            if toks and toks not in by_tokens:
+                by_tokens[toks] = str(row["room_uid"])
+    generated = [str(uid) for uid in (town.get("rooms") or {})]
+    # The planner prefixes every room of an institution with its name
+    # ("lamb_flag_taproom"): the prefix the ids share is not part of any
+    # room's own name and is stripped for the token match.
+    prefix = ""
+    if len(generated) > 1:
+        parts = [uid.split("_") for uid in generated]
+        common = []
+        for i in range(min(len(p) for p in parts)):
+            if len({p[i] for p in parts}) == 1:
+                common.append(parts[0][i])
+            else:
+                break
+        prefix = "_".join(common)
     merged = {}
     for uid, raw in (town.get("rooms") or {}).items():
         uid = str(uid)
@@ -1607,6 +1638,15 @@ def _merge_generated_rooms_by_name(cid, town, pinned):
             continue
         name = " ".join(str(raw.get("name") or "").split()).casefold()
         target = by_form.get(name)
+        if not target:
+            candidates = [_tokens(name)] if name and name != uid.casefold() else []
+            candidates.append(_tokens(uid))
+            if prefix and uid.startswith(prefix + "_"):
+                candidates.append(_tokens(uid[len(prefix) + 1:]))
+            for toks in candidates:
+                if toks and toks in by_tokens:
+                    target = by_tokens[toks]
+                    break
         if target and target != uid:
             merged[uid] = target
     return merged

@@ -7,7 +7,7 @@
 | Module | Lines | Purpose | Local dependencies |
 |---|---:|---|---|
 | `agents/__init__.py` | 100 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
-| `agents/background.py` | 1978 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
+| `agents/background.py` | 1986 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
 | `agents/character.py` | 4580 | Private character decision agent. | `agents.character_kernel`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/character_kernel.py` | 468 |  | — |
 | `agents/common.py` | 10940 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
@@ -164,7 +164,7 @@
 | `world/charter_promote.py` | 612 |  | `world.charter_commitment`, `world.charter_feel`, `world.charter_politics`, `world.charter_social` |
 | `world/charter_roster.py` | 134 |  | `world.charter_model` |
 | `world/charter_run.py` | 1528 |  | `world`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_enrol`, `world.charter_feel`, `world.charter_figure`, `world.charter_harm`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
-| `world/charter_runtime.py` | 5113 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics`, `world.spatial` |
+| `world/charter_runtime.py` | 5153 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics`, `world.spatial` |
 | `world/charter_social.py` | 865 |  | `world.charter_politics` |
 | `world/charter_space.py` | 213 |  | `world.spatial` |
 | `world/charter_surface.py` | 364 |  | — |
@@ -222,11 +222,11 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_react_one()` | 1794 | 185 lines |
+| `_react_one()` | 1802 | 185 lines |
 | `_background_react()` | 446 | 182 lines |
 | `scene_life()` | 1061 | 157 lines |
 | `_demanded_presences()` | 854 | 138 lines |
-| `declare_charter_figures()` | 1643 | 94 lines |
+| `declare_charter_figures()` | 1643 | 102 lines |
 | `_beat_for_presence()` | 192 | 84 lines |
 | `_present_others()` | 1454 | 82 lines |
 | `managed_presences()` | 709 | 78 lines |
@@ -2008,14 +2008,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `registry_warnings()` | 2335 | 233 lines |
-| `advance_snapshot()` | 2712 | 199 lines |
-| `_plan_lived_location()` | 1847 | 181 lines |
+| `registry_warnings()` | 2375 | 233 lines |
+| `advance_snapshot()` | 2752 | 199 lines |
+| `_plan_lived_location()` | 1887 | 181 lines |
 | `_prepare_cast_histories()` | 1034 | 172 lines |
-| `presence_view()` | 4346 | 160 lines |
-| `_generate_lived_location()` | 2088 | 154 lines |
-| `hearing_for_creatures()` | 2913 | 112 lines |
-| `schedule_charter_ticks()` | 3276 | 107 lines |
+| `presence_view()` | 4386 | 160 lines |
+| `_generate_lived_location()` | 2128 | 154 lines |
+| `hearing_for_creatures()` | 2953 | 112 lines |
+| `schedule_charter_ticks()` | 3316 | 107 lines |
 
 ### `world/charter_social.py`
 

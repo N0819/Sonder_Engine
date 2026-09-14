@@ -235,3 +235,20 @@ class TestEvidenceFindsAnActorByItsDisplayName:
             registry, scene, [{"actor": shown, "kind": "speech"}])
         assert placed["positions"] == {shown: "yard"}
         assert scene["positions"] == {}
+
+
+class TestTheCapAsksTheCreature:
+    def test_a_creature_outranks_a_stranger_in_another_room(self, monkeypatch, temp_db):
+        cid = _chat(temp_db)
+        save_registry(cid, {"well": _well_thing()})
+        sc = {**SC, "positions": {"Iris Vale": "scullery", "Well Thing": "yard"}}
+        asked = []
+        monkeypatch.setattr(background, "_react_one",
+                            lambda ctx, dr, name, *a, **k: asked.append(name) or None)
+        monkeypatch.setattr(background, "_player_room", lambda ctx, sc_: "scullery")
+        rows = [{"name": "Aaron", "room": "scullery"}, {"name": "Abel", "room": "scullery"},
+                {"name": "Ada", "room": "scullery"},
+                {"name": "Well Thing", "room": "yard", "creature": {"hunts": ["figure"]}}]
+        background.declare_charter_figures(_ctx(cid), dict(
+            TestTheDeclaredBeatIsWhatTheVoiceHears.INTERP), sc, rows, [], 0)
+        assert "Well Thing" in asked and len(asked) == background.CHARTER_VOICES_PER_BEAT
