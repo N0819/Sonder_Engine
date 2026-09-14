@@ -137,8 +137,20 @@ def record_exchange(*, turn_id: int | None, step_key: str, role: str,
                     system: str = "", payload: Any = None,
                     response: Any = None, reasoning: str = "",
                     started: float = 0.0, duration: float = 0.0,
-                    ok: bool = True, error: str = "") -> None:
+                    ok: bool = True, error: str = "",
+                    response_format: str = "", reasoning_effort: str = "",
+                    max_tokens: int | None = None,
+                    finish_reason: str = "") -> None:
     """Record one provider exchange against a turn, in call order.
+
+    The four shape fields are HOW the call was made, beside what it sent and
+    what came back: the `response_format` type the provider layer actually
+    put on the wire (`json_schema`, `json_object`, or empty), the reasoning
+    effort it sent, the `max_tokens` it sent, and the finish reason it got
+    (`providers.request_shape`). They exist because two specialist calls
+    hung for 22 minutes on 2026-09-14 and the capture could not say whether
+    a grammar was on the wire. Empty is a real answer -- the call never
+    posted, or the provider did not say -- and is stored as such.
 
     `seq` is assigned per turn at insert time, so it is only the order calls
     were STARTED in if the caller inserts them in that order --
@@ -161,16 +173,23 @@ def record_exchange(*, turn_id: int | None, step_key: str, role: str,
                 response = json.dumps(response, ensure_ascii=False)
             except Exception:
                 response = str(response)
+        try:
+            max_tokens = int(max_tokens) if max_tokens is not None else None
+        except (TypeError, ValueError):
+            max_tokens = None
         qi("INSERT INTO llm_capture(turn_id,seq,step_key,role,requested,served,"
            "started,duration,ok,error,system_hash,payload_hashes,response_hash,"
-           "reasoning_hash) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+           "reasoning_hash,response_format,reasoning_effort,max_tokens,"
+           "finish_reason) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
            (int(turn_id), seq, str(step_key or ""), str(role or ""),
             str(requested or ""), str(served or ""),
             float(started or time.time()), float(duration or 0.0),
             1 if ok else 0, str(error or "")[:400],
             put_blob(system),
             json.dumps(_payload_hashes(payload), ensure_ascii=False),
-            put_blob(response), put_blob(reasoning) if reasoning else None))
+            put_blob(response), put_blob(reasoning) if reasoning else None,
+            str(response_format or ""), str(reasoning_effort or ""),
+            max_tokens, str(finish_reason or "")))
     except Exception:
         return
 
@@ -362,7 +381,10 @@ def record_room_exchange(*, role: str, system: str = "", payload: Any = None,
                          started: float = 0.0, duration: float = 0.0,
                          ok: bool = True, error: str = "",
                          phase: str = "", chat_id=None,
-                         requested: str = "", served: str = "") -> None:
+                         requested: str = "", served: str = "",
+                         response_format: str = "", reasoning_effort: str = "",
+                         max_tokens: int | None = None,
+                         finish_reason: str = "") -> None:
     """Record one Writers' Room provider call.
 
     The same recorder, the same content-addressed blobs and the same
@@ -400,7 +422,10 @@ def record_room_exchange(*, role: str, system: str = "", payload: Any = None,
                         role=role, requested=requested, served=served,
                         system=system, payload=payload, response=response,
                         reasoning=reasoning, started=started,
-                        duration=duration, ok=ok, error=error)
+                        duration=duration, ok=ok, error=error,
+                        response_format=response_format,
+                        reasoning_effort=reasoning_effort,
+                        max_tokens=max_tokens, finish_reason=finish_reason)
     except Exception:
         return
 

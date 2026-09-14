@@ -141,6 +141,85 @@ def response_truncated():
     return (last_finish_reason.get() or "") in _LENGTH_STOPS
 
 
+# HOW the last request on this context was SHAPED: the `response_format`
+# type, the reasoning effort and the `max_tokens` that actually went on the
+# wire. Two specialist calls hung for 22 minutes on 2026-09-14 and nobody
+# could prove afterwards whether a grammar was on the wire, because the
+# capture recorded what was SENT (sheet, payload) and what CAME BACK, and
+# nothing in between -- the body's shape was known to `_apply_json_mode` and
+# `_apply_reasoning_effort` and died with the call.
+#
+# Stashed at the POST, not where the body is built: the staged 400 ladder
+# (`_json_mode_recovery_stages`) and the placeholder re-ask send a DIFFERENT
+# body from the one `_apply_json_mode` shaped, and the question a reader
+# asks is what the provider was last handed, not what the engine first meant
+# to send. Cleared at the start of every completion, like the finish reason,
+# so a call that dies before posting reads as unknown rather than as the
+# previous call's shape.
+#
+# A ContextVar for the same reason `last_finish_reason` is one: the pipeline
+# fans out across a thread pool with contextvars.copy_context(), and a
+# plain global would file one specialist's grammar under another's row.
+last_request_shape = contextvars.ContextVar("last_request_shape", default=None)
+
+
+def _note_request_shape(body):
+    """Stash the shape of the body about to be posted.
+
+    `response_format` is its `type` (`json_schema`, `json_object`) or empty
+    when none was sent. The reasoning effort is the wire value: the flat
+    `reasoning_effort` an OpenAI-style backend takes verbatim (`none` when
+    the role is off), and OpenRouter's `reasoning` object rendered as its
+    `effort`, or `off` for `{enabled: false}`. Anthropic bodies carry no
+    effort field, so theirs reads empty. `max_tokens` is the clamped value
+    sent, which is the number a reasoning trace was billed against.
+    """
+    try:
+        if not isinstance(body, dict):
+            return
+        rf = body.get("response_format")
+        rf_type = (str(rf.get("type") or "") if isinstance(rf, dict)
+                   else ("" if rf is None else str(rf)))
+        effort = body.get("reasoning_effort")
+        reasoning = body.get("reasoning")
+        if isinstance(reasoning, dict):
+            if reasoning.get("enabled") is False:
+                effort = "off"
+            elif reasoning.get("effort"):
+                effort = reasoning.get("effort")
+        max_tokens = body.get("max_tokens")
+        try:
+            max_tokens = int(max_tokens) if max_tokens is not None else None
+        except (TypeError, ValueError):
+            max_tokens = None
+        last_request_shape.set({
+            "response_format": rf_type,
+            "reasoning_effort": str(effort or ""),
+            "max_tokens": max_tokens,
+        })
+    except Exception:
+        pass
+
+
+def request_shape():
+    """How the last completion on this context was shaped, and how it stopped.
+
+    Always four keys -- `response_format`, `reasoning_effort`, `max_tokens`,
+    `finish_reason` -- empty (or None for the budget) where the call never
+    reached the wire or the provider said nothing. Read by the debug
+    capture at the moment an exchange is noted, on the thread that made the
+    call, because the values are per context and do not survive the fan-out
+    boundary any better than the reasoning trace does.
+    """
+    shape = last_request_shape.get() or {}
+    return {
+        "response_format": str(shape.get("response_format") or ""),
+        "reasoning_effort": str(shape.get("reasoning_effort") or ""),
+        "max_tokens": shape.get("max_tokens"),
+        "finish_reason": str(last_finish_reason.get() or ""),
+    }
+
+
 def _capture_choice_finish(parsed):
     """The finish reason off an OpenAI-compatible response body."""
     choice = (parsed.get("choices") or [{}])[0] if isinstance(parsed, dict) else {}
@@ -2404,6 +2483,7 @@ class _ActivityClock:
 
 def _sse_openai(url, headers, body, sink, role=None, model=None):
     body["stream"] = True
+    _note_request_shape(body)
     # Ask for a final usage-bearing chunk -- without this, streamed
     # responses never report token counts at all, so there'd be no way to
     # confirm implicit prompt caching (see _log_usage) is doing anything on
@@ -2494,6 +2574,7 @@ def _sse_openai(url, headers, body, sink, role=None, model=None):
 
 def _sse_anthropic(base, headers, body, sink, role=None, model=None):
     body["stream"] = True
+    _note_request_shape(body)
     text = ""
     # Anthropic splits usage across two events: input and cache counts arrive
     # on message_start, the final output count on message_delta. Neither alone
@@ -2857,8 +2938,10 @@ def _chat_complete_once(
     _check_cancel()
     # Clear before the request, not after: every path below either records a
     # reason or records nothing, and "nothing" must read as unknown rather
-    # than as the previous call's answer.
+    # than as the previous call's answer. The request shape is cleared for
+    # the same reason: a call that dies resolving its role sent nothing.
     _capture_finish_reason(None)
+    last_request_shape.set(None)
 
     prov, model, cfg = resolved or resolve_role(role)
     t, merged = _merge_samplers(cfg, sampler, temperature)
@@ -2919,6 +3002,7 @@ def _chat_complete_once(
             )
 
         _t0 = time.time()
+        _note_request_shape(body)
         response = _post_abortable(
             base + "/v1/messages",
             headers=h,
@@ -3074,6 +3158,7 @@ def _chat_complete_once(
         return out
 
     _t0 = time.time()
+    _note_request_shape(body)
     response = _post_abortable(
         url,
         headers=headers,
@@ -3091,6 +3176,7 @@ def _chat_complete_once(
         # cause must not turn a role configured "off" back into a thinking
         # model. Then every optional field, as before.
         for candidate, notes in _json_mode_recovery_stages(body, prov, model):
+            _note_request_shape(candidate)
             response = _post_abortable(
                 url,
                 headers=headers,
@@ -3137,6 +3223,7 @@ def _chat_complete_once(
     if json_mode and _is_placeholder_json(content):
         retry_body = dict(body)
         retry_body.pop("response_format", None)
+        _note_request_shape(retry_body)
         alt = _post_abortable(url, headers=headers, json=retry_body)
         if alt.status_code < 400:
             parsed = alt.json()
@@ -3371,6 +3458,7 @@ async def _chat_complete_async_once(
 ):
     _check_cancel()
     _capture_finish_reason(None)
+    last_request_shape.set(None)
     prov, model, cfg = resolved or resolve_role(role)
     t, merged = _merge_samplers(cfg, sampler, temperature)
     base = prov["base_url"].rstrip("/")
@@ -3400,6 +3488,7 @@ async def _chat_complete_async_once(
             if streaming:
                 return await _sse_anthropic_async(base, h, dict(body), guarded(), client, role=role, model=model)
             _t0 = time.time()
+            _note_request_shape(body)
             r = await client.post(base + "/v1/messages", headers=h, json=body)
             if r.status_code >= 400:
                 raise LLMError(f"{prov['name']}: HTTP {r.status_code}: {r.text[:300]}", r.status_code, r.status_code in DEFAULT_RETRY.retryable_status)
@@ -3454,9 +3543,11 @@ async def _chat_complete_async_once(
                 out = await _sse_openai_async(base + "/chat/completions", _headers(prov), retry_body, guarded(), client, role=role, model=model)
             return out
         _t0 = time.time()
+        _note_request_shape(body)
         r = await client.post(base + "/chat/completions", headers=_headers(prov), json=body)
         if r.status_code == 400:
             for candidate, notes in _json_mode_recovery_stages(body, prov, model):
+                _note_request_shape(candidate)
                 r = await client.post(base + "/chat/completions", headers=_headers(prov), json=candidate)
                 if r.status_code < 400:
                     for note in notes:
@@ -3475,6 +3566,7 @@ async def _chat_complete_async_once(
 
 async def _sse_openai_async(url, headers, body, sink, client, role=None, model=None):
     body["stream"] = True
+    _note_request_shape(body)
     # Without this a streamed response reports no token counts at all -- see
     # the matching comment in _sse_openai.
     body["stream_options"] = {"include_usage": True}
@@ -3546,6 +3638,7 @@ async def _sse_openai_async(url, headers, body, sink, client, role=None, model=N
 
 async def _sse_anthropic_async(base, headers, body, sink, client, role=None, model=None):
     body["stream"] = True
+    _note_request_shape(body)
     text = ""
     usage = None
     served = ""
