@@ -3321,11 +3321,14 @@ def test_a_wall_attenuates_and_does_not_abolish():
     # building is heard, and now it is. What the rung decides is unchanged
     # and is still the whole point: the LADDER decides, not the room, not the
     # story, not a special case.
+    # REAL WALL (45 dB, 2026-09-14): the impact ladder is still the
+    # compressed one (`loud` 72, `deafening` 80 at the cell -- registered in
+    # docs/UNBUILT_PERCEPTION.md § 1.159), so against a real masonry wall
+    # only the two far rungs (120, 140) cross. The ladder still decides.
     for level in SOUND_LEVELS:
         quieter = [{**crash[0], "level": level}]
         crossed = bool(distant_sounds(sc, "Ada", events=quieter))
-        assert crossed == (
-            level in ("loud", "deafening", "thunderous", "catastrophic")), level
+        assert crossed == (level in ("thunderous", "catastrophic")), level
     # And the quiet end still dies against a wall, which is the other half of
     # "attenuates and does not abolish".
     for level in ("faint", "audible"):
