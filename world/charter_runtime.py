@@ -1579,6 +1579,39 @@ def _unique_generated_key(base, taken):
     return f"{base}_{index}"
 
 
+def _merge_generated_rooms_by_name(cid, town, pinned):
+    """``{generated_uid: existing_uid}`` for every generated room whose
+    name (folded) is the name or an alias of a room this story has PLANNED
+    and not yet landed (`room_registry` rows with no ``created_turn_id``).
+    A pinned room is the author's by id and is never merged."""
+    import json as _json
+    from core.db import q
+    by_form = {}
+    for row in q("SELECT room_uid, name, aliases, created_turn_id FROM "
+                 "room_registry WHERE chat_id=? AND retired_turn_id IS NULL",
+                 (cid,)):
+        if row["created_turn_id"] is not None:
+            continue
+        try:
+            aliases = _json.loads(row["aliases"] or "[]")
+        except Exception:
+            aliases = []
+        for form in [row["name"], *(aliases if isinstance(aliases, list) else [])]:
+            key = " ".join(str(form or "").split()).casefold()
+            if key and key not in by_form:
+                by_form[key] = str(row["room_uid"])
+    merged = {}
+    for uid, raw in (town.get("rooms") or {}).items():
+        uid = str(uid)
+        if uid in pinned or not isinstance(raw, dict):
+            continue
+        name = " ".join(str(raw.get("name") or "").split()).casefold()
+        target = by_form.get(name)
+        if target and target != uid:
+            merged[uid] = target
+    return merged
+
+
 def _remap_generated_town(cid, town, existing_registry, *, pinned=()):
     """Give an added location its own stable namespace when ids collide.
 
@@ -1606,13 +1639,27 @@ def _remap_generated_town(cid, town, existing_registry, *, pinned=()):
         "SELECT room_uid FROM room_registry WHERE chat_id=? ", (cid,))}
     generated_rooms = {str(uid) for uid in (town.get("rooms") or {})}
     pinned &= generated_rooms
+    # A ROOM ANSWERS TO ITS ID AND ITS NAME (review 2026-09-07 B2), and a
+    # generated room that NAMES a room the story has already planned and
+    # not yet landed IS that room. Measured (scratch play 2026-09-14, chat
+    # 5): the Writers' Room published the village's rooms as a plan and
+    # then had the Charter Planner populate the same village; the planner
+    # generated "The Boat Inn Taproom" again under its own id, the
+    # namespace rule kept both, the innkeeper stood in the generated copy
+    # and the player walked into the planned one, and no body could ever
+    # surface there. Only an UNLANDED planned room of this story is merged
+    # -- two rooms of one name in a lived town are two rooms.
+    merged = _merge_generated_rooms_by_name(cid, town, pinned)
+    duplicates = set(merged)
     needs_namespace = structure_key != old_structure \
-        or bool((existing_rooms - pinned).intersection(generated_rooms))
-    room_map = {uid: uid for uid in generated_rooms}
+        or bool((existing_rooms - pinned).intersection(
+            generated_rooms - duplicates))
+    room_map = {uid: merged.get(uid, uid) for uid in generated_rooms}
     if needs_namespace:
         taken = set(existing_rooms) | pinned
         room_map = {uid: uid for uid in pinned}
-        for uid in sorted(generated_rooms - pinned):
+        room_map.update(merged)
+        for uid in sorted(generated_rooms - pinned - duplicates):
             stem = normalize_room_id(f"{structure_key} {uid}") \
                 or f"{structure_key}_{len(room_map) + 1}"
             mapped = _unique_generated_key(stem, taken)
@@ -1621,6 +1668,8 @@ def _remap_generated_town(cid, town, existing_registry, *, pinned=()):
 
     rooms = {}
     for old_uid, raw in (town.get("rooms") or {}).items():
+        if str(old_uid) in duplicates:
+            continue        # the story's own room stands; the copy does not
         room = copy.deepcopy(raw)
         for edge in room.get("adjacent") or ():
             if isinstance(edge, dict):
@@ -3960,15 +4009,21 @@ def _scene_placing_charter_actors(registry, scene, rows):
     for charter_key, item in sorted((registry.get("items") or {}).items()):
         state = item["state"]
         bindings = state.get("bindings") or {}
-        names = index.display(charter_key) or {}
+        names = index.display(charter_key)
         for body_key, body in sorted((state.get("bodies") or {}).items()):
             if body_key in bindings:
                 continue
-            # Every spelling the body answers to: a creature charter has no
-            # naming law, so its display is the capitalised key and the
-            # index has no entry for it.
+            # Every spelling the body answers to. The display map deals a
+            # body's name on subscription (`_DealtMap.__missing__`), never
+            # on `.get`: read it that way, or a body whose display carries
+            # a role ("Apprentice Barrowbrookdale") is never matched
+            # (scratch play 2026-09-14, chat 5 turn 21).
+            try:
+                shown = names[body_key]
+            except Exception:
+                shown = ""
             forms = {str(f).casefold() for f in (
-                body_key, body.get("name"), names.get(body_key)) if f}
+                body_key, body.get("name"), shown) if f}
             place = str(body.get("place") or "")
             for actor in sorted(missing):
                 if (actor.casefold() in forms and place
