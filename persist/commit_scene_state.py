@@ -1753,6 +1753,31 @@ def compose_beat_scene(ctx):
         for rid in destruction.get("doomed_rooms") or []:
             (sc.get("rooms") or {}).pop(rid, None)
 
+    # THE LEASE ON A CHARTER BODY THE SCENE STANDS (`charter_place.
+    # lease_scene_bodies`): in the beat's aperture the scene keeps its row
+    # and the registry mirrors the room under a lease; outside it the room
+    # is returned to the charter and the scene's rows are released.
+    try:
+        from world.charter_place import lease_scene_bodies
+        from world.charter_runtime import registry_for
+        _aperture = (ctx.get("compile_world_context") or {}).get("rooms_in_view")
+        if _aperture:
+            _lease = lease_scene_bodies(
+                registry_for(cid, getattr(getattr(ctx, "turn", None),
+                                          "frame_id", None)),
+                sc, _aperture)
+            if _lease["moves"]:
+                _charter_placements.setdefault("moves", []).extend(
+                    _lease["moves"])
+            for _eid in _lease["released"]:
+                for _channel in ("positions", "stations", "orientation",
+                                 "poses"):
+                    table = sc.get(_channel)
+                    if isinstance(table, dict):
+                        table.pop(_eid, None)
+    except Exception as exc:
+        ctx.add_warning("charter lease not settled: %s" % exc)
+
     staged = ctx.world_context().get("staged_lore") or []
     # The destination as the world spells it (`ctx.declared_movement`): a
     # planned room's own id, never the Director's spelling of it.

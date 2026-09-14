@@ -525,6 +525,12 @@ def walk(bodies, moves, scene, travelled=None, cache=None, hours=4.0,
         target = str((moves or {}).get(body_key) or "")
         if body is None or not target or not body.get("available"):
             continue
+        if body.get("leased"):
+            # ON SCREEN, THE SCENE MOVES IT. A posting, an errand or a
+            # homecoming waits until the commit releases the body
+            # (`charter_place.lease_scene_bodies`); walking it now would
+            # pull a bargee out of the kitchen mid-scene (owner, 2026-09-14).
+            continue
         if str(body.get("place") or "") == target and not en_route(body):
             continue
         dispatched = _dispatch(body, target, scene, cache, hours, neighbors)
@@ -558,7 +564,7 @@ def homecomings(bodies, watch, visits):
 
 # ------------------------------------------------- the scene's own movement
 
-def place_body(registry, charter_key, body_key, room):
+def place_body(registry, charter_key, body_key, room, leased=None):
     """The SCENE moved this body: land it. Returns the registry (mutated).
 
     Not `relocate`/`walk`, on purpose. Those dispatch a body along a route
@@ -587,6 +593,14 @@ def place_body(registry, charter_key, body_key, room):
         body.pop("station", None)
     body.pop("walk", None)
     body.pop("errand", None)
+    # THE LEASE. ``leased`` True: the scene is standing this body beat by
+    # beat and the runtime keeps its hands off it; False: the scene has
+    # released it here and the runtime resumes; None: not this write's
+    # business (a plain routed move says nothing about the lease).
+    if leased is True:
+        body["leased"] = True
+    elif leased is False:
+        body.pop("leased", None)
     return registry
 
 

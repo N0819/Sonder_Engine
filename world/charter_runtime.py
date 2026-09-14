@@ -4146,7 +4146,7 @@ def apply_scene_placements(cid, routing, frame_id=None):
     touched = set()
     for move in moves:
         place_body(registry, move.get("charter"), move.get("body"),
-                   move.get("room"))
+                   move.get("room"), leased=move.get("leased"))
         touched.add((str(move.get("charter")), str(move.get("body"))))
     for row in stations:
         station_body(registry, row.get("charter"), row.get("body"),
