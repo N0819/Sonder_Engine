@@ -571,6 +571,15 @@ def compile_world_context(ctx, nonce):
         # standing in front of is never silently dropped.
         ctx.add_warning(f"rooms in view not derived: {exc}")
         _view = None
+    _moved = {"lines": [], "snapshot": {"places": {}, "acts": []}}
+    try:
+        from world.charter_runtime import charter_moves_since
+        _moved = charter_moves_since(
+            cid, _view or (),
+            wget_for_frame(cid, "charter_last_places", frame_id, {}) or {},
+            frame_id=frame_id)
+    except Exception as exc:
+        ctx.add_warning(f"charter moves not derived: {exc}")
     # The one walk of the charter for that aperture, shared with resolve
     # (`common.figures_in_view`). Guarded on its own so a charter that cannot
     # be read costs the charter rows and not the day and the weather beside
@@ -599,6 +608,13 @@ def compile_world_context(ctx, nonce):
         # scope, and a declared destination. One derivation, read by the
         # rulebook above and by `director_resolve`'s figures in view.
         "rooms_in_view": sorted(_view or ()),
+        # What the charter moved since the last beat, in the rooms the beat
+        # is about (`charter_runtime.charter_moves_since`): lines the
+        # Director is handed as author notes, and the snapshot the commit
+        # persists for the next beat to compare against. The world moves
+        # every beat; this is how the page hears of it.
+        "charter_moves": _moved["lines"],
+        "charter_places_seen": _moved["snapshot"],
         # The compiler never stages and never patches: a room the beat
         # reached with no plan is a NEED, not a proposal.
         "staged_lore": [],

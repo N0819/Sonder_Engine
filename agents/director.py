@@ -689,14 +689,25 @@ def _author_notes_view(ctx, rooms_in_reach):
     consequence is for. Author knowledge for the Director's stages and the
     hands that place things, never for a mind or the narrator. Fail-open: a
     store that cannot be read carries no note."""
+    notes = []
     try:
         from story.plot_packages import active_director_notes
-        notes = active_director_notes(
+        notes = list(active_director_notes(
             ctx.chat["id"], getattr(ctx.turn, "frame_id", None),
-            ctx.turn.idx, rooms_in_reach)
-        return list(notes) or None
+            ctx.turn.idx, rooms_in_reach) or ())
     except Exception:
-        return None
+        notes = []
+    # WHAT THE CHARTER MOVED SINCE THE LAST BEAT (`compile_world_context`'s
+    # `charter_moves`, from `charter_runtime.charter_moves_since`): an
+    # arrival, a departure, an act in the rooms the beat is about. The
+    # world moves every beat; the Director is told so it can resolve the
+    # motion into the page instead of finding a body simply standing there.
+    try:
+        moved = (ctx.get("compile_world_context") or {}).get("charter_moves")
+        notes.extend(str(line) for line in (moved or ()) if str(line or ""))
+    except Exception:
+        pass
+    return notes or None
 
 
 def _figures_in_view(ctx, rooms, reserved=False):

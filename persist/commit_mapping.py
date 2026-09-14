@@ -674,6 +674,12 @@ def commit_mapping(ctx, nonce, *, prepared=None):
     seed = prepared["seed"]
 
     world = ctx.world_context()
+    # The snapshot the next beat's compile compares the charter against
+    # (`charter_runtime.charter_moves_since`): what this beat saw of where
+    # every charter body stood and which window acts it had reported.
+    if isinstance(world.get("charter_places_seen"), dict):
+        wset_if_changed(cid, "charter_last_places",
+                        world["charter_places_seen"])
     if prepared.get("skipped"):
         # WRITE ON CHANGE, here and at every sibling below. These three rows
         # are re-derived from the same inputs every beat and are byte-identical
