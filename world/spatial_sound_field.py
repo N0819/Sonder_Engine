@@ -424,15 +424,26 @@ SOUND_DB = {level: db_of_power(power) for level, power in SOUND_POWER.items()}
 #: is never an aperture; `separated` and `unknown` are not on a placed field
 #: at all. Kept as § 6 proposed.
 #:
-#:   open 1.0 | open_door 0.9 | bars 0.9 | membrane 0.5 | closed_door 0.25 |
-#:   window 0.1 | one_way_window 0.1 | wall 0
-APERTURE_PASS = {"open": 1.0, "open_door": 0.9, "bars": 0.9,
-                 "membrane": 0.5, "closed_door": 0.25, "window": 0.1,
-                 "one_way_window": 0.1, "wall": 0.0}
+#: REAL TRANSMISSION LOSSES SINCE 2026-09-14, on the same scale as the
+#: emission ladders above: an open doorway ~2 dB, a grille the same, a hung
+#: curtain ~5, a shut solid door ~25, closed glass ~28. Until then the table
+#: was the compressed one calibrated against the old 20.8 dB voice span
+#: (closed_door 6.02), and with real voices a shut door passed a normal line
+#: `full` into the next room -- measured as
+#: `tests/test_replay_defects_h.py`'s shut-door test failing the day the
+#: ladders went real. Authored in dB and converted, so the pass factors
+#: cannot drift from the losses they are.
+#:
+#:   open 0 | open_door 2 | bars 2 | membrane 5 | closed_door 25 |
+#:   window 28 | one_way_window 28 | wall (no aperture)
+APERTURE_DB = {"open": 0.0, "open_door": 2.0, "bars": 2.0, "membrane": 5.0,
+               "closed_door": 25.0, "window": 28.0, "one_way_window": 28.0}
+APERTURE_PASS = {**{barrier: 10.0 ** (-loss / 10.0)
+                    for barrier, loss in APERTURE_DB.items()},
+                 "wall": 0.0}
 
-#: The same table as LOSSES in dB -- open 0 | open_door 0.46 | bars 0.46 |
-#: membrane 3.01 | closed_door 6.02 | window 10.0 -- which is what an
-#: aperture factor is once the model is in logs: a subtraction. `wall` is
+#: The same table as LOSSES in dB -- which is what an aperture factor is
+#: once the model is in logs: a subtraction. `wall` is
 #: not in it, because on the NEAR field a wall is not an aperture at all:
 #: `sound_passes` refuses to place a neighbour beyond one, so there is no
 #: cell path through a wall to charge a loss to. A wall's finite
@@ -2116,8 +2127,9 @@ def beat_sensory_events(scene: dict, turn_idx) -> list:
 #: against 9.0). A real 45 dB wall, compressed, is 16, and that is what
 #: shipped.
 #:
-#: THE 2026-09-14 RECALIBRATION LEFT THIS TABLE WHERE IT WAS, and the model
-#: is therefore mixed: the emission ladders are real levels and the aperture
+#: THE 2026-09-14 RECALIBRATION MOVED THIS TABLE TOO, later the same day
+#: (45 for a masonry wall, 50 for a floor, the apertures above at real
+#: losses), because the mixed state it first left had a direction: the emission ladders are real levels and the aperture
 #: and partition losses are the compressed ones calibrated against the old
 #: ladder. Stated rather than hidden, because it has a direction: an
 #: opening or a wall passes a real voice more readily than a real one would.
@@ -2138,7 +2150,7 @@ def beat_sensory_events(scene: dict, turn_idx) -> list:
 #: ladder the same wall passes more: an 83 dB engine is heard through one
 #: wall of the next room (83 - 16 - 21.6 = 45.4 against 27.0) and a
 #: `deafening` klaxon through two.
-WALL_LOSS_DB = 16.0
+WALL_LOSS_DB = 45.0
 
 #: A floor or a ceiling: an edge that goes up or down and is a wall rather
 #: than a passage. A stairwell, a hatch or an open gallery is an APERTURE
@@ -2146,7 +2158,7 @@ WALL_LOSS_DB = 16.0
 #: so this is only ever charged where the two rooms are stacked and nothing
 #: joins them. On the same compressed scale as the wall above: a real 50 dB
 #: concrete floor is 18 here, and it stays the heavier of the two.
-FLOOR_CEILING_LOSS_DB = 18.0
+FLOOR_CEILING_LOSS_DB = 50.0
 
 #: What a barrier with nothing usable on it costs. A wall: the far field
 #: fails toward LESS reach, which is the direction every guard here fails.

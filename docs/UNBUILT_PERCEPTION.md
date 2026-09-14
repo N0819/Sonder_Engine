@@ -1513,49 +1513,26 @@ speech-reception number (`FRAGMENT_SNR` 1/16, -12 dB). The play scenes that
 forced it -- a hearth fire masking a line spoken at the hearth, a launch
 engine refusing a raised line one pace off -- now grade as a reader would.
 
-**What was NOT moved, and is therefore on the wrong scale against the new
-ladders.** Every loss and floor was calibrated against the old, compressed
-ladder (§ 1.125 measured the factor at 0.358) and stays where it was:
+**Moved later the same day (2026-09-14):** `APERTURE_PASS` is now derived
+from real transmission losses (`APERTURE_DB`: open doorway 2, grille 2,
+curtain 5, shut door 25, glass 28), `WALL_LOSS_DB` 45 and
+`FLOOR_CEILING_LOSS_DB` 50 -- forced by
+`tests/test_replay_defects_h.py`'s shut-door test failing the moment the
+ladders went real. Measured after: a normal voice at a shut door is a
+fragment beyond it and nothing at the far wall; one shut door passes a
+shout, two end it; a normal voice down an open run is whole at two rooms,
+pieces at three; no voice's level clears a masonry wall; the far-field
+reach on a 300-room chain is 10 / 18 / 26 / 35 for loud / deafening /
+thunderous / catastrophic. The two expected failures are ordinary tests now.
 
-* `APERTURE_PASS` -- a shut door passes at 6 dB where a real solid door is
-  about 25, a window at 10 against 28. Measured: a normal line at the far
-  wall of the next room through a shut door is `full` (63 - 6 - 22.8 = 34.2
-  against 27.0), where the edge rule and the old ladder gave a fragment;
-  four shut doors down a run of four rooms pass a real shout `full`. Both
-  are pinned as strict expected failures
-  (`test_sound_field.py::test_a_closed_door_holds_a_normal_voice_registered`,
-  `::test_four_closed_doors_end_a_shout_registered`) so the fix lands with
-  a test change rather than a silent pass.
-* `WALL_LOSS_DB` 16 and `FLOOR_CEILING_LOSS_DB` 18 -- a real 45 and 50.
-  An 83 dB engine is heard through one wall of the next room at 45.4 dB
-  and a `deafening` klaxon through two; a raised voice's LEVEL would cross
-  a wall if it were flooded, and the sentence "a voice never crosses a
-  wall" is now held by kind alone (`far_field_sources` drops speech), which
-  is where it always belonged.
-* `AMBIENT` 27.0 / 30.0 / 30.0 -- a very quiet room; a furnished room is
-  35-40 dB(A). It is why a normal voice is `full` across any room the engine
-  lays out and a mutter carries three paces; a real floor would shorten
-  both. `HEAR_FLOOR` is the same 27.0 and means "the floor of the quietest
-  ordinary room", not the ear's physiological limit; the invariant it
-  implements (you cannot hear below the room you stand in) is unchanged.
-* `WEATHER_NOISE` and `WIND_NOISE` -- heavy rain 37 dB, a gale 40, where
-  real ones are 55-70. A downpour costs a real voice nothing at four paces
-  and a gale with heavy rain leaves it `full` across a large room.
-* The impact ladder (`EVENT_POWER` faint 45 | audible 58 | loud 72 |
-  deafening 80 at the cell) now sits BELOW the emission ladder at `loud`
-  and `deafening`; a real one (a slammed door 80-90 at a metre, a hammer
-  on steel over 100) would move `loud` over the far-field entry by more
-  and `deafening` to where the wall is crossed outright. Nothing compares
-  the two ladders, so no verdict turns on it.
-
-**What to decide.** One decision, not five: put the losses and floors on
-the real scale in one commit (a real door 25, a real wall 45, a real floor
-50, a furnished room 35, real weather), remeasure § 9.3's sentences and the
-far-field reach on the same day, and delete the two expected failures.
-The direction of every change is known: openings pass less, rooms mask
-more, a whisper's reach shortens by a pace, and the top rungs' reach through
-walls falls to what thunder does. Not taken here because it is one decision
-for every doorway in every story, and this work was scoped to the ladders.
+**Still on the compressed scale, and the remaining decision:** `AMBIENT`
+27.0 / 30.0 / 30.0 (a furnished room is 35-40 dB(A), which is why a normal
+voice is `full` across any room and a mutter carries three paces);
+`WEATHER_NOISE` and `WIND_NOISE` (heavy rain 37, a gale 40, against real
+55-70); and the impact ladder (`EVENT_POWER`), which now sits below the
+emission ladder at `loud` and `deafening` -- nothing compares the two, so
+no verdict turns on it. Each is one number with a known direction: rooms
+mask more, weather masks at all, a whisper's reach shortens by a pace.
 
 **A composer symptom the fragment exposed, not fixed:** a delivered fragment
 that quotes the perceiver's own name ("...here's... Hinami... kitsune...")

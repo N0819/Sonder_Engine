@@ -241,22 +241,15 @@ def test_a_shout_through_a_closed_door_and_a_normal_voice_through_it():
     heard = levels(sc, "S", "L")
     assert {v: heard[v] for v in ("mutter", "whisper", "loud", "shout")} == {
         "mutter": "none", "whisper": "none", "loud": "full", "shout": "full"}
-    # The normal voice is the registered mixed-scale case
-    # (`test_a_closed_door_holds_a_normal_voice_registered`): it was the
-    # edge rule's `fragment` on the compressed ladder and is `full` on the
-    # real one against a door still priced at 6 dB.
+    # REAL LOSSES (2026-09-14, later the same day): a shut solid door is 25
+    # dB, so a normal voice spoken right at it arrives in the next room in
+    # pieces, and a whisper not at all.
     sc = scene(two_rooms("closed_door"), {"S": "a", "L": "b"},
                {"S": {"at": "door:b"}, "L": {"at": "door:a"}})
-    assert levels(sc, "S", "L")["normal"] == "full"
+    assert levels(sc, "S", "L")["normal"] == "fragment"
     assert levels(sc, "S", "L")["whisper"] == "none"
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "REGISTERED 2026-09-14 (docs/UNBUILT.md): the emission ladders are real "
-    "levels and the aperture table is still the compressed one, so a shut "
-    "door priced at 6 dB passes a real normal voice `full` across two "
-    "rooms. Passes -- and must then lose this marker -- the day "
-    "APERTURE_PASS['closed_door'] is a real door."))
 def test_a_closed_door_holds_a_normal_voice_registered():
     """Far walls of two medium rooms through a shut door: a normal line
     ought to be a fragment at most, as it was before the recalibration and
@@ -1365,13 +1358,15 @@ def test_a_wall_passes_a_catastrophic_event_and_refuses_a_shout():
     # (73 and 85 at the cell) would clear the compressed 16 dB wall if it
     # were flooded, while the three ordinary volumes still die against it.
     # The mixed scale is registered in `docs/UNBUILT.md`.
-    from world.spatial import RAISED_VOLUMES
+    # REAL WALL (45 dB, 2026-09-14): no voice's LEVEL clears a masonry
+    # wall, a shout's 85 at the cell included, so "a voice never crosses a
+    # wall" is held by the arithmetic again as well as by kind.
     for volume, level in SPEECH_DB.items():
         reached = room_sound_flood(sc, "r0", level)
         crossed = bool(distant_level_word(
             reached.get("r1", {}).get("db", -999.0), floor))
-        assert crossed == (volume in RAISED_VOLUMES), volume
-    assert WALL_LOSS_DB == 16.0
+        assert not crossed, volume
+    assert WALL_LOSS_DB == 45.0
 
 
 def test_a_floor_is_a_wall_that_goes_up_and_a_stair_is_not():
@@ -1416,8 +1411,10 @@ def test_the_far_field_terminates_on_audibility_and_has_no_hop_cap():
              for level in SOUND_LEVELS}
     assert reach["catastrophic"] > reach["thunderous"] > reach["deafening"] \
         > reach["loud"] > reach["audible"] >= reach["faint"]
-    assert reach == {"faint": 1, "audible": 2, "loud": 26, "deafening": 56,
-                     "thunderous": 91, "catastrophic": 128}
+    # Real losses (2026-09-14): open doorways at 2 dB rather than 0.46, so
+    # every rung's reach shortens; the ordering is what the test is for.
+    assert reach == {"faint": 1, "audible": 2, "loud": 10, "deafening": 18,
+                     "thunderous": 26, "catastrophic": 35}
     assert reach["catastrophic"] < 300, (
         "the flood must stop of its own arithmetic, not run out of rooms")
     # The cut is the quietest floor the model has at the `fragment` margin,
@@ -1717,8 +1714,8 @@ def test_every_barrier_in_the_table_is_on_one_scale():
     span = SPEECH_ONE_PACE_DB["shout"] - SPEECH_ONE_PACE_DB["whisper"]
     assert 45.0 <= span <= 58.0, span         # a real voice's span, not 20.8
 
-    # The losses, still on the compressed scale of 2026-09-05.
-    k = 0.358
+    # The losses went real the same day (apertures, wall, floor): k is 1.
+    k = 1.0
     real = {"open": 0.0, "open_door": 2.0, "bars": 2.0, "membrane": 5.0,
             "closed_door": 25.0, "window": 28.0, "one_way_window": 28.0}
     for barrier, engine_db in APERTURE_LOSS_DB.items():
@@ -1735,7 +1732,7 @@ def test_every_barrier_in_the_table_is_on_one_scale():
     # (63 at the cell, 6.0 for the door, 22.8 of path against a 27.0 floor).
     sc = scene(two_rooms("closed_door"), {"S": "a", "L": "b"},
                {"S": {"at": "c"}, "L": {"at": "w"}})
-    assert levels(sc, "S", "L")["normal"] == "full"
+    assert levels(sc, "S", "L")["normal"] == "none"   # a real shut door
 
 
 # ---------------------------------------------------------------------------
@@ -2092,7 +2089,9 @@ def test_a_shout_down_a_long_run_is_heard_and_a_normal_voice_is_not():
     # What the test is FOR is unchanged: the answer falls with distance.
     words = [hear_level(spatial_rel_between(_run(h), "L", "S"), "normal")
              for h in (2, 3, 4, 5)]
-    assert words == ["full", "full", "full", "fragment"]
+    # Real doorway losses (2 dB each, 2026-09-14): whole two rooms down an
+    # open run, in pieces at three, gone at four.
+    assert words == ["full", "fragment", "none", "none"]
 
     # ...and the gain FALLS with distance, which is the whole complaint.
     gains = [spatial_rel_between(_run(h), "L", "S")["signal"]
@@ -2114,15 +2113,14 @@ def test_a_closed_door_ends_a_shout_where_open_doorways_carry_it():
     # mixed-scale case, pinned as a strict expected failure below so the
     # day a door is priced as a door this test is updated rather than
     # silently right.
-    shut = spatial_rel_between(_run(4, "closed_door"), "L", "S")
-    assert hear_level(shut, "shout") == "full"
+    # Real doors (25 dB each, 2026-09-14): one shut door passes a shout
+    # whole, two end it.
+    assert hear_level(spatial_rel_between(_run(1, "closed_door"), "L", "S"),
+                      "shout") == "full"
+    assert hear_level(spatial_rel_between(_run(2, "closed_door"), "L", "S"),
+                      "shout") == "none"
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "REGISTERED 2026-09-14 (docs/UNBUILT.md): four shut doors at the "
-    "compressed 6 dB each pass a real shout (85 at the cell) down a run of "
-    "four rooms at 33.4 dB over a 27.0 floor. A real door is 25 dB and "
-    "would end it at the second."))
 def test_four_closed_doors_end_a_shout_registered():
     shut = spatial_rel_between(_run(4, "closed_door"), "L", "S")
     assert hear_level(shut, "shout") == "none"

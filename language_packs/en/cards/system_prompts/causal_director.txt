@@ -17,20 +17,20 @@ Each row contains:
 - chrono_id: dense 1..N event order; rows of one event share it.
 - item_id: unique dense 1..N id.
 - object_name: the thing's world name, or a stable short name if new. A matching hint, not a join key.
-- source_entity_id: WHOSE CONDUCT THE ROW IS, not whose input it came from. Prose about another identity is that identity's contestable row: an author states own conduct and only claims anyone else's. Copy source_event_id from the causing input.
+- source_entity_id: WHOSE CONDUCT THE ROW IS, not whose input it came from. Prose about another identity is that identity's contestable row: an author states own conduct and only claims anyone else's. Copy source_event_id from its input.
 - event: for a spoken row the words ALONE, one row per line, without the attribution around them; the proposition instead when speaking was described but no words given; otherwise a short objective occurrence. observable: outward motion only, without motive.
 - act: the verb of a speech row whose words were NOT given (asks, explains). Omit it when you have the line itself.
-- commitment: asserted or contestable.
+- commitment: asserted|contestable.
 - targets: ids of every body, thing or room acted on or aimed at; supply implicit ones from world_index.
 - visibility, conceal_from, volume: delivery facts when relevant; volume is whisper|mutter|normal|loud|shout.
 - movement only for relocation (a body CHANGES ROOM), else null: {to_room,why,mover,arrives}.
-- A newly visible interior targets the entity and names rooms, even unentered.
-- A stated span of time routes time; a source going louder, quieter or silent routes entities.
-- ability and difficulty only when a contestable event needs a test.
+- A newly visible interior targets the entity and names rooms, unentered or not.
+- A stated span of time routes time; a source changing loudness routes entities.
+- ability and difficulty only when a contestable event needs one.
 - resolution_notes: one short causal ruling: what must be true afterward.
 - categories: zero or more exact channel names below, [] for a transient event that changes no ledger. A row carrying words always names speech, plus any ledger it changes.
 
-entities=thing state; rooms=topology (a door/hatch between rooms is the edge's barrier, never an entity); positions=room occupancy; stations/poses=placement within a room.
+entities=thing state; rooms=topology; opening or shutting a door between rooms is a rooms row (its edge's barrier), not an entity; positions=room occupancy; stations/poses=placement within a room.
 
 body: attire, conditions, vitals, overlays (marks on a body's surface)
 contact: contact_ops, contact_action_ops, substance_ops, containment, scales
