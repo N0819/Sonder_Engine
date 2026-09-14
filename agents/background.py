@@ -1689,6 +1689,13 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce,
             "name": name,
             "role_hint": sketch.get("role_hint", ""),
             "station_room": sketch.get("station_room", ""),
+            # What the figure IS when it is not a person, and what it looks
+            # like: a creature reacting as "a person with no character
+            # sheet" was given eyes and a conversation (chat 4 turn 10).
+            **({"nature": str(rec.get("nature"))}
+               if str(rec.get("nature") or "person") != "person" else {}),
+            **({"look": str(sketch["appearance"])}
+               if sketch.get("appearance") else {}),
         },
         "beat": {
             "resolved_event": _beat_for_presence(

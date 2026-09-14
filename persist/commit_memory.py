@@ -523,6 +523,44 @@ def _interior_relations_of(scene, cname):
     return out
 
 
+def _names_spoken_by(dlog, scene, roster, known_before, learned, *,
+                     speakers=None, rooms_by_name=None, aliases=None,
+                     address_index=None):
+    """A NAME A SPEAKER USES OF SOMEBODY STANDING THERE IS A NAME THEY KNOW.
+
+    `known` was learned by HEARING alone: every path above teaches the hearer
+    of a line and never its speaker. So the player who shouted "Abel! Abel,
+    the bar" across the yard at her own patient (scratch play 2026-09-14,
+    chat 4 turn 10) went on seeing "the gaunt old man" for the rest of the
+    story, the tripwire firing every beat his name reached her page. The
+    test is the hearer's own (`_names_heard_in`): the named body must stand
+    in the speaker's room, so a name shouted at a shut door or read off a
+    letter teaches nothing here -- and the address forms are the hearer's
+    own (`_address_index`: the full name and the family name), so a bare
+    given name teaches neither party. ``speakers``, when given, are the
+    minds this map is kept for (players and registered cast); a charter
+    body's recognition is its charter's own ledger. Mutates ``learned`` in
+    place; returns it.
+    """
+    for line in dlog or ():
+        speaker = str((line or {}).get("speaker") or "").strip()
+        body = _quote_body(str((line or {}).get("exact_quote") or "").strip())
+        if not speaker or not body:
+            continue
+        if speakers is not None and speaker not in speakers:
+            continue
+        already = set(known_before.get(speaker) or []) | set(
+            learned.get(speaker) or [])
+        for name in _names_heard_in(
+                body, speaker, roster, scene, _room_of(scene, speaker),
+                rooms_by_name=rooms_by_name, address_index=address_index):
+            for alias in (aliases or {}).get(name, [name]):
+                if alias not in already:
+                    already.add(alias)
+                    learned.setdefault(speaker, []).append(alias)
+    return learned
+
+
 def prepare_memory_commit(ctx, *, scene=None):
     """Build and embed all per-character memory mutations without writes."""
     chat = ctx.chat
@@ -564,6 +602,10 @@ def prepare_memory_commit(ctx, *, scene=None):
     # by commit_memories inside the transaction -- this function runs BEFORE
     # the write lock and must not write. See _names_heard_in.
     _name_roster = _known_name_roster(chat, ctx.cast)
+    # The minds `known` is kept for -- players and registered cast -- before
+    # the charter's names are appended below; a charter body's recognition
+    # is the charter's own ledger (`commit_charter_observations`).
+    _minds_with_a_map = set(_name_roster)
     # Charter bodies are real co-located identities even before promotion.
     # They are absent from chat_chars by design, so the legacy cast-only
     # roster made it impossible for either a character or the player to learn
@@ -618,6 +660,10 @@ def prepare_memory_commit(ctx, *, scene=None):
                             _already.add(_alias)
                             _names_learned.setdefault(
                                 _hearer_name, []).append(_alias)
+    _names_spoken_by(dlog, sc, _name_roster, _known_before, _names_learned,
+                     speakers=_minds_with_a_map,
+                     rooms_by_name=_charter_rooms, aliases=_charter_aliases,
+                     address_index=_name_address_index)
     relationship_ops = []
     witnessed_signals = []
     belief_reconciles = []

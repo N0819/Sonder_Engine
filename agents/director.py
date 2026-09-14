@@ -65,6 +65,7 @@ from llm import schemas
 from llm.schemas import validate_llm_output
 from world.survival import survival_enabled, vitals_of
 from world.spatial import (
+    _BARRIER_ANCHOR_DESC, normalize_barrier,
     apply_contact_ops,
     derived_room_name,
     contact_motion,
@@ -93,6 +94,7 @@ from world.spatial import (
 )
 
 from .common import (
+    _identity_token_set,
     merge_player_state_assertions,
     preview_player_state_assertions,
     validated_player_state_assertions,
@@ -349,6 +351,7 @@ from .director_fanout import (
     _specialist_payload,
     _specialist_ledger,
     _anchor_names,
+    _anchor_payload_desc,
     _beat_rooms,
     _stage_container,
     _stage_state,
@@ -907,6 +910,57 @@ def _addressed_characters(rows, cast):
     return out
 
 
+def _route_doorway_rows(sc, out, room_ids):
+    """A row about a doorway of a room in view is a `rooms` row.
+
+    A door between two rooms is the edge's barrier (`rooms`), never a
+    thing, and the Director keeps writing an act on one as a contact or a
+    contact action -- "slid the bolt back", "cracked it the width of her
+    hand", "pushed the door wide" (scratch play 2026-09-14, chat 4 turns
+    7-8) -- so the edge stayed shut while the page described it open, and
+    the creature standing on the other side was never in the aperture. The
+    join is structural: the row's `object_name`, as identity tokens, is a
+    subset of an in-view edge's own name (or of the generic barrier phrase
+    the geometry writes for an unnamed one). Nothing here reads English;
+    the edge names are the engine's, and the spatial hand decides which
+    edge the row moves once it is handed the row.
+    """
+    rooms = (sc or {}).get("rooms") or {}
+    door_names = []
+    for room_id in room_ids or ():
+        room = rooms.get(str(room_id))
+        if not isinstance(room, dict):
+            continue
+        for edge in room.get("adjacent") or []:
+            if not isinstance(edge, dict) or not edge.get("to"):
+                continue
+            name = " ".join(str(edge.get("name") or "").split())
+            if not name:
+                name = _BARRIER_ANCHOR_DESC.get(
+                    normalize_barrier(edge.get("barrier"))) or ""
+            tokens = _identity_token_set(name) if name else set()
+            if tokens:
+                door_names.append(tokens)
+    if not door_names:
+        return []
+    routed = []
+    for row in out.get("ledgers") or []:
+        if not isinstance(row, dict):
+            continue
+        categories = row.get("categories")
+        if not isinstance(categories, list):
+            categories = []
+            row["categories"] = categories
+        if "rooms" in categories or "spatial" in categories:
+            continue
+        tokens = _identity_token_set(str(row.get("object_name") or ""))
+        if not tokens or not any(tokens <= door for door in door_names):
+            continue
+        categories.append("rooms")
+        routed.append(str(row.get("object_name") or ""))
+    return routed
+
+
 def _final_movement(rows):
     """The beat's relocation: the LAST movement row that arrives.
 
@@ -1364,7 +1418,8 @@ def director_interpret(ctx, nonce):
         sc, here=p_room, room_ids=_causal_rooms,
         include_entity_interiors=True,
         exclude_entity_interiors=_bodies_without_interiors(
-            sc, _interpret_identities))
+            sc, _interpret_identities),
+        figures=_figures_in_view(ctx, _causal_rooms))
     _interpret_model_payload = {
         "event_inputs": _event_inputs,
         "identity_index": _interpret_identities,
@@ -1405,6 +1460,9 @@ def director_interpret(ctx, nonce):
     )
     normalize_causal_ledger(
         out, authority_by_entity(_event_inputs), _interpret_identities)
+    for _door_row in _route_doorway_rows(sc, out, _causal_rooms):
+        ctx.add_warning(f"interpret: {_door_row!r} names a doorway of a room "
+                        "in view; the engine routed rooms")
     _all_causal_sequence = list(out.get("sequence") or [])
     if ctx.extra_players:
         _extra_ids = {
@@ -4723,7 +4781,8 @@ def director_resolve(ctx, nonce, _corrections=None):
         resolve_sc, here=room_of(resolve_sc, p_name),
         room_ids=_resolve_causal_rooms, include_entity_interiors=True,
         exclude_entity_interiors=_bodies_without_interiors(
-            resolve_sc, _identity_index))
+            resolve_sc, _identity_index),
+        figures=_present_figures)
     _model_payload = {
         "event_inputs": _resolve_event_inputs,
         "identity_index": _identity_index,
@@ -4773,6 +4832,9 @@ def director_resolve(ctx, nonce, _corrections=None):
     normalize_causal_ledger(
         out, authority_by_entity(_model_payload.get("event_inputs")),
         _identity_index)
+    for _door_row in _route_doorway_rows(resolve_sc, out, _resolve_causal_rooms):
+        ctx.add_warning(f"resolve: {_door_row!r} names a doorway of a room "
+                        "in view; the engine routed rooms")
     _canonicalize_interior_movements(resolve_sc, out, _identity_index)
 
     # WORLD PRESSURE must-tick floor (F5), enforced. The ledger + prompt rule

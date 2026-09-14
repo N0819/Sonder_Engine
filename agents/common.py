@@ -1985,6 +1985,9 @@ def chatter_inputs(cid, sc, turn_idx=None):
             "bindings": frozenset(
                 str(k) for k in (state.get("bindings") or {})),
             "feel": state.get("feel") or {},
+            # What the charter's bodies ARE when they are not people: the
+            # stranger label reads it (`presence_figures_for_room`).
+            "creature": state.get("creature"),
         })
     # `standing` is the stage's slot for the OTHER per-room ledgers -- crowds,
     # couriers, posted notices (see `_standing`). Empty and filled on first
@@ -2224,10 +2227,21 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
         """What the body IS, on the same terms the crowd's composition says
         it -- a rank or a duty is worn, and an observer in the room reads it
         off the same band these people are members of. Computed only for the
-        bodies actually emitted, so a plaza's crowd costs nothing here."""
+        bodies actually emitted, so a plaza's crowd costs nothing here.
+
+        A CREATURE IS NOT A PERSON WITH NO POST. Its charter holds no posts
+        for `member_noun` to read, so the label fell through to the person
+        fallback: the well-house thing reached the player at arm's length as
+        "the unfamiliar person" (scratch play 2026-09-14, chat 4 turn 9).
+        Its own authored `noun` is the word, and a creature that authored
+        none is the compositor's unnamed shape -- less, never a face."""
+        from world.charter_creature import normalize_creature
         for charter_key, body_key in sorted(refs):
-            noun = charter_crowd.member_noun(
-                by_key.get(charter_key) or {}, body_key)
+            charter = by_key.get(charter_key) or {}
+            creature = normalize_creature(charter.get("creature"))
+            if creature:
+                return creature.get("noun") or _text("creature_noun")
+            noun = charter_crowd.member_noun(charter, body_key)
             if noun:
                 return noun
         return ""
@@ -7810,6 +7824,10 @@ def _observable_predicate(display, surface):
     if independent:
         return stripped if stripped.endswith((".", "!", "?")) else stripped + "."
     body = stripped[0].lower() + stripped[1:]
+    # The template closes the sentence; a surface that arrived already
+    # closed ("...eyes fixed on the light.") would close it twice.
+    if body.endswith(".") and not body.endswith("..."):
+        body = body[:-1].rstrip()
     return _text("observable", label=display, body=body)
 
 

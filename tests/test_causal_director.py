@@ -401,3 +401,34 @@ def test_a_present_character_a_line_targets_is_a_reactor():
     ]
     assert director._addressed_characters(rows, cast) == [2]
     assert director._addressed_characters([], cast) == []
+
+
+def test_a_row_about_a_doorway_in_view_is_routed_to_rooms():
+    """Scratch play 2026-09-14, chat 4 turns 7-8: "slid the bolt back",
+    "cracked it the width of her hand", "pushed the door wide" were routed
+    as contacts and contact actions; the edge stayed shut while the page
+    described it open, and the creature on the other side never entered
+    the aperture. The join is the engine's own edge name."""
+    sc = {"rooms": {
+        "scullery": {"name": "Scullery", "adjacent": [
+            {"to": "yard", "barrier": "closed_door",
+             "name": "the back door to the yard"},
+            {"to": "kitchen", "barrier": "open_door"}]},
+        "yard": {"name": "Farmyard", "adjacent": [
+            {"to": "scullery", "barrier": "closed_door",
+             "name": "the back door to the yard"}]}}}
+    out = {"ledgers": [
+        {"object_name": "yard door", "event": "pushed the door wide",
+         "categories": ["contact_action_ops"]},
+        {"object_name": "door", "event": "slid the bolt back",
+         "categories": ["contacts"]},
+        {"object_name": "tallow candle", "event": "lifted the candle",
+         "categories": ["contact_action_ops"]},
+        {"object_name": "the open doorway", "event": "stepped through",
+         "categories": []},
+    ]}
+    routed = director._route_doorway_rows(sc, out, ["scullery"])
+    assert routed == ["yard door", "door", "the open doorway"]
+    assert "rooms" in out["ledgers"][0]["categories"]
+    assert "rooms" not in out["ledgers"][2]["categories"]
+    assert director._route_doorway_rows(sc, {"ledgers": []}, ["scullery"]) == []

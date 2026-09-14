@@ -321,3 +321,51 @@ def test_the_dropped_line_says_so(temp_db):
     assert "Okinawa! Japan" in view and "cannot make out" in view, view
     assert not [w for w in (ctx.warnings or []) if "reached no view" in w], (
         ctx.warnings)
+
+
+def test_a_gesture_made_after_she_left_the_room_is_not_seen_through_the_door(temp_db):
+    """Sight is graded at the event's moment too. Scratch play 2026-09-14,
+    chat 4 turn 2: the nurse walked from the sickroom to the scullery; the
+    patient then clenched his fingers in the quilt; her view carried the
+    gesture as SIGHT through a shut door and two rooms, because the
+    beat-wide sight map says yes if either end of the beat could see."""
+    ctx = _beat(temp_db)
+    rooms = {
+        "sickroom": {"name": "Sickroom", "light": "lit",
+                     "adjacent": [{"to": "passage", "barrier": "closed_door"}]},
+        "passage": {"name": "Passage", "light": "dim",
+                    "adjacent": [{"to": "sickroom", "barrier": "closed_door"},
+                                 {"to": "scullery", "barrier": "open_door"}]},
+        "scullery": {"name": "Scullery", "light": "dim",
+                     "adjacent": [{"to": "passage", "barrier": "open_door"}]},
+    }
+    before = {"rooms": rooms, "positions": {"Hinami": "sickroom",
+                                             "The Doctor": "sickroom"},
+              "stations": {}, "entities": {}, "orientation": {}, "poses": {},
+              "attire": {}}
+    temp_db.wset(ctx.chat.id, "scene", before)
+    ctx.director_interpret["sequence"] = [{
+        "type": "action", "attempt": "walks out to the scullery",
+        "observable": "walks out to the scullery",
+        "visibility": "overt", "commitment": "asserted",
+        "event_id": "turn:1:player:0:action",
+        "movement": {"to_room": "scullery", "mover": "Hinami", "arrives": True},
+    }]
+    ctx.director_interpret["movement"] = {
+        "to_room": "scullery", "mover": "Hinami", "arrives": True}
+    gesture = [{
+        "type": "action", "attempt": "clench my fingers in the quilt",
+        "observable": "clenches his fingers into the quilt and stares at the door",
+        "visibility": "overt", "commitment": "asserted",
+        "event_id": "turn:1:character:1:0:action"}]
+    ctx["interaction_loop"]["rounds"][0]["result"]["sequence"] = gesture
+    ctx.character_results[int(ctx.cast[0]["id"])] = {"sequence": gesture}
+    ctx.director_resolve = {
+        "resolved_event": "She goes to the scullery; he clenches the quilt.",
+        "dialogue_log": [],
+        "state_diff": {"positions": {"Hinami": "scullery"}},
+    }
+    out = perception_outcome(ctx, "n0")
+    view = (out["views"] or {}).get("player") or ""
+    assert "clenches his fingers" not in view, view
+    assert "quilt" not in view, view

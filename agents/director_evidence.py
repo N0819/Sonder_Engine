@@ -1372,8 +1372,23 @@ def mover_cut_events(out, diff=None):
         # Interpret's elements cite nothing and carry their own id, because
         # interpret's sequence IS the player's declaration; they are unchanged.
         element = sequence[where]
-        phase_id = (str(element.get("from_declaration") or "").strip()
-                    or str(element.get("event_id") or "").strip())
+        own = str(element.get("event_id") or "").strip()
+        cited = str(element.get("from_declaration") or "").strip()
+        # THE CITED DECLARATION FIRST -- unless what is cited is the RAW
+        # INPUT. Since the ledger carried `source_event_id`, the player's own
+        # elements cite the raw declaration ("turn:56:primary:raw", minted
+        # in `director_interpret`), an id no stream is keyed on; preferring
+        # it sent every player cut to a key the stream never held, so
+        # `beat_movement_cuts` fell back to the last-action heuristic.
+        # Measured (scratch play 2026-09-14, chat 4 turn 12): a nurse walked
+        # three rooms to her patient's bedside, sat, and spoke, and both
+        # lines were refused "barrier separated" because her cut fell on the
+        # beat's last action and everything before it was graded from the
+        # room she had left. A raw id is the engine's own suffix, so the
+        # test is structural: a citation of a phase wins, a citation of the
+        # raw input yields to the element's own phase id.
+        phase_id = (cited if cited and not cited.endswith(":raw")
+                    else (own or cited))
         if phase_id:
             cuts[subject] = phase_id
     return cuts
@@ -2654,7 +2669,7 @@ def causal_contact_rows(sc, room_ids):
 
 def causal_world_index(sc, here=None, *, room_ids=None,
                        include_entity_interiors=False,
-                       exclude_entity_interiors=()):
+                       exclude_entity_interiors=(), figures=None):
     """What the Director needs to NAME A TARGET THE INPUT DID NOT NAME.
 
     The causal contract asks for `targets`, and deterministic code then
@@ -2715,6 +2730,34 @@ def causal_world_index(sc, here=None, *, room_ids=None,
             continue
         room["holds"].append({"id": str(key), "name": display(key),
                               "kind": "entity" if key in entities else "body"})
+    # A CHARTER BODY STANDING IN THE SLICE IS HERE TOO. `positions` holds the
+    # scene's own bodies; a charter body is a derived placement and never a
+    # position, so the aperture that lists "the man by the door" for the
+    # Director listed nobody the charter put there. Measured (scratch play
+    # 2026-09-14, chat 4 turns 9-10): a creature stood one pace from the
+    # player at the open scullery door for two beats and the causal
+    # Director's index for the yard held one body -- the player -- so the
+    # line spoken at the thing had no addressee to route and the social
+    # hand never ran. ``figures`` are `present_charter_figures` rows (name,
+    # room, role, look, creature); the row's own room decides whether it
+    # falls in the slice, and a name already held (a body bound to a
+    # registered mind, or a scene entity of the same name) is not doubled.
+    for figure in figures or ():
+        if not isinstance(figure, dict) or figure.get("reserved"):
+            continue
+        room = index.get(str(figure.get("room") or ""))
+        name = str(figure.get("name") or "").strip()
+        if room is None or not name:
+            continue
+        if any(str(row.get("id")) == name for row in room["holds"]):
+            continue
+        row = {"id": name, "name": name, "kind": "figure"}
+        for field in ("role", "look"):
+            if str(figure.get(field) or "").strip():
+                row[field] = str(figure[field]).strip()
+        if figure.get("creature"):
+            row["creature"] = figure["creature"]
+        room["holds"].append(row)
     for room in index.values():
         room["holds"].sort(key=lambda row: (row["kind"], row["id"]))
 
