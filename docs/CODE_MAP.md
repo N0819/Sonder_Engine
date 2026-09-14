@@ -88,7 +88,7 @@
 | `persist/commit_memory_write.py` | 354 | The durable memory write and its out-of-band consolidation twin. | `core.db`, `mind.memory`, `persist.commit_memory`, `story.character_schema`, `story.scene` |
 | `persist/commit_place_graph.py` | 336 | Per-mind durable place graph and per-beat spatial experience. | `world.spatial` |
 | `persist/commit_room_registry.py` | 566 | Room identity across frames: registry projection, mint dedup, renames, retirement, exit pruning. | `core.db`, `persist.commit_common`, `story.character_schema`, `world.spatial` |
-| `persist/commit_scene_state.py` | 2626 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `core.pipeline_context`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.beat_ledger`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.weather` |
+| `persist/commit_scene_state.py` | 2651 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `core.pipeline_context`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.beat_ledger`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.weather` |
 | `persist/llm_capture.py` | 455 |  | `core.db` |
 | `persist/pipeline_trace.py` | 635 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `core.db` |
 | `persist/steps.py` | 150 |  | `core.db` |
@@ -150,13 +150,13 @@
 | `world/charter_log.py` | 521 |  | `world.charter_commitment`, `world.charter_decide`, `world.charter_economy`, `world.charter_feel`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_needs`, `world.charter_news`, `world.charter_politics`, `world.charter_social`, `world.charter_temper` |
 | `world/charter_mark.py` | 302 |  | — |
 | `world/charter_mind.py` | 262 |  | — |
-| `world/charter_model.py` | 887 |  | `world.charter_chatter`, `world.charter_figure`, `world.charter_harm`, `world.charter_mark` |
-| `world/charter_move.py` | 630 |  | `world.charter_needs`, `world.charter_space` |
+| `world/charter_model.py` | 894 |  | `world.charter_chatter`, `world.charter_figure`, `world.charter_harm`, `world.charter_mark` |
+| `world/charter_move.py` | 644 |  | `world.charter_needs`, `world.charter_space` |
 | `world/charter_needs.py` | 615 |  | `world.charter_model` |
 | `world/charter_news.py` | 517 |  | `world.charter_mind`, `world.charter_model`, `world.charter_talk` |
 | `world/charter_observe.py` | 645 |  | `world.charter_figure`, `world.charter_identity`, `world.charter_mind`, `world.spatial` |
 | `world/charter_ops.py` | 336 |  | `world.charter_harm` |
-| `world/charter_place.py` | 453 |  | `world.charter_identity`, `world.charter_model`, `world.charter_move`, `world.spatial` |
+| `world/charter_place.py` | 502 |  | `world.charter_identity`, `world.charter_model`, `world.charter_move`, `world.spatial` |
 | `world/charter_plan.py` | 227 |  | `world.charter_drift`, `world.charter_model`, `world.charter_roster` |
 | `world/charter_politics.py` | 161 |  | — |
 | `world/charter_practice.py` | 1203 |  | `world.charter_commitment`, `world.charter_figure`, `world.charter_mind`, `world.charter_needs`, `world.charter_politics`, `world.charter_social`, `world.charter_talk` |
@@ -1115,8 +1115,8 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `compose_beat_scene()` | 1421 | 621 lines |
-| `prepare_scene_commit()` | 2044 | 462 lines |
+| `compose_beat_scene()` | 1421 | 646 lines |
+| `prepare_scene_commit()` | 2069 | 462 lines |
 | `_fold_duplicate_mints()` | 767 | 118 lines |
 | `derive_borne_containment()` | 921 | 113 lines |
 | `_advance_day_cycle()` | 70 | 111 lines |
@@ -1834,13 +1834,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_charter()` | 455 | 411 lines |
-| `normalize_body()` | 231 | 131 lines |
+| `normalize_charter()` | 462 | 411 lines |
+| `normalize_body()` | 231 | 138 lines |
 | `normalize_post()` | 144 | 45 lines |
-| `body_of_an_authored_mind()` | 364 | 45 lines |
+| `body_of_an_authored_mind()` | 371 | 45 lines |
 | `normalize_body_station()` | 191 | 38 lines |
 | `normalize_upkeep()` | 111 | 31 lines |
-| `_phase_set()` | 433 | 20 lines |
+| `_phase_set()` | 440 | 20 lines |
 | `_tags()` | 72 | 15 lines |
 
 ### `world/charter_move.py`
@@ -1851,9 +1851,9 @@
 | `_advance()` | 229 | 57 lines |
 | `edge_seconds()` | 112 | 41 lines |
 | `continue_walks()` | 288 | 41 lines |
+| `place_body()` | 567 | 38 lines |
+| `walk()` | 506 | 36 lines |
 | `_dispatch()` | 195 | 32 lines |
-| `walk()` | 506 | 30 lines |
-| `place_body()` | 561 | 30 lines |
 | `_nearest()` | 370 | 23 lines |
 
 ### `world/charter_needs.py`
@@ -1913,13 +1913,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `charter_placements()` | 198 | 69 lines |
-| `resolve_scene_placements()` | 381 | 66 lines |
+| `resolve_scene_placements()` | 430 | 66 lines |
+| `lease_scene_bodies()` | 381 | 47 lines |
 | `_station_and_facing()` | 150 | 46 lines |
 | `_spelling_table()` | 346 | 33 lines |
 | `lay_charter_bodies()` | 300 | 29 lines |
 | `rooms_in_frame()` | 281 | 17 lines |
 | `_dealt_cell()` | 132 | 12 lines |
-| `scene_with_charter_bodies()` | 331 | 11 lines |
 
 ### `world/charter_plan.py`
 

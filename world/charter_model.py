@@ -264,6 +264,13 @@ def normalize_body(key, entry):
         # can meet a corpse on a watch bill however the record arrived.
         "condition": normalize_condition(entry.get("condition")),
     }
+    # ON LOAN TO THE SCENE. A body the player's aperture holds is played by
+    # a model beat by beat and moved by the Director; the window runtime
+    # must not walk it while the lease stands (`charter_move.walk`). Set
+    # and cleared by the commit (`charter_place.lease_scene_bodies`);
+    # absent for every body the scene is not standing.
+    if entry.get("leased"):
+        body["leased"] = True
     if body["condition"] in GONE:
         body["available"] = False
         body["stood_down"] = False

@@ -378,6 +378,55 @@ def _spelling_table(registry, rooms):
     return table
 
 
+def lease_scene_bodies(registry, scene, aperture):
+    """A charter body the SCENE stands (a Director-minted entity bound to it,
+    `charter_ref` on the entity record) is on loan to the scene while it is
+    in the player's aperture, and returned to the charter when it is not.
+
+    THE LEASE, not ownership. The owner's rule (2026-09-14): a charter body
+    moves seamlessly from being animated on screen by a model to being
+    handled by the charter off screen. Owning the position always would
+    make beat-scale motion rigid, so while the body stands in a room the
+    beat is about, the scene keeps its row and the Director moves it; the
+    registry mirrors the room (so the runtime knows where it is) and the
+    body is marked ``leased`` (so the runtime does not walk it). The beat
+    that leaves it outside the aperture writes its room back as the
+    charter's ``place`` and RELEASES the scene's rows, so the runtime
+    resumes from where the scene left it and perception lays it from the
+    registry when it next comes into view.
+
+    Pure. Returns ``{"moves": [{charter, body, name, room, leased}],
+    "released": [entity_id, ...]}`` -- the moves in the shape
+    `charter_runtime.apply_scene_placements` lands, the released ids for
+    the caller to strip from the scene's positions, stations, orientation
+    and poses. A body the registry no longer holds, or an entity placed in
+    no room, is left alone.
+    """
+    scene = scene if isinstance(scene, dict) else {}
+    rooms = {str(r) for r in (aperture or ()) if str(r or "")}
+    items = ((registry or {}).get("items") or {})
+    moves, released = [], []
+    for eid, ent in sorted((scene.get("entities") or {}).items()):
+        ref = (ent or {}).get("charter_ref") if isinstance(ent, dict) else None
+        if not isinstance(ref, dict):
+            continue
+        charter, body = str(ref.get("charter") or ""), str(ref.get("body") or "")
+        if not charter or not body:
+            continue
+        state = ((items.get(charter) or {}).get("state") or {})
+        if body not in (state.get("bodies") or {}):
+            continue
+        room = str((scene.get("positions") or {}).get(str(eid)) or "")
+        if not room:
+            continue
+        leased = room in rooms
+        moves.append({"charter": charter, "body": body, "name": str(eid),
+                      "room": room, "leased": leased})
+        if not leased:
+            released.append(str(eid))
+    return {"moves": moves, "released": released}
+
+
 def resolve_scene_placements(registry, diff, scene):
     """Which of a Director diff's ``positions`` and ``stations`` entries name
     a charter body the scene does not stand, and what each one means for the
