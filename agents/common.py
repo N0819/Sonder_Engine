@@ -2457,6 +2457,18 @@ def _creature_stance(cid, charter_key, frame_id=None):
                        if k in senses},
             "opens_doors": bool(creature.get("can_open_doors")),
         }
+        # HOW IT SOUNDS DOING EACH THING -- the same table the offscreen
+        # noise channel and the onscreen voice read (`creature.voice`), so
+        # a hand that writes a sensory event for a creature's act writes it
+        # at the creature's own rung rather than guessing one (2026-09-14:
+        # the objects hand wrote "faint" for a dragging thing by luck; the
+        # reactor had left `activity` empty).
+        voice = {k: {"level": str(v.get("level") or ""),
+                     "sound": str(v.get("sound") or "")}
+                 for k, v in (creature.get("voice") or {}).items()
+                 if isinstance(v, dict) and v.get("level")}
+        if voice:
+            out["voice"] = voice
         level = hunger.get("level")
         floor = hunger.get("floor")
         if level is not None:
