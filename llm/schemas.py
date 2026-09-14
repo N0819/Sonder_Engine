@@ -2170,6 +2170,10 @@ class BackgroundReactOutput(LenientModel):
     dialogue_log_entry: Optional[DialogueLogEntry] = None
     action: str = ""
     charter_act: Optional[CharterConduct] = None
+    # For a creature (an entity carrying a nature): which of its voice
+    # activities the action is (`charter_creature.CREATURE_ACTIVITIES`), so
+    # the engine can say how loud it was and how far it carried.
+    activity: str = ""
 
 class SceneLifeEntry(LenientModel):
     """One managed presence's conduct for this beat, attributed by name so the
@@ -2613,6 +2617,11 @@ class DirectorResolve(LenientModel):
     # STRIPS what it does not name, which is how `note` and `from_event` were
     # each lost once already this week.
     sequence: list[dict] = Field(default_factory=list)
+    # The onscreen charter bodies' own declarations this beat -- one voice
+    # call each, made INSIDE resolve before the causal author runs, so the
+    # Director resolves what a charter body does instead of the narrator
+    # improvising it after the fact (`agents.background.declare_charter_figures`).
+    charter_declarations: list[dict] = Field(default_factory=list)
     changes_asserted: list[AssertedChange] = Field(default_factory=list)
     # The manifest's counterpart: what the beat deliberately did NOT list,
     # because it was interior. Never committed, never perceived, never

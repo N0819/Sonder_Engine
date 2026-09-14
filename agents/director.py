@@ -4070,6 +4070,35 @@ def _beat_event_sentences(out, identity_index=None):
     return parts
 
 
+def _take_declaration(decls, char_speech, char_actions, declaration):
+    """File one autonomous declaration -- a character's, a reaction's, or an
+    onscreen charter body's -- into the three tables resolve reads."""
+    char_id = declaration.get("char_id")
+    name = declaration.get("name")
+    sequence = declaration.get("sequence") or []
+    decls.append({
+        "char_id": char_id, "name": name, "sequence": sequence,
+        "is_reaction": declaration.get("is_reaction", False),
+        "follow_op": declaration.get("follow_op"),
+        "material_effects": declaration.get("material_effects") or [],
+        "speech": next((e.get("text") for e in sequence
+                        if e.get("type") == "speech"), None),
+        "action": next((e for e in sequence
+                        if e.get("type") == "action"), None),
+    })
+    speeches = [{"text": e["text"], "volume": e.get("volume", "normal"),
+                 "tone": e.get("tone", ""),
+                 "visibility": e.get("visibility", "overt"),
+                 "conceal_from": e.get("conceal_from") or [],
+                 "targets": e.get("targets") or []}
+                for e in sequence if e.get("type") == "speech" and e.get("text")]
+    if speeches:
+        char_speech.setdefault(name, []).extend(speeches)
+    for event in sequence:
+        if event.get("type") == "action" and event.get("attempt"):
+            char_actions.setdefault(name, []).append(event)
+
+
 def director_resolve(ctx, nonce, _corrections=None):
     from persist.commit import presence_name_items
     chat = ctx.chat
@@ -4156,35 +4185,7 @@ def director_resolve(ctx, nonce, _corrections=None):
                             % (_declaration.get("name") or "?", _note))
 
     for declaration in all_declarations:
-        char_id = declaration.get("char_id")
-        name = declaration.get("name")
-        sequence = declaration.get("sequence") or []
-        decls.append({
-            "char_id": char_id, "name": name, "sequence": sequence,
-            "is_reaction": declaration.get("is_reaction", False),
-            "follow_op": declaration.get("follow_op"),
-            "material_effects": declaration.get("material_effects") or [],
-            "speech": next((e.get("text") for e in sequence
-                            if e.get("type") == "speech"), None),
-            "action": next((e for e in sequence
-                            if e.get("type") == "action"), None),
-        })
-        speeches = [{"text": e["text"], "volume": e.get("volume", "normal"),
-                     "tone": e.get("tone", ""),
-                     "visibility": e.get("visibility", "overt"),
-                     "conceal_from": e.get("conceal_from") or [],
-                     # WHO IT WAS SAID TO, carried from the declaration. The
-                     # `dialogue_log` re-mint below is the only producer of
-                     # that field now that resolve authors no log, and it
-                     # used to hardcode None -- which cost `spatial_frames`
-                     # its orientation snap on every line of every beat.
-                     "targets": e.get("targets") or []}
-                    for e in sequence if e.get("type") == "speech" and e.get("text")]
-        if speeches:
-            char_speech.setdefault(name, []).extend(speeches)
-        for event in sequence:
-            if event.get("type") == "action" and event.get("attempt"):
-                char_actions.setdefault(name, []).append(event)
+        _take_declaration(decls, char_speech, char_actions, declaration)
 
     for c in ctx.cast:
         if int(c["id"]) in covered_ids:
@@ -4263,6 +4264,36 @@ def director_resolve(ctx, nonce, _corrections=None):
     onset_state = onset_state if isinstance(onset_state, dict) else {}
     resolve_sc = preview_player_state_assertions(
         resolve_sc, onset_state, ctx, p_name)
+    # ONSCREEN CHARTER BODIES: LAID INTO THE SCENE THE DIRECTOR RESOLVES,
+    # THEN GIVEN THEIR VOICE BEFORE THE AUTHOR RUNS. Off screen a charter
+    # body is pure code (the runtime's windows); in the player's aperture
+    # it is played by a model and the Director resolves what it did, like a
+    # character's declaration. Until 2026-09-14 the only voice a charter
+    # body had ran AFTER resolve (`background_react`), so a creature's act
+    # was narrated and never resolved, and the scene the hands wrote to
+    # did not hold the body at all (`lay_charter_figures`).
+    _figure_rows, _figure_declarations = [], []
+    try:
+        from .common import lay_charter_figures, rooms_in_view
+        _mv_resolve = interp.get("movement")
+        _aperture = rooms_in_view(
+            ctx, resolve_sc,
+            ctx.get("_player_room") or room_of(resolve_sc, p_name),
+            _mv_resolve.get("to_room") if isinstance(_mv_resolve, dict)
+            else None)
+        _figure_rows = lay_charter_figures(ctx, resolve_sc, _aperture)
+    except Exception as exc:
+        ctx.add_warning(
+            f"charter figures not laid into the resolve scene: {exc}")
+    if _figure_rows:
+        try:
+            from .background import declare_charter_figures
+            _figure_declarations = declare_charter_figures(
+                ctx, interp, resolve_sc, _figure_rows, decls, nonce)
+        except Exception as exc:
+            ctx.add_warning(f"charter voices before resolve skipped: {exc}")
+        for _fd in _figure_declarations:
+            _take_declaration(decls, char_speech, char_actions, _fd)
     # Each declaring character's own heading, exactly as the player already
     # gets one in director_interpret. The room graph is undirected, so
     # "steps through the doorway" and "turns west" name a set of doorways
@@ -4768,6 +4799,12 @@ def director_resolve(ctx, nonce, _corrections=None):
         f"character:{d.get('char_id')}": str(d.get("name") or "")
         for d in decls if d.get("char_id") is not None
     })
+    # A charter figure's handle IS its name -- the id the world index lists
+    # it under (`causal_world_index(figures=)`).
+    _identity_index.update({
+        str(_fd.get("name")): str(_fd.get("name"))
+        for _fd in _figure_declarations if _fd.get("name")
+    })
     _resolve_event_inputs = _causal_event_inputs(
         ctx, interp, decls, dice, payload.get("world_pressure") or [])
     _resolve_actor_names = [
@@ -5171,6 +5208,17 @@ def director_resolve(ctx, nonce, _corrections=None):
 
     # Warning-only re-normalization; strict validation already ran inside
     # _agent_json (see director_establish above).
+    out["charter_declarations"] = [dict(_fd) for _fd in _figure_declarations]
+    # A creature's declared act is heard at its own voice rung: the row the
+    # voice derived (`background._creature_noise`) joins the beat's sensory
+    # events, which perception and the commit both read from the diff.
+    _figure_noise = [row for _fd in _figure_declarations
+                     for row in (_fd.get("sensory_events") or [])
+                     if isinstance(row, dict)]
+    if _figure_noise:
+        _sd = out.get("state_diff")
+        if isinstance(_sd, dict):
+            _sd["sensory_events"] = list(_sd.get("sensory_events") or []) + _figure_noise
     out, warnings = validate_llm_output("director_resolve", out)
     ctx.warnings.extend(warnings)
 

@@ -2379,6 +2379,53 @@ def charter_view_for_rooms(cid, sc, rooms, frame_id=None):
     return viewed, [p["key"] for p in placements.values()]
 
 
+def lay_charter_figures(ctx, sc, rooms):
+    """Stand the charter's bodies in ``rooms`` on ``sc`` -- the stage's OWN
+    copy, never the store -- and return the rows laid.
+
+    The resolve scene is assembled from the committed scene plus the beat's
+    asserted state, and the committed scene holds no charter body: a charter
+    body is a derived placement (`charter_place`), which perception lays
+    onto its own read every beat and the Director never saw. So the hands
+    resolved targets against a room that, to them, held one body -- measured
+    (scratch play 2026-09-14, chat 4 turns 9-11): a creature stood one pace
+    from the player for three beats and no position, station, contact or
+    pose could be written for it, because to the spatial and contact hands
+    it did not exist. Same rows and same laying as perception
+    (`presence_figures_for_room` + `lay_charter_bodies`); a body the scene
+    already stands is left alone. What the Director then writes for one of
+    these keys is routed back to the registry at commit
+    (`charter_runtime.route_scene_placements`), never stored on the scene.
+    """
+    from world.charter_place import lay_charter_bodies, rooms_in_frame
+    chat = ctx.chat
+    cid = chat["id"] if isinstance(chat, dict) else chat.id
+    turn_idx = getattr(ctx.turn, "idx", None)
+    frame_id = getattr(ctx.turn, "frame_id", None)
+    inputs = chatter_inputs(cid, sc, turn_idx=turn_idx)
+    rows, seen, placements, keys = [], set(), {}, {}
+    for room in rooms_in_frame(sc, rooms):
+        for row in presence_figures_for_room(
+                cid, sc, room, inputs, turn_idx=turn_idx, frame_id=frame_id):
+            name = str(row.get("name") or "")
+            if not name or name.casefold() in seen:
+                continue
+            seen.add(name.casefold())
+            placed = row.get("placement") if isinstance(
+                row.get("placement"), dict) else None
+            if placed and not room_of(sc, name):
+                placements[placed["uid"]] = placed
+                keys[placed["uid"]] = name
+            elif not room_of(sc, name):
+                sc.setdefault("positions", {})[name] = row["room"]
+            rows.append({"name": name, "room": row["room"],
+                         "role": row.get("role") or "",
+                         "appearance": row.get("appearance") or ""})
+    if placements:
+        lay_charter_bodies(sc, placements, keys=keys)
+    return rows
+
+
 def _creature_stance(cid, charter_key, frame_id=None):
     """What a charter body IS, where its charter says it is a creature:
     ``{hunts, hunger, senses, prey, opens_doors}`` -- or ``{}`` for the

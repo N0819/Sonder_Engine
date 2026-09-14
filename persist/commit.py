@@ -131,7 +131,7 @@ from persist.commit_mapping import (
     premise_entry_uid, _opening_premise, _file_opening_premise,
     NEED_SUBJECT_WORDS, _need_words, _reads_as_prose, _answering_bodies,
     _drop_needs_the_beat_answers)
-from persist.commit_background import (BACKGROUND_PROMOTION_DIALOGUE_THRESHOLD,
+from persist.commit_background import (beat_reactions, BACKGROUND_PROMOTION_DIALOGUE_THRESHOLD,
     BACKGROUND_PROMOTION_MENTION_THRESHOLD, promotion_thresholds,
     _BACKGROUND_NAME_TITLE_WORDS, _NAME_TITLE_PREFIXES, strip_name_titles,
     name_in_roster, _PRESENCE_ARTICLES, _presence_identity,

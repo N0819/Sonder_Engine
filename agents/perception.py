@@ -762,6 +762,15 @@ def _outcome_event_stream(ctx, scene, interp, res, player_name,
             sequences.append((cast_names.get(char_id) or str(char_id),
                               result["sequence"], False))
 
+    # An onscreen charter body's own declaration (`declare_charter_figures`),
+    # resolved by the Director like a character's; its acts and lines carry
+    # their own phase ids, so the dispositions and the cut machinery read
+    # them exactly as they read a character's.
+    for figure in ((res or {}).get("charter_declarations") or []):
+        if isinstance(figure, dict) and figure.get("sequence"):
+            sequences.append((str(figure.get("name") or ""),
+                              figure["sequence"], False))
+
     def _same_speaker(actual, declared, is_player):
         if (is_player
                 and str(declared or "").strip().casefold()
