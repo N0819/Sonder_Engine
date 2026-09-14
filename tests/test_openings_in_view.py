@@ -296,3 +296,36 @@ class TestStandingInTheDarkLookingIntoTheLight:
         seen = [f["desc"] for f in rows[0].get("features") or ()]
         assert "a tall pine dresser" in seen
         assert "a black iron stove" not in seen
+
+
+class TestASeenRoomDeliversItsDescription:
+    """What sight reaches past an open boundary into a lit room is the same
+    prose the room delivers underfoot -- `notes`, else `desc`. Measured on
+    chat 123 turn 9: the spatial hand minted the TARDIS interior with a
+    forty-word `desc` and no `notes`, and the player, told "Show me", was
+    told "Through the third open doorway is TARDIS Interior." and nothing of
+    the chamber behind it."""
+
+    def test_a_room_with_desc_and_no_notes_is_described_through_the_door(self):
+        sc = _pair()
+        sc["rooms"]["vault"]["notes"] = ""
+        sc["rooms"]["vault"]["desc"] = ("A vast chamber far larger than the "
+                                        "box outside suggests.")
+        rows = _visible_openings(sc, "Ada", "hall")
+        assert rows[0]["state"] == "seen"
+        assert rows[0]["room_notes"].startswith("A vast chamber")
+        assert "A vast chamber" in composer._render_openings(rows)
+
+    def test_notes_still_outrank_desc(self):
+        sc = _pair()
+        sc["rooms"]["vault"]["notes"] = "Shelves of ledgers line the walls."
+        sc["rooms"]["vault"]["desc"] = "A vault."
+        rows = _visible_openings(sc, "Ada", "hall")
+        assert rows[0]["room_notes"] == "Shelves of ledgers line the walls."
+
+    def test_a_shut_door_still_withholds_the_description(self):
+        sc = _pair(barrier="closed_door")
+        sc["rooms"]["vault"]["desc"] = "A vast chamber."
+        rows = _visible_openings(sc, "Ada", "hall")
+        assert "room_notes" not in rows[0]
+        assert "vast chamber" not in composer._render_openings(rows)

@@ -264,7 +264,7 @@ SPEECH_DB = {volume: db_of_power(power)
 #: `catastrophic` 100 are 23 and 38 dB over `deafening`, which is where a
 #: cannon, a collapsing roof and a ship's horn live and where the old ladder
 #: had no rung at all.
-SOUND_POWER = {"faint": 1.0, "audible": 12.0, "loud": 40.0,
+SOUND_POWER = {"faint": 1.0, "audible": 4.0, "loud": 40.0,
                "deafening": 150.0,
                "thunderous": power_of_db(85.0),
                "catastrophic": power_of_db(100.0)}

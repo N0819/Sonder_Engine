@@ -631,6 +631,7 @@ from .common import (
     player_room_in,
     _room_notes_from_lore,
     _room_notes_for_view,
+    room_prose,
     CROWDS_KEY,
     crowds_for_room,
     artifacts_for_room,
@@ -3412,14 +3413,15 @@ def _manifest_percepts(sc, manifest, observer, display_map, recognized,
                                        sense_card) != "none"
         demeanor = _composer_scrub_surface(
             str(entry.get("surface_demeanor") or ""), observer, recognized,
-            unknown)
+            unknown, labels=display_map)
         percept = composer.demeanor_percept(sname, label, demeanor) \
             if demeanor and can_see else None
         if percept:
             out.append(percept)
         for cue in entry.get("cues") or []:
             text = _composer_scrub_surface(str(cue or ""), observer,
-                                           recognized, unknown)
+                                           recognized, unknown,
+                                           labels=display_map)
             percept = composer.cue_percept(sname, label, text, order_key=order,
                                            can_see=can_see)
             if percept:
@@ -3879,7 +3881,8 @@ def _strip_self_narration_quote_safe(view, perceiver_name, other_names=()):
 #: failure direction is the safe one -- a join point this misses leaves the
 #: two predicates in ONE span, so a span that names an inadmissible body
 #: takes more with it, never less. Nothing here decides meaning.
-def _composer_scrub_surface(text, name, recognized, unknown_sources):
+def _composer_scrub_surface(text, name, recognized, unknown_sources,
+                            labels=None):
     """Input-side identity floor for an act's observable surface: a Director
     or character-authored surface can embed a canonical name ("steps toward
     Hinami") the receiving observer has not earned. Applied at ADMISSION so
@@ -3889,7 +3892,7 @@ def _composer_scrub_surface(text, name, recognized, unknown_sources):
         return text
     scrubbed, _ = _scrub_unknown_identities(
         text, allowed_forms=[name, *recognized],
-        unknown_sources=unknown_sources)
+        unknown_sources=unknown_sources, labels=labels)
     return scrubbed
 
 
@@ -4416,7 +4419,11 @@ def _visible_openings(sc, name, room, *, sweep=False, gate=None):
             out.append(row)
             continue
         row["state"] = "seen"
-        notes = far.get("notes")
+        # THE SAME PROSE THE ROOM UNDERFOOT DELIVERS (`room_prose`): notes,
+        # else desc. Reading `notes` alone here handed a freshly minted room
+        # through its doorway as a bare name -- chat 123 turn 9, the TARDIS
+        # interior the spatial hand had just described at length.
+        notes = room_prose(far)
         row["room_name"] = far_name
         row["room_notes"] = gate(notes) if gate is not None else notes
         rows = neighbour_feature_visibility(sc, name, to_room, sweep=bool(sweep))
@@ -5255,7 +5262,8 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                     if _cut and not surface:
                         continue        # refusal already recorded
                     surface = _composer_scrub_surface(
-                        surface, name, recognized, unknown)
+                        surface, name, recognized, unknown,
+                        labels=display_map)
                     surface = resolve_action_referents(
                         surface, event, {
                             **{key: value for key, value in display_map.items()},
@@ -6183,7 +6191,8 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                     order += 1
                     continue            # refusal already recorded
                 surface = _composer_scrub_surface(
-                    surface, name, recognized, unknown)
+                    surface, name, recognized, unknown,
+                    labels=display_map)
                 surface = resolve_action_referents(
                     surface, act.get("event") or {}, {
                         **{key: value for key, value in display_map.items()},

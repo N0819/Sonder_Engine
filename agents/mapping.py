@@ -191,6 +191,19 @@ def classify_movement(interp, scene, *, planned_for):
         if held != target:
             out["declared_as"] = target
         return out
+    # The compiler runs beside first-pass perception, after the Director has
+    # already let the spatial hand mint the destination on THIS step.  That
+    # room is not in the committed scene yet, but it is no longer missing and
+    # must not become a Writers' Room debt.  In particular, entity interiors
+    # are spatially authored at reveal/entry rather than preplanned.
+    asserted = ((interp.get("state_assertions") or {}).get("rooms") or {})
+    asserted_scene = {"rooms": asserted}
+    held = scene_room_id(asserted_scene, target)
+    if held:
+        out = {"to_room": held, "status": "known"}
+        if held != target:
+            out["declared_as"] = target
+        return out
     plan = planned_for(target)
     if plan:
         # THE PLAN'S ROOM ENTERS UNDER THE PLAN'S IDENTITY. The Director

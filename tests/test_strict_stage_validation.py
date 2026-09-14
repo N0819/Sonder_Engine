@@ -131,6 +131,27 @@ def test_director_interpret_semantic_check_uses_source_payload(monkeypatch):
     assert out["sequence"][0]["attempt"] == "open the door"
     assert len(llm.calls) == 2
 
+
+def test_empty_causal_json_reasks_the_original_before_repair(monkeypatch):
+    payload = {"event_inputs": [{
+        "entity_id": "persona:1", "authority_mode": "world_author",
+        "events": [{"event_id": "e1", "raw_text": "I open the door"}],
+    }], "identity_index": {"persona:1": "Corin"}}
+    good = {"ledgers": [{
+        "chrono_id": 1, "item_id": 1, "object_name": "door",
+        "source_entity_id": "persona:1", "source_event_id": "e1",
+        "event": "opens the door", "commitment": "asserted",
+        "resolution_notes": "The door is open.", "categories": ["entities"],
+    }]}
+    llm = _script(monkeypatch, ["{}", json.dumps(good)])
+
+    out = _agent_json("director", "director_interpret", "original", payload)
+
+    assert out["ledgers"][0]["event"] == "opens the door"
+    assert len(llm.calls) == 2
+    assert llm.calls[1]["system"] == "original"
+    assert json.loads(llm.calls[1]["user"]) == payload
+
 def test_unparseable_output_triggers_repair(monkeypatch):
     llm = _script(monkeypatch, [
         "Sure! Here is the reaction you asked for.",
@@ -230,3 +251,34 @@ def test_prose_the_model_sent_reaches_the_page_unedited(monkeypatch):
     kept = narration._report_prose_guards(
         prose, "", ['hello'], "I said hello", warnings)
     assert kept == prose
+
+
+def test_an_empty_object_from_any_step_reasks_the_original_before_repair(monkeypatch):
+    """The stall is a provider trait, not a causal-Director one. Measured on
+    the owner's database 2026-09-14: eight bare `{}` replies across five roles
+    since 09-08, none of them the causal Director; on chat 123 turn 9 the
+    contact and objects hands each stalled, were handed their `{}` to repair,
+    and stalled again -- two fruitless calls and a lost door state."""
+    payload = {"ledgers": [{"item_id": 1, "object_name": "door"}],
+               "source": "causal_ledger"}
+    good = {"results": [{"status": "already_true", "transforms": [],
+                         "reroute_to": ""}], "notes": []}
+    llm = _script(monkeypatch, ["{}", json.dumps(good)])
+
+    out = _agent_json("director_contact", "director_contact", "original",
+                      payload)
+
+    assert out["results"][0]["status"] == "already_true"
+    assert len(llm.calls) == 2
+    assert llm.calls[1]["system"] == "original"
+    assert json.loads(llm.calls[1]["user"]) == payload
+
+
+def test_an_empty_narrator_object_is_a_stall_not_a_page(monkeypatch):
+    """Every narrator field defaults, so `{}` validated and committed an
+    empty page (scratch play 2026-09-14, chat 3 turn 0). It now fails
+    validation and the original request is re-asked before any repair."""
+    llm = _script(monkeypatch, ["{}", json.dumps({"prose": "The fire burns."})])
+    out = _agent_json("narrator", "narrator", "sys", {"beat": 1})
+    assert out["prose"] == "The fire burns."
+    assert len(llm.calls) == 2 and llm.calls[1]["system"] == "sys"

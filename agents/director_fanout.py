@@ -632,6 +632,11 @@ def _specialist_payload(name, ctx, sc, view, extras):
         "source": view["source"],
         "variant_seed": extras.get("nonce"),
     }
+    if extras.get("identity_index"):
+        # Causal rows retain stable persona/character ids.  Hands write scene
+        # ledgers under display subjects, so give every hand the same small,
+        # explicit join instead of asking it to infer a person from prose.
+        payload["identity_index"] = extras["identity_index"]
     # The Director's ruling for THIS hand's channels, when it made one, AT
     # BOTH STAGES. Scoped like every other slice: a specialist sees its own
     # note and no one else's, so this carries authority without carrying
@@ -668,6 +673,19 @@ def _specialist_payload(name, ctx, sc, view, extras):
                      for span in _specialist_span_slice(name, view)]
     if internal_rows:
         ledgers = [_specialist_ledger(row) for row in internal_rows]
+        identity_index = extras.get("identity_index") or {}
+        for ledger in ledgers:
+            if not isinstance(ledger, dict):
+                continue
+            source_name = identity_index.get(str(
+                ledger.get("source_entity_id") or ""))
+            if source_name:
+                # A hand writes scene subjects, not causal identity handles.
+                # Keep the stable source id for provenance and put its exact
+                # display join beside it.  This prevents a contact hand from
+                # guessing that ``persona:10`` meant the Doctor when it was
+                # Hinami, without asking another model to infer identity.
+                ledger["source_name"] = str(source_name)
         # OBJECT MATCHING COMES FROM THE WORLD, NOT FROM DIRECTOR PROSE.
         # The Director supplies only a readable object_name. Deterministic
         # code matches it against standing scene records and embeds the
@@ -955,6 +973,7 @@ def _specialist_payload(name, ctx, sc, view, extras):
         # keeper. Everything else here is the geography's own ledgers plus
         # each declared mover's heading -- never lore, minds, or bodies.
         payload.update({
+            "player": view.get("player"),
             "rooms": sc.get("rooms") or {},
             "positions": sc.get("positions") or {},
             "stations": sc.get("stations") or {},
@@ -994,6 +1013,10 @@ def _specialist_payload(name, ctx, sc, view, extras):
             ],
             "movement": extras.get("movement"),
             "movers": extras.get("movers") or {},
+            # Identity plus one topological fact for entities in the
+            # immediate scene.  An empty list is meaningful: entering that
+            # entity asks this hand to author its first interior.
+            "entity_interiors": extras.get("entity_interiors") or {},
             # The geometry's sight digest -- who sees whom, who is within
             # reach, what cover stands between -- computed from the ledgers
             # this hand writes (stations, poses, facing) so it can see what

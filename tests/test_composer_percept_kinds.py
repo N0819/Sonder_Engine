@@ -56,3 +56,29 @@ def test_the_live_builders_mint_declared_kinds():
     assert poses, "the pose builder produced nothing to check"
     for percept in poses:
         assert percept.kind in PERCEPT_KINDS
+
+
+def test_a_standing_presence_splices_a_sentence_shaped_anchor():
+    """The presence sentence was the one reader taking an anchor's `desc`
+    raw. Chat 123 turn 9: "The Doctor is still at A flat stretch of dark,
+    packed sand damp from the receding surf.." -- sentence case and two
+    stops, beside a pose sentence that already said "on the sand shelf"."""
+    from agents import composer
+    sc = {
+        "rooms": {"strand": {"name": "Moonlit Strand", "light": "lit",
+                             "anchors": {"sand_shelf": {
+                                 "desc": "A flat stretch of dark, packed sand "
+                                         "damp from the receding surf.",
+                                 "dir": "s"}}}},
+        "positions": {"Hinami": "strand", "The Doctor": "strand"},
+        "stations": {"The Doctor": {"at": "sand_shelf"},
+                     "Hinami": {"at": "sand_shelf"}},
+        "entities": {}, "orientation": {}, "poses": {},
+    }
+    body = {"name": "The Doctor", "room": "strand", "appearance": "a thin man",
+            "aliases": [], "disguise_known_to": None}
+    rows = composer.presence_percepts(sc, "Hinami", [body],
+                                      {"The Doctor": "The Doctor"})
+    at = [p.data.get("at") for p in rows if p.kind == "presence"]
+    assert at and at[0] == ("a flat stretch of dark, packed sand damp from "
+                            "the receding surf")

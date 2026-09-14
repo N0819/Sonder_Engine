@@ -237,6 +237,12 @@ _CATEGORY_CHANNELS = {
     # as an omission every beat and buys a repair from a mind that never
     # saw it -- measured live at 49.2s for two such events in one beat.
     "overlays": "overlays",
+    # What lies ON a body without changing it -- mud, wet, blood, paint,
+    # ash -- is the channel `overlays`, a name no Director ever reached for
+    # because it names the storage, not the fact (owner, 2026-09-14). The
+    # causal sheet publishes it as `marks`; the ledger key is unchanged so
+    # every archive still reads.
+    "marks": "overlays",
     "vitals": "vitals",
     "containment": "containment",
     "scales": "scales",

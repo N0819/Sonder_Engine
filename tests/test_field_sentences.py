@@ -104,12 +104,12 @@ def view(sc, name, language="en"):
                                 full_render=True, language=language)
 
 
-Q_LIGHT = ("The light from the lamp falls on the table, thins to half-light "
-           "at the shelf, and leaves the hearth in the dark. You are in "
+Q_LIGHT = ("The light from the lamp falls on the table, reaches the shelf as "
+           "half-light, and leaves the hearth in the dark. You are in "
            "half-light.")
 P_LIGHT = "The light from the lamp falls on the table. You are in the light."
 Q_SOUND = ("The noise from the generator drowns everything at the shelf and "
-           "the hearth and dies away at the table. Where you are, the noise "
+           "the hearth and is faint at the table. Where you are, the noise "
            "drowns everything.")
 Q_LIGHT_JA = ("光はthe lampから来ている。the tableは明るく照らされている。"
               "the shelfは薄明かりの中にある。the hearthは闇の中にある。"

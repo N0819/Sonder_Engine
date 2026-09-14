@@ -190,7 +190,16 @@ def _capture_reasoning(message):
 # first tokens arrive in seconds. A stream silent for a minute and a half is
 # not slow, it is gone. Owner's number (2026-08-29); raise it per-call with
 # `request_timeout(...)` where a role genuinely needs longer.
-REQUEST_TIMEOUT = (30, 90)
+#: HOW LONG A PROVIDER MAY SAY NOTHING. The owner's rule (2026-09-14): a
+#: provider that has sent neither a reasoning fragment nor a content token for
+#: this long is unresponsive, and the call moves down the ladder (and, for a
+#: grammar-bearing request, counts a format stall) instead of waiting. Every
+#: OpenAI-style call is streamed so that activity is observable; a thinking
+#: model that is working shows it in reasoning deltas, and a keepalive comment
+#: is not activity. Measured the same day: two specialist calls on one beat
+#: took 1,324 s and 1,319 s where the role's usual cost is 3-7 s.
+PROVIDER_SILENCE_SECONDS = 10.0
+REQUEST_TIMEOUT = (30, PROVIDER_SILENCE_SECONDS)
 
 # Independent pipeline stages (mapping+perception_act, narrator+
 # narrator_extra, narrator_extra's own per-persona loop) now run
@@ -2053,6 +2062,17 @@ def _json_schema_supported(prov, model) -> bool:
     if not getattr(_json_schema_supported, "_loaded", False):
         _json_schema_supported._loaded = True
         _load_schema_blacklist()
+    # A GEMINI MODEL GETS json_object, NEVER A GRAMMAR (owner's ruling,
+    # 2026-09-14). Measured on the scratch play of that day, every role on
+    # OpenRouter `google/gemini-3.8-flash`: 15 of 65 specialist replies were
+    # malformed patches (null-filled arrays, records serialised into their
+    # own string slots, junk keys), and two specialist calls on one beat
+    # hung for 1,324 s and 1,319 s where the role's usual cost is 3-7 s.
+    # Replayed in isolation with json_object the same requests answered
+    # cleanly in 2-3 s. The predicate is the model family, which is a fact
+    # about the wire, not a word list over prose.
+    if "gemini" in str(model or "").casefold():
+        return False
     key = _json_object_key(prov, model)
     with _NO_JSON_SCHEMA_LOCK:
         if key in _NO_JSON_SCHEMA:
@@ -2348,6 +2368,40 @@ def _classify_error(e: Exception) -> LLMError:
         return LLMError(str(e), 0, True)
     return LLMError(str(e), 0, False)
 
+class ProviderSilent(LLMError):
+    """A stream that stopped saying anything for `PROVIDER_SILENCE_SECONDS`.
+
+    Retryable, and distinct from a socket timeout because a provider may keep
+    the socket alive with comment lines while producing nothing; the clock
+    below counts only reasoning and content as activity."""
+
+
+class _ActivityClock:
+    """Raises `ProviderSilent` when no activity arrived within the limit."""
+
+    def __init__(self, limit=None, now=None):
+        self.limit = PROVIDER_SILENCE_SECONDS if limit is None else float(limit)
+        self._now = now or time.monotonic
+        self.last = self._now()
+        self.reasoning_chars = 0
+        self.content_chars = 0
+
+    def tick(self, reasoning="", content=""):
+        if reasoning or content:
+            self.reasoning_chars += len(reasoning or "")
+            self.content_chars += len(content or "")
+            self.last = self._now()
+            return
+        idle = self._now() - self.last
+        if idle > self.limit:
+            seen = ("after %d chars of reasoning and %d of content"
+                    % (self.reasoning_chars, self.content_chars)
+                    if (self.reasoning_chars or self.content_chars)
+                    else "before any token")
+            raise ProviderSilent(
+                "provider silent for %.0fs (%s)" % (idle, seen), 0, True)
+
+
 def _sse_openai(url, headers, body, sink, role=None, model=None):
     body["stream"] = True
     # Ask for a final usage-bearing chunk -- without this, streamed
@@ -2369,8 +2423,10 @@ def _sse_openai(url, headers, body, sink, role=None, model=None):
                          timeout=_request_timeout()) as r, _abortable(r):
         if r.status_code >= 400:
             raise LLMError(f"HTTP {r.status_code}: {r.text[:300]}", r.status_code, r.status_code in DEFAULT_RETRY.retryable_status)
+        clock = _ActivityClock()
         for raw in r.iter_lines():
             _check_cancel()
+            clock.tick()
             if not raw:
                 continue
             line = raw.decode("utf-8", "ignore")
@@ -2426,6 +2482,7 @@ def _sse_openai(url, headers, body, sink, role=None, model=None):
             if d:
                 text += d
                 sink(d)
+            clock.tick(reasoning=_r, content=d or "")
     if role:
         _log_usage(role, model, t0, usage, served=served,
                    kind="stream")
@@ -2807,7 +2864,12 @@ def _chat_complete_once(
     t, merged = _merge_samplers(cfg, sampler, temperature)
     base = prov["base_url"].rstrip("/")
     raw_sink = token_sink.get()
-    streaming = bool(raw_sink)
+    # EVERY OPENAI-STYLE CALL IS STREAMED, sink or no sink, so the silence
+    # clock in `_sse_openai` can see whether the provider is working
+    # (reasoning deltas) or saying nothing. A blocking read cannot tell the
+    # two apart and waited `BLOCKING_READ_TIMEOUT` on both.
+    streaming = bool(raw_sink) or prov["kind"] != "anthropic"
+    raw_sink = raw_sink or (lambda _piece: None)
 
     # A FRESH GUARD PER ATTEMPT. `OutputGuard` accumulates every delta it is
     # fed and judges a 4KB tail plus a 16KB loop window, so one guard shared
@@ -2950,10 +3012,13 @@ def _chat_complete_once(
             schema_bearing = (isinstance(_rf, dict)
                               and _rf.get("type") == "json_schema")
             stalled = False
-            if isinstance(exc, LLMError):
+            silent = isinstance(exc, (ProviderSilent,) + _RETRYABLE_NETWORK)
+            if isinstance(exc, LLMError) and not silent:
                 if exc.status_code != 400:
                     raise
-            elif not schema_bearing:
+            elif silent and not schema_bearing:
+                # Unresponsive on a plain request: the outer ladder's turn
+                # (retry, then the next candidate), not a format matter.
                 raise
             else:
                 stalled = True

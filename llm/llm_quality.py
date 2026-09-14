@@ -657,6 +657,55 @@ def complete_validated_json(
             ok=bool(report.valid), started=_capture_t0,
             error="" if report.valid else "; ".join(report.errors[:3]))
 
+    # A BARE `{}` THAT VALIDATES IS STILL NO ANSWER. Every narrator field
+    # defaults, so the stall reply `{}` passed validation and COMMITTED an
+    # empty page (scratch play 2026-09-14, chat 3 turn 0: the trace ended
+    # "Let me render the drawing room" and the content was `{}`). The
+    # narrator's standing rule -- a content judgment may not buy a REPAIR,
+    # because the repair ladder is what turned an empty answer into a dead
+    # turn (chat 95 t18) -- is kept whole: this is one re-ask of the same
+    # request, never a repair, and an answer that says something (even
+    # `{"prose": ""}`) is taken as it came. Only the literal empty object is
+    # a stall.
+    if (report.valid and not provider_errored and parsed == {}
+            and isinstance(payload, dict) and payload):
+        _t0 = time.monotonic()
+        _wall0 = time.time()
+        try:
+            again = chat_complete(
+                role, system, user, temperature=temperature,
+                max_tokens=max_tokens, sampler=sampler, candidate_offset=0,
+                token_ceiling=token_ceiling, json_schema=json_schema)
+        except Aborted:
+            raise
+        except LLMError as exc:
+            note_step_warning(
+                "llm second call: empty-object reply re-ask errored after "
+                f"{time.monotonic() - _t0:.1f}s ({exc}); the empty answer stands")
+            return _accepted(report)
+        note_step_warning(
+            "llm second call: empty-object reply treated as a stall; "
+            f"re-asked the original request ({time.monotonic() - _t0:.1f}s)")
+        try:
+            again_parsed = strict_json_parse(again)
+        except Exception:
+            again_parsed = None
+        if isinstance(again_parsed, dict) and again_parsed:
+            again_report = validate_llm_output_strict(
+                step_key, again_parsed, source_payload=payload)
+            note_provider_exchange(
+                role=role, system=system, payload=payload, response=again,
+                ok=bool(again_report.valid), started=_wall0,
+                error="" if again_report.valid
+                else "; ".join(again_report.errors[:3]))
+            if again_report.valid:
+                return _accepted(again_report)
+        else:
+            note_provider_exchange(
+                role=role, system=system, payload=payload, response=again,
+                ok=False, started=_wall0, error="empty or unparseable re-ask")
+        return _accepted(report)
+
     if report.valid:
         return _accepted(report)
 
@@ -769,6 +818,75 @@ def complete_validated_json(
                 ran_out_of_room = output_ran_out_of_room(raw)
                 previous_raw = raw
                 previous_parsed = parsed
+
+    # AN EMPTY OBJECT IS A STALL, NOT A DRAFT TO EDIT. A thinking model
+    # sometimes spends its whole reply reasoning correctly -- the trace ends
+    # "Let me construct the result." -- and finalizes as `{}`. The same class
+    # as the truncation above, in another coat: the model had the answer and
+    # delivered none of it, so the repair rung is the wrong tool. It hands
+    # the model its own `{}` and asks for a fix, and the model reasons the
+    # same way to the same nothing. Re-ask the ORIGINAL request once, with
+    # its original sheet and sampler, before any repair rung.
+    #
+    # THE CLASS IS EVERY VALIDATED STEP, NOT THE CAUSAL DIRECTOR. Measured on
+    # the owner's database, 2026-09-14: eight replies that were exactly `{}`
+    # since 09-08, across five roles -- director_body, character_major, the
+    # room planner twice, and on chat 123 turn 9 the contact and objects
+    # hands twice each (the original and the repair that re-stalled) -- and
+    # not one on the causal Director this block was first scoped to. That
+    # beat lost the door state and the contact ledger to two fruitless repair
+    # calls; the same request replayed three times answered three times. It
+    # stays narrow in the one way that matters: an object carrying even one
+    # field is a substantive attempt and follows ordinary validation, and a
+    # `{}` that VALIDATED never reaches here.
+    # A reply that PARSED as `{}`, not one that failed to parse: an
+    # unparseable reply also leaves `parsed` empty, and that one is the
+    # repair rung's own case (a delimiter the model can fix, or a truncation
+    # the block above already handled).
+    _empty_answer_stall = (
+        parse_error is None and previous_parsed == {}
+        and isinstance(payload, dict) and bool(payload)
+    )
+    if not provider_errored and _empty_answer_stall:
+        _t0 = time.monotonic()
+        _wall0 = time.time()
+        try:
+            previous_raw = chat_complete(
+                role, system, user, temperature=temperature,
+                max_tokens=max_tokens, sampler=sampler, candidate_offset=0,
+                token_ceiling=token_ceiling, json_schema=json_schema)
+        except Aborted:
+            raise
+        except LLMError as exc:
+            last_provider_error = exc
+            note_provider_exchange(
+                role=role, system=system, payload=payload, response="",
+                ok=False, started=_wall0, error=str(exc))
+            note_step_warning(
+                "llm second call: empty-object reply re-ask errored after "
+                f"{time.monotonic() - _t0:.1f}s ({exc})")
+        else:
+            note_step_warning(
+                "llm second call: empty-object reply treated as a stall; "
+                f"re-asked the original request ({time.monotonic() - _t0:.1f}s)")
+            try:
+                previous_parsed = strict_json_parse(previous_raw)
+                parse_error = None
+            except Exception as exc:
+                previous_parsed = {}
+                parse_error = str(exc)
+            report = validate_llm_output_strict(
+                step_key, previous_parsed, source_payload=payload)
+            if parse_error:
+                report.valid = False
+                report.errors.insert(0, parse_error)
+            note_provider_exchange(
+                role=role, system=system, payload=payload,
+                response=previous_raw, ok=bool(report.valid),
+                started=_wall0,
+                error="" if report.valid else "; ".join(report.errors[:3]))
+            if report.valid:
+                return _accepted(report)
 
     # THE CHEAP RUNG FIRST. One malformed field does not need the whole beat
     # re-authored on the stage's own model; the validator already said which

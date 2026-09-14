@@ -19,6 +19,7 @@ import pytest
 
 from llm import providers
 from llm.providers import token_sink
+from tests.helpers import streamed
 
 PROV = {"id": 7, "kind": "generic", "base_url": "http://x/v1",
         "api_key": "k", "name": "lmstudio-local"}
@@ -62,9 +63,10 @@ def _reasoning_off(temp_db):
 
 def _install_session(monkeypatch, bodies, responder):
     class FakeSession:
-        def post(self, url, headers=None, json=None, timeout=None):
+        def post(self, url, headers=None, json=None, timeout=None,
+                 stream=None, **kw):
             bodies.append(json)
-            return responder(json)
+            return streamed(responder(json), stream)
 
     monkeypatch.setattr(providers, "_session", lambda: FakeSession())
 

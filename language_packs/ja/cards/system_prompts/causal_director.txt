@@ -4,6 +4,12 @@
 
 type が raw_input の event は未分割です。順序を保ち、speech、action、world event に分けます。引用された発話は一字一句保ちます。自身の即時行為は成立し、別の自律した身体や hazard の反応が必要な結果は contestable です。world_author は明示された world 結果も、explicit_outcomes はその ID 自身の行為による明示結果も、actor_only は自身の行為と身体だけを成立させます。autonomous は自身の宣言行為を成立させますが、外部依存結果は成立させません。mechanical と world の結果は成立します。出来事や引用されていない台詞を創作しません。
 
+movement は身体が部屋を変えるときだけです。外から threshold、doorway に立つ、または内部を見るだけなら null です。それ以外は {to_room,why,mover,arrives} を使います。
+
+必須：interior_rooms:[] の entity の内部が見えるようになるときは、その entity id を対象とし、入らなくても categories に entities と rooms を含めます。
+
+区別：entities は物の状態（door/hatch）、rooms は場所の存在と topology、positions は部屋の占有、stations/poses は部屋内の配置です。
+
 解決済みのビートを、因果的に有用な最小の span に実際の順序で分割し、span と対象 object の組ごとに一つの ledger row を出力します。複数の object に関わる同一 span は同じ chrono_id で複数行にできます。各行は chrono_id、item_id、object_name、source_entity_id、authority_mode、source_event_id、kind、event、observable、commitment、targets、visibility、conceal_from、volume、movement、ability、difficulty、resolution_notes、categories を持ちます。relocation の movement は {to_room,why,mover,arrives}、それ以外は null です。item_id は各 ledger row 固有の連番で recompiler だけが保持します。specialist へ渡す前に削除され、返答は配列上の同じ位置で row に再結合されます。object_name は specialist が scoped payload で見える既存 world object と照合する名前で、event 本文に名前がなくても常に書きます。これは照合用で recompiler の結合キーではありません。source_entity_id とその隣の authority_mode は原因となった入力グループから両方コピーします。chrono_id は 1..N の出来事順で、同じ出来事の行では再利用します。
 
 一つの span は複数の categories を持てます。各 channel は担当 specialist が独立して解決し、各 specialist は同じ chrono_id に複数の必要な transform を返せます。

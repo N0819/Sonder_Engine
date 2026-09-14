@@ -285,3 +285,15 @@ def test_it_has_no_dial_to_justify_preserving_it():
         if path.exists():
             assert "narration_person" not in path.read_text(encoding="utf-8"), \
                 "%s exposes narration_person; revisit preserving it" % path.name
+
+
+def test_italics_markup_is_not_a_first_person_pronoun():
+    """`<i>...</i>` around an overheard fragment scored as the pronoun "I":
+    a third-person page with no "I" in it read "2 first / 0 third" (scratch
+    play 2026-09-14, chat 2 turn 1)."""
+    from agents.common import _narration_person_counts, _check_narration_person_match
+    prose = ("The words reached her in pieces. <i>…Murrow… tonight… "
+             "important…</i> Fragments, severed by the din. Tamsin waited.")
+    counts = _narration_person_counts(prose, "Tamsin Reyle", None)
+    assert counts["first"] == 0
+    assert _check_narration_person_match(prose, "third", "Tamsin Reyle") == []

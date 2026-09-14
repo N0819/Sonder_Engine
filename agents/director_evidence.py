@@ -21,7 +21,7 @@ from llm import schemas
 from story.character_schema import (fold_identity_key,
                                     normalized_character_of_row)
 from world.spatial import (_merge_entity, _merge_room, resolve_placement_target,
-                           room_of)
+                           room_of, visible_adjacent_rooms)
 
 # `director_scopes` owns the ownership table and imports no
 # sibling, so this direction adds no cycle.
@@ -2427,7 +2427,7 @@ def authority_by_entity(event_inputs):
     return modes
 
 
-def normalize_causal_ledger(out, authority=None):
+def normalize_causal_ledger(out, authority=None, identity_index=None):
     """Make the Director's ledgers authoritative for legacy sequence readers.
 
     Positive model-authored ``chrono_id`` values preserve chronology across
@@ -2439,6 +2439,12 @@ def normalize_causal_ledger(out, authority=None):
     raw = (out or {}).get("ledgers") or (out or {}).get("causal_ledger")
     if not isinstance(raw, list) or not raw:
         return out
+    identity_index = identity_index if isinstance(identity_index, dict) else {}
+    display_forms = {}
+    for identity_id, display in identity_index.items():
+        form = str(display or "").strip().casefold()
+        if form:
+            display_forms.setdefault(form, []).append(str(identity_id))
     ledger = []
     sequence = []
     used_item_ids = set()
@@ -2470,6 +2476,10 @@ def normalize_causal_ledger(out, authority=None):
         next_item_id = max(next_item_id, item_id + 1)
         object_name = str(entry.get("object_name") or "").strip()
         source_entity_id = str(entry.get("source_entity_id") or "").strip()
+        if source_entity_id not in identity_index:
+            matches = display_forms.get(source_entity_id.casefold()) or []
+            if len(matches) == 1:
+                source_entity_id = matches[0]
         source_event_id = str(entry.get("source_event_id") or "").strip()
         act = str(entry.get("act") or "").strip()
         # WHAT THIS ROW IS, DERIVED -- there is no `kind` field, deliberately.
@@ -2532,6 +2542,12 @@ def normalize_causal_ledger(out, authority=None):
             "note": note,
             "items": [{"id": item_id, "name": object_name}],
         }
+        if normalized["movement"] is not None:
+            # The spatial hand receives the same ordered work rows as every
+            # other hand.  Keeping relocation only on the top-level
+            # compatibility mirror made a movement row arrive there as an
+            # ordinary action, with no destination to encode.
+            projected["movement"] = dict(normalized["movement"])
         if spoken and not act:
             projected.update({
                 "type": "speech", "text": event,
@@ -2598,7 +2614,47 @@ def normalize_causal_ledger(out, authority=None):
     return out
 
 
-def causal_world_index(sc, here=None):
+def causal_scene_room_ids(sc, actor_names, fallback_room=None):
+    """Rooms that can fall inside one of the acting bodies' sight aperture."""
+    sc = sc if isinstance(sc, dict) else {}
+    rooms = set()
+    for actor in actor_names or []:
+        room_id = room_of(sc, str(actor or ""))
+        if not room_id:
+            continue
+        rooms.add(str(room_id))
+        rooms.update(
+            str(row["room_id"])
+            for row in visible_adjacent_rooms(sc, room_id)
+            if isinstance(row, dict) and row.get("room_id")
+        )
+    if not rooms and fallback_room:
+        rooms.add(str(fallback_room))
+        rooms.update(
+            str(row["room_id"])
+            for row in visible_adjacent_rooms(sc, str(fallback_room))
+            if isinstance(row, dict) and row.get("room_id")
+        )
+    return rooms
+
+
+def causal_contact_rows(sc, room_ids):
+    """Standing contacts with at least one endpoint in the causal aperture."""
+    selected = {str(room_id) for room_id in room_ids or [] if room_id}
+    if not selected:
+        return []
+    return [
+        dict(row) for row in ((sc or {}).get("contacts") or [])
+        if isinstance(row, dict) and any(
+            room_of(sc, str(row.get(endpoint) or "")) in selected
+            for endpoint in ("actor", "target")
+        )
+    ]
+
+
+def causal_world_index(sc, here=None, *, room_ids=None,
+                       include_entity_interiors=False,
+                       exclude_entity_interiors=()):
     """What the Director needs to NAME A TARGET THE INPUT DID NOT NAME.
 
     The causal contract asks for `targets`, and deterministic code then
@@ -2614,14 +2670,28 @@ def causal_world_index(sc, here=None):
     lore, no ledger values -- a Director that can see what a condition says
     is a Director being invited to resolve it, and resolving is the hands'.
 
+    ``room_ids`` narrows that index to the actors' immediate sight aperture.
+    An exit may still name a room outside the slice -- adjacency is precisely
+    the fact the causal Director needs -- but that far room's contents do not
+    come with it. ``include_entity_interiors`` adds one structural fact for
+    entities in the slice: which room ids, if any, are their interior. It adds
+    no entity state.
+
     Grouped by room rather than handed over flat, because "the man by the
     door" is a question about one room and a flat map makes the Director
     re-derive the grouping every beat.
     """
     sc = sc if isinstance(sc, dict) else {}
     positions = sc.get("positions") or {}
-    rooms = sc.get("rooms") or {}
+    all_rooms = sc.get("rooms") or {}
     entities = sc.get("entities") or {}
+    selected = ({str(value) for value in room_ids if str(value or "")}
+                if room_ids is not None else None)
+    rooms = {
+        room_id: room
+        for room_id, room in all_rooms.items()
+        if selected is None or str(room_id) in selected
+    }
 
     def display(key):
         record = entities.get(key)
@@ -2648,9 +2718,15 @@ def causal_world_index(sc, here=None):
     for room in index.values():
         room["holds"].sort(key=lambda row: (row["kind"], row["id"]))
 
+    local_subjects = {
+        str(key) for key, room_id in positions.items()
+        if str(room_id) in index
+    }
     worn = {}
     for who, attire in (sc.get("attire") or {}).items():
         if not isinstance(attire, dict):
+            continue
+        if selected is not None and str(who) not in local_subjects:
             continue
         wearing = [str(item) for item in attire.get("wearing") or []]
         if wearing:
@@ -2663,8 +2739,57 @@ def causal_world_index(sc, here=None):
     # below the room, and the one that makes a positional description
     # ("behind the counter") name something the engine holds.
     stations = sc.get("stations") or {}
+    if selected is not None and isinstance(stations, dict):
+        stations = {
+            key: value for key, value in stations.items()
+            if str(key) in index or str(key) in local_subjects
+        }
     if stations:
         out["stations"] = stations
+    if include_entity_interiors:
+        excluded_interiors = {
+            str(value).strip().casefold()
+            for value in exclude_entity_interiors if str(value).strip()
+        }
+        entity_rows = {}
+        for entity_id, entity in entities.items():
+            if not isinstance(entity, dict):
+                continue
+            entity_id = str(entity_id)
+            entity_forms = {
+                entity_id.casefold(),
+                str(entity.get("name") or "").strip().casefold(),
+                *(str(alias).strip().casefold()
+                  for alias in entity.get("aliases") or []),
+            } - {""}
+            if entity_forms & excluded_interiors:
+                continue
+            entity_room = room_of(sc, entity_id)
+            interiors = []
+            for room_id, room in all_rooms.items():
+                if (isinstance(room, dict)
+                        and str(room.get("parent_entity") or "") == entity_id):
+                    interiors.append(str(room_id))
+            for room_id in entity.get("interior_rooms") or []:
+                room_id = str(room_id)
+                if room_id not in interiors:
+                    interiors.append(room_id)
+            if (selected is not None and entity_room not in selected
+                    and not (set(interiors) & selected)):
+                continue
+            row = {
+                "name": str(entity.get("name") or entity_id),
+                "interior_rooms": interiors,
+            }
+            aliases = [str(alias) for alias in entity.get("aliases") or []
+                       if str(alias).strip()]
+            if aliases:
+                row["aliases"] = aliases
+            if entity_room:
+                row["room"] = str(entity_room)
+            entity_rows[entity_id] = row
+        if entity_rows:
+            out["entities"] = entity_rows
     if here:
         out["here"] = str(here)
     return out

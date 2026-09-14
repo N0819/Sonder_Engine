@@ -1045,6 +1045,11 @@ def _material_shifted_barrier(barrier, material):
     return _SOUND_LADDER[max(0, min(index - step, len(_SOUND_LADDER) - 1))]
 
 
+#: Power ratio a voice gains at arm's reach over the one-pace default the
+#: field assumes for a pair it could not place (about half a pace, +8 dB).
+WITHIN_REACH_SIGNAL_GAIN = 6.0
+
+
 def hear_level(
     rel: dict,
     volume: str,
@@ -1170,7 +1175,19 @@ def _hear_level(
     # exemption was always the intent; only its enforcement was borrowed.
     if not vouched and rel.get("signal") is not None \
             and rel.get("noise") is not None:
-        return _field_hear_level(volume, rel["signal"], rel["noise"])
+        signal = rel["signal"]
+        # WITHIN REACH IS CLOSER THAN ONE PACE. A pair the field could not
+        # place stands at the one-pace default, and the act tier is the only
+        # distance the beat holds for them. A whisper is speech made for a
+        # listener at touching distance; graded at one pace against a room's
+        # noise it vanished -- measured (scratch play 2026-09-14, chat 2 turn
+        # 6): signal 1.0 against noise 5.4 in a cabin with an engine beyond
+        # the door, whisper -> none, mutter -> none, for two bodies on one
+        # bench. `WITHIN_REACH_SIGNAL_GAIN` is the power ratio of roughly
+        # half a pace over one, applied only where the field placed nothing.
+        if proximity == "within_reach" and rel.get("tier") is None:
+            signal = signal * WITHIN_REACH_SIGNAL_GAIN
+        return _field_hear_level(volume, signal, rel["noise"])
 
     if rel.get("same_room"):
         # The two quiet volumes are NOT one tier, and writing them as one

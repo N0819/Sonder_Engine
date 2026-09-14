@@ -24,6 +24,7 @@ import json
 import pytest
 
 from llm import providers
+from tests.helpers import streamed
 
 PROV = {"id": 7, "kind": "generic", "base_url": "http://x/v1",
         "api_key": "k", "name": "lmstudio-local"}
@@ -69,9 +70,10 @@ def _reasoning_off(temp_db):
 
 def _install(monkeypatch, bodies, responder):
     class FakeSession:
-        def post(self, url, headers=None, json=None, timeout=None):
+        def post(self, url, headers=None, json=None, timeout=None,
+                 stream=None, **kw):
             bodies.append(json)
-            return responder(json)
+            return streamed(responder(json), stream)
 
     monkeypatch.setattr(providers, "_session", lambda: FakeSession())
 
@@ -238,3 +240,35 @@ def test_every_rung_that_rebuilds_the_object_carries_its_grammar(monkeypatch):
     assert all(schema is not None for schema in seen), (
         "a rung rebuilding the same object was left unconstrained at "
         f"{[i for i, schema in enumerate(seen) if schema is None]}")
+
+
+def test_a_gemini_model_never_gets_a_grammar():
+    """Owner's ruling 2026-09-14: only json_object with Gemini. Measured on
+    OpenRouter gemini-3.8-flash: 15 of 65 specialist replies malformed under
+    the grammar and two calls on one beat hung for 22 minutes."""
+    from llm import providers
+    prov = {"name": "openrouter", "kind": "openrouter"}
+    assert providers._json_schema_supported(prov, "google/gemini-3.8-flash") is False
+    body = providers._apply_json_mode({}, prov, "google/gemini-3.8-flash", True,
+                                      json_schema={"type": "object"})
+    assert body.get("response_format", {}).get("type") != "json_schema"
+
+
+def test_a_provider_that_says_nothing_for_ten_seconds_is_unresponsive():
+    """Owner's rule 2026-09-14: silence, not elapsed time, is the signal. A
+    reasoning fragment is activity; a keepalive line is not."""
+    from llm import providers
+    now = [0.0]
+    clock = providers._ActivityClock(limit=10.0, now=lambda: now[0])
+    now[0] = 9.0; clock.tick()                      # quiet, within the limit
+    now[0] = 12.0; clock.tick(reasoning="thinking") # activity resets the clock
+    now[0] = 21.0; clock.tick()                     # nine seconds since
+    now[0] = 22.5
+    with pytest.raises(providers.ProviderSilent) as caught:
+        clock.tick()
+    assert "after 8 chars of reasoning" in str(caught.value)
+    assert caught.value.retryable
+    fresh = providers._ActivityClock(limit=10.0, now=lambda: now[0])
+    now[0] = 40.0
+    with pytest.raises(providers.ProviderSilent, match="before any token"):
+        fresh.tick()

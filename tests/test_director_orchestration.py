@@ -35,6 +35,8 @@ import json
 import time
 import uuid
 
+import pytest
+
 from story.character_schema import default_character_data
 from core.pipeline_context import ChatData, PipelineContext, TurnData
 
@@ -4224,6 +4226,262 @@ def test_interpret_drops_a_resolve_only_channel_and_says_so(temp_db,
     assert not any("should be widened" in note for note in notes), notes
 
 
+def test_interpret_spatial_mints_an_entity_interior_before_perception(
+        temp_db, monkeypatch):
+    """The causal hand names entry; spatial alone creates the place."""
+    scene = json.loads(json.dumps(BASE_SCENE))
+    scene["rooms"]["far_archive"] = {
+        "name": "Far Archive", "adjacent": []}
+    scene["entities"] = {
+        "tardis": {"name": "TARDIS", "kind": "vehicle"},
+        "remote_box": {"name": "remote box"},
+    }
+    scene["positions"].update({
+        "tardis": "keeper_room", "remote_box": "far_archive"})
+
+    causal = {"ledgers": [{
+        "chrono_id": 1, "item_id": 1, "object_name": "TARDIS",
+        "source_entity_id": "persona:primary",
+        "source_event_id": "turn:1:primary:raw",
+        "authority_mode": "world_author", "kind": "action",
+        "event": "steps into the TARDIS", "observable": "steps inside",
+        "commitment": "asserted", "targets": ["tardis"],
+        "visibility": "overt", "conceal_from": [], "volume": "normal",
+        "movement": {"mover": "self", "to_room": "TARDIS",
+                     "arrives": True},
+        "resolution_notes": "The Stranger enters the TARDIS.",
+        "categories": ["rooms", "positions"],
+    }]}
+    spatial = {"results": [{"transforms": [
+        {"patch": {"rooms": {"tardis_console": {
+            "name": "TARDIS Console Room",
+            "desc": "A many-sided chamber gathered around a time rotor.",
+            "light": "bright", "size": "vast", "adjacent": [],
+            "parent_entity": "tardis",
+        }}}},
+        {"patch": {"positions": {"The Stranger": "tardis_console"}}},
+    ], "status": "encoded"}], "notes": []}
+    calls = []
+    spatial_seen = {}
+
+    def answer_spatial(payload):
+        spatial_seen.update(json.loads(json.dumps(payload)))
+        return spatial
+
+    monkeypatch.setattr(
+        director, "_agent_json",
+        _fake_agent(calls, {
+            "director_interpret": causal,
+            "director_spatial": answer_spatial,
+        }))
+
+    ctx = _make_ctx(
+        temp_db, scene=scene, player_input="I step into the TARDIS.")
+    ctx.director_interpret = None
+    out = director.director_interpret(ctx, nonce=0)
+
+    assert out["state_assertions"]["rooms"]["tardis_console"] \
+        ["parent_entity"] == "tardis"
+    assert out["state_assertions"]["positions"]["The Stranger"] == \
+        "tardis_console"
+    assert out["movement"]["to_room"] == "tardis_console"
+    preview = director.preview_player_state_assertions(
+        scene, out["state_assertions"])
+    assert director.room_of(preview, "The Stranger") == "tardis_console"
+    assert preview["rooms"]["tardis_console"]["desc"].startswith(
+        "A many-sided chamber")
+
+    causal_payload = next(
+        call["payload"] for call in calls
+        if call["step_key"] == "director_interpret")
+    assert "tardis" in causal_payload["world_index"]["entities"]
+    assert "remote_box" not in causal_payload["world_index"]["entities"]
+    assert "far_archive" not in causal_payload["world_index"]["rooms"]
+
+    assert spatial_seen["entity_interiors"]["tardis"] \
+        ["interior_rooms"] == []
+    assert spatial_seen["ledgers"][0]["movement"]["to_room"] == "tardis"
+
+
+def test_interpret_spatial_mints_an_interior_when_opening_reveals_it(
+        temp_db, monkeypatch):
+    """Visibility, not entry, is the first-mint boundary."""
+    from world.spatial import merge_scene_with_diff, visible_adjacent_rooms
+
+    scene = json.loads(json.dumps(BASE_SCENE))
+    scene["entities"] = {"tardis": {
+        "name": "TARDIS", "kind": "vehicle", "container": True,
+        "interior_rooms": [], "state": {"hatch": "closed"},
+    }}
+    scene["positions"]["tardis"] = "keeper_room"
+    causal = {"ledgers": [{
+        "chrono_id": 1, "item_id": 1, "object_name": "TARDIS",
+        "source_entity_id": "persona:primary",
+        "source_event_id": "turn:1:primary:raw",
+        "authority_mode": "world_author", "kind": "action",
+        "event": "opens the TARDIS doors",
+        "observable": "pulls the doors open",
+        "commitment": "asserted", "targets": ["tardis"],
+        "visibility": "overt", "conceal_from": [], "volume": "normal",
+        "movement": None,
+        "resolution_notes": "The open doors expose the interior.",
+        "categories": ["entities", "rooms"],
+    }]}
+    objects = {"results": [{"transforms": [{"patch": {"entities": {
+        "tardis": {"state": {"hatch": "open"}},
+    }}}], "status": "encoded"}], "notes": []}
+    spatial = {"results": [{"transforms": [{"patch": {"rooms": {
+        "tardis_console": {
+            "name": "TARDIS Console Room",
+            "desc": "A many-sided chamber gathered around a time rotor.",
+            "light": "bright", "size": "vast", "adjacent": [],
+            "parent_entity": "tardis",
+        },
+    }}}], "status": "encoded"}], "notes": []}
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_interpret": causal,
+        "director_objects": objects,
+        "director_spatial": spatial,
+    }))
+
+    ctx = _make_ctx(temp_db, scene=scene,
+                    player_input="I pull the TARDIS doors open.")
+    ctx.director_interpret = None
+    out = director.director_interpret(ctx, nonce=0)
+
+    assertions = out["state_assertions"]
+    assert assertions["rooms"]["tardis_console"]["parent_entity"] == "tardis"
+    assert "The Stranger" not in (assertions.get("positions") or {})
+    preview = merge_scene_with_diff(scene, assertions)
+    assert preview["entities"]["tardis"]["interior_rooms"] == [
+        "tardis_console"]
+    assert preview["entities"]["tardis"]["state"]["hatch"] == "open"
+    visible = visible_adjacent_rooms(preview, "keeper_room")
+    assert "tardis_console" in {str(room.get("room_id")) for room in visible}
+
+    spatial_payload = next(
+        call["payload"] for call in calls
+        if call["step_key"] == "director_spatial")
+    assert spatial_payload["ledgers"][0].get("movement") is None
+    assert spatial_payload["identity_index"]["persona:primary"] == \
+        "The Stranger"
+
+
+def test_resolve_spatial_mints_an_interior_when_a_character_opens_it(
+        temp_db, monkeypatch):
+    """An autonomous Doctor-like action uses the same reveal contract."""
+    from world.spatial import merge_scene_with_diff, visible_adjacent_rooms
+
+    scene = json.loads(json.dumps(BASE_SCENE))
+    scene["entities"] = {"tardis": {
+        "name": "TARDIS", "kind": "vehicle", "container": True,
+        "interior_rooms": [], "state": {"hatch": "closed"},
+    }}
+    scene["positions"]["tardis"] = "keeper_room"
+    ctx = _make_ctx(temp_db, scene=scene, interp=_speech_interp())
+    char_id = int(ctx.cast[0]["id"])
+    ctx.character_results[char_id] = {
+        "name": "Mara",
+        "sequence": [{
+            "type": "action", "attempt": "opens the TARDIS doors",
+            "observable": "pulls the doors open", "commitment": "asserted",
+            "targets": ["tardis"], "visibility": "overt",
+            "conceal_from": [],
+        }],
+    }
+    causal = {"ledgers": [{
+        "chrono_id": 1, "item_id": 1, "object_name": "TARDIS",
+        "source_entity_id": f"character:{char_id}",
+        "source_event_id": "character:open",
+        "authority_mode": "autonomous", "kind": "action",
+        "event": "opens the TARDIS doors",
+        "observable": "pulls the doors open",
+        "commitment": "asserted", "targets": ["tardis"],
+        "visibility": "overt", "conceal_from": [], "volume": "normal",
+        "movement": None,
+        "resolution_notes": "The open doors expose the interior.",
+        "categories": ["entities", "rooms"],
+    }]}
+    objects = {"results": [{"transforms": [{"patch": {"entities": {
+        "tardis": {"state": {"hatch": "open"}},
+    }}}], "status": "encoded"}], "notes": []}
+    spatial = {"results": [{"transforms": [{"patch": {"rooms": {
+        "tardis_console": {
+            "name": "TARDIS Console Room",
+            "desc": "A many-sided chamber gathered around a time rotor.",
+            "light": "bright", "size": "vast", "adjacent": [],
+            "parent_entity": "tardis",
+        },
+    }}}], "status": "encoded"}], "notes": []}
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_resolve": causal,
+        "director_objects": objects,
+        "director_spatial": spatial,
+    }))
+
+    out = director.director_resolve(ctx, nonce=0)
+
+    assert out["state_diff"]["rooms"]["tardis_console"]["parent_entity"] \
+        == "tardis"
+    assert "Mara" not in (out["state_diff"].get("positions") or {})
+    preview = merge_scene_with_diff(scene, out["state_diff"])
+    assert preview["entities"]["tardis"]["state"]["hatch"] == "open"
+    assert "tardis_console" in {
+        str(room.get("room_id"))
+        for room in visible_adjacent_rooms(preview, "keeper_room")
+    }
+    spatial_payload = next(
+        call["payload"] for call in calls
+        if call["step_key"] == "director_spatial")
+    assert spatial_payload["identity_index"][f"character:{char_id}"] == "Mara"
+    assert spatial_payload["ledgers"][0]["source_name"] == "Mara"
+
+
+def test_an_existing_entity_interior_is_canonicalized_before_fanout():
+    scene = {
+        "rooms": {
+            "alley": {"name": "Alley", "adjacent": []},
+            "tardis_console": {
+                "name": "TARDIS Console Room", "parent_entity": "tardis"},
+        },
+        "entities": {"tardis": {
+            "name": "TARDIS", "interior_rooms": ["tardis_console"]}},
+        "positions": {"tardis": "alley"},
+    }
+    out = {"ledgers": [{
+        "chrono_id": 1, "item_id": 1, "object_name": "TARDIS",
+        "source_entity_id": "persona:primary", "source_event_id": "raw",
+        "authority_mode": "world_author", "kind": "action",
+        "event": "enters the TARDIS", "movement": {
+            "mover": "self", "to_room": "TARDIS", "arrives": True},
+        "categories": ["rooms", "positions"],
+    }]}
+    director.normalize_causal_ledger(out)
+    director._canonicalize_interior_movements(scene, out)
+    assert out["ledgers"][0]["movement"]["to_room"] == "tardis_console"
+    assert out["sequence"][0]["movement"]["to_room"] == "tardis_console"
+
+
+def test_an_identity_id_is_canonicalized_before_spatial_fanout():
+    scene = {
+        "rooms": {"alley": {"name": "Alley", "adjacent": []}},
+        "entities": {"tardis": {
+            "name": "TARDIS", "interior_rooms": []}},
+        "positions": {"tardis": "alley", "Hinami": "alley"},
+    }
+    out = {"ledgers": [{
+        "source_entity_id": "persona:10",
+        "movement": {"mover": "persona:10", "to_room": "TARDIS",
+                     "arrives": True},
+    }]}
+    director._canonicalize_interior_movements(
+        scene, out, {"persona:10": "Hinami"})
+    assert out["ledgers"][0]["movement"] == {
+        "mover": "Hinami", "to_room": "tardis", "arrives": True}
+
+
 def test_resolve_still_fails_open_on_a_genuine_under_grant(temp_db,
                                                            monkeypatch):
     """The other half must not change. A channel the stage CAN carry, gated
@@ -6102,3 +6360,100 @@ class TestASpanNamedForNobodyIsEverybodysToDecline:
         reached nobody."""
         view = {"spans": [{"event_id": 1, "categories": ["geography"]}]}
         assert director._unrouted_rulings(view) == ["geography"]
+
+
+def test_a_required_visible_interior_cannot_fail_open_into_narration():
+    sc = {"rooms": {}, "entities": {"box": {
+        "name": "Police Box", "aliases": ["TARDIS"],
+        "interior_rooms": []}}}
+    view = {"spans": [{
+        "object_name": "TARDIS", "targets": ["Hinami", "box"],
+        "categories": ["entities", "rooms"],
+    }]}
+    extras = {"entity_interiors": sc["entities"]}
+    out = {"state_assertions": {"rooms": {}, "entities": {}}}
+    with pytest.raises(RuntimeError, match="was not minted"):
+        director._require_complete_entity_interiors(
+            out, sc, view, extras, "interpret")
+
+    out["state_assertions"]["rooms"]["box_inside"] = {
+        "name": "Control Room", "parent_entity": "box"}
+    director._require_complete_entity_interiors(
+        out, sc, view, extras, "interpret")
+
+
+def test_a_required_interior_failure_preserves_the_spatial_diagnostic():
+    out = {
+        "state_assertions": {"rooms": {}, "entities": {}},
+        "orchestration": {"specialists": {"spatial": {
+            "error": "results.0 did not create a parented room"}}},
+    }
+    sc = {"rooms": {}, "entities": {"box": {
+        "name": "Police Box", "interior_rooms": []}}}
+    with pytest.raises(RuntimeError, match="spatial failure: results.0"):
+        director._require_complete_entity_interiors(
+            out, sc, {"spans": [{
+                "object_name": "Police Box", "categories": ["rooms"]}]},
+            {"entity_interiors": sc["entities"]}, "interpret")
+
+
+def test_resolve_accepts_the_interior_already_minted_at_onset():
+    """Resolve need not mint interpret's room a second time, even if an old
+    entity roster still says the holder has no interior rooms."""
+    sc = {
+        "rooms": {"box_inside": {
+            "name": "Control Room", "parent_entity": "box"}},
+        "entities": {"box": {
+            "name": "Police Box", "aliases": ["TARDIS"],
+            "interior_rooms": ["box_inside"]}},
+    }
+    stale_extras = {"entity_interiors": {"box": {
+        "name": "Police Box", "aliases": ["TARDIS"],
+        "interior_rooms": []}}}
+    view = {"spans": [{
+        "object_name": "TARDIS", "targets": ["box"],
+        "categories": ["entities", "rooms"],
+    }]}
+    out = {"state_diff": {"rooms": {}, "entities": {}}}
+    director._require_complete_entity_interiors(
+        out, sc, view, stale_extras, "resolve")
+
+
+def test_a_bystander_target_does_not_replace_the_existing_interior_holder():
+    """Regression for `past Hinami ... peers into the TARDIS interior`."""
+    sc = {
+        "rooms": {"tardis_console": {
+            "name": "TARDIS Console Room", "parent_entity": "box"}},
+        "entities": {
+            "Hinami": {"name": "Hinami", "interior_rooms": []},
+            "box": {"name": "Police Box", "aliases": ["TARDIS"],
+                    "interior_rooms": ["tardis_console"]},
+        },
+    }
+    view = {"spans": [{
+        "object_name": "Hinami", "targets": ["Hinami", "box"],
+        "event": "leans past Hinami and peers into the TARDIS interior",
+        "categories": ["poses", "rooms"],
+    }]}
+    excluded = director._bodies_without_interiors(sc, {"persona:10": "Hinami"})
+    index = director.causal_world_index(
+        sc, include_entity_interiors=True,
+        exclude_entity_interiors=excluded)
+
+    assert "Hinami" not in index["entities"]
+    assert index["entities"]["box"]["interior_rooms"] == [
+        "tardis_console"]
+    director._require_complete_entity_interiors(
+        {"state_diff": {"rooms": {}, "entities": {}}}, sc, view,
+        {"entity_interiors": index["entities"]}, "resolve")
+
+
+def test_a_new_entity_interior_reference_must_name_a_real_room():
+    out = {"state_assertions": {"rooms": {}, "entities": {
+        "box": {"name": "Police Box", "interior_rooms": ["missing"]},
+    }}}
+    with pytest.raises(RuntimeError, match="introduced room reference"):
+        director._require_complete_entity_interiors(
+            out, {"rooms": {}, "entities": {"box": {
+                "name": "Police Box", "interior_rooms": []}}},
+            {"spans": []}, {"entity_interiors": {}}, "interpret")

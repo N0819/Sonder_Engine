@@ -1374,7 +1374,12 @@ def presence_percepts(scene, observer_name, co_present, display_map,
             record = (effective_anchors(scene, here) or {}).get(at) \
                 if (at and here) else None
             if record is not None:
-                station = (str((record or {}).get("desc") or "").strip()
+                # Spliced like every other authored description
+                # (`_noun_phrase`): this was the one reader that took the
+                # desc raw, so a sentence-shaped anchor rendered "at A flat
+                # stretch of dark, packed sand damp from the receding
+                # surf.." -- sentence case and two stops (chat 123 turn 9).
+                station = (_noun_phrase(str((record or {}).get("desc") or ""))
                            or at.replace("_", " "))
         out.append(Percept(
             kind="presence", channel="sight",
@@ -1620,6 +1625,29 @@ def _no_engine_ids(scene, text):
         clause + ((separator or ",") + " " if position < len(kept) - 1 else "")
         for position, (clause, separator) in enumerate(kept))
     return " ".join(out.split())
+
+
+def _spliced_fragment(text):
+    """Authored text made fit to follow a verb, without deciding its shape.
+
+    `_noun_phrase` is for a NOUN phrase and supplies an article where none
+    stands, which is right for "sand shelf" and wrong for an adjectival
+    demeanor ("calm, attentive" became "the calm, attentive"). This does
+    the two subtractions that hold for any spliced fragment and nothing
+    more: the terminal stop goes, and a leading article written in sentence
+    case is lowercased, so "A wet, nervous young man on a bench." follows
+    "seems" as "a wet, nervous young man on a bench".
+    """
+    text = " ".join(str(text or "").split())
+    while text and text[-1] in ".!?":
+        text = text[:-1].rstrip()
+    if not text:
+        return ""
+    first, _, rest = text.partition(" ")
+    if first.casefold() in _pack_words("pose_bare_determiners") \
+            and first[:1].isupper():
+        text = first.casefold() + (" " + rest if rest else "")
+    return text
 
 
 def _noun_phrase(text):
@@ -2855,6 +2883,34 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
             str(rel.get("barrier") or "none"),
             str(proximity or rel.get("tier") or "unmeasured")))
     if level == "none":
+        # SEEN SPEAKING, UNHEARD. A line the noise takes whole is still an
+        # act the eyes have: a body within reach turns its head to yours
+        # and its mouth moves. Refusing the WORDS is the firewall doing its
+        # job; refusing that anything was said at all is a wrong scene.
+        # Measured (scratch play 2026-09-14, chat 2 turns 2-3): on a deck
+        # a "loud" engine graded drowned, a woman sat against a man's
+        # sleeve and spoke at his ear, twice, and his view carried nothing
+        # -- so his mind answered as if she had never spoken, and the
+        # narrator wrote "He gave no reply". Delivered as the fragment
+        # percept with the pack's indistinct marker and no words, so
+        # `_scrub_invented_dialogue` has nothing to check and nothing can
+        # leak: what reaches the observer is only that speech happened.
+        if can_see and str(proximity or rel.get("tier") or "") in (
+                "within_reach", "near"):
+            note_step_decision(
+                "speech_percept", _who, "delivered",
+                "seen speaking, unheard: the words did not carry but the "
+                "speaker is in sight within reach")
+            return Percept(
+                kind="speech", channel="sight", source_label=display,
+                fidelity="fragment",
+                data={"level": "none", "volume": volume, "can_see": True,
+                      "attributed": bool(str(display or "").strip()),
+                      "fragment": _muffled_fragment(""),
+                      "tone": "", "manner": "",
+                      "directed_at_self": _addresses(
+                          entry.get("intended_target"), observer_name)},
+                salience=0.5, order_key=order_key)
         return None
     channel = rel.get("comm_channel")
     tone = str(entry.get("tone") or "").strip()
@@ -3939,7 +3995,11 @@ def _render_standing(p):
     if p.kind == "body_part":
         return _render_body_part(p)
     if p.kind == "demeanor":
-        text = str(p.data.get("demeanor") or "").strip()
+        # Spliced like every other authored description (`_noun_phrase`):
+        # a character writes its demeanor as a sentence, and the raw form
+        # rendered "An indistinct figure seems A wet, nervous young man on a
+        # bench, ...." (scratch play 2026-09-14, chat 2 turn 1).
+        text = _spliced_fragment(str(p.data.get("demeanor") or ""))
         return _en("demeanor", label=_cap(p.source_label), demeanor=text) \
             if text else ""
     if p.kind == "body_state":

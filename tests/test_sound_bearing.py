@@ -268,3 +268,18 @@ def test_an_unreachable_shout_snaps_nothing():
                             "volume": "shout"}]}
     infer_focus(None, None, sc, sc, dr, list(sc["positions"]))
     assert sc["orientation"].get("Bystander", {}).get("focus") is None
+
+
+def test_a_whisper_within_reach_is_graded_closer_than_one_pace():
+    """Measured (scratch play 2026-09-14, chat 2 turn 6): two bodies on one
+    cabin bench, an engine beyond the open door, the field placing neither
+    (`tier` None, signal at the one-pace default 1.0, noise 5.4) -- whisper
+    and mutter both `none`. Within reach is closer than a pace."""
+    from world.spatial import hear_level
+    rel = {"same_room": True, "barrier": "open", "signal": 1.0, "noise": 5.4,
+           "tier": None, "distance": "same"}
+    assert hear_level(rel, "whisper") == "none"
+    assert hear_level(rel, "whisper", proximity="within_reach") != "none"
+    # A pair the field DID place keeps the field's own distance.
+    placed = dict(rel, tier="within_reach")
+    assert hear_level(placed, "whisper", proximity="within_reach") == "none"
