@@ -3408,6 +3408,97 @@ def place_view(cid, place, frame_id=None):
     return _place_views(registry_for(cid, frame_id), place)
 
 
+def charter_moves_since(cid, rooms, previous, *, frame_id=None, cap=8):
+    """WHAT THE CHARTER MOVED SINCE THE LAST BEAT, in and one step from the
+    beat's rooms, as lines the Director is handed -- and the snapshot the
+    next beat compares against.
+
+    The owner's rule (2026-09-14): the world needs to move every beat. The
+    runtime already advances every charter every beat by the beat's own
+    seconds, but nothing told the Director what it did, so a pot-boy who
+    walked down the towpath was simply THERE in the next view and no page
+    ever said he came. ``previous`` is the last beat's snapshot
+    (``{"places": {display: place}, "acts": [act keys]}``, persisted by
+    `persist/commit_mapping` from the compile stage's output); a body whose
+    place changed into or out of ``rooms`` is an arrival or a departure,
+    and a window act (`charter_chatter.window_acts`: a greeting, a quarrel,
+    a tending) in ``rooms`` the snapshot has not reported is an act. Bound
+    and departed bodies are the scene's or nobody's and are not walked here.
+
+    Returns ``{"lines": [...], "snapshot": {...}}``; a story with no charter
+    returns no lines and an empty snapshot. Read-only.
+    """
+    rooms = {str(r) for r in (rooms or ()) if str(r or "")}
+    previous = previous if isinstance(previous, dict) else {}
+    prev_places = previous.get("places") if isinstance(
+        previous.get("places"), dict) else {}
+    prev_acts = set(str(k) for k in (previous.get("acts") or ()))
+    try:
+        registry = registry_for(cid, frame_id)
+    except Exception:
+        return {"lines": [], "snapshot": {"places": {}, "acts": []}}
+    index = identity_index(registry)
+    places, act_keys, lines = {}, [], []
+    room_names = {}
+    for charter_key, item in sorted((registry.get("items") or {}).items()):
+        state = (item or {}).get("state") or {}
+        bindings = state.get("bindings") or {}
+        for rid, room in ((state.get("scene") or {}).get("rooms") or {}).items():
+            if isinstance(room, dict) and room.get("name"):
+                room_names.setdefault(str(rid), str(room["name"]))
+        names = index.display(charter_key)
+        for body_key, body in sorted((state.get("bodies") or {}).items()):
+            if body_key in bindings or body.get("departed"):
+                continue
+            try:
+                shown = str(names[body_key] or body_key)
+            except Exception:
+                shown = str(body_key)
+            place = str(body.get("place") or "")
+            if not place:
+                continue
+            places[shown] = place
+            before = str(prev_places.get(shown) or "")
+            if before == place or not before:
+                continue
+            if place in rooms:
+                lines.append("%s came into %s from %s since the last beat." % (
+                    shown, room_names.get(place, place),
+                    room_names.get(before, before)))
+            elif before in rooms:
+                lines.append("%s left %s for %s since the last beat." % (
+                    shown, room_names.get(before, before),
+                    room_names.get(place, place)))
+        for row in (state.get("window_acts") or ()):
+            if not isinstance(row, dict):
+                continue
+            place = str(row.get("place") or "")
+            key = "%s|%s|%s|%s|%s" % (charter_key, row.get("actor"),
+                                       row.get("act"), row.get("other"),
+                                       row.get("at_hours"))
+            act_keys.append(key)
+            if place not in rooms or key in prev_acts:
+                continue
+            actor = str(row.get("actor") or "")
+            other = str(row.get("other") or "")
+            try:
+                actor_shown = str(names[actor] or actor) if actor else ""
+            except Exception:
+                actor_shown = actor
+            try:
+                other_shown = str(names[other] or other) if other else ""
+            except Exception:
+                other_shown = other
+            what = str(row.get("act") or "").replace("_", " ")
+            if actor_shown and what:
+                lines.append("%s: %s%s in %s since the last beat." % (
+                    actor_shown, what,
+                    (" with %s" % other_shown) if other_shown else "",
+                    room_names.get(place, place)))
+    return {"lines": lines[:max(0, int(cap))],
+            "snapshot": {"places": places, "acts": act_keys[-200:]}}
+
+
 def residue_facts(cid, place, frame_id=None, cap=3):
     """Present-state Charter facts suitable for the existing residue aperture."""
     facts = []
