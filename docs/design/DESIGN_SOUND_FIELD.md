@@ -328,6 +328,42 @@ Neither is a constant; both are the same sentence in two places.
   would refuse the same voice one pace off, nothing from the next room
   survives either.
 
+### 6c. The ladders re-authored from real decibels (2026-09-14)
+
+The § 6a tables (`SPEECH_POWER 0.6 | 1 | 12 | 40 | 120`, `SOUND_POWER 1 |
+12 | 40 | 150`, and `audible` 12 → 4 on 2026-09-14 morning) are the record of
+what shipped and no longer the values. They had the ORDER a real voice has
+and not its span — whisper to shout was 20.8 dB against 55 in the world — so
+a fire and a voice, an engine and a raised voice, held one power each and
+every masking verdict between them was a coin toss the play lost
+(`DESIGN_SOUND_DECIBELS.md` § 5c has the three scenes and their numbers).
+The constants keep their § 6 names and are now authored in dB at one pace,
+the powers derived:
+
+    SPEECH_ONE_PACE_DB   mutter 38 | whisper 35 | normal 60 | loud 70 | shout 82
+    SOUND_ONE_PACE_DB    faint 40 | audible 50 | loud 80 | deafening 100 |
+                         thunderous 120 | catastrophic 140
+    FRAGMENT_SNR         1/16 (-12 dB)      FULL_SNR 2.0 (as § 6)
+    HEAR_FLOOR, AMBIENT, WEATHER_NOISE, WIND_NOISE, APERTURE_PASS, DIAGONAL_COST,
+    OCCLUDER_PASS, CROWD_SOUND   unmoved
+
+With these, in a still enclosed room (27.0 dB): a `normal` voice is `full`
+across any room the engine lays out; a `whisper` is `full` to two paces, a
+fragment at three, gone at four; a `mutter` is `full` to three, a fragment
+at four, gone at five (and dies across a large room's width, which the aside
+tests hold). A hearth fire (`audible`) leaves its own hearth `quiet` and a
+normal line from it is `full` five paces off. A `loud` engine on a 4x3 deck
+is `drowned` at every cell; a raised line one pace off is a fragment from
+every cell, a normal line at arm's reach a fragment three paces from the
+machine and `none` at two, and a whisper is gone everywhere. The noise words
+derive as before: `quiet` to 57 dB, `din` to 72, `drowned` above.
+`tests/test_sound_calibration.py` pins the three scenes.
+
+The aperture, partition, ambient and weather tables are still on the
+compressed scale of § 6a and 2026-09-05, so the model is mixed and known to
+pass a real voice through an opening more readily than a real opening
+would; registered as `docs/UNBUILT.md` § 1.159 rather than taken here.
+
 ## 7. Cost, and fail-open
 
 One Dijkstra per source over at most ~600 cells, a handful of sources: well

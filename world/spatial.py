@@ -311,6 +311,8 @@ from world.spatial_sound_field import (
     ratio_of_db,
     OCCLUDER_LOSS_DB, power_of_db, quantise_hearing_db, SOUND_DB, SPEECH_DB,
     spreading_loss_db, VOICE_ONE_PACE_DB, WEATHER_NOISE_DB, WIND_NOISE_DB,
+    # Real levels, authored at one pace (2026-09-14).
+    one_pace_power, SOUND_ONE_PACE_DB, SPEECH_ONE_PACE_DB,
     # The far field: a very loud sound on the room graph.
     _inaudible_everywhere_db, DISTANT_LEVELS, distant_level_word,
     distant_sounds, FAR_FIELD_ENTRY_DB, far_field_graph, far_field_sources,

@@ -273,10 +273,17 @@ def test_an_unreachable_shout_snaps_nothing():
 def test_a_whisper_within_reach_is_graded_closer_than_one_pace():
     """Measured (scratch play 2026-09-14, chat 2 turn 6): two bodies on one
     cabin bench, an engine beyond the open door, the field placing neither
-    (`tier` None, signal at the one-pace default 1.0, noise 5.4) -- whisper
-    and mutter both `none`. Within reach is closer than a pace."""
+    (`tier` None, signal at the one-pace default 1.0, noise 5.4 on the
+    compressed ladder of the day) -- whisper and mutter both `none`. Within
+    reach is closer than a pace.
+
+    RECALIBRATED 2026-09-14: the same cabin on the real ladder. A whisper is
+    38 dB at its cell, the floor an engine leaves through an open door is
+    about 53 (noise 20.0), and the fragment margin is -12: at one pace the
+    whisper is 15 dB under and refused; at half a pace (+7.8) it is caught.
+    The old 5.4 (47.3 dB) is under the new whisper's own reach."""
     from world.spatial import hear_level
-    rel = {"same_room": True, "barrier": "open", "signal": 1.0, "noise": 5.4,
+    rel = {"same_room": True, "barrier": "open", "signal": 1.0, "noise": 20.0,
            "tier": None, "distance": "same"}
     assert hear_level(rel, "whisper") == "none"
     assert hear_level(rel, "whisper", proximity="within_reach") != "none"

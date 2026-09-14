@@ -30,9 +30,12 @@ from story.character_schema import default_character_data
 ROOMS = ("cellar", "stair", "gallery")
 DETAIL = "a long grinding collapse"
 
-#: `FAR_FIELD_ENTRY_DB` is 70 and `SOUND_DB["deafening"]` is 61.8, so a
-#: sound has to be past the ordinary ladder's top before it travels at all.
-#: That is the constant doing its job, not a big number chosen for the test.
+#: `FAR_FIELD_ENTRY_DB` is 70; since the 2026-09-14 recalibration a `loud`
+#: standing source (83 at its cell) already clears it, and `catastrophic`
+#: (143, a real explosion) is the rung whose reach is measured in whole
+#: buildings. The top rung is used here so the sound is heard at every
+#: room of the chain whatever the barriers; that is the constant doing its
+#: job, not a big number chosen for the test.
 LOUD = "catastrophic"
 
 

@@ -228,6 +228,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.149 — A lamp cannot be aimed at the thing worth aiming it at](UNBUILT_PERCEPTION.md#unbuilt-1-149)
 - [§1.151 — Being TOLD does not ask for ears, and a closed intake leaves the old claims standing](UNBUILT_PERCEPTION.md#unbuilt-1-151)
 - [§1.158 — A sense can be masked by nothing, so the gas the plan was for was modelled as a noise](UNBUILT_PERCEPTION.md#unbuilt-1-158)
+- [§1.159 — The sound model is half real: the ladders are decibels and the losses are still compressed](UNBUILT_PERCEPTION.md#unbuilt-1-159)
 
 **2. Roadmap**
 

@@ -108,14 +108,18 @@ Q_LIGHT = ("The light from the lamp falls on the table, reaches the shelf as "
            "half-light, and leaves the hearth in the dark. You are in "
            "half-light.")
 P_LIGHT = "The light from the lamp falls on the table. You are in the light."
+#: RECALIBRATED 2026-09-14: a `loud` generator is a real engine (80 dB(A)
+#: at a pace, 83 at its cell) and the table across a medium hall from it
+#: reads 71.8 dB -- a `din`, where a normal voice one pace off is caught in
+#: pieces -- rather than the `quiet` the compressed ladder gave it.
 Q_SOUND = ("The noise from the generator drowns everything at the shelf and "
-           "the hearth and is faint at the table. Where you are, the noise "
+           "the hearth and is a din at the table. Where you are, the noise "
            "drowns everything.")
 Q_LIGHT_JA = ("光はthe lampから来ている。the tableは明るく照らされている。"
               "the shelfは薄明かりの中にある。the hearthは闇の中にある。"
               "あなたは薄明かりの中に立っている。")
 Q_SOUND_JA = ("騒音はthe generatorから来ている。the shelfとthe hearthでは騒音が"
-              "何もかもをかき消している。the tableでは静かだ。"
+              "何もかもをかき消している。the tableでは騒がしい。"
               "あなたのいる場所では騒音が何もかもをかき消している。")
 
 
@@ -177,7 +181,7 @@ def test_sound_groups_the_visible_anchors_by_noise_word_loud_to_quiet():
     shape = sound_shape(sc, "Q")
     assert shape == {
         "groups": [{"level": "drowned", "items": ["the shelf", "the hearth"]},
-                   {"level": "quiet", "items": ["the table"]}],
+                   {"level": "din", "items": ["the table"]}],
         "sources": ["the generator"], "openings": [], "self": "drowned"}
     for group in shape["groups"]:
         assert group["level"] in NOISE_WORDS
@@ -279,9 +283,13 @@ def test_a_sound_beyond_the_door_is_named_by_the_opening_and_an_unheard_one_neve
             "shelf": {"desc": "a shelf", "dir": "s", "height": "waist"}},
             adjacent=[{"to": "a", "barrier": "open_door", "dir": "w"}]),
     }
+    # RECALIBRATED 2026-09-14: `deafening` is a real klaxon (103 at its
+    # cell) and drowns every cell of the next room through the doorway --
+    # an EVEN room, which says nothing (rule a). A `loud` engine grades the
+    # next room unevenly, which is what this test needs.
     sc = scene(two, {"L": "b", "gen": "a"},
                entities={"gen": {"name": "the generator", "kind": "machine",
-                                 "sound_source": "deafening"}},
+                                 "sound_source": "loud"}},
                stations={"gen": {"at": "c"}, "L": {"at": "w"}})
     shape = sound_shape(sc, "L")
     assert shape["sources"] == [] and shape["openings"] == ["the open doorway"]
