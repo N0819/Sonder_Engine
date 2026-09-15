@@ -119,6 +119,10 @@ def normalize_plan(uid, entry):
     look = _text(entry.get("look"), SURFACE_CHARS)
     if look:
         out["look"] = look
+    enrolled = entry.get("enrolled")
+    if isinstance(enrolled, dict) and enrolled.get("charter") and enrolled.get("body"):
+        out["enrolled"] = {"charter": str(enrolled["charter"]),
+                           "body": str(enrolled["body"])}
     rendered = entry.get("rendered")
     if isinstance(rendered, dict) and str(rendered.get("render") or "").strip():
         out["rendered"] = {
@@ -244,8 +248,10 @@ def plan_figure(plan):
         "room": str(brief.get("where") or ""),
         "role": str(plan.get("role") or ""),
         "posts": [],
-        "charter": "",
-        "body": "",
+        # The charter body an enrolled plan is simulated as; empty for a
+        # plan nobody has enrolled (`story.plot_packages._apply_plan_entity`).
+        "charter": str((plan.get("enrolled") or {}).get("charter") or ""),
+        "body": str((plan.get("enrolled") or {}).get("body") or ""),
         "plan": str(plan.get("uid") or ""),
         "kind": str(plan.get("kind") or "person"),
         "aliases": list(plan.get("aliases") or ()),

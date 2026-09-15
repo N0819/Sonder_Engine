@@ -2812,6 +2812,85 @@ def _catchup_order(registry):
     return sorted(registry["items"].items(), key=_behind)
 
 
+def deliver_errands(registry):
+    """File every carried word into its addressee's mind where the walker
+    and the addressee stand in one place. Returns the deliveries made.
+
+    The other half of `charter_surgery.send_errand`: the walker holds the
+    message from dispatch; here it reaches the person it was for, as a
+    told claim (`heard_from` the walker), across charters -- the footman
+    the Assembly sent and the brewer the Crown keeps -- and the act is
+    written on the window's acts so the beat's feed can say it. An errand
+    stays undelivered while the addressee is elsewhere or is nobody the
+    registry holds; the walker still carries the word, and its voice may
+    say it to whoever it meets.
+    """
+    items = (registry or {}).get("items") or {}
+    if not items:
+        return []
+    index = identity_index(registry)
+    by_name = {}
+    for charter_key, item in items.items():
+        state = (item or {}).get("state") or {}
+        shown = index.display(charter_key)
+        for body_key, body in (state.get("bodies") or {}).items():
+            if not isinstance(body, dict) or body.get("departed"):
+                continue
+            by_name.setdefault(str(body_key).casefold(), (charter_key, body_key))
+            try:
+                by_name.setdefault(str(shown[body_key] or "").casefold(),
+                                   (charter_key, body_key))
+            except Exception:
+                continue
+    from .charter_move import en_route
+    delivered = []
+    for charter_key, item in items.items():
+        state = (item or {}).get("state") or {}
+        for body_key, body in (state.get("bodies") or {}).items():
+            errand = body.get("errand") if isinstance(body, dict) else None
+            if not isinstance(errand, dict) or not errand.get("message") \
+                    or errand.get("delivered_at") is not None \
+                    or en_route(body):
+                continue
+            target = by_name.get(str(errand.get("addressee") or "").casefold())
+            if not target:
+                continue
+            to_charter, to_body = target
+            other = ((items.get(to_charter) or {}).get("state") or {}).get(
+                "bodies", {}).get(to_body) or {}
+            if str(other.get("place") or "") != str(body.get("place") or ""):
+                continue
+            held = (state.get("minds") or {}).get(body_key) or {}
+            claim = held.get(errand.get("claim_key") or "")
+            if not claim:
+                continue
+            copy_ = dict(claim)
+            try:
+                walker_name = index.display(charter_key)[body_key]
+            except Exception:
+                walker_name = body_key
+            copy_["heard_from"] = str(walker_name or body_key)
+            copy_["provenance"] = "carried_word_delivered"
+            copy_["retellings"] = int(claim.get("retellings") or 0) + 1
+            copy_["strength"] = min(1.0, float(claim.get("strength") or 1.0))
+            at = float(state.get("clock_hours") or 0.0)
+            copy_["as_of_hours"] = at
+            target_state = items[to_charter]["state"]
+            target_state.setdefault("minds", {}).setdefault(to_body, {})[
+                claim["body"]] = copy_
+            errand["delivered_at"] = at
+            acts = state.setdefault("window_acts", [])
+            if isinstance(acts, list):
+                acts.append({"actor": body_key, "act": "tell",
+                             "other": to_body if to_charter == charter_key
+                             else str(walker_name and other.get("name") or to_body),
+                             "subject": "", "place": str(body.get("place") or ""),
+                             "at_hours": at, "event": True})
+            delivered.append({"charter": charter_key, "body": body_key,
+                              "to": to_body, "message": errand["message"]})
+    return delivered
+
+
 def advance_snapshot(registry, *, elapsed_seconds, epoch_id, base_turn,
                      cid, frame_id, scene=None, cancelled=None,
                      budget_seconds=None):
@@ -3010,6 +3089,7 @@ def advance_snapshot(registry, *, elapsed_seconds, epoch_id, base_turn,
                         due_at))
     if advanced_any:
         cross_charter_gossip(registry)
+        deliver_errands(registry)
     return registry, rows, produced
 
 
@@ -3565,9 +3645,15 @@ def charter_moves_since(cid, rooms, previous, *, frame_id=None, cap=8):
             if before == place or not before:
                 continue
             if place in rooms:
-                lines.append("%s came into %s from %s since the last beat." % (
+                errand = body.get("errand") if isinstance(body, dict) else None
+                word = ""
+                if isinstance(errand, dict) and errand.get("message") \
+                        and errand.get("delivered_at") is None:
+                    word = " with word for %s" % (
+                        errand.get("addressee") or "somebody")
+                lines.append("%s came into %s from %s%s since the last beat." % (
                     shown, room_names.get(place, place),
-                    room_names.get(before, before)))
+                    room_names.get(before, before), word))
             elif before in rooms:
                 lines.append("%s left %s for %s since the last beat." % (
                     shown, room_names.get(before, before),
