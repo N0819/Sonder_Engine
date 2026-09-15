@@ -1249,6 +1249,11 @@ class MovementDecl(LenientModel):
     # neither, the walk ends one pace inside the door it came through.
     to_anchor: str = ""
     to_cell: Optional[list] = None
+    # HOW FAST: `run` doubles the paces a beat covers (`spatial_walk.
+    # RUN_PACES_PER_SECOND`); anything else is a walk. A declaration that
+    # runs by its verb and omits the field is read as a run by
+    # `_declares_rapid_movement`, the same fallback following uses.
+    pace: str = ""
 
 # ---- Flow ----
 

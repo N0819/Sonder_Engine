@@ -368,6 +368,21 @@ def _effective_anchors(scene: dict, room_id, *, derive=False) -> dict:
         # east or west one -- so the far side's value reads unchanged.
         if offset is not None:
             anchor["offset"] = offset
+        # AN OPEN SIDE, NOT A DOORWAY (the owner, 2026-09-15). Outdoors an
+        # `open` edge between two open-air cells -- a road onto a field, a
+        # yard onto a lane -- is the whole shared side: sight, sound, light
+        # and a walk cross it anywhere along its length. The aperture spans
+        # the wall (`width: "wall"`, read by `_place_anchors`); an edge may
+        # say so itself with `width: "wall"` wherever a side is open.
+        other = rooms.get(neighbor_id) if isinstance(rooms.get(neighbor_id), dict) else {}
+        if str(width or "").strip().casefold() == "wall" or (
+                normalize_barrier(barrier) == "open"
+                and str(room.get("exposure") or "").strip().casefold() == "open"
+                and str((other or {}).get("exposure") or "").strip().casefold() == "open"):
+            anchor["width"] = "wall"
+            anchor["desc"] = "the open side"
+            out[aid] = anchor
+            return
         # The passage's `width` in paces is the doorway's aperture
         # (`spatial_fov._place_anchors` reads it on an implicit anchor in
         # place of the footprint's one cell). Only a passage carries one.

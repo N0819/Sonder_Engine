@@ -5846,7 +5846,7 @@ def director_resolve(ctx, nonce, _corrections=None):
             # THE ROUTE IS OPEN; THE BODY WALKS IT, over the cells, as far
             # as the beat's paces carry (`director_movement.walk_declared`).
             walk_declared(ctx, sc, route_scene, sd, out, move_subject, mv,
-                          prev_room)
+                          prev_room, interp=interp)
             if contested_door:
                 # Say which door was crossed. The contest is only nameable
                 # because the walk was followed edge by edge, and a multi-hop

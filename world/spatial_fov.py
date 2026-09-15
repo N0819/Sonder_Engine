@@ -560,8 +560,15 @@ def _place_anchors(room_id, grid: RoomGrid, anchors) -> dict:
             if anchor.get("implicit") and isinstance(width, (int, float)) \
                     and not isinstance(width, bool) and width >= 1:
                 length = max(1, min(int(width), max(1, along)))
+            # AN OPEN SIDE: the aperture is the whole wall, from its start.
+            whole_side = bool(anchor.get("implicit")) and str(width or "") == "wall"
+            if whole_side:
+                length = max(1, along)
             placed_at = normalize_offset(anchor.get("offset"))
-            if placed_at is not None and bearing not in ROOM_CORNERS:
+            if whole_side:
+                offset = 0
+                source = "side"
+            elif placed_at is not None and bearing not in ROOM_CORNERS:
                 # An authored place along the wall: the fraction of the
                 # positions the footprint leaves, from the wall's start
                 # (`RoomGrid.rim`'s order), never wrapping. Absent, the
@@ -966,6 +973,10 @@ class _Field:
         # reach along it; `aperture` is the doorway's span on that line.
         # See `_wall_verdict`.
         self.walls = []
+        #: {cell: (height rank, body name)} for a body standing IN a
+        #: doorway of a placed room: it is the door for a line through
+        #: that aperture (the owner, 2026-09-15).
+        self.held = {}
 
     def add_room(self, scene, room_id, offset, *, derive=False):
         ox, oy = offset
@@ -1168,7 +1179,34 @@ def room_field(scene: dict, room_id, *, through=None,
                 "to": other,
                 "pass": factor,
             })
+    _hold_doorways(scene, field)
     return field
+
+
+def _hold_doorways(scene, field):
+    """Every body standing on a doorway cell of a placed room holds that
+    cell at its own height (`_Field.held`): a line through the aperture
+    meets the body, and a walk through it finds it filled
+    (`spatial_walk`). Read from cells, so a body with no cell is in no
+    doorway."""
+    positions = (scene or {}).get("positions") or {}
+    for name, room_id in positions.items():
+        room_id = str(room_id)
+        if room_id not in field.offsets:
+            continue
+        cell = body_cell(scene, name)
+        if cell is None:
+            continue
+        doors = set()
+        for aid, rec in (field.anchors.get(room_id) or {}).items():
+            if rec.get("implicit") or str(aid).startswith("door:"):
+                doors.update(tuple(c) for c in rec.get("cells") or ())
+        if tuple(cell) not in doors:
+            continue
+        placed = field.cell_of(room_id, tuple(cell))
+        rank = _EYE_RANK.get(posture_class(scene, name), 2.0)
+        if rank > field.held.get(placed, (-1.0, None))[0]:
+            field.held[placed] = (rank, str(name))
 
 
 def wall_aperture_cells(wall) -> list:
@@ -1285,6 +1323,16 @@ def _occluders_on(field, origin, target, eye, top):
                 continue                    # the wall itself, judged above
             return "__wall__", tallest, tallest_id
         h = field.height.get(cell)
+        held = getattr(field, "held", {}).get(cell)
+        if held is not None and cell not in (origin, target) \
+                and (h is None or held[0] > h):
+            # A BODY IN A DOORWAY IS THE DOOR: a line through the aperture
+            # meets the body standing in it at the body's own height.
+            if _blocks(held[0], eye, top):
+                return held[1], tallest, tallest_id
+            if held[0] > tallest:
+                tallest, tallest_id = held[0], held[1]
+            continue
         if h is None:
             continue
         if _blocks(h, eye, top):

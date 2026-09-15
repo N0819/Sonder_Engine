@@ -18,7 +18,7 @@
 | `agents/director_fanout.py` | 1601 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 2117 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
-| `agents/director_movement.py` | 1665 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
+| `agents/director_movement.py` | 1706 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `agents/director_reconcile.py` | 605 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story`, `world.spatial` |
 | `agents/director_scopes.py` | 1217 |  | `agents.director_lingua`, `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 706 |  | `agents.common`, `story.character_schema`, `story.scene`, `world.background_claims` |
@@ -49,7 +49,7 @@
 | `llm/prompts.py` | 590 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 4337 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
-| `llm/schemas.py` | 6931 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `llm/schemas.py` | 6936 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2434 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 398 |  | — |
@@ -194,9 +194,9 @@
 | `world/spatial_contact_migration.py` | 332 |  | `story.character_schema`, `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_contacts.py` | 1933 |  | `world.spatial_containment`, `world.spatial_identity`, `world.spatial_transit` |
 | `world/spatial_containment.py` | 3083 |  | `world.spatial_barriers`, `world.spatial_identity`, `world.spatial_transit` |
-| `world/spatial_fov.py` | 1650 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
+| `world/spatial_fov.py` | 1698 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_frames.py` | 1392 |  | `core.db`, `core.frames`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial` |
-| `world/spatial_geometry.py` | 2103 |  | `story.character_schema`, `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
+| `world/spatial_geometry.py` | 2118 |  | `story.character_schema`, `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_identity.py` | 887 |  | — |
 | `world/spatial_light.py` | 472 |  | `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity` |
 | `world/spatial_light_field.py` | 1306 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation` |
@@ -210,7 +210,7 @@
 | `world/spatial_sound_field.py` | 2812 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light_field`, `world.spatial_senses` |
 | `world/spatial_substance.py` | 1128 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_transit.py` | 525 |  | `world.spatial_barriers`, `world.spatial_identity` |
-| `world/spatial_walk.py` | 250 |  | `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_routing` |
+| `world/spatial_walk.py` | 316 |  | `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_routing` |
 | `world/stimulation.py` | 239 |  | `story`, `world.spatial` |
 | `world/structure.py` | 1661 |  | `world.charter_model`, `world.regions`, `world.spatial` |
 | `world/subjects.py` | 505 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
@@ -361,12 +361,12 @@
 |---|---:|---:|
 | `_reconcile_near_group_positions()` | 306 | 284 lines |
 | `_apply_following_movement()` | 681 | 192 lines |
-| `_travel_continues()` | 1370 | 137 lines |
-| `_guard_approach_is_not_arrival()` | 1509 | 96 lines |
+| `_travel_continues()` | 1411 | 137 lines |
+| `_guard_approach_is_not_arrival()` | 1550 | 96 lines |
+| `walk_declared()` | 1275 | 83 lines |
 | `_unreachable_position_writes()` | 874 | 68 lines |
-| `crossing_legs()` | 1607 | 59 lines |
+| `crossing_legs()` | 1648 | 59 lines |
 | `_door_route()` | 1054 | 57 lines |
-| `route_scene_for()` | 73 | 54 lines |
 
 ### `agents/director_reconcile.py`
 
@@ -686,13 +686,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `semantic_output_errors()` | 6094 | 517 lines |
-| `preprocess_llm_output()` | 5179 | 336 lines |
+| `semantic_output_errors()` | 6099 | 517 lines |
+| `preprocess_llm_output()` | 5184 | 336 lines |
 | `_lenient_coerce()` | 836 | 159 lines |
-| `validate_llm_output_strict()` | 6793 | 139 lines |
-| `canonicalize_prose_markup()` | 4984 | 102 lines |
+| `validate_llm_output_strict()` | 6798 | 139 lines |
+| `canonicalize_prose_markup()` | 4989 | 102 lines |
 | `_coerce_station_table()` | 85 | 81 lines |
-| `_uncross_concealed_speech()` | 5108 | 69 lines |
+| `_uncross_concealed_speech()` | 5113 | 69 lines |
 | `_coerce_list_valued_map()` | 168 | 57 lines |
 
 ### `mind/affect.py`
@@ -2371,14 +2371,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `feature_visibility()` | 1314 | 111 lines |
-| `_place_anchors()` | 512 | 107 lines |
-| `body_cell()` | 734 | 76 lines |
-| `body_visibility()` | 1529 | 70 lines |
-| `neighbour_feature_visibility()` | 1458 | 69 lines |
-| `room_field()` | 1111 | 61 lines |
-| `_line()` | 845 | 52 lines |
-| `_placed_neighbours()` | 1050 | 49 lines |
+| `_place_anchors()` | 512 | 114 lines |
+| `feature_visibility()` | 1362 | 111 lines |
+| `body_cell()` | 741 | 76 lines |
+| `body_visibility()` | 1577 | 70 lines |
+| `neighbour_feature_visibility()` | 1506 | 69 lines |
+| `room_field()` | 1122 | 62 lines |
+| `_line()` | 852 | 52 lines |
+| `_placed_neighbours()` | 1061 | 49 lines |
 
 ### `world/spatial_frames.py`
 
@@ -2397,14 +2397,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `invalidate_transferred_pose_details()` | 1650 | 113 lines |
-| `derive_scene_stations()` | 2000 | 104 lines |
-| `invalidate_moved_body_place_details()` | 1494 | 102 lines |
-| `_effective_anchors()` | 325 | 90 lines |
+| `invalidate_transferred_pose_details()` | 1665 | 113 lines |
+| `_effective_anchors()` | 325 | 105 lines |
+| `derive_scene_stations()` | 2015 | 104 lines |
+| `invalidate_moved_body_place_details()` | 1509 | 102 lines |
 | `spatial_digest()` | 150 | 89 lines |
 | `egocentric_frame()` | 62 | 86 lines |
-| `invalidate_moved_body_pose_details()` | 1384 | 79 lines |
-| `invalidate_contact_bound_poses()` | 1765 | 75 lines |
+| `invalidate_moved_body_pose_details()` | 1399 | 79 lines |
+| `invalidate_contact_bound_poses()` | 1780 | 75 lines |
 
 ### `world/spatial_identity.py`
 
@@ -2575,14 +2575,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `walk()` | 157 | 87 lines |
-| `cell_path()` | 121 | 24 lines |
-| `blocked_cells()` | 74 | 12 lines |
-| `inside_the_door()` | 108 | 11 lines |
-| `paces_for()` | 63 | 9 lines |
-| `door_cell()` | 88 | 8 lines |
-| `entry_cell()` | 98 | 8 lines |
-| `standing_cell()` | 147 | 8 lines |
+| `walk()` | 192 | 117 lines |
+| `cell_path()` | 156 | 24 lines |
+| `door_cell()` | 108 | 19 lines |
+| `paces_for()` | 67 | 12 lines |
+| `blocked_cells()` | 81 | 12 lines |
+| `entry_cell()` | 129 | 12 lines |
+| `held_cells()` | 95 | 11 lines |
+| `inside_the_door()` | 143 | 11 lines |
 
 ### `world/stimulation.py`
 
