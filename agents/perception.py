@@ -56,6 +56,7 @@ from story.scene import (
 
 from mind import affect
 from world.spatial import (
+    tread_events,
     apply_contact_ops,
     room_display_name,
     hiding_holders_of,
@@ -1221,6 +1222,30 @@ def _sound_field_for(ctx, sc, name, room, events=None):
     return sound_field(sc, name, room=room,
                        turn_idx=getattr(ctx.turn, "idx", None), crowds=crowds,
                        events=events or None)
+
+
+def _beat_movers(ctx) -> dict:
+    """{name: pace} for every body the beat walked (the resolve's `travel`
+    records, paces > 0): its tread is a sound source at the cell it ended
+    on (`spatial_sound_field.sound_sources`). Empty before the resolve has
+    run, so the onset pass hears no footfall that has not happened."""
+    cached = ctx.get("_beat_movers")
+    if cached is not None:
+        return cached
+    movers = {}
+    travel = (ctx.get("director_resolve") or {}).get("travel") or {}
+    for rec in (travel.get("advanced") or []) if isinstance(travel, dict) else []:
+        if not isinstance(rec, dict):
+            continue
+        try:
+            paces = float(rec.get("paces") or 0)
+        except (TypeError, ValueError):
+            paces = 0.0
+        subject = str(rec.get("subject") or "").strip()
+        if subject and paces > 0:
+            movers[subject] = str(rec.get("pace") or "walk").strip().casefold() or "walk"
+    ctx["_beat_movers"] = movers
+    return movers
 
 
 def _source_channels(sc, perceiver_name, perceiver_room, sources,
@@ -5902,6 +5927,9 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                          getattr(getattr(ctx, "turn", None), "frame_id", None))))
     except Exception:
         pass                       # a story with no charter adds nothing
+    # THE BEAT'S FOOTFALLS ARE SOUND EVENTS (`spatial_sound_field.tread_events`):
+    # a tread in the walker's room, and one in every room it lies over.
+    _incoming = list(_incoming) + tread_events(sc, _beat_movers(ctx))
     _sensory = [record for record in (
         normalize_sensory_event(event, rooms=sc.get("rooms") or {})
         for event in _incoming
@@ -6159,7 +6187,12 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                 # room's observers get the authored detail through the same
                 # admission gate the establish stage uses...
                 percepts.extend(
-                    _gated_ambient_percepts(gate, beat_sounds, p.get("room")))
+                    _gated_ambient_percepts(
+                        gate,
+                        # A walker's own footfalls are no news to the walker.
+                        [e for e in beat_sounds
+                         if not (e.get("tread") and str(e.get("source") or "") == str(name))],
+                        p.get("room")))
                 # ...THEN THE NEAR FIELD: a sound in a room the listener's
                 # own composite grid places is a one-beat source on that
                 # room's centre, spread through the doorway it came by and

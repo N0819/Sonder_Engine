@@ -37,7 +37,8 @@ from story.scene import (
 from .background import background_react
 from .character import character_step
 from .common import (_assert_plan_materialized, _dict, _present_cast_bodies,
-                     player_speech_lines, widen_reactors_to_hearers)
+                     player_speech_lines, widen_reactors_to_engaged,
+                     widen_reactors_to_hearers)
 from .director import director_establish, director_interpret, director_resolve
 from .loops import interaction_loop, reaction_loop, rehydrate_loop_views
 from .mapping import compile_world_context
@@ -763,6 +764,7 @@ def resume_key_for_turn(turn_id, chat_id):
             active_cast(chat_id, turn["frame_id"]),
             chat_id=chat_id,
             frame_id=turn["frame_id"],
+            turn_idx=turn["idx"],
         )
 
     rows = q(
@@ -808,7 +810,8 @@ def resume_key_for_turn(turn_id, chat_id):
 
     return None
 
-def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=None):
+def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=None,
+               turn_idx=None):
     if not isinstance(interp, dict):
         interp = {}
         
@@ -875,6 +878,9 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
     # Bodies in the player's own room are the Director's call, as before.
     if chat_id is not None and player_speech_lines(interp):
         reactors = widen_reactors_to_hearers(chat_id, cast_rows, interp, reactors)
+    if chat_id is not None and turn_idx is not None:
+        reactors = widen_reactors_to_engaged(chat_id, cast_rows, reactors, turn_idx,
+                                             frame_id)
 
     autonomy = 0
     if chat_id is not None:
@@ -1067,6 +1073,7 @@ SIDE_CHANNELS = {
     "_books": "memo: the chat's lorebook ids",
     "_book_weights": "memo: the chat's lorebook weights",
     "_sound_crowds": "memo: the chat's crowd ledger from world state",
+    "_beat_movers": "memo: {name: pace} read off the resolve's travel record",
     "_background_beats_cache": "memo: derived from the hydrated "
                                "`background_react` content",
     "_composed_beat": "memo: keyed by the stored scene's read token; the "
@@ -1490,7 +1497,8 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
 
     plan = build_plan(ctx["director_interpret"], cast_rows, chat_id=chat_id,
                       frame_id=turn_row["frame_id"],
-                      extra_players=ctx.extra_players)
+                      extra_players=ctx.extra_players,
+                      turn_idx=getattr(ctx.turn, "idx", None))
     keys = [k for k, _ in plan]
     if start_key is not None and start_key not in keys:
         # Refuse before deleting orphans or marking anything stale -- an

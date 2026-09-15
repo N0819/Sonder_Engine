@@ -9,7 +9,7 @@ from world.spatial import (FLIGHT_PACES, FLOOR_LOSS_DB, far_path_gain, floor_edg
                            infer_room_levels, level_span, merge_scene_with_diff,
                            passable_route_exists, room_level, rooms_over, rooms_under,
                            spatial_digest, stack_of, visual_level_between, walk)
-from world.spatial_sound_field import far_field_graph
+from world.spatial import far_field_graph
 
 
 def _tower(levels=False):

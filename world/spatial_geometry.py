@@ -223,6 +223,10 @@ def spatial_digest(scene, observer, label_for=None):
         level = room_level(scene, here)
         if level is not None:
             out["storey"] = level
+        from world.spatial_sound_field import room_reverberation
+        ring = room_reverberation(scene, here)
+        if ring and ring.get("word"):
+            out["acoustics"] = ring["word"]
         for edge in floor_edges(scene, here):
             key = "overhead" if edge.get("vertical") == "up" else "underfoot"
             out.setdefault(key, []).append(

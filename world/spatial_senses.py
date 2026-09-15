@@ -1109,6 +1109,11 @@ def hear_level(
         level = open_edge_floor(volume, rel) or level
     if vouched or level == "none":
         return level
+    # THE RING SMEARS THE WORDS: where the reverberant part arrives well
+    # over the direct part (`stamp_sound_relation`, REVERB_SMEAR_DB), a
+    # line heard whole is heard in pieces.
+    if level == "full" and isinstance(rel, dict) and rel.get("reverberant"):
+        level = "fragment"
     door = rel.get("door_gain") if isinstance(rel, dict) else None
     if door is None or rel.get("noise") is None:
         return level
@@ -1557,6 +1562,17 @@ def _bearing_through(scene: dict, observer: str, o_room, next_room, scope):
     direction = _sector_label(relative_bearing(facing, bearing)) \
         if facing and bearing else None
     out = {"scope": scope, "barrier": barrier}
+    # IN A ROOM THAT RINGS, A SOUND FROM BEYOND COMES FROM EVERYWHERE: the
+    # walls give it back before the ear can place the opening it came
+    # through (`spatial_sound_field.room_reverberation`).
+    from world.spatial_sound_field import room_reverberation
+    if room_reverberation(scene, o_room):
+        from language_runtime import compositor_text
+        out["reverberant"] = True
+        out["phrase"] = compositor_text("bearing_reverberant")
+        if vertical:
+            out["vertical"] = vertical
+        return out
     if bearing:
         out["bearing"] = bearing
     if direction:

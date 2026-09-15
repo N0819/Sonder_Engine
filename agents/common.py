@@ -6344,6 +6344,65 @@ def widen_reactors_to_hearers(chat_id, cast_rows, interp, reactors):
     return widened
 
 
+def widen_reactors_to_engaged(chat_id, cast_rows, reactors, turn_idx,
+                              frame_id=None):
+    """`reactors` plus every present cast body OUTSIDE the player's room
+    that addressed the player on the previous beat: a conversation across
+    rooms is still a conversation, and the body that just said "Coming
+    down" is asked what it does next.
+
+    THE DIRECTOR PACES THE ROOM IT SEES. A body elsewhere that answered
+    the player last beat -- its `dialogue_log` line aimed at the player --
+    is engaged with them, and on the beat after, with nothing said to
+    widen it in (`widen_reactors_to_hearers`), it stood where it was:
+    Skerry Light turn 15 (2026-09-15), "Coming down." from three storeys
+    up, then a whole beat of silence on the stair. One beat of grace, read
+    from the previous turn's committed resolve; a body that then neither
+    moves nor speaks to the player is not asked again.
+    """
+    if turn_idx is None:
+        return reactors
+    try:
+        idx = int(turn_idx)
+    except (TypeError, ValueError):
+        return reactors
+    if idx <= 0:
+        return reactors
+    try:
+        row = q("SELECT v.content AS content FROM turns t "
+                "JOIN steps s ON s.turn_id=t.id "
+                "JOIN variants v ON v.step_id=s.id AND v.active=1 "
+                "WHERE t.chat_id=? AND t.idx=? AND t.frame_id IS ? "
+                "AND s.key='director_resolve' LIMIT 1",
+                (chat_id, idx - 1, frame_id), one=True)
+        resolve = json.loads(row["content"]) if row else None
+        scene = get_scene(chat_id)
+        chat = q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True)
+        from story.character_schema import persona_name
+        p_name = persona_name(persona_of(dict(chat))) if chat else ""
+    except Exception:
+        return reactors
+    if not isinstance(resolve, dict) or not p_name:
+        return reactors
+    from world.spatial import room_of
+    here = room_of(scene, p_name)
+    spoke_to_player = set()
+    for line in resolve.get("dialogue_log") or []:
+        if not isinstance(line, dict):
+            continue
+        if str(line.get("intended_target") or "").strip().casefold() == p_name.casefold():
+            spoke_to_player.add(str(line.get("speaker") or "").strip().casefold())
+    if not spoke_to_player:
+        return reactors
+    widened = list(reactors)
+    for body in _present_cast_bodies(scene, cast_rows):
+        if body["id"] in widened or body.get("room") == here:
+            continue
+        if str(body.get("name") or "").strip().casefold() in spoke_to_player:
+            widened.append(body["id"])
+    return widened
+
+
 def player_speech_lines(interp):
     lines = [e.get("text") for e in (interp.get("sequence") or [])
              if e.get("type") == "speech" and e.get("text")]
