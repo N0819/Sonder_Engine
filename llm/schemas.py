@@ -2904,10 +2904,16 @@ class LedgerPatchTransform(LenientModel):
 
 
 class LedgerTransformResult(LenientModel):
-    """Specialist result aligned to the input ledger at the same index."""
+    """Specialist result aligned to the input ledger at the same index.
+
+    `settled` is the verdict per THING (the owner, 2026-09-15: "the verdict
+    follows the thing"): for each of the row's `item_names` the hand did not
+    transform, its name -> already_true | not_mine | no_referent. A row
+    about one thing needs none; the row's `status` is its verdict."""
     transforms: list[LedgerPatchTransform] = Field(default_factory=list)
     status: str = ""
     reroute_to: str = ""
+    settled: dict[str, str] = Field(default_factory=dict)
 
 
 class CausalSpecialistOutput(LenientModel):

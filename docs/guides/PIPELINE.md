@@ -698,10 +698,20 @@ verdict -- one transform per thing whose record changes, `item` naming it
 from the row's `item_names` (a row about one thing needs no `item`).
 Row-local `item_matches` (per name) and `world_matches` let it use the keys
 of objects that already exist in its scoped world view; a name absent from
-`item_matches` is new or unresolved. The attach site resolves `item` back to
-the handle, and `compile_transforms` orders every transform by its row's
-`chrono_id` and files it under its item. No Director-invented handle is used
-as world identity.
+`item_matches` is new or unresolved, and a new thing whose record a hand's
+channels hold is that hand's to declare, in the same result, before any op
+names it. The verdict follows the thing: on a row about several things a
+result's `settled` gives `already_true` / `not_mine` / `no_referent` per
+thing it did not transform, and a thing with neither a transform nor a
+verdict is recorded under `things_unaccounted` (report-only). A row a hand
+declines with `not_mine` and a `reroute_to` is handed on to that hand once
+(`_rows_to_forward`; `orchestration.forwards`), and its answer attaches
+like any other. The attach site resolves `item` back to the handle, and
+`compile_transforms` orders every transform by its row's `chrono_id` and
+files it under its item; an entity a hand declared on an earlier row of the
+same answer is a standing record for its later rows. No Director-invented
+handle is used as world identity. Each hand's raw answer is kept under
+`orchestration.specialists.<hand>.results`.
 
 After every parallel call finishes, deterministic code zips each result to the
 hidden input row and restores its private `item_id` and `chrono_id`. The pure

@@ -4137,8 +4137,16 @@ def cut_short_speech(text, ratio=0.6):
 #: `categories` rides along beside the folded `category` because a span may
 #: name two ledgers and only the list says so; keeping just the singular one
 #: silently halves the multi-hand routing this contract is built on.
+#:
+#: `item_ids` and `item_names` are the lists the singular pair became
+#: (the owner's contract, 2026-09-15). Measured before they were added
+#: here, chat 12 turn 190: every interpret span reached the hands with the
+#: lists gone, so the per-thing accounting saw one-thing rows everywhere
+#: and a three-thing row's silence about two of them went unrecorded --
+#: the exact failure the accounting was built to see.
 SPAN_FIELDS = ("category", "categories", "note", "items",
-               "chrono_id", "item_id", "object_name", "act",
+               "chrono_id", "item_id", "item_ids", "item_names",
+               "object_name", "act",
                "source_entity_id", "actor", "from_declaration", "movement")
 
 

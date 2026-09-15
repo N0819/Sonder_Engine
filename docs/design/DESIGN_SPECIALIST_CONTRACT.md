@@ -19,7 +19,9 @@ Maintained execution detail lives in [`PIPELINE.md`](../guides/PIPELINE.md).
 >    name in `item_names` is matched against objects already in that view and
 >    the resulting world keys are attached to the row as `item_matches`
 >    (`world_matches` for the first). A hand emits one transform per thing
->    whose record changes and names it in `item`.
+>    whose record changes and names it in `item`; the verdict follows the
+>    thing (`settled`, per thing it did not transform), and a `not_mine`
+>    with an address is forwarded to that hand once.
 > 3. **No recompiler identity.** `chrono_id` and the Director's `item_ids`
 >    (one handle per thing, the same number wherever it recurs) are private
 >    routing data. Dispatch strips them, a specialist correlates its output to

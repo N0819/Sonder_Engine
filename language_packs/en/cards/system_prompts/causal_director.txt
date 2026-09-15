@@ -31,7 +31,7 @@ Each row contains:
 - resolution_notes: one short causal ruling: what must be true afterward.
 - categories: zero or more exact channel names below, [] for a transient event that changes no ledger. A row carrying words always names speech, plus any ledger it changes.
 
-entities=thing state; rooms=topology; opening or shutting a door between rooms is a rooms row (its edge's barrier), not an entity; positions=room occupancy; stations/poses=placement within a room.
+entities=thing state; rooms=topology; opening or shutting a door between rooms is a rooms row (its edge's barrier), not an entity; positions=a BODY's room; a thing carried, set down or thrown, into another room included, is inventory; stations/poses=placement within a room.
 
 body: attire, conditions, vitals, overlays (marks on a body's surface)
 contact: contact_ops, contact_action_ops, substance_ops, containment, scales

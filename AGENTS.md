@@ -228,7 +228,10 @@ several hands and each hand may receive several ordered rows.
 `director_fanout._specialist_payload` strips the ids and attaches row-local
 `item_matches` (per name) and `world_matches` from exact names in the hand's
 scoped world view; a hand emits one transform per thing whose record changes,
-naming it in `item`; model output correlates by array position through
+naming it in `item`, and answers for the rest of a row's things in `settled`
+(a thing with neither is `things_unaccounted`, report-only); a `not_mine`
+with a `reroute_to` is forwarded to that hand once; model output correlates
+by array position through
 `LedgerTransformResult`, with zero or more `{patch: ...}` transforms per row.
 `world.causality.compile_transforms` is the pure recompiler: it restores the
 private ids, validates channel ownership, sorts all transforms by chronology,
