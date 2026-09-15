@@ -6303,6 +6303,47 @@ def substitute_player_token(obj, player_name):
     return fix(obj)
 
 
+def widen_reactors_to_hearers(chat_id, cast_rows, interp, reactors):
+    """`reactors` plus every present cast body OUTSIDE the player's room
+    that hears the player's line this beat (`hear_level` over
+    `spatial_rel_between`, at the line's volume).
+
+    A VOICE THAT CARRIES INTO ANOTHER ROOM REACHES A BODY THE DIRECTOR DID
+    NOT SEE. `flow.reactors` is the Director's pacing judgement of the room
+    the player stands in; the sound field is the engine's knowledge of
+    where a line goes past it. Read by the planner and by the interaction
+    loop alike (both read `flow.reactors` on their own), so the two cannot
+    disagree about who was called to. Skerry Light turn 4 (2026-09-15): a
+    loud challenge called down a three-storey stairwell reached the man at
+    its foot in full, the Director's list was empty, and he stood there
+    for the beat. Bodies in the player's own room stay the Director's call.
+    """
+    from story.character_schema import persona_name
+    from world.spatial import hear_level, room_of, spatial_rel_between
+    try:
+        scene = get_scene(chat_id)
+        chat = q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True)
+        p_name = persona_name(persona_of(dict(chat))) if chat else ""
+    except Exception:
+        return reactors
+    if not p_name or not room_of(scene, p_name):
+        return reactors
+    volume = str(interp.get("speech_volume") or "normal")
+    widened = list(reactors)
+    here = room_of(scene, p_name)
+    for body in _present_cast_bodies(scene, cast_rows):
+        if body["id"] in widened or body.get("room") == here:
+            continue
+        try:
+            rel = spatial_rel_between(scene, body["name"], p_name)
+            heard = hear_level(rel, volume)
+        except Exception:
+            continue
+        if heard and heard != "none":
+            widened.append(body["id"])
+    return widened
+
+
 def player_speech_lines(interp):
     lines = [e.get("text") for e in (interp.get("sequence") or [])
              if e.get("type") == "speech" and e.get("text")]

@@ -140,15 +140,19 @@ def entry_cell(scene: dict, room_id, from_room, near_index=None) -> tuple:
     return cells[len(cells) // 2]
 
 
-def inside_the_door(scene: dict, room_id, from_room) -> tuple:
+def inside_the_door(scene: dict, room_id, from_room, entered_at=None) -> tuple:
     """One pace into the room from its doorway onto `from_room`: where a
     walk that names no destination in the room ends, so the body is in the
-    room and not standing in its door."""
+    room and not standing in its door. `entered_at` is the doorway cell the
+    body actually came through -- on an open side that is wherever it
+    crossed, not the side's middle."""
     grid = room_grid(scene, room_id)
     cells, bearing = _door_cells(scene, room_id, from_room)
     if not cells or not bearing:
         return grid.centre()
-    x, y = [tuple(c) for c in cells][len(cells) // 2]
+    cells = [tuple(c) for c in cells]
+    x, y = (tuple(entered_at) if entered_at is not None and tuple(entered_at) in cells
+            else cells[len(cells) // 2])
     dx, dy = _inward(bearing)
     return grid.nearest((x + dx, y + dy))
 
@@ -177,6 +181,52 @@ def cell_path(scene: dict, room_id, start, goal) -> list:
             seen.add(nxt)
             heapq.heappush(frontier, (cost + 1, nxt, path + (nxt,)))
     return []
+
+
+# One storey of stair, in paces of the beat's budget: fifteen or so risers
+# and the landings, walked at a walk. The owner's number (2026-09-15).
+FLIGHT_PACES = 6
+
+
+def _edge_is_vertical(scene: dict, from_room, to_room) -> bool:
+    for room_id, other in ((from_room, to_room), (to_room, from_room)):
+        room = ((scene or {}).get("rooms") or {}).get(room_id) or {}
+        for edge in room.get("adjacent") or []:
+            if isinstance(edge, dict) and edge.get("to") == other and edge.get("vertical"):
+                return True
+    return False
+
+
+def free_cell_near(scene: dict, room_id, cell, walker=None) -> tuple:
+    """`cell`, or the nearest cell of the room that neither furniture
+    (`blocked_cells`) nor another body holds. Nobody lands in a shed: the
+    yard's east door opened one pace from a head-high shed and the arrival
+    cell was inside its footprint (Skerry Light, 2026-09-15)."""
+    grid = room_grid(scene, room_id)
+    cell = grid.nearest(tuple(cell))
+    taken = blocked_cells(scene, room_id) | held_cells(scene, room_id, walker)
+    if cell not in taken:
+        return cell
+    free = [c for c in grid.cells if c not in taken]
+    if not free:
+        return cell
+    return min(free, key=lambda c: ((c[0] - cell[0]) ** 2 + (c[1] - cell[1]) ** 2, c))
+
+
+def anchor_stand_cell(scene: dict, room_id, anchor_id, near=None):
+    """Where a body stands when it goes TO a fixture: the cells a station
+    `at` it would seat a body on (`spatial_fov._anchor_stand_cells`), the
+    one nearest `near`; None when the room has no such anchor."""
+    from world.spatial_fov import _anchor_stand_cells
+    grid = room_grid(scene, room_id)
+    cells = _anchor_stand_cells(scene, room_id, grid, str(anchor_id), {"at": str(anchor_id)})
+    cells = [tuple(c) for c in (cells or ()) if grid.contains(tuple(c))]
+    if not cells:
+        return None
+    if near is None:
+        return cells[0]
+    nx, ny = tuple(near)
+    return min(cells, key=lambda c: ((c[0] - nx) ** 2 + (c[1] - ny) ** 2, c))
 
 
 def standing_cell(scene: dict, name: str) -> tuple:
@@ -212,13 +262,12 @@ def walk(scene: dict, name: str, to_room, to_cell=None, *, paces,
     if not here or to_room not in rooms:
         return None
     if to_anchor and to_cell is None:
-        placed = (anchor_cells(scene, to_room) or {}).get(str(to_anchor))
-        if placed and placed.get("cells"):
-            cells = [tuple(c) for c in placed["cells"]]
-            x, y = cells[len(cells) // 2]
-            dx, dy = _inward(placed.get("dir")) if placed.get("dir") else (0, 0)
-            to_cell = room_grid(scene, to_room).nearest((x + dx, y + dy))
+        stand = anchor_stand_cell(scene, to_room, to_anchor)
+        if stand is not None:
+            to_cell = stand
     goal_cell = normalize_cell(list(to_cell)) if to_cell is not None else None
+    if goal_cell is not None:
+        goal_cell = free_cell_near(scene, to_room, goal_cell, name)
     route = [] if here == to_room else passable_path(scene, here, to_room, limit=None)
     if here != to_room and not route:
         return None
@@ -228,6 +277,7 @@ def walk(scene: dict, name: str, to_room, to_cell=None, *, paces,
             if from_cell is not None else standing_cell(scene, name))
     crossed = []
     came_from = None
+    entered_at = None
     walked = 0
     legs = list(route)
     while True:
@@ -235,8 +285,9 @@ def walk(scene: dict, name: str, to_room, to_cell=None, *, paces,
         if final:
             goal = goal_cell
             if goal is None:
-                goal = (inside_the_door(scene, room_id, came_from)
+                goal = (inside_the_door(scene, room_id, came_from, entered_at)
                         if came_from else cell)
+                goal = free_cell_near(scene, room_id, goal, name)
         else:
             taken = held_cells(scene, room_id, name)
             goal = door_cell(scene, room_id, legs[0], near=cell, avoid=taken)
@@ -289,12 +340,37 @@ def walk(scene: dict, name: str, to_room, to_cell=None, *, paces,
                     "crossed": crossed, "paces": walked}
         nxt = legs.pop(0)
         prev = room_id
+        # A DOORWAY IS ONE OPENING SEEN FROM TWO ROOMS. A body standing in
+        # the far room's door cell fills it as surely as one in this
+        # room's; the check above saw only this side, so a keeper planted
+        # in the stairhead was stepped past and the climber seated beside
+        # her one pace inside (Skerry Light turn 8, 2026-09-15).
+        far_cells, _fb = _door_cells(scene, nxt, prev)
+        far_cells = [tuple(c) for c in far_cells] if far_cells else []
+        if far_cells and all(c in held_cells(scene, nxt, name) for c in far_cells):
+            return {"room": room_id, "cell": cell, "arrived": False,
+                    "crossed": crossed, "paces": walked, "blocked": True,
+                    "held_by": "doorway"}
+        # A FLIGHT OF STAIRS IS NOT A DOORWAY. Crossing a vertical edge
+        # costs `FLIGHT_PACES` of the budget on top of the doorway pace; a
+        # body whose paces run out on the stair holds the stairfoot cell
+        # and the walk carries on next beat. Without it a body climbed
+        # three storeys of a tower in six paces, because each floor's
+        # stairhead sat on the wall its stairfoot did (Skerry Light,
+        # 2026-09-15).
+        if _edge_is_vertical(scene, prev, nxt):
+            if budget < FLIGHT_PACES + 1:
+                return {"room": room_id, "cell": cell, "arrived": False,
+                        "crossed": crossed, "paces": walked + budget}
+            budget -= FLIGHT_PACES
+            walked += FLIGHT_PACES
         exit_cells, _b = _door_cells(scene, prev, nxt)
         exit_cells = [tuple(c) for c in exit_cells] if exit_cells else []
         near_index = exit_cells.index(cell) if cell in exit_cells else None
         room_id = nxt
         came_from = prev
         cell = entry_cell(scene, room_id, prev, near_index=near_index)
+        entered_at = cell
         taken = held_cells(scene, room_id, name)
         if cell in taken:
             # Somebody stands just inside; step in beside them.
@@ -311,6 +387,6 @@ def walk(scene: dict, name: str, to_room, to_cell=None, *, paces,
 __all__ = [
     "BLOCKING_HEIGHT", "DEFAULT_BEAT_SECONDS", "PACES", "PACES_PER_SECOND",
     "RUN_PACES_PER_SECOND", "blocked_cells", "cell_path", "door_cell",
-    "entry_cell", "held_cells", "inside_the_door", "paces_for",
-    "standing_cell", "walk",
+    "entry_cell", "free_cell_near", "anchor_stand_cell", "held_cells", "FLIGHT_PACES",
+    "inside_the_door", "paces_for", "standing_cell", "walk",
 ]

@@ -189,6 +189,22 @@ def normalize_scene_bearings(scene: dict) -> dict:
             if back is None:
                 continue
             forward_dir, back_dir = edge.get("dir"), back.get("dir")
+            # A STAIR IS ONE SHAFT, NOT A DOOR SEEN FROM TWO SIDES. A door in
+            # a room's north wall is in its neighbour's south wall, so the two
+            # bearings are opposites. A stair's bearing is the wall its OWN
+            # end sits on, per floor: a tower stair sits on the same wall of
+            # every floor it serves, and a straight flight may climb from one
+            # wall and arrive at another. So two floors that disagree both
+            # stand, and a floor that names none takes the other's (the shaft
+            # is where it is), never its opposite. Skerry Light, 2026-09-15:
+            # every stair authored 'n' on both floors was dropped as a
+            # contradiction and the tower lost its stairs' places.
+            if edge.get("vertical") or back.get("vertical"):
+                if forward_dir and not back_dir:
+                    back["dir"] = forward_dir
+                elif back_dir and not forward_dir:
+                    edge["dir"] = back_dir
+                continue
             if forward_dir and back_dir:
                 if opposite_bearing(forward_dir) != back_dir:
                     edge.pop("dir", None)

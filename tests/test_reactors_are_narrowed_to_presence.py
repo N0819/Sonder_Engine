@@ -159,3 +159,32 @@ def test_character_step_refuses_a_mind_the_scene_places_nowhere(temp_db):
     assert out["sequence"] == [] and out["manifest"] == {}
     assert out.get("_absent_gated") is True
     assert any("Nowhere" in w for w in ctx.warnings), ctx.warnings
+
+
+def test_a_body_elsewhere_that_hears_the_line_is_planned(temp_db):
+    """Skerry Light turn 4, 2026-09-15: a loud challenge called down a
+    three-storey stairwell reached the man at its foot in full; the
+    Director's reactor list was empty and he stood there for the beat. A
+    voice that carries into another room reaches a body the Director did
+    not see; the sound field, not the pacing list, says who."""
+    from agents.runtime import build_plan
+    ctx, chat_id, ids = _bridge(temp_db, _positions())
+    temp_db.wset(chat_id, "dialogue_config", {"autonomy": 0})
+    sc = temp_db.wget(chat_id, "scene", {})
+    sc["rooms"] = {
+        "bridge": {"name": "Bridge", "extent": {"w": 8, "d": 8}, "anchors": {},
+                   "adjacent": [{"to": "annex", "barrier": "open_door", "dir": "e"}]},
+        "annex": {"name": "Annex", "extent": {"w": 8, "d": 8}, "anchors": {},
+                  "adjacent": [{"to": "bridge", "barrier": "open_door", "dir": "w"}]}}
+    temp_db.wset(chat_id, "scene", sc)
+    shouted = {"flow": {"reactors": [], "resolution_flags": {}},
+               "speech_volume": "shout",
+               "sequence": [{"type": "speech", "text": "Stop where you are!"}]}
+    keys = [key for key, _ in build_plan(shouted, ctx.cast, chat_id=chat_id)]
+    assert f"character:{ids['Elsewhere']}" in keys, keys
+    assert f"character:{ids['Here']}" not in keys, \
+        "a body in the player's own room stays the Director's call"
+    quiet = {"flow": {"reactors": [], "resolution_flags": {}},
+             "sequence": [{"type": "action", "attempt": "sits"}]}
+    keys = [key for key, _ in build_plan(quiet, ctx.cast, chat_id=chat_id)]
+    assert not any(k.startswith("character:") for k in keys)

@@ -85,6 +85,7 @@ from world.spatial_walk import (
     BLOCKING_HEIGHT, DEFAULT_BEAT_SECONDS, PACES, PACES_PER_SECOND,
     RUN_PACES_PER_SECOND, blocked_cells, cell_path, door_cell, entry_cell,
     held_cells, inside_the_door, paces_for, standing_cell, walk,
+    free_cell_near, anchor_stand_cell, FLIGHT_PACES,
 )
 from world.spatial_transit import (
     _closed_enclosure_barrier, _entity_exterior_room, _interior_entry_room,

@@ -2540,6 +2540,21 @@ def perception_establish(ctx, nonce):
         _presence_bodies(ctx, sc, [p["room"] for p in perceivers], chatter)),
         ctx)
 
+def _addressee_name(ctx, ref):
+    """A speech span's target as the name a body is placed under: a cast
+    id (`character:N`) becomes that member's name; anything else is
+    returned as written (a name, an entity id, a room)."""
+    ref = str(ref or "").strip()
+    if ref.startswith("character:") and ref[10:].isdigit():
+        for row in (getattr(ctx, "cast", None) or []):
+            try:
+                if int(row["id"]) == int(ref[10:]):
+                    return character_name_from_text(row["sheet"])
+            except (KeyError, TypeError, ValueError):
+                continue
+    return ref
+
+
 def perception_act(ctx, nonce):
     chat = ctx.chat
     interp = ctx.director_interpret
@@ -5400,15 +5415,28 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                     speech_rel = _with_comm_channel(
                         sc, speech_rel, speaker=p_name, observer=name,
                         observer_room=p.get("room"))
+                    # LOUD ENOUGH FOR THE ONE ADDRESSED, AT ONSET TOO. The
+                    # addressee is on the interpret's own span (its
+                    # `intended_target`/`targets`), so the level is solved
+                    # here from where they stand, exactly as the outcome
+                    # pass solves it; graded as a normal line, a keeper's
+                    # order pitched down three storeys reached the man it
+                    # was for as "...Then... hands... where..." (Skerry
+                    # Light turn 5, 2026-09-15).
+                    onset_volume = str(event.get("volume") or "normal")
+                    onset_level = None
+                    if onset_volume.strip().casefold() == "pitched":
+                        from world.spatial import pitched_level_db, word_for_level
+                        onset_level = pitched_level_db(
+                            sc, p_name, _addressee_name(
+                                ctx, event.get("intended_target")
+                                or (event.get("targets") or [None])[0]))
+                        onset_volume = word_for_level(onset_level)
                     entry = {
                         "speaker": p_name,
                         "text": event.get("text"),
-                        # At onset the addressee is not yet on the entry, so
-                        # a pitched line is graded as a normal one here and
-                        # solved on the outcome pass.
-                        "volume": ("normal" if str(event.get("volume") or "")
-                                   .strip().casefold() == "pitched"
-                                   else event.get("volume", "normal")),
+                        "volume": onset_volume,
+                        **({"level_db": onset_level} if onset_level is not None else {}),
                         "tone": event.get("tone", ""),
                         "visibility": event.get("visibility", "overt"),
                         "conceal_from": event.get("conceal_from") or [],
