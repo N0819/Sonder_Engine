@@ -26,7 +26,7 @@ def test_an_open_adjacent_walk_arrives_inside_the_door_on_a_cell(temp_db, monkey
 def test_a_walk_the_paces_do_not_finish_is_under_way(temp_db, monkeypatch):
     ctx = _make_ctx(temp_db, "lamp_room")
     monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {})
-    monkeypatch.setattr(movement, "paces_for", lambda seconds=None: 1)
+    monkeypatch.setattr(movement, "paces_for", lambda seconds=None, pace=None: 1)
     out = director.director_resolve(ctx, nonce=0)
     sd = out["state_diff"]
     assert sd["positions"]["The Stranger"] == "keeper_room"

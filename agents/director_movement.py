@@ -1272,7 +1272,8 @@ def _travel_record(out):
     return record
 
 
-def walk_declared(ctx, scene, route_scene, sd, out, subject, mv, prev_room):
+def walk_declared(ctx, scene, route_scene, sd, out, subject, mv, prev_room,
+                  interp=None):
     """Land a declared walk whose route is open: as far as the beat's paces
     carry the body over the cells, through the doorways on the way.
 
@@ -1284,7 +1285,10 @@ def walk_declared(ctx, scene, route_scene, sd, out, subject, mv, prev_room):
     (`_travel_continues`). Where the grid cannot answer (no room, no
     route), the room-granular rule stands: the body is in the destination.
     """
-    paces = paces_for(beat_seconds(ctx, sd))
+    pace = str(mv.get("pace") or "").strip().casefold()
+    if not pace and _declares_rapid_movement(interp):
+        pace = "run"
+    paces = paces_for(beat_seconds(ctx, sd), pace)
     # FROM WHERE THE BEAT BEGAN. `route_scene` carries this beat's diff, and
     # the diff already holds the declared destination as the body's room
     # (asserted movement enters the preview world at interpret), so the
@@ -1313,6 +1317,43 @@ def walk_declared(ctx, scene, route_scene, sd, out, subject, mv, prev_room):
             f"Walk under way: {subject} covers {result['paces']} paces toward "
             f"{mv['to_room']!r} and ends the beat in {result['room']!r} at "
             f"cell {list(result['cell'])}; silence carries the walk on.")
+    if result.get("blocked"):
+        ctx.add_warning(
+            f"Walk stopped: {subject}'s way toward {mv['to_room']!r} is held "
+            f"at {result['room']!r} cell {list(result['cell'])}"
+            + (" -- a body stands in the doorway." if result.get("held_by") == "doorway"
+               else " -- nothing walkable leads on."))
+    # EVERYONE WALKING WITH THEM WALKS. A companion the beat sent to the
+    # same destination out of the walker's own room walks the same cells
+    # at the same pace from where they stood, and ends where their paces
+    # end -- beside the walker, or short of the door if they were further
+    # from it -- instead of arriving by fiat while the walker is still on
+    # the way.
+    for other, room in list(sd.get("positions", {}).items()):
+        if other == subject or str(room) != str(mv["to_room"]):
+            continue
+        if room_of(scene, other) != prev_room:
+            continue
+        landed = walk(route_scene, other, mv["to_room"],
+                      to_cell=mv.get("to_cell"), to_anchor=mv.get("to_anchor"),
+                      paces=paces, from_room=prev_room,
+                      from_cell=standing_cell(scene, other))
+        if landed is None:
+            continue
+        sd["positions"][other] = landed["room"]
+        entry = station.get(other) if isinstance(station.get(other), dict) else {}
+        entry["cell"] = list(landed["cell"])
+        station[other] = entry
+        if not landed["arrived"]:
+            _travel_record(out)["advanced"].append({
+                "subject": other, "from": prev_room, "to": landed["room"],
+                "destination": mv["to_room"], "to_anchor": mv.get("to_anchor"),
+                "to_cell": mv.get("to_cell"), "paces": landed["paces"],
+                "underway": True})
+            ctx.add_warning(
+                f"Walk under way: {other} walks with {subject}, "
+                f"{landed['paces']} paces toward {mv['to_room']!r}, and ends "
+                f"the beat in {landed['room']!r}.")
     return result
 
 

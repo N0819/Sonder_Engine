@@ -51,6 +51,10 @@ from world.spatial_routing import passable_path
 #: An unhurried walk: 1.8 paces a second, about 1.35 m/s at the 0.75 m pace
 #: `spatial_routing._DISTANCE_UNIT_METERS` reads.
 PACES_PER_SECOND = 1.8
+#: A run: twice the walk, 3.6 paces a second (about 2.7 m/s, a steady jog).
+RUN_PACES_PER_SECOND = 3.6
+#: The paces a declaration may name: a walk (the default) or a run.
+PACES = ("walk", "run")
 #: A beat that states no span of time covers this many seconds of walking:
 #: `world.mechanics.UNCLAIMED_BEAT_SECONDS`, the clock's own silent beat.
 DEFAULT_BEAT_SECONDS = 10.0
@@ -60,15 +64,18 @@ BLOCKING_HEIGHT = "waist"
 _STEPS = ((1, 0), (-1, 0), (0, 1), (0, -1))
 
 
-def paces_for(seconds=None) -> int:
-    """How many paces a beat of `seconds` walks, at least one."""
+def paces_for(seconds=None, pace=None) -> int:
+    """How many paces a beat of `seconds` covers at `pace` (walk, or run),
+    at least one."""
     try:
         span = float(seconds) if seconds is not None else DEFAULT_BEAT_SECONDS
     except (TypeError, ValueError):
         span = DEFAULT_BEAT_SECONDS
     if span <= 0:
         span = DEFAULT_BEAT_SECONDS
-    return max(1, int(round(span * PACES_PER_SECOND)))
+    rate = RUN_PACES_PER_SECOND if str(pace or "").strip().casefold() == "run" \
+        else PACES_PER_SECOND
+    return max(1, int(round(span * rate)))
 
 
 def blocked_cells(scene: dict, room_id) -> frozenset:
@@ -85,24 +92,52 @@ def blocked_cells(scene: dict, room_id) -> frozenset:
     return frozenset(blocked)
 
 
-def door_cell(scene: dict, room_id, neighbour_id) -> Optional[tuple]:
-    """The cell of this room's doorway onto `neighbour_id`: the middle of the
-    aperture, or None when the edge has no bearing to place it by."""
+def held_cells(scene: dict, room_id, walker=None) -> frozenset:
+    """The cells of `room_id` some OTHER body stands on."""
+    me = str(walker or "").strip().casefold()
+    held = set()
+    for name, where in ((scene or {}).get("positions") or {}).items():
+        if str(where) != str(room_id) or str(name).strip().casefold() == me:
+            continue
+        cell = body_cell(scene, name)
+        if cell is not None:
+            held.add(tuple(cell))
+    return frozenset(held)
+
+
+def door_cell(scene: dict, room_id, neighbour_id, near=None,
+              avoid=()) -> Optional[tuple]:
+    """The cell of this room's doorway onto `neighbour_id`: the aperture
+    cell nearest `near` (the middle when no `near` is given), skipping the
+    cells in `avoid` -- an open side is crossed where the walker reaches
+    it, and a doorway another body fills is not crossed (None when every
+    cell of it is filled). None when the edge has no bearing to place it
+    by."""
     cells, _bearing = _door_cells(scene, room_id, neighbour_id)
     if not cells:
         return None
     cells = [tuple(c) for c in cells]
-    return cells[len(cells) // 2]
+    free = [c for c in cells if c not in set(avoid)]
+    if not free:
+        return None
+    if near is None:
+        return free[len(free) // 2]
+    nx, ny = tuple(near)
+    return min(free, key=lambda c: ((c[0] - nx) ** 2 + (c[1] - ny) ** 2, c))
 
 
-def entry_cell(scene: dict, room_id, from_room) -> tuple:
+def entry_cell(scene: dict, room_id, from_room, near_index=None) -> tuple:
     """Where a body stands the moment it has come into `room_id` from
-    `from_room`: the doorway cell it came through, or the room's centre when
-    the doorway cannot be placed."""
-    cell = door_cell(scene, room_id, from_room)
-    if cell is None:
+    `from_room`: the doorway cell it came through -- for an open side, the
+    cell across from where it crossed (`near_index` along the side) -- or
+    the room's centre when the doorway cannot be placed."""
+    cells, _bearing = _door_cells(scene, room_id, from_room)
+    if not cells:
         return room_grid(scene, room_id).centre()
-    return cell
+    cells = [tuple(c) for c in cells]
+    if near_index is not None and len(cells) > 1:
+        return cells[max(0, min(len(cells) - 1, int(near_index)))]
+    return cells[len(cells) // 2]
 
 
 def inside_the_door(scene: dict, room_id, from_room) -> tuple:
@@ -203,7 +238,16 @@ def walk(scene: dict, name: str, to_room, to_cell=None, *, paces,
                 goal = (inside_the_door(scene, room_id, came_from)
                         if came_from else cell)
         else:
-            goal = door_cell(scene, room_id, legs[0])
+            taken = held_cells(scene, room_id, name)
+            goal = door_cell(scene, room_id, legs[0], near=cell, avoid=taken)
+            all_cells, _b = _door_cells(scene, room_id, legs[0])
+            if goal is None and all_cells:
+                # THE DOORWAY IS FILLED: another body stands in every cell of
+                # it, and a body in a doorway is the door. The walk ends
+                # where it stands.
+                return {"room": room_id, "cell": cell, "arrived": False,
+                        "crossed": crossed, "paces": walked, "blocked": True,
+                        "held_by": "doorway"}
             if goal is None:
                 # A DOOR WITH NO BEARING CANNOT BE PLACED, but the room is
                 # still as wide as it is: reaching it costs half the grid's
@@ -228,6 +272,16 @@ def walk(scene: dict, name: str, to_room, to_cell=None, *, paces,
             return {"room": room_id, "cell": cell, "arrived": False,
                     "crossed": crossed, "paces": walked}
         if final:
+            # NOBODY STANDS ON ANYBODY: an arrival cell another body holds
+            # puts this one on the nearest free cell beside it.
+            taken = held_cells(scene, room_id, name)
+            if cell in taken:
+                grid = room_grid(scene, room_id)
+                free = [c for c in ((cell[0] + dx, cell[1] + dy) for dx, dy in _STEPS)
+                        if grid.contains(c) and c not in taken
+                        and c not in blocked_cells(scene, room_id)]
+                if free:
+                    cell = min(free)
             return {"room": room_id, "cell": cell, "arrived": True,
                     "crossed": crossed, "paces": walked}
         if budget <= 0:
@@ -235,16 +289,28 @@ def walk(scene: dict, name: str, to_room, to_cell=None, *, paces,
                     "crossed": crossed, "paces": walked}
         nxt = legs.pop(0)
         prev = room_id
+        exit_cells, _b = _door_cells(scene, prev, nxt)
+        exit_cells = [tuple(c) for c in exit_cells] if exit_cells else []
+        near_index = exit_cells.index(cell) if cell in exit_cells else None
         room_id = nxt
         came_from = prev
-        cell = entry_cell(scene, room_id, prev)
+        cell = entry_cell(scene, room_id, prev, near_index=near_index)
+        taken = held_cells(scene, room_id, name)
+        if cell in taken:
+            # Somebody stands just inside; step in beside them.
+            grid = room_grid(scene, room_id)
+            free = [c for c in ((cell[0] + dx, cell[1] + dy) for dx, dy in _STEPS)
+                    if grid.contains(c) and c not in taken]
+            if free:
+                cell = min(free)
         budget -= 1
         walked += 1
         crossed.append(room_id)
 
 
 __all__ = [
-    "BLOCKING_HEIGHT", "DEFAULT_BEAT_SECONDS", "PACES_PER_SECOND",
-    "blocked_cells", "cell_path", "door_cell", "entry_cell",
-    "inside_the_door", "paces_for", "standing_cell", "walk",
+    "BLOCKING_HEIGHT", "DEFAULT_BEAT_SECONDS", "PACES", "PACES_PER_SECOND",
+    "RUN_PACES_PER_SECOND", "blocked_cells", "cell_path", "door_cell",
+    "entry_cell", "held_cells", "inside_the_door", "paces_for",
+    "standing_cell", "walk",
 ]

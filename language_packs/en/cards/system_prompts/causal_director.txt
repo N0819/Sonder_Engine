@@ -24,7 +24,7 @@ Each row contains:
 - targets: ids of every body, thing or room acted on or aimed at; supply implicit ones from world_index; never the row's own source.
 - visibility, conceal_from, volume: delivery facts when relevant; volume is whisper|mutter|normal|loud|shout, or pitched: loud enough for its target, no louder.
 - look: when the span turns or looks: a body, fixture or exit id it turns to; left|right|back turns the body; around sweeps the room. Such a row names attention.
-- movement only for relocation (a body CHANGES ROOM), else null: {to_room,why,mover,arrives}; to_room is where the walk ENDS (the engine walks the legs); arrives: this beat ends there; to_anchor: the destination feature named (world_index features). An act that carries a body out of its room is a positions row.
+- movement only for relocation (a body CHANGES ROOM), else null: {to_room,why,mover,arrives}; to_room is where the walk ENDS (the engine walks the legs); arrives: this beat ends there; to_anchor: the destination feature named (world_index features); pace: run when the span runs. An act that carries a body out of its room is a positions row.
 - A newly visible interior targets the entity and names rooms, unentered or not.
 - A stated span of time routes time; a source changing loudness routes entities.
 - ability and difficulty only when a contestable event needs one.
