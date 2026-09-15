@@ -57,3 +57,16 @@ def test_the_landlady_presents_where_she_stands(temp_db, monkeypatch):
     records = background_presence_records(cid, places={"taproom"})
     assert "Mother Pascoe" in records
     assert "Naniseth Carwarnor" in records
+
+
+def test_an_honorific_in_the_name_is_not_the_bodys_noun():
+    """"Mrs Dacre" with `title: "Mrs"` composed "the elderly wiry miss" and a
+    crowd of "mrs" (scratch play 2026-09-14, chat 9); the noun is the post's."""
+    from world.charter_crowd import member_noun
+    charter = {"bodies": {"lady_patroness:featured:1": {
+        "name": "Mrs Dacre", "title": "Mrs", "home_post": "lady_patroness"}},
+        "watch": {}, "naming": {}}
+    assert member_noun(charter, "lady_patroness:featured:1") == "lady patroness"
+    charter["bodies"]["skipper:featured:1"] = {"name": "Jory Trewin", "title": "Skipper",
+                                               "home_post": "skipper"}
+    assert member_noun(charter, "skipper:featured:1") == "skipper"

@@ -211,6 +211,17 @@ def member_noun(charter, body_key, held=None):
     roles = sorted(held.get(str(body_key)) or ())
     if not roles and body.get("home_post"):
         roles = [str(body["home_post"])]
+    # AN HONORIFIC IS HOW A PERSON IS ADDRESSED, NOT WHAT THEY ARE. A body
+    # the planner named "Mrs Dacre" with `title: "Mrs"` carries its own
+    # address in its name, and reading that title as the noun composed
+    # "the elderly wiry miss with grey locks" and a crowd of "mrs"
+    # (scratch play 2026-09-14, chat 9). The same test `display_name`
+    # makes: a title the name already opens with is an address form, and
+    # the noun is the post's.
+    explicit = str(body.get("title") or "").strip()
+    name = str(body.get("name") or "").strip()
+    if explicit and name.casefold().startswith(explicit.casefold() + " "):
+        body = {k: v for k, v in body.items() if k != "title"}
     noun = str(title_for(body, roles, charter.get("naming"))
                or "").strip().casefold()
     if not noun and roles:
