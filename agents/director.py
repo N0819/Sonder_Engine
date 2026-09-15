@@ -4165,6 +4165,61 @@ def _own_words_only(declaration, said):
     return out, echoed
 
 
+def _addressees_from_speech_spans(dlog, spans, scene, cast_names, p_name):
+    """Fill an EMPTY `intended_target` on a dialogue_log line from the speech
+    span the same speaker declared with the same words.
+
+    The Director's transcription of a line carries no addressee unless the
+    model thought to write one, and its OWN ledger row for that line does:
+    the causal ledger names the target of every speech span. A line with
+    a target on the row and none on the log reached the background gate as
+    aimed at nobody, so the figure it was spoken to was never asked to
+    answer (scratch play 2026-09-14, chat 9 turn 19: "Lead on, my dear sir"
+    to a card-room gentleman, row target `josiah_crane`, log target null,
+    and the gentleman stood where he was). A target spelled as an entity id
+    or a cast id is rendered as the name the gate matches on; a speaker's
+    own id is not an addressee. A filled target is never touched.
+    """
+    entities = (scene or {}).get("entities") or {}
+
+    def _display(ref):
+        ref = str(ref or "").strip()
+        if ref.startswith("character:") and ref[10:].isdigit():
+            return cast_names.get(int(ref[10:])) or ref
+        if ref.startswith("persona:"):
+            return p_name
+        ent = entities.get(ref)
+        if isinstance(ent, dict) and str(ent.get("name") or "").strip():
+            return str(ent["name"]).strip()
+        return ref
+
+    speech = []
+    for element in spans or []:
+        if not isinstance(element, dict) or element.get("type") != "speech":
+            continue
+        body = _quote_body(str(element.get("text") or element.get("attempt")
+                               or element.get("event") or ""))
+        if not body:
+            continue
+        actor = _display(element.get("actor")
+                         or element.get("source_entity_id") or "")
+        targets = [_display(t) for t in (element.get("targets") or []) if t]
+        targets = [t for t in targets
+                   if t and t.casefold() != str(actor).casefold()]
+        speech.append((str(actor).casefold(), body, targets))
+    for d in dlog:
+        if not isinstance(d, dict) or d.get("intended_target"):
+            continue
+        body = _quote_body(str(d.get("exact_quote") or ""))
+        speaker = str(d.get("speaker") or "").strip().casefold()
+        if not body or not speaker:
+            continue
+        for actor, span_body, targets in speech:
+            if actor == speaker and span_body == body and targets:
+                d["intended_target"] = targets[0]
+                break
+
+
 def _address_from_spans(out, figure_names, cast_info):
     """Fill an EMPTY `flow.addressed_to` from the speech spans' targets.
 
@@ -6373,6 +6428,15 @@ def director_resolve(ctx, nonce, _corrections=None):
                              "visibility": s.get("visibility", "overt"),
                              "conceal_from": s.get("conceal_from") or []})
                 existing_keys.add((str(cname).casefold(), body))
+
+    # After every line is on the log -- the model's transcription and the
+    # deterministic re-append of each declaration -- so a character's own
+    # line, whose declaration named nobody, still takes the row's target.
+    _addressees_from_speech_spans(
+        dlog, out.get("sequence") or [], sc,
+        {int(row["id"]): character_name_from_text(row["sheet"])
+         for row in ctx.cast if str(row["id"]).isdigit()},
+        p_name)
 
     for d in dlog:
         eq = d.get("exact_quote", "")
