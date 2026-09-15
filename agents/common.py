@@ -4383,6 +4383,11 @@ def norm_sequence(out, warn=None):
                     "commitment": commitment,
                     "verb": e.get("verb", ""),
                     "stage": e.get("stage", "immediate"),
+                    # WHERE THE ACT LOOKS OR TURNS: carried through, so the
+                    # commit can set the facing from it. The first live
+                    # `look: around` was written by the model, kept by the
+                    # ledger, and lost here (2026-09-15).
+                    "look": str(e.get("look") or "").strip(),
                     "intended_effects": intended_effects,
                     "asserted_effects": asserted_effects,
                     "phase_id": str(e.get("phase_id") or ""),

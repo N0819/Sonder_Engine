@@ -1158,6 +1158,12 @@ class ActionElement(LenientModel):
         lambda cls, v: normalize_action_stage(v)
     )
     targets: list[str] = Field(default_factory=list)
+    # WHERE THE ACT LOOKS OR TURNS (the owner, 2026-09-15): a body, fixture
+    # or exit id the actor turns to face; `left`, `right` or `back` for a
+    # turn of the body; `around` for a sweep of the room. The commit sets
+    # the facing from it (`spatial_frames.look_bearing`) and perception
+    # lifts the cone for a sweep. Empty when the act looks nowhere new.
+    look: str = ""
     intended_effects: list[IntendedEffect] = Field(default_factory=list)
     asserted_effects: list[IntendedEffect] = Field(default_factory=list)
     visibility: ActionVisibility = ActionVisibility.overt
@@ -1378,6 +1384,10 @@ class CausalLedgerEntry(LenientModel):
     conceal_from: list[str] = Field(default_factory=list)
     volume: str = "normal"
     movement: Optional[dict] = None
+    # Where the span looks or turns (`ActionElement.look`): declared here
+    # because an undeclared field is dropped by the validation round-trip,
+    # which is how the first live `look` never reached the commit.
+    look: str = ""
     ability: str = ""
     difficulty: str = ""
     resolution_notes: str = ""
@@ -6166,6 +6176,7 @@ def semantic_output_errors(
         # here rather than imported: `agents` imports this module, so reading
         # `director_scopes.ENGINE_CATEGORIES` back would close a cycle.
         allowed_categories.add("speech")
+        allowed_categories.add("attention")
         # A HAND'S NAME IS A COARSER ANSWER TO "WHICH LEDGER", NOT A WRONG
         # ONE. `manifest_category_targets` has accepted one for exactly that
         # reason since 2026-09-09 -- it grants the hand its story's channels

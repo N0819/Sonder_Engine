@@ -500,6 +500,13 @@ def effective_facing(scene: dict, name: str) -> Optional[str]:
     infer_facing. Never guessed: no focus, no beared anchor -> None, and
     every egocentric consumer keeps asserting no direction.
     """
+    # A SWEEP FACES NOWHERE FOR ITS BEAT: perception marks the observers
+    # who looked around (`scene["_sweeping"]`, a list on the beat's working
+    # copy, never persisted), and with no facing the cone subtracts
+    # nothing for them.
+    if str(name).casefold() in {str(n).casefold()
+                                for n in (scene.get("_sweeping") or ())}:
+        return None
     rec = _ci_get(scene.get("orientation") or {}, name) or {}
     facing = normalize_bearing(rec.get("facing"))
     if facing:
@@ -514,6 +521,13 @@ def effective_facing(scene: dict, name: str) -> Optional[str]:
     if focus.get("kind") in ("target", "entity"):
         if room_of(scene, ref) != room:
             return None
+        # FROM CELL TO CELL, when both stand on cells of the room.
+        from world.spatial_fov import bearing_between, body_cell
+        mine, theirs = body_cell(scene, name), body_cell(scene, ref)
+        if mine is not None and theirs is not None:
+            toward = bearing_between(tuple(mine), tuple(theirs))
+            if toward:
+                return toward
         t_at = effective_station(scene, ref).get("at")
         if not t_at or t_at == effective_station(scene, name).get("at"):
             # Side by side at the same anchor: its room bearing is not the

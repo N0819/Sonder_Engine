@@ -3074,6 +3074,9 @@ def perception_outcome(ctx, nonce):
     sc = copy.deepcopy(composed.scene)
     substance_events = resolve_substance_ops(
         prev_scene, diff.get("substance_ops"))
+    # The sweep marker was this pass's alone (`effective_facing` reads it);
+    # the scene handed on faces as it faces.
+    sc.pop("_sweeping", None)
     ctx._extra["outcome_scene"] = sc
 
     # Prefer re-resolving against the just-merged (post-resolution) scene
@@ -3349,6 +3352,14 @@ def _explicit_look_intent(interp):
         return False
     if str(interp.get("location_query") or "").strip():
         return True
+    # A DECLARED LOOK FIRST (the owner, 2026-09-15): the interpret's row says
+    # `look: around` when the player sweeps the room, and that field speaks
+    # for a character too. The pack's look-verb table stays as the fallback
+    # for a model that writes the act and omits the field.
+    for event in interp.get("sequence") or []:
+        if isinstance(event, dict) \
+                and str(event.get("look") or "").strip().casefold() == "around":
+            return True
     for event in interp.get("sequence") or []:
         if not isinstance(event, dict) or event.get("type") != "action":
             continue
@@ -3359,6 +3370,34 @@ def _explicit_look_intent(interp):
         if verb and _ling("_LOOK_VERBS").search(verb):
             return True
     return False
+
+
+def swept_this_beat(res, p_name, cast, interp=None):
+    """The names of every body whose act this beat swept the room
+    (`look: around` on the resolve's sequence): the player's and the
+    cast's alike."""
+    by_id = {}
+    for row in cast or ():
+        try:
+            by_id[str(row["id"])] = character_name_from_text(row["sheet"])
+        except Exception:
+            continue
+    swept = set()
+    rows = list((res or {}).get("sequence") or [])
+    rows.extend((interp or {}).get("sequence") or [])
+    for element in rows:
+        if not isinstance(element, dict):
+            continue
+        if str(element.get("look") or "").strip().casefold() != "around":
+            continue
+        actor = str(element.get("actor") or element.get("source_entity_id") or "")
+        if actor.startswith("persona:") or actor in ("", "self", "player"):
+            swept.add(str(p_name or ""))
+        elif actor.startswith("character:"):
+            swept.add(by_id.get(actor[10:]) or "")
+        else:
+            swept.add(actor)
+    return {n for n in swept if n}
 
 
 def _composer_prev_ledger(ctx):
@@ -6004,6 +6043,11 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
     base_ledger = dict(_composer_prev_ledger(ctx))
     base_ledger.update(ctx.get("_composer_turn_ledger") or {})
     full_player_render = _explicit_look_intent(interp)
+    # Who looked around this beat: the cone subtracts nothing for them
+    # (`effective_facing` reads the marker on this working copy).
+    _swept_names = swept_this_beat(res, p_name, ctx.cast, interp)
+    if _swept_names:
+        sc["_sweeping"] = sorted(_swept_names)
     _ubiq = _ubiquitous_names(sc)
 
     # EVERY line this beat produced, until a view takes it.
@@ -6047,7 +6091,10 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
         else:
             others = [b for b in bodies
                       if not _is_the_observer(sc, b["name"], name)]
-            p["sweep"] = is_player_view and full_player_render
+            # A SWEEP IS A SWEEP FOR WHOEVER MADE IT: the player's full
+            # re-render, or any body whose act this beat looked around.
+            p["sweep"] = (is_player_view and full_player_render) \
+                or name in _swept_names
             display_map = composer.observer_display_map(
                 sc, name, others, known, p.get("sense_card"))
             self_forms = _composer_self_forms(

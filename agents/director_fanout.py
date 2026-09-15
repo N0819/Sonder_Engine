@@ -269,7 +269,7 @@ def _interpret_beat_view(ctx, out, p_name):
                       "act", "content", "phase_id", "phase", "depends_on",
                       "participants", "requires_contacts", "referents",
                       "targets", "asserted_effects", "intended_effects",
-                      "volume")
+                      "volume", "look")
             if element.get(k) is not None
         })
     declared = {}

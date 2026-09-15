@@ -476,7 +476,10 @@ _CHANNEL_SPECIALISTS = {}
 #: Kept here beside `_CHANNEL_SPECIALISTS` because this is the module that
 #: owns the ownership table, and a second table saying who owns what is the
 #: failure this file already carries three notes about.
-ENGINE_CATEGORIES = frozenset({"speech"})
+#: The categories no hand owns because the ENGINE settles them: `speech`
+#: (the delivered line) and, since 2026-09-15, `attention` -- a row that
+#: turns or looks, whose `look` field the commit reads into the facing.
+ENGINE_CATEGORIES = frozenset({"speech", "attention"})
 
 
 def _default_channel_gate(facts):
