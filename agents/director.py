@@ -94,6 +94,7 @@ from world.spatial import (
 )
 
 from .common import (
+    substitute_player_token,
     _identity_token_set,
     merge_player_state_assertions,
     preview_player_state_assertions,
@@ -242,6 +243,7 @@ from .director_floors import (
     _scan_for_untracked_restraint,
 )
 from .director_evidence import (
+    restore_declared_quotes,
     _category_names,
     beat_event_ledger,
     beat_item_records,
@@ -457,6 +459,8 @@ def director_establish(ctx, nonce):
     # Warning-only re-normalization; strict schema+semantic validation
     # (with repair/fallback/raise) already ran inside _agent_json.
     out, warnings = validate_llm_output("director_establish", out)
+    # THE PLAYER'S SLOT IS THE PERSONA (`substitute_player_token`).
+    out = substitute_player_token(out, player_name)
     ctx.warnings.extend(warnings)
 
     attire = out.get("attire") or {}
@@ -1483,6 +1487,9 @@ def director_interpret(ctx, nonce):
         _interpret_model_payload,
         max_tokens=None,   # the configured ceiling; see complete_validated_json
     )
+    # A QUOTED SPAN IN THE INPUT IS THE PLAYER'S LINE, whatever row the
+    # author filed it under (`restore_declared_quotes`).
+    restore_declared_quotes(out, ctx.input, warn=ctx.add_warning)
     normalize_causal_ledger(
         out, authority_by_entity(_event_inputs), _interpret_identities)
     for _door_row in _route_doorway_rows(sc, out, _causal_rooms):

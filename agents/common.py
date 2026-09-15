@@ -6265,6 +6265,39 @@ def repair_narrated_speech_elements(out):
     return changed
 
 
+def substitute_player_token(obj, player_name):
+    """Every `{{PLAYER}}` in a stage's output is the persona.
+
+    The token marks the player's slot in greetings and in the establish
+    example, and the model copies it: an opening wrote `positions:
+    {"{{PLAYER}}": ...}`, the commit tracked "{{PLAYER}}" as a background
+    presence with an open person need, and three beats later the resolve
+    was addressing lines to "{{PLAYER}}" while the persona sat unbound (the
+    owner's chat 125, 2026-09-14). Keys and string values alike, whole-value
+    equality (case-insensitive) or the token inside a longer string; the
+    structure is returned rebuilt, never mutated.
+    """
+    from story.importers import PLAYER_TOKEN
+    name = str(player_name or "").strip()
+    if not name:
+        return obj
+    token_cf = PLAYER_TOKEN.casefold()
+
+    def fix(value):
+        if isinstance(value, dict):
+            return {fix(k): fix(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [fix(v) for v in value]
+        if isinstance(value, str):
+            if value.strip().casefold() == token_cf:
+                return name
+            if token_cf in value.casefold():
+                return re.sub(re.escape(PLAYER_TOKEN), name, value,
+                              flags=re.IGNORECASE)
+        return value
+    return fix(obj)
+
+
 def player_speech_lines(interp):
     lines = [e.get("text") for e in (interp.get("sequence") or [])
              if e.get("type") == "speech" and e.get("text")]
