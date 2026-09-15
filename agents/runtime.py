@@ -36,7 +36,8 @@ from story.scene import (
 
 from .background import background_react
 from .character import character_step
-from .common import _assert_plan_materialized, _dict, _present_cast_bodies
+from .common import (_assert_plan_materialized, _dict, _present_cast_bodies,
+                     player_speech_lines, widen_reactors_to_hearers)
 from .director import director_establish, director_interpret, director_resolve
 from .loops import interaction_loop, reaction_loop, rehydrate_loop_views
 from .mapping import compile_world_context
@@ -860,6 +861,20 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
         _present = {b["id"] for b in _present_cast_bodies(
             get_scene(chat_id), cast_rows)}
         reactors = [cid for cid in reactors if cid in _present]
+
+    # A VOICE THAT CARRIES INTO ANOTHER ROOM REACHES A BODY THE DIRECTOR
+    # DID NOT SEE. `flow.reactors` is the Director's pacing judgement of
+    # the room the player stands in; the sound field is the engine's
+    # knowledge of where a line goes past it. A cast body elsewhere that
+    # hears the player's line this beat -- a fragment or the whole of it,
+    # by the same `hear_level` perception will render it with -- is asked
+    # to act on it, as the player would expect of a person called to.
+    # Skerry Light turn 4 (2026-09-15): a loud challenge called down a
+    # three-storey stairwell reached the man at its foot in full, the
+    # Director's reactor list was empty, and he stood there for the beat.
+    # Bodies in the player's own room are the Director's call, as before.
+    if chat_id is not None and player_speech_lines(interp):
+        reactors = widen_reactors_to_hearers(chat_id, cast_rows, interp, reactors)
 
     autonomy = 0
     if chat_id is not None:

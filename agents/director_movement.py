@@ -1288,6 +1288,16 @@ def walk_declared(ctx, scene, route_scene, sd, out, subject, mv, prev_room,
     pace = str(mv.get("pace") or "").strip().casefold()
     if not pace and _declares_rapid_movement(interp):
         pace = "run"
+    # THE HAND'S STATION IS THE WALK'S DESTINATION. The spatial hand writes
+    # where the mover stops (`stations[mover].at`) with the same beat's
+    # ledger in front of it; a declaration that names no feature walks to
+    # that fixture rather than to one pace inside the door (Skerry Light
+    # turn 1: the hand said "at the shed", the walk ended inside the door).
+    if not mv.get("to_anchor") and mv.get("to_cell") is None:
+        _st = (sd.get("stations") or {}).get(subject)
+        if isinstance(_st, dict) and str(_st.get("at") or "").strip() \
+                and _st.get("cell") is None:
+            mv = {**mv, "to_anchor": str(_st["at"]).strip()}
     paces = paces_for(beat_seconds(ctx, sd), pace)
     # FROM WHERE THE BEAT BEGAN. `route_scene` carries this beat's diff, and
     # the diff already holds the declared destination as the body's room
@@ -1527,9 +1537,19 @@ def _travel_continues(ctx, out, sc, sd, interp, p_name):
         sd.setdefault("positions", {})[subject] = landed["room"]
         sd.setdefault("stations", {}).setdefault(subject, {})[
             "cell"] = list(landed["cell"])
+        # THE WALK KEEPS ITS END. The feature or cell the declaration
+        # named rides every continued leg's record, so the commit's
+        # approach still says where in the room the walk ends and the last
+        # leg lands there rather than one pace inside the opening (Skerry
+        # Light turn 12, 2026-09-15: `to_anchor: path_track` was dropped on
+        # the second leg and the keeper arrived at the yard wall's gap).
         record["advanced"].append({"subject": subject, "from": here,
                                    "to": landed["room"],
                                    "destination": destination,
+                                   **({"to_anchor": leg.get("to_anchor")}
+                                      if leg.get("to_anchor") else {}),
+                                   **({"to_cell": leg.get("to_cell")}
+                                      if leg.get("to_cell") is not None else {}),
                                    "paces": landed["paces"],
                                    "underway": not landed["arrived"]})
         if landed["arrived"]:

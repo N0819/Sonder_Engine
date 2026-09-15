@@ -94,6 +94,8 @@ from world.spatial import (
 )
 
 from .common import (
+    _unknown_actor_label,
+    observer_label_fn,
     substitute_player_token,
     _identity_token_set,
     merge_player_state_assertions,
@@ -4277,9 +4279,69 @@ def _address_from_spans(out, figure_names, cast_info):
     flow["addressed_to_refs"] = ints + refs
 
 
-def _take_declaration(decls, char_speech, char_actions, declaration):
+def _bodies_addressed_as(ctx, scene, speaker, addresses):
+    """The bodies a speaker's `interaction.addresses` name, as THIS speaker
+    may name them: a form that ends in a body's name, or in the label the
+    identity gate hands this speaker for that body, addresses it.
+
+    A mind that has not been told a name still answers the person: it
+    writes the address in the words its own view gave it ("the unfamiliar
+    person"), and a speech row carrying no `targets` then reached the log
+    aimed at nobody -- so a line pitched to that person was pitched to
+    nobody, solved as normal, and never climbed the tower it was answering
+    (Skerry Light turn 3, 2026-09-15: "Coming." to the keeper three floors
+    up, `addresses: ["the unfamiliar person"]`, `targets: []`, heard by
+    no one). The label is `observer_label_fn`'s, the one floor perception
+    and every payload share, so nothing here names anyone the view did
+    not."""
+    forms = [str(a or "").strip().casefold() for a in (addresses or []) if str(a or "").strip()]
+    if not forms:
+        return []
+    try:
+        label_of = observer_label_fn(ctx.chat, speaker, ctx.cast)
+        if scene is None:
+            scene = get_scene(ctx.chat["id"], ctx.chat)
+    except Exception:
+        return []
+    found, by_voice = [], []
+    for body in list((scene or {}).get("positions") or {}):
+        body = str(body)
+        if body == speaker or body in found:
+            continue
+        keys = {body.casefold()}
+        seen_as = str(label_of(body) or "").strip().casefold()
+        stranger = bool(seen_as) and seen_as != body.casefold()
+        if seen_as:
+            keys.add(seen_as)
+            keys.add(re.sub(r"^(?:the|a|an)\s+", "", seen_as))
+
+        def _names(form, keys=keys):
+            return any(form == k or re.search(r"(?:^|[\s.,;:!?\"])" + re.escape(k) + r"$", form)
+                       for k in keys if k)
+        if any(_names(form) for form in forms):
+            found.append(body)
+            continue
+        # A VOICE HAS NO APPEARANCE. A body the speaker only HEARD wears
+        # the bare stranger label in the view (no build, dress or bearing
+        # to describe it by), and the speaker answers it by that label.
+        # It names that body when it is the one stranger it could name.
+        if stranger:
+            voice = str(_unknown_actor_label(body) or "").strip().casefold()
+            if voice and any(_names(form, {voice, re.sub(r"^(?:the|a|an)\s+", "", voice)})
+                             for form in forms):
+                by_voice.append(body)
+    if not found and len(by_voice) == 1:
+        found = by_voice
+    return found
+
+
+def _take_declaration(decls, char_speech, char_actions, declaration,
+                      address_bodies=None):
     """File one autonomous declaration -- a character's, a reaction's, or an
-    onscreen charter body's -- into the three tables resolve reads."""
+    onscreen charter body's -- into the three tables resolve reads.
+    `address_bodies(addresses)` names the bodies a declaration's
+    `interaction.addresses` reach, for a speech row that carries no target
+    of its own."""
     char_id = declaration.get("char_id")
     name = declaration.get("name")
     sequence = declaration.get("sequence") or []
@@ -4299,6 +4361,14 @@ def _take_declaration(decls, char_speech, char_actions, declaration):
                  "conceal_from": e.get("conceal_from") or [],
                  "targets": e.get("targets") or []}
                 for e in sequence if e.get("type") == "speech" and e.get("text")]
+    if speeches and address_bodies is not None and any(not sp["targets"] for sp in speeches):
+        interaction = declaration.get("interaction")
+        addressed = address_bodies((interaction or {}).get("addresses")
+                                   if isinstance(interaction, dict) else None)
+        if addressed:
+            for sp in speeches:
+                if not sp["targets"]:
+                    sp["targets"] = list(addressed)
     if speeches:
         char_speech.setdefault(name, []).extend(speeches)
     for event in sequence:
@@ -4392,7 +4462,10 @@ def director_resolve(ctx, nonce, _corrections=None):
                             % (_declaration.get("name") or "?", _note))
 
     for declaration in all_declarations:
-        _take_declaration(decls, char_speech, char_actions, declaration)
+        _take_declaration(
+            decls, char_speech, char_actions, declaration,
+            address_bodies=lambda addresses, _who=declaration.get("name"):
+                _bodies_addressed_as(ctx, None, _who, addresses))
 
     for c in ctx.cast:
         if int(c["id"]) in covered_ids:
@@ -4421,6 +4494,15 @@ def director_resolve(ctx, nonce, _corrections=None):
             if not speeches and dk.get("speech"):
                 speeches.append({"text": dk["speech"], "volume": "normal", "tone": "",
                                   "visibility": "overt", "conceal_from": []})
+            if speeches and any(not sp.get("targets") for sp in speeches):
+                _interaction = dk.get("interaction")
+                _addressed = _bodies_addressed_as(
+                    ctx, None, dk.get("name") or cname,
+                    (_interaction or {}).get("addresses")
+                    if isinstance(_interaction, dict) else None)
+                for sp in speeches:
+                    if not sp.get("targets") and _addressed:
+                        sp["targets"] = list(_addressed)
             if speeches:
                 char_speech.setdefault(cname, []).extend(speeches)
             # The SEQUENCE first, exactly as the loop branch above reads it.
@@ -5891,6 +5973,38 @@ def director_resolve(ctx, nonce, _corrections=None):
                     f"'{mv['to_room']}' -- the player rides inside the "
                     "vehicle's interior; only the vehicle's position moves."
                 )
+
+    # EVERY MOVER WALKS, NOT ONLY THE BEAT'S FIRST. `movement_for_resolve`
+    # names one declaration -- the player's, or the body the player drives
+    # -- and only that body was walked over the cells; a cast member whose
+    # own ledger row carried a movement was seated by the merge one pace
+    # inside the door it came through, wherever the row said it went
+    # (Skerry Light turn 3, 2026-09-15: "to the foot of the stair",
+    # `to_anchor: stair_foot`, landed at the yard door on the far wall).
+    # Walked only where the hands' merged diff already places the body in
+    # the row's destination: the arrival is theirs to assert, the cell is
+    # the walker's to find.
+    _walked = {move_subject} if move_subject else set()
+    _walked.add(p_name)
+    for _row in out.get("causal_ledger") or []:
+        _rmv = _row.get("movement") if isinstance(_row, dict) else None
+        if not isinstance(_rmv, dict) or not _rmv.get("to_room"):
+            continue
+        _who, _room_before, _eid = _resolve_movement_mover(sc, sd, _rmv, p_name)
+        if not _who or _who in _walked:
+            continue
+        # A PERSON WALKS; A THING IS MOVED. A cast member has an entity
+        # record too (kind `person`), so the record alone does not make a
+        # mover a vehicle whose occupants ride.
+        _ent = (sc.get("entities") or {}).get(_eid) if _eid else None
+        if isinstance(_ent, dict) \
+                and str(_ent.get("kind") or "").strip().casefold() != "person":
+            continue
+        if sd["positions"].get(_who) != _rmv["to_room"]:
+            continue
+        _walked.add(_who)
+        walk_declared(ctx, sc, route_scene_for(ctx, sc, sd), sd, out, _who,
+                      _rmv, _room_before or room_of(sc, _who), interp=interp)
 
     # Durable following supplies ordinary group travel, bounded by pace and
     # route. It runs after the movement backstop has finalized the player's

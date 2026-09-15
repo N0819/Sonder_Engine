@@ -363,3 +363,20 @@ def test_a_genuine_disagreement_resolves_to_the_players_room(temp_db,
     assert positions.get("The Stranger") in (None, "lobby"), (
         "the player was relocated by somebody else's station anchor")
     assert positions.get("Mara") == "lobby"
+
+
+def test_a_continued_walk_keeps_the_end_it_was_given(temp_db, monkeypatch):
+    """Skerry Light turn 12, 2026-09-15: `to_anchor: path_track` was dropped
+    on the second leg's record, so the commit's approach forgot it and the
+    last leg landed one pace inside the opening instead of at the track."""
+    import agents.director as director
+    import agents.director_movement as movement
+
+    ctx = _walk_ctx(temp_db, approach={"The Stranger": {"to_room": "lobby",
+                                                        "to_anchor": "desk"}})
+    monkeypatch.setattr(director, "_agent_json",
+                        fanout_resolve_agent(_resolved()))
+    monkeypatch.setattr(movement, "paces_for", lambda seconds=None, pace=None: 4)
+    out = director.director_resolve(ctx, nonce=0)
+    leg = next(a for a in out["travel"]["advanced"] if a["subject"] == "The Stranger")
+    assert leg["underway"] and leg["to_anchor"] == "desk", leg

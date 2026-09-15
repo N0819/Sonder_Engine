@@ -44,7 +44,8 @@ from world.spatial import (THRESHOLD_CROSSING_BEATS, _SUBJECT_KEYED, _anchor_dir
                      anchor_bearing_of, effective_anchors, has_visual,
                      hear_level, is_alarming, room_of, room_of_record,
                      rooms_adjacent, sound_path, sound_walk_level, spatial_rel,
-                     travel_bearing, TURNS, turn_bearing, normalize_bearing)
+                     travel_bearing, TURNS, turn_bearing, normalize_bearing,
+                     opposite_bearing)
 
 NOT_A_ZONE = None
 
@@ -769,6 +770,29 @@ def _cells_bearing(scene, name, other):
     return bearing_between(tuple(mine), tuple(theirs))
 
 
+def arrival_facing(scene, from_room, to_room):
+    """Which way a body faces on arriving in `to_room` from `from_room`:
+    the way it travelled through a door, and INTO THE ROOM off a stair.
+    A door's two bearings are opposites, so the travel bearing is also the
+    bearing away from the wall just crossed. A stair is one shaft and
+    keeps its wall on both floors, so a body that climbed the north stair
+    stands at the upper floor's north wall and faces south -- the travel
+    bearing would have it facing the wall (Skerry Light turn 3,
+    2026-09-15: arrived up the north stair, 'n', the gallery door on the
+    south wall rendered "to my right")."""
+    rooms = (scene or {}).get("rooms") or {}
+    back = next((e for e in ((rooms.get(to_room) or {}).get("adjacent") or [])
+                 if isinstance(e, dict) and e.get("to") == from_room), None)
+    forward = next((e for e in ((rooms.get(from_room) or {}).get("adjacent") or [])
+                    if isinstance(e, dict) and e.get("to") == to_room), None)
+    vertical = bool((back or {}).get("vertical") or (forward or {}).get("vertical"))
+    if vertical:
+        wall = normalize_bearing((back or {}).get("dir")) \
+            or normalize_bearing((forward or {}).get("dir"))
+        return opposite_bearing(wall) if wall else None
+    return travel_bearing(scene, from_room, to_room)
+
+
 def infer_facing(chat_id, frame_id, prev_scene, new_scene, cast_names,
                  looks=None, turn_idx=None):
     """Deterministic per-character `facing` -- an ABSOLUTE compass bearing --
@@ -818,19 +842,27 @@ def infer_facing(chat_id, frame_id, prev_scene, new_scene, cast_names,
             # facing and marks the beat, so perception lifts the cone for
             # it once.
             faced, focus = look_bearing(new_scene, name, declared, prev_facing)
-            if str(declared).strip().casefold() == "around":
+            sweep = str(declared).strip().casefold() == "around"
+            if sweep:
                 rec["swept_turn"] = turn_idx
             elif focus:
                 rec["focus"] = focus
-            if faced is not None and faced != prev_facing:
-                rec["facing"] = faced
-                changed = True
-            continue
+            if faced is not None and not sweep:
+                if faced != prev_facing:
+                    rec["facing"] = faced
+                    changed = True
+                continue
+            # A LOOK THAT SETS NO BEARING -- a sweep, or a target the room
+            # cannot place -- leaves the facing to the inferences below: a
+            # body that climbed in through the north wall and looked around
+            # faces south, not whatever it faced on the floor below (Skerry
+            # Light turn 3, 2026-09-15: arrived up a north stair, swept,
+            # kept 'e', and the page put the south door "to my right").
         if moved:
             if rec.get("came_from") is None:
                 new_facing = None                 # disoriented jump
             else:
-                new_facing = travel_bearing(new_scene, old_r, new_r)
+                new_facing = arrival_facing(new_scene, old_r, new_r)
         else:
             focus = rec.get("focus") or {}
             ref = focus.get("ref")

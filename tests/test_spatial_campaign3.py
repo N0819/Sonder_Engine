@@ -76,8 +76,12 @@ def test_a_stair_and_a_doorway_on_one_bearing_both_keep_it():
     assert _edge(scene, "guild_hall", "gallery")["dir"] == "s"
     assert _edge(scene, "guild_hall", "gallery")["vertical"] == "up"
     assert _edge(scene, "guild_hall", "yard")["dir"] == "s"
-    # The reciprocals the pass writes carry it too.
-    assert _edge(scene, "gallery", "guild_hall")["dir"] == "n"
+    # The reciprocals the pass writes carry it too. A DOOR's far side is
+    # the opposite wall; a STAIR is one shaft and keeps its wall on the
+    # floor it climbs to (Skerry Light, 2026-09-15: both floors authored
+    # 'n' were dropped as a contradiction), so the gallery's stairhead
+    # sits on the gallery's south wall too.
+    assert _edge(scene, "gallery", "guild_hall")["dir"] == "s"
     assert _edge(scene, "yard", "guild_hall")["dir"] == "n"
 
 

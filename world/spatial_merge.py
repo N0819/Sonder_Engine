@@ -1483,7 +1483,9 @@ def _seat_arrivals(merged, positions_before, incoming_stations):
         cell = said.get(str(name).strip().casefold())
         if cell is None:
             try:
-                cell = list(inside_the_door(merged, str(now), str(was)))
+                from world.spatial_walk import free_cell_near
+                cell = list(free_cell_near(
+                    merged, str(now), inside_the_door(merged, str(now), str(was)), name))
             except Exception:
                 continue
         st = stations.get(name)
