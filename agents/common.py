@@ -10216,7 +10216,7 @@ def _dialogue_tokens(view, p_lines):
     SPOKEN LINE", and had already failed three times on that beat with the
     dropped lines named in correction notes.
 
-    The player's own lines are excluded, because PLAYER ECHO RULE requires
+    The player's own lines are excluded, because the current_narration framing (the player's own line is already on the page, 2026-09-14; the named PLAYER ECHO RULE is gone) requires
     their ABSENCE -- handing them back as tokens to place would push the model
     to violate one rule to satisfy the other.
     """
@@ -10278,7 +10278,7 @@ def _check_speech_marking(prose, view_quotes, excluded_bodies=()):
     a short line is invisible to it and the marks it skips then pair with
     their neighbours.
 
-    The player's own lines are excluded: PLAYER ECHO RULE requires their
+    The player's own lines are excluded: the current_narration framing (the player's own line is already on the page, 2026-09-14; the named PLAYER ECHO RULE is gone) requires their
     ABSENCE, so their marking is a different rule's business.
     """
     scan = re.sub(r"\s+", " ",
@@ -10460,7 +10460,7 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
     # about X..." text and are exempt). DIALOGUE FIDELITY requires every such
     # line to survive verbatim -- if the narrator drops, truncates, or
     # paraphrases a quote, the exact substring will no longer be found.
-    # EXCEPT the player's own declared lines: PLAYER ECHO RULE requires those
+    # EXCEPT the player's own declared lines: the current_narration framing (the player's own line is already on the page, 2026-09-14; the named PLAYER ECHO RULE is gone) requires those
     # to be *excluded*, the exact opposite requirement, so they must never be
     # scored against this check -- otherwise the two rules contradict each
     # other and the retry loop would be pushing the model to violate one to

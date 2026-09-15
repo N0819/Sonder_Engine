@@ -42,7 +42,7 @@ class TestWhichLinesBecomeTokens:
         assert "That could be a countdown, Captain." in lines
 
     def test_the_players_own_lines_are_excluded(self):
-        """PLAYER ECHO RULE requires their ABSENCE. Handing them back as
+        """the current_narration framing (the player's own line is already on the page, 2026-09-14; the named PLAYER ECHO RULE is gone) requires their ABSENCE. Handing them back as
         tokens to place would push the model to break one rule to keep the
         other -- the same contradiction the fidelity check already avoids."""
         lines = _dialogue_tokens(
