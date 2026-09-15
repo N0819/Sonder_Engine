@@ -3136,8 +3136,10 @@ def act_percept(scene, event, observer_name, actor_name, rel, *,
                      if (_bearing := _sound_bearing_phrase(
                          scene, observer_name, actor_name)) else {})},
             salience=0.4, suddenness=0.3, order_key=order_key,
-            dedupe_key="act-heard:" + _short_hash(
-                event.get("event_id") or "", actor_name))
+            # ONE "SOMETHING MOVES" PER BODY PER BEAT: three unseen acts by
+            # one body behind you are one fact, not three lines (Hollin
+            # Mill turn 11, 2026-09-15, "Something moves behind you." x3).
+            dedupe_key="act-heard:" + _short_hash(actor_name))
     if not can_see or sight == "none":
         note_step_decision("act_percept", _who, "refused",
                            "observer cannot see (sight gate)")
@@ -3939,7 +3941,11 @@ def _render_openings(openings):
         if state != "seen" or not room:
             parts.append(_cap(_en("opening_bare", opening=desc)))
             continue
-        parts.append(_cap(_en("opening_seen", opening=desc, room=room)))
+        if opening.get("way") == "overlook" and opening.get("vertical") in ("up", "down"):
+            parts.append(_cap(_en("opening_seen_above" if opening["vertical"] == "up"
+                                  else "opening_seen_below", opening=desc, room=room)))
+        else:
+            parts.append(_cap(_en("opening_seen", opening=desc, room=room)))
         notes = str(opening.get("room_notes") or "").strip()
         if notes:
             parts.append(notes if notes[-1:] in ".!?" else notes + ".")

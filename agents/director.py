@@ -981,23 +981,54 @@ def _route_doorway_rows(sc, out, room_ids):
     return routed
 
 
-def _final_movement(rows):
+def _final_movement(rows, scene=None, warn=None):
     """The beat's relocation: the LAST movement row that arrives.
 
     Rows are in chronological order, so the last arrival is where the body
     ends; an earlier one is a room passed through. A trailing row that does
     not arrive (a move refused or interrupted) never replaces an arrival
     already made.
+
+    THE WALK ENDS AT THE LAST ROOM THE WORLD HOLDS. Given the scene, an
+    arrival whose `to_room` names no room the world has -- not by id and
+    not by the words a room is known by (`scene_room_id`) -- does not
+    replace an arrival before it that does: the legs already walked
+    survive the leg that cannot be. Hollin Mill turn 1 (2026-09-15): rows
+    `yard` then `mill`, `mill` being the Director's word for the wheel
+    floor's door; the unknown last leg was refused and the walk to the
+    yard was thrown away with it, so the page left her at the gate. A beat
+    whose only arrivals are unknown keeps its last one, so the planning
+    need for a genuinely new place still fires.
     """
     final = None
+    known = None
     for row in rows or []:
         if not isinstance(row, dict) or not isinstance(row.get("movement"), dict):
             continue
         movement = row["movement"]
         if movement.get("arrives") is False and final is not None:
             continue
+        if scene is not None and final is not None:
+            to_room = str(movement.get("to_room") or "").strip()
+            if to_room and not _room_the_world_holds(scene, to_room):
+                if warn is not None:
+                    warn(f"movement to {to_room!r} names no room the world "
+                         f"holds; the walk ends at {final.get('to_room')!r}, "
+                         "the last arrival it does")
+                continue
         final = dict(movement)
     return final
+
+
+def _room_the_world_holds(scene, to_room) -> bool:
+    rooms = (scene or {}).get("rooms") or {}
+    if to_room in rooms:
+        return True
+    try:
+        from world.spatial import scene_room_id
+        return bool(scene_room_id(scene, to_room))
+    except Exception:
+        return False
 
 
 def _canonicalize_interior_movements(sc, out, identity_index=None):
@@ -1521,7 +1552,8 @@ def director_interpret(ctx, nonce):
     # into the study" -- rows hall then study, the spatial hand placed him
     # in the study, `movement` said hall, and the commit left him in the
     # hall while the page described the study he never reached.
-    _last_movement = _final_movement(out.get("causal_ledger"))
+    _last_movement = _final_movement(out.get("causal_ledger"), scene=sc,
+                                     warn=ctx.add_warning)
     if _last_movement is not None:
         out["movement"] = _last_movement
     _canonicalize_interior_movements(sc, out, _interpret_identities)

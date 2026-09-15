@@ -840,14 +840,28 @@ def infer_facing(chat_id, frame_id, prev_scene, new_scene, cast_names,
             # A DECLARED LOOK OUTRANKS EVERY INFERENCE (the owner,
             # 2026-09-15: turning and looking are acts). A sweep keeps the
             # facing and marks the beat, so perception lifts the cone for
-            # it once.
-            faced, focus = look_bearing(new_scene, name, declared, prev_facing)
-            sweep = str(declared).strip().casefold() == "around"
-            if sweep:
-                rec["swept_turn"] = turn_idx
-            elif focus:
+            # it once. Several looks in one beat apply in order, each from
+            # the facing the one before it left, and the last the room can
+            # place decides.
+            looks_in_order = list(declared) if isinstance(declared, (list, tuple)) else [declared]
+            faced, focus, sweep = None, None, False
+            facing_so_far = prev_facing
+            for one in looks_in_order:
+                if not str(one or "").strip():
+                    continue
+                if str(one).strip().casefold() == "around":
+                    sweep = True
+                    rec["swept_turn"] = turn_idx
+                    continue
+                got, got_focus = look_bearing(new_scene, name, one, facing_so_far)
+                if got_focus:
+                    focus = got_focus
+                if got is not None:
+                    faced = got
+                    facing_so_far = got
+            if focus:
                 rec["focus"] = focus
-            if faced is not None and not sweep:
+            if faced is not None:
                 if faced != prev_facing:
                     rec["facing"] = faced
                     changed = True

@@ -320,6 +320,15 @@ def walk(scene: dict, name: str, to_room, to_cell=None, *, paces,
         budget -= steps
         walked += steps
         if cell != path[-1]:
+            # IN THE ROOM IS ARRIVED, when the walk named no cell or fixture
+            # in it: a body standing on the destination's own door cell with
+            # its paces spent has got there, and the pace to "one inside the
+            # door" is not a leg to carry over (Hollin Mill turn 8,
+            # 2026-09-15: a climb left "under way" at the hatch, and every
+            # silent beat after would have walked it one pace).
+            if final and goal_cell is None and came_from:
+                return {"room": room_id, "cell": cell, "arrived": True,
+                        "crossed": crossed, "paces": walked}
             return {"room": room_id, "cell": cell, "arrived": False,
                     "crossed": crossed, "paces": walked}
         if final:

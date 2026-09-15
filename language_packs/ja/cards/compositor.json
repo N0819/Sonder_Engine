@@ -320,6 +320,8 @@
     "surface_summary_with": "{text}、{items}",
     "surface_summary_wearing": "{text}、{items}を身につけている",
     "opening_seen": "{opening}の向こうは{room}。",
+    "opening_seen_above": "上に{room}がある。",
+    "opening_seen_below": "下に{room}がある。",
     "opening_features": "その奥に{items}が見える。",
     "opening_closed": "{opening}の向こうは何も見えない。",
     "opening_dark": "{opening}の向こうは暗闇だけ。",

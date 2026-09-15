@@ -291,7 +291,13 @@ def normalize_scene_bearings(scene: dict) -> dict:
             if isinstance(edge, dict) and edge.get("dir"):
                 key = edge["dir"]
                 if edge.get("vertical"):
-                    key = "%s|%s" % (key, edge["vertical"])
+                    # A STAIR AND AN OVERLOOK ON ONE WALL ARE TWO THINGS: the
+                    # stair is in the wall, the rail runs above it. Only two
+                    # ways of one kind up one wall are the ambiguity this
+                    # pass exists for (`spatial_levels.edge_way`; Hollin
+                    # Mill, 2026-09-15, lost both).
+                    from world.spatial_levels import edge_way
+                    key = "%s|%s|%s" % (key, edge["vertical"], edge_way(edge))
                 by_bearing.setdefault(key, []).append(edge)
         for colliding in by_bearing.values():
             if len(colliding) < 2:

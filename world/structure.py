@@ -72,7 +72,8 @@ def normalize_structures(stored):
 #: same reason: it is a property of the PLACE that the plan knows and the
 #: scene does not, and a stub that arrives without it is a room the story
 #: laid out and then silenced.
-GEOMETRY_FIELDS = ("extent", "shape", "exposure", "sound")
+GEOMETRY_FIELDS = ("extent", "shape", "exposure", "sound",
+                   "level", "over", "floor", "surface", "quiet")
 
 
 def planned_geometry(planned):

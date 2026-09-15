@@ -113,4 +113,4 @@ def test_the_commit_reads_the_players_look_from_the_interpret_and_the_casts_from
                              {"type": "action", "actor": "persona:1", "look": "back"}]})
     res = {"sequence": [{"type": "action", "actor": "character:5", "look": "Ada"}]}
     looks = _declared_looks(ctx, res, p_name="Ada")
-    assert looks == {"Ada": "back", "Bram": "Ada"}
+    assert looks == {"Ada": ["around", "back"], "Bram": ["Ada"]}
