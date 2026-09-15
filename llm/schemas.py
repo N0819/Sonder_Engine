@@ -146,6 +146,20 @@ def _coerce_station_table(value):
                 entry["cover"] = None
             else:
                 entry["cover"] = str(cover).strip() or None
+        # A PLACE IS A CELL (the owner, 2026-09-15: bodies do not have to
+        # land at anchors). Two whole numbers in the room's own grid, the
+        # same rule `spatial_geometry.normalize_cell` reads the map's pin
+        # by; anything else is junk and is dropped here, so the hand can
+        # write "she stops in the middle of the floor" as a cell and the
+        # merge keeps it where a room change would otherwise drop it.
+        if "cell" in station:
+            cell = station.get("cell")
+            if (isinstance(cell, (list, tuple)) and len(cell) == 2
+                    and all(isinstance(c, int) and not isinstance(c, bool)
+                            for c in cell)):
+                entry["cell"] = [int(cell[0]), int(cell[1])]
+            elif cell is None:
+                entry["cell"] = None
         if entry:
             out[name] = entry
     return out
@@ -320,6 +334,10 @@ class SpeechVolume(str, Enum):
     normal = "normal"
     loud = "loud"
     shout = "shout"
+    # LOUD ENOUGH FOR THE ONE ADDRESSED AND NO LOUDER: the level is solved
+    # from the addressee's cell (`spatial_sound_field.pitched_level_db`),
+    # never a fixed number; everyone else is graded at that level.
+    PITCHED = "pitched"
 
 class ActionVisibility(str, Enum):
     overt = "overt"
@@ -404,6 +422,7 @@ def normalize_speech_volume(value: Any) -> str:
         "normal",
         "loud",
         "shout",
+        "pitched",
     }:
         return "normal"
 
@@ -1217,6 +1236,13 @@ class MovementDecl(LenientModel):
     # existed meant arrival, and a default of False would strand every one of
     # them.
     arrives: bool = True
+    # WHERE IN THE ROOM the walk ends, when the declaration says: the
+    # feature it named ("to the hearth" -- an anchor id of the destination,
+    # from world_index's `features`), or a cell of the room's grid. The
+    # engine walks the cells (`world/spatial_walk`) and stops there; with
+    # neither, the walk ends one pace inside the door it came through.
+    to_anchor: str = ""
+    to_cell: Optional[list] = None
 
 # ---- Flow ----
 

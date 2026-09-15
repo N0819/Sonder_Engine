@@ -19,6 +19,7 @@ from world.spatial import (contact_action_ledger_index, contact_id,
                            passage_id_for,
                            crossing_of, effective_anchors, room_of,
                            scene_room_id, substance_ledger_index)
+from world.spatial import anchor_cells, body_cell, door_cell, room_grid
 
 from .common import (communication_surface, observable_action_text,
                      scene_compact_attire)
@@ -435,6 +436,47 @@ def _note_for(notes, name):
         # it (`note_key_targets`) is the one dispatch runs on.
         return "\n".join(dict.fromkeys(lines))
     return None
+
+def _grid_view(sc, room_ids):
+    """Each room of the beat as the cells the senses judge it by: its size
+    in paces, every anchor's cell, every doorway's cell by the room it opens
+    onto, and every body's cell -- the surface a station `cell` is written
+    against (the owner, 2026-09-15: a place is a cell). Derived, so a room
+    with no extent is its size tier's square exactly as the fields see it."""
+    out = {}
+    positions = sc.get("positions") or {}
+    for room_id in room_ids or ():
+        room = (sc.get("rooms") or {}).get(room_id)
+        if not isinstance(room, dict):
+            continue
+        grid = room_grid(sc, room_id)
+        anchors = {}
+        doors = {}
+        for aid, placed in (anchor_cells(sc, room_id) or {}).items():
+            cells = placed.get("cells") or []
+            if not cells:
+                continue
+            if str(aid).startswith("door:"):
+                doors[str(aid)[5:]] = list(cells[len(cells) // 2])
+            else:
+                anchors[str(aid)] = list(cells[len(cells) // 2])
+        for edge in room.get("adjacent") or []:
+            to = str((edge or {}).get("to") or "")
+            if to and to not in doors:
+                cell = door_cell(sc, room_id, to)
+                if cell is not None:
+                    doors[to] = list(cell)
+        bodies = {}
+        for name, where in positions.items():
+            if str(where) != str(room_id):
+                continue
+            cell = body_cell(sc, str(name))
+            if cell is not None:
+                bodies[str(name)] = list(cell)
+        out[str(room_id)] = {"w": grid.w, "d": grid.d, "anchors": anchors,
+                             "doors": doors, "bodies": bodies}
+    return out
+
 
 def _beat_rooms(sc, ctx, whos, view=None):
     """The rooms a body could be STANDING IN by the end of this beat.
@@ -1101,6 +1143,10 @@ def _specialist_payload(name, ctx, sc, view, extras):
             "rooms": sc.get("rooms") or {},
             "positions": sc.get("positions") or {},
             "stations": sc.get("stations") or {},
+            # THE ROOMS AS CELLS: what a station `cell` is written against,
+            # for the rooms this beat can leave its people standing in.
+            "grid": _grid_view(sc, _beat_rooms(
+                sc, ctx, [view["player"]] + list(view["cast"]), view)),
             "poses": sc.get("poses") or {},
             "contained": sc.get("contained") or {},
             # THE VOICE LEDGER, WITH THE IDS ITS OPS ADDRESS. The same

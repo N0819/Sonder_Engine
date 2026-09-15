@@ -428,14 +428,22 @@ def test_the_merge_keeps_an_anchor_cell_a_re_echo_left_out():
     assert "cell" not in merged["rooms"]["r"]["anchors"]["bar"]
 
 
-def test_a_body_that_changes_room_loses_its_cell_in_the_merge():
+def test_a_body_that_changes_room_loses_its_old_cell_and_stands_inside_the_door():
+    """The old cell is in the old room's coordinates and is dropped; the
+    arrival stands one pace inside the door it came through (the owner,
+    2026-09-15: a place is a cell, and an arrival's place is its door)."""
+    from world.spatial import inside_the_door
     sc = scene(SHAPES["large"], {"P": {"at": "bar", "near": [], "cell": [3, 2]},
                                  "Q": {"at": None, "near": [], "cell": [1, 1]}})
     merged = merge_scene_with_diff(sc, {"positions": {"P": "q"}})
     assert merged["positions"]["P"] == "q"
-    assert "cell" not in merged["stations"]["P"]
+    assert merged["stations"]["P"]["cell"] == list(inside_the_door(merged, "q", "r"))
     assert merged["stations"]["P"]["at"] is None          # the old hygiene, unchanged
     assert merged["stations"]["Q"]["cell"] == [1, 1]     # the body that stayed keeps it
+    # A cell the diff itself wrote for the arrival stands over the door's.
+    told = merge_scene_with_diff(sc, {"positions": {"P": "q"},
+                                      "stations": {"P": {"cell": [2, 2]}}})
+    assert told["stations"]["P"]["cell"] == [2, 2]
 
 
 def test_invalidate_moved_body_cells_compares_against_where_the_body_was():

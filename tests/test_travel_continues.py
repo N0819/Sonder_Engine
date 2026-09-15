@@ -151,17 +151,33 @@ def _resolved(**extra):
 
 def test_a_silent_beat_continues_the_walk(temp_db, monkeypatch):
     """The reported oddity, from the other side: she declared no movement,
-    and the engine must carry her one leg toward the place she already said
-    she was going -- not strand her and not teleport her."""
+    and the engine must carry her toward the place she already said she was
+    going -- not strand her and not teleport her. Since 2026-09-15 the walk
+    is paces over cells rather than a leg a beat: a short beat leaves her
+    in the first room on the way, a whole one carries her to the lobby."""
+    import agents.director as director
+    import agents.director_movement as movement
+
+    ctx = _walk_ctx(temp_db, approach={"The Stranger": {"to_room": "lobby"}})
+    monkeypatch.setattr(director, "_agent_json",
+                        fanout_resolve_agent(_resolved()))
+    monkeypatch.setattr(movement, "paces_for", lambda seconds=None: 4)
+
+    out = director.director_resolve(ctx, nonce=0)
+
+    assert out["state_diff"]["positions"]["The Stranger"] == "hotel"
+    assert "The Stranger" not in out["travel"]["arrived"]
+
+
+def test_a_whole_silent_beat_carries_the_walk_to_its_end(temp_db, monkeypatch):
     import agents.director as director
 
     ctx = _walk_ctx(temp_db, approach={"The Stranger": {"to_room": "lobby"}})
     monkeypatch.setattr(director, "_agent_json",
                         fanout_resolve_agent(_resolved()))
-
     out = director.director_resolve(ctx, nonce=0)
-
-    assert out["state_diff"]["positions"]["The Stranger"] == "hotel"
+    assert out["state_diff"]["positions"]["The Stranger"] == "lobby"
+    assert out["travel"]["arrived"] == ["The Stranger"]
 
 
 def test_the_walk_ends_by_arriving_and_the_record_is_cleared(temp_db,

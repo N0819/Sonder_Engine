@@ -16,8 +16,10 @@ import json
 import re
 
 from story.character_schema import character_name_from_text
+from world.mechanics import UNCLAIMED_BEAT_SECONDS, read_time_diff, time_diff_claims
 from world.spatial import (
     _ROUTE_MEMORY_BARRIERS,
+    door_cell,
     egocentric_frame,
     merge_scene_with_diff,
     neighbor_map,
@@ -25,9 +27,11 @@ from world.spatial import (
     normalize_edge_distance,
     passable_neighbors,
     passable_route_exists,
+    paces_for,
     passable_route_next_step,
     room_of,
     spatial_rel,
+    walk,
 )
 
 from .director_lingua import _ling
@@ -674,7 +678,8 @@ def _following_record(following, name):
     return None, None
 
 
-def _apply_following_movement(ctx, scene, state_diff, interp, player_name):
+def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
+                              out=None):
     """Carry willing followers through ordinary travel, never pursuit.
 
     The relation is durable intent, not a tether. A follower is moved only
@@ -768,6 +773,17 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name):
             if positions.get(follower) == target_dest:
                 continue
             positions[follower] = target_dest
+            # BESIDE THE ONE FOLLOWED: a body carried through a doorway
+            # with somebody stands next to them, not on the door's cell.
+            station = state_diff.setdefault("stations", {})
+            entry = station.get(follower) if isinstance(
+                station.get(follower), dict) else {}
+            near = [n for n in (entry.get("near") or []) if n]
+            if target not in near:
+                near.append(target)
+            entry["near"] = near
+            entry.pop("cell", None)
+            station[follower] = entry
             progressed = changed = True
         if not progressed:
             break
@@ -814,12 +830,41 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name):
                 f"but no open route reaches {target_room!r}; the relation "
                 "stands and the body stays.")
             continue
-        positions[follower] = target_room
+        # OVER THE CELLS, AS FAR AS THE PACES CARRY (`spatial_walk.walk`):
+        # the follower is beside the target when the budget reaches them,
+        # else mid-way with the walk recorded as under way.
+        from world.spatial import standing_cell
+        landed = walk(route_scene, follower, target_room,
+                      paces=paces_for(beat_seconds(ctx, state_diff)),
+                      from_room=origin, from_cell=standing_cell(scene, follower))
+        if landed is None:
+            continue
+        positions[follower] = landed["room"]
+        station = state_diff.setdefault("stations", {})
+        entry = station.get(follower) if isinstance(
+            station.get(follower), dict) else {}
+        if landed["arrived"]:
+            near = [n for n in (entry.get("near") or []) if n]
+            if target not in near:
+                near.append(target)
+            entry["near"] = near
+            entry.pop("cell", None)
+        else:
+            entry["cell"] = list(landed["cell"])
+            if isinstance(out, dict):
+                _travel_record(out)["advanced"].append({
+                    "subject": follower, "from": origin, "to": landed["room"],
+                    "destination": target_room, "paces": landed["paces"],
+                    "underway": True})
+        station[follower] = entry
         changed = True
         ctx.add_warning(
             f"Approach: {follower} started following {target} from another "
-            f"room and reaches {target_room!r} this beat; a follow begun "
-            "from elsewhere is a walk to the one followed.")
+            f"room and walks {landed['paces']} paces toward "
+            f"{target_room!r}, "
+            + ("arriving beside them." if landed["arrived"]
+               else f"ending the beat in {landed['room']!r}.")
+            + " A follow begun from elsewhere is a walk to the one followed.")
     if changed:
         # `positions` may be a fresh dict when the diff carried an empty one
         # (`state_diff.get("positions") or {}`), so a carry must be attached.
@@ -1195,6 +1240,82 @@ def _still_crossing(distance, beats_spent):
             and int(beats_spent) < _LONG_EDGE_BEATS)
 
 
+def beat_seconds(ctx, sd) -> float:
+    """How long this beat is, for a walk's budget: the span the merged diff's
+    `time` block asserts (the spatial hand's channel, read the one way the
+    clock reads it -- `read_time_diff`, from where the clock stands), else
+    the clock's own silent beat, `UNCLAIMED_BEAT_SECONDS`."""
+    time_diff = sd.get("time") if isinstance(sd, dict) else None
+    if time_diff_claims(time_diff):
+        try:
+            from story.scene import simulation_clock
+            clock = simulation_clock(ctx.chat["id"]) or {}
+            was = float(clock.get("elapsed_seconds") or 0.0)
+            end = read_time_diff(was, time_diff)[0]
+            span = float(end) - was
+            if span > 0:
+                return span
+        except Exception:
+            pass
+    return float(UNCLAIMED_BEAT_SECONDS)
+
+
+def _travel_record(out):
+    """`out["travel"]` with every list present -- the validated output
+    already carries an empty dict under the key."""
+    record = out.get("travel")
+    if not isinstance(record, dict):
+        record = out["travel"] = {}
+    for key in ("advanced", "arrived", "interrupted", "held"):
+        if not isinstance(record.get(key), list):
+            record[key] = []
+    return record
+
+
+def walk_declared(ctx, scene, route_scene, sd, out, subject, mv, prev_room):
+    """Land a declared walk whose route is open: as far as the beat's paces
+    carry the body over the cells, through the doorways on the way.
+
+    A body ARRIVES when the budget reaches the destination -- the cell the
+    declaration names (`to_cell`), the cell inside the anchor it names
+    (`to_anchor`), or one pace inside the door it came through -- and is
+    otherwise left where the paces ran out, in whichever room that is, with
+    the walk recorded as under way so silence carries it on next beat
+    (`_travel_continues`). Where the grid cannot answer (no room, no
+    route), the room-granular rule stands: the body is in the destination.
+    """
+    paces = paces_for(beat_seconds(ctx, sd))
+    # FROM WHERE THE BEAT BEGAN. `route_scene` carries this beat's diff, and
+    # the diff already holds the declared destination as the body's room
+    # (asserted movement enters the preview world at interpret), so the
+    # walk starts from the body's room and cell in the scene as it stood.
+    from world.spatial import standing_cell
+    result = walk(route_scene, subject, mv["to_room"],
+                  to_cell=mv.get("to_cell"), to_anchor=mv.get("to_anchor"),
+                  paces=paces, from_room=prev_room,
+                  from_cell=(standing_cell(scene, subject)
+                             if room_of(scene, subject) else None))
+    if result is None:
+        sd["positions"][subject] = mv["to_room"]
+        return None
+    sd["positions"][subject] = result["room"]
+    station = sd.setdefault("stations", {})
+    entry = station.get(subject) if isinstance(station.get(subject), dict) else {}
+    entry["cell"] = list(result["cell"])
+    station[subject] = entry
+    if not result["arrived"]:
+        _travel_record(out)["advanced"].append({
+            "subject": subject, "from": prev_room, "to": result["room"],
+            "destination": mv["to_room"], "to_anchor": mv.get("to_anchor"),
+            "to_cell": mv.get("to_cell"), "paces": result["paces"],
+            "underway": True})
+        ctx.add_warning(
+            f"Walk under way: {subject} covers {result['paces']} paces toward "
+            f"{mv['to_room']!r} and ends the beat in {result['room']!r} at "
+            f"cell {list(result['cell'])}; silence carries the walk on.")
+    return result
+
+
 def _travel_in_flight_view(sc, interp, p_name):
     """What the Director is told about walks already under way.
 
@@ -1334,24 +1455,52 @@ def _travel_continues(ctx, out, sc, sd, interp, p_name):
             continue
         # A long edge is not crossed in a breath. Counted on the standing
         # record so the beats already spent on this leg survive a reroll.
+        # The body walks to the doorway meanwhile and waits there.
         distance = normalize_edge_distance(
             _edge_to(rooms, here, step).get("distance"))
         spent = int(leg.get("edge_beats") or 0) + 1
+        paces = paces_for(beat_seconds(ctx, sd))
         if _still_crossing(distance, spent):
+            at_door = door_cell(route_scene, here, step)
+            if at_door is not None:
+                waited = walk(route_scene, subject, here, to_cell=list(at_door),
+                              paces=paces)
+                if waited is not None:
+                    sd.setdefault("stations", {}).setdefault(subject, {})[
+                        "cell"] = list(waited["cell"])
             record["held"].append(
                 {"subject": subject, "reason": "still crossing",
                  "edge_beats": spent})
             continue
-        sd.setdefault("positions", {})[subject] = step
+        # OVER THE CELLS, AS FAR AS THE PACES CARRY. The walk goes to the
+        # destination's cell or anchor when the record names one, else one
+        # pace inside the door it comes through; a budget that runs out
+        # leaves the body mid-way, in whichever room that is.
+        landed = walk(route_scene, subject, destination,
+                      to_cell=leg.get("to_cell"), to_anchor=leg.get("to_anchor"),
+                      paces=paces)
+        if landed is None:
+            record["held"].append(
+                {"subject": subject, "reason": "no passable route"})
+            continue
+        sd.setdefault("positions", {})[subject] = landed["room"]
+        sd.setdefault("stations", {}).setdefault(subject, {})[
+            "cell"] = list(landed["cell"])
         record["advanced"].append({"subject": subject, "from": here,
-                                   "to": step, "destination": destination})
-        if step == destination:
+                                   "to": landed["room"],
+                                   "destination": destination,
+                                   "paces": landed["paces"],
+                                   "underway": not landed["arrived"]})
+        if landed["arrived"]:
             record["arrived"].append(subject)
         ctx.add_warning(
             f"Travel continues: {subject} declared a walk to "
-            f"{destination!r} and this beat did not stop it, so they move "
-            f"{here!r} -> {step!r}. Silence continues a declared walk; an "
-            "interruption is the Director's to assert.")
+            f"{destination!r} and this beat did not stop it, so they walk "
+            f"{landed['paces']} paces, {here!r} -> {landed['room']!r}"
+            + (" and arrive." if landed["arrived"] else
+               f", cell {list(landed['cell'])}.")
+            + " Silence continues a declared walk; an interruption is the "
+            "Director's to assert.")
 
     if any(record.values()):
         out["travel"] = record
