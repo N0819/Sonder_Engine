@@ -18,7 +18,13 @@ def test_both_director_invocations_share_one_minimal_contract():
     assert "state_diff" not in shared
     assert "resolved_event" not in shared
     assert "player_declaration" not in shared
-    assert len(shared) < 4_500
+    # 4,500 sat eight characters above the sheet as first written, so the
+    # three lines of 2026-09-14 (where a walk ends, a speaker is not their own
+    # addressee, an act out of a room is a positions row -- about 200
+    # characters, measured 4,696 with the policy suffix) needed the ceiling
+    # moved. It is a test's number, not the owner's; the point it keeps is
+    # that the contract stays a page, not that it never grows a line.
+    assert len(shared) < 4_800
 
 
 def test_a_body_is_not_a_room_until_the_world_has_made_it_one():
