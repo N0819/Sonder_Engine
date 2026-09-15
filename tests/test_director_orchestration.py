@@ -6544,3 +6544,166 @@ def test_a_row_about_several_things_files_each_transform_under_its_thing(
     assert [(h["item_id"], h["chrono_id"]) for h in history] == [
         (9, 1), (7, 1), (7, 1)]
     assert any("names none of them" in w for w in ctx.warnings)
+    # Both things were transformed, so both are accounted for.
+    body = out["orchestration"]["specialists"]["body"]
+    assert [(v["item"], v["status"]) for v in body["item_verdicts"]] == [
+        ("wool coat", "encoded"), ("linen scarf", "encoded")]
+    assert body.get("things_unaccounted", []) == []
+
+
+def test_the_verdict_follows_the_thing(temp_db, monkeypatch):
+    """The owner, 2026-09-15: a row about three things was satisfied by one
+    transform and silence about the other two was invisible (the fair,
+    turn 188: a pencil named on two rows, never minted). A result now
+    carries `settled`, name -> verdict, for the things it did not
+    transform; a thing with neither a transform nor a verdict is recorded
+    as unaccounted and warned, report-only."""
+    calls = []
+    responses = {
+        "director_resolve": {
+            "ledgers": [{
+                "chrono_id": 1,
+                "item_ids": [7, 8, 9],
+                "item_names": ["wool coat", "pencil", "linen scarf"],
+                "source_entity_id": "character:mara",
+                "authority_mode": "autonomous",
+                "kind": "action",
+                "event": "Mara sheds coat and scarf and pockets a pencil.",
+                "resolution_notes": "Coat and scarf off; pencil kept.",
+                "categories": ["attire"],
+            }],
+            "resolved_event": "Mara sheds her coat and scarf.",
+            "summary": "Off.", "state_diff": {}, **_ruling("body"),
+        },
+        "director_body": {
+            "results": [{
+                "transforms": [
+                    {"item": "wool coat", "patch": {"attire": {
+                        "Mara": {"remove": ["wool coat"]}}}},
+                ],
+                "status": "encoded",
+                "settled": {"pencil": "not_mine", "lantern": "no_referent",
+                            "ent_scarf": "already_true"},
+            }],
+            "notes": [],
+        },
+    }
+    scene = json.loads(json.dumps(BASE_SCENE))
+    scene["attire"] = {
+        "Mara": {"wearing": ["wool coat", "linen scarf"]}}
+    # A settled key may be the WORLD key the hand resolved the thing to.
+    scene.setdefault("entities", {})["ent_scarf"] = {
+        "name": "linen scarf", "kind": "item"}
+    monkeypatch.setattr(director, "_agent_json",
+                        _fake_agent(calls, responses))
+    ctx = _make_ctx(temp_db, scene=scene, interp=_action_interp(),
+                    player_input="I shed the coat and scarf")
+    out = director.director_resolve(ctx, nonce=0)
+
+    body = out["orchestration"]["specialists"]["body"]
+    assert [(v["item_id"], v["item"], v["status"])
+            for v in body["item_verdicts"]] == [
+        (7, "wool coat", "encoded"),
+        (8, "pencil", "not_mine"),
+        (9, "linen scarf", "already_true"),
+    ]
+    assert body["things_unaccounted"] == []
+    # A row where the hand does not answer for a thing at all:
+    responses["director_body"]["results"][0]["settled"] = {
+        "pencil": "not_mine"}
+    ctx2 = _make_ctx(temp_db, scene=scene, interp=_action_interp(),
+                     player_input="I shed the coat and scarf")
+    out2 = director.director_resolve(ctx2, nonce=0)
+    body2 = out2["orchestration"]["specialists"]["body"]
+    assert [v["item"] for v in body2["things_unaccounted"]] == ["linen scarf"]
+    assert any("'linen scarf' was neither changed nor accounted for" in w
+               for w in ctx2.warnings)
+    assert any("settles 'lantern', which the row does not carry" in w
+               for w in ctx.warnings)
+    # The encoded transform still landed; accounting is report-only.
+    assert out["state_diff"]["attire"]["Mara"]["remove"] == ["wool coat"]
+
+
+def test_the_sequence_normaliser_carries_the_item_lists():
+    """Chat 12 turn 190: every interpret span reached the hands with
+    `item_ids`/`item_names` gone, because `SPAN_FIELDS` named the singular
+    pair only. The lists ride through like the pair does."""
+    from agents.common import norm_sequence
+    out = {"sequence": [{
+        "chrono_id": 3, "item_id": 1, "item_ids": [1, 2, 3],
+        "item_names": ["notebook", "pencil", "coat"],
+        "object_name": "notebook", "actor": "persona:1",
+        "source_entity_id": "persona:1", "type": "action",
+        "attempt": "drops both into the coat", "categories": ["containment"],
+    }]}
+    norm_sequence(out)
+    row = out["sequence"][0]
+    assert row["item_ids"] == [1, 2, 3]
+    assert row["item_names"] == ["notebook", "pencil", "coat"]
+    assert row["item_id"] == 1 and row["chrono_id"] == 3
+
+
+def test_a_not_mine_with_an_address_is_forwarded_once(temp_db, monkeypatch):
+    """Chat 12 turn 192: a page tossed into the square was categorised
+    `positions`; the spatial hand said "not mine, objects"; the address
+    was recorded as a routing vote and nobody asked the objects hand, so
+    the world kept the page in her fist. A row a hand declines with an
+    address is handed on to that hand, once, and its answer attaches like
+    any other -- here to a hand the ruling never dispatched."""
+    calls = []
+    responses = {
+        "director_resolve": {
+            "ledgers": [{
+                "chrono_id": 1,
+                "item_ids": [1],
+                "item_names": ["page"],
+                "source_entity_id": "character:mara",
+                "authority_mode": "autonomous",
+                "kind": "action",
+                "event": "Mara tosses the page down into the square.",
+                "resolution_notes": "The page lands in the square.",
+                "categories": ["positions"],
+            }],
+            "resolved_event": "The page sails down into the square.",
+            "summary": "Tossed.", "state_diff": {}, **_ruling("spatial"),
+        },
+        "director_spatial": {
+            "results": [{"transforms": [], "status": "not_mine",
+                         "reroute_to": "objects"}],
+            "notes": [],
+        },
+        "director_objects": {
+            "results": [{
+                "transforms": [{"item": "page", "patch": {"inventory_ops": [
+                    {"op": "transfer", "object_id": "ent_page",
+                     "to_id": "lamp_room"}]}}],
+                "status": "encoded",
+            }],
+            "notes": [],
+        },
+    }
+    scene = json.loads(json.dumps(BASE_SCENE))
+    scene.setdefault("entities", {})["ent_page"] = {
+        "name": "page", "kind": "item", "portable": True}
+    monkeypatch.setattr(director, "_agent_json",
+                        _fake_agent(calls, responses))
+    ctx = _make_ctx(temp_db, scene=scene, interp=_action_interp(),
+                    player_input="I toss the page down")
+    out = director.director_resolve(ctx, nonce=0)
+
+    assert _steps(calls).count("director_objects") == 1
+    opayload = next(c["payload"] for c in calls
+                    if c["step_key"] == "director_objects")
+    assert [row["item_names"] for row in opayload["ledgers"]] == [["page"]]
+    assert all(not k.startswith("_") for row in opayload["ledgers"]
+               for k in row)
+    orch = out["orchestration"]
+    assert orch["forwards"] == {"objects": [1]}
+    assert orch["specialists"]["objects"]["forwarded"] == [
+        {"chrono_id": 1, "from": "spatial"}]
+    assert orch["events_addressed"][1]["by_hand"]["objects"]["status"] \
+        == "encoded"
+    assert [h["item_id"] for h in orch["transform_history"]] == [1]
+    assert out["state_diff"]["inventory_ops"][0]["object_id"] == "ent_page"
+    assert any("spatial specialist forwarded row 1 to objects" in w
+               for w in ctx.warnings)

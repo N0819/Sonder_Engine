@@ -1186,7 +1186,7 @@ def _resolve_identity_handles(patch, identity_index):
     return fix(patch)
 
 
-def _hydrate_existing_entity_patch(sc, patch):
+def _hydrate_existing_entity_patch(sc, patch, minted=None):
     """Give a partial existing-entity transform the one required join field.
 
     ``StateDiff`` also creates entities, so its full entity definition rightly
@@ -1195,6 +1195,12 @@ def _hydrate_existing_entity_patch(sc, patch):
     TARDIS hatch became open.  Before validating that patch as a StateDiff,
     restore the standing entity's name by its canonical key.  New entities
     remain subject to the full schema and are still dropped when nameless.
+
+    `minted` is what THIS hand declared earlier in the same answer, keyed
+    the same way: a thing torn out on row 2 and crumpled on row 3 is a
+    standing record by row 3 as far as the row's chronology is concerned,
+    and was being dropped as a nameless new entity (chat 12 turn 192, the
+    page). The engine's own ordering, not the scene's, is the reference.
     """
     if not isinstance(patch, dict) or not isinstance(patch.get("entities"), dict):
         return patch
@@ -1205,7 +1211,11 @@ def _hydrate_existing_entity_patch(sc, patch):
             continue
         entity_id, standing = _unique_entity_keyed(sc, str(key))
         if not entity_id or not isinstance(standing, dict):
-            continue
+            declared = (minted or {}).get(str(key))
+            if isinstance(declared, dict) and str(declared.get("name") or "").strip():
+                entity_id, standing = str(key), declared
+            else:
+                continue
         incoming["name"] = str(standing.get("name") or entity_id)
     return hydrated
 
@@ -3363,7 +3373,11 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
     # recorded error and never touches a sibling's completed work; Aborted
     # is the one exception that propagates, because a cancelled turn has
     # no beat to fail open into.
-    def _call_isolated(name, state, context):
+    def _call_isolated(name, state, context, seen=None):
+        # `seen`: the view this call answers -- the beat's, or the slice a
+        # forwarding round hands on (below).
+        seen = view if seen is None else seen
+
         def run():
             token_sink.set(None)
             generation_event_sink.set(None)
@@ -3375,14 +3389,14 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
                 # schemas.SCHEMA_MAP knows a step key from outside this tree.
                 return _extension_specialist_call(
                     spec, state["scope"],
-                    _specialist_payload(name, ctx, sc, view, extras),
+                    _specialist_payload(name, ctx, sc, seen, extras),
                     ctx.language)
             return _agent_json(
                 spec["role"],
                 spec["step_key"],
                 specialist_prompt(name, state["scope"], ctx.language,
-                                  specialist_co_hands(name, view)),
-                _specialist_payload(name, ctx, sc, view, extras),
+                                  specialist_co_hands(name, seen)),
+                _specialist_payload(name, ctx, sc, seen, extras),
                 temperature=0.2,
                 max_tokens=None,   # the configured ceiling
             )
@@ -3455,6 +3469,74 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
         if aborted is not None:
             raise aborted
 
+    # ---- Forward: "not mine, ask X" is acted on, once ------------------
+    #
+    # A hand answering `not_mine` names the hand it belongs to
+    # (`reroute_to`). That address was recorded as a routing vote and
+    # never acted on: the repair tier runs off the evidence scan, so a row
+    # whose only fault was reaching the wrong hand stayed unaddressed.
+    # Chat 12 turn 192: a crumpled page tossed down the steps into the
+    # square was categorised `positions`, the spatial hand answered "not
+    # mine, objects", nobody asked the objects hand, and the world kept
+    # the page in her fist while the page said it tumbled toward the fair.
+    #
+    # So each such row is handed on, once, to the hand it named -- the
+    # same call, the same sheet, a view holding only the forwarded rows
+    # -- and its answer is attached like any other. Once: a second
+    # decline is recorded, not forwarded again. A hand that already
+    # answered that row is not asked twice.
+    forwards = _rows_to_forward(jobs, results, dispatch)
+    for target, entries in forwards.items():
+        spans = [entry["span"] for entry in entries]
+        seen = dict(view)
+        seen["spans"] = [dict(span, _forwarded_to=[target]) for span in spans]
+        state = dispatch.get(target)
+        fresh = not (state and state.get("run"))
+        if fresh:
+            state = {
+                "run": True,
+                "scope": list(SPECIALISTS[target]["channels"]),
+                "gated": None, "addressed_by": [],
+                "channels": list(SPECIALISTS[target]["channels"]),
+                "ledger_items": [], "event_ids": [],
+            }
+            dispatch[target] = state
+        elif isinstance(results.get(target), Exception) \
+                or results.get(target) is None:
+            continue   # its own round failed; nothing to attach onto
+        state["forwarded"] = [
+            {"chrono_id": entry["chrono_id"], "from": entry["from"]}
+            for entry in entries]
+        for entry in entries:
+            ctx.add_warning(
+                f"{entry['from']} specialist forwarded row "
+                f"{entry['chrono_id']} to {target}")
+        try:
+            answer = _call_isolated(target, state,
+                                    contextvars.copy_context(), seen)
+        except Aborted:
+            raise
+        except Exception as exc:
+            ctx.add_warning(f"{target} specialist failed on a forwarded "
+                            f"row (fail-open): {exc}")
+            if fresh:
+                results[target] = exc
+            continue
+        rows = [_without_private_keys(span) for span in seen["spans"]]
+        chronos = _granted_event_ids(target, seen)
+        if fresh or not isinstance(results.get(target), dict):
+            results[target] = answer if isinstance(answer, dict) else {}
+            state["ledger_items"] = rows
+            state["event_ids"] = chronos
+        else:
+            _append_forwarded_answer(results[target], answer)
+            state["ledger_items"] = list(state.get("ledger_items") or []) + rows
+            state["event_ids"] = list(state.get("event_ids") or []) + chronos
+    if forwards:
+        record["forwards"] = {
+            target: [entry["chrono_id"] for entry in entries]
+            for target, entries in forwards.items()}
+
     # ---- Assemble: canonical order, ownership per granted channel ------
     for name in SPECIALISTS:
         state = dispatch.get(name)
@@ -3489,6 +3571,7 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
             # contract -- could not be read back at all.
             state["results"] = copy.deepcopy(positional)
             raw_transforms = []
+            minted = {}   # entities this hand declared on an earlier row
             ledger_items = state.get("ledger_items") or []
             if len(positional) != len(ledger_items):
                 alignment_errors.append(
@@ -3520,7 +3603,7 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
                     patch = transform.get("patch") \
                         if isinstance(transform, dict) else None
                     if isinstance(patch, dict) and patch:
-                        patch = _hydrate_existing_entity_patch(sc, patch)
+                        patch = _hydrate_existing_entity_patch(sc, patch, minted)
                         patch = _resolve_identity_handles(
                             patch, extras.get("identity_index"))
                         try:
@@ -3546,6 +3629,10 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
                             "chrono_id": chrono_id,
                             "patch": patch,
                         })
+                        for _key, _entity in (patch.get("entities") or {}).items():
+                            if isinstance(_entity, dict) and str(
+                                    _entity.get("name") or "").strip():
+                                minted.setdefault(str(_key), _entity)
                         emitted += 1
                     else:
                         alignment_errors.append(
@@ -3555,6 +3642,11 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
                     alignment_errors.append(
                         f"result {index + 1} says encoded without a transform")
                     continue
+                _account_for_every_thing(
+                    ledger, row, raw_transforms, chrono_id, status,
+                    state.setdefault("item_verdicts", []),
+                    state.setdefault("things_unaccounted", []),
+                    alignment_errors, index, sc)
                 if status:
                     receipt = {"item_id": item_id, "chrono_id": chrono_id,
                                "status": status}
@@ -4349,6 +4441,143 @@ def _transform_item_id(ledger, transform, default_id, notes, index):
            else "names none of them; ")
         + f"filed under the first, {names[0]!r}")
     return int(ids[0])
+
+
+_THING_VERDICTS = ("already_true", "not_mine", "no_referent")
+
+
+def _rows_to_forward(jobs, results, dispatch):
+    """{target hand: [{"span", "chrono_id", "from"}]} for every row a hand
+    declined with an address, where the addressed hand has not answered
+    that row. The span is the view's own (private keys and all), so the
+    forwarding round can hand it on unchanged."""
+    forwards = {}
+    for name, state in jobs:
+        result = results.get(name)
+        if not isinstance(result, dict):
+            continue
+        positional = result.get("results")
+        if not isinstance(positional, list):
+            continue
+        rows = state.get("ledger_items") or []
+        for index, row in enumerate(positional):
+            if not isinstance(row, dict) or index >= len(rows):
+                continue
+            if str(row.get("status") or "").strip().casefold() != "not_mine":
+                continue
+            target = str(row.get("reroute_to") or "").strip().casefold()
+            if target not in SPECIALISTS or target == name:
+                continue
+            ledger = rows[index] or {}
+            try:
+                chrono = int(ledger.get("chrono_id")
+                             or ledger.get("event_id") or 0)
+            except (TypeError, ValueError):
+                continue
+            if chrono <= 0:
+                continue
+            answered = dispatch.get(target) or {}
+            if answered.get("run") and chrono in (
+                    answered.get("event_ids") or []):
+                continue
+            if any(e["chrono_id"] == chrono
+                   for e in forwards.get(target, [])):
+                continue
+            forwards.setdefault(target, []).append(
+                {"span": ledger, "chrono_id": chrono, "from": name})
+    return forwards
+
+
+def _append_forwarded_answer(first, answer):
+    """A hand's answer to a forwarded slice, appended positionally after
+    its own round's answer, so one attach loop reads both."""
+    if not isinstance(answer, dict):
+        return
+    first.setdefault("results", [])
+    if not isinstance(first["results"], list):
+        first["results"] = []
+    first["results"].extend(
+        row for row in (answer.get("results") or []) if isinstance(row, dict))
+    notes = [str(n) for n in (answer.get("notes") or []) if str(n).strip()]
+    if notes:
+        first["notes"] = [str(n) for n in (first.get("notes") or [])] + notes
+
+
+def _thing_forms(text):
+    """A name as it is compared: casefolded, its leading determiner gone."""
+    form = str(text or "").strip().casefold()
+    for article in ("the ", "a ", "an "):
+        if form.startswith(article) and len(form) > len(article):
+            form = form[len(article):].strip()
+            break
+    return form
+
+
+def _settled_forms(sc, key):
+    """Every spelling a hand's `settled` key may stand for: the key itself,
+    and -- when it is a world key the hand took from item_matches -- that
+    record's name and aliases. A hand that resolved the thing and answered
+    under the key it resolved to has named the thing."""
+    forms = {_thing_forms(key)}
+    entity = ((sc or {}).get("entities") or {}).get(str(key))
+    if isinstance(entity, dict):
+        forms.add(_thing_forms(entity.get("name")))
+        forms.update(_thing_forms(alias) for alias in entity.get("aliases") or [])
+    forms.discard("")
+    return forms
+
+
+def _account_for_every_thing(ledger, row, raw_transforms, chrono_id, status,
+                             verdicts, unaccounted, notes, index, sc=None):
+    """Every thing on a granted row is either changed or accounted for.
+
+    The owner, 2026-09-15: "the verdict follows the thing". A row's status
+    was a thing's verdict while a row was one thing; a row about three
+    things is satisfied by one transform, and silence about the other two
+    was invisible by construction (the fair, turn 188: a pencil named on
+    two rows, three runs, never minted). So a result carries `settled`,
+    name -> verdict, for the things it did not transform, and this records
+    one verdict per thing: encoded for a thing a transform names, the
+    hand's word for the rest, and `things_unaccounted` for a thing with
+    neither -- report-only, so the rate can be measured before anything
+    is done about it. A row about one thing is accounted for by its
+    status."""
+    ids = ledger.get("item_ids") if isinstance(ledger.get("item_ids"), list) else []
+    names = ledger.get("item_names") if isinstance(ledger.get("item_names"), list) else []
+    if len(ids) <= 1:
+        return
+    changed = {int(t.get("item_id") or 0) for t in raw_transforms
+               if int(t.get("chrono_id") or 0) == int(chrono_id)}
+    settled = row.get("settled") if isinstance(row.get("settled"), dict) else {}
+    known = {_thing_forms(n) for n in names} - {""}
+    by_name = {}
+    for k, v in settled.items():
+        forms = _settled_forms(sc, k) & known
+        if not forms:
+            notes.append(f"result {index + 1} settles {str(k)!r}, which the "
+                         "row does not carry")
+            continue
+        for form in forms:
+            by_name[form] = str(v or "").strip().casefold()
+    for one, name in zip(ids, names):
+        key = _thing_forms(name)
+        if int(one) in changed:
+            verdict = "encoded"
+        elif by_name.get(key) in _THING_VERDICTS:
+            verdict = by_name[key]
+        elif by_name.get(key):
+            verdict = ""
+            notes.append(f"result {index + 1} settles {name!r} with "
+                         f"{by_name[key]!r}, which is not a verdict")
+        else:
+            verdict = ""
+        entry = {"chrono_id": int(chrono_id), "item_id": int(one),
+                 "item": str(name or ""), "status": verdict}
+        verdicts.append(entry)
+        if not verdict and status == "encoded":
+            unaccounted.append(entry)
+            notes.append(f"result {index + 1}: {name!r} was neither "
+                         "changed nor accounted for")
 
 
 def _bodies_addressed_as(ctx, scene, speaker, addresses):

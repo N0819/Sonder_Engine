@@ -403,6 +403,11 @@ def span_owners(item):
             hand = target if kind == "hand" else _CHANNEL_SPECIALISTS.get(target)
             if hand and hand not in owners:
                 owners.append(hand)
+    # A span handed on by a hand that declined it with an address (the
+    # forwarding round in `_run_specialists`) is the addressed hand's too.
+    for hand in (item.get("_forwarded_to") or []) if isinstance(item, dict) else []:
+        if hand in SPECIALISTS and hand not in owners:
+            owners.append(hand)
     return [name for name in SPECIALISTS if name in owners]
 
 
