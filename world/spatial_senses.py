@@ -842,6 +842,13 @@ def _opening_view_cap(scene: dict, room_id, body: str, other_room) -> str:
         # is this body's room, so `down` says the body is the one above. A
         # stair, ladder or hatch keeps the open answer both ways
         # (`spatial_levels.edge_way`).
+        # UNDER THE SKY THERE IS NO FLOOR BETWEEN: steps from a square up to
+        # a porch open to it are an overlook for sight -- the porch sees the
+        # square from its lip and is seen from it -- because nothing but air
+        # stands between the two (Coldharbour Fair turn 6, 2026-09-15: the
+        # clerk at the porch rail saw nothing of the fair below).
+        if _under_the_sky(scene, room_id, other_room):
+            return "full"          # no wall, no floor: the porch sees the square
         if _overlook_between(scene, room_id, other_room):
             if vertical == "down" and not _at_the_lip(scene, body, room_id, other_room):
                 return "none"
@@ -1488,16 +1495,29 @@ def _overlook_between(scene: dict, a, b) -> bool:
     return False
 
 
+def _under_the_sky(scene: dict, a, b) -> bool:
+    """Is neither room enclosed -- two places under the sky, a roofed porch
+    included, with air and not a floor between them?"""
+    rooms = (scene or {}).get("rooms") or {}
+    for rid in (a, b):
+        exposure = str((rooms.get(rid) or {}).get("exposure") or "enclosed").strip().casefold()
+        if exposure == "enclosed":
+            return False
+    return True
+
+
 def _at_the_lip(scene: dict, body, room_id, other_room) -> bool:
     """Does `body`, in `room_id`, stand at the cells of its opening onto
-    `other_room` -- the rail, the hatch's edge?"""
+    `other_room` -- the rail, the hatch's edge -- or within a pace of them,
+    which is where a body looking over a rail stands?"""
     from world.spatial_fov import _door_cells, body_cell
     cells, _b = _door_cells(scene, room_id, other_room)
     cell = body_cell(scene, body)
     if cell is None or not cells:
         at = effective_station(scene, body).get("at")
         return bool(at) and at == door_anchor_id(other_room)
-    return tuple(cell) in {tuple(c) for c in cells}
+    x, y = tuple(cell)
+    return any(max(abs(x - c[0]), abs(y - c[1])) <= 1 for c in cells)
 
 
 def _edge_vertical(scene: dict, from_room, to_room) -> Optional[str]:

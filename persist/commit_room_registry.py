@@ -381,6 +381,18 @@ def _apply_room_registry(cid, turn_id, registry):
             "WHERE chat_id=? AND room_uid=? AND retired_turn_id IS NULL",
             (turn_id, cid, rid),
         )
+    # A BOOK THE RESTORE TOOK WITH IT IS NO OWNER. A checkpoint restore
+    # recreates a chat's snapshot books under new ids, and a planned room
+    # still citing the old one made the whole commit fail on the registry's
+    # foreign key (Coldharbour Fair, 2026-09-15: a rerun of the opening
+    # rolled the scene back and left the chat with no scene at all). The
+    # column's own rule is ON DELETE SET NULL; applied here at write time,
+    # so a dead owner is nulled and the beat lands.
+    for row in registry.get("upserts") or []:
+        book = row.get("owning_book_id")
+        if book is not None and not q("SELECT 1 FROM lorebooks WHERE id=?",
+                                      (book,), one=True):
+            row["owning_book_id"] = None
     for row in registry.get("upserts") or []:
         qi(
             "INSERT INTO room_registry"

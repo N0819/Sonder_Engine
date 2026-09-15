@@ -217,3 +217,39 @@ def test_a_thing_that_says_who_carries_it_is_carried(temp_db):
     minted = derive_borne_containment(sc)
     assert any(subject == "lamp" and bearer == "Ada" for subject, bearer, _e in minted), minted
     assert sc["contained"]["lamp"]["in"] == "Ada" and sc["contained"]["lamp"]["mode"] == "carried"
+
+
+def test_a_planned_measurement_survives_the_establish():
+    """Coldharbour Fair, 2026-09-15: the plan laid a 20 by 16 square and the
+    establish re-measured it 30 by 30. A stub carrying the plan's geometry
+    keeps it; the establish's description is welcome, its measuring is not."""
+    from world.spatial import merge_scene_with_diff
+    sc = {"rooms": {"square": {"name": "Square", "planned": True, "extent": {"w": 20, "d": 16},
+                               "exposure": "open", "level": 0, "adjacent": []}},
+          "positions": {}, "entities": {}}
+    merged = merge_scene_with_diff(sc, {"rooms": {"square": {
+        "name": "Market Square", "desc": "cobbles and stalls", "extent": {"w": 30, "d": 30},
+        "exposure": "sheltered", "level": 2}}})
+    room = merged["rooms"]["square"]
+    assert room["extent"] == {"w": 20, "d": 16} and room["exposure"] == "open" and room["level"] == 0
+    assert room["desc"] == "cobbles and stalls"
+
+
+def test_steps_under_the_sky_are_an_overlook_for_sight():
+    """Coldharbour Fair turn 6, 2026-09-15: the clerk at the porch rail, a
+    storey above the square up a flight of steps, saw nothing of the fair.
+    Between two rooms neither of which is enclosed there is air, not a
+    floor: the porch sees the square from its lip and is seen from it."""
+    sc = {"rooms": {
+        "square": {"name": "Square", "extent": {"w": 20, "d": 16}, "anchors": {}, "exposure": "open",
+                   "adjacent": [{"to": "porch", "barrier": "open", "dir": "e", "vertical": "up", "way": "stair"}]},
+        "porch": {"name": "Porch", "extent": {"w": 6, "d": 4}, "anchors": {}, "exposure": "sheltered",
+                  "adjacent": [{"to": "square", "barrier": "open", "dir": "w", "vertical": "down", "way": "stair"}]}},
+        "positions": {"Isla": "porch", "Wick": "square"},
+        "stations": {"Isla": {"cell": [1, 1]}, "Wick": {"cell": [10, 8]}}, "entities": {}}
+    assert visual_level_between(sc, "Isla", "Wick") == "full"
+    assert visual_level_between(sc, "Wick", "Isla") == "full"
+    sc["stations"]["Isla"] = {"cell": [5, 2]}          # back from the rail: still open air
+    assert visual_level_between(sc, "Isla", "Wick") == "full"
+    from world.spatial import anchor_cells
+    assert len(anchor_cells(sc, "square")["door:porch"]["cells"]) > 1, "the steps' side is the whole side"

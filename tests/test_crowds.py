@@ -353,8 +353,15 @@ class TestOnlyTheEngineMintsAnId:
             [], [{"op": "set", "crowd_id": "the market crowd", "room": "square",
                   "composition": "traders"}],
             chat_id=1, turn=3, known_rooms=["square"])
-        assert standing == []
-        assert any("refusing to mint" in r for r in rejected)
+        # Since 2026-09-15 the crowd it DESCRIBES is minted -- under the
+        # engine's id, never the model's key (Coldharbour Fair: the
+        # establish's fair crowd was refused and the square stood silent).
+        assert len(standing) == 1 and standing[0]["uid"] != "the market crowd"
+        assert any("engine's own id" in r for r in rejected)
+        standing, rejected = crowds.apply_ops(
+            standing, [{"op": "move", "crowd_id": "nobody", "room": "square"}],
+            chat_id=1, turn=3, known_rooms=["square"])
+        assert any("refusing to mint" in r for r in rejected), "an op that is not a set still refuses"
 
     def test_an_empty_crowd_id_is_how_a_new_crowd_is_asked_for(self):
         standing, rejected = crowds.apply_ops(
