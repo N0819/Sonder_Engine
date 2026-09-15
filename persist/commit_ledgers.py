@@ -5,6 +5,8 @@ Extracted verbatim from commit.py, which re-exports every name here.
 See docs/experiments/AUDIT_COMMIT.md for the split record.
 """
 
+import re
+
 from core.db import wget, wset_if_changed
 from core.pipeline_context import note_step_decision
 from persist.commit_common import _normalized_fact
@@ -219,6 +221,35 @@ def world_pressure_view(chat_id, turn_idx):
     return view
 
 
+def _positioned_body_named(scene, subject):
+    """The positioned body a pressure's subject is about, or None.
+
+    A subject names a body by its whole name, or by its last name where that
+    last name belongs to exactly one positioned body ("Captain Hale's
+    approach" against a positions key of "Captain Edmund Hale"). One shared
+    surname is nobody: two Cranes in the room and the subject is about
+    neither for this purpose. Words shorter than three letters never match.
+    """
+    subject_cf = " %s " % re.sub(r"[^a-z0-9]+", " ", str(subject or "").casefold())
+    if not subject_cf.strip():
+        return None
+    keys = [str(k) for k in ((scene or {}).get("positions") or {})
+            if str(k).strip()]
+    for key in keys:
+        folded = re.sub(r"[^a-z0-9]+", " ", key.casefold()).strip()
+        if folded and f" {folded} " in subject_cf:
+            return key
+    by_last = {}
+    for key in keys:
+        words = [w for w in re.split(r"[^a-z0-9]+", key.casefold()) if len(w) >= 3]
+        if words:
+            by_last.setdefault(words[-1], []).append(key)
+    for last, owners in by_last.items():
+        if len(owners) == 1 and f" {last} " in subject_cf:
+            return owners[0]
+    return None
+
+
 def _find_pressure(ledger, op):
     """Index of the ledger entry an op targets: exact id first, then a fuzzy
     overlapping-subject fallback (models routinely echo the subject but not
@@ -325,6 +356,31 @@ def commit_world_pressure(ctx, nonce):
             else:
                 ledger.pop(idx)
                 resolved += 1
+
+    # REPORT-ONLY: a tick on a pressure whose subject is a positioned body
+    # counts only when that body's position changed this beat. The Director
+    # ticked "Captain Hale's approach continues toward Clara" on fifteen
+    # beats running while the captain's position never changed (scratch play
+    # 2026-09-14, chat 9); each tick reset the streak, so the must-tick floor
+    # never fired. The floor stays a warning until its false-positive rate is
+    # measured (the owner's 2026-09-06 ruling on guards over valid output).
+    _sd = res.get("state_diff") if isinstance(res.get("state_diff"), dict) else {}
+    _moved = {str(k).strip().casefold() for k in (_sd.get("positions") or {})}
+    _scene_now = wget(cid, "scene", {}) or {}
+    for op in ops:
+        if not isinstance(op, dict) \
+                or str(op.get("op") or "").strip().lower() != "tick":
+            continue
+        _idx = _find_pressure(ledger, op)
+        _subject = str((ledger[_idx].get("subject") if _idx is not None
+                        else None) or op.get("subject") or "")
+        _body = _positioned_body_named(_scene_now, _subject)
+        if _body and _body.casefold() not in _moved:
+            ctx.add_warning(
+                f"World pressure ticked without movement: {_subject!r} is "
+                f"about {_body}, and {_body}'s position did not change this "
+                "beat. A pressure about where a body is going advances by "
+                "the body moving.")
 
     unaddressed = 0
     stalled = 0
