@@ -265,7 +265,12 @@ def test_declaring_a_fresh_move_this_beat_is_left_alone(temp_db, monkeypatch):
     out = director.director_resolve(ctx, nonce=0)
 
     assert out["state_diff"]["positions"]["The Stranger"] == "hotel"
-    assert not (out.get("travel") or {}).get("advanced")
+    # The declared walk is on the record as ARRIVED (every walk is, since
+    # 2026-09-15: the beat's footfalls are read off it); nothing is under
+    # way, and the stale approach does not survive it.
+    travel = out.get("travel") or {}
+    assert not any(e.get("underway") for e in travel.get("advanced") or [])
+    assert "The Stranger" in travel.get("arrived", [])
 
 
 def test_nobody_walks_when_no_walk_was_ever_declared(temp_db, monkeypatch):

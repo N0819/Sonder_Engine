@@ -1317,12 +1317,18 @@ def walk_declared(ctx, scene, route_scene, sd, out, subject, mv, prev_room,
     entry = station.get(subject) if isinstance(station.get(subject), dict) else {}
     entry["cell"] = list(result["cell"])
     station[subject] = entry
+    # EVERY WALK IS ON THE RECORD, arrived or not: the beat's footfalls are
+    # read off it (`perception._beat_movers`), and only an under-way leg
+    # becomes an approach at commit.
+    _travel_record(out)["advanced"].append({
+        "subject": subject, "from": prev_room, "to": result["room"],
+        "destination": mv["to_room"], "to_anchor": mv.get("to_anchor"),
+        "to_cell": mv.get("to_cell"), "paces": result["paces"],
+        "pace": pace or "walk",
+        "underway": not result["arrived"]})
+    if result["arrived"] and subject not in _travel_record(out)["arrived"]:
+        _travel_record(out)["arrived"].append(subject)
     if not result["arrived"]:
-        _travel_record(out)["advanced"].append({
-            "subject": subject, "from": prev_room, "to": result["room"],
-            "destination": mv["to_room"], "to_anchor": mv.get("to_anchor"),
-            "to_cell": mv.get("to_cell"), "paces": result["paces"],
-            "underway": True})
         ctx.add_warning(
             f"Walk under way: {subject} covers {result['paces']} paces toward "
             f"{mv['to_room']!r} and ends the beat in {result['room']!r} at "
@@ -1354,12 +1360,15 @@ def walk_declared(ctx, scene, route_scene, sd, out, subject, mv, prev_room,
         entry = station.get(other) if isinstance(station.get(other), dict) else {}
         entry["cell"] = list(landed["cell"])
         station[other] = entry
+        _travel_record(out)["advanced"].append({
+            "subject": other, "from": prev_room, "to": landed["room"],
+            "destination": mv["to_room"], "to_anchor": mv.get("to_anchor"),
+            "to_cell": mv.get("to_cell"), "paces": landed["paces"],
+            "pace": pace or "walk",
+            "underway": not landed["arrived"]})
+        if landed["arrived"] and other not in _travel_record(out)["arrived"]:
+            _travel_record(out)["arrived"].append(other)
         if not landed["arrived"]:
-            _travel_record(out)["advanced"].append({
-                "subject": other, "from": prev_room, "to": landed["room"],
-                "destination": mv["to_room"], "to_anchor": mv.get("to_anchor"),
-                "to_cell": mv.get("to_cell"), "paces": landed["paces"],
-                "underway": True})
             ctx.add_warning(
                 f"Walk under way: {other} walks with {subject}, "
                 f"{landed['paces']} paces toward {mv['to_room']!r}, and ends "

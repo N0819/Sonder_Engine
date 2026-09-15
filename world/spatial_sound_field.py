@@ -1268,6 +1268,90 @@ def _is_sound_event(event) -> bool:
     return False
 
 
+#: WHAT THE WALLS GIVE BACK (the owner's ask, 2026-09-15: "quieter spaces
+#: should allow for some pretty long reaching echoes like an abandoned
+#: building"). A room's `surface` is the fraction of sound its surfaces
+#: absorb: `bare` for stone, concrete, tile and an emptied room; `soft`
+#: for cloth, crowd and snow; `furnished` the ordinary room. Sabine's
+#: numbers, the owner's to move.
+ABSORPTION = {"bare": 0.05, "furnished": 0.25, "soft": 0.5}
+#: Only a BARE room adds its reverberant field to the direct one below: an
+#: ordinary furnished room keeps today's spreading model byte for byte,
+#: because applying the physics to every parlour would move every
+#: calibration the owner has set. `soft` is accepted as the word for a room
+#: that rings even less than that.
+REVERBERANT_SURFACES = frozenset({"bare"})
+#: The height a room is assumed to have, in metres, and a pace in metres.
+ROOM_HEIGHT_M = 3.0
+PACE_M = 0.75
+#: When the ring is this much louder than the voice at the listener's cell,
+#: the words smear: a `full` line grades `fragment`.
+REVERB_SMEAR_DB = 6.0
+#: A bare room this long (its longer side, in paces) gives a sharp sound
+#: back as a second, separate sound -- about seventeen metres of extra
+#: path, the fifty milliseconds an ear needs to hear two.
+ECHO_SPAN_PACES = 12
+#: The word the narrator is handed for a room's ring, by reverberation
+#: time in seconds.
+REVERB_WORDS = ((2.0, "cavernous"), (1.0, "ringing"), (0.6, "live"))
+#: A body's tread at one pace, by pace: a walk is `faint` (40 dB), a run
+#: `audible` (50). The owner's numbers.
+TREAD_LEVEL = {"walk": "faint", "run": "audible"}
+#: A TREAD IS IMPACT NOISE AND IS MADE IN THE FLOOR ITSELF: what the room
+#: below hears is a property of the floor, not of the air above it --
+#: boards overhead carry a footfall into the room beneath at a level a
+#: voice through the same floor never reaches. The level heard in the room
+#: below a walk, by the upper room's `floor` word (masonry for anything
+#: else); a run is `TREAD_RUN_DB` louder. The owner's numbers.
+FLOOR_IMPACT_DB = {"timber": 55.0, "board": 55.0, "plank": 55.0,
+                   "stone": 40.0, "concrete": 40.0, "masonry": 40.0}
+TREAD_RUN_DB = 8.0
+
+
+def normalize_surface(value) -> str:
+    word = str(value or "").strip().casefold()
+    return word if word in ABSORPTION else ""
+
+
+def room_surface(scene, room_id) -> str:
+    room = ((scene or {}).get("rooms") or {}).get(room_id)
+    return normalize_surface((room or {}).get("surface")) if isinstance(room, dict) else ""
+
+
+def room_reverberation(scene: dict, room_id) -> Optional[dict]:
+    """How a bare room rings: `{rt60, gain, gain_db, word, echo}` from
+    Sabine's rule over the room's extent and an assumed height, or None for
+    a room that declares no reverberant surface.
+
+    `rt60` is the reverberation time in seconds (0.161 V / A); `gain` is
+    the reverberant field's level everywhere in the room relative to the
+    ONE-PACE direct level the ladders are authored at
+    (L_rev - L_1 = 8.5 + 10 log10(4 / R), R = A / (1 - a)), as a power
+    ratio; `echo` says the room's longer side clears `ECHO_SPAN_PACES`.
+    """
+    surface = room_surface(scene, room_id)
+    if surface not in REVERBERANT_SURFACES:
+        return None
+    from world.spatial_fov import room_grid
+    grid = room_grid(scene, room_id)
+    w = float(getattr(grid, "w", 0) or grid_side(scene, room_id)) * PACE_M
+    d = float(getattr(grid, "d", 0) or grid_side(scene, room_id)) * PACE_M
+    h = ROOM_HEIGHT_M
+    alpha = ABSORPTION[surface]
+    surface_m2 = 2.0 * (w * d + w * h + d * h)
+    volume = w * d * h
+    absorption = max(1e-6, alpha * surface_m2)
+    rt60 = 0.161 * volume / absorption
+    room_constant = absorption / max(1e-6, 1.0 - alpha)
+    gain_db = 8.5 + 10.0 * math.log10(4.0 / room_constant)
+    word = next((name for floor, name in REVERB_WORDS if rt60 >= floor), "")
+    longest = max(getattr(grid, "w", 0) or 0, getattr(grid, "d", 0) or 0) \
+        or grid_side(scene, room_id)
+    return {"rt60": round(rt60, 2), "gain": ratio_of_db(gain_db),
+            "gain_db": round(gain_db, 1), "word": word,
+            "echo": float(longest) >= ECHO_SPAN_PACES}
+
+
 def sound_sources(scene: dict, *, turn_idx=None, crowds=None, events=None,
                   speakers=None) -> tuple:
     """(sources, notices). Each source: {id, kind, room, cell, power, level,
@@ -1566,6 +1650,11 @@ class SoundField:
             self.sources.append(placed)
         self.ambient = {room: _ambient_floor(scene, room)
                         for room in grid.offsets}
+        # THE RING, ROOM BY ROOM: a bare room's reverberant field, as a gain
+        # relative to the one-pace level, or None (`room_reverberation`).
+        self.reverb = {room: room_reverberation(scene, room)
+                       for room in grid.offsets}
+        self._rev_spreads = {}
         # WHAT A PACE COSTS, ROOM BY ROOM. A duct carries a sound further
         # than the same length of hall (`DUCT_STEP`), and every other room
         # is unchanged, so a field with no duct on it floods byte for byte
@@ -1648,13 +1737,63 @@ class SoundField:
             l = field.locate(listener, l_room)
             if s is None or l is None:
                 continue
-            return gain_at(field.spread_from(s), l)
+            # THE LOUDER OF THE TWO WAYS THE SOUND ARRIVES: straight, or off
+            # the walls of a room that rings (`rev_gain`).
+            return max(gain_at(field.spread_from(s), l),
+                       field.rev_gain(str(s_room), l))
+        return None
+
+    # -- reverberation ------------------------------------------------------
+
+    def rev_gain(self, source_room, cell) -> float:
+        """The reverberant field a source in `source_room` puts at `cell`:
+        the room's ring everywhere inside it, and beyond each of its
+        openings the ring at the opening spread on as any sound is. Zero
+        where the room does not ring."""
+        rev = self.reverb.get(str(source_room))
+        if not rev:
+            return 0.0
+        if self.grid.inside.get(cell) == str(source_room):
+            return float(rev["gain"])
+        if source_room not in self._rev_spreads:
+            spreads = []
+            for other in sorted(self.grid.offsets):
+                if other == source_room:
+                    continue
+                cells, _bearing = _door_cells(self.scene, source_room, other)
+                for door in cells or ():
+                    at = self.grid.cell_of(source_room, door)
+                    if at in self.grid.inside:
+                        spreads.append(self.spread_from(at))
+            self._rev_spreads[source_room] = spreads
+        best = 0.0
+        for spread_map in self._rev_spreads[source_room]:
+            best = max(best, gain_at(spread_map, cell))
+        return float(rev["gain"]) * best
+
+    def gain_parts(self, speaker, listener, *, speaker_room=None,
+                   listener_room=None):
+        """(direct, reverberant) gains between two bodies, or None."""
+        s_room = speaker_room or room_of(self.scene, speaker)
+        l_room = listener_room or room_of(self.scene, listener)
+        if not s_room or not l_room:
+            return None
+        for room_id in sorted({str(s_room), str(l_room)}):
+            field = self._field_for(room_id)
+            if field is None:
+                continue
+            s = field.locate(speaker, s_room)
+            l = field.locate(listener, l_room)
+            if s is None or l is None:
+                continue
+            return gain_at(field.spread_from(s), l), field.rev_gain(str(s_room), l)
         return None
 
     # -- intensity ----------------------------------------------------------
 
     def intensity_at(self, source, cell) -> float:
-        return source["power"] * gain_at(self.spread_from(source["at"]), cell)
+        direct = gain_at(self.spread_from(source["at"]), cell)
+        return source["power"] * max(direct, self.rev_gain(source["room"], cell))
 
     def noise_at(self, listener, *, exclude=(), room=None) -> Optional[float]:
         """The listener's NOISE (§ 4.4): every placed source's intensity at
@@ -2014,6 +2153,20 @@ def stamp_sound_relation(scene: dict, rel: dict, observer: str, target: str,
     if gain is not None:
         rel["signal"] = gain
         rel["noise"] = noise
+        # THE RING OVER THE VOICE. When the reverberant part arrives
+        # `REVERB_SMEAR_DB` above the direct part, the words smear and the
+        # direction is gone (`hear_level` grades it, `_bearing_through`
+        # says where it seems to come from). An echo is the room's own:
+        # a bare room long enough gives a sharp sound back.
+        parts = sound.gain_parts(target, observer, speaker_room=target_room,
+                                 listener_room=observer_room)
+        if parts is not None:
+            direct, rev = parts
+            if rev > 0.0 and rev >= direct * ratio_of_db(REVERB_SMEAR_DB):
+                rel["reverberant"] = True
+        ring = room_reverberation(scene, o_room)
+        if ring and ring.get("echo") and str(o_room) == str(t_room):
+            rel["echo"] = True
         return rel
     # NOISE MASKS A VOICE BY WHAT REACHES THE LISTENER, WHEREVER THE VOICE
     # CAME FROM. One masking rule, on every path: a listener's noise floor
@@ -2112,6 +2265,42 @@ SENSORY_EVENTS_KEY = "sensory_events"
 MAX_SENSORY_EVENTS = 8
 
 
+def tread_events(scene: dict, movers) -> list:
+    """The beat's footfalls as one-beat sound events: for every body in
+    `movers` ({name: pace}) a tread in its own room at `TREAD_LEVEL`, and
+    one in every room it lies over with a floor between, at the floor's
+    impact level (`FLOOR_IMPACT_DB`, plus `TREAD_RUN_DB` for a run). Events
+    reach a listener the way every other beat sound does -- in the room,
+    through the near field, and by the far flood -- and their `detail` is
+    a sound fact that names nobody. Before 2026-09-15 a man climbing three
+    storeys of stone stair made no sound anywhere.
+    """
+    from language_runtime import compositor_text
+    from world.spatial_levels import floor_edges
+    rooms = (scene or {}).get("rooms") or {}
+    out = []
+    for name, pace in sorted((movers or {}).items()):
+        room = room_of(scene, name)
+        if not room or room not in rooms:
+            continue
+        running = str(pace or "walk").strip().casefold() == "run"
+        tread = compositor_text("sound_tread_run" if running else "sound_tread_walk")
+        level = TREAD_LEVEL["run" if running else "walk"]
+        out.append({"kind": "sound", "room": str(room), "level": level,
+                    "source": str(name), "detail": tread, "tread": True})
+        for edge in floor_edges(scene, room):
+            if edge.get("vertical") != "down" or edge["to"] not in rooms:
+                continue
+            material = str((rooms.get(room) or {}).get("floor") or "").strip().casefold()
+            level_db = FLOOR_IMPACT_DB.get(material, FLOOR_IMPACT_DB["stone"])
+            if running:
+                level_db += TREAD_RUN_DB
+            out.append({"kind": "sound", "room": str(edge["to"]), "db": float(level_db),
+                        "source": str(name), "tread": True,
+                        "detail": compositor_text("sound_tread_overhead", tread=tread)})
+    return out
+
+
 def normalize_sensory_event(event, rooms=None) -> Optional[dict]:
     """One `state_diff.sensory_events` entry as the engine holds it, or None
     where it names no room the scene has.
@@ -2146,6 +2335,13 @@ def normalize_sensory_event(event, rooms=None) -> Optional[dict]:
         raw = event.get("intensity")
         if raw not in (None, ""):
             out["intensity"] = raw
+    if event.get("tread"):
+        out["tread"] = True             # a footfall: its maker does not hear it as news
+    # A BARE ROOM LONG ENOUGH GIVES A SHARP SOUND BACK (`room_reverberation`).
+    if rooms is not None:
+        ring = room_reverberation({"rooms": rooms}, room)
+        if ring and ring.get("echo"):
+            out["echo"] = True
     return out
 
 
@@ -2437,6 +2633,18 @@ def _inaudible_everywhere_db(scene=None) -> float:
     return cut
 
 
+def ring_boost_db(scene: dict, room_id) -> float:
+    """How much louder a room that rings hands its walls than the direct
+    sound crossing it would be: the reverberant gain less the spreading
+    the far field would otherwise charge for the room's span, never below
+    nothing. The one term a bare room adds to the far field, applied at
+    its entry and at the flood's start alike (`room_reverberation`)."""
+    ring = room_reverberation(scene, room_id)
+    if not ring:
+        return 0.0
+    return max(0.0, float(ring["gain_db"]) + spreading_loss_db(room_span(scene, room_id)))
+
+
 def room_sound_flood(scene: dict, source_room, source_db: float) -> dict:
     """`{room_id: {"db", "length", "barrier_db", "via"}}` for every room a
     sound of `source_db` at one pace can still be heard in, `via` being the
@@ -2482,6 +2690,11 @@ def room_sound_flood(scene: dict, source_room, source_db: float) -> dict:
         return spans[room_id]
 
     span0 = span(source_room)
+    # A ROOM THAT RINGS HANDS ITS OPENINGS THE RING, not what is left of the
+    # direct sound after crossing it (`room_reverberation`): the level at
+    # the source room's walls is the reverberant one, and every room beyond
+    # starts from that. `source_db` is raised by the difference, once.
+    source_db += ring_boost_db(scene, source_room)
     best = {source_room: {"db": source_db - spreading_loss_db(span0),
                           "length": span0, "barrier_db": 0.0, "via": None}}
     heap = [(-best[source_room]["db"], source_room)]
@@ -2544,7 +2757,9 @@ def far_field_sources(scene: dict, *, turn_idx=None, crowds=None,
         if source.get("kind") == "speech":
             continue                    # never, at any volume. See above.
         level_db = db_of_power(source.get("power"))
-        if level_db < FAR_FIELD_ENTRY_DB:
+        # A ROOM THAT RINGS MAKES A SMALL SOUND A LOUD ONE at its walls
+        # (`ring_boost_db`): the entry is judged on what leaves the room.
+        if level_db + ring_boost_db(scene, source["room"]) < FAR_FIELD_ENTRY_DB:
             continue
         out.append({**source, "db": level_db})
     return out

@@ -188,3 +188,28 @@ def test_a_body_elsewhere_that_hears_the_line_is_planned(temp_db):
              "sequence": [{"type": "action", "attempt": "sits"}]}
     keys = [key for key, _ in build_plan(quiet, ctx.cast, chat_id=chat_id)]
     assert not any(k.startswith("character:") for k in keys)
+
+
+def test_a_body_elsewhere_that_answered_the_player_last_beat_is_planned(temp_db):
+    """Skerry Light turn 15, 2026-09-15: "Coming down." from three storeys
+    up, then a whole silent beat on the stair, because nothing said this
+    beat widened him in and the Director paces only the room it sees."""
+    from agents.runtime import build_plan
+    ctx, chat_id, ids = _bridge(temp_db, _positions())
+    temp_db.wset(chat_id, "dialogue_config", {"autonomy": 0})
+    # The previous beat's committed resolve: Elsewhere spoke to the player.
+    prev = temp_db.qi("INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
+                      (chat_id, 0, "", time.time()))
+    step = temp_db.qi("INSERT INTO steps(turn_id,key,label,ord) VALUES(?,?,?,?)",
+                      (prev, "director_resolve", "resolve", 4))
+    temp_db.qi("INSERT INTO variants(step_id,content,created,active) VALUES(?,?,?,?)",
+               (step, json.dumps({"dialogue_log": [
+                   {"speaker": "Elsewhere", "exact_quote": "\"Coming down.\"",
+                    "volume": "normal", "intended_target": "Player"}]}), time.time(), 1))
+    quiet = {"flow": {"reactors": [], "resolution_flags": {}},
+             "sequence": [{"type": "action", "attempt": "waits"}]}
+    keys = [key for key, _ in build_plan(quiet, ctx.cast, chat_id=chat_id, turn_idx=1)]
+    assert f"character:{ids['Elsewhere']}" in keys, keys
+    assert f"character:{ids['Here']}" not in keys
+    keys = [key for key, _ in build_plan(quiet, ctx.cast, chat_id=chat_id, turn_idx=2)]
+    assert not any(k.startswith("character:") for k in keys), "one beat of grace, not two"

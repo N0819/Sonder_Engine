@@ -2485,6 +2485,8 @@ def ambient_percepts(sensory_events, observer_room, *, order_key=None):
         if not desc:
             continue
         channel = _ambient_channel(event)
+        if event.get("echo") and channel != "sight":
+            desc = desc.rstrip(".") + _en("sound_echo")
         out.append(Percept(
             kind="ambient", channel=channel, data={"desc": desc},
             salience=0.4,

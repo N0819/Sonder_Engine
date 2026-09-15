@@ -91,6 +91,10 @@ from world.spatial_levels import (  # noqa: E402
     WAYS, FLOOR_LOSS_DB, normalize_level, edge_way, is_overlook, room_level,
     infer_room_levels, rooms_over, rooms_under, stack_of, level_span, floor_edges,
 )
+from world.spatial_sound_field import (  # noqa: E402
+    ABSORPTION, REVERB_SMEAR_DB, ECHO_SPAN_PACES, TREAD_LEVEL, FLOOR_IMPACT_DB, TREAD_RUN_DB,
+    room_surface, room_reverberation, normalize_surface, tread_events,
+)
 from world.spatial_transit import (
     _closed_enclosure_barrier, _entity_exterior_room, _interior_entry_room,
     _interior_rooms_of, _is_body_entity,
