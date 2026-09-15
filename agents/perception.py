@@ -2373,29 +2373,15 @@ def _inverted_motion_check(ctx, stage, views, resolved_event):
     the fix belongs upstream in what perception is handed, and rewriting a view
     on a regex would be a worse authority than the model it is policing.
     """
-    event = str(resolved_event or "").casefold()
-    if not event:
-        return
-    raising, lowering = _ling("_RAISING"), _ling("_LOWERING")
-    event_lowers = bool(lowering.search(event))
-    event_raises = bool(raising.search(event))
-    if event_lowers == event_raises:
-        return                      # says both, or says neither
-    for pid, view in (views or {}).items():
-        text = str(view or "").casefold()
-        if not text:
-            continue
-        if event_lowers and raising.search(text) and not lowering.search(text):
-            said, saw = "lowering", "raising"
-        elif event_raises and lowering.search(text) and not raising.search(text):
-            said, saw = "raising", "lowering"
-        else:
-            continue
-        ctx.warnings.append(
-            f"{stage}: the view for {pid} describes {saw} where the resolved "
-            f"event describes {said} -- perception has reversed a physical "
-            "direction the Director committed to.")
-
+    # CUT 2026-09-15. Measured on the scratch corpus: 5 fires in 167 turns,
+    # every one read a false positive -- the check matched a raising word
+    # and a lowering word anywhere in a whole view against a whole event
+    # ("down through the hatch" flagged for a lantern "raised" in the same
+    # paragraph). A regex over free prose fails in whichever direction its
+    # missing word points; the owner's rule for a guard that fires on valid
+    # output is to measure the rate and cut. Kept as a name so a stored
+    # variant that names it still loads.
+    return
 
 def _disguise_leak_check(ctx, stage, views, perceivers, subject_name,
                          concealed_terms, known_to):

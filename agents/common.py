@@ -5059,9 +5059,20 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None, *,
         name_tokens = _identity_token_set(actor_name, aliases)
         if role:
             name_tokens -= _identity_token_set(role)
+        # THE HEAD CLAUSE IS THE DESCRIPTOR. An appearance is a sentence of
+        # clauses -- "a county surveyor of thirty, small and brisk, ink on
+        # her right cuff" -- and running them together before the word cap
+        # made "the county surveyor of thirty small" (Hollin Mill, 2026-09-15).
+        # The first clause is what a stranger's eye takes in; the rest is
+        # detail a label has no room for.
+        head = appearance_text.strip()
+        for mark in (";", ","):
+            first = head.split(mark, 1)[0].strip()
+            if len(first.split()) >= 2:
+                head = first
         cleaned = re.sub(
             r"^(?:" + "|".join(map(re.escape, articles)) + r")\s+", "",
-            appearance_text.strip(), flags=re.I,
+            head, flags=re.I,
         ).replace(",", "")
         # STRIP THE NAME FORMS BEFORE TOKENISING. The token filter below
         # splits on whitespace, which an unspaced script does not have: a
@@ -9864,84 +9875,11 @@ def _check_action_direction(prose, event_order):
       at all, so this stays visible in fidelity_warnings for review rather
       than buying a rewrite it might not deserve.
     """
-    if not prose or not event_order:
-        return []
-    # _NARR_LOWERING and _NARR_RAISING are deliberately TIGHTER than a natural
-    # reading of "goes down" / "goes up": only verbs naming a deliberate directed
-    # movement, plus the unambiguous adverbs. Bare "up"/"down" ("heat scorching up
-    # your neck"), "rise"/"rose" (a chest rises; rose-gold motes) and "sink"/"drop"
-    # all appear constantly in ordinary prose, and every one of them would turn
-    # this into a false-positive generator that spends a rewrite on correct pages.
-    p_low = bool(_ling("_NARR_LOWERING").search(prose))
-    p_high = bool(_ling("_NARR_RAISING").search(prose))
-    warnings = []
-    for ev in event_order:
-        if not isinstance(ev, dict) or ev.get("kind") != "action":
-            continue
-        act = str(ev.get("action") or "")
-        a_low = bool(_ling("_NARR_LOWERING").search(act))
-        a_high = bool(_ling("_NARR_RAISING").search(act))
-        if a_low == a_high:
-            continue                # the act says both directions, or neither
-        said = "downward" if a_low else "upward"
-        if (a_low and p_high and not p_low) or (a_high and p_low and not p_high):
-            warnings.append(
-                "Physical direction reversed: event_order has "
-                f"{ev.get('actor')} moving {said} "
-                f"(\"{act[:60]}\") but the prose renders the opposite. "
-                "Render the act in the direction the record gives."
-            )
-    return warnings
-
-
-# THE MISSING ARM IS GONE (2026-09-06, the owner's ruling: a check that fires
-# on otherwise valid output has to die).
-#
-# It warned when the ACT named a direction and the prose named neither, and
-# the docstring above already conceded the hole -- "legitimate prose can
-# carry a descent with no directional verb at all". Worse, the direction is
-# read off a verb, so an act that is not a MOVEMENT is classed as one: in
-# the descent run it fired five times and at least three were not travel at
-# all -- "raises a hand in a halt gesture" and "turns the wheel mechanism"
-# both read as the body moving UPWARD, and "leans her torso inward toward
-# the concrete wall, looking upward" as a climb.
-#
-# It could not be measured historically the way the proper-noun arm was:
-# `event_order` is assembled for the narrator call and is not in the stored
-# resolve rows, so the corpus has nothing to replay it against. The evidence
-# is the run's own five firings, and it is enough under the standing rule.
-#
-# THE REVERSED ARM STAYS, and it is the one worth having: the act says down
-# and the page says up, which is a CONTRADICTION rather than an omission --
-# the Director resolved one character carrying another downward and the page
-# rendered a lift. That is a fact about the world disagreeing with itself,
-# not a judgement about how prose ought to read.
-
-
-# THE DECLARED-CONDUCT CHECK IS GONE (2026-09-06, the owner's ruling: a
-# check that fires on otherwise valid output has to die, and the fix belongs
-# in the payload and the prompt).
-#
-# IT ASKED FOR THE OPPOSITE OF WHAT THE NARRATOR PROMPT ASKS FOR. The prompt
-# says, of the player's own body: "If it is about theirs, imply it and move
-# on; if it is about anything else in the room, render it." The check scored
-# the act on its own content words -- the ones the view was not already using
-# -- and warned when none of them reached the page, which is precisely what
-# implying an act produces. Prose that obeyed the instruction was flagged for
-# obeying it.
-#
-# Measured on the descent run (chat 117), where every beat carried it: turns
-# 13, 14 and 15, four firings, and the one I first read as a true positive
-# was not one either -- the page implied the player's stop-and-listen and
-# rendered the echo it was listening to, which is the rule working.
-#
-# The failure it was built for is real and stays the prompt's: multitude
-# 2026-09-05 PM4 turn 7, where the page carried nothing of the player at all
-# while five other people spoke. IMPLYING IS NOT OMITTING, and that sentence
-# is now in the narrator card in both packs, where a rule about how prose
-# reads belongs. A lexical test could not tell the two apart, because the
-# difference is not in the vocabulary.
-
+    # CUT 2026-09-15: 4 fires in 167 scratch turns, the ones read all false
+    # ("You descend the ladder" flagged against prose that took the rungs
+    # "down through the hatch" and raised a lantern). See
+    # `perception._inverted_motion_check` for the rule. Returns nothing.
+    return []
 
 def _actor_reference_patterns(display):
     """Compiled patterns that count as a prose reference to one actor.

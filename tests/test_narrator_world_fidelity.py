@@ -748,92 +748,10 @@ def test_act_omitted_without_a_scene_fails_closed(temp_db):
     assert [e["kind"] for e in events] == ["speech"]
 
 
-def _act(actor, action):
-    return [{"n": 1, "actor": actor, "kind": "action", "action": action}]
-
-
-def test_reversed_direction_fires_but_no_longer_buys_a_rewrite():
-    """THE REVERSED ARM IS WARNING-ONLY NOW (2026-09-06), the same ruling
-    that cut the MISSING arm below, applied to its sibling.
-
-    This fixture is a REAL reversal and still fires: one subject, one object,
-    opposite directions, no sequence. What changed is the price. It was in
-    `_ENFORCEABLE_PREFIXES`, so it bought a full narrator rewrite -- and
-    measured over the corpus there are 19 stored findings, every one false.
-    Stored means SURVIVED a rewrite, because a finding the retry clears never
-    reaches the variant: those pages were correct, were rewritten, and were
-    flagged again.
-
-    The vocabularies are already deliberately tight, and tightness was not
-    the problem. The comparison binds no subject (`fox ears fold downward`
-    contradicted by "a tail lifts"; `lowers both arms` by "You lift your
-    chin"), reads no negation (`lowering his mug` by "Veronica's pen doesn't
-    lift"), and allows no sequence (`lifts her mouth` by "she descends" three
-    words after the prose said "Higher"). Each needs subject-bound parsing
-    this codebase does not do.
-    """
-    order = _act("Mara", "slowly lowers the lantern into the well shaft")
-    prose = "Mara lifts the lantern clear of the shaft, rope creaking."
-    warnings = _check_action_direction(prose, order)
-    assert len(warnings) == 1
-    assert warnings[0].startswith("Physical direction reversed")
-    assert not warnings[0].startswith(_enforceable())
-
-
-def test_direction_rendered_correctly_passes():
-    order = _act("Mara", "slowly lowers the lantern into the well shaft")
-    prose = "The lantern lowers past the lip of the well, light shrinking."
-    assert _check_action_direction(prose, order) == []
-
-
-def test_a_direction_the_page_does_not_name_is_not_a_defect():
-    """THE MISSING ARM IS GONE (2026-09-06, the owner's ruling).
-
-    It warned when the act named a direction and the prose named neither,
-    and the check's own docstring conceded the hole: correct prose can
-    render a descent with no directional verb in it at all -- as this very
-    fixture does, since a rope creaking in a fist IS a lantern going down.
-
-    Worse, direction is read off a VERB, so an act that is not travel gets
-    classed as travel. In the descent run it fired five times and at least
-    three were not movement: "raises a hand in a halt gesture" and "turns
-    the wheel mechanism" both read as the body moving UPWARD, and "leans her
-    torso inward toward the concrete wall, looking upward" as a climb.
-
-    What it was built for -- a beat where the body simply is not on the page
-    -- is the narrator card's, and has been since the same day: IMPLYING IS
-    NOT OMITTING. A lexical test could not tell an implied act from an
-    absent one, because the difference is not in the vocabulary.
-    """
-    order = _act("Mara", "slowly lowers the lantern into the well shaft")
-    prose = ("Mara's mouth tightens. The rope creaks in her fist and the yard "
-             "smells suddenly of wet stone.")
-    assert _check_action_direction(prose, order) == []
-
-
-def test_a_direction_the_page_reverses_is_still_a_defect():
-    """The arm worth keeping, and the reason the pair are not the same
-    check: this is the world disagreeing with itself, not a judgement about
-    how prose ought to read. The Director resolved one character carrying
-    another downward and the page rendered a lift."""
-    order = _act("Mara", "slowly lowers the lantern into the well shaft")
-    prose = "Mara raises the lantern clear of the shaft, hand over hand."
-    warnings = _check_action_direction(prose, order)
-    assert len(warnings) == 1
-    assert warnings[0].startswith("Physical direction reversed")
-
-
-def test_direction_check_ignores_ordinary_prose():
-    # Neither the act nor the page names a direction -> nothing to judge.
-    order = _act("Mara", "sets the mug down on the table")
-    prose = "Mara sets the mug down, the ceramic clicking against the wood."
-    assert _check_action_direction(prose, order) == []
-    # The tightened vocabulary must not read a rose-gold light, a rising heat
-    # or a dropped voice as a body being moved.
-    order2 = _act("Mara", "lowers the lantern into the shaft")
-    prose2 = ("Rose-gold light drifts up the shaft as heat rises off the "
-              "stones. Her voice drops. The lantern lowers out of sight.")
-    assert _check_action_direction(prose2, order2) == []
+# The five direction-check tests that stood here were cut with the check on
+# 2026-09-15: `_check_action_direction` fired 4 times in 167 scratch turns,
+# every one read a false positive, and a regex over free prose is the guard
+# class the repo's rules forbid. `_check_action_direction` now returns [].
 
 
 def test_speech_only_record_is_unaffected():

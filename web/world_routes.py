@@ -823,7 +823,7 @@ def _room_name(scene, room_id):
 
 
 def grid_view(scene, room_id, lint_rows, *, player="", cast=None, things=(),
-              sound_from=None, charter=None):
+              sound_from=None, charter=None, sight_from=None):
     """One room's field exactly as the engine computes it -- the module
     docstring gives the shape. Pure over the scene and the same functions
     sight and light read (`room_grid`, `anchor_cells`, `body_cell`,
@@ -902,6 +902,26 @@ def grid_view(scene, room_id, lint_rows, *, player="", cast=None, things=(),
             # "anchor" (derived from `at`/`near`), or "none".
             "source": body_cell_source(scene, who),
         }
+    # AS ONE BODY SEES AND HEARS THE OTHERS (`sight_from`, a body in this
+    # room): the verdicts the perception stage would reach for it, so the
+    # debug map shows why a body was or was not on that observer's page.
+    # The same functions perception reads: `body_visibility` for the line
+    # and the cone, `hear_level` over `spatial_rel_between` at a normal
+    # voice for the ear. Built for the pipeline drawer, 2026-09-15.
+    if sight_from and str(sight_from) in bodies:
+        from world.spatial import body_visibility, hear_level, spatial_rel_between
+        for who in bodies:
+            if who == str(sight_from):
+                continue
+            try:
+                seen = body_visibility(scene, str(sight_from), who)
+                heard = hear_level(spatial_rel_between(scene, str(sight_from), who), "normal")
+            except Exception:
+                continue
+            bodies[who]["from"] = {
+                "visible": bool(seen.get("visible")), "sector": seen.get("sector"),
+                "tier": seen.get("tier"), "occluded_by": seen.get("occluded_by"),
+                "basis": seen.get("basis"), "hears": heard}
     # The townspeople, after the scene's bodies: this room's, then the ones
     # standing in a neighbour the field lays (`room` says which). Their
     # ``source`` is the placement's (`PLACEMENT_SOURCES`), not the pin word.
@@ -1111,7 +1131,7 @@ def map_view(scene, lint_rows, charter=None):
 
 @router.get("/{room_id}/grid")
 def rooms_grid(cid: int, room_id: str, frame_id: int | None = None,
-               sound_from: str | None = None):
+               sound_from: str | None = None, sight_from: str | None = None):
     chat = _chat_or_404(cid)
     with _era(cid, frame_id):
         scene = rooms.read_scene(cid)
@@ -1124,7 +1144,7 @@ def rooms_grid(cid: int, room_id: str, frame_id: int | None = None,
             scene, room_id, _lint_rows(scene),
             player=str(persona_name(persona_of(chat)) or "").strip(),
             cast=_cast_ids(cid), things=slice_.get("things") or (),
-            sound_from=sound_from,
+            sound_from=sound_from, sight_from=sight_from,
             # The townspeople of this room and of every room the field lays
             # beyond its doorways -- the observer's frame, and no more.
             charter=charter_body_records(

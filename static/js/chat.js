@@ -1717,6 +1717,87 @@ function renderEngineNotes(box, content) {
   }
 }
 
+// The drawer's map panel (see `openPipeline`). Lazy: nothing is fetched
+// until the panel is opened.
+function pipelineMapPanel(p) {
+  const outcome = (p.steps || []).find(s => s.key === "perception_outcome");
+  let room = null;
+  try {
+    const active = (outcome?.variants || []).find(v => v.active) || (outcome?.variants || []).slice(-1)[0];
+    room = active ? (JSON.parse(active.content || "{}").player_room || null) : null;
+  } catch (e) { room = null; }
+  const host = el("div", { class: "wb-map-canvas pipeline-map" });
+  const table = el("div", { class: "pipeline-map-verdicts" });
+  const panel = el(
+    "details",
+    { class: "pipeline-map-wrap" },
+    el("summary", {}, room ? `Map · ${room}` : "Map"),
+    host,
+    table
+  );
+  if (!room) {
+    host.append(el("div", { class: "small dim" }, "No outcome room on this turn."));
+    return panel;
+  }
+  let loaded = false;
+  panel.addEventListener("toggle", async () => {
+    if (!panel.open || loaded) return;
+    loaded = true;
+    host.append(el("div", { class: "small dim" }, "Loading…"));
+    try {
+      const index = await api("GET", `/api/chats/${S.chatId}/rooms`);
+      const first = await api("GET", `/api/chats/${S.chatId}/rooms/${encodeURIComponent(room)}/grid`);
+      const player = Object.entries(first.bodies || {}).find(([, b]) => b.kind === "player");
+      const view = player
+        ? await api("GET", `/api/chats/${S.chatId}/rooms/${encodeURIComponent(room)}/grid?sight_from=${encodeURIComponent(player[0])}`)
+        : first;
+      const ctx = {
+        vocab: index.vocab || {},
+        pendingCell: null,
+        select() {}, chooseCell() {}, focusRow() {},
+      };
+      host.innerHTML = "";
+      if (typeof wbRenderRoomMap === "function") {
+        wbRenderRoomMap(host, view, ctx);
+      } else {
+        host.append(el("div", { class: "small dim" }, "Map renderer not loaded."));
+      }
+      table.innerHTML = "";
+      const rows = Object.entries(view.bodies || {});
+      if (player && rows.length > 1) {
+        const t = el("table", { class: "small" },
+          el("tr", {}, el("th", {}, `From ${player[0]}`), el("th", {}, "cell"), el("th", {}, "facing"),
+            el("th", {}, "sees"), el("th", {}, "sector"), el("th", {}, "tier"),
+            el("th", {}, "hears"), el("th", {}, "hidden by")));
+        for (const [name, b] of rows) {
+          if (name === player[0]) continue;
+          const f = b.from || {};
+          t.append(el("tr", {},
+            el("td", {}, name),
+            el("td", {}, b.cell ? b.cell.join(",") : "—"),
+            el("td", {}, b.facing || "—"),
+            el("td", {}, f.visible === undefined ? "—" : (f.visible ? "yes" : "no")),
+            el("td", {}, f.sector || "—"),
+            el("td", {}, f.tier || "—"),
+            el("td", {}, f.hears || "—"),
+            el("td", {}, f.occluded_by || "—")));
+        }
+        table.append(t);
+      }
+      const me = player ? view.bodies[player[0]] : null;
+      if (me) {
+        table.append(el("div", { class: "small dim" },
+          `${player[0]}: cell ${me.cell ? me.cell.join(",") : "—"}, facing ${me.facing || "—"}`
+          + (me.at ? `, at ${me.at}` : "")));
+      }
+    } catch (e) {
+      host.innerHTML = "";
+      host.append(el("div", { class: "small dim" }, "Map unavailable: " + (e?.message || e)));
+    }
+  });
+  return panel;
+}
+
 // ---- Pipeline drawer ----
 async function openPipeline(tid) {
   const D = $("#drawer");
@@ -1840,6 +1921,15 @@ async function openPipeline(tid) {
   );
 
   D.append(headerRow);
+
+  // THE MAP, IN THE DRAWER. The room's field as the engine computes it
+  // (`GET /rooms/{id}/grid`, the World Browser's own renderer) for the room
+  // the player stood in at this turn's outcome, with every other body's
+  // sight and hearing verdicts FROM the player (`sight_from`), so a body
+  // missing from the page can be read off the cone, the line and the ear
+  // in one glance instead of a probe script. Drawn from the scene as it
+  // stands now: exact for the latest turn, which is the one anyone reruns.
+  D.append(pipelineMapPanel(p));
 
   // The server computes `blocked_by_other_frame` separately from `editable`
   // for exactly this: "so the UI can explain WHY a frame-latest turn is still

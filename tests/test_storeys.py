@@ -201,3 +201,19 @@ def test_touching_cells_see_each_other_and_a_fixture_is_still_cover():
     sc["stations"]["Ada"] = {"cell": [post[0], post[1] + 3]}
     sc["orientation"]["Ada"] = {"facing": "n"}
     assert not body_visibility(sc, "Ada", "Cal")["visible"]
+
+
+def test_a_thing_that_says_who_carries_it_is_carried(temp_db):
+    """Hollin Mill, 2026-09-15: the establish stood the surveyor's lantern
+    and key loose in the lane; setting the lantern down was refused as not
+    hers. `held_by` on the thing is the bearing record's evidence."""
+    from persist.commit import derive_borne_containment
+    sc = {"rooms": {"lane": {"name": "Lane", "adjacent": []}},
+          "positions": {"Ada": "lane", "lamp": "lane"},
+          "entities": {"char_ada": {"name": "Ada", "kind": "person", "aliases": []},
+                       "lamp": {"name": "a lantern", "kind": "item", "portable": True,
+                                "held_by": "Ada"}},
+          "contained": {}, "contacts": [], "poses": {}}
+    minted = derive_borne_containment(sc)
+    assert any(subject == "lamp" and bearer == "Ada" for subject, bearer, _e in minted), minted
+    assert sc["contained"]["lamp"]["in"] == "Ada" and sc["contained"]["lamp"]["mode"] == "carried"

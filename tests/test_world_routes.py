@@ -1871,3 +1871,23 @@ class TestTownspeopleOnTheMap:
         then = client.get(f"/api/chats/{cid}/rooms/kitchen/grid?frame_id={fid}").json()
         assert then["bodies"]["Ysra"]["cell"] == [1, 1] and then["bodies"]["Ysra"]["source"] == "authored"
         assert client.get(f"/api/chats/{cid}/rooms/kitchen/grid").json()["bodies"]["Ysra"]["source"] == "post"
+
+
+class TestTheGridSeesFromABody:
+    def test_sight_from_carries_the_observers_verdicts(self, client, story, temp_db):
+        """The pipeline drawer's map (2026-09-15): every other body in the
+        room carries how the named observer sees and hears it, from the
+        same functions perception reads."""
+        cid = story["chat_id"]
+        scene = _lay_out(temp_db, cid)
+        scene["positions"]["Bob"] = "kitchen"
+        scene["stations"]["Bob"] = {"cell": [6, 2], "near": []}
+        scene.setdefault("entities", {})["char_bob"] = {"name": "Bob", "kind": "person", "aliases": []}
+        temp_db.wset(cid, "scene", scene)
+        plain = client.get(f"/api/chats/{cid}/rooms/kitchen/grid").json()
+        assert "from" not in plain["bodies"]["Bob"]
+        view = client.get(f"/api/chats/{cid}/rooms/kitchen/grid?sight_from=Alice").json()
+        verdict = view["bodies"]["Bob"]["from"]
+        assert set(verdict) == {"visible", "sector", "tier", "occluded_by", "basis", "hears"}
+        assert verdict["hears"] in ("full", "fragment", "none")
+        assert "from" not in view["bodies"]["Alice"]
