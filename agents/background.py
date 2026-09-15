@@ -631,9 +631,15 @@ def _background_react(ctx, nonce):
 # Scene manager (docs/design/BACKGROUND_LIFE_DESIGN.md §3.10-§3.12)
 # ---------------------------------------------------------------------------
 
-def _place_block(ctx, room_id):
+def _place_block(ctx, room_id, *, walkable_from=None):
     """Objective self-locating knowledge for the managed location (§3.7). Every
-    field is something anyone standing in the room trivially has."""
+    field is something anyone standing in the room trivially has.
+
+    With `walkable_from` (the room a figure stands in), the block also
+    carries where it can go: `exits`, one step away on the graph every body
+    walks, and `rooms`, the names of the place's rooms -- the list a
+    reaction's `goes_to` is chosen from (`_presence_exits`,
+    `_presence_rooms`)."""
     sc = wget(ctx.chat.id, "scene", {}) or {}
     room = ((sc.get("rooms") or {}).get(room_id) or {}) if room_id else {}
     block = {
@@ -682,7 +688,45 @@ def _place_block(ctx, room_id):
         block["style"] = {k: sg[k] for k in ("tone", "avoid") if sg.get(k)}
     except Exception:
         pass
+    if walkable_from:
+        block["exits"] = _presence_exits(sc, walkable_from)
+        block["rooms"] = _presence_rooms(sc)
     return block
+
+
+def _presence_exits(sc, here):
+    """The rooms one step from where this figure stands, as {room_id, name}.
+
+    A presence's place block carried no exits, so a figure who decided to
+    leave had nowhere to say it was going: the reaction's `action` said
+    "begins to rise from the table" and the commit, reading no room, left
+    the body seated (scratch play 2026-09-14, chat 9 turn 11). The graph is
+    the one every body walks (`passable_neighbors`), so a chute or a locked
+    door is honoured here exactly as it is for the cast.
+    """
+    from world.spatial import passable_neighbors, room_display_name
+    here = str(here or "").strip()
+    if not here:
+        return []
+    try:
+        reachable = passable_neighbors(sc or {}).get(here) or ()
+    except Exception:
+        return []
+    rooms = (sc or {}).get("rooms") or {}
+    return [{"room_id": rid, "name": room_display_name(rooms.get(rid) or {}, rid)}
+            for rid in sorted(reachable)]
+
+
+def _presence_rooms(sc):
+    """Every room of the place, as {room_id, name}: the layout anyone who
+    works or lives here knows, and the list a departure's `goes_to` is
+    chosen from. Names only -- no description, no contents, no one's
+    position -- so the block says where a figure CAN go and nothing about
+    what it would find."""
+    from world.spatial import room_display_name
+    rooms = (sc or {}).get("rooms") or {}
+    return [{"room_id": rid, "name": room_display_name(room or {}, rid)}
+            for rid, room in sorted(rooms.items()) if isinstance(room, dict)]
 
 
 def _player_room(ctx, sc):
@@ -1911,7 +1955,8 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce,
         # The per-presence path carried NO place block whatever -- not the
         # room, not the time, not the setting, not a word of lore. It knew its
         # own role_hint and the beat, and nothing about the world it stands in.
-        "place": _place_block(ctx, here or _player_room(ctx, sc)),
+        "place": _place_block(ctx, here or _player_room(ctx, sc),
+                              walkable_from=here),
         "entity": {
             "name": name,
             "role_hint": sketch.get("role_hint", ""),
@@ -1983,4 +2028,5 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce,
             "heard_address": addressed_by,
             "charter_act": out.get("charter_act"),
             "charter_offers": charter_offers,
-            "activity": str(out.get("activity") or "").strip().casefold()}
+            "activity": str(out.get("activity") or "").strip().casefold(),
+            "goes_to": str(out.get("goes_to") or "").strip()}
