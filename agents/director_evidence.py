@@ -2621,6 +2621,7 @@ def normalize_causal_ledger(out, authority=None, identity_index=None):
             "volume": str(entry.get("volume") or "normal"),
             "movement": (dict(entry["movement"])
                          if isinstance(entry.get("movement"), dict) else None),
+            "look": str(entry.get("look") or "").strip(),
             "ability": str(entry.get("ability") or ""),
             "difficulty": str(entry.get("difficulty") or ""),
             "resolution_notes": note,
@@ -2646,6 +2647,8 @@ def normalize_causal_ledger(out, authority=None, identity_index=None):
             # compatibility mirror made a movement row arrive there as an
             # ordinary action, with no destination to encode.
             projected["movement"] = dict(normalized["movement"])
+        if normalized["look"]:
+            projected["look"] = normalized["look"]
         if spoken and not act:
             projected.update({
                 "type": "speech", "text": event,

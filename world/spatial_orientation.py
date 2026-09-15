@@ -55,6 +55,24 @@ def normalize_bearing(value) -> Optional[str]:
     return _BEARING_ALIASES.get(key)
 
 
+#: The turns a body makes in place, relative to where it faces: a quarter
+#: turn to either side, or about. Absolute bearings are `_BEARINGS`.
+TURNS = ("left", "right", "back")
+_TURN_STEPS = {"left": -2, "right": 2, "back": 4}
+
+
+def turn_bearing(facing: Optional[str], turn) -> Optional[str]:
+    """Where a body faces after turning `left`, `right` or `back` from
+    `facing`; None when the facing is unknown (a turn from nowhere faces
+    nowhere -- the same fail-open the cone keeps) or the turn is none of
+    the three."""
+    facing = normalize_bearing(facing)
+    step = _TURN_STEPS.get(str(turn or "").strip().casefold())
+    if not facing or step is None:
+        return None
+    return _BEARINGS[(_BEARINGS.index(facing) + step) % len(_BEARINGS)]
+
+
 def opposite_bearing(bearing: Optional[str]) -> Optional[str]:
     return _OPPOSITE_BEARING.get(bearing)
 

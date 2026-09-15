@@ -80,7 +80,11 @@ log = logging.getLogger(__name__)
 #: cheap; missing one is not.
 SCENE_READS = ("rooms", "positions", "entities", "stations", "orientation",
                "poses", "contacts", "contained", "crossings", "passages",
-               "day_phase", "weather", "beat_idx")
+               "day_phase", "weather", "beat_idx",
+               # The outcome pass's sweep marker (`effective_facing` reads
+               # it; never stored): a working-copy key, stamped so a
+               # derivation that read it is invalidated when it changes.
+               "_sweeping")
 
 #: id(scene) -> (scene, fingerprint, cache). Never outlives the outermost
 #: `scene_read_pass` for that object, so this global holds nothing between

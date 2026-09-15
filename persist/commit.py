@@ -167,6 +167,7 @@ from persist.commit_background import (beat_reactions, BACKGROUND_PROMOTION_DIAL
     auto_promote_background_characters, select_auto_promotion,
     schedule_auto_promotion, AUTO_PROMOTION_JOB_KEY)
 from persist.commit_scene_state import (_anchor_current_room, sync_anchored_books,
+    _declared_looks,
     _guard_occupied_mover_removal, _advance_ground, prepare_scene_commit,
     commit_scene, _record_subject_last_seen, _dedupe_overlay_entries,
     _merge_overlays, _overlay_handles, _overlay_ending_handles,

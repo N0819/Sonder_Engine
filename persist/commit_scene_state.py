@@ -1418,6 +1418,47 @@ def composed_beat_for(ctx):
     return compose_beat_scene(ctx)
 
 
+def _declared_looks(ctx, res, p_name=None):
+    """{body name: look} for every act this beat that turned or looked
+    (`ActionElement.look` on the resolve's sequence, player and cast
+    alike; the last look an actor declared wins)."""
+    looks = {}
+    if p_name is None:
+        try:
+            from story.scene import persona_of
+            p_name = persona_name(persona_of(ctx.chat))
+        except Exception:
+            p_name = ""
+    by_id = {}
+    for row in ctx.cast or ():
+        try:
+            by_id[str(row["id"])] = character_name_from_text(row["sheet"])
+        except Exception:
+            continue
+    # THE PLAYER'S OWN ROWS LIVE ON THE INTERPRET. An asserted player act
+    # never re-enters the resolve's sequence (it was decided at interpret),
+    # so the player's look is read there; the cast's declared acts reach
+    # the resolve's sequence and are read from it.
+    rows = list((ctx.get("director_interpret") or {}).get("sequence") or [])
+    rows.extend((res or {}).get("sequence") or [])
+    for element in rows:
+        if not isinstance(element, dict):
+            continue
+        look = str(element.get("look") or "").strip()
+        if not look:
+            continue
+        actor = str(element.get("actor") or element.get("source_entity_id") or "")
+        if actor.startswith("persona:") or actor in ("", "self", "player"):
+            name = p_name
+        elif actor.startswith("character:"):
+            name = by_id.get(actor[10:]) or ""
+        else:
+            name = actor
+        if name:
+            looks[name] = look
+    return looks
+
+
 def compose_beat_scene(ctx):
     """Compose the scene this beat produced: ONE function, two callers.
 
@@ -2057,7 +2098,8 @@ def compose_beat_scene(ctx):
                               _carry_names)
     infer_focus(cid, ctx.turn.frame_id, prev_scene, sc,
                 ctx.get("director_resolve") or {}, _carry_names)
-    infer_facing(cid, ctx.turn.frame_id, prev_scene, sc, _carry_names)
+    infer_facing(cid, ctx.turn.frame_id, prev_scene, sc, _carry_names,
+                 looks=_declared_looks(ctx, res), turn_idx=ctx.turn.idx)
 
     # THE BEAT'S EVENTS, ONTO THE SCENE (`world/beat_ledger.py`).
     #

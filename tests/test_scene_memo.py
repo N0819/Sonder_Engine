@@ -212,6 +212,7 @@ def _furnished_scene():
     that `effective_anchors` reads the key (review C12 rework).
     """
     return _RecordingScene({
+        "_sweeping": [],
         "rooms": {
             "hall": {
                 "name": "the Hall", "size": "large", "light": "lit",

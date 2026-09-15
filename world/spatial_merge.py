@@ -2213,6 +2213,9 @@ def merge_scene_with_diff(
     # centre when the doorway cannot be placed -- a body in a room is
     # somewhere in it, and the door is where an arrival is.
     _seat_arrivals(merged, _positions_before, incoming_stations)
+    # A perception pass's sweep marker is never state: it rode a working copy
+    # and must not ride the merge into the stored scene.
+    merged.pop("_sweeping", None)
     invalidate_contact_bound_poses(merged, _contacts_before_ops)
     normalize_scene_poses(merged)
 

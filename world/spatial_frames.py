@@ -44,7 +44,7 @@ from world.spatial import (THRESHOLD_CROSSING_BEATS, _SUBJECT_KEYED, _anchor_dir
                      anchor_bearing_of, effective_anchors, has_visual,
                      hear_level, is_alarming, room_of, room_of_record,
                      rooms_adjacent, sound_path, sound_walk_level, spatial_rel,
-                     travel_bearing)
+                     travel_bearing, TURNS, turn_bearing, normalize_bearing)
 
 NOT_A_ZONE = None
 
@@ -692,7 +692,85 @@ def infer_focus(chat_id, frame_id, prev_scene, new_scene, dr_output, cast_names)
     return changed
 
 
-def infer_facing(chat_id, frame_id, prev_scene, new_scene, cast_names):
+def _body_key_named(scene, ref):
+    """The positions key `ref` denotes -- the key itself, case-tolerant, or
+    an entity whose name is `ref` -- or None."""
+    positions = (scene or {}).get("positions") or {}
+    want = str(ref or "").strip().casefold()
+    if not want:
+        return None
+    for key in positions:
+        if str(key).strip().casefold() == want:
+            return key
+    for eid, ent in ((scene or {}).get("entities") or {}).items():
+        if isinstance(ent, dict) and eid in positions \
+                and str(ent.get("name") or "").strip().casefold() == want:
+            return eid
+    return None
+
+
+def look_bearing(scene, name, look, prev_facing):
+    """Where `name` faces after a declared look, and what it now attends.
+
+    Returns `(facing, focus)`. `left`, `right` and `back` turn the body from
+    where it faced (`turn_bearing`; from nowhere, nowhere). `around` is a
+    sweep: the facing stands and the caller marks the beat. A compass word
+    is that bearing. Anything else is a thing looked at: a co-located body
+    (bearing from cell to cell, else the anchor it stands at), a fixture of
+    the room (its bearing), or an exit (the way to that room) -- and it
+    becomes the focus as well, so the frame and the cone agree.
+    """
+    from world.spatial import (_anchor_dir, anchor_bearing_of, bearing_between,
+                               body_cell, effective_anchors)
+    look = str(look or "").strip()
+    if not look:
+        return None, None
+    word = look.casefold()
+    if word == "around":
+        return prev_facing, None
+    if word in TURNS:
+        return turn_bearing(prev_facing, word), None
+    bearing = normalize_bearing(look)
+    if bearing:
+        return bearing, None
+    room = room_of(scene, name)
+    if not room:
+        return None, None
+    other = _body_key_named(scene, look)
+    if other and other != name and room_of(scene, other) == room:
+        mine, theirs = body_cell(scene, name), body_cell(scene, other)
+        if mine is not None and theirs is not None:
+            toward = bearing_between(tuple(mine), tuple(theirs))
+        else:
+            toward = anchor_bearing_of(scene, other)
+        return toward, {"kind": "target", "ref": other}
+    anchors = effective_anchors(scene, room) or {}
+    if look in anchors:
+        return _anchor_dir(scene, room, look), {"kind": "anchor", "ref": look}
+    rooms = (scene or {}).get("rooms") or {}
+    exit_id = look if look in rooms else next(
+        (rid for rid, rm in rooms.items()
+         if str((rm or {}).get("name") or "").strip().casefold() == word), None)
+    if exit_id and exit_id != room:
+        return travel_bearing(scene, room, exit_id), {"kind": "edge", "ref": exit_id}
+    return None, None
+
+
+def _cells_bearing(scene, name, other):
+    """Bearing from `name`'s cell to `other`'s, when both stand on cells of
+    one room; else None."""
+    from world.spatial import bearing_between, body_cell
+    key = _body_key_named(scene, other)
+    if not key or room_of(scene, key) != room_of(scene, name):
+        return None
+    mine, theirs = body_cell(scene, name), body_cell(scene, key)
+    if mine is None or theirs is None:
+        return None
+    return bearing_between(tuple(mine), tuple(theirs))
+
+
+def infer_facing(chat_id, frame_id, prev_scene, new_scene, cast_names,
+                 looks=None, turn_idx=None):
     """Deterministic per-character `facing` -- an ABSOLUTE compass bearing --
     joining the infer_came_from / infer_focus family. Runs at commit AFTER both
     (it reads the freshly-set came_from and focus). facing is the observer's
@@ -730,6 +808,24 @@ def infer_facing(chat_id, frame_id, prev_scene, new_scene, cast_names):
         moved = bool(new_r) and new_r != old_r
         prev_facing = rec.get("facing")
 
+        declared = (looks or {}).get(name)
+        if declared is None:
+            declared = next((v for k, v in (looks or {}).items()
+                             if str(k).casefold() == str(name).casefold()), None)
+        if declared:
+            # A DECLARED LOOK OUTRANKS EVERY INFERENCE (the owner,
+            # 2026-09-15: turning and looking are acts). A sweep keeps the
+            # facing and marks the beat, so perception lifts the cone for
+            # it once.
+            faced, focus = look_bearing(new_scene, name, declared, prev_facing)
+            if str(declared).strip().casefold() == "around":
+                rec["swept_turn"] = turn_idx
+            elif focus:
+                rec["focus"] = focus
+            if faced is not None and faced != prev_facing:
+                rec["facing"] = faced
+                changed = True
+            continue
         if moved:
             if rec.get("came_from") is None:
                 new_facing = None                 # disoriented jump
@@ -741,6 +837,13 @@ def infer_facing(chat_id, frame_id, prev_scene, new_scene, cast_names):
             if focus.get("kind") == "edge" and ref:
                 turned = travel_bearing(new_scene, new_r, ref)
                 new_facing = turned if turned else prev_facing
+            elif focus.get("kind") == "target" and ref and _cells_bearing(
+                    new_scene, name, ref) is not None:
+                # FROM CELL TO CELL: a body attending another turns toward
+                # where that body stands, not only toward a fixture it
+                # happens to be at (89 of the owner's 104 unresolved focuses
+                # were this case, 2026-09-15).
+                new_facing = _cells_bearing(new_scene, name, ref)
             elif focus.get("kind") == "target" and ref:
                 # Turned to attend a CO-LOCATED person -> face their anchor's
                 # bearing, so a rear source you turn toward deterministically
@@ -758,6 +861,19 @@ def infer_facing(chat_id, frame_id, prev_scene, new_scene, cast_names):
                 new_facing = toward if toward else prev_facing
             else:
                 new_facing = prev_facing          # persist (no decay)
+            if new_facing is None:
+                # A POSE THAT SAYS WHERE A BODY FACES IS A FACING, when
+                # nothing else has said one: "standing at the sideboard,
+                # facing the door" was written by the spatial hand and read
+                # by nobody (5 such poses in the owner's corpus).
+                pose = (new_scene.get("poses") or {}).get(name) or {}
+                if isinstance(pose, dict) \
+                        and str(pose.get("relation") or "").strip().casefold() == "facing" \
+                        and str(pose.get("relative_to") or "").strip():
+                    posed, _focus = look_bearing(
+                        new_scene, name, pose["relative_to"], prev_facing)
+                    if posed:
+                        new_facing = posed
 
         if new_facing != prev_facing:
             rec["facing"] = new_facing

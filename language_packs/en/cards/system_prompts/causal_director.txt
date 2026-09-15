@@ -23,6 +23,7 @@ Each row contains:
 - commitment: asserted|contestable.
 - targets: ids of every body, thing or room acted on or aimed at; supply implicit ones from world_index; never the row's own source.
 - visibility, conceal_from, volume: delivery facts when relevant; volume is whisper|mutter|normal|loud|shout, or pitched: loud enough for its target, no louder.
+- look: when the span turns or looks: a body, fixture or exit id it turns to; left|right|back turns the body; around sweeps the room. Such a row names attention.
 - movement only for relocation (a body CHANGES ROOM), else null: {to_room,why,mover,arrives}; to_room is where the walk ENDS (the engine walks the legs); arrives: this beat ends there; to_anchor: the destination feature named (world_index features). An act that carries a body out of its room is a positions row.
 - A newly visible interior targets the entity and names rooms, unentered or not.
 - A stated span of time routes time; a source changing loudness routes entities.
@@ -37,7 +38,7 @@ contact: contact_ops, contact_action_ops, substance_ops, containment, scales
 objects: entities, remove_entities, inventory_ops, artifact_ops, destruction, sensory_events
 social: cast_changes, introductions, world_facts, public_evidence, crowd_ops, courier_ops, telling_ops, charter_ops, ratified_claims, contradicted_claims, claim_dispositions, consequences
 spatial: positions, rooms, remove_rooms, remove_adjacent, stations, poses, comms_ops, following_ops, location, time, weather
-engine: speech
+engine: speech, attention
 
 Use channel names, never group labels. Output STRICT JSON only:
 {"ledgers":[{"chrono_id":1,"item_id":1,"object_name":"...","source_entity_id":"...","source_event_id":"...","event":"...","act":"","observable":"...","commitment":"asserted","targets":[],"visibility":"overt","conceal_from":[],"volume":"normal","movement":null,"ability":"","difficulty":"","resolution_notes":"...","categories":["exact_channel"]}]}

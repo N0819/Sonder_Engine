@@ -148,6 +148,12 @@ _POSTURE_TOKENS = {
 #: The egocentric sectors sight reaches: full in front, an impression to the
 #: side, nothing behind. `_REAR_SECTORS` in `spatial_geometry` is the same
 #: rear arc; the peripheral band is this module's addition.
+#: How far a deliberate look around reaches, in paces: the largest extent a
+#: room may have (`spatial_geometry.EXTENT_MAX_PACES`). Indoors the cast is
+#: bounded by the room and its open doorways; outdoors and in a vast room
+#: this is the owner's cap on what a sweep takes in.
+SWEEP_REACH_PACES = 24
+
 _FRONT_SECTORS = frozenset({"ahead", "ahead_left", "ahead_right"})
 _SIDE_SECTORS = frozenset({"left", "right"})
 

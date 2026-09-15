@@ -2008,6 +2008,40 @@ def narrator(ctx, nonce):
         "spatial_frame": spatial_digest(_scene_for_frame, player_name,
                                         label_for=_view_label),
     })
+    # THE PLAYER TURNED THIS BEAT: their own row said where they looked
+    # (`look`), so the frame carries it and the page says what they now
+    # face and what is at their back, once, on the beat it changed.
+    _player_looks = [
+        str(e.get("look") or "").strip()
+        for e in (ctx.get("director_interpret") or {}).get("sequence") or []
+        if isinstance(e, dict) and str(e.get("look") or "").strip()]
+    if _player_looks and _spatial_fields.get("spatial_frame") is not None:
+        _frame = _spatial_fields["spatial_frame"]
+        _facing = None
+        try:
+            from world.spatial import effective_facing
+            from world.spatial_frames import look_bearing
+            # Where they faced as the beat began: the orientation record
+            # itself, so a sweep marker on the working copy (which makes
+            # `effective_facing` answer None for the pass) does not read as
+            # "faced nowhere".
+            _frame_scene = {k: v for k, v in _scene_for_frame.items() if k != "_sweeping"}
+            _was = effective_facing(_frame_scene, player_name)
+            for _look in _player_looks:
+                _faced, _f = look_bearing(_frame_scene, player_name, _look, _was)
+                _was = _faced if _faced else _was
+            _facing = _was
+        except Exception as _exc:
+            _facing = None
+            ctx.add_warning(f"spatial_frame.turned: facing not computed ({_exc})")
+        _frame["turned"] = {
+            "looks": _player_looks,
+            "look": _player_looks[-1],
+            "facing": _facing,
+            "ahead": list(_frame.get("ahead") or [])
+                     + ([_frame["ahead_entity"]] if _frame.get("ahead_entity") else []),
+            "behind": list(_frame.get("behind") or []),
+        }
 
     # F1-F4 world-fidelity payload: the pipeline's own ordered event record,
     # co-present position deltas, and visible portal states -- plus the same
