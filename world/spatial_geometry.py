@@ -397,10 +397,15 @@ def _effective_anchors(scene: dict, room_id, *, derive=False) -> dict:
         # of the open side: a gallery looks down along the whole of its
         # edge, not through one cell of it (`spatial_levels.is_overlook`).
         from world.spatial_levels import is_overlook
+        # ...and UNDER THE SKY THERE IS NO WALL: an open way between two
+        # rooms neither of which is enclosed -- a lane onto a square, a
+        # square onto a roofed porch up a flight of steps -- is the whole
+        # shared side too.
+        _exposures = (str(room.get("exposure") or "enclosed").strip().casefold(),
+                      str((other or {}).get("exposure") or "enclosed").strip().casefold())
         if str(width or "").strip().casefold() == "wall" or is_overlook(edge) or (
                 normalize_barrier(barrier) == "open"
-                and str(room.get("exposure") or "").strip().casefold() == "open"
-                and str((other or {}).get("exposure") or "").strip().casefold() == "open"):
+                and "enclosed" not in _exposures):
             anchor["width"] = "wall"
             anchor["desc"] = "the rail" if is_overlook(edge) else "the open side"
             out[aid] = anchor

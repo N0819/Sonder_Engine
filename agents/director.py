@@ -178,6 +178,7 @@ from .director_views import (
 from .director_movement import (
     beat_seconds,
     walk_declared,
+    walk_within_room,
     declared_walk_leg,
     _door_route,
     _egocentric_exits,
@@ -6043,6 +6044,12 @@ def director_resolve(ctx, nonce, _corrections=None):
         _walked.add(_who)
         walk_declared(ctx, sc, route_scene_for(ctx, sc, sd), sd, out, _who,
                       _rmv, _room_before or room_of(sc, _who), interp=interp)
+
+    # A STATION MOVED ACROSS A ROOM IS WALKED TOO (`walk_within_room`). The
+    # player is in `_walked` by name whether or not they walked rooms this
+    # beat; only a body that did is spared a second walk.
+    walk_within_room(ctx, sc, sd, out,
+                     exclude=(set(_walked) - {p_name}) | ({move_subject} if move_subject else set()))
 
     # Durable following supplies ordinary group travel, bounded by pace and
     # route. It runs after the movement backstop has finalized the player's

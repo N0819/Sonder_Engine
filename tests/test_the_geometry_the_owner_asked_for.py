@@ -348,3 +348,58 @@ def test_the_walk_ends_at_the_last_room_the_world_holds():
     assert _final_movement(rows)["to_room"] == "mill", "without a scene, the last arrival as before"
     only = [{"movement": {"to_room": "mill", "arrives": True, "mover": "self"}}]
     assert _final_movement(only, scene=sc)["to_room"] == "mill", "a lone unknown still raises its need"
+
+
+def test_a_station_moved_across_a_room_is_walked(temp_db, monkeypatch):
+    """Coldharbour Fair turn 2, 2026-09-15: "step round to where I can see
+    him" re-stationed the clerk nine paces across the square to arm's reach
+    of the boy in one beat, with no walk. A station the hands move across a
+    room covers the paces like any walk and ends where they run out."""
+    from tests.helpers import fanout_resolve_agent
+    import agents.director_movement as movement
+    ctx = _make_ctx(temp_db, "lamp_room")
+    # No room move this beat: the scaffold's interpret walks the player to
+    # the lamp room, and a body that walked rooms is rightly spared.
+    ctx.director_interpret["movement"] = None
+    ctx.director_interpret["sequence"] = [
+        {**e, "movement": None} for e in ctx.director_interpret.get("sequence") or []]
+    sc = temp_db.wget(ctx.chat.id, "scene", {})
+    sc["rooms"]["keeper_room"]["extent"] = {"w": 12, "d": 8}
+    sc["rooms"]["keeper_room"]["anchors"] = {"hearth": {"desc": "the hearth", "dir": "e", "height": "waist"}}
+    sc["stations"] = {"The Stranger": {"cell": [1, 4]}}
+    temp_db.wset(ctx.chat.id, "scene", sc)
+    monkeypatch.setattr(movement, "paces_for", lambda seconds=None, pace=None: 4)
+    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent(
+        {"state_diff": {"stations": {"The Stranger": {"at": "hearth", "near": []}}}}))
+    out = director.director_resolve(ctx, nonce=0)
+    st = out["state_diff"]["stations"]["The Stranger"]
+    assert st.get("at") is None and st["cell"][0] <= 5, st
+    leg = next(a for a in out["travel"]["advanced"] if a["subject"] == "The Stranger")
+    assert leg["underway"] and leg["to"] == "keeper_room" and leg.get("to_cell")
+
+
+def test_a_pose_written_for_the_arrival_does_not_survive_a_short_walk(temp_db, monkeypatch):
+    """Coldharbour Fair turn 5, 2026-09-15: "standing at the top of the church
+    steps looking out over the market square" beside a position at the foot
+    of them, and the page put her on the porch."""
+    from tests.helpers import fanout_resolve_agent
+    import agents.director_movement as movement
+    ctx = _make_ctx(temp_db, "lamp_room")
+    sc = temp_db.wget(ctx.chat.id, "scene", {})
+    sc["rooms"]["keeper_room"]["extent"] = {"w": 12, "d": 8}
+    sc["rooms"]["lamp_room"]["extent"] = {"w": 8, "d": 8}
+    sc["rooms"]["keeper_room"]["adjacent"][0]["dir"] = "e"
+    sc["rooms"]["lamp_room"]["adjacent"] = [{"to": "keeper_room", "barrier": "open", "dir": "w"}]
+    sc["stations"] = {"The Stranger": {"cell": [1, 4]}}
+    temp_db.wset(ctx.chat.id, "scene", sc)
+    monkeypatch.setattr(movement, "paces_for", lambda seconds=None, pace=None: 3)
+    monkeypatch.setattr(director, "_agent_json", fanout_resolve_agent({"state_diff": {
+        "positions": {"The Stranger": "lamp_room"},
+        "stations": {"The Stranger": {"at": None, "near": []}},
+        "poses": {"The Stranger": {"posture": "standing", "detail": "standing in the lamp room, looking out"}}}}))
+    out = director.director_resolve(ctx, nonce=0)
+    sd = out["state_diff"]
+    assert sd["positions"]["The Stranger"] == "keeper_room", "three paces do not cross the room"
+    assert (sd.get("poses") or {}).get("The Stranger", {}).get("detail") == "", \
+        "the arrival's pose went with the arrival; a bare standing pose stands in for it"
+    assert any("Dropped the pose" in w for w in ctx.warnings)

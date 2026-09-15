@@ -18,6 +18,7 @@ import re
 from story.character_schema import character_name_from_text
 from world.mechanics import UNCLAIMED_BEAT_SECONDS, read_time_diff, time_diff_claims
 from world.spatial import (
+    anchor_stand_cell, body_cell, free_cell_near, room_grid,
     _ROUTE_MEMORY_BARRIERS,
     door_cell,
     egocentric_frame,
@@ -1329,6 +1330,21 @@ def walk_declared(ctx, scene, route_scene, sd, out, subject, mv, prev_room,
     if result["arrived"] and subject not in _travel_record(out)["arrived"]:
         _travel_record(out)["arrived"].append(subject)
     if not result["arrived"]:
+        # A POSE WRITTEN FOR THE ARRIVAL DOES NOT SURVIVE A WALK THAT FELL
+        # SHORT. The hands wrote the body at its destination; the walk ended
+        # it on the way, and a pose of "standing at the top of the steps
+        # looking out over the fair" beside a position at the foot of them
+        # is the two-representations disagreement the page then repeats
+        # (Coldharbour Fair turn 5, 2026-09-15). The station keeps its cell
+        # only; the pose goes, and the beat says so.
+        _poses = sd.setdefault("poses", {}) if isinstance(sd.get("poses", {}), dict) else {}
+        if subject in _poses:
+            ctx.add_warning(
+                f"Dropped the pose written for {subject} at {mv['to_room']!r}: "
+                "the walk ended short of it, so the body is on its way, not there.")
+        _poses[subject] = _on_the_way_pose()
+        entry.pop("at", None)
+        entry["near"] = []
         ctx.add_warning(
             f"Walk under way: {subject} covers {result['paces']} paces toward "
             f"{mv['to_room']!r} and ends the beat in {result['room']!r} at "
@@ -1381,6 +1397,85 @@ def walk_declared(ctx, scene, route_scene, sd, out, subject, mv, prev_room,
                 f"{landed['paces']} paces toward {mv['to_room']!r}, and ends "
                 f"the beat in {landed['room']!r}.")
     return result
+
+
+def _on_the_way_pose():
+    """The pose of a body whose walk is under way: standing, nothing more.
+    Engine-authored so the beat-old pose ("standing in clear view of the
+    boy") cannot outlive the walk that carried the body away from it
+    (Coldharbour Fair turn 5, 2026-09-15)."""
+    return {"posture": "standing", "support": "", "relative_to": "",
+            "relation": "", "constraint": "", "detail": ""}
+
+
+def walk_within_room(ctx, scene, sd, out, *, exclude=()):
+    """A station the hands moved WITHIN a room is walked too. A body the
+    beat re-stations across its room -- to a fixture, beside another body,
+    onto a cell -- covers the paces at the beat's pace like any walk, and
+    where the budget runs short it ends the beat where the paces did, with
+    the leg under way (Coldharbour Fair turn 2, 2026-09-15: "step round to
+    where I can see him" re-stationed the clerk nine paces across a square
+    to arm's reach of the boy, in a beat, with no walk).
+
+    Only for a body whose room did not change (the room walk already
+    covered the others, `exclude`), whose cell the scene knows, and whose
+    new station the grid can place. Never for a body the beat named as
+    carried or that has no measured station: the fail-open answer is the
+    station as written."""
+    stations = sd.get("stations") if isinstance(sd.get("stations"), dict) else {}
+    if not stations:
+        return
+    positions = sd.get("positions") if isinstance(sd.get("positions"), dict) else {}
+    paces = paces_for(beat_seconds(ctx, sd))
+    for subject, station in list(stations.items()):
+        if subject in exclude or not isinstance(station, dict):
+            continue
+        room = room_of(scene, subject)
+        if not room or (positions.get(subject) and str(positions[subject]) != str(room)):
+            continue
+        here = body_cell(scene, subject)
+        if here is None:
+            continue
+        # The fixture named outranks a pinned cell, and a body named
+        # outranks both: a station's `cell` is often the body's OLD cell
+        # echoed beside a new `at`, and the new `at` is what moved.
+        goal = None
+        if str(station.get("at") or "").strip():
+            goal = anchor_stand_cell(scene, room, str(station["at"]).strip(), near=here)
+        if goal is None and station.get("near"):
+            other = next((n for n in station["near"] if room_of(scene, n) == room
+                          and body_cell(scene, n) is not None), None)
+            if other:
+                beside = body_cell(scene, other)
+                goal = free_cell_near(scene, room, beside, subject)
+        if goal is None and station.get("cell") is not None:
+            try:
+                goal = room_grid(scene, room).nearest((int(station["cell"][0]), int(station["cell"][1])))
+            except (TypeError, ValueError, IndexError):
+                goal = None
+        if goal is None or tuple(goal) == tuple(here):
+            continue
+        landed = walk(scene, subject, room, to_cell=list(goal), paces=paces,
+                      from_room=room, from_cell=here)
+        if landed is None or landed.get("arrived"):
+            continue
+        # SHORT OF IT: the body stands where the paces ran out, the station
+        # it was written keeps only what the cell can honour, and the leg
+        # carries on next beat.
+        station["cell"] = list(landed["cell"])
+        station.pop("at", None)
+        station["near"] = []
+        stations[subject] = station
+        if isinstance(sd.get("poses", {}), dict):
+            sd.setdefault("poses", {})[subject] = _on_the_way_pose()
+        _travel_record(out)["advanced"].append({
+            "subject": subject, "from": room, "to": room, "destination": room,
+            "to_cell": [int(goal[0]), int(goal[1])], "paces": landed["paces"],
+            "pace": "walk", "underway": True})
+        ctx.add_warning(
+            f"Walk under way: {subject} covers {landed['paces']} paces across "
+            f"{room!r} toward cell {list(goal)} and ends the beat at "
+            f"{list(landed['cell'])}; silence carries the walk on.")
 
 
 def _travel_in_flight_view(sc, interp, p_name):
@@ -1553,6 +1648,8 @@ def _travel_continues(ctx, out, sc, sd, interp, p_name):
         sd.setdefault("positions", {})[subject] = landed["room"]
         sd.setdefault("stations", {}).setdefault(subject, {})[
             "cell"] = list(landed["cell"])
+        if not landed["arrived"] and isinstance(sd.get("poses", {}), dict):
+            sd.setdefault("poses", {})[subject] = _on_the_way_pose()
         # THE WALK KEEPS ITS END. The feature or cell the declaration
         # named rides every continued leg's record, so the commit's
         # approach still says where in the room the walk ends and the last

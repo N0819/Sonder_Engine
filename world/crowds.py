@@ -437,11 +437,19 @@ def apply_ops(crowds, ops, *, chat_id, turn, known_rooms, roster=(), spoken=()):
             continue
 
         target = by_uid.get(uid) if uid else None
-        if uid and target is None:
+        if uid and target is None and op != OP_SET:
             rejected.append("no crowd %r; refusing to mint one under it" % uid)
             continue
 
         if op == OP_SET and target is None:
+            # A `set` under a handle nobody holds is a request for a NEW
+            # crowd, minted under the ENGINE's id -- only the engine mints an
+            # id, and the model's key is dropped with a note (Coldharbour
+            # Fair, 2026-09-15: the establish's fair crowd was refused for
+            # naming itself, and the square stood silent through the fair).
+            if uid:
+                rejected.append("no crowd %r; minted the crowd it describes "
+                                "under the engine's own id" % uid)
             if room not in rooms:
                 rejected.append("crowd in unknown room %r" % room)
                 continue

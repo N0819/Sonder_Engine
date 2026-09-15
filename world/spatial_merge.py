@@ -245,9 +245,21 @@ def _merge_room(existing: dict, incoming: dict, room_id=None) -> dict:
 
     merged_room["adjacent"] = list(existing_edges.values())
 
+    # A MEASUREMENT THE PLAN STATED IS NOT THE DIRECTOR'S TO INVENT A SECOND
+    # TIME (`world/structure.py` says the same at landing). While the room
+    # is the plan's stub carrying the plan's geometry, an establish that
+    # re-measures it -- Coldharbour Fair, 2026-09-15: a 20 by 16 square
+    # rewritten 30 by 30, a 24-pace nave 28 -- keeps the plan's numbers;
+    # what it describes is welcome, what it measures is not.
+    _planned_geometry = set()
+    if existing.get("planned") and existing.get("extent"):
+        _planned_geometry = {"extent", "shape", "parts", "size", "exposure",
+                             "level", "surface", "quiet"}
     for key, value in incoming.items():
         if key in ("name", "desc", "notes", "parent_entity", "adjacent",
                    "remove_anchors"):
+            continue
+        if key in _planned_geometry and existing.get(key) not in (None, "", [], {}):
             continue
         # An empty container is indistinguishable from "the model did not
         # mention this", so it cannot be read as an erasure -- the doctrine

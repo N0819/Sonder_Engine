@@ -8074,7 +8074,21 @@ def _observable_predicate(display, surface):
     surface = str(surface or "").strip()
     if not surface:
         return None
-    disp_tokens = _identity_token_set(display)
+    # A SURFACE THAT ALREADY OPENS WITH THE LABEL IS A PREDICATE AFTER IT.
+    # The identity scrub rewrites a name inside a surface to the observer's
+    # label, so the surface arrives as "The constable's clerk of twenty-six
+    # reaches out"; the token peel below misses a possessive, and the label
+    # was prefixed again ("The constable's clerk of twenty-six constable's
+    # clerk of twenty-six reaches out", Coldharbour Fair turn 4, 2026-09-15).
+    _label = str(display or "").strip()
+    if _label and surface.casefold().startswith(_label.casefold()):
+        rest = surface[len(_label):].lstrip(" ,:;")
+        if rest:
+            surface = rest
+    # The label's own article is not a name token: peeling it off "The
+    # flashlight beam moves" for a label of "the gaunt man" doubled the
+    # subject the docstring exists to prevent.
+    disp_tokens = _identity_token_set(display) - set(compositor_value("articles"))
     words = surface.split()
     # Peel leading actor-name tokens / a leading pronoun off the surface.
     while words and (words[0].strip(".,;:'").casefold() in disp_tokens

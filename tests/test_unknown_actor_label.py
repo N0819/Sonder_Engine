@@ -50,7 +50,11 @@ def test_trims_trailing_dangling_function_word():
         "A young woman, five-foot-seven-inches, with a slightly disheveled uniform",
         aliases=["Sarah Moon"],
     )
-    assert label == "the young woman five-foot-seven-inches"
+    # Since 2026-09-15 the label is the appearance's HEAD CLAUSE -- what a
+    # stranger's eye takes in -- rather than its clauses run together and
+    # capped: "the young woman", not "the young woman five-foot-seven-inches"
+    # (Hollin Mill made "the county surveyor of thirty small" the other way).
+    assert label == "the young woman"
     assert not label.rstrip().endswith((" a", " with", " in", " of"))
 
     # A LINKING PARTICIPLE dangles exactly as a preposition does, and is the
