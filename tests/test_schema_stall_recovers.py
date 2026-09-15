@@ -462,8 +462,8 @@ class TestBothDirectorInvocationsCarryOneCausalLedger:
         for name in ("director_interpret", "director_resolve"):
             assert '"ledgers"' in text, name
             assert "resolution_notes" in text, name
-            assert "object_name" in text, name
-            assert "item_id" in text, name
+            assert "item_names" in text, name
+            assert "item_ids" in text, name
             assert "categories" in text, name
             assert "state_diff" not in text, name
             assert "changes_asserted" not in text, name

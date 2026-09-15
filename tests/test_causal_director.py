@@ -25,8 +25,10 @@ def test_both_director_invocations_share_one_minimal_contract():
     # moved. It is a test's number, not the owner's; the point it keeps is
     # that the contract stays a page, not that it never grows a line.
     # 5,200 since 2026-09-15: the owner asked for two more row fields on
-    # one day (`look`, the sixth volume) and each is a line.
-    assert len(shared) < 5_200
+    # one day (`look`, the sixth volume) and each is a line. 5,300 the same
+    # day: `object_name` became `item_names` beside `item_ids` (one row per
+    # span, the owner's sketch), one line more; measured 5,201.
+    assert len(shared) < 5_300
 
 
 def test_a_body_is_not_a_room_until_the_world_has_made_it_one():

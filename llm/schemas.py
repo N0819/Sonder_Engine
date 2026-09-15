@@ -1392,6 +1392,14 @@ class CausalLedgerEntry(LenientModel):
     # Where the span looks or turns (`ActionElement.look`): declared here
     # because an undeclared field is dropped by the validation round-trip,
     # which is how the first live `look` never reached the commit.
+    # THE THINGS A ROW IS ABOUT (the owner's contract, 2026-09-15): the
+    # Director's handles, one per thing, the same number wherever the thing
+    # appears -- for the recompiler; and their names in the same order --
+    # for the hands, to match against the world or to mint. `item_id` and
+    # `object_name` are the first of each, kept for every reader that
+    # predates the lists.
+    item_ids: list[int] = Field(default_factory=list)
+    item_names: list[str] = Field(default_factory=list)
     look: str = ""
     ability: str = ""
     difficulty: str = ""
@@ -2887,7 +2895,11 @@ class CausalTransform(LenientModel):
 
 
 class LedgerPatchTransform(LenientModel):
-    """One model-authored patch; its ledger identity is positional."""
+    """One model-authored patch; its ledger identity is positional. `item`
+    names which of the row's `item_names` this patch changes (the owner's
+    contract, 2026-09-15: one transform per thing); a row about one thing
+    needs none."""
+    item: str = ""
     patch: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -6210,14 +6222,17 @@ def semantic_output_errors(
                 found.append(f"ledgers.{index} must be an object")
                 continue
             prefix = f"ledgers.{index}"
-            item_id = ledger.get("item_id")
+            listed = ledger.get("item_ids")
+            if not isinstance(listed, list):
+                listed = [ledger.get("item_id")]
             chrono_id = ledger.get("chrono_id")
-            if not isinstance(item_id, int) or isinstance(item_id, bool) \
-                    or item_id <= 0:
-                noted.append(f"{prefix}.item_id was not a positive integer; "
-                             "the engine assigned one")
-            else:
-                item_ids.append(item_id)
+            for item_id in listed:
+                if not isinstance(item_id, int) or isinstance(item_id, bool) \
+                        or item_id <= 0:
+                    noted.append(f"{prefix}.item_ids has a value that is not a "
+                                 "positive integer; the engine assigned one")
+                else:
+                    item_ids.append(item_id)
             if not isinstance(chrono_id, int) or isinstance(chrono_id, bool) \
                     or chrono_id <= 0:
                 noted.append(f"{prefix}.chrono_id was not a positive integer; "
@@ -6278,12 +6293,20 @@ def semantic_output_errors(
 
             if not str(ledger.get("event") or "").strip():
                 found.append(f"{prefix}.event is empty")
-            if not str(ledger.get("object_name") or "").strip():
-                # A matching hint, not a ruling: without it `world_matches`
-                # resolves nothing and the hand works harder, but the row is
-                # still a valid causal statement.
-                noted.append(f"{prefix}.object_name is empty; the hand gets "
+            # THE NAMES BESIDE THE HANDLES (the owner's contract,
+            # 2026-09-15): one per thing, in step. A matching hint, not a
+            # ruling: a missing name resolves nothing and the hand works
+            # harder, but the row is still a valid causal statement.
+            names = ledger.get("item_names")
+            if not isinstance(names, list):
+                names = [ledger.get("object_name")]
+            if not any(str(name or "").strip() for name in names):
+                noted.append(f"{prefix}.item_names is empty; the hand gets "
                              "no world match for it")
+            elif isinstance(listed, list) and len(names) != len(listed):
+                noted.append(f"{prefix}.item_names ({len(names)}) and "
+                             f"item_ids ({len(listed)}) are not in step; "
+                             "the engine paired them by position")
             if not str(ledger.get("resolution_notes") or "").strip():
                 found.append(f"{prefix}.resolution_notes is empty")
             # THERE IS NO `kind`, deliberately. It said nothing `categories`

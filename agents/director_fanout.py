@@ -621,6 +621,7 @@ def _specialist_ledger(item):
         return visible
     visible = dict(visible)
     visible.pop("item_id", None)
+    visible.pop("item_ids", None)
     visible.pop("chrono_id", None)
     # AUTHORITY IS THE DIRECTOR'S WORKING INPUT, NOT A HAND'S.
     #
@@ -869,15 +870,24 @@ def _specialist_payload(name, ctx, sc, view, extras):
 
         def want(text):
             query = str(text or "").strip().casefold()
+            # A name as prose writes it carries its determiner ("the
+            # notebook"); a world name does not. The determiner is grammar,
+            # not identity, so it is dropped before matching.
+            for article in ("the ", "a ", "an "):
+                if query.startswith(article) and len(query) > len(article):
+                    query = query[len(article):].strip()
+                    break
             if query:
                 queries.setdefault(query, set())
             return query
 
         row_queries = []
         for row in ledgers:
+            names = row.get("item_names") if isinstance(row.get("item_names"), list) else []
             row_queries.append((
                 want(row.get("object_name")),
                 [want(target) for target in row.get("targets") or []],
+                [want(name) for name in names],
             ))
 
         def match(kind, key, display, aliases=()):
@@ -913,10 +923,22 @@ def _specialist_payload(name, ctx, sc, view, extras):
                 (dict(entry) for entry in queries.get(query) or ()),
                 key=lambda found: (found["kind"], found["world_key"]))
 
-        for index, (name_query, target_queries) in enumerate(row_queries):
+        for index, (name_query, target_queries, item_queries) in enumerate(row_queries):
             found = candidates(name_query) if name_query else []
             if found:
                 ledgers[index]["world_matches"] = found
+            # EACH THING THE ROW IS ABOUT, RESOLVED ON ITS OWN: `item_matches`
+            # is {item name: candidates}; a name absent from it is new or
+            # unresolved, which is what the hand mints under.
+            names = ledgers[index].get("item_names") if isinstance(
+                ledgers[index].get("item_names"), list) else []
+            matched = {}
+            for item_name, query in zip(names, item_queries):
+                resolved = candidates(query) if query else []
+                if resolved and str(item_name).strip():
+                    matched[str(item_name).strip()] = resolved
+            if matched:
+                ledgers[index]["item_matches"] = matched
             aimed = {}
             for position, query in enumerate(target_queries):
                 resolved = candidates(query) if query else []

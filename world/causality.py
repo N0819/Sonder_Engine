@@ -203,11 +203,14 @@ def compile_transforms(
         specialist: str = "") -> tuple[dict, list[dict], list[dict]]:
     """Compile all valid transforms and return ``(diff, history, rejected)``.
 
-    A current transform cites only the Director's small numeric ``item_id``;
-    chronology is recovered from the original ledger rather than trusted to a
-    second model. Ordering is then ``chrono_id`` followed by response order.
-    Legacy ``chrono_id``/``object_id`` transforms remain readable when no
-    ledger index is supplied.
+    A transform cites its row's ``chrono_id`` (the key it joins by) and the
+    ``item_id`` of the thing it changes -- the Director's handle, one of
+    that row's ``item_ids`` (the owner's contract, 2026-09-15: one row per
+    span, one transform per thing). Chronology is the row's, never the
+    second model's; ordering is ``chrono_id`` then response order. A
+    transform citing only an item id (a stored beat, a direct call) joins
+    by that as before, and legacy ``object_id`` transforms remain readable
+    when no ledger index is supplied.
     """
     channels = {str(channel) for channel in allowed_channels}
     ledger_index = {}
@@ -220,16 +223,39 @@ def compile_transforms(
             chrono_id = int(row.get("chrono_id") or row.get("event_id") or 0)
         except (TypeError, ValueError):
             continue
+        # THE THINGS THE ROW IS ABOUT, each under its own handle with its
+        # own name, so a transform filed under the second thing is recorded
+        # as the second thing's. A row written before the lists carries one
+        # of each.
+        listed_ids = row.get("item_ids") if isinstance(
+            row.get("item_ids"), list) else [item_id]
+        listed_names = row.get("item_names") if isinstance(
+            row.get("item_names"), list) else [row.get("object_name")]
+        names = {}
+        handles = []
+        for position, raw_id in enumerate(listed_ids):
+            try:
+                one = int(raw_id or 0)
+            except (TypeError, ValueError):
+                continue
+            if one <= 0:
+                continue
+            handles.append(one)
+            names[one] = str((listed_names[position]
+                              if position < len(listed_names) else "")
+                             or "").strip()
         meta = {"chrono_id": chrono_id,
-                "object_name": str(row.get("object_name") or "").strip()}
+                "object_name": str(row.get("object_name") or "").strip(),
+                "item_ids": handles, "names": names}
         # THE CHRONO ID IS THE ROW'S KEY (the owner, 2026-09-15): an item
         # id is the object's and several rows share it. A transform that
         # cites its row's chrono id joins by it; one that cites only an
         # item id (a stored beat, a direct call) joins by that as before.
         if chrono_id > 0:
             row_index.setdefault(chrono_id, meta)
-        if item_id > 0 and chrono_id > 0 and item_id not in ledger_index:
-            ledger_index[item_id] = meta
+        for one in handles:
+            if chrono_id > 0 and one not in ledger_index:
+                ledger_index[one] = meta
     item_ids = None if allowed_item_ids is None else {
         int(value) for value in allowed_item_ids
     }
@@ -254,14 +280,17 @@ def compile_transforms(
         meta = row_index.get(row_key) if row_key > 0 else None
         if meta is None:
             meta = ledger_index.get(item_id) if item_id > 0 else None
-        if meta is not None and row_key > 0 and row_key in row_index:
-            item_id = row_key          # the row is the key from here on
+        if meta is not None and not item_id:
+            # A transform that cites its row and no thing is the row's
+            # first thing's.
+            item_id = int((meta.get("item_ids") or [0])[0])
         try:
             chrono_id = int((meta or {}).get("chrono_id")
                             or raw.get("chrono_id") or 0)
         except (TypeError, ValueError):
             chrono_id = 0
-        object_name = str((meta or {}).get("object_name") or "").strip()
+        object_name = str(((meta or {}).get("names") or {}).get(item_id)
+                          or (meta or {}).get("object_name") or "").strip()
         patch = raw.get("patch")
         # ORDERED SO THE REPORTED REASON IS THE ACTUAL ONE. A transform with
         # no id at all used to be rejected as "item has no valid chronology"
