@@ -989,6 +989,13 @@ def derive_borne_containment(scene):
     #    the wardrobe keeps ("a hand keeps what it holds until something says
     #    otherwise") and was read by renderers alone.
     for eid, ent in (scene.get("entities") or {}).items():
+        # A THING THAT SAYS WHO CARRIES IT IS CARRIED. `held_by` on the
+        # thing's own record (the establish writes it for what a card puts
+        # in a body's hands; Hollin Mill, 2026-09-15: the lantern and key
+        # stood loose in the lane and setting the lantern down was refused
+        # as not hers).
+        if isinstance(ent, dict) and str(ent.get("held_by") or "").strip():
+            _record(eid, str(ent["held_by"]).strip(), "held_by")
         state = ent.get("state") if isinstance(ent, dict) else None
         if not isinstance(state, dict):
             continue

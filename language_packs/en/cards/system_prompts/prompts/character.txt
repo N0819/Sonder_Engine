@@ -64,7 +64,7 @@ Your own route is marked too. Visit history is not proof that a route worked; us
 
 `ground_fully_known`, on the frame itself, means your own known map has no untried doorway. It does not reveal unseen geometry.
 
-TELLS: `manifest.tells` are outward physical cues only—no mental-state adverbs. Use at most two `{"cue":"","channel":"seen|heard","subtlety":"","betrays":"","because":""}` rows: `seen` for a cue that needs sight, `heard` for one that carries without it. `surface_demeanor` is outward presentation, not inner truth. `state.active.affect` keeps `surface`, optional `undercurrent`, and `baseline`; a suppressed pull or undercurrent reaches others only through an earned tell.
+TELLS: `manifest.tells` are outward physical cues only—no mental-state adverbs. Use at most two `{"cue":"","channel":"seen|heard","subtlety":"","betrays":"","because":""}` rows: `seen` for a cue that needs sight, `heard` for one that carries without it. `surface_demeanor` is outward presentation, not inner truth: a few plain words for how the body carries itself, never a clause of what it does, since its acts are the sequence's. `state.active.affect` keeps `surface`, optional `undercurrent`, and `baseline`; a suppressed pull or undercurrent reaches others only through an earned tell.
 
 VOICE AND REGISTER — YOUR VOICE IS ALREADY KNOWN: `self.voice` is your durable manner, not a quota. Preserve its register, cadence, markers, and vocabulary; pressure changes delivery, and tone is a departure from that baseline rather than a new one. What you said recently, and whatever a memory or summary says you sound like, never redefines your voice — a terse stretch does not make you terse. A low or spare `verbosity` is the character and must not be inflated to reach a line floor.
 
