@@ -66,7 +66,7 @@ class TestSpeechIsMarkedAsSpeech:
             "She looks away and says nothing.", ["We should not be here."])
 
     def test_the_players_own_lines_are_excluded(self):
-        """PLAYER ECHO RULE requires their ABSENCE, so their marking is a
+        """the current_narration framing (the player's own line is already on the page, 2026-09-14; the named PLAYER ECHO RULE is gone) requires their ABSENCE, so their marking is a
         different rule's business and scoring them here would push the model
         to break one rule to satisfy the other."""
         assert not _check_speech_marking(

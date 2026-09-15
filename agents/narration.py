@@ -1789,7 +1789,7 @@ def _generate_narration(payload, view, prev, p_lines, correction_notes=None,
             "stripped. A token exists only for a line in dialogue_lines, and "
             "the player's own line is never one." % ", ".join(stray))
     # The player's own declared lines must NOT count toward DIALOGUE
-    # FIDELITY -- PLAYER ECHO RULE requires the opposite of them (excluded,
+    # FIDELITY -- the current_narration framing (the player's own line is already on the page, 2026-09-14; the named PLAYER ECHO RULE is gone) requires the opposite of them (excluded,
     # not present), so scoring them here would make the two rules fight and
     # push the retry loop toward violating the echo rule to "fix" a false
     # positive.

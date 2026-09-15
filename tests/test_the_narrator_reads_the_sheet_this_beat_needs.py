@@ -31,8 +31,8 @@ def test_the_english_sheet_drops_what_the_beat_does_not_carry():
     assert "PORTAL STATE:" not in bare and "PORTAL STATE:" in full
     assert "DIALOGUE PLACEHOLDERS" not in bare and "DIALOGUE PLACEHOLDERS" in full
     assert "STYLE EXEMPLARS" not in bare and "STYLE EXEMPLARS" in full
-    # The core every beat reads stays: the four rules and the echo rule.
-    assert "INVENT NOTHING" in bare and "PLAYER ECHO RULE" in bare
+    # The core every beat reads stays: the four rules.
+    assert "INVENT NOTHING" in bare and "DECIDE FOR NO ONE" in bare
     assert len(bare) < 0.8 * len(full)
 
 

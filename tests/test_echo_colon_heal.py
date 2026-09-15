@@ -2,7 +2,7 @@
 echoed quote must not leave a dangling attributive colon.
 
 Live, v3 t7: the narrator wrote "...and when I speak again it's quieter, almost
-gentle: <player quote>. Vorne swallows once...". The PLAYER ECHO RULE correctly
+gentle: <player quote>. Vorne swallows once...". The narrator (then under PLAYER ECHO RULE, now under the current_narration framing) correctly
 removes the player's own quote (the UI already shows what they typed), but the
 colon that introduced it was left dangling straight into the next sentence.
 
