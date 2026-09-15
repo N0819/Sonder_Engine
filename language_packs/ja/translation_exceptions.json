@@ -276,5 +276,6 @@
   "— “${AMB.track.title}”": "placeholders and punctuation only — no prose to translate",
   "→ ${verdict.reroute_to}": "placeholders and punctuation only — no prose to translate",
   "⚙ API": "the menu's own label, kept as the glyph",
-  "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}": "placeholders and punctuation only — no prose to translate"
+  "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}": "placeholders and punctuation only — no prose to translate",
+  "wb-map-canvas pipeline-map": "CSS class list, not a message"
 }
