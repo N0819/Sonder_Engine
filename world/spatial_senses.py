@@ -1055,6 +1055,7 @@ def hear_level(
     volume: str,
     vouched: bool = False,
     proximity: str | None = None,
+    level_db=None,
 ) -> str:
     """How much of a line at `volume` this relation delivers: none |
     fragment | full.
@@ -1076,7 +1077,13 @@ def hear_level(
     it. The enclosure cases never carry either stamp
     (`stamp_sound_relation`), so the conducted answers below are untouched.
     """
-    level = _hear_level(rel, volume, vouched, proximity)
+    if level_db is not None:
+        # A PITCHED LINE HAS A LEVEL, NOT A WORD. The field grades the level
+        # itself; every word-keyed rule below reads the word the level is
+        # nearest to (`spatial_sound_field.word_for_level`).
+        from world.spatial_sound_field import word_for_level
+        volume = word_for_level(level_db)
+    level = _hear_level(rel, volume, vouched, proximity, level_db)
     if level == "none" and not vouched:
         # A RAISED VOICE CARRIES THROUGH AN OPENING: one passable edge away
         # it is at worst a fragment, whatever the walk costs it. The edge
@@ -1110,6 +1117,7 @@ def _hear_level(
     volume: str,
     vouched: bool = False,
     proximity: str | None = None,
+    level_db=None,
 ) -> str:
     volume = str(volume or "normal").strip().casefold()
     barrier = _material_shifted_barrier(
@@ -1187,7 +1195,7 @@ def _hear_level(
         # half a pace over one, applied only where the field placed nothing.
         if proximity == "within_reach" and rel.get("tier") is None:
             signal = signal * WITHIN_REACH_SIGNAL_GAIN
-        return _field_hear_level(volume, signal, rel["noise"])
+        return _field_hear_level(volume, signal, rel["noise"], level_db)
 
     if rel.get("same_room"):
         # The two quiet volumes are NOT one tier, and writing them as one
@@ -1286,12 +1294,12 @@ def _hear_level(
 
     return "none"
 
-def _field_hear_level(volume, signal_gain, noise) -> str:
+def _field_hear_level(volume, signal_gain, noise, level_db=None) -> str:
     """`hear_level`'s field branch: the sound field's quantisation, reached
     through a deferred import (the field module imports this one's material
     ladder at import time)."""
     from world.spatial_sound_field import sound_field_hear_level
-    return sound_field_hear_level(volume, signal_gain, noise)
+    return sound_field_hear_level(volume, signal_gain, noise, level_db)
 
 
 def can_perceive(rel: dict, volume: str = "normal") -> bool:

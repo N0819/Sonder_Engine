@@ -682,7 +682,8 @@ def line_hear_level(entry, rel, observer_name, proximity=None,
     if isinstance(rel.get("comm_channel"), dict):
         return "full"
     _unimpaired = hear_level(rel, entry.get("volume", "normal"),
-                             proximity=proximity)
+                             proximity=proximity,
+                             level_db=entry.get("level_db"))
     base = _sense_graded(_unimpaired, "hearing", senses)
     # AN IMPAIRED EAR IS NOT AN UNREACHABLE ONE. `full` is the top of the
     # hearing ladder, so a -1 acuity took every `full` to `fragment`
@@ -2865,7 +2866,8 @@ def speech_percept(entry, rel, observer_name, *, display, can_see,
     if isinstance(rel.get("comm_channel"), dict):
         _how = "comm channel"
     elif level == "full" and _sense_graded(
-            hear_level(rel, volume, proximity=proximity),
+            hear_level(rel, volume, proximity=proximity,
+                       level_db=entry.get("level_db")),
             "hearing", senses) == "none":
         # `line_hear_level` already applied the addressed rescue; naming it
         # here is a report of what happened inside it, not a second copy of

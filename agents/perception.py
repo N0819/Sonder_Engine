@@ -3129,9 +3129,21 @@ def perception_outcome(ctx, nonce):
             sp_room = p_room
         else:
             sp_room = cast_room(sc, speaker, ctx.cast) or _bg_rooms.get(speaker)
+        volume = str(d.get("volume") or "normal")
+        level_db = None
+        if volume.strip().casefold() == "pitched":
+            # LOUD ENOUGH FOR THE ONE ADDRESSED AND NO LOUDER: solved once
+            # from the addressee's cell, then every observer is graded at
+            # that level and the view carries the word it comes to.
+            from world.spatial import pitched_level_db, word_for_level
+            level_db = pitched_level_db(
+                sc, p_name if is_player_speaker(speaker, chat) else speaker,
+                d.get("intended_target"))
+            volume = word_for_level(level_db)
         enriched_dlog.append({
             "speaker": speaker, "exact_quote": d.get("exact_quote", ""),
-            "volume": d.get("volume", "normal"),
+            "volume": volume,
+            **({"level_db": level_db} if level_db is not None else {}),
             "intended_target": d.get("intended_target"),
             "tone": d.get("tone", ""), "speaker_room": sp_room,
             "visibility": d.get("visibility", "overt"),
@@ -5352,7 +5364,12 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                     entry = {
                         "speaker": p_name,
                         "text": event.get("text"),
-                        "volume": event.get("volume", "normal"),
+                        # At onset the addressee is not yet on the entry, so
+                        # a pitched line is graded as a normal one here and
+                        # solved on the outcome pass.
+                        "volume": ("normal" if str(event.get("volume") or "")
+                                   .strip().casefold() == "pitched"
+                                   else event.get("volume", "normal")),
                         "tone": event.get("tone", ""),
                         "visibility": event.get("visibility", "overt"),
                         "conceal_from": event.get("conceal_from") or [],
