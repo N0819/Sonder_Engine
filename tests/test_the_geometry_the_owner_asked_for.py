@@ -331,3 +331,20 @@ def test_a_body_in_the_far_rooms_door_cell_fills_the_doorway():
     assert landed["room"] == "watch" and landed.get("held_by") == "doorway", landed
     sc["stations"]["Nell"] = {"cell": [3, 3]}
     assert walk(sc, "Ware", "lamp", paces=60)["room"] == "lamp"
+
+
+def test_the_walk_ends_at_the_last_room_the_world_holds():
+    """Hollin Mill turn 1, 2026-09-15: rows `yard` then `mill`, the second
+    naming no room; the unknown leg was refused and the walk to the yard
+    went with it."""
+    from agents.director import _final_movement
+    sc = {"rooms": {"lane": {"name": "The Lane", "adjacent": []},
+                    "yard": {"name": "Walled Yard", "adjacent": []}}}
+    rows = [{"movement": {"to_room": "yard", "arrives": True, "mover": "self"}},
+            {"movement": {"to_room": "mill", "arrives": True, "mover": "self"}}]
+    notes = []
+    assert _final_movement(rows, scene=sc, warn=notes.append)["to_room"] == "yard"
+    assert notes and "mill" in notes[0]
+    assert _final_movement(rows)["to_room"] == "mill", "without a scene, the last arrival as before"
+    only = [{"movement": {"to_room": "mill", "arrives": True, "mover": "self"}}]
+    assert _final_movement(only, scene=sc)["to_room"] == "mill", "a lone unknown still raises its need"

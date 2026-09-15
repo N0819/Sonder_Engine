@@ -1455,7 +1455,11 @@ def _declared_looks(ctx, res, p_name=None):
         else:
             name = actor
         if name:
-            looks[name] = look
+            # EVERY LOOK, IN ORDER: the commit applies them in turn and the
+            # last one the room can place wins (`infer_facing`). Keeping
+            # only the last erased a look down over a rail with a look at a
+            # hatch in another room (Hollin Mill turn 5, 2026-09-15).
+            looks.setdefault(name, []).append(look)
     return looks
 
 

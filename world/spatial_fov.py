@@ -1308,7 +1308,7 @@ def _wall_verdict(field, origin, target) -> bool:
     return True
 
 
-def _occluders_on(field, origin, target, eye, top):
+def _occluders_on(field, origin, target, eye, top, ignore=()):
     """(blocking anchor id or None, tallest non-blocking anchor height rank)
     along the straight line between two cells. `__wall__` names a wall,
     whether the line struck one between two rooms (`_wall_verdict`) or ran
@@ -1317,6 +1317,15 @@ def _occluders_on(field, origin, target, eye, top):
     tallest_id = None
     if not _wall_verdict(field, origin, target):
         return "__wall__", tallest, tallest_id
+    # WITHIN ARM'S REACH NOTHING STANDS BETWEEN: two bodies on touching
+    # cells, corner to corner included, see each other whatever the cells
+    # beside the diagonal hold. The supercover line of a one-step diagonal
+    # takes in both side cells, and a head-high stair post in one of them
+    # hid a man from the woman he stood beside (Hollin Mill turn 13,
+    # 2026-09-15). `ignore` names anchors a caller asks to look past.
+    if max(abs(origin[0] - target[0]), abs(origin[1] - target[1])) <= 1 \
+            and field.inside.get(origin) == field.inside.get(target):
+        return None, tallest, tallest_id
     for cell in _line(origin, target):
         if cell not in field.inside:
             if _on_wall_line(field, cell):
@@ -1334,6 +1343,8 @@ def _occluders_on(field, origin, target, eye, top):
                 tallest, tallest_id = held[0], held[1]
             continue
         if h is None:
+            continue
+        if ignore and field.occluder.get(cell) in ignore:
             continue
         if _blocks(h, eye, top):
             return field.occluder.get(cell), tallest, tallest_id
@@ -1613,9 +1624,14 @@ def body_visibility(scene: dict, observer: str, target: str) -> dict:
     if origin == goal:
         return {**open_answer, "basis": "line", "sector": sector,
                 "side": _side_label(sector)}
+    # WITHIN ARM'S REACH NOTHING STANDS BETWEEN (Hollin Mill turn 13,
+    # 2026-09-15: a head-high stair post beside a one-step diagonal hid the
+    # man at the stair foot from the woman at the pit's lip). A fixture a
+    # body stands AT still hides it from the far side -- that is cover.
+    touching = t_room == o_room and max(abs(origin[0] - goal[0]), abs(origin[1] - goal[1])) <= 1
     seen = _visible_set(field, origin, eye, top)
     blocker, tallest, tallest_id = _occluders_on(field, origin, goal, eye, top)
-    visible = goal in seen and blocker is None
+    visible = touching or (goal in seen and blocker is None)
     if not visible and blocker is None:
         # The shadowcast closed the line at a corner the straight walk
         # slipped past; name the tallest thing the walk did touch.

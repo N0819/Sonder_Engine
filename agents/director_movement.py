@@ -1350,6 +1350,13 @@ def walk_declared(ctx, scene, route_scene, sd, out, subject, mv, prev_room,
             continue
         if room_of(scene, other) != prev_room:
             continue
+        # A THING DOES NOT WALK. A lantern the walker carries is moved by
+        # the hands' positions and rides the merge; only a body walks the
+        # cells beside them (Hollin Mill turn 12, 2026-09-15: `ada_lantern`
+        # walked thirteen paces as a companion).
+        _ent = (scene.get("entities") or {}).get(other)
+        if isinstance(_ent, dict) and str(_ent.get("kind") or "").strip().casefold() != "person":
+            continue
         landed = walk(route_scene, other, mv["to_room"],
                       to_cell=mv.get("to_cell"), to_anchor=mv.get("to_anchor"),
                       paces=paces, from_room=prev_room,

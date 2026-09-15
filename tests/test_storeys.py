@@ -105,3 +105,99 @@ def test_an_overlook_is_looked_through_and_never_walked_through():
     sc["stations"]["Watcher"] = {"cell": [5, 0]}
     assert visual_level_between(sc, "Speaker", "Watcher") == "none"
     assert visual_level_between(sc, "Watcher", "Speaker") == "none"
+
+
+def test_a_stair_and_an_overlook_on_one_wall_both_keep_it():
+    """Hollin Mill, 2026-09-15: the stair in the wheel floor's north wall
+    and the gallery rail above it, both `up` on `n`, were dropped as a
+    collision, and their far sides with them."""
+    from world.spatial import normalize_scene_bearings
+    sc = {"rooms": {
+        "wheel": {"adjacent": [{"to": "stones", "barrier": "open", "dir": "n", "vertical": "up", "way": "stair"},
+                               {"to": "gallery", "barrier": "open", "dir": "n", "vertical": "up", "way": "overlook"}]},
+        "stones": {"adjacent": [{"to": "wheel", "barrier": "open", "dir": "n", "vertical": "down", "way": "stair"}]},
+        "gallery": {"adjacent": [{"to": "wheel", "barrier": "open", "dir": "s", "vertical": "down", "way": "overlook"}]}}}
+    normalize_scene_bearings(sc)
+    e = lambda a, b: next(x for x in sc["rooms"][a]["adjacent"] if x["to"] == b)
+    assert e("wheel", "stones")["dir"] == "n" and e("wheel", "gallery")["dir"] == "n"
+    assert e("stones", "wheel")["dir"] == "n" and e("gallery", "wheel")["dir"] == "s"
+
+
+def test_a_hatch_shows_its_own_two_ends_and_nothing_beyond():
+    """Hollin Mill turn 4, 2026-09-15: through a ladder hatch the surveyor
+    below saw the man in the loft's far corner, and he saw her by the
+    millstones. A passage shows the body at its end, not the room."""
+    sc = {"rooms": {
+        "stones": {"name": "Stones", "extent": {"w": 12, "d": 10}, "anchors": {}, "exposure": "enclosed",
+                   "adjacent": [{"to": "loft", "barrier": "open", "dir": "e", "vertical": "up", "way": "ladder"}]},
+        "loft": {"name": "Loft", "extent": {"w": 12, "d": 8}, "anchors": {}, "exposure": "enclosed",
+                 "adjacent": [{"to": "stones", "barrier": "open", "dir": "e", "vertical": "down", "way": "ladder"}]}},
+        "positions": {"Ada": "stones", "Cal": "loft"},
+        "stations": {"Ada": {"cell": [6, 5]}, "Cal": {"cell": [1, 4]}}, "entities": {}}
+    assert visual_level_between(sc, "Ada", "Cal") == "none"
+    assert visual_level_between(sc, "Cal", "Ada") == "none"
+    from world.spatial import _door_cells
+    lip_loft = _door_cells(sc, "loft", "stones")[0][0]
+    lip_stones = _door_cells(sc, "stones", "loft")[0][0]
+    sc["stations"]["Cal"] = {"cell": list(lip_loft)}
+    sc["stations"]["Ada"] = {"cell": list(lip_stones)}
+    assert visual_level_between(sc, "Ada", "Cal") == "full"
+    assert visual_level_between(sc, "Cal", "Ada") == "full"
+
+
+def test_looks_apply_in_order_and_the_last_the_room_can_place_wins():
+    """Hollin Mill turn 5, 2026-09-15: a look down over the rail (south),
+    then a look at a hatch in another room; only the last was kept, it
+    placed nothing, and she faced north with her back to the drop."""
+    from world.spatial_frames import infer_facing
+    rooms = {"gallery": {"extent": {"w": 12, "d": 3}, "anchors": {},
+                         "adjacent": [{"to": "stones", "barrier": "open", "dir": "s"},
+                                      {"to": "wheel", "barrier": "open", "dir": "s", "vertical": "down", "way": "overlook"}]},
+             "stones": {"adjacent": [{"to": "gallery", "barrier": "open", "dir": "n"}]},
+             "wheel": {"adjacent": [{"to": "gallery", "barrier": "open", "dir": "n", "vertical": "up", "way": "overlook"}]}}
+    prev = {"rooms": rooms, "positions": {"Ada": "stones"}, "orientation": {"Ada": {"facing": "n"}}}
+    new = {"rooms": rooms, "positions": {"Ada": "gallery"}, "stations": {"Ada": {"cell": [1, 1]}},
+           "orientation": {"Ada": {"came_from": "stones", "facing": "n"}}}
+    infer_facing(1, None, prev, new, [], looks={"Ada": ["wheel", "loft_hatch"]}, turn_idx=5)
+    assert new["orientation"]["Ada"]["facing"] == "s"
+
+
+def test_standing_on_the_destinations_door_cell_is_arriving():
+    """Hollin Mill turn 8, 2026-09-15: a climb ended on the loft's hatch
+    cell with its paces spent and was left "under way" to the pace inside
+    the door, so every silent beat after would have walked it."""
+    from world.spatial import FLIGHT_PACES
+    sc = {"rooms": {
+        "stones": {"name": "Stones", "extent": {"w": 12, "d": 10}, "anchors": {}, "exposure": "enclosed",
+                   "adjacent": [{"to": "loft", "barrier": "open", "dir": "e", "vertical": "up", "way": "ladder"}]},
+        "loft": {"name": "Loft", "extent": {"w": 12, "d": 8}, "anchors": {}, "exposure": "enclosed",
+                 "adjacent": [{"to": "stones", "barrier": "open", "dir": "e", "vertical": "down", "way": "ladder"}]}},
+        "positions": {"Ada": "stones"}, "stations": {"Ada": {"cell": [2, 6]}}, "entities": {}}
+    # Exactly enough paces to reach the hatch cell and cross: the door,
+    # the flight, and the entry -- none for the pace inside.
+    from world.spatial import walk as _walk
+    probe = _walk(sc, "Ada", "loft", paces=200)
+    short = _walk(sc, "Ada", "loft", paces=probe["paces"] - 1)
+    assert short["room"] == "loft" and short["arrived"], short
+
+
+def test_touching_cells_see_each_other_and_a_fixture_is_still_cover():
+    """Hollin Mill turn 13, 2026-09-15: a head-high stair post beside a
+    one-step diagonal hid the man at the stair foot from the woman at
+    the pit, one pace away, and her from him."""
+    from world.spatial import anchor_cells, body_visibility
+    sc = {"rooms": {"wheel": {"name": "Wheel", "extent": {"w": 12, "d": 10}, "exposure": "enclosed",
+                              "adjacent": [], "anchors": {
+                                  "stair": {"desc": "the stair foot", "dir": "n", "height": "head", "footprint": "small"}}}},
+          "positions": {"Ada": "wheel", "Cal": "wheel"},
+          "stations": {"Ada": {"cell": [8, 1]}, "Cal": {"at": "stair", "cell": [9, 2]}},
+          "orientation": {"Ada": {"facing": "e"}, "Cal": {"facing": "s"}}, "entities": {}}
+    assert body_visibility(sc, "Ada", "Cal")["visible"]
+    assert body_visibility(sc, "Cal", "Ada")["visible"]
+    # Three paces off, with the post's cell squarely on the line, the post
+    # is cover: standing at a fixture does not make it transparent.
+    post = anchor_cells(sc, "wheel")["stair"]["cells"][0]
+    sc["stations"]["Cal"] = {"at": "stair", "cell": [post[0], post[1] - 1]}
+    sc["stations"]["Ada"] = {"cell": [post[0], post[1] + 3]}
+    sc["orientation"]["Ada"] = {"facing": "n"}
+    assert not body_visibility(sc, "Ada", "Cal")["visible"]

@@ -88,7 +88,7 @@ from world.spatial_walk import (
     free_cell_near, anchor_stand_cell, FLIGHT_PACES,
 )
 from world.spatial_levels import (  # noqa: E402
-    WAYS, FLOOR_LOSS_DB, normalize_level, edge_way, is_overlook, room_level,
+    WAYS, FLOOR_LOSS_DB, normalize_level, edge_way, declared_way, is_overlook, room_level,
     infer_room_levels, rooms_over, rooms_under, stack_of, level_span, floor_edges,
 )
 from world.spatial_sound_field import (  # noqa: E402

@@ -1285,8 +1285,16 @@ REVERBERANT_SURFACES = frozenset({"bare"})
 ROOM_HEIGHT_M = 3.0
 PACE_M = 0.75
 #: When the ring is this much louder than the voice at the listener's cell,
-#: the words smear: a `full` line grades `fragment`.
-REVERB_SMEAR_DB = 6.0
+#: the words smear: a `full` line grades `fragment`. Fifteen, not six: the
+#: reverberant field of Sabine's rule is early reflections and late tail
+#: together, and the early part HELPS a listener, so a bare room's ring
+#: beats the direct voice by six decibels two paces off and every word
+#: said across a stone room came out in pieces (Hollin Mill turn 11,
+#: 2026-09-15: "Derbyshire grit" eight paces off, at normal volume, as
+#: "...Derbyshire... Bedstone... underneath..."). At fifteen a voice
+#: carries whole across a hall and still smears down a shaft or from the
+#: far end of a nave. The owner's number.
+REVERB_SMEAR_DB = 15.0
 #: A bare room this long (its longer side, in paces) gives a sharp sound
 #: back as a second, separate sound -- about seventeen metres of extra
 #: path, the fifty milliseconds an ear needs to hear two.
@@ -2475,6 +2483,13 @@ DISTANT_LEVELS = ("faint", "plain", "overwhelming")
 #: becomes something you cannot do anything else through. 20 dB is a
 #: hundredfold over the room. The owner's, like every constant here.
 OVERWHELMING_MARGIN_DB = 20.0
+#: ...AND LOUD IN ITS OWN RIGHT. Twenty over a dead room's floor is 35 dB,
+#: a key dropped two storeys down, and "drowns everything" was said of it
+#: (Hollin Mill turn 3, 2026-09-15). A sound nothing can be done through
+#: arrives at least as loud as ordinary talk in the room: 50 dB at the
+#: listener, which a `deafening` crash next door clears (56) and a key
+#: two floors down does not (39). The owner's number.
+OVERWHELMING_FLOOR_DB = 50.0
 
 
 def _edge_loss_db(edge) -> float:
@@ -2729,7 +2744,7 @@ def distant_level_word(level_db: float, floor_db: float) -> Optional[str]:
     # `quantise_hearing_db`; `floor_db` is that room's noise.
     if not _at_least(level_db, min(HEAR_FLOOR_DB, floor_db)):
         return None
-    if _at_least(level_db, floor_db + OVERWHELMING_MARGIN_DB):
+    if _at_least(level_db, max(floor_db + OVERWHELMING_MARGIN_DB, OVERWHELMING_FLOOR_DB)):
         return "overwhelming"
     if _at_least(level_db, floor_db + FULL_SNR_DB):
         return "plain"

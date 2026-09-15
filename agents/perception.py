@@ -4518,9 +4518,19 @@ def _visible_openings(sc, name, room, *, sweep=False, gate=None):
         # The edge's own authored name is the specific thing ("the open blue
         # police box doors"); the barrier's generic phrasing is the floor.
         desc = " ".join(str(edge.get("name") or "").split())
+        # A way up or down says so, and an overlook is worded as one: the
+        # composer puts the room above or below, over the rail
+        # (`spatial_levels.edge_way`).
+        from world.spatial import edge_way, normalize_vertical
+        _vertical = normalize_vertical(edge.get("vertical"))
+        _way = edge_way(edge)
         if not desc:
             desc = _BARRIER_ANCHOR_DESC.get(barrier) or "the way through"
         row = {"desc": desc}
+        if _vertical:
+            row["vertical"] = _vertical
+        if _way:
+            row["way"] = _way
         far = rooms.get(to_room)
         if not _sight_crosses(barrier):
             row["state"] = "blind"
@@ -6189,9 +6199,15 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                 percepts.extend(
                     _gated_ambient_percepts(
                         gate,
-                        # A walker's own footfalls are no news to the walker.
+                        # A walker's own footfalls are no news to the walker,
+                        # and a walker in plain view is seen walking, not
+                        # heard: the tread reaches whoever cannot see them.
                         [e for e in beat_sounds
-                         if not (e.get("tread") and str(e.get("source") or "") == str(name))],
+                         if not (e.get("tread") and (
+                             str(e.get("source") or "") == str(name)
+                             or (str(e.get("room") or "") == str(p.get("room") or "")
+                                 and visual_level_between(
+                                     sc, name, str(e.get("source") or "")) == "full")))],
                         p.get("room")))
                 # ...THEN THE NEAR FIELD: a sound in a room the listener's
                 # own composite grid places is a one-beat source on that

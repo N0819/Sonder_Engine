@@ -842,7 +842,21 @@ def _opening_view_cap(scene: dict, room_id, body: str, other_room) -> str:
         # is this body's room, so `down` says the body is the one above. A
         # stair, ladder or hatch keeps the open answer both ways
         # (`spatial_levels.edge_way`).
-        if vertical == "down" and _overlook_between(scene, room_id, other_room) \
+        if _overlook_between(scene, room_id, other_room):
+            if vertical == "down" and not _at_the_lip(scene, body, room_id, other_room):
+                return "none"
+            return "full"
+        # A STAIR, A LADDER OR A HATCH IS A PASSAGE, NOT A WINDOW. What it
+        # shows is its own two ends: a body at the stairhead is seen from
+        # the foot and a body at the foot from the head, and a body three
+        # paces into the room beyond is behind the floor between. Hollin
+        # Mill turn 4 (2026-09-15): a surveyor by the millstones watched a
+        # man's fingers curl into a sack in the loft above through the
+        # hatch, and he watched her look around from a corner under the
+        # eaves.
+        # Only where the way is DECLARED: an unmarked vertical edge keeps
+        # the open answer it always had (PM2's gallery carried no word).
+        if _declared_way_between(scene, room_id, other_room) \
                 and not _at_the_lip(scene, body, room_id, other_room):
             return "none"
         return "full"
@@ -1452,6 +1466,16 @@ def _sound_barrier_phrases():
 
 def _sector_phrases():
     return _phrase_table("sector_phrases")
+
+
+def _declared_way_between(scene: dict, a, b) -> str:
+    from world.spatial_levels import declared_way
+    rooms = (scene or {}).get("rooms") or {}
+    for x, y in ((a, b), (b, a)):
+        for edge in ((rooms.get(x) or {}).get("adjacent") or []):
+            if isinstance(edge, dict) and str(edge.get("to")) == str(y):
+                return declared_way(edge)
+    return ""
 
 
 def _overlook_between(scene: dict, a, b) -> bool:

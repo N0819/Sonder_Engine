@@ -73,6 +73,16 @@ def edge_way(edge) -> str:
     return way if way in WAYS else "stair"
 
 
+def declared_way(edge) -> str:
+    """The way an edge DECLARES, or "" -- `edge_way` fails open to a stair;
+    this does not, for the reader that must not guess (sight through an
+    unmarked vertical opening keeps the open answer it always had)."""
+    if not isinstance(edge, dict):
+        return ""
+    way = str(edge.get("way") or "").strip().casefold()
+    return way if way in WAYS else ""
+
+
 def is_overlook(edge) -> bool:
     return edge_way(edge) == "overlook"
 
