@@ -826,7 +826,58 @@ def _power_of_level(level, beat) -> float:
     return SOUND_POWER[level]
 
 
-def sound_field_hear_level(volume, signal_gain, noise) -> str:
+def word_for_level(level_db) -> str:
+    """The volume word nearest a level AT THE CELL (`SPEECH_DB`'s terms):
+    what a pitched line counts as wherever a reader wants the word --
+    the edge ladder, a view, a memory."""
+    try:
+        level = float(level_db)
+    except (TypeError, ValueError):
+        return "normal"
+    return min(SPEECH_DB, key=lambda w: (abs(SPEECH_DB[w] - level), w))
+
+
+def _body_key(scene, name):
+    """The positions key `name` denotes, by key or entity name, or None."""
+    positions = (scene or {}).get("positions") or {}
+    want = str(name or "").strip().casefold()
+    if not want:
+        return None
+    for key in positions:
+        if str(key).strip().casefold() == want:
+            return key
+    for eid, ent in ((scene or {}).get("entities") or {}).items():
+        if isinstance(ent, dict) and str(ent.get("name") or "").strip().casefold() == want:
+            if eid in positions:
+                return eid
+    return None
+
+
+def pitched_level_db(scene, speaker, addressee) -> float:
+    """The level AT THE CELL a line pitched to `addressee` is spoken at: the
+    lowest that arrives `full` at the addressee's cell -- their noise floor
+    plus `FULL_SNR_DB`, less the path's gain -- clamped to the ladder's
+    span (a whisper at the least, a shout at the most: nobody pitches a
+    line across a hall by wanting to). The owner's ask (2026-09-15): a
+    line's loudness follows its intent, "low, so that only his table would
+    hear" reaching the table and nobody at the far wall. Where the pair has
+    no field, or the addressee cannot be placed, the line is a normal one.
+    """
+    lo, hi = SPEECH_DB["whisper"], SPEECH_DB["shout"]
+    who = _body_key(scene, addressee)
+    said = _body_key(scene, speaker)
+    if not who or not said:
+        return SPEECH_DB["normal"]
+    from world.spatial_senses import spatial_rel_between
+    rel = spatial_rel_between(scene, who, said)
+    signal, noise = rel.get("signal"), rel.get("noise")
+    if signal is None or noise is None or float(signal) <= 0.0:
+        return SPEECH_DB["normal"]
+    level = db_of_power(noise) + FULL_SNR_DB - db_ratio(signal)
+    return max(lo, min(hi, level))
+
+
+def sound_field_hear_level(volume, signal_gain, noise, level_db=None) -> str:
     """Quantise, LAST (§ 4.5): `full` at FULL_SNR, `fragment` at
     FRAGMENT_SNR and above HEAR_FLOOR, else `none`. `signal_gain` is the
     fraction of the speaker's power arriving at the listener's cell (what
@@ -839,8 +890,9 @@ def sound_field_hear_level(volume, signal_gain, noise) -> str:
     aperture losses and the spreading loss the flood accumulated. That is
     the whole of what "an aperture factor becomes a subtraction" means."""
     volume = str(volume or "normal").strip().casefold()
-    level_db = SPEECH_DB.get(volume, SPEECH_DB["normal"])
-    return quantise_hearing_db(level_db + db_ratio(signal_gain),
+    if level_db is None:
+        level_db = SPEECH_DB.get(volume, SPEECH_DB["normal"])
+    return quantise_hearing_db(float(level_db) + db_ratio(signal_gain),
                                db_of_power(noise))
 
 
