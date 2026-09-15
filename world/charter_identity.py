@@ -244,8 +244,19 @@ def derived_name_parts(pool):
             chunks = _syllable_chunks(run)
             if len(chunks) < 2:
                 continue
-            starts.setdefault(chunks[0].casefold(), chunks[0])
-            tail = "".join(chunks[1:]).lower()
+            # A RUN OF ONE LETTER IS NOT MATERIAL: refusal of the cast's
+            # syllables left the Assembly's law an ends list of ["w"], and
+            # every footman was minted "Lianw" and "Brabw" (scratch play
+            # 2026-09-14, chat 9). The ending is the last chunk rather than
+            # the whole tail, which is the same thing for the two-chunk
+            # words the splitter mostly makes; "llroom" and "ntrance" as
+            # endings, when the material of last resort is the setting's
+            # rooms ("Anmassage Cobdintchen"), are the splitter's and the
+            # refusal's to answer, not this line's.
+            start, tail = chunks[0], chunks[-1].lower()
+            if len(start) < 2 or len(tail) < 2:
+                continue
+            starts.setdefault(start.casefold(), start)
             ends.setdefault(tail.casefold(), tail)
     if len(starts) < 2 or not ends:
         return {"starts": [], "middles": [], "ends": []}
@@ -363,6 +374,14 @@ def _stored_name_components(body, profile):
         # "Dan" has a given name and no family name; filling both fields
         # from the one word rendered "Cousin Kitto Kitto" and "Cousin Dan
         # Dan" on every line of a story (scratch play 2026-09-14, chat 7).
+        # WHICH component is the law's to say: under a law that calls a
+        # person by the family name alone ("{title} {family}"), the one
+        # word "Bragg" is the family, and reading it as a given name
+        # rendered the landlord as "Mr" on every line (chat 9).
+        formats = " ".join(str(profile.get(k) or "")
+                           for k in ("name_format", "formal_format"))
+        if "{given}" not in formats and "{family}" in formats:
+            return "", parts[0]
         return parts[0], ""
     if parts and not (given and family):
         if profile["name_format"] == "{given} {family}":
@@ -1125,7 +1144,14 @@ def display_name(body, roles=(), profile=None):
               "family": family,
               "name": name, "title": title,
               "rank": str(body.get("rank") or "")}
-    return " ".join(fmt.format(**values).split()).strip()
+    rendered = " ".join(fmt.format(**values).split()).strip()
+    # A NAME THAT RENDERS TO ITS TITLE ALONE IS NOT RENDERED: a format
+    # whose components the stored name could not fill shows the name
+    # itself after the title rather than "Mr" (scratch play 2026-09-14,
+    # chat 9, the landlord).
+    if rendered.casefold() == title.casefold():
+        return " ".join(f"{title} {name}".split())
+    return rendered
 
 
 def identity_aliases(body, roles=(), profile=None):

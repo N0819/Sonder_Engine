@@ -741,6 +741,32 @@ def _featured_assignments(plan, residents):
             seed_id = str(row.get("seed_id") or "")
             if seed_id in residents and seed_id not in assigned:
                 assigned[seed_id] = (ci, copy.deepcopy(row))
+    # THE POST A ROLE NAMES IS THE POST. The brief said "Bragg the
+    # landlord" and "Mr Pellew the master of ceremonies"; the planner's
+    # plan put every one of them under the inn-maid post in the kitchen
+    # and its own minted names on the posts the brief had filled (scratch
+    # play 2026-09-14, chat 8). A resident whose role's words answer
+    # exactly one post's key stands that post, whatever the plan wrote.
+    from world.spatial import room_name_words, room_words_answer
+    for seed_id, resident in residents.items():
+        if not charters:
+            break
+        wanted = room_name_words(resident.get("post") or resident.get("role"))
+        if not wanted:
+            continue
+        hits = [(ci, str(post_key))
+                for ci, charter in enumerate(charters)
+                for post_key in _mapping(charter.get("posts"))
+                if room_words_answer(wanted, room_name_words(post_key))]
+        if len(hits) != 1:
+            continue
+        ci, post_key = hits[0]
+        held = assigned.get(seed_id)
+        if held and (held[0], str(held[1].get("post") or "")) == (ci, post_key):
+            continue
+        row = copy.deepcopy(held[1]) if held else {"seed_id": seed_id}
+        row["post"] = post_key
+        assigned[seed_id] = (ci, row)
     for seed_id, resident in residents.items():
         if seed_id in assigned or not charters:
             continue

@@ -1652,6 +1652,40 @@ def _merge_generated_rooms_by_name(cid, town, pinned):
     return merged
 
 
+def _merge_town_rooms_by_name(town, pinned=()):
+    """``{dropped_uid: kept_uid}`` for every generated room that shares its
+    folded name with another room of the same town. The author's id
+    (``pinned``) is kept; else the room the most bodies and posts stand in;
+    else the shortest id, which is the one without the article."""
+    from world.spatial import normalize_room_id
+
+    pinned = {str(uid) for uid in pinned or ()}
+    rooms = town.get("rooms") or {}
+    standing = {}
+    for state in (town.get("charters") or {}).values():
+        for collection in ("bodies", "posts"):
+            for value in ((state or {}).get(collection) or {}).values():
+                if isinstance(value, dict) and value.get("place") is not None:
+                    place = str(value["place"])
+                    standing[place] = standing.get(place, 0) + 1
+    by_name = {}
+    for uid, raw in rooms.items():
+        name = normalize_room_id(str((raw or {}).get("name") or "")) \
+            if isinstance(raw, dict) else ""
+        if name:
+            by_name.setdefault(name, []).append(str(uid))
+    out = {}
+    for uids in by_name.values():
+        if len(uids) < 2:
+            continue
+        keep = min(uids, key=lambda u: (u not in pinned,
+                                        -standing.get(u, 0), len(u), u))
+        for uid in uids:
+            if uid != keep:
+                out[uid] = keep
+    return out
+
+
 def _remap_generated_town(cid, town, existing_registry, *, pinned=()):
     """Give an added location its own stable namespace when ids collide.
 
@@ -1690,7 +1724,16 @@ def _remap_generated_town(cid, town, existing_registry, *, pinned=()):
     # surface there. Only an UNLANDED planned room of this story is merged
     # -- two rooms of one name in a lived town are two rooms.
     merged = _merge_generated_rooms_by_name(cid, town, pinned)
-    duplicates = set(merged)
+    # AND ONE ROOM PER NAME WITHIN THE TOWN ITSELF. The Charter Planner
+    # answered a brief that named the ballroom, the card room and the
+    # rest with every one of them TWICE -- the author's id and its own
+    # "the_" spelling, one name each -- and the merge above only knew the
+    # registry's rows (scratch play 2026-09-14, chat 8: nineteen rooms for
+    # nine places, the charters in one set and an empty second town in
+    # the other). Two generated rooms under one folded name are one room;
+    # the author's id, else the one somebody stands in, is the one kept.
+    intra = _merge_town_rooms_by_name(town, pinned)
+    duplicates = set(merged) | set(intra)
     needs_namespace = structure_key != old_structure \
         or bool((existing_rooms - pinned).intersection(
             generated_rooms - duplicates))
@@ -1706,6 +1749,9 @@ def _remap_generated_town(cid, town, existing_registry, *, pinned=()):
             taken.add(mapped)
             room_map[uid] = mapped
 
+    for dup, keep in intra.items():
+        room_map[dup] = room_map.get(keep, keep)
+
     rooms = {}
     for old_uid, raw in (town.get("rooms") or {}).items():
         if str(old_uid) in duplicates:
@@ -1715,6 +1761,23 @@ def _remap_generated_town(cid, town, existing_registry, *, pinned=()):
             if isinstance(edge, dict):
                 edge["to"] = room_map.get(str(edge.get("to")), edge.get("to"))
         rooms[room_map[str(old_uid)]] = room
+    # A dropped twin's doorways are the kept room's: its neighbours were
+    # declared toward the same place under the other spelling.
+    for dup, keep in intra.items():
+        kept = rooms.get(room_map.get(keep, keep))
+        twin = (town.get("rooms") or {}).get(dup) or {}
+        if not isinstance(kept, dict) or not isinstance(twin, dict):
+            continue
+        held = {str(e.get("to")) for e in kept.get("adjacent") or ()
+                if isinstance(e, dict)}
+        for edge in twin.get("adjacent") or ():
+            if not isinstance(edge, dict) or not edge.get("to"):
+                continue
+            to = room_map.get(str(edge["to"]), str(edge["to"]))
+            if to in held or to == room_map.get(keep, keep):
+                continue
+            held.add(to)
+            kept.setdefault("adjacent", []).append({**edge, "to": to})
     town["rooms"] = rooms
     town.setdefault("structure", {})["key"] = structure_key
 
