@@ -18,7 +18,7 @@
 | `agents/director_fanout.py` | 1555 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 2117 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
-| `agents/director_movement.py` | 1463 |  | `agents.director_lingua`, `story.character_schema`, `world.spatial` |
+| `agents/director_movement.py` | 1516 |  | `agents.director_lingua`, `story.character_schema`, `world.spatial` |
 | `agents/director_reconcile.py` | 605 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story`, `world.spatial` |
 | `agents/director_scopes.py` | 1214 |  | `agents.director_lingua`, `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 706 |  | `agents.common`, `story.character_schema`, `story.scene`, `world.background_claims` |
@@ -81,7 +81,7 @@
 | `persist/commit_common.py` | 713 | Leaf helpers shared across commit domains: scalar utilities, name/address roster, entity-id canonicalisation. | `core.db`, `mind.memory`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `persist/commit_destruction.py` | 414 | Single- and multi-book destruction cascades, retirement, and latency-gated news. | `core.db`, `mind.memory`, `persist.commit_common`, `world.mechanics`, `world.spatial`, `world.spatial_frames` |
 | `persist/commit_entities.py` | 568 | world_entities projection of the scene commit, awareness gate, disguise supersession. | `core.db`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
-| `persist/commit_ledgers.py` | 465 | Pending-obligation and world-pressure debt ledgers. | `core.db`, `core.pipeline_context`, `persist.commit_common` |
+| `persist/commit_ledgers.py` | 521 | Pending-obligation and world-pressure debt ledgers. | `core.db`, `core.pipeline_context`, `persist.commit_common` |
 | `persist/commit_mapping.py` | 909 | Lore/book mapping commit: book ops, lore ops, canon fallback ops, offscreen-event normaliser. | `core.db`, `core.frames`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.provenance_text`, `world.spatial` |
 | `persist/commit_mechanics.py` | 469 | Transit/news sweeps, the world-event spine, information carriers, cast changes. | `core.db`, `persist.commit_common`, `persist.commit_scene_state`, `story.character_schema`, `story.scene`, `world.mechanics` |
 | `persist/commit_memory.py` | 2040 | Pre-lock memory preparation: per-mind memories and the psychology deltas riding with them. | `core.db`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_background`, `persist.commit_common`, `persist.commit_place_graph`, `story.character_schema`, `world.charter`, `world.comfort`, `world.exposure`, `world.spatial`, `world.stimulation`, `world.survival` |
@@ -359,12 +359,12 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `_reconcile_near_group_positions()` | 302 | 284 lines |
-| `_travel_continues()` | 1196 | 109 lines |
-| `_apply_following_movement()` | 677 | 98 lines |
-| `_guard_approach_is_not_arrival()` | 1307 | 96 lines |
-| `_unreachable_position_writes()` | 776 | 68 lines |
-| `crossing_legs()` | 1405 | 59 lines |
-| `_door_route()` | 956 | 57 lines |
+| `_apply_following_movement()` | 677 | 151 lines |
+| `_travel_continues()` | 1249 | 109 lines |
+| `_guard_approach_is_not_arrival()` | 1360 | 96 lines |
+| `_unreachable_position_writes()` | 829 | 68 lines |
+| `crossing_legs()` | 1458 | 59 lines |
+| `_door_route()` | 1009 | 57 lines |
 | `route_scene_for()` | 69 | 54 lines |
 
 ### `agents/director_reconcile.py`
@@ -1038,14 +1038,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `commit_world_pressure()` | 242 | 133 lines |
-| `commit_obligations()` | 92 | 82 lines |
-| `commit_world_facts()` | 413 | 53 lines |
-| `world_pressure_view()` | 198 | 22 lines |
-| `_find_obligation()` | 59 | 21 lines |
-| `pending_obligation_view()` | 38 | 20 lines |
-| `_find_pressure()` | 222 | 18 lines |
-| `_beats_open()` | 81 | 9 lines |
+| `commit_world_pressure()` | 273 | 158 lines |
+| `commit_obligations()` | 94 | 82 lines |
+| `commit_world_facts()` | 469 | 53 lines |
+| `_positioned_body_named()` | 224 | 27 lines |
+| `world_pressure_view()` | 200 | 22 lines |
+| `_find_obligation()` | 61 | 21 lines |
+| `pending_obligation_view()` | 40 | 20 lines |
+| `_find_pressure()` | 253 | 18 lines |
 
 ### `persist/commit_mapping.py`
 

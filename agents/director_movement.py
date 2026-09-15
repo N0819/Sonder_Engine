@@ -771,6 +771,59 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name):
             progressed = changed = True
         if not progressed:
             break
+
+    # AN APPROACH IS NOT A FOLLOW, AND A FOLLOW BEGUN FROM ANOTHER ROOM IS AN
+    # APPROACH. The relation above carries a follower only from beside the
+    # target, which is right for travel together and right for a sprint that
+    # leaves someone behind. It says nothing about a body that DECIDES to go
+    # to somebody who is elsewhere -- and that is what a start op across
+    # rooms declares. Left as a relation alone it moved nobody: a world
+    # pressure "Captain Hale's approach continues toward Clara" was filed as
+    # `following_ops` and ticked on fifteen beats running while the captain
+    # sat two rooms away (scratch play 2026-09-14, chat 9 turns 0-15).
+    # Offscreen movement on a declared intent is code's to carry (the charter
+    # ruling: pure code off screen), so the follower is in the target's room
+    # when the beat ends if an open route reaches it; a route that does not
+    # exist, a target that is running, or a follower moved this beat by
+    # something else leaves the relation standing and the body where it is.
+    # The player is never carried: their walk is their own declaration.
+    for raw in ops:
+        if not isinstance(raw, dict) \
+                or str(raw.get("op") or "").strip().casefold() != "start":
+            continue
+        all_positions = dict(scene.get("positions") or {})
+        all_positions.update(positions)
+        follower = _ci_mapping_key(all_positions, raw.get("follower"))
+        target = _ci_mapping_key(all_positions, raw.get("target"))
+        if not follower or not target \
+                or follower.casefold() == target.casefold():
+            continue
+        if follower.casefold() == str(player_name or "").casefold():
+            continue
+        origin = room_of(scene, follower)
+        target_room = positions.get(target) or room_of(scene, target)
+        if not origin or not target_room or origin == target_room:
+            continue
+        if positions.get(follower) and positions[follower] != origin:
+            continue
+        if target.casefold() in rapid:
+            continue
+        if not passable_route_exists(route_scene, origin, target_room):
+            ctx.add_warning(
+                f"{follower} started following {target} from {origin!r}, "
+                f"but no open route reaches {target_room!r}; the relation "
+                "stands and the body stays.")
+            continue
+        positions[follower] = target_room
+        changed = True
+        ctx.add_warning(
+            f"Approach: {follower} started following {target} from another "
+            f"room and reaches {target_room!r} this beat; a follow begun "
+            "from elsewhere is a walk to the one followed.")
+    if changed:
+        # `positions` may be a fresh dict when the diff carried an empty one
+        # (`state_diff.get("positions") or {}`), so a carry must be attached.
+        state_diff["positions"] = positions
     return changed
 
 def _unreachable_position_writes(scene, route_scene, positions, bodies,
