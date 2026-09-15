@@ -43,8 +43,12 @@ from .charter_harm import CONDITIONS
 #: silently ignored key.
 CHARTER_OPS = {
     # An errand dispatched: a body walks there, one room at a time, and its
-    # post calls it back after (`charter_move.continue_walks`).
-    "errand": ("body", "to", "purpose"),
+    # post calls it back after (`charter_move.continue_walks`). It may
+    # CARRY WORD: `message` is what the body was sent to say, `addressee`
+    # whom to, `sender` who gave it -- the walker holds the message as a
+    # claim its voice may say, and it is filed into the addressee's mind
+    # when the two stand together (`charter_runtime.deliver_errands`).
+    "errand": ("body", "to", "purpose", "message", "addressee", "sender"),
     # Somebody joins this institution. The person must already exist
     # somewhere in the world -- minting one is `plan_entity`'s act, under
     # the `create_people` grant.
@@ -193,7 +197,10 @@ def _surgery(registry, op, fields, *, by, turn_idx):
 def _op_errand(registry, op, *, by, turn_idx, scene=None):
     return _surgery(registry, "send_errand", {
         "charter": op["charter"], "body": op["body"], "to": op["to"],
-        "purpose": op.get("purpose") or "", "scene": scene},
+        "purpose": op.get("purpose") or "", "scene": scene,
+        "message": op.get("message") or "",
+        "addressee": op.get("addressee") or "",
+        "sender": op.get("sender") or "", "turn_idx": turn_idx},
         by=by, turn_idx=turn_idx)
 
 

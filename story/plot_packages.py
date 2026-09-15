@@ -1429,6 +1429,30 @@ def _apply_plan_entity(cid, frame_id, op, turn_idx):
         "source": "writers_room"},
         frame_id=frame_id, turn_idx=turn_idx)
     out = {"uid": plan["uid"]}
+    # A PLANTED PERSON IS SOMEBODY, AND SOMEBODY HAS A MIND. A plan alone
+    # is a look and a brief the Director renders; nothing simulates it,
+    # nothing can be told to it, and a telling to a brewer the Room planted
+    # in a card room was refused as naming someone unregistered (scratch
+    # play 2026-09-14, chat 9 turn 9). The same enrolment a person-need
+    # gets (`charter_enrol.enrol_person`: the post their role names, else
+    # a guest of the house standing there, else a household) gives the
+    # plan a charter body; the plan keeps the look, the body keeps the mind.
+    if op["kind"] == "person" and (op.get("brief") or {}).get("where"):
+        try:
+            from world.charter_enrol import enrol_person
+            record = enrol_person(cid, {"surface": {
+                "name": op["name"], "room": op["brief"]["where"],
+                "role": op.get("role") or "",
+                "description": op.get("look") or ""}}, frame_id=frame_id)
+        except Exception:
+            record = None
+        if record and record.get("ref"):
+            from world.planned_entities import (add_planned_entity,
+                                                planned_entities)
+            held = planned_entities(cid, frame_id).get(plan["uid"]) or plan
+            add_planned_entity(cid, {**held, "enrolled": dict(record["ref"])},
+                               frame_id=frame_id, turn_idx=turn_idx)
+            out["enrolled"] = dict(record["ref"])
     if op["answers_need"]:
         fill_planning_need(cid, op["answers_need"],
                            {"ref": {"plan": plan["uid"]}, "how": "planned"},

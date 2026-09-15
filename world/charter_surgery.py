@@ -269,12 +269,23 @@ def charter_shock(charter, *, intervention=None):
     return {"intervention": rows[0]["id"], "op": rows[0]["op"]}
 
 
-def send_errand(charter, *, body="", to="", purpose="", scene=None):
+def send_errand(charter, *, body="", to="", purpose="", scene=None,
+                message="", addressee="", sender="", turn_idx=None):
     """Send a body somewhere on foot: a walk record toward ``to`` that the
     institution's own movement phase spends (`charter_move.continue_walks`),
     so the body is seen on the way and arrives when the rooms are walked,
     and its post calls it back the window after. With no scene graph the
-    walk is one step. Refuses an unreachable target."""
+    walk is one step. Refuses an unreachable target.
+
+    AN ERRAND MAY CARRY WORD. ``message`` is what the body was sent to say,
+    ``addressee`` whom to, ``sender`` who gave it. The walker holds the
+    message from this moment as a claim its own voice may bring up
+    (`presence_view` reads the mind), so what a footman says on arrival is
+    what he was sent with; and `charter_runtime.deliver_errands` files it
+    into the addressee's mind when the two stand together. Without this the
+    errand moved the body and carried nothing (scratch play 2026-09-14,
+    chat 9: a message for Mr Crane that no footman could say).
+    """
     from .charter_space import walk_route
     to = _text(to, 120)
     if not to:
@@ -291,8 +302,29 @@ def send_errand(charter, *, body="", to="", purpose="", scene=None):
     if len(route) > 1:
         held["walk"] = {"target": to, "route": route, "leg": 0,
                         "credit": 0.0, "held": False}
-    held["errand"] = {"to": to, "purpose": _text(purpose, 200)}
-    return {"body": str(body), "from": origin, "to": to, "rooms": len(route) - 1}
+    errand = {"to": to, "purpose": _text(purpose, 200)}
+    message = _text(message, 320)
+    if message:
+        errand["message"] = message
+        errand["addressee"] = _text(addressee, 120)
+        errand["sender"] = _text(sender, 120) or "somebody"
+        at = float(charter.get("clock_hours") or 0.0)
+        errand["given_at"] = at
+        from .charter_observe import evidence_claim
+        claim = evidence_claim(
+            {"source_id": "errand:%s:%.4f" % (body, at), "kind": "speech",
+             "actor": errand["sender"], "exact_quote": message,
+             "target": errand["addressee"], "status": "attempted",
+             "salience": 0.8},
+            int(turn_idx or 0), at, origin, label=errand["sender"])
+        if claim:
+            claim["provenance"] = "carried_word"
+            errand["claim_key"] = claim["body"]
+            charter.setdefault("minds", {}).setdefault(str(body), {})[
+                claim["body"]] = claim
+    held["errand"] = errand
+    return {"body": str(body), "from": origin, "to": to, "rooms": len(route) - 1,
+            **({"carries": message} if message else {})}
 
 
 def harm_body(charter, *, body="", outcome="hurt", cause="", by=""):

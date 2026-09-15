@@ -338,9 +338,29 @@ def normalize_body(key, entry):
     # An errand the room sent this body on (`charter_surgery.send_errand`):
     # where and what for, kept while the walk it started is alive so the
     # body can say why it is where it is. Dropped with the walk.
-    if isinstance(entry.get("errand"), dict) and isinstance(entry.get("walk"), dict):
-        body["errand"] = {"to": str(entry["errand"].get("to") or "")[:120],
-                          "purpose": str(entry["errand"].get("purpose") or "")[:200]}
+    # ...unless it CARRIES WORD not yet delivered: the message rides past
+    # the arrival that drops the walk, because it is delivered where the
+    # walker and the addressee stand together (`charter_runtime.
+    # deliver_errands`), which may be a window later than the arrival.
+    raw_errand = entry.get("errand") if isinstance(entry.get("errand"), dict) else None
+    carrying = bool(raw_errand and raw_errand.get("message")
+                    and raw_errand.get("delivered_at") is None)
+    if raw_errand and (isinstance(entry.get("walk"), dict) or carrying):
+        errand = {"to": str(raw_errand.get("to") or "")[:120],
+                  "purpose": str(raw_errand.get("purpose") or "")[:200]}
+        if raw_errand.get("message"):
+            errand["message"] = str(raw_errand["message"])[:320]
+            errand["addressee"] = str(raw_errand.get("addressee") or "")[:120]
+            errand["sender"] = str(raw_errand.get("sender") or "")[:120]
+            errand["claim_key"] = str(raw_errand.get("claim_key") or "")
+            for field in ("given_at", "delivered_at"):
+                value = raw_errand.get(field)
+                if value is not None:
+                    try:
+                        errand[field] = float(value)
+                    except (TypeError, ValueError):
+                        pass
+        body["errand"] = errand
     # A walk in progress: the courier's shape (`charter_move`), carried only
     # while the body is between its origin and its target. Dropped on arrival
     # by the mover, and dropped here if it is not a route at all -- a body
