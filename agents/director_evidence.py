@@ -2442,6 +2442,89 @@ def authority_by_entity(event_inputs):
     return modes
 
 
+_QUOTED_SPAN = re.compile(r'"([^"\n]{2,}?)"|\u201c([^\u201d\n]{2,}?)\u201d')
+
+
+def restore_declared_quotes(out, raw_input, warn=None):
+    """A quoted span in the player's own input is the player's LINE.
+
+    The causal sheet asks for a spoken row's words ALONE, and a model that
+    files `calls out "Hello, is anyone here?" and looks around` as one
+    ACTION row has mis-typed the beat: the line reaches no dialogue log,
+    addresses nobody, is heard only as the text of an act, is remembered as
+    nothing said, and the composer's tripwire fires on every view that
+    carries it (the owner's chat 125, every beat, 2026-09-14). The input
+    is ground truth for what the player said, so each quoted span that no
+    speech row carries is lifted into one -- same chronology, the act's own
+    targets and delivery facts, categories `speech` -- and the act keeps
+    what is left of its words, or goes when nothing is.
+    """
+    ledgers = (out or {}).get("ledgers")
+    if not isinstance(ledgers, list) or not str(raw_input or "").strip():
+        return out
+    spans = [m.group(1) or m.group(2) for m in _QUOTED_SPAN.finditer(raw_input)]
+    spans = [sp.strip() for sp in spans if sp and sp.strip()]
+    if not spans:
+        return out
+
+    def body(text):
+        return str(text or "").strip().strip('"\'\u201c\u201d\u2018\u2019').strip()
+
+    def carries_speech(row):
+        cats = row.get("categories") if isinstance(row.get("categories"), list) \
+            else ([row["category"]] if row.get("category") else [])
+        return "speech" in {str(c).strip().casefold() for c in cats}
+
+    said = {body(r.get("event")).casefold() for r in ledgers
+            if isinstance(r, dict) and carries_speech(r)}
+    next_item = max([int(r.get("item_id") or 0) for r in ledgers
+                     if isinstance(r, dict)] + [0]) + 1
+    rebuilt, restored = [], []
+    for row in ledgers:
+        if not isinstance(row, dict) or carries_speech(row):
+            rebuilt.append(row)
+            continue
+        event = str(row.get("event") or "")
+        lifted = [sp for sp in spans
+                  if sp.casefold() not in said and sp.casefold() in event.casefold()]
+        if not lifted:
+            rebuilt.append(row)
+            continue
+        residual = event
+        for sp in lifted:
+            line = {k: v for k, v in row.items()}
+            line.update({
+                "item_id": next_item, "event": sp, "act": "",
+                "observable": "speaks", "categories": ["speech"],
+                "category": "speech", "volume": row.get("volume") or "normal",
+            })
+            next_item += 1
+            rebuilt.append(line)
+            said.add(sp.casefold())
+            restored.append(sp)
+            residual = re.sub(
+                r'["\u201c]?\s*' + re.escape(sp) + r'\s*["\u201d]?[.!?,]?',
+                " ", residual, count=1, flags=re.IGNORECASE)
+        residual = re.sub(r"\s+", " ", residual).strip(" ,;:")
+        if len(re.findall(r"[^\W\d_]+", residual)) >= 2:
+            kept = dict(row)
+            kept["event"] = residual
+            if str(kept.get("observable") or "").strip():
+                obs = kept["observable"]
+                for sp in lifted:
+                    obs = re.sub(r'["\u201c]?\s*' + re.escape(sp) + r'\s*["\u201d]?[.!?,]?',
+                                 " ", obs, count=1, flags=re.IGNORECASE)
+                kept["observable"] = re.sub(r"\s+", " ", obs).strip(" ,;:") or residual
+            rebuilt.append(kept)
+    if restored:
+        out["ledgers"] = rebuilt
+        if callable(warn):
+            warn("player speech restored: %d quoted line(s) the ledger had "
+                 "filed as action now stand as speech rows: %s"
+                 % (len(restored), "; ".join(f'"{r}"' for r in restored)))
+    return out
+
+
 def normalize_causal_ledger(out, authority=None, identity_index=None):
     """Make the Director's ledgers authoritative for legacy sequence readers.
 

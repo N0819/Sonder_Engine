@@ -1557,6 +1557,27 @@ class RoomDef(LenientModel):
     name: str = ""
     desc: str = ""
     adjacent: list[dict] = Field(default_factory=list)
+
+    @validator("adjacent", pre=True, allow_reuse=True)
+    def _fold_edge_keys(cls, value):
+        """An exit names its far room under `to`. Models write the same
+        fact under `room` (this file's own establish example did, until
+        2026-09-15), `room_id` or `target`; every edge reader asks for `to`
+        and the commit dropped the exit as leading to "undefined room None"
+        -- one room of a two-room parlour lost its only way back (the
+        owner's chat 125). The keys are the engine's own aliases for one
+        field, folded here so no reader learns them."""
+        if not isinstance(value, list):
+            return value
+        out = []
+        for edge in value:
+            if isinstance(edge, dict) and not str(edge.get("to") or "").strip():
+                for alias in ("room", "room_id", "target"):
+                    if str(edge.get(alias) or "").strip():
+                        edge = {**edge, "to": str(edge[alias]).strip()}
+                        break
+            out.append(edge)
+        return out
     notes: str = ""
     parent_entity: Optional[str] = None
     # Declared here (not just passed through) because Pydantic's default
@@ -5564,14 +5585,14 @@ OUTPUT_EXAMPLES = {
             "pier_head": {
                 "name": "Pier Head",
                 "desc": "Wet boards, a bollard, the lamp on its iron post.",
-                "adjacent": [{"room": "quay_road", "barrier": "open"}],
+                "adjacent": [{"to": "quay_road", "barrier": "open"}],
                 "exposure": "open",
                 "anchors": {"lamp_post": {"desc": "the iron lamp post"}},
             },
             "quay_road": {
                 "name": "Quay Road",
                 "desc": "A cobbled run of shuttered warehouses.",
-                "adjacent": [{"room": "pier_head", "barrier": "open"}],
+                "adjacent": [{"to": "pier_head", "barrier": "open"}],
                 "exposure": "open",
             },
         },
@@ -6386,6 +6407,16 @@ def semantic_output_errors(
                     continue
                 status = str(result.get("status") or "").strip().casefold()
                 transforms = result.get("transforms") or []
+                # A TRANSFORM IS A VERDICT. A result that carries transforms
+                # and says no status has said "encoded" in the only way that
+                # matters, and refusing it lost the whole hand: on
+                # z-ai/glm-5.2 the spatial and objects hands omitted `status`
+                # on every beat of a story, the temperature-0 repair omitted
+                # it again, and fail-open meant no station, pose or entity
+                # they wrote ever landed (the owner's chat 125, 2026-09-14).
+                # A status that is present and unknown is still an error.
+                if not status and transforms:
+                    result["status"] = status = "encoded"
                 if status not in {
                         "encoded", "already_true", "not_mine",
                         "no_referent"}:
