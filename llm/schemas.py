@@ -2174,6 +2174,12 @@ class BackgroundReactOutput(LenientModel):
     # activities the action is (`charter_creature.CREATURE_ACTIVITIES`), so
     # the engine can say how loud it was and how far it carried.
     activity: str = ""
+    # Where the figure goes when the reaction takes it out of the room: the
+    # room_id of one exit from `place.exits`, or "" when it stays. A
+    # departure written only into `action` moved nobody (scratch play
+    # 2026-09-14, chat 9 turn 11: "Excuse me for a few moments, gentlemen",
+    # rising from the card table, and four beats later still seated there).
+    goes_to: str = ""
 
 class SceneLifeEntry(LenientModel):
     """One managed presence's conduct for this beat, attributed by name so the

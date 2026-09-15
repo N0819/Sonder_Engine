@@ -2152,6 +2152,18 @@ def track_background_presences(ctx, nonce, *, prepared=None):
         except Exception as exc:
             ctx.add_warning(f"Charter conduct skipped for {reaction_name}: {exc}")
 
+    # A figure that said where it goes is there when the beat ends; the
+    # scene is the one this domain read after the scene commit, written back
+    # under the same frame (`wget`/`wset` scope it).
+    try:
+        departed = apply_presence_departures(
+            live_scene, _background_fired_reactions_any(br), presences,
+            warn=ctx.add_warning)
+        if departed:
+            wset(cid, "scene", live_scene)
+    except Exception as exc:
+        ctx.add_warning(f"presence departures skipped: {exc}")
+
     # Lore a background presence asserted this beat enters as a CLAIM, never as
     # fact -- the Director ratifies it, contradicts it, or lets it expire
     # (background_claims.py). Same treatment the Player Authority Contract
@@ -2577,6 +2589,68 @@ def _background_fired_reactions_any(br):
         return [r for r in reactions if isinstance(r, dict)
                 and (r.get("dialogue_log_entry") or r.get("action"))]
     return _background_fired_reactions(br)
+
+def apply_presence_departures(scene, reactions, presences, warn=None):
+    """A presence that said where it goes is there when the beat ends.
+
+    A background reaction is stateless, and until now nothing it said could
+    change where its figure stands: `room` is where it reacted, `action` is
+    prose nobody reads, `charter_act` needs a charter body. So a figure who
+    excused himself from the card table and rose to go (scratch play
+    2026-09-14, chat 9 turn 11) was still seated there four beats later,
+    while the player waited in the room he had said he was coming to.
+
+    `goes_to` is typed: a room_id from the rooms the figure was shown. It
+    lands on the one graph every body walks (`passable_route_exists`), so a
+    chute or a locked door refuses a presence exactly as it refuses the
+    cast. The figure ARRIVES this beat, however many rooms lie between: a
+    one-room-a-beat pace was the owner's call to drop (2026-09-14, "one is
+    rather extremely strict"), and a background figure crossing a building
+    between two beats is ordinary fiction. A destination that is no room
+    here, or that no open route reaches, is a warning and the figure stays:
+    the floor is code's, never the model's. Returns
+    [(name, from_room, to_room)] and mutates `scene`.
+    """
+    from world.spatial import passable_route_exists
+    moved = []
+    rooms = (scene or {}).get("rooms") or {}
+    for reaction in reactions or ():
+        if not isinstance(reaction, dict):
+            continue
+        dest = str(reaction.get("goes_to") or "").strip()
+        name = str(reaction.get("name") or "").strip()
+        if not dest or not name:
+            continue
+        _key, record = presence_record_for(presences or {}, name, scene)
+        here = presence_room(scene, name, record or {})
+        if dest == here:
+            continue
+        if dest not in rooms:
+            if warn:
+                warn(f"{name} declared a departure to {dest!r}, which is no "
+                     f"room here; stays in {here or 'place'}")
+            continue
+        if not here or not passable_route_exists(scene or {}, here, dest):
+            if warn:
+                warn(f"{name} declared a departure to {dest!r}, which no "
+                     f"open route reaches from {here or 'nowhere'}; stays")
+            continue
+        positions = scene.setdefault("positions", {})
+        eid, _ent = _presence_scene_entity(scene, name, record)
+        key = next((k for k in positions
+                    if str(k).strip().casefold() == name.casefold()), None)
+        if key is None and eid and eid in positions:
+            key = eid
+        positions[key or name] = dest
+        moved.append((name, here, dest))
+        if isinstance(record, dict):
+            recent = record.setdefault("recent", [])
+            if isinstance(recent, list):
+                recent.append({
+                    "text": "went through to %s" % (
+                        (rooms.get(dest) or {}).get("name") or dest)})
+    return moved
+
 
 def _raw_flow_addressed_refs(ctx):
     """Raw flow.addressed_to entries as the director emitted them, preserved
