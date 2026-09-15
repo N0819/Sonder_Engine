@@ -211,6 +211,7 @@ def compile_transforms(
     """
     channels = {str(channel) for channel in allowed_channels}
     ledger_index = {}
+    row_index = {}
     for row in ledger_items or []:
         if not isinstance(row, dict):
             continue
@@ -219,11 +220,16 @@ def compile_transforms(
             chrono_id = int(row.get("chrono_id") or row.get("event_id") or 0)
         except (TypeError, ValueError):
             continue
-        if item_id > 0 and chrono_id > 0:
-            ledger_index[item_id] = {
-                "chrono_id": chrono_id,
-                "object_name": str(row.get("object_name") or "").strip(),
-            }
+        meta = {"chrono_id": chrono_id,
+                "object_name": str(row.get("object_name") or "").strip()}
+        # THE CHRONO ID IS THE ROW'S KEY (the owner, 2026-09-15): an item
+        # id is the object's and several rows share it. A transform that
+        # cites its row's chrono id joins by it; one that cites only an
+        # item id (a stored beat, a direct call) joins by that as before.
+        if chrono_id > 0:
+            row_index.setdefault(chrono_id, meta)
+        if item_id > 0 and chrono_id > 0 and item_id not in ledger_index:
+            ledger_index[item_id] = meta
     item_ids = None if allowed_item_ids is None else {
         int(value) for value in allowed_item_ids
     }
@@ -241,10 +247,15 @@ def compile_transforms(
             continue
         try:
             item_id = int(raw.get("item_id") or 0)
+            row_key = int(raw.get("chrono_id") or 0)
         except (TypeError, ValueError):
-            item_id = 0
+            item_id, row_key = 0, 0
         legacy_object_id = str(raw.get("object_id") or "").strip()
-        meta = ledger_index.get(item_id) if item_id > 0 else None
+        meta = row_index.get(row_key) if row_key > 0 else None
+        if meta is None:
+            meta = ledger_index.get(item_id) if item_id > 0 else None
+        if meta is not None and row_key > 0 and row_key in row_index:
+            item_id = row_key          # the row is the key from here on
         try:
             chrono_id = int((meta or {}).get("chrono_id")
                             or raw.get("chrono_id") or 0)

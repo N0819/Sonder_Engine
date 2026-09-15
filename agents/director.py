@@ -3499,6 +3499,10 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
                     item_id = int((ledger or {}).get("item_id") or 0)
                 except (TypeError, ValueError):
                     item_id = 0
+                try:
+                    chrono_id = int((ledger or {}).get("chrono_id") or 0) or index + 1
+                except (TypeError, ValueError):
+                    chrono_id = index + 1
                 emitted = 0
                 transforms = row.get("transforms") or []
                 if not isinstance(transforms, list):
@@ -3530,6 +3534,7 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
                             continue
                         raw_transforms.append({
                             "item_id": item_id,
+                            "chrono_id": chrono_id,
                             "patch": patch,
                         })
                         emitted += 1
@@ -3542,7 +3547,8 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
                         f"result {index + 1} says encoded without a transform")
                     continue
                 if status:
-                    receipt = {"item_id": item_id, "status": status}
+                    receipt = {"item_id": item_id, "chrono_id": chrono_id,
+                               "status": status}
                     reroute = str(row.get("reroute_to") or "").strip()
                     if reroute:
                         receipt["reroute_to"] = reroute

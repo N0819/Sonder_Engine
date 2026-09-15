@@ -1307,8 +1307,11 @@ def _granted_event_ids(name, view):
     for item in (_specialist_span_slice(name, view or {})
                  + _specialist_manifest_slice(name, view or {})):
         try:
-            number = int((item or {}).get("item_id")
-                         or (item or {}).get("event_id") or 0)
+            # The row's key is its chrono id (the span's `event_id`); the
+            # item id is the object's and several rows share it.
+            number = int((item or {}).get("chrono_id")
+                         or (item or {}).get("event_id")
+                         or (item or {}).get("item_id") or 0)
         except (TypeError, ValueError):
             continue
         if number > 0 and number not in granted:
@@ -1352,7 +1355,8 @@ def _resolved_event_verdicts(result, granted_ids):
         if not isinstance(entry, dict):
             continue
         try:
-            event_id = int(entry.get("item_id") or entry.get("event_id") or 0)
+            event_id = int(entry.get("chrono_id") or entry.get("event_id")
+                           or entry.get("item_id") or 0)
         except (TypeError, ValueError):
             continue
         status = str(entry.get("status") or "").strip().casefold()

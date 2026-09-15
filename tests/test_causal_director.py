@@ -440,3 +440,50 @@ def test_a_row_about_a_doorway_in_view_is_routed_to_rooms():
     assert "rooms" in out["ledgers"][0]["categories"]
     assert "rooms" not in out["ledgers"][2]["categories"]
     assert director._route_doorway_rows(sc, {"ledgers": []}, ["scullery"]) == []
+
+
+def test_the_item_id_is_the_directors_handle_and_the_chrono_id_is_the_row():
+    """The owner, 2026-09-15: item_id is the Director's handle for a thing,
+    the same on every row about it, so every hand's transforms reconcile
+    onto that thing in chronological order whether or not the world knows
+    it. The engine keeps the handle AS WRITTEN -- no merging by name, no
+    renumbering a shared handle -- and only fills a missing one. Chrono is
+    the row's own key, unique to it."""
+    from agents.director import normalize_causal_ledger
+    out = {"ledgers": [
+        {"chrono_id": 1, "item_id": 1, "object_name": "Hinami", "source_entity_id": "persona:10",
+         "event": "Uhm hello?", "categories": ["speech"]},
+        {"chrono_id": 2, "item_id": 1, "object_name": "Hinami", "source_entity_id": "persona:10",
+         "event": "looks at Mirelle", "look": "Mirelle", "categories": ["attention"]},
+        {"chrono_id": 3, "item_id": 2, "object_name": "a new thing", "source_entity_id": "character:72",
+         "event": "produces a thing the world has no record of", "categories": ["entities"]},
+        {"chrono_id": 3, "item_id": None, "object_name": "hinami", "source_entity_id": "character:72",
+         "event": "a row with no handle", "categories": ["poses"]},
+    ]}
+    normalize_causal_ledger(out)
+    rows = out["causal_ledger"]
+    assert [r["item_id"] for r in rows[:3]] == [1, 1, 2], "handles kept as written"
+    assert rows[3]["item_id"] == 3, "a missing handle is filled past the highest, never merged by name"
+    assert [r["chrono_id"] for r in rows] == [1, 2, 3, 4], "a repeated chrono gets the row its own"
+    spans = out["sequence"]
+    assert spans[0]["items"][0]["id"] == spans[1]["items"][0]["id"] == 1
+
+
+def test_transforms_join_by_the_row_and_order_by_its_chronology():
+    """Two rows about one object, two hands' transforms attached by
+    position: each cites its row's chrono id, and the recompiler orders
+    by it rather than by the object's first appearance."""
+    rows = [
+        {"item_id": 1, "chrono_id": 1, "object_name": "door"},
+        {"item_id": 1, "chrono_id": 2, "object_name": "door"},
+    ]
+    transforms = [
+        {"chrono_id": 2, "item_id": 1, "patch": {"rooms": {"hall": {"state": {"open": True}}}}},
+        {"chrono_id": 1, "item_id": 1, "patch": {"rooms": {"hall": {"state": {"open": False}}}}},
+    ]
+    compiled, history, rejected = compile_transforms(
+        transforms, allowed_channels=["rooms"], ledger_items=rows,
+        allowed_item_ids=[1, 2], specialist="spatial")
+    assert rejected == []
+    assert [row["chrono_id"] for row in history] == [1, 2]
+    assert compiled["rooms"]["hall"]["state"]["open"] is True, "the later row wins"

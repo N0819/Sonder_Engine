@@ -6323,10 +6323,16 @@ def semantic_output_errors(
         # position); and `compile_transforms` sorts by chrono_id itself, so
         # an out-of-order answer is already ordered before anything reads it.
         # Three checks that could destroy a beat and buy nothing.
-        if len(item_ids) != len(set(item_ids)):
-            noted.append("ledger item_id values repeat; the engine renumbered")
-        if item_ids and set(item_ids) != set(range(1, len(item_ids) + 1)):
+        # THE ITEM ID IS THE DIRECTOR'S HANDLE FOR A THING and rows about one
+        # thing share it (the owner, 2026-09-15), so a repeat is the contract
+        # and density is over the distinct handles; the chrono id is the
+        # row's own and a repeat there is what the engine gives each row its
+        # own number for.
+        distinct_items = sorted(set(item_ids))
+        if distinct_items and distinct_items != list(range(1, len(distinct_items) + 1)):
             noted.append("ledger item_id values are not dense from 1")
+        if len(chrono_ids) != len(set(chrono_ids)):
+            noted.append("ledger chrono_id values repeat; the engine gave each row its own")
         if chrono_ids:
             unique_chrono = sorted(set(chrono_ids))
             if unique_chrono != list(range(1, unique_chrono[-1] + 1)):

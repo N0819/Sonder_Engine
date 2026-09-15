@@ -2700,5 +2700,15 @@
   "🔊 Mute": "🔊 ミュート",
   "🔒 persona secrets": "🔒 ペルソナの秘密",
   "🔗 Generate invite": "🔗 招待を生成",
-  "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}": "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}"
+  "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}": "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}",
+  "Map": "地図",
+  "Map · ${room}": "地図 · ${room}",
+  "No outcome room on this turn.": "このターンには結果の部屋がありません。",
+  "Map renderer not loaded.": "地図の描画部が読み込まれていません。",
+  "Map unavailable:": "地図を表示できません:",
+  "From ${player[0]}": "${player[0]}から",
+  "hidden by": "遮るもの",
+  "${player[0]}: cell ${me.cell ? me.cell.join(\",\") : \"—\"}, facing ${me.facing || \"—\"}": "${player[0]}: セル ${me.cell ? me.cell.join(\",\") : \"—\"}、向き ${me.facing || \"—\"}",
+  ", at ${me.at}": "、${me.at}にて",
+  "wb-map-canvas pipeline-map": "wb-map-canvas pipeline-map"
 }

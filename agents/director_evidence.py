@@ -2545,8 +2545,21 @@ def normalize_causal_ledger(out, authority=None, identity_index=None):
             display_forms.setdefault(form, []).append(str(identity_id))
     ledger = []
     sequence = []
+    # THE ITEM ID IS THE DIRECTOR'S OWN HANDLE, THE CHRONO ID IS THE ROW
+    # (the owner, 2026-09-15). The item id is not a world id: it is the
+    # handle the Director gives a thing so the recompiler can reconcile
+    # every hand's transforms onto that one thing in chronological order,
+    # whether or not the world knows the thing yet. So the number is KEPT
+    # AS WRITTEN: rows the Director gave one number to are one thing by
+    # its say-so, and the engine never merges rows by name nor renumbers
+    # a shared handle. Only a missing or non-positive number is filled, past
+    # the highest in use. The chrono id is the row's own key, unique to it.
+    # (Before this the normaliser renumbered every repeated item id, so a
+    # handle could never span two rows -- the owner's chat 126 saw four
+    # numbers for Hinami.)
     used_item_ids = set()
-    next_item_id = 1
+    used_chrono_ids = set()
+
     for order, entry in enumerate(raw, start=1):
         if not isinstance(entry, dict):
             continue
@@ -2556,23 +2569,24 @@ def normalize_causal_ledger(out, authority=None, identity_index=None):
             if folded and folded not in categories:
                 categories.append(folded)
         event = str(entry.get("event") or "").strip()
+        # THE ROW'S KEY IS THE DIRECTOR'S CHRONO NUMBER, kept where it is
+        # positive and unique to this row; a missing or repeated one takes
+        # the next free number, so every row has its own.
         try:
-            chrono_id = int(entry.get("chrono_id") or order)
+            chrono_id = int(entry.get("chrono_id") or 0)
         except (TypeError, ValueError):
-            chrono_id = order
-        if chrono_id <= 0:
-            chrono_id = order
-        try:
-            item_id = int(entry.get("item_id") or order)
-        except (TypeError, ValueError):
-            item_id = order
-        if item_id <= 0 or item_id in used_item_ids:
-            while next_item_id in used_item_ids:
-                next_item_id += 1
-            item_id = next_item_id
-        used_item_ids.add(item_id)
-        next_item_id = max(next_item_id, item_id + 1)
+            chrono_id = 0
+        if chrono_id <= 0 or chrono_id in used_chrono_ids:
+            chrono_id = (max(used_chrono_ids) if used_chrono_ids else 0) + 1
+        used_chrono_ids.add(chrono_id)
         object_name = str(entry.get("object_name") or "").strip()
+        try:
+            item_id = int(entry.get("item_id") or 0)
+        except (TypeError, ValueError):
+            item_id = 0
+        if item_id <= 0:
+            item_id = (max(used_item_ids) if used_item_ids else 0) + 1
+        used_item_ids.add(item_id)
         source_entity_id = str(entry.get("source_entity_id") or "").strip()
         if source_entity_id not in identity_index:
             matches = display_forms.get(source_entity_id.casefold()) or []

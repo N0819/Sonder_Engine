@@ -918,8 +918,11 @@ class TestAGuardMayNotDestroyABeatItCannotJustify:
 
     def test_and_says_so_rather_than_swallowing_it(self):
         """Demoted, not deleted: the information still reaches the log."""
-        report = self._report(self._row(item_id=5), self._row(item_id=5))
-        assert any("renumbered" in str(w) for w in report.warnings), \
+        # Two rows may SHARE an item id -- it is the Director's handle for
+        # one thing (the owner, 2026-09-15) -- so the guard that speaks here
+        # is the chrono one: a row's own number given twice.
+        report = self._report(self._row(item_id=5, chrono_id=3), self._row(item_id=5, chrono_id=3))
+        assert any("each row its own" in str(w) for w in report.warnings), \
             report.warnings
 
     def test_the_packs_own_alias_no_longer_kills_a_beat(self):
