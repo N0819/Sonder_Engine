@@ -1459,6 +1459,41 @@ def sync_scene_passages(scene: dict, prior_scene: dict = None) -> list:
     return touched
 
 
+def _seat_arrivals(merged, positions_before, incoming_stations):
+    """Give every body whose room changed this beat a cell in its new room:
+    the one the diff wrote, else one pace inside the door it came through.
+    Returns [(name, room, cell)]; mutates `merged["stations"]`."""
+    from world.spatial_geometry import normalize_cell
+    from world.spatial_walk import inside_the_door
+    positions = merged.get("positions") or {}
+    stations = merged.setdefault("stations", {})
+    said = {}
+    for name, st in (incoming_stations or {}).items() if isinstance(
+            incoming_stations, dict) else ():
+        if isinstance(st, dict) and normalize_cell(st.get("cell")) is not None:
+            said[str(name).strip().casefold()] = list(normalize_cell(st["cell"]))
+    contained = merged.get("contained") or {}
+    seated = []
+    for name, now in positions.items():
+        was = _ci_get(positions_before or {}, name)
+        if not was or not now or str(was) == str(now):
+            continue
+        if isinstance(contained, dict) and _ci_get(contained, name):
+            continue
+        cell = said.get(str(name).strip().casefold())
+        if cell is None:
+            try:
+                cell = list(inside_the_door(merged, str(now), str(was)))
+            except Exception:
+                continue
+        st = stations.get(name)
+        if not isinstance(st, dict):
+            st = stations[name] = {"at": None, "near": []}
+        st["cell"] = cell
+        seated.append((name, str(now), cell))
+    return seated
+
+
 def _station_moved_off_its_pin(current, incoming) -> bool:
     """Does this incoming station name an anchor that is not the one the
     standing `cell` was written with?
@@ -2170,6 +2205,14 @@ def merge_scene_with_diff(
     # see it fail (a cell has no membership test), so it is compared against
     # where the body stood before this beat, as the pose details were.
     invalidate_moved_body_cells(merged, _positions_before)
+    # ...UNLESS THIS BEAT SAID WHERE IT STANDS. A cell the diff wrote for a
+    # body is in the coordinates of the room the diff put it in, so it
+    # survives the room change that dropped the stale one; and a body that
+    # came into a room with no cell said for it stands one pace inside the
+    # doorway it came through (`spatial_walk.inside_the_door`), the room's
+    # centre when the doorway cannot be placed -- a body in a room is
+    # somewhere in it, and the door is where an arrival is.
+    _seat_arrivals(merged, _positions_before, incoming_stations)
     invalidate_contact_bound_poses(merged, _contacts_before_ops)
     normalize_scene_poses(merged)
 

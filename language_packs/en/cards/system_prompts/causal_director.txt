@@ -22,8 +22,8 @@ Each row contains:
 - act: the verb of a speech row whose words were NOT given (asks, explains). Omit it when you have the line itself.
 - commitment: asserted|contestable.
 - targets: ids of every body, thing or room acted on or aimed at; supply implicit ones from world_index; never the row's own source.
-- visibility, conceal_from, volume: delivery facts when relevant; volume is whisper|mutter|normal|loud|shout.
-- movement only for relocation (a body CHANGES ROOM), else null: {to_room,why,mover,arrives}; to_room is where the walk was declared to END (the engine walks the legs), arrives whether this beat ends there. An act that carries a body out of its room is a positions row.
+- visibility, conceal_from, volume: delivery facts when relevant; volume is whisper|mutter|normal|loud|shout, or pitched: loud enough for its target, no louder.
+- movement only for relocation (a body CHANGES ROOM), else null: {to_room,why,mover,arrives}; to_room is where the walk ENDS (the engine walks the legs); arrives: this beat ends there; to_anchor: the destination feature named (world_index features). An act that carries a body out of its room is a positions row.
 - A newly visible interior targets the entity and names rooms, unentered or not.
 - A stated span of time routes time; a source changing loudness routes entities.
 - ability and difficulty only when a contestable event needs one.

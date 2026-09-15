@@ -173,6 +173,8 @@ from .director_views import (
     _lazy_view,
 )
 from .director_movement import (
+    beat_seconds,
+    walk_declared,
     declared_walk_leg,
     _door_route,
     _egocentric_exits,
@@ -5834,7 +5836,10 @@ def director_resolve(ctx, nonce, _corrections=None):
                     "unchanged."
                 )
         elif mv.get("arrives", True):
-            sd["positions"][move_subject] = mv["to_room"]
+            # THE ROUTE IS OPEN; THE BODY WALKS IT, over the cells, as far
+            # as the beat's paces carry (`director_movement.walk_declared`).
+            walk_declared(ctx, sc, route_scene, sd, out, move_subject, mv,
+                          prev_room)
             if contested_door:
                 # Say which door was crossed. The contest is only nameable
                 # because the walk was followed edge by edge, and a multi-hop
@@ -5883,7 +5888,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     # Durable following supplies ordinary group travel, bounded by pace and
     # route. It runs after the movement backstop has finalized the player's
     # destination, so it follows physical truth rather than interpret intent.
-    _apply_following_movement(ctx, sc, sd, interp, p_name)
+    _apply_following_movement(ctx, sc, sd, interp, p_name, out=out)
 
     # A fresh station is structured within-room evidence.  Reconcile the
     # narrow provable case before approach semantics gets final authority over

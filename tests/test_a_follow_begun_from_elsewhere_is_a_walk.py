@@ -118,5 +118,5 @@ def test_the_causal_sheet_says_where_a_walk_ends():
     from llm.prompts import get_prompt_body
     sheet = get_prompt_body("director_interpret", "en")
     assert "never the row's own source" in sheet
-    assert "where the walk was declared to END" in sheet
+    assert "where the walk ENDS" in sheet
     assert "carries a body out of its room is a positions row" in sheet

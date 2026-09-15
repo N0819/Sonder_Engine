@@ -1982,6 +1982,29 @@ def compose_beat_scene(ctx):
     # asserted. Both come back on `res["travel"]`, so the ledger and the
     # committed position are written from one answer and cannot disagree.
     _travel = res.get("travel") if isinstance(res, dict) else None
+    # A WALK THAT DID NOT ARRIVE IS UNDER WAY. The resolve walks a declared
+    # route over the cells as far as the beat's paces carry
+    # (`director_movement.walk_declared`); one that ran out of paces is
+    # recorded here as an approach, destination and all, so silence carries
+    # it on next beat exactly as a walk declared as approaching is.
+    if isinstance(_travel, dict) and any(
+            isinstance(e, dict) and e.get("underway") and e.get("subject")
+            for e in (_travel.get("advanced") or [])):
+        if not isinstance(sc.get("approach"), dict) or "who" in sc["approach"]:
+            sc["approach"] = {} if not isinstance(sc.get("approach"), dict) \
+                or not sc["approach"].get("who") else {
+                    sc["approach"]["who"]: {"to_room": sc["approach"].get("to_room"),
+                                            "turn": sc["approach"].get("turn")}}
+        for _entry in _travel["advanced"]:
+            if not isinstance(_entry, dict) or not _entry.get("underway"):
+                continue
+            _rec = {"to_room": _entry.get("destination"),
+                    "turn": getattr(ctx.turn, "idx", None)}
+            if _entry.get("to_anchor"):
+                _rec["to_anchor"] = _entry["to_anchor"]
+            if _entry.get("to_cell"):
+                _rec["to_cell"] = _entry["to_cell"]
+            sc["approach"][str(_entry["subject"])] = _rec
     if isinstance(sc.get("approach"), dict) and isinstance(_travel, dict):
         _pending = sc["approach"]
         if "who" in _pending:

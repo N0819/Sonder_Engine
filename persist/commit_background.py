@@ -2156,9 +2156,13 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     # scene is the one this domain read after the scene commit, written back
     # under the same frame (`wget`/`wset` scope it).
     try:
+        from agents.director import beat_seconds
+        from world.spatial import paces_for
         departed = apply_presence_departures(
             live_scene, _background_fired_reactions_any(br), presences,
-            warn=ctx.add_warning)
+            warn=ctx.add_warning,
+            paces=paces_for(beat_seconds(ctx, res.get("state_diff"))),
+            turn_idx=turn_idx)
         if departed:
             wset(cid, "scene", live_scene)
     except Exception as exc:
@@ -2590,7 +2594,8 @@ def _background_fired_reactions_any(br):
                 and (r.get("dialogue_log_entry") or r.get("action"))]
     return _background_fired_reactions(br)
 
-def apply_presence_departures(scene, reactions, presences, warn=None):
+def apply_presence_departures(scene, reactions, presences, warn=None,
+                              paces=None, turn_idx=None):
     """A presence that said where it goes is there when the beat ends.
 
     A background reaction is stateless, and until now nothing it said could
@@ -2641,8 +2646,31 @@ def apply_presence_departures(scene, reactions, presences, warn=None):
                     if str(k).strip().casefold() == name.casefold()), None)
         if key is None and eid and eid in positions:
             key = eid
-        positions[key or name] = dest
-        moved.append((name, here, dest))
+        landed_room, landed_cell, arrived = dest, None, True
+        if paces is not None:
+            # OVER THE CELLS, AS FAR AS THE BEAT'S PACES CARRY
+            # (`spatial_walk.walk`); a walk that runs out is recorded as
+            # under way so silence carries it on (`_travel_continues`).
+            from world.spatial import walk
+            landed = walk(scene, key or name, dest, paces=paces)
+            if landed is not None:
+                landed_room, landed_cell = landed["room"], list(landed["cell"])
+                arrived = bool(landed["arrived"])
+        positions[key or name] = landed_room
+        if landed_cell is not None:
+            st = scene.setdefault("stations", {})
+            entry = st.get(key or name) if isinstance(
+                st.get(key or name), dict) else {"at": None, "near": []}
+            entry["cell"] = landed_cell
+            entry.pop("at", None) if arrived else None
+            entry.setdefault("at", None)
+            st[key or name] = entry
+        if not arrived:
+            approach = scene.get("approach")
+            if not isinstance(approach, dict) or "who" in approach:
+                approach = scene["approach"] = {}
+            approach[key or name] = {"to_room": dest, "turn": turn_idx}
+        moved.append((name, here, landed_room))
         if isinstance(record, dict):
             recent = record.setdefault("recent", [])
             if isinstance(recent, list):

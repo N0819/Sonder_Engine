@@ -2723,6 +2723,13 @@ def causal_world_index(sc, here=None, *, room_ids=None,
                 str(edge.get("to")) for edge in room.get("adjacent") or []
                 if isinstance(edge, dict) and edge.get("to")),
             "holds": [],
+            # The room's own fixtures by id, so a walk that ends at one
+            # ("to the hearth") can name it (`movement.to_anchor`). Ids
+            # only: what a fixture IS reaches the hands, not this index.
+            **({"features": sorted(str(a) for a in room["anchors"]
+                                   if str(a or "").strip())}
+               if isinstance(room.get("anchors"), dict) and room["anchors"]
+               else {}),
         }
     for key, room_id in positions.items():
         room = index.get(str(room_id))

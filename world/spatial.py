@@ -79,6 +79,12 @@ from world.spatial_barriers import (
 )
 
 
+from world.spatial_sound_field import pitched_level_db, word_for_level
+from world.spatial_walk import (
+    BLOCKING_HEIGHT, DEFAULT_BEAT_SECONDS, PACES_PER_SECOND, blocked_cells,
+    cell_path, door_cell, entry_cell, inside_the_door, paces_for,
+    standing_cell, walk,
+)
 from world.spatial_transit import (
     _closed_enclosure_barrier, _entity_exterior_room, _interior_entry_room,
     _interior_rooms_of, _is_body_entity,
