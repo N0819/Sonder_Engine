@@ -301,6 +301,46 @@ _HANDLERS = {
 }
 
 
+def _resolve_body_name(registry, op):
+    """An op names a body the way the beat does -- by its display name --
+    and the surgeries key bodies by their ledger keys. Resolve the one to
+    the other in place, and settle `charter` from the body when the op
+    left it unsaid or named the wrong house.
+
+    The social hand, shown a house by name (`addressed_house`), wrote
+    {op: errand, body: "Lianw Brabw"} for the footman `footman:0001`
+    (scratch play 2026-09-14, chat 9 turn 7); `_body` knew keys alone and
+    would have refused the errand it had just been enabled to write. A
+    name two bodies of one house share names neither, and is refused as
+    before; a key stays a key.
+    """
+    if not isinstance(op, dict) or not op.get("body"):
+        return
+    wanted = str(op["body"]).strip()
+    items = (registry or {}).get("items") or {}
+    charter_key = str(op.get("charter") or "")
+    if charter_key in items and wanted in ((items[charter_key].get("state")
+                                            or {}).get("bodies") or {}):
+        return
+    from .charter_runtime import identity_index
+    index = identity_index(registry)
+    houses = [charter_key] if charter_key in items else list(items)
+    hits = []
+    for key in houses:
+        state = (items.get(key) or {}).get("state") or {}
+        if wanted in (state.get("bodies") or {}):
+            hits.append((key, wanted))
+            continue
+        shown = index.display(key)
+        for body_key in state.get("bodies") or {}:
+            if str(shown[body_key] or "").strip().casefold() == wanted.casefold():
+                hits.append((key, body_key))
+    if len(hits) == 1:
+        op["charter"], op["body"] = hits[0]
+    elif len(hits) > 1:
+        raise ValueError("%r names %d bodies; say which" % (wanted, len(hits)))
+
+
 def apply_charter_ops(registry, ops, *, by="writers_room", turn_idx=None,
                       scene=None):
     """Apply one authored EVENT -- an ordered list of ops -- to a registry in
@@ -322,6 +362,7 @@ def apply_charter_ops(registry, ops, *, by="writers_room", turn_idx=None,
         op = raw if isinstance(raw, dict) and raw.get("op") in CHARTER_OPS \
             else normalize_charter_op(raw)
         try:
+            _resolve_body_name(registry, op)
             result = _HANDLERS[op["op"]](registry, op, by=by,
                                          turn_idx=turn_idx, scene=scene)
         except ValueError as exc:

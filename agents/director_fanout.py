@@ -213,6 +213,7 @@ def _resolve_beat_view(out, decls, char_actions, dice, p_name, interp,
         "dice": dice if isinstance(dice, list) else [],
         "player": p_name,
         "cast": [str(d.get("name") or "") for d in decls if d.get("name")],
+        "addressed_figures": addressed_figures(interp),
         "public_sources": public_sources[:20],
         # THE BEAT'S WORLD-PRESSURE TICKS, so dispatch can route them. A tick
         # is a structured op the author emitted -- not prose -- and the
@@ -229,6 +230,16 @@ def _resolve_beat_view(out, decls, char_actions, dice, p_name, interp,
             and str(op.get("op") or "").strip().lower() == "tick"
         ],
     }
+
+
+def addressed_figures(interp):
+    """The NAMES in `flow.addressed_to_refs` -- the unregistered figures a
+    line was aimed at; cast ids are ints and are not figures."""
+    flow = (interp or {}).get("flow") if isinstance(interp, dict) else None
+    if not isinstance(flow, dict):
+        return []
+    return [str(r) for r in (flow.get("addressed_to_refs") or [])
+            if isinstance(r, str) and r.strip()]
 
 
 def _interpret_beat_view(ctx, out, p_name):
@@ -291,6 +302,10 @@ def _interpret_beat_view(ctx, out, p_name):
         "dice": [],
         "player": p_name,
         "cast": [character_name_from_text(c["sheet"]) for c in ctx.cast],
+        # The unregistered figures this beat's line is aimed at, by name:
+        # what a figure does with a request is the social hand's ledger
+        # (`_ruling_for`).
+        "addressed_figures": addressed_figures(out),
     }
 
 
@@ -319,8 +334,34 @@ def _specialist_span_slice(name, view):
     one definition, so a hand cannot be judged on a work item it was never
     handed.
     """
-    return [item for item in (view.get("spans") or [])
+    rows = [item for item in (view.get("spans") or [])
             if name in span_owners(item)]
+    # THE LINE AIMED AT A FIGURE IS THE SOCIAL HAND'S WORK ITEM. The
+    # addressee ruling (`_ruling_for`) opens the hand; without a row the
+    # hand answered a slice of nothing and its one result was discarded as
+    # misaligned ("returned 1 positional result(s) for 0 ledger row(s)",
+    # scratch play 2026-09-14, chat 9 turn 4). A speech span whose targets
+    # name an addressed figure is handed to it, so the courier, telling
+    # or charter op it writes answers a numbered item like any other.
+    if name == "social":
+        aimed = {str(n).casefold() for n in (view.get("addressed_figures") or [])}
+        if aimed:
+            held = {id(item) for item in rows}
+            for item in (view.get("spans") or []):
+                if id(item) in held or not isinstance(item, dict):
+                    continue
+                if item.get("type") not in ("speech", "action"):
+                    continue
+                # The line aimed at the figure (the interpret's row) and
+                # the figure's own answer to it (the resolve's rows, whose
+                # actor is the figure): an errand is written on the
+                # agreement, so the hand is handed both.
+                targets = {str(t).casefold() for t in (item.get("targets") or [])}
+                actor = str(item.get("actor") or "").casefold()
+                if actor in aimed or (item.get("type") == "speech"
+                                      and targets & aimed):
+                    rows.append(item)
+    return rows
 
 
 def specialist_co_hands(name, view):
@@ -654,6 +695,44 @@ def co_hand_view(name, view, sc):
     return slices
 
 
+def addressed_house(ctx, names, cap=40):
+    """``{charter_key: [{name, post, place}, ...]}`` for the institution of
+    every addressed figure -- the bodies an errand may name. Fail-open: a
+    story with no charter, or a figure no charter employs, lists nothing."""
+    try:
+        from world.charter_runtime import (_body_refs, charter_speaker_records,
+                                           registry_for)
+        chat = ctx.chat
+        cid = chat["id"] if isinstance(chat, dict) else chat.id
+        frame_id = getattr(ctx.turn, "frame_id", None)
+        registry = registry_for(cid, frame_id)
+        charters = []
+        for figure in names or ():
+            for charter_key, _body_key in _body_refs(registry, name=str(figure)):
+                if charter_key not in charters:
+                    charters.append(charter_key)
+        if not charters:
+            return {}
+        out = {}
+        for row in charter_speaker_records(cid, frame_id):
+            key = str(row.get("charter") or "")
+            if key not in charters:
+                continue
+            state = registry["items"][key]["state"]
+            body = (state.get("bodies") or {}).get(str(row.get("body"))) or {}
+            posts = [p for p, holder in (state.get("watch") or {}).items()
+                     if str(holder) == str(row.get("body"))]
+            post = posts[0] if posts else str(body.get("home_post") or "")
+            rows = out.setdefault(key, [])
+            if len(rows) < cap:
+                rows.append({"name": str(row.get("name") or ""),
+                             "post": post.replace("_", " "),
+                             "place": str(row.get("place") or "")})
+        return out
+    except Exception:
+        return {}
+
+
 def _specialist_payload(name, ctx, sc, view, extras):
     """One specialist's scoped payload -- its written entitlement, applied
     to whichever invocation's causal ledger it was handed. The shared part is
@@ -672,6 +751,16 @@ def _specialist_payload(name, ctx, sc, view, extras):
         # ledgers under display subjects, so give every hand the same small,
         # explicit join instead of asking it to infer a person from prose.
         payload["identity_index"] = extras["identity_index"]
+    if name == "social" and view.get("addressed_figures"):
+        # THE HOUSE OF THE FIGURE THE BEAT ADDRESSED, by name, post and
+        # room. An errand names a body the institution employs, and the
+        # hand asked to write one for "his footman" had no footman in front
+        # of it: it called the dispatch already true, and the errand a
+        # master of ceremonies had agreed to went nowhere (scratch play
+        # 2026-09-14, chat 9 turn 7).
+        house = addressed_house(ctx, view["addressed_figures"])
+        if house:
+            payload["addressed_house"] = house
     # The Director's ruling for THIS hand's channels, when it made one, AT
     # BOTH STAGES. Scoped like every other slice: a specialist sees its own
     # note and no one else's, so this carries authority without carrying

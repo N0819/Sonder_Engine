@@ -879,6 +879,16 @@ def _resolve_movement_mover(sc, sd, mv, p_name):
         # under (id, name, or alias); default to the canonical id.
         key = next((f for f in forms if f in positions), str(eid))
         return key, positions.get(key), str(eid)
+    # A BODY THE SCENE STANDS SOMEWHERE IS A MOVER, entity row or none. The
+    # positions table is the physical ledger; a cast member whose establish
+    # minted no entity record still has a room in it, and a walk of theirs
+    # is theirs (scratch play 2026-09-14, chat 9 turn 5: "Captain Edmund
+    # Hale" resolved to no entity, the fallback read the walk as the
+    # player's, and the widow's companion was stood in the card room she
+    # had refused to enter).
+    for key in positions:
+        if str(key).casefold() == mover_cf:
+            return str(key), positions.get(key), None
     return None, None, None
 
 

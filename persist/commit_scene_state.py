@@ -1566,9 +1566,17 @@ def compose_beat_scene(ctx):
     # Director just minted under an honorific is spelled the sheet's way from
     # its first beat). Idempotent, and it must stay so -- a checkpoint restore
     # replays it. Argument: `docs/design/DESIGN_SUBJECT_SPELLING_AUTHORITY.md`.
-    from agents.common import (reconcile_cast_entity_names,
+    from agents.common import (ensure_cast_entities,
+                               reconcile_cast_entity_names,
                                stamp_authored_interiors)
 
+    # A cast body the standing scene places and holds no record for gets
+    # its record here, before the reconcile that keeps it spelled right
+    # (`ensure_cast_entities`; chat 9 stood its whole cast recordless).
+    # Silent: a floor that heals a save is not a warning, and it fires
+    # once, being idempotent.
+    ensure_cast_entities(prev_scene, ctx.cast,
+                         player_name=_player_name_or_none(ctx))
     for _scope in (prev_scene, diff):
         for _eid, _old, _new in reconcile_cast_entity_names(
                 _scope, ctx.cast, player_name=_player_name_or_none(ctx)):

@@ -345,6 +345,16 @@ def relocate(bodies, watch, posts, scene, travelled=None, hours=4.0,
         post = (posts or {}).get(post_key)
         if body is None or post is None or not post.get("place"):
             continue
+        # AN ERRAND IS FINISHED BEFORE THE POST CALLS THE BODY BACK. A
+        # posted body sent on an errand was re-dispatched to its post by
+        # the very next window's bill -- "the watch changed, and the body
+        # turns" -- so the footman the master of ceremonies sent to the
+        # card room turned round on the landing before he had left it, and
+        # the errand the commit had just landed was gone with no trace
+        # (scratch play 2026-09-14, chat 9 turn 7). The post waits until
+        # the errand's walk is walked; the window after, it recalls him.
+        if body.get("errand") and en_route(body):
+            continue
         moves[body_key] = str(post["place"])
     return walk(bodies, moves, scene, travelled, cache=cache, hours=hours,
                 neighbors=neighbors, walked=walked)

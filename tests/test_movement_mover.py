@@ -201,7 +201,12 @@ def test_self_move_still_moves_the_player_body(temp_db, monkeypatch):
     assert "van" not in out["state_diff"]["positions"]
 
 
-def test_unknown_mover_falls_back_to_player_with_warning(temp_db, monkeypatch):
+def test_unknown_mover_moves_nobody_with_warning(temp_db, monkeypatch):
+    """A WALK IS THE WALKER'S OWN. This used to fall back to moving the
+    player's body "loudly"; measured on scratch chat 9 turn 5 (2026-09-14),
+    a captain's walk into the card room resolved to no entity and the
+    fallback stood the widow's companion in the room she had just refused
+    to enter. A mover the scene cannot place moves nobody, and says so."""
     import agents.director as director
 
     ctx = _make_ctx(temp_db, {"to_room": "dock_road", "mover": "the zeppelin"})
@@ -209,6 +214,5 @@ def test_unknown_mover_falls_back_to_player_with_warning(temp_db, monkeypatch):
 
     out = director.director_resolve(ctx, nonce=0)
 
-    # Safe default: the pre-mover behavior (player-body move), loudly.
-    assert out["state_diff"]["positions"]["The Stranger"] == "dock_road"
-    assert any("does not resolve" in w for w in ctx.warnings)
+    assert out["state_diff"]["positions"].get("The Stranger") != "dock_road"
+    assert any("moves nobody" in w for w in ctx.warnings)
