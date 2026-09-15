@@ -2579,14 +2579,33 @@ def normalize_causal_ledger(out, authority=None, identity_index=None):
         if chrono_id <= 0 or chrono_id in used_chrono_ids:
             chrono_id = (max(used_chrono_ids) if used_chrono_ids else 0) + 1
         used_chrono_ids.add(chrono_id)
-        object_name = str(entry.get("object_name") or "").strip()
-        try:
-            item_id = int(entry.get("item_id") or 0)
-        except (TypeError, ValueError):
-            item_id = 0
-        if item_id <= 0:
-            item_id = (max(used_item_ids) if used_item_ids else 0) + 1
-        used_item_ids.add(item_id)
+        # THE THINGS THE ROW IS ABOUT: `item_ids` and `item_names` in step
+        # (the owner's contract, 2026-09-15), the single `item_id` /
+        # `object_name` still read as a one-item row. Handles kept as
+        # written; a missing one filled past the highest in use; a name
+        # with no handle gets one, a handle with no name keeps "".
+        listed_ids = entry.get("item_ids")
+        listed_names = entry.get("item_names")
+        if not isinstance(listed_ids, list):
+            listed_ids = [entry.get("item_id")]
+        if not isinstance(listed_names, list):
+            listed_names = [entry.get("object_name")]
+        width = max(len(listed_ids), len(listed_names), 1)
+        item_ids, item_names = [], []
+        for k in range(width):
+            raw_id = listed_ids[k] if k < len(listed_ids) else None
+            raw_name = listed_names[k] if k < len(listed_names) else ""
+            try:
+                one = int(raw_id or 0)
+            except (TypeError, ValueError):
+                one = 0
+            if one <= 0:
+                one = (max(used_item_ids) if used_item_ids else 0) + 1
+            used_item_ids.add(one)
+            item_ids.append(one)
+            item_names.append(str(raw_name or "").strip())
+        item_id = item_ids[0]
+        object_name = item_names[0]
         source_entity_id = str(entry.get("source_entity_id") or "").strip()
         if source_entity_id not in identity_index:
             matches = display_forms.get(source_entity_id.casefold()) or []
@@ -2608,6 +2627,8 @@ def normalize_causal_ledger(out, authority=None, identity_index=None):
         normalized = {
             "chrono_id": chrono_id,
             "item_id": item_id,
+            "item_ids": list(item_ids),
+            "item_names": list(item_names),
             "object_name": object_name,
             "source_entity_id": source_entity_id,
             # Filled by the engine from what it handed this source, never
@@ -2646,6 +2667,8 @@ def normalize_causal_ledger(out, authority=None, identity_index=None):
             "event_id": chrono_id,
             "chrono_id": chrono_id,
             "item_id": item_id,
+            "item_ids": list(item_ids),
+            "item_names": list(item_names),
             "object_name": object_name,
             "actor": source_entity_id,
             "source_entity_id": source_entity_id,
@@ -2653,7 +2676,7 @@ def normalize_causal_ledger(out, authority=None, identity_index=None):
             "from_declaration": source_event_id,
             "categories": categories,
             "note": note,
-            "items": [{"id": item_id, "name": object_name}],
+            "items": [{"id": one, "name": name} for one, name in zip(item_ids, item_names)],
         }
         if normalized["movement"] is not None:
             # The spatial hand receives the same ordered work rows as every
@@ -3004,7 +3027,8 @@ def speech_transforms(ledger, *, chrono_offset=0):
         # contestable -- and says nothing once the ruling is made. `chrono_id`
         # and `item_id` go because the compiler re-stamps them.
         row = {key: value for key, value in entry.items()
-               if key not in ("authority_mode", "chrono_id", "item_id")}
+               if key not in ("authority_mode", "chrono_id", "item_id",
+                              "item_ids")}
         try:
             chrono_id = int(entry.get("chrono_id") or 0)
         except (TypeError, ValueError):

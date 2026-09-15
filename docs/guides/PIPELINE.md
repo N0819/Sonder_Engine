@@ -331,12 +331,16 @@ their rooms and physically visible adjacent rooms. Room rows expose exits;
 entities in that slice expose only identity, placement, and existing interior
 room ids. A disconnected room or entity is absent.
 
-Each row carries `chrono_id`, a private numeric `item_id`, `object_name`, source
+Each row is one span of the prose and carries `chrono_id` (the row's own
+number, unique to it), `item_ids` (the Director's handle for each thing the
+span is about -- the same number wherever that thing appears in the beat,
+whether or not the world knows it; for the recompiler only) with `item_names`
+in step (for the hands, to match against the world or to mint), source
 identity and authority, an objective event, a short `resolution_notes` ruling,
-and zero or more exact state channel categories. One occurrence can become
-several rows when several objects need distinct treatment; rows from the same
-occurrence may share a `chrono_id`. A row can name several categories and is
-therefore routed to several specialists.
+and zero or more exact state channel categories. A row can name several
+categories and is therefore routed to several specialists. `item_id` and
+`object_name` remain on every row as the first of each list, for readers
+that predate the lists (the owner's contract, 2026-09-15).
 
 Compatibility code projects those ledgers into the older `sequence`, movement,
 dice, and flow surfaces still read by onset perception and plan construction.
@@ -687,11 +691,16 @@ it to the onset preview; feeding it back here would execute it twice.
 The Director again returns one or more event ledgers, not prose or a
 `state_diff`. Categories dispatch the five channel owners (`body`, `social`,
 `contact`, `objects`, `spatial`). A specialist may receive several ordered
-rows, and one row may reach several specialists. Dispatch strips `item_id`;
+rows, and one row may reach several specialists. Dispatch strips `item_ids`;
 each specialist instead returns exactly one positional result per input row,
-containing zero or more `{patch:{channel:value}}` transforms and a verdict.
-`object_name` and row-local `world_matches` let it use the keys of objects that
-already exist in its scoped world view. No Director-invented object id is used
+containing zero or more `{item, patch:{channel:value}}` transforms and a
+verdict -- one transform per thing whose record changes, `item` naming it
+from the row's `item_names` (a row about one thing needs no `item`).
+Row-local `item_matches` (per name) and `world_matches` let it use the keys
+of objects that already exist in its scoped world view; a name absent from
+`item_matches` is new or unresolved. The attach site resolves `item` back to
+the handle, and `compile_transforms` orders every transform by its row's
+`chrono_id` and files it under its item. No Director-invented handle is used
 as world identity.
 
 After every parallel call finishes, deterministic code zips each result to the

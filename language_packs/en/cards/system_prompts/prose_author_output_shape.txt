@@ -1,1 +1,1 @@
-Output STRICT JSON {ledgers:[{chrono_id,item_id,object_name,source_entity_id,authority_mode,source_event_id,event,resolution_notes,categories:[]}]}. This compatibility fragment is not part of the current causal Director sheet.
+Output STRICT JSON {ledgers:[{chrono_id,item_ids:[],item_names:[],source_entity_id,authority_mode,source_event_id,event,resolution_notes,categories:[]}]}. This compatibility fragment is not part of the current causal Director sheet.

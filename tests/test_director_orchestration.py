@@ -677,8 +677,8 @@ class TestTheInstructionRidesOnTheEvent:
         from llm.prompts import get_prompt
         from llm import prompts
         interpret = get_prompt("director_interpret", "en")
-        for _field in ("categories", "resolution_notes", "object_name",
-                       "item_id"):
+        for _field in ("categories", "resolution_notes", "item_names",
+                       "item_ids"):
             assert _field in interpret, _field
         assert "changes_asserted" not in interpret
         assert "changes_asserted" not in prompts._PROSE_AUTHOR_OUTPUT_SHAPE
@@ -740,8 +740,8 @@ class TestTheInstructionRidesOnTheEvent:
         from llm.prompts import specialist_prompt
         for name in director.SPECIALISTS:
             sheet = specialist_prompt(name, director.SPECIALISTS[name]["channels"])
-            assert "item_id" in sheet, name
-            assert "object_name" in sheet, name
+            assert "item_names" in sheet, name
+            assert "item_matches" in sheet, name
 
 
 class TestASpanIsSettledOnlyWhenEveryOwnerHas:
@@ -915,8 +915,8 @@ class TestTheSpanIsTheWorkItem:
     def test_the_sheet_asks_for_them(self):
         from llm.prompts import get_prompt
         sheet = get_prompt("director_interpret", "en")
-        for _field in ("categories", "resolution_notes", "object_name",
-                       "item_id"):
+        for _field in ("categories", "resolution_notes", "item_names",
+                       "item_ids"):
             assert _field in sheet, _field
         assert "smallest useful speech, action, and event spans" in sheet
 
@@ -1077,8 +1077,8 @@ class TestBothHalvesEmitWorkItems:
     def test_both_sheets_ask_for_the_field(self):
         from llm.prompts import get_prompt_body, prose_author_prompt
         _body = get_prompt_body("director_interpret")
-        for _field in ("categories", "resolution_notes", "object_name",
-                       "item_id"):
+        for _field in ("categories", "resolution_notes", "item_names",
+                       "item_ids"):
             assert _field in _body, _field
         resolve = prose_author_prompt(None)
         assert '"ledgers"' in resolve
@@ -1725,7 +1725,15 @@ def test_specialist_payload_is_the_body_slice_and_nothing_more(temp_db,
     assert "cast" not in spayload
     assert len(spayload["ledgers"]) == 2
     assert all("item_id" not in row for row in spayload["ledgers"])
+    assert all("item_ids" not in row for row in spayload["ledgers"])
     assert all("chrono_id" not in row for row in spayload["ledgers"])
+    # The names the hand matches by travel; the handles do not (the
+    # owner's contract, 2026-09-15).
+    assert spayload["ledgers"][0]["item_names"] == ["wool coat"]
+    assert spayload["ledgers"][0]["item_matches"] == {"wool coat": [{
+        "kind": "garment",
+        "world_key": "wool coat", "world_name": "wool coat",
+    }]}
     assert spayload["ledgers"][0]["world_matches"] == [{
         "kind": "garment",
         "world_key": "wool coat", "world_name": "wool coat",
@@ -2523,7 +2531,7 @@ def test_prose_author_core_keeps_the_never_gated_blocks():
     core = prose_author_prompt([])
     assert "ordered event ledgers" in core
     assert "no narration" in core
-    assert "categories" in core and "object_name" in core
+    assert "categories" in core and "item_names" in core
     for name, heading in PROSE_DUTY_HEADINGS.items():
         assert heading not in core, (name, heading)
 
@@ -3916,7 +3924,8 @@ def test_the_sheet_tells_every_hand_a_body_is_not_a_thing_it_keeps():
     from llm.prompts import specialist_prompt
 
     sheet = specialist_prompt("objects", ["entities"])
-    assert "Use object_name and that row's world_matches" in sheet
+    assert "item_matches resolves each to an existing world key" in sheet
+    assert "one transform per thing whose record you change" in sheet
     assert "Do not narrate, reinterpret a row" in sheet
 
 
@@ -5239,9 +5248,9 @@ class TestTheBeatNumbersTheThingsItTouches:
         from llm.prompts import DEFAULT_PROMPTS, prose_author_prompt
         for sheet in (DEFAULT_PROMPTS["director_interpret"],
                       prose_author_prompt(None, "en")):
-            assert "object_name" in sheet
-            assert "item_id" in sheet
-            assert "matching hint" in sheet
+            assert "item_names" in sheet
+            assert "item_ids" in sheet
+            assert "the hands match by these" in sheet
 
 
 class TestWhichRecordOfAThingIsAllowedToExist:
@@ -6472,3 +6481,66 @@ def test_a_new_entity_interior_reference_must_name_a_real_room():
             out, {"rooms": {}, "entities": {"box": {
                 "name": "Police Box", "interior_rooms": []}}},
             {"spans": []}, {"entity_interiors": {}}, "interpret")
+
+
+def test_a_row_about_several_things_files_each_transform_under_its_thing(
+        temp_db, monkeypatch):
+    """The owner's contract (2026-09-15): one row per span, `item_ids`
+    for the recompiler and `item_names` for the hands in step, and a hand
+    that changes two of the row's things emits two transforms, each naming
+    its thing in `item`. The attach site resolves the name back to the
+    handle; a transform that names nothing on a several-thing row is filed
+    under the first thing, with a warning, rather than lost."""
+    calls = []
+    responses = {
+        "director_resolve": {
+            "ledgers": [{
+                "chrono_id": 1,
+                "item_ids": [7, 9],
+                "item_names": ["wool coat", "linen scarf"],
+                "source_entity_id": "character:mara",
+                "authority_mode": "autonomous",
+                "kind": "action",
+                "event": "Mara pulls off her coat and scarf together.",
+                "resolution_notes": "Both come off.",
+                "categories": ["attire"],
+            }],
+            "resolved_event": "Mara pulls off her coat and scarf.",
+            "summary": "Both off.", "state_diff": {}, **_ruling("body"),
+        },
+        "director_body": {
+            "results": [{
+                "transforms": [
+                    {"item": "linen scarf", "patch": {"attire": {
+                        "Mara": {"remove": ["linen scarf"]}}}},
+                    {"item": "wool coat", "patch": {"attire": {
+                        "Mara": {"remove": ["wool coat"]}}}},
+                    {"patch": {"attire": {
+                        "Mara": {"conditions": {"wool coat": "creased"}}}}},
+                ],
+                "status": "encoded",
+            }],
+            "notes": [],
+        },
+    }
+    scene = json.loads(json.dumps(BASE_SCENE))
+    scene["attire"] = {
+        "Mara": {"wearing": ["wool coat", "linen scarf"]}}
+    monkeypatch.setattr(director, "_agent_json",
+                        _fake_agent(calls, responses))
+    ctx = _make_ctx(temp_db, scene=scene, interp=_action_interp(),
+                    player_input="I pull off the coat and scarf")
+    out = director.director_resolve(ctx, nonce=0)
+
+    spayload = next(c["payload"] for c in calls
+                    if c["step_key"] == "director_body")
+    row = spayload["ledgers"][0]
+    assert row["item_names"] == ["wool coat", "linen scarf"]
+    assert "item_ids" not in row and "item_id" not in row
+    assert set(row["item_matches"]) == {"wool coat", "linen scarf"}
+    assert out["state_diff"]["attire"]["Mara"]["remove"] == [
+        "linen scarf", "wool coat"]
+    history = out["orchestration"]["transform_history"]
+    assert [(h["item_id"], h["chrono_id"]) for h in history] == [
+        (9, 1), (7, 1), (7, 1)]
+    assert any("names none of them" in w for w in ctx.warnings)

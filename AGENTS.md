@@ -220,12 +220,15 @@ without world law, or infer speech impairment from quantity.
 orchestration row below).** `director_interpret` and `director_resolve` invoke
 the same minimal causal prompt (`causal_director.txt`) over generic
 `{entity_id, authority_mode, events}` inputs. The Director emits multiple
-`CausalLedgerEntry` rows with private `chrono_id` and numeric `item_id`, an
-optional `object_name`, resolution notes and one or more exact specialist
-categories. One row may be dispatched to several hands and each hand may
-receive several ordered rows. `director_fanout._specialist_payload` strips both
-ids and attaches row-local `world_matches` from exact names in the hand's
-scoped world view; model output correlates by array position through
+`CausalLedgerEntry` rows -- one per span -- with a private `chrono_id`, the
+Director's `item_ids` (one handle per thing the span is about, the same
+number wherever the thing recurs) with `item_names` in step, resolution notes
+and one or more exact specialist categories. One row may be dispatched to
+several hands and each hand may receive several ordered rows.
+`director_fanout._specialist_payload` strips the ids and attaches row-local
+`item_matches` (per name) and `world_matches` from exact names in the hand's
+scoped world view; a hand emits one transform per thing whose record changes,
+naming it in `item`; model output correlates by array position through
 `LedgerTransformResult`, with zero or more `{patch: ...}` transforms per row.
 `world.causality.compile_transforms` is the pure recompiler: it restores the
 private ids, validates channel ownership, sorts all transforms by chronology,

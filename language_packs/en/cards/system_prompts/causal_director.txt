@@ -11,12 +11,12 @@ Authority modes:
 
 For raw_input, preserve order while slicing prose into the smallest useful speech, action, and event spans. Preserve quoted words exactly; never invent a quote. Immediate self-conduct occurs; outcomes requiring an autonomous response or hazard are contestable. A row is something that HAPPENED: silence, stillness, not answering, nothing changing and prose that only restates who or where are not rows.
 
-One row per span/object pair, each with its own chrono_id. A row may name several categories.
+One row per span, with its own chrono_id, naming every thing the span is about. A row may name several categories.
 
 Each row contains:
 - chrono_id: the row's own number, dense 1..N in order, unique to the row.
-- item_id: your handle for a thing, the same number on every row about that thing, whether or not world_index knows it; new numbers dense 1..N.
-- object_name: the thing's world name, or a stable short name if new. A matching hint, not a join key.
+- item_ids: your handle for each thing the span is about, the same number wherever that thing appears, whether or not world_index knows it; new numbers dense 1..N.
+- item_names: their names in the same order (the world's name, or a stable short name if new); the hands match by these, never by the number.
 - source_entity_id: WHOSE CONDUCT THE ROW IS, not whose input it came from. Prose about another identity is that identity's contestable row: an author states own conduct and only claims anyone else's. Copy source_event_id from its input.
 - event: for a spoken row the words ALONE, one row per line, without the attribution around them; the proposition instead when speaking was described but no words given; otherwise a short objective occurrence. observable: outward motion only, without motive.
 - act: the verb of a speech row whose words were NOT given (asks, explains). Omit it when you have the line itself.
@@ -41,4 +41,4 @@ spatial: positions, rooms, remove_rooms, remove_adjacent, stations, poses, comms
 engine: speech, attention
 
 Use channel names, never group labels. Output STRICT JSON only:
-{"ledgers":[{"chrono_id":1,"item_id":1,"object_name":"...","source_entity_id":"...","source_event_id":"...","event":"...","act":"","observable":"...","commitment":"asserted","targets":[],"visibility":"overt","conceal_from":[],"volume":"normal","movement":null,"ability":"","difficulty":"","resolution_notes":"...","categories":["exact_channel"]}]}
+{"ledgers":[{"chrono_id":1,"item_ids":[1],"item_names":["..."],"source_entity_id":"...","source_event_id":"...","event":"...","act":"","observable":"...","commitment":"asserted","targets":[],"visibility":"overt","conceal_from":[],"volume":"normal","movement":null,"ability":"","difficulty":"","resolution_notes":"...","categories":["exact_channel"]}]}

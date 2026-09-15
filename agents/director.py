@@ -3482,6 +3482,12 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
         alignment_errors = []
         receipts = []
         if isinstance(positional, list):
+            # THE HAND'S ANSWER AS IT GAVE IT, kept beside what the engine
+            # made of it. Until 2026-09-15 a hand's work was visible only
+            # as its channels in the merged diff, so which thing a transform
+            # was filed under -- `item`, under the one-row-per-span
+            # contract -- could not be read back at all.
+            state["results"] = copy.deepcopy(positional)
             raw_transforms = []
             ledger_items = state.get("ledger_items") or []
             if len(positional) != len(ledger_items):
@@ -3534,7 +3540,9 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
                                 f"result {index + 1} contains an empty transform")
                             continue
                         raw_transforms.append({
-                            "item_id": item_id,
+                            "item_id": _transform_item_id(
+                                ledger, transform, item_id, alignment_errors,
+                                index),
                             "chrono_id": chrono_id,
                             "patch": patch,
                         })
@@ -3561,7 +3569,9 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
                 raw_transforms,
                 allowed_channels=spec["channels"],
                 ledger_items=state.get("ledger_items") or (),
-                allowed_item_ids=state.get("event_ids") or (),
+                # The grant is by ROW (chrono ids); the things a granted
+                # row is about are read off the rows themselves.
+                allowed_chrono_ids=state.get("event_ids") or (),
                 specialist=name,
             )
             for channel, value in compiled.items():
@@ -3573,13 +3583,13 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
                     result[channel] = value
             state["transform_history"] = history
             if isinstance(positional, list):
-                accepted_items = {
-                    int(entry.get("item_id") or 0) for entry in history
+                accepted_rows = {
+                    int(entry.get("chrono_id") or 0) for entry in history
                 }
                 receipts = [
                     receipt for receipt in receipts
                     if receipt.get("status") != "encoded"
-                    or int(receipt.get("item_id") or 0) in accepted_items
+                    or int(receipt.get("chrono_id") or 0) in accepted_rows
                 ]
             if rejected:
                 state["transforms_rejected"] = rejected
@@ -4316,6 +4326,29 @@ def _address_from_spans(out, figure_names, cast_info):
         return
     flow["addressed_to"] = ints
     flow["addressed_to_refs"] = ints + refs
+
+
+def _transform_item_id(ledger, transform, default_id, notes, index):
+    """Which of the row's things this transform changes: the handle whose
+    name the hand wrote in `item` (the owner's contract, 2026-09-15: one
+    transform per thing). A row about one thing needs no `item`; on a row
+    about several, a transform naming none or a name the row does not
+    carry takes the first thing and says so, rather than being lost."""
+    ids = ledger.get("item_ids") if isinstance(ledger.get("item_ids"), list) else []
+    names = ledger.get("item_names") if isinstance(ledger.get("item_names"), list) else []
+    if len(ids) <= 1:
+        return default_id
+    named = str((transform or {}).get("item") or "").strip().casefold()
+    if named:
+        for one, name in zip(ids, names):
+            if str(name or "").strip().casefold() == named:
+                return int(one)
+    notes.append(
+        f"result {index + 1}: a transform on a row about {len(ids)} things "
+        + (f"names {named!r}, which the row does not carry; " if named
+           else "names none of them; ")
+        + f"filed under the first, {names[0]!r}")
+    return int(ids[0])
 
 
 def _bodies_addressed_as(ctx, scene, speaker, addresses):

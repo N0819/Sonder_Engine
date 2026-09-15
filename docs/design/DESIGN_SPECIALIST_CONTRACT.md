@@ -11,15 +11,20 @@ Maintained execution detail lives in [`PIPELINE.md`](../guides/PIPELINE.md).
 > A specialist receives:
 >
 > 1. **One or more ordered event ledgers.** The Director may split one source
->    event into several rows. Every row carries its source entity and authority
->    mode, the causal event, an object name when useful, resolution notes, and
->    one or more exact specialist categories.
-> 2. **The slice of persistent world state relevant to those rows.** An
->    `object_name` is matched against objects already in that view and the
->    resulting world keys are attached to the row as `world_matches`.
-> 3. **No recompiler identity.** `chrono_id` and numeric `item_id` are private
->    routing data. Dispatch strips them, and a specialist correlates its output
->    to its ordered inputs by array position.
+>    event into several rows. Every row is one span and carries its source
+>    entity and authority mode, the causal event, the names of the things the
+>    span is about (`item_names`), resolution notes, and one or more exact
+>    specialist categories.
+> 2. **The slice of persistent world state relevant to those rows.** Each
+>    name in `item_names` is matched against objects already in that view and
+>    the resulting world keys are attached to the row as `item_matches`
+>    (`world_matches` for the first). A hand emits one transform per thing
+>    whose record changes and names it in `item`.
+> 3. **No recompiler identity.** `chrono_id` and the Director's `item_ids`
+>    (one handle per thing, the same number wherever it recurs) are private
+>    routing data. Dispatch strips them, a specialist correlates its output to
+>    its ordered inputs by array position, and the attach site resolves
+>    `item` back to the handle (the owner's contract, 2026-09-15).
 >
 > A specialist renders each row onto the world through its own structured
 > channels. It returns exactly one positional result for each input row. That
