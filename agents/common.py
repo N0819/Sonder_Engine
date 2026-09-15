@@ -9552,6 +9552,79 @@ def _flexible_quote_re(body, flags=re.I):
         + r"(?!\w)", flags)
 
 
+def _check_action_attribution(prose, observations, player_forms=(),
+                              present_labels=()):
+    """F7: an ACT the record gives to one body, rendered as another's.
+
+    Measured (scratch play 2026-09-14): chat 9 turn 14 gave Reen's letting
+    go of the bell rope to Edith ("Edith let the hemp drop"), and chat 7
+    turn 1 gave the captain's line to a footman. Perception's own record
+    names the actor of every act it delivered (`observations[*].actor`, the
+    label this mind may call them by), so the page can be read against it:
+    the sentence that renders an act is the one sharing the most of its
+    content words, and the body that sentence puts first is who the page
+    says did it.
+
+    Deterministic and conservative, reported and never edited: an act is
+    scored only where a sentence shares at least two content words of five
+    letters or more with it, the actor's own words excluded, and only where
+    that sentence's first-named body is a DIFFERENT present body. A sentence
+    naming nobody, or naming the actor first, is not a finding.
+    """
+    if not prose or not observations:
+        return []
+    text = strip_prose_markup(str(prose))
+    text = _ling("_QUOTED_SPAN_RE").sub(" ", text)
+    sentences = [x.strip() for x in _SENTENCE_SPLIT.split(text) if x.strip()]
+    if not sentences:
+        return []
+
+    def _words(value):
+        return {w for w in re.findall(r"[a-z]{5,}", str(value or "").casefold())}
+
+    forms = {}
+    for label in present_labels or ():
+        label = str(label or "").strip()
+        if label:
+            forms[label] = [label] + [w for w in label.split() if len(w) > 2]
+    you = [str(f) for f in (player_forms or ()) if str(f or "").strip()]
+
+    def _first_body(sentence):
+        low = sentence.casefold()
+        best, at = None, None
+        for who, spellings in list(forms.items()) + ([("__player__", you)] if you else []):
+            for form in spellings:
+                m = re.search(r"(?<!\w)%s(?!\w)" % re.escape(form.casefold()), low)
+                if m and (at is None or m.start() < at):
+                    best, at = who, m.start()
+        return best
+
+    warnings = []
+    for obs in observations:
+        if not isinstance(obs, dict) or obs.get("kind") != "action":
+            continue
+        actor = str(obs.get("actor") or "").strip()
+        if not actor or actor not in forms:
+            continue
+        act = str((obs.get("observed") or {}).get("text") or "")
+        want = _words(act) - _words(actor)
+        if len(want) < 2:
+            continue
+        scored = sorted(((len(want & _words(sent)), i) for i, sent in enumerate(sentences)),
+                        reverse=True)
+        overlap, index = scored[0]
+        if overlap < 2:
+            continue
+        first = _first_body(sentences[index])
+        if first is None or first == actor:
+            continue
+        who = "the player" if first == "__player__" else first
+        warnings.append(
+            f"Action attributed to {who} where perception's record has "
+            f"{actor} doing it (\"{act[:60]}\"): \"{sentences[index][:80]}\"")
+    return warnings
+
+
 def _check_event_order(prose, event_order):
     """F1 (A1 ordering half): a quoted line must not render before the event
     it answers. event_order is the pipeline's own numbered causal record of
@@ -10283,7 +10356,9 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
                              narration_person=None, player_aliases=None,
                              event_order=None, position_facts=None,
                              room_names=None, portal_states=None,
-                             attire_facts=None, narration_tense=None):
+                             attire_facts=None, narration_tense=None,
+                             observations=None, player_forms=None,
+                             present_labels=None):
     warnings = []
     view_text = str(view or "")
     prose = out.get("prose") or ""
@@ -10517,6 +10592,9 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
         prose, position_facts, room_names))
     warnings.extend(_check_portal_fidelity(prose, portal_states))
     warnings.extend(_check_action_direction(prose, event_order))
+    warnings.extend(_check_action_attribution(
+        prose, observations, player_forms=player_forms,
+        present_labels=present_labels))
 
     # F5-F6: the page against the two records it was written from. Neither is
     # in `_ENFORCEABLE_PREFIXES`, which no longer decides anything the reader
