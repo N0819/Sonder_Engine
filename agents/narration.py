@@ -10,7 +10,7 @@ from core.db import get_setting, q, wget, wset
 from language_runtime import (
     LanguagePackError, compositor_text, compositor_value,
     english_linguistic, installed_language_packs, linguistic)
-from llm.prompts import get_prompt, prompt_fragment
+from llm.prompts import get_prompt, narrator_prompt, prompt_fragment
 from story import attire as attire_model
 from story.scene import (
     NON_AWAKE_GATED,
@@ -1745,7 +1745,10 @@ def _generate_narration(payload, view, prev, p_lines, correction_notes=None,
     out = _agent_json(
         "narrator",
         "narrator",
-        get_prompt("narrator", language),
+        # THE SHEET THIS BEAT NEEDS: the core plus the sections whose
+        # payload field is present (`prompts.narrator_prompt`), the same
+        # miniaturisation the Director's hands got.
+        narrator_prompt(call_payload.keys(), language),
         call_payload,
         max_tokens=None,   # the configured ceiling; see complete_validated_json
     )
@@ -1804,7 +1807,10 @@ def _generate_narration(payload, view, prev, p_lines, correction_notes=None,
         position_facts=facts.get("position_facts"),
         room_names=facts.get("room_names"),
         portal_states=facts.get("portal_states"),
-        attire_facts=facts.get("attire_facts"))
+        attire_facts=facts.get("attire_facts"),
+        observations=facts.get("observations"),
+        player_forms=facts.get("player_forms"),
+        present_labels=facts.get("present_labels"))
     # THE ALIAS RUNS BOTH WAYS OR IT IS A FOOTGUN. `text` is read above as a
     # spelling of `prose` and then left exactly as the model wrote it, so the
     # stored narrator variant carried `{"prose": "...", "text": ""}` and any
@@ -2172,6 +2178,17 @@ def narrator(ctx, nonce):
             "room_names": room_names,
             "portal_states": portal_states,
             "attire_facts": _attire_facts,
+            # Perception's own record of who did each act, for the
+            # attribution check (`_check_action_attribution`): the labels
+            # this mind may call the present bodies by.
+            "observations": list(_obs_map.get("player") or []),
+            "player_forms": list(player_forms),
+            "present_labels": sorted({
+                str(f.get("name") or "") for f in pos_facts
+                if isinstance(f, dict) and f.get("name")} | {
+                _speaker_display(_n, recognized, _i.get("appearance"),
+                                 _i.get("aliases"))
+                for _n, _i in cast_info.items() if _n != player_name}),
         }
 
     _abp = _authored_body_parts(ctx, pers, player_name)

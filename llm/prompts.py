@@ -539,6 +539,51 @@ def get_prompt_body(pid, language=None):
     return base + nsfw_overlay(pid, _prompt_card(language))
 
 
+#: A section of the narrator's sheet that teaches ONE optional payload
+#: field opens with a marker line naming the field(s) and closes with
+#: `[[core]]`; text under no marker is the core every beat reads. The
+#: markers are the sheet's own and never reach a model.
+_SECTION_MARK = re.compile(r"^\[\[(?:when:\s*([A-Za-z0-9_,\s]+)|core)\]\]\s*$",
+                           re.MULTILINE)
+
+
+def narrator_sections(body):
+    """``[(fields, text), ...]`` -- the sheet cut at its markers. ``fields``
+    is the frozenset of payload keys a section teaches, empty for the core.
+    A sheet with no markers is one core section, which is what the
+    Japanese pack is until it adopts them."""
+    out, fields, start = [], frozenset(), 0
+    for match in _SECTION_MARK.finditer(str(body or "")):
+        text = body[start:match.start()]
+        if text:
+            out.append((fields, text))
+        named = match.group(1)
+        fields = frozenset(f.strip() for f in named.split(",") if f.strip()) \
+            if named else frozenset()
+        start = match.end()
+    tail = body[start:]
+    if tail:
+        out.append((fields, tail))
+    return out
+
+
+def narrator_prompt(present, language=None):
+    """The narrator's sheet for ONE beat: its core plus every section whose
+    payload field this beat carries. THE SAME MINIATURISATION THE HANDS
+    GOT: a specialist loads its core and one chunk per granted channel; the
+    narrator loaded 42 KB every beat, eleven sections of which describe a
+    field the payload carries only sometimes (portal states, attire, the
+    spatial frame, beat time, sensory channels, exemplars, correction notes,
+    dialogue placeholders...). ``present`` is the set of keys in the call
+    payload. A preset's replacement sheet is cut by the same markers, and a
+    sheet with none is sent whole."""
+    body = get_prompt_body("narrator", language)
+    present = {str(k) for k in (present or ())}
+    kept = [text for fields, text in narrator_sections(body)
+            if not fields or fields & present]
+    return apply_prompt_policy("".join(kept), _language(language), "narrator")
+
+
 def get_prompt(pid, language=None):
     """Return one complete localized prompt with the schema contract applied."""
     return apply_prompt_policy(

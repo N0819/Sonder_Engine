@@ -4938,6 +4938,13 @@ def observations_from_render(pid, rendered):
             "channel": atom["channel"],
             "fidelity": "ambiguous" if atom["ambiguity"] >= 0.5 else "rendered",
             "observed": {"text": " ".join(atom["parts"])},
+            # WHO DID IT, as this mind may call them -- the IR's own source
+            # label, already the subject of the rendered sentence, kept so
+            # the page can be read against the record
+            # (`common._check_action_attribution`). Empty when atoms of
+            # different mouths were merged, exactly as `speaker` is.
+            **({"actor": atom["speaker"]} if atom.get("speaker") else {}),
+            **({"kind": atom["kind"]} if atom.get("kind") else {}),
             "intensity": atom["intensity"],
             "suddenness": atom["suddenness"],
             "ambiguity": atom["ambiguity"],
