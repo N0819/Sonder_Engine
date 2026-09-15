@@ -7,6 +7,7 @@ import re
 from typing import Optional
 
 from llm.schemas import NON_ENTITY_FIELD_KEYS, is_derived_entity_name
+from world.spatial_levels import infer_room_levels
 from world.spatial_orientation import (normalize_bearing, normalize_scene_bearings,
                                  normalize_vertical, opposite_bearing,
                                  opposite_vertical)
@@ -1894,6 +1895,9 @@ def merge_scene_with_diff(
     # reciprocals so either room can derive a consistent left/right. Runs after
     # dedupe (so only surviving edges are reconciled) and barrier normalization.
     normalize_scene_bearings(merged)
+    # Storeys along the stairs (`spatial_levels`): a room reached by an `up`
+    # edge is one level higher, and a scene that declares none starts at 0.
+    infer_room_levels(merged)
     # An anchor's `cell` (the map editor's pin, 2026-09-04) is two whole
     # numbers or nothing; `_merge_anchor_fields` above kept it through a
     # re-echo, and this drops what a re-echo could not have written well.

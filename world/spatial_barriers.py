@@ -572,6 +572,14 @@ def neighbor_map(scene: dict, barriers=None, *, known_rooms_only=False,
                     and normalize_barrier(edge.get("barrier")) not in barriers:
                 continue
             if directional:
+                # The directed map is the one BODIES walk, and an overlook
+                # is no way for a body (`edge_passable` says the same for
+                # one edge; this is the graph's copy of the rule).
+                from world.spatial_levels import is_overlook
+                if is_overlook(edge):
+                    neighbors.setdefault(room_id, set())
+                    neighbors.setdefault(target, set())
+                    continue
                 if edge_crossable_from(edge, room_id):
                     neighbors.setdefault(room_id, set()).add(target)
                 if edge_crossable_from(edge, target):
@@ -634,6 +642,13 @@ def edge_passable(edge, from_room) -> bool:
     it, which was the entire question while a one-way passage had no spelling.
     """
     if not isinstance(edge, dict):
+        return False
+    # AN OVERLOOK IS LOOKED THROUGH, NOT WALKED THROUGH: a gallery rail, a
+    # balcony, a hole in the floor is an open vertical edge for sight and
+    # sound and no way for a body (`spatial_levels.edge_way`). A drop
+    # through it is the Director's to assert, never a route.
+    from world.spatial_levels import is_overlook
+    if is_overlook(edge):
         return False
     return (normalize_barrier(edge.get("barrier")) in _PASSABLE_BARRIERS
             and edge_crossable_from(edge, from_room))

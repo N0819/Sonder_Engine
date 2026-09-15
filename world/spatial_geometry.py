@@ -213,6 +213,20 @@ def spatial_digest(scene, observer, label_for=None):
         refs = [r for r in (ref(e) for e in frame.get(bucket) or []) if r]
         if refs:
             out[bucket] = refs
+    # THE STOREY, AND WHAT LIES THROUGH THE FLOOR. `above`/`below` name the
+    # rooms a stair reaches; a room over or under this one with nothing but
+    # a floor between (`over`) is named here too, because a footfall or a
+    # voice through that floor needs a place to come from
+    # (`spatial_levels`, 2026-09-15).
+    if here:
+        from world.spatial_levels import room_level, floor_edges
+        level = room_level(scene, here)
+        if level is not None:
+            out["storey"] = level
+        for edge in floor_edges(scene, here):
+            key = "overhead" if edge.get("vertical") == "up" else "underfoot"
+            out.setdefault(key, []).append(
+                (rooms.get(edge["to"]) or {}).get("name") or edge["to"])
     if frame.get("ahead_entity"):
         # ref is an entity id (look up its name) or already a character name.
         ent = (scene.get("entities") or {}).get(frame["ahead_entity"]) or {}
@@ -375,12 +389,16 @@ def _effective_anchors(scene: dict, room_id, *, derive=False) -> dict:
         # the wall (`width: "wall"`, read by `_place_anchors`); an edge may
         # say so itself with `width: "wall"` wherever a side is open.
         other = rooms.get(neighbor_id) if isinstance(rooms.get(neighbor_id), dict) else {}
-        if str(width or "").strip().casefold() == "wall" or (
+        # AN OVERLOOK IS A RAIL THE LENGTH OF ITS SIDE, the vertical case
+        # of the open side: a gallery looks down along the whole of its
+        # edge, not through one cell of it (`spatial_levels.is_overlook`).
+        from world.spatial_levels import is_overlook
+        if str(width or "").strip().casefold() == "wall" or is_overlook(edge) or (
                 normalize_barrier(barrier) == "open"
                 and str(room.get("exposure") or "").strip().casefold() == "open"
                 and str((other or {}).get("exposure") or "").strip().casefold() == "open"):
             anchor["width"] = "wall"
-            anchor["desc"] = "the open side"
+            anchor["desc"] = "the rail" if is_overlook(edge) else "the open side"
             out[aid] = anchor
             return
         # The passage's `width` in paces is the doorway's aperture

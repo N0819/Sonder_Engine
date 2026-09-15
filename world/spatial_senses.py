@@ -832,7 +832,19 @@ def _opening_view_cap(scene: dict, room_id, body: str, other_room) -> str:
     # there was no configuration that worked: with no bearing on the stair
     # edge the large-room branch capped at `shapes`, and with a proper
     # bearing a body more than one sector off the axis capped at `none`.
-    if _edge_vertical(scene, room_id, other_room):
+    vertical = _edge_vertical(scene, room_id, other_room)
+    if vertical:
+        # THE BODY ABOVE AN OVERLOOK IS IN VIEW AT THE RAIL AND NOWHERE
+        # ELSE. Looking DOWN through a gallery, balcony or hole shows the
+        # whole floor, and the body doing it is seen from that floor -- at
+        # the rail; a body back from the rail neither sees the floor nor is
+        # seen from it, the floor it stands on is between them. `room_id`
+        # is this body's room, so `down` says the body is the one above. A
+        # stair, ladder or hatch keeps the open answer both ways
+        # (`spatial_levels.edge_way`).
+        if vertical == "down" and _overlook_between(scene, room_id, other_room) \
+                and not _at_the_lip(scene, body, room_id, other_room):
+            return "none"
         return "full"
     at = effective_station(scene, body).get("at")
     if at and at == door_anchor_id(other_room):
@@ -1435,6 +1447,28 @@ def _sound_barrier_phrases():
 
 def _sector_phrases():
     return _phrase_table("sector_phrases")
+
+
+def _overlook_between(scene: dict, a, b) -> bool:
+    from world.spatial_levels import is_overlook
+    rooms = (scene or {}).get("rooms") or {}
+    for x, y in ((a, b), (b, a)):
+        for edge in ((rooms.get(x) or {}).get("adjacent") or []):
+            if isinstance(edge, dict) and str(edge.get("to")) == str(y):
+                return is_overlook(edge)
+    return False
+
+
+def _at_the_lip(scene: dict, body, room_id, other_room) -> bool:
+    """Does `body`, in `room_id`, stand at the cells of its opening onto
+    `other_room` -- the rail, the hatch's edge?"""
+    from world.spatial_fov import _door_cells, body_cell
+    cells, _b = _door_cells(scene, room_id, other_room)
+    cell = body_cell(scene, body)
+    if cell is None or not cells:
+        at = effective_station(scene, body).get("at")
+        return bool(at) and at == door_anchor_id(other_room)
+    return tuple(cell) in {tuple(c) for c in cells}
 
 
 def _edge_vertical(scene: dict, from_room, to_room) -> Optional[str]:
