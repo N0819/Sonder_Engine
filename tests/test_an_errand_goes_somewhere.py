@@ -42,3 +42,24 @@ def test_the_working_day_keeps_its_own_room_answer():
     out = errands(bodies, {}, {}, {}, ["net_loft", "quay"], reach, seed=1,
                   rate=1.0, hours=1000.0, commons=[], phase="morning")
     assert out == {"hand": "net_loft"}
+
+
+def test_a_posted_body_finishes_its_errand_before_the_post_recalls_it():
+    """The footman sent to the card room was re-dispatched to his post by
+    the next window's bill before he had left the landing, and the errand
+    the commit had just landed vanished (scratch play 2026-09-14, chat 9)."""
+    from world.charter_move import relocate
+    bodies = {"footman": {"place": "landing", "berth": "landing", "available": True,
+                          "errand": {"to": "card_room", "purpose": "a message"},
+                          "walk": {"target": "card_room", "route": ["landing", "card_room"],
+                                   "leg": 0, "credit": 0.0, "held": False}}}
+    out, _t, _w = relocate(bodies, {"footman_post": "footman"},
+                           {"footman_post": {"place": "landing"}}, None, hours=0.01)
+    assert out["footman"]["walk"]["target"] == "card_room"
+    assert out["footman"]["errand"]["to"] == "card_room"
+    # Arrived (no walk), the post recalls him as before.
+    bodies["footman"].pop("walk"); bodies["footman"]["place"] = "card_room"
+    out, _t, _w = relocate(bodies, {"footman_post": "footman"},
+                           {"footman_post": {"place": "landing"}}, None, hours=4.0)
+    assert out["footman"].get("walk", {}).get("target") in ("landing", None)
+    assert out["footman"]["place"] in ("landing", "card_room")

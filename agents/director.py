@@ -336,6 +336,7 @@ from .director_scopes import (
     _dispatch_specialists,
 )
 from .director_fanout import (
+    addressed_figures, addressed_house,
     fanout_is_parallel,
     _note_for,
     _resolve_beat_view,
@@ -1670,6 +1671,16 @@ def director_interpret(ctx, nonce):
     # The view carries the interpret author's own ruling (`ledger_notes`),
     # which is what decides who runs; the facts decide how much sheet an
     # addressed hand is assembled with.
+    # AN ADDRESSEE THE SPANS NAME IS AN ADDRESSEE. The author wrote every
+    # line of the errand with `targets: ["Mr Pellew"]` and left
+    # `flow.addressed_to` empty, so the master of ceremonies ranked as
+    # nobody's addressee, the reactor list held the captain alone, and no
+    # hand was addressed for what the figure would do with the message
+    # (scratch play 2026-09-14, chat 9 turns 2-3). The targets are the
+    # author's own finding; an empty list beside them is an omission, and
+    # the engine fills it from what the author already wrote.
+    _address_from_spans(out, [str(_f.get("name") or "")
+                              for _f in _interpret_figures], cast_info)
     _iview = _interpret_beat_view(ctx, out, p_name)
     # The four views the gate and the payload both read, built once, and only
     # if one of them reads them.
@@ -4103,6 +4114,105 @@ def _beat_event_sentences(out, identity_index=None):
     return parts
 
 
+def _fold_line(text):
+    """One spelling of a spoken line for the echo floor: case, quotes and
+    punctuation folded, whitespace collapsed."""
+    import re as _re
+    return " ".join(_re.sub(r"[^\w\s]", "", str(text or "").casefold()).split())
+
+
+def _player_lines_this_beat(interp):
+    """Every line the player's interpret carries, whichever field holds it."""
+    out = []
+    speech = (interp or {}).get("speech")
+    if isinstance(speech, str) and speech.strip():
+        out.append(speech)
+    for e in (interp or {}).get("sequence") or []:
+        if isinstance(e, dict) and e.get("type") == "speech" and e.get("text"):
+            out.append(e["text"])
+    return out
+
+
+def _own_words_only(declaration, said):
+    """A figure's declaration with any spoken line another speaker already
+    said this beat removed. Returns (declaration, the echo dropped or "").
+
+    A CHARTER VOICE MAY NOT SAY ANOTHER'S SENTENCE BACK AS ITS OWN. The
+    voice is shown the beat so it can answer it, and the master of
+    ceremonies answered the captain's "You have the best post in the room
+    for judging it, ma'am" by saying it again, verbatim, as his (scratch
+    play 2026-09-14, chat 9 turn 1). The prompt says never speak for anyone
+    else present; this is the floor under it, and it is exact on purpose:
+    a paraphrase is the voice's own words and the prompt's to judge, a copy
+    is not speech at all. The action stands; only the copied line goes.
+    """
+    sequence = list((declaration or {}).get("sequence") or [])
+    kept, echoed = [], ""
+    for e in sequence:
+        if isinstance(e, dict) and e.get("type") == "speech" \
+                and _fold_line(e.get("text")) in said \
+                and _fold_line(e.get("text")):
+            echoed = echoed or str(e.get("text") or "")
+            continue
+        kept.append(e)
+    if not echoed:
+        return declaration, ""
+    out = dict(declaration)
+    out["sequence"] = kept
+    entry = out.get("dialogue_log_entry")
+    if isinstance(entry, dict) and _fold_line(entry.get("exact_quote")) in said:
+        out["dialogue_log_entry"] = None
+    return out, echoed
+
+
+def _address_from_spans(out, figure_names, cast_info):
+    """Fill an EMPTY `flow.addressed_to` from the speech spans' targets.
+
+    A speech span's target that is a cast id (`character:N`) addresses that
+    character; one that is the name of a figure standing in view addresses
+    that figure, by name, which is the form `flow.addressed_to` already
+    accepts for an unregistered presence. Rooms, objects and the player
+    are not addressees. Nothing the author DID write is touched: a filled
+    list stands as filled.
+    """
+    flow = out.get("flow") if isinstance(out, dict) else None
+    if not isinstance(flow, dict):
+        return
+    if flow.get("addressed_to") or flow.get("addressed_to_refs"):
+        return
+    figures = {str(n).casefold(): str(n) for n in (figure_names or ()) if n}
+    cast_ids = {int(row["id"]) for row in (cast_info or ())
+                if isinstance(row, dict) and str(row.get("id") or "").lstrip("-").isdigit()}
+    cast_names = {str(row.get("name") or "").casefold(): int(row["id"])
+                  for row in (cast_info or ()) if isinstance(row, dict)
+                  and row.get("name") and str(row.get("id") or "").isdigit()}
+    ints, refs = [], []
+    for element in out.get("sequence") or []:
+        if not isinstance(element, dict) or element.get("type") != "speech":
+            continue
+        for target in element.get("targets") or []:
+            target = str(target or "").strip()
+            if not target:
+                continue
+            if target.startswith("character:") and target[10:].isdigit():
+                cid = int(target[10:])
+                if cid in cast_ids and cid not in ints:
+                    ints.append(cid)
+                continue
+            if target.casefold() in cast_names:
+                cid = cast_names[target.casefold()]
+                if cid not in ints:
+                    ints.append(cid)
+                continue
+            name = figures.get(target.casefold())
+            if name and name not in refs:
+                refs.append(name)
+    if not ints and not refs:
+        return
+    flow["addressed_to"] = ints
+    flow["addressed_to_refs"] = ints + refs
+
+
 def _take_declaration(decls, char_speech, char_actions, declaration):
     """File one autonomous declaration -- a character's, a reaction's, or an
     onscreen charter body's -- into the three tables resolve reads."""
@@ -4325,7 +4435,16 @@ def director_resolve(ctx, nonce, _corrections=None):
                 ctx, interp, resolve_sc, _figure_rows, decls, nonce)
         except Exception as exc:
             ctx.add_warning(f"charter voices before resolve skipped: {exc}")
+        _said = {_fold_line(e.get("text")) for lines in char_speech.values()
+                 for e in lines if e.get("text")}
+        _said |= {_fold_line(t) for t in _player_lines_this_beat(interp)}
         for _fd in _figure_declarations:
+            _fd, _echoed = _own_words_only(_fd, _said)
+            if _echoed:
+                ctx.add_warning(
+                    f"charter voice: {_fd.get('name')} said back a line "
+                    f"another speaker said this beat; the echo is dropped "
+                    f"and the rest of the declaration stands: {_echoed!r}")
             _take_declaration(decls, char_speech, char_actions, _fd)
     # Each declaring character's own heading, exactly as the player already
     # gets one in director_interpret. The room graph is undirected, so
@@ -5446,11 +5565,18 @@ def director_resolve(ctx, nonce, _corrections=None):
         move_subject, mover_room, mover_eid = _resolve_movement_mover(
             sc, sd, mv, p_name)
         if move_subject is None:
+            # A WALK IS THE WALKER'S OWN. The old fallback moved the player
+            # for any mover it could not name, which is how a companion
+            # was walked into a room she had just refused (chat 9 turn 5).
+            # A mover the scene cannot place moves nobody; the beat's
+            # positions channel still stands for whoever the hands placed.
             ctx.warnings.append(
                 f"movement.mover {mv.get('mover')!r} does not resolve to a "
-                "known entity; treating the move as the player's own."
+                "known entity or a placed body; the declared movement moves "
+                "nobody this beat."
             )
-            move_subject, mover_room, mover_eid = p_name, None, None
+            mv = _mv_for_context = None
+            target_room = None
     subject_prev_room = mover_room if mover_eid else room_of(sc, p_name)
 
     for entry in staged:

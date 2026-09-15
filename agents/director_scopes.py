@@ -979,6 +979,16 @@ def _ruling_for(name, view):
     addressed_by = []
     named = []
     own = set(spec["channels"])
+    # A LINE AIMED AT AN UNREGISTERED FIGURE ADDRESSES THE SOCIAL HAND.
+    # What a charter body does with a request -- carries the word, tells
+    # it on, refuses -- is written in this hand's ledgers (courier, telling
+    # and charter ops), and no category the author files on a speech span
+    # names them: speech is the one channel no hand writes. A message
+    # handed to the master of ceremonies therefore reached no hand at all
+    # and left the room by nobody's legs (scratch play 2026-09-14, chat 9
+    # turns 2-3). The addressee is the ruling.
+    if name == "social" and (view or {}).get("addressed_figures"):
+        addressed_by.append("addressee")
     for key, value in ((view or {}).get("ledger_notes") or {}).items():
         if not (isinstance(value, str) and value.strip()):
             continue

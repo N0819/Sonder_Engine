@@ -6064,6 +6064,51 @@ def reconcile_cast_entity_names(scene, cast, player_name=None):
     return renamed
 
 
+def ensure_cast_entities(scene, cast, player_name=None):
+    """Mint a scene entity for every registered cast body the scene STANDS
+    somewhere and holds no record for. Returns [(entity_id, name)].
+
+    A CAST MEMBER IS A BODY WHETHER OR NOT THE OPENING WROTE ONE. The
+    establish is asked to mint the cast's entities and usually does; one
+    that did not (scratch play 2026-09-14, chat 9, every cast member) left
+    the captain and the companion as positions with no entity, and every
+    resolver keyed on entities -- the movement mover first -- could not
+    find them: his walk into the card room was read as hers. The
+    positions table is where the engine already stands them; the record is
+    minted from it, under the sheet's own spelling, and the reconcile that
+    follows keeps it there. Idempotent.
+    """
+    if not isinstance(scene, dict):
+        return []
+    entities = scene.get("entities")
+    if not isinstance(entities, dict):
+        entities = scene["entities"] = {}
+    positions = scene.get("positions") or {}
+    if not isinstance(positions, dict) or not positions:
+        return []
+    canonical, forms = cast_spelling_policy(cast, player_name)
+    if not forms:
+        return []
+    claims, _forms = _cast_entity_claims(scene, cast, player_name)
+    held = {str(v).casefold() for v in claims.values()}
+    minted = []
+    for key in list(positions):
+        canon = canonical(str(key))
+        canon_cf = str(canon or "").strip().casefold()
+        if not canon_cf or canon_cf not in {str(v).casefold() for v in forms.values()}:
+            continue
+        if canon_cf in held:
+            continue
+        eid = "char_" + normalize_room_id(str(canon))
+        while eid in entities:
+            eid += "_"
+        entities[eid] = {"name": str(canon), "kind": "person", "from_event": 0,
+                         "aliases": []}
+        held.add(canon_cf)
+        minted.append((eid, str(canon)))
+    return minted
+
+
 def canonicalize_positions(positions, cast, player_name=None):
     """Rewrite any positions key that identifies a registered cast character
     (or the player) to that person's display name -- the positions-key
