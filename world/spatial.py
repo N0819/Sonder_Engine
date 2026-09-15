@@ -87,6 +87,10 @@ from world.spatial_walk import (
     held_cells, inside_the_door, paces_for, standing_cell, walk,
     free_cell_near, anchor_stand_cell, FLIGHT_PACES,
 )
+from world.spatial_levels import (  # noqa: E402
+    WAYS, FLOOR_LOSS_DB, normalize_level, edge_way, is_overlook, room_level,
+    infer_room_levels, rooms_over, rooms_under, stack_of, level_span, floor_edges,
+)
 from world.spatial_transit import (
     _closed_enclosure_barrier, _entity_exterior_room, _interior_entry_room,
     _interior_rooms_of, _is_body_entity,

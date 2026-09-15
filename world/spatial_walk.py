@@ -359,11 +359,15 @@ def walk(scene: dict, name: str, to_room, to_cell=None, *, paces,
         # stairhead sat on the wall its stairfoot did (Skerry Light,
         # 2026-09-15).
         if _edge_is_vertical(scene, prev, nxt):
-            if budget < FLIGHT_PACES + 1:
+            # As many flights as there are storeys between the two rooms
+            # (`spatial_levels.level_span`), one where levels are unknown.
+            from world.spatial_levels import level_span
+            flights = FLIGHT_PACES * level_span(scene, prev, nxt)
+            if budget < flights + 1:
                 return {"room": room_id, "cell": cell, "arrived": False,
                         "crossed": crossed, "paces": walked + budget}
-            budget -= FLIGHT_PACES
-            walked += FLIGHT_PACES
+            budget -= flights
+            walked += flights
         exit_cells, _b = _door_cells(scene, prev, nxt)
         exit_cells = [tuple(c) for c in exit_cells] if exit_cells else []
         near_index = exit_cells.index(cell) if cell in exit_cells else None

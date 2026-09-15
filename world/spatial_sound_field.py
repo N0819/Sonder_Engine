@@ -2355,6 +2355,21 @@ def _build_far_field_graph(scene, rooms) -> dict:
                 known = graph[a].get(b)
                 if known is None or loss < known:
                     graph[a][b] = loss
+        # A FLOOR IS AN EDGE TO A SOUND. Two rooms stacked with no stair
+        # between them (`over`) share a floor the far field crosses at the
+        # floor's loss -- a timber floor passes a shout and a heavy tread,
+        # masonry passes almost nothing (`spatial_levels.floor_edges`).
+        from world.spatial_levels import floor_edges
+        for edge in floor_edges(scene, room):
+            other = str(edge["to"])
+            if other not in rooms:
+                continue
+            loss = edge.get("loss_db")
+            loss = float(loss) if loss is not None else FLOOR_CEILING_LOSS_DB
+            for a, b in ((str(room), other), (other, str(room))):
+                known = graph[a].get(b)
+                if known is None or loss < known:
+                    graph[a][b] = loss
     return graph
 
 

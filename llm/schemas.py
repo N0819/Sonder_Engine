@@ -1639,6 +1639,15 @@ class RoomDef(LenientModel):
     # before this the engine priced it as a furnished parlour and swallowed
     # a crowbar 18 paces off (`docs/UNBUILT.md` § 1.140).
     quiet: Optional[str] = None
+    # STOREYS (world/spatial_levels.py, 2026-09-15): `level` is the storey
+    # (0 ground, +1 above, -1 below), inferred along vertical edges where
+    # absent; `over` names rooms this one lies directly above with no way
+    # between; `floor` is the material of that floor (its sound loss);
+    # `surface` is what the walls give back -- bare | furnished | soft.
+    level: Optional[int] = None
+    over: Optional[list[str]] = None
+    floor: Optional[str] = None
+    surface: Optional[str] = None
     # The named features within the room that prose already refers to -- the
     # bar, the hearth, the bed -- as {anchor_id: {desc, dir?}}. Entity
     # `stations` hang off these, and `dir` gives each one a wall so left/right
