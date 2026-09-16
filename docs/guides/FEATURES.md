@@ -838,15 +838,19 @@ legitimately perceive, learn, remember or infer.
 
 - **Multiple providers** — As many as you like, with presets for the major
   hosted services and for local servers, or any OpenAI-compatible endpoint.
-- **Claude Code as a provider** — The `claude_cli` kind runs the Claude Code
-  command-line tool in print mode (`claude -p`) under the login it already
-  holds, so a host signed in to Claude Code plays with no API key stored
-  here. The provider's base url is the `claude` executable. Each call is one
-  process with tools, slash commands and MCP servers off and the role's
-  system prompt in place of the CLI's own; streaming, JSON schemas,
-  reasoning effort, usage and cancellation all work. Temperature, the other
-  samplers and the output ceiling do not reach the CLI, and thinking cannot
-  be switched off there, so `off` lands on its lowest effort.
+- **Claude Code as a development backend** — The `claude_cli` kind runs the
+  Claude Code command-line tool in print mode (`claude -p`) under your own
+  Claude Code login, for debugging runs on your own machine; no API key is
+  stored here. It is not a way to serve other people: a hosted instance
+  must not route its players' turns through the host's login (Anthropic's
+  Claude Code terms name exactly that), so a public deployment uses an API
+  key provider. The provider's base url is the `claude` executable. Each
+  call is one process with tools, slash commands and MCP servers off and
+  the role's system prompt in place of the CLI's own; streaming, JSON
+  schemas, reasoning effort, usage and cancellation all work. Temperature,
+  the other samplers and the output ceiling do not reach the CLI, and
+  thinking cannot be switched off there, so `off` lands on its lowest
+  effort.
 - **Per-role models** — A different model for the director, background
   characters, major characters, the narrator, utilities and embeddings, so you
   spend where it matters. Perception has no role to set: what a mind may
