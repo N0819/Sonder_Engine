@@ -1187,8 +1187,24 @@ def complete_validated_json(
     # guessed. Trimmed hard, and attached only when everything has already
     # failed -- at which point the beat is lost anyway and the one thing worth
     # salvaging is the evidence.
-    _shown = str(previous_raw if previous_raw else raw or "")[:600]
-    _sent = f" | model sent: {_shown}" if _shown.strip() else ""
+    _full = str(previous_raw if previous_raw else raw or "")
+    _shown = _full[:600]
+    # SAY WHETHER THIS IS ALL OF IT. The trim above is what a reader sees,
+    # and a 600-character window makes a response that STOPPED EARLY and one
+    # that merely continues past the window look identical -- both end
+    # mid-object. Diagnosed wrongly twice on 2026-09-16 from this very
+    # line, once concluding a character kernel had been truncated when it
+    # had run to a clean close and simply omitted two sections. The length
+    # and whether the object closes are both free to compute here, and they
+    # are the difference between "ask for more room" and "the model left
+    # fields out", which have opposite remedies.
+    _sent = ""
+    if _shown.strip():
+        _closes = _full.rstrip().endswith(("}", "```"))
+        _sent = (" | model sent %d chars, %s: %s"
+                 % (len(_full),
+                    "closed" if _closes else "ENDING MID-STRUCTURE",
+                    _shown))
     # For a thinking model the reasoning is where the intent is visible, and
     # a malformed answer usually has a perfectly clear intent behind it.
     try:
@@ -1218,6 +1234,41 @@ def complete_validated_json(
             " | RESPONSE TRUNCATED: the model ran out of output budget"
             + _why + _sent
         )
+    # LAST RESORT, AND ONLY FOR A BEAT THAT WOULD OTHERWISE BE THROWN AWAY.
+    # Everything above has already been tried: the first answer, the targeted
+    # field patch, the full repair. What is left is to keep the beat minus
+    # what was left out, rather than keep nothing -- "the psychology is really
+    # good for immersion but mild breaks are mostly acceptable" (owner,
+    # 2026-09-16). The fields that carry the bar are filled EMPTY here and
+    # nowhere earlier, so no retry is skipped on their account and every
+    # cheaper remedy has had its turn first. Loud, because unlike the quiet
+    # lanes these are a real loss: the character keeps what it did and what
+    # it learned, and loses some of why.
+    if previous_parsed and not provider_errored:
+        try:
+            import copy as _copy
+            from llm import schemas as _schemas
+            from llm.schemas import (KERNEL_CARRIES_THE_BAR,
+                                     fill_absent_required)
+            if step_key == "character_kernel":
+                salvage = _copy.deepcopy(previous_parsed)
+                filled = []
+                fill_absent_required(_schemas.SCHEMA_MAP[step_key], salvage,
+                                     notes=filled, only=KERNEL_CARRIES_THE_BAR)
+                if filled:
+                    salvaged = validate_llm_output_strict(
+                        step_key, salvage, source_payload=payload)
+                    if salvaged.valid:
+                        note_step_warning(
+                            "llm repair exhausted (%d errors; first: %r); the "
+                            "beat is kept and %s"
+                            % (len(report.errors or []),
+                               str((report.errors or [""])[0])[:120],
+                               "; ".join(filled[:4])))
+                        return _accepted(salvaged)
+        except Exception:
+            pass    # a salvage that cannot run is not a new failure mode
+
     if last_provider_error is not None:
         raise RuntimeError(
             f"{step_key}: all providers failed "

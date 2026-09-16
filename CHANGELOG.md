@@ -1,15 +1,89 @@
 # Changelog
 
-## alpha 10.0.0 — The Writers' Room plans the opening, and a fixture stands against its wall
+## alpha 10.0.1 — Keep the beat
 
-Two features, and they meet at the same place: the ground a story opens on.
-The Writers' Room now plans that ground before the Director ever runs, and
-the geometry lets a fixture stand where its own description says it does.
+Five repairs on the day 10.0.0 shipped, every one of them found by launching
+stories rather than by reading code.
 
-Everything below was found by launching stories rather than by reading code.
-Six live quick starts from one greeting produced five distinct defects in the
-opening path, every one of them in work landed the same day, and the sixth
-run is the first where a plan published.
+**A character's beat is no longer thrown away because it arrived
+incomplete.** Chat 135 lost a reroll and two resumes to one turn: each
+attempt omitted a required field or two, and each time an appraisal, a
+sequence, a speech, a revised belief, a progressed intention, a relationship
+delta, three mind models, a learned association and three memory operations
+went in the bin with them. The repair pass, which said in its own reasoning
+that it knew exactly which sections were missing, failed the same way.
+
+The contract is unchanged: the schema still declares all fourteen fields
+required and the card still teaches them. What changed is what happens to an
+answer that does not carry them all, and the line is the owner's bar --
+**all a character fundamentally needs to do is remember, and know why it did
+the things it did.** Twelve fields are now simply allowed, filled empty and
+reported nowhere: the eight learning lanes, because a character does not
+revise a belief or move a relationship every time it speaks and an absent
+lane says the event did not happen; plus demeanour, salience, floor control
+and effects, which touch neither capacity. Four still fail first so the
+repair gets its chance -- what the character did, and why -- and are filled
+only when the alternative is discarding the beat, loudly. Replayed against
+chat 135, the character keeps every sequence element, the belief, the memory
+and the relationship, and loses the decision record alone.
+
+**Expression is an action and renders no matter how temporary.** A player's
+flush, look and stiffening tails reached nobody: the body hand rightly
+declined to record a momentary reaction as a lasting condition, the verifier
+read that silence as proof the act never happened, and perception dropped it
+with a bare `continue` that recorded nothing. A thin ledger is a fact about
+the ledger; only a requested patch the world does not show is evidence an act
+failed. The audit still records the gap, and the drop now speaks.
+
+**A town plan cut off mid-structure is asked for once more.** Reasoning off
+is a request, not a guarantee: `z-ai/glm-5.2:thinking` ignored it, spent all
+16,000 response tokens and returned 3,461 characters of plan cut off inside a
+washroom. Over 99% of what was paid for was the trace. A cut-off object is
+the one JSON failure more room fixes, and it was fatal; a malformed or
+reasoning-only response is still refused at once, because neither is helped
+by asking again.
+
+**A failed beat now says whether that was all of it.** The evidence attached
+to a validation failure is trimmed to 600 characters, which makes a response
+that stopped early and one that merely continues past the window look
+identical. Both end mid-object on the page. That cost two wrong diagnoses in
+one afternoon, so the length and whether the object closed are now said out
+loud.
+
+**And the belief card shows the shape it was only describing.** Reinforce and
+weaken are told to write `target_belief` as the empty string, and the only
+worked example was a revise. A required field whose correct value is usually
+empty, demonstrated nowhere, is one a model drops as redundant.
+
+Known failures are unchanged from 10.0.0 and are listed there.
+
+## alpha 10.0.0 — The room that plans it, the space it happens in, and a Director that only rules
+
+**The first release carrying the Writers' Room and the geometry system**, and
+a substantially revised orchestrated Director. 469 commits since alpha 9.10.2,
+most of them never on `main` until now.
+
+The **Writers' Room** is an author that works beside the story rather than
+inside it: a Story Planner that keeps the prepared horizon, a Dramaturge that
+proposes direction and builds nothing, plot packages that land all-or-nothing
+through typed operations, and mandates that record in the player's own words
+what the room has been allowed to do. It plans the ground a story opens on
+before the Director ever runs.
+
+The **geometry system** gives a room a floor. Anchors placed on their walls,
+bodies at cells, sight cast across the shape by recursive shadowcasting with
+eye height from posture, light and sound as scalars over one shared grid,
+storeys, extents and room shapes. A fixture stands where its own description
+says it does.
+
+The **Director** was already orchestrated at 9.10.2; here it is revised to
+stop encoding the world at all. It slices, routes and rules, and the five
+specialist hands own the channels.
+
+Everything in the sections below was found by launching stories rather than
+by reading code. Six live quick starts from one greeting produced five
+distinct defects in the opening path, every one of them in work landed the
+same day, and the sixth run is the first where a plan published.
 
 ### Known failures, carried into this release deliberately
 

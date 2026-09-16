@@ -75,9 +75,33 @@ def execution_receipt(before, after, step):
               "pending" if pending else
               "applied" if any(e.get("status") == "applied" for e in effects) else
               "unchanged" if effects else "recorded")
+    # WHAT MAKES AN ACT UNACCOMPLISHED IS THE WORLD REFUSING IT, NEVER THE
+    # LEDGER BEING THIN. `action_status` answers one question -- may this
+    # act render as something that happened -- and a `missing_effect` is
+    # not an answer to it. That code means an assigned hand wrote no typed
+    # effect, which is a fact about the ledger; a `verify_patch` failure
+    # means a patch WAS requested and the world does not show it, which is
+    # the Doctor stepping onto a platform that is not there
+    # (`tests/test_causal_completion_perception.py`). Only the second is
+    # evidence the act did not happen, and only it should un-see one.
+    #
+    # EXPRESSION IS AN ACTION AND RENDERS NO MATTER HOW TEMPORARY (owner
+    # ruling, 2026-09-16). A blush, a flinch, a glance, a wince leave
+    # nothing durable by construction, so a hand asked to record one
+    # correctly writes nothing -- and the engine was reading that silence
+    # as proof the act never occurred. Measured on chat 135 turn 1: the
+    # player looked at Mirelle, flushed and stiffened her tails, the body
+    # hand said in so many words "the row's observable action carries
+    # them", and every one of those facts was then dropped from Mirelle's
+    # view, which received the two spoken lines and nothing else.
+    #
+    # `status` is untouched, so the gap stays in the audit ledger exactly
+    # as it was -- the test's own title, "failed requested effects remain
+    # auditable without becoming observed successes", is what this keeps.
     action_unresolved = [effect for effect in unresolved
-                         if not ((effect.get("code") == "unsupported_channel"
-                                  and effect.get("channel") in DEFERRED_NONPHYSICAL_CHANNELS)
+                         if not (effect.get("code") == "missing_effect"
+                                 or (effect.get("code") == "unsupported_channel"
+                                     and effect.get("channel") in DEFERRED_NONPHYSICAL_CHANNELS)
                                  or (effect.get("code") == "pending_commit_domain"
                                      and effect.get("scope") == "commit"))]
     action_status = ("unresolved" if action_unresolved else

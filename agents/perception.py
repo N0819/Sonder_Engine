@@ -5553,6 +5553,18 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                 if event.get("type") != "speech" and execution_statuses.get(idx) == "unresolved":
                     # Keep the event in the audit ledger, but never render a
                     # known unexecuted effect as an accomplished outward act.
+                    # SAID OUT LOUD, because this was the one refusal in the
+                    # stage that recorded nothing: a bare `continue` left the
+                    # pipeline drawer showing a specialist's note and no
+                    # trace of the act it had cost (chat 135 turn 1). What
+                    # reaches here now is a verification failure only --
+                    # a thin ledger stopped counting as one
+                    # (`world/causal_completion.execution_receipt`).
+                    note_step_decision(
+                        "act_percept", "%s -> %s" % (
+                            actor_names.get(str(event.get("actor") or ""), "?"), name),
+                        "refused",
+                        "the beat verified this act as unexecuted")
                     continue
                 actor_ref = str(event.get("actor") or event.get("source_entity_id") or "")
                 event_actor = actor_names.get(actor_ref) or actor_ref or p_name

@@ -27,7 +27,7 @@
 | `agents/loops.py` | 1529 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/mapping.py` | 665 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `mind.memory`, `story.scene`, `world.spatial` |
 | `agents/narration.py` | 2739 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
-| `agents/perception.py` | 6808 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
+| `agents/perception.py` | 6820 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
 | `agents/runtime.py` | 1698 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 103 | Step and active-variant persistence helpers. | `core.db`, `persist.steps` |
 | `agents/story_planner.py` | 1446 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
@@ -44,12 +44,12 @@
 | `dressing/ambience.py` | 2103 |  | `core`, `core.db`, `core.paths`, `dressing.backdrops`, `world.weather` |
 | `dressing/backdrops.py` | 1772 |  | `core`, `core.db`, `core.logging_utils`, `core.paths`, `persist.steps`, `world.day_cycle`, `world.spatial`, `world.weather` |
 | `llm/__init__.py` | 6 |  | — |
-| `llm/llm_quality.py` | 1230 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
+| `llm/llm_quality.py` | 1281 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 590 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 4337 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
-| `llm/schemas.py` | 7370 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `llm/schemas.py` | 7524 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2503 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 398 |  | — |
@@ -131,7 +131,7 @@
 | `world/__init__.py` | 6 |  | — |
 | `world/background_claims.py` | 598 |  | `core.db` |
 | `world/beat_ledger.py` | 184 |  | — |
-| `world/causal_completion.py` | 127 |  | — |
+| `world/causal_completion.py` | 151 |  | — |
 | `world/causal_program.py` | 339 |  | — |
 | `world/causal_verification.py` | 705 |  | — |
 | `world/causality.py` | 425 |  | `world.spatial` |
@@ -147,7 +147,7 @@
 | `world/charter_enrol.py` | 431 |  | `world.charter_generate`, `world.charter_model`, `world.charter_needs`, `world.charter_roster`, `world.charter_surface` |
 | `world/charter_feel.py` | 469 |  | `mind.psychology_runtime`, `world.charter_mark`, `world.charter_needs`, `world.charter_temper` |
 | `world/charter_figure.py` | 140 |  | — |
-| `world/charter_generate.py` | 1512 |  | `world.charter_identity`, `world.charter_model`, `world.charter_needs`, `world.charter_roster`, `world.charter_surface` |
+| `world/charter_generate.py` | 1545 |  | `world.charter_identity`, `world.charter_model`, `world.charter_needs`, `world.charter_roster`, `world.charter_surface` |
 | `world/charter_harm.py` | 264 |  | — |
 | `world/charter_history.py` | 885 |  | — |
 | `world/charter_identity.py` | 1199 |  | — |
@@ -479,8 +479,8 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_composer_outcome_views()` | 5967 | 842 lines |
-| `_composer_act_views()` | 5280 | 431 lines |
+| `_composer_outcome_views()` | 5979 | 842 lines |
+| `_composer_act_views()` | 5280 | 443 lines |
 | `perception_outcome()` | 3142 | 284 lines |
 | `_composer_standing_percepts()` | 4662 | 284 lines |
 | `perception_act()` | 2652 | 220 lines |
@@ -633,7 +633,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `complete_validated_json()` | 638 | 593 lines |
+| `complete_validated_json()` | 638 | 644 lines |
 | `_targeted_field_patch()` | 268 | 98 lines |
 | `note_provider_exchange()` | 577 | 59 lines |
 | `_step_json_schema()` | 526 | 49 lines |
@@ -692,11 +692,11 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `semantic_output_errors()` | 6404 | 585 lines |
-| `preprocess_llm_output()` | 5342 | 337 lines |
+| `semantic_output_errors()` | 6558 | 585 lines |
+| `preprocess_llm_output()` | 5476 | 357 lines |
 | `_lenient_coerce()` | 836 | 159 lines |
-| `validate_llm_output_strict()` | 7232 | 139 lines |
-| `_causal_patch_errors()` | 6272 | 130 lines |
+| `validate_llm_output_strict()` | 7386 | 139 lines |
+| `_causal_patch_errors()` | 6426 | 130 lines |
 | `canonicalize_prose_markup()` | 5108 | 102 lines |
 | `_coerce_station_table()` | 85 | 81 lines |
 | `_uncross_concealed_speech()` | 5232 | 69 lines |
@@ -1611,9 +1611,9 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `execution_receipt()` | 20 | 68 lines |
-| `event_execution_statuses()` | 105 | 23 lines |
-| `annotate_event_execution()` | 90 | 13 lines |
+| `execution_receipt()` | 20 | 92 lines |
+| `event_execution_statuses()` | 129 | 23 lines |
+| `annotate_event_execution()` | 114 | 13 lines |
 
 ### `world/causal_program.py`
 
@@ -1793,14 +1793,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `close_plan()` | 794 | 353 lines |
-| `_spread_berths()` | 581 | 84 lines |
-| `_featured_assignments()` | 721 | 71 lines |
-| `_json_call()` | 225 | 65 lines |
-| `_ensure_shift_crews()` | 387 | 62 lines |
-| `ensure_required_rooms()` | 1177 | 60 lines |
-| `narrate_actual_history()` | 1346 | 58 lines |
-| `_scale_populations()` | 503 | 51 lines |
+| `close_plan()` | 827 | 353 lines |
+| `_json_call()` | 225 | 98 lines |
+| `_spread_berths()` | 614 | 84 lines |
+| `_featured_assignments()` | 754 | 71 lines |
+| `_ensure_shift_crews()` | 420 | 62 lines |
+| `ensure_required_rooms()` | 1210 | 60 lines |
+| `narrate_actual_history()` | 1379 | 58 lines |
+| `_scale_populations()` | 536 | 51 lines |
 
 ### `world/charter_harm.py`
 
