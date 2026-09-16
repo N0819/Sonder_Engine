@@ -80,6 +80,24 @@ PLANNER_WALL_SECONDS = REPLY_WALL_SECONDS
 #: Passes one background task may take before it is left for the next job
 #: -- a safety ceiling under the spend that really bounds it.
 TASK_PASSES_CAP = 12
+#: THE OPENING REGIME (`docs/design/DESIGN_OPENING_PLAN.md`): one pass,
+#: bounded, before the first turn row exists. Owner ruling 2026-09-16: a
+#: hard budget with a silent fallback -- a plan that does not land in time
+#: costs nothing but the plan, and the opening runs as it did.
+#:
+#: RAISED from 10 steps / 150s on the first three live openings, because the
+#: budget was cutting the plan off one call from the end. Chat 127 spent 17
+#: calls over the full 10 steps, drafted all four operations (`plan_rooms`,
+#: `director_note` and a `place_at_opening` per present body), validated
+#: clean, wrote the status line "the opening package is drafted and ready;
+#: validation is the last check before it lands" -- and stopped on `steps`
+#: without ever calling `publish_package`. Nothing landed, from a package
+#: that was finished. The shape of the work is read, open, draft once per
+#: operation, validate, publish, and one operation per draft call is what
+#: the model actually does, so the floor is the number of operations plus
+#: four and the ceiling wants room above it.
+OPENING_STEPS = 24
+OPENING_WALL_SECONDS = 360.0
 #: Output budget per model call -- the FALLBACK, when the host's own ceiling
 #: cannot be read. `story.room_calls.room_max_tokens()` is what callers
 #: use, and it asks the host for its whole ceiling.
@@ -430,7 +448,7 @@ def _shown_transcript(transcript, cap=None):
 
 def _payload(cid, frame_id, *, text, task, transcript, step, calls_left,
              seconds_left, turn_idx, spend=None, regime="reply", memo=None,
-             shown=None):
+             shown=None, steps_cap=None):
     """The step's payload. Everything but the transcript and the budget is
     DERIVED FROM THE DATABASE, and nothing derived can move while the reply
     is only reading, so ``memo`` (`room_calls.ReplyMemo`) holds that half
@@ -496,7 +514,7 @@ def _payload(cid, frame_id, *, text, task, transcript, step, calls_left,
              "status": p["status"]} for p in pending_proposals(cid, frame_id)]),
         "transcript": shown,
         "budget": {"regime": regime, "step": step,
-                   "steps": PLANNER_STEPS_PER_REPLY,
+                   "steps": int(steps_cap or PLANNER_STEPS_PER_REPLY),
                    "calls_left": calls_left,
                    "seconds_left": round(max(0.0, seconds_left), 1),
                    **({"spend": spend} if spend else {})},
@@ -722,7 +740,10 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
                                           default=str)
 
     regime = regime or ("task" if task is not None and text is None else "reply")
-    wall = REPLY_WALL_SECONDS if regime == "reply" else TASK_PASS_SECONDS
+    wall = (REPLY_WALL_SECONDS if regime == "reply"
+            else OPENING_WALL_SECONDS if regime == "opening"
+            else TASK_PASS_SECONDS)
+    steps_cap = OPENING_STEPS if regime == "opening" else PLANNER_STEPS_PER_REPLY
     system = system_block(cid, frame_id)
     turn_idx = room.current_turn_idx(cid)
     expire_mandates(cid, frame_id, turn_idx)
@@ -756,7 +777,7 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
     memo = ReplyMemo()
     if hour_left <= 0:
         stopped = "spend_hour"
-    for step in range(1, PLANNER_STEPS_PER_REPLY + 1):
+    for step in range(1, steps_cap + 1):
         if stopped:
             break
         _emit({"type": "room_step", "step": step,
@@ -779,6 +800,7 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
                 cid, frame_id, text=text, task=task, transcript=transcript,
                 step=step, calls_left=calls_left, seconds_left=seconds_left,
                 turn_idx=turn_idx, regime=regime, memo=memo, shown=shown,
+                steps_cap=steps_cap,
                 spend={"calls_per_reply": reply_cap,
                        "calls_per_hour_left": hour_left}),
                 max_tokens=room_max_tokens())
@@ -822,7 +844,16 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
         if out.get("status_line"):
             status_line = str(out["status_line"])
         if isinstance(out.get("questions"), list):
-            questions = out["questions"]
+            # THE OPENING CANNOT ASK (owner, 2026-09-16): nobody is there to
+            # answer before the first beat, and chat 126's plan waited on
+            # one question for the whole story. A question in that regime
+            # is kept as a note, never written to the status row.
+            if regime == "opening":
+                for q_text in out["questions"]:
+                    notes.append("question not asked at the opening: %s"
+                                 % str(q_text)[:200])
+            else:
+                questions = out["questions"]
         if out.get("reply"):
             reply = str(out["reply"])
         if isinstance(out.get("verdicts"), list):
@@ -1004,6 +1035,94 @@ def _run_task(cid, frame_id, task, *, base_turn, job=None):
             break
     out["passes"] = passes
     return out
+
+
+def _opening_task(cid, frame_id, passage):
+    """What the opening regime is handed: the passage the story opens on,
+    who is present, and what the launch already planted."""
+    from story.opening_plan import present_bodies
+    from story.scene import persona_name, persona_of
+    from core.db import q, wget_for_frame
+    from world.structure import STRUCTURES_KEY, normalize_structures
+    chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
+    try:
+        player = persona_name(persona_of(dict(chat))) if chat else ""
+    except Exception:
+        player = ""
+    present = present_bodies(cid)
+    planted = sorted(normalize_structures(
+        wget_for_frame(cid, STRUCTURES_KEY, frame_id, {}) or {})["items"])
+    return {"kind": "opening",
+            "passage": str(passage or "")[:PLANNER_TRANSCRIPT_CHARS],
+            "player": player,
+            "present": present,
+            "planted_structures": planted}
+
+
+def run_opening_plan(cid, frame_id=None, *, passage):
+    """Plan the ground the story opens on, before the first turn row exists
+    (`docs/design/DESIGN_OPENING_PLAN.md`). Mints the opening mandate, runs
+    ONE pass of the planner in the `opening` regime, records the outcome in
+    the `opening_plan` world row and the room thread, and NEVER RAISES: a
+    launch is not failed by its plan. Returns the row written."""
+    from story import room_conversation as room
+    from story.opening_plan import (mint_opening_mandate, opening_placements,
+                                    record_opening_plan)
+    fields = {"published": [], "calls": 0, "steps": 0, "stopped": None,
+              "notes": [], "error": "", "trace": []}
+    # WHAT THE ROOM ACTUALLY DID, because nothing else records it. A
+    # planner exchange is captured against a TURN (`persist/llm_capture`,
+    # keyed on `turn_id`), and this runs before turn 0 exists, so the
+    # opening plan's calls leave no trace anywhere -- the owner's question
+    # on chat 131, after seventeen calls produced no package: "what is the
+    # writers room actually doing in those calls, I have no idea." The
+    # loop's own `on_event` seam is advisory by construction (a raising or
+    # slow callback cannot change what the room does), so the trace costs
+    # the plan nothing and rides the row the launch already writes.
+    trace = []
+
+    def _watch(event):
+        if event.get("type") != "room_tool":
+            return
+        row = {"step": event.get("step"), "tool": event.get("tool")}
+        if event.get("refused"):
+            row["refused"] = str(event["refused"])[:200]
+        if event.get("error"):
+            row["error"] = str(event["error"])[:200]
+        trace.append(row)
+
+    try:
+        mint_opening_mandate(cid, frame_id)
+        task = _opening_task(cid, frame_id, passage)
+        out = run_planner(cid, frame_id, task=task, regime="opening",
+                          base_turn=None, on_event=_watch)
+        fields.update({
+            "published": list(out.get("published") or []),
+            "calls": int(out.get("calls") or 0),
+            "steps": int(out.get("steps") or 0),
+            "stopped": out.get("stopped"),
+            "notes": list(out.get("notes") or []),
+        })
+        reply = str(out.get("reply") or "").strip()
+        if reply:
+            try:
+                room.add_message(cid, frame_id, "planner", reply, turn_idx=0)
+            except ValueError:
+                pass
+    except Exception as exc:
+        logger.info("opening plan failed for chat %s: %s", cid, exc)
+        fields["error"] = "%s: %s" % (type(exc).__name__, str(exc)[:300])
+    fields["trace"] = trace
+    row = record_opening_plan(cid, frame_id, **fields)
+    tools = ", ".join(
+        "%s%s" % (t["tool"], "!" if t.get("refused") or t.get("error") else "")
+        for t in trace) or "none"
+    logger.info("opening plan for chat %s: %d published, %d calls, %d "
+                "placement(s)%s; tools: %s", cid, len(row["published"]),
+                row["calls"], len(opening_placements(cid, frame_id)),
+                (", stopped: %s" % row["stopped"]) if row["stopped"] else "",
+                tools)
+    return row
 
 
 def planner_reply(cid, frame_id, text, *, on_event=None):

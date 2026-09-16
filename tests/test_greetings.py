@@ -663,3 +663,63 @@ class TestTheExtractorVersionIsStampedAndChecked:
         greetings.start_story(cid_char, pid, greeting_index=0)
 
         assert calls == []
+
+
+class TestARetryResumesTheTurnItLeft:
+    """A quick start that died AFTER writing turn 0 must be retryable.
+
+    Measured on chat 128 (2026-09-16): the first attempt wrote turn 0, saved
+    `compile_world_context`, and raised in the establish stage. Every retry
+    then answered 500 with `UNIQUE constraint failed: turns.chat_id,
+    turns.idx`, because the turn insert was the one stage of the resume path
+    that did not ask the chat whether its work was already there -- so the
+    failure that was KEPT so the story could be resumed was the failure that
+    made resuming impossible.
+    """
+
+    def _card(self):
+        return {"name": "Mirelle", "description": "a proprietor",
+                "first_mes": "\"Welcome, {{user}},\" she says."}
+
+    def _stub(self, monkeypatch, *, pipeline=None):
+        from agents import story_planner as sp
+        from story import greetings
+        monkeypatch.setattr(greetings, "extract_greeting",
+                            lambda sheet, prose: {"knowledge_seeds": [], "time": "now"})
+        monkeypatch.setattr(sp, "run_opening_plan",
+                            lambda cid, frame_id=None, *, passage: {})
+        monkeypatch.setattr(greetings, "_run_pipeline",
+                            pipeline or (lambda cid, tid: iter(())))
+        return greetings
+
+    def test_a_start_that_died_after_the_turn_row_resumes_on_that_row(
+            self, temp_db, monkeypatch):
+        from core.db import q
+        from story import importers
+
+        def dies(cid, tid):
+            # The first attempt gets one stage in, then raises -- exactly
+            # what chat 128 did.
+            from agents.storage import save_step
+            save_step(tid, "compile_world_context", "compile", 0, {"compiled": True})
+            raise RuntimeError("provider is down")
+            yield  # pragma: no cover - a generator that raises on first pull
+
+        greetings = self._stub(monkeypatch, pipeline=dies)
+        char_id, _ = importers.import_character(self._card(), reinterpret=False)
+        persona_id, _ = importers.import_persona({"name": "Hinami"},
+                                                 reinterpret=False)
+        with pytest.raises(RuntimeError):
+            greetings.start_story(char_id, persona_id)
+
+        cid = q("SELECT id FROM chats ORDER BY id DESC", one=True)["id"]
+        first = q("SELECT id, idx FROM turns WHERE chat_id=?", (cid,))
+        assert [r["idx"] for r in first] == [0], "the failed start kept its turn"
+
+        # The retry resumes rather than colliding.
+        self._stub(monkeypatch)
+        chat_id, tid = greetings.start_story(char_id, persona_id,
+                                             resume_chat_id=cid)
+        assert chat_id == cid
+        assert tid == first[0]["id"], "the retry reuses turn 0, never a second one"
+        assert len(q("SELECT id FROM turns WHERE chat_id=?", (cid,))) == 1

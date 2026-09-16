@@ -715,6 +715,12 @@ _EMBEDDED_FRAGMENTS = {
     # house style -- a card is read by the character AND by everyone
     # who is not them, and the two readings need different persons.
     "card_person_note": 7,
+    # The place vocabulary (size, shape, light, quiet, bearings, insides,
+    # anchors, storeys, surfaces): the spatial hand's rooms chunk and
+    # `director_establish`, which had drifted 23 headings apart by
+    # 2026-09-16 -- the opening was still writing anchors without heights
+    # and a neighbour it could not see as a described room.
+    "room_vocabulary": 2,
 }
 
 

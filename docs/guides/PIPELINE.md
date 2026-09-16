@@ -21,7 +21,18 @@ This dual representation allows live execution through `PipelineContext` and lat
 
 ## Opening turn (`turn.idx == 0`)
 
+Before the turn row exists, both launches run the opening plan
+(`agents/story_planner.run_opening_plan`, `docs/design/DESIGN_OPENING_PLAN.md`):
+one bounded Story Planner pass that plants the rooms the passage implies as
+stubs, says where each present body stands (`place_at_opening` ->
+`opening_placements`) and leaves a director note, published at turn -1 so
+this turn sees it. It is not a pipeline step: it writes through the Room's
+own seams, records itself in the `opening_plan` world row, and never fails
+the launch.
+
 ```text
+[opening plan, before the row]
+    ↓
 compile_world_context
     ↓
 director_establish
@@ -401,6 +412,50 @@ The step never decides what a character perceives. It is before `perception_act`
 
 ### `perception_act`
 
+
+**Model-facing perception (2026-09-15).** The composer projects each admitted
+rendered span into one observation, preserving its exact text, observer-safe
+actor, channel, fidelity and citation id. There is no eight-row merging cap:
+separate speech deliveries and actions remain separate on crowded beats.
+`phase` distinguishes a witnessed `event` (with its existing `order`) from a
+noticed `change` (no invented occurrence time), current `state`, and undivided
+legacy `context`. The older `standing` flag remains for stored consumers.
+
+`composer.perception_packet` is the shared presentation seam. It accepts only
+admitted observations and the observer's already rendered view; it cannot read
+the scene, infer a cause, resolve a hidden name or supply unseen details.
+Characters receive `perception.events`, `changes_noticed`, and `current_state`,
+with state rows grouped by their already admitted actor label. Event `order`
+is a single delivery ordinal across onset and all micro-rounds; local source
+orders remain on the stored observations. Each row keeps
+its own evidence handle, and complete relevant standing body/attire/sensory
+state remains available on every character call. The paragraph and a duplicate
+observation list are no longer both sent to the model. Archived prose without
+recoverable boundaries stays in `unstructured_context`. Legacy actor metadata
+is omitted: older repairs scrubbed the delivered text without always repairing
+its separate actor label. Modern explicit-phase rows use the shared identity
+repair for both. If an old observation
+contains text removed by the final view repair, it cannot restore it; any safe
+view text not covered by surviving rows is retained as unstructured context.
+
+The Perception inspector uses this same grouping for each saved observer and
+variant: Events, Changes noticed, Current state, and Additional context where
+legacy prose has no recoverable boundaries. `web.pipeline_views` derives the
+`perception_packets` sidecar when the pipeline endpoint is read; saved variant
+content is unchanged and the JSON lens still shows that original content.
+The inspector shows the selected perception stage's evidence, while a later
+character call can also include observations delivered during micro-rounds.
+Null views remain empty, and no current scene or identity lookup augments the
+stored observer's evidence.
+
+Interaction micro-rounds carry the same individual observations alongside
+views. Round records store `delivered_observations` and `self_observations`;
+`interaction_observations` and `reaction_observations` are derived context maps
+rebuilt with their matching views on resume. Handles include the round,
+speaker and sequence slot. An initial simultaneous wave still declares blind:
+no member receives another member's observations before the whole wave ends.
+Legacy round records remain readable without inventing event boundaries.
+
 Produces observer-specific views of the action onset: speech delivery, visible movement, immediate sensory evidence, and deterministic spatial additions. This occurs before objective resolution so characters do not react using future knowledge.
 
 A `contestable` action's visible first phase is rendered under explicit attempt
@@ -639,6 +694,15 @@ consume. Legacy answers pass through the compiler unchanged. This shrinks the
 operating prompt and provider grammar without shrinking the character card or
 removing a cognitive product.
 
+Current kernel want text, decision hinge and uncertainty are bounded to 240
+characters apiece. Emitted belief rows must include operation, target,
+confidence and cited evidence; `revise` needs the exact held target, while
+other operations leave the target empty. Missing learning inputs are invalid
+output and use the existing repair path. The stable `CharacterOutput` decoder
+retains legacy belief semantics. These constraints close measured cases where
+a want ran to the completion limit and where an apparently valid correction
+said nothing persistence could apply.
+
 Observation and memory identifiers are call-local handles (`oN`, `mN`, `sN`)
 on the provider wire. The adapter restores their canonical ids before the
 existing grounding guard runs. At memory commit, current observation citations
@@ -656,9 +720,44 @@ relationship and frame projections, and is joined before anything
 memory-dependent is built.
 
 The historical `CharacterOutput` schema and its aliases remain the archive and
-downstream compatibility contract, not the provider grammar. The hinge is
-deliberation residue rather than a thought transcript; conducted action and
-the enacted/suppressed want preserve the decision downstream readers use.
+downstream compatibility contract. The compiler resolves the temporary want
+handles into a private `decision_continuity` record with `chosen`,
+`suppressed`, `why` (the hinge), and `uncertainty`, each at most 240 characters.
+Commit stores one latest record in the character's state with its `turn`; the
+next character payload supplies it as `self.decision_continuity`. An explicit
+empty record clears the prior note, while a legacy answer that omits it leaves
+the note alone. This concise choice record carries the character's reason and
+open question across turns; it does not establish that the chosen action
+succeeded, and no thought transcript is required.
+
+Within an interaction loop, `self.earlier_this_beat` carries the same mind's
+earlier feelings, decision and active concerns from the loop-owned
+`beat_declared` map. Its `status: proposed_before_resolution` marks a prior
+self-report awaiting the Director's resolution. It is separate from settled
+active state and gives no other character's private state or physical outcome.
+The loop's existing own-line/move history remains the record of what this mind
+has already declared this beat.
+Each loop clears its own result map before re-execution, including no-call
+exits; interaction results are assembled from that run's fresh declarations.
+Hydrated results from a discarded reroll cannot become private continuity or
+committed conduct. Reaction and interaction maps remain separately owned.
+Within a run, a later legacy omission preserves earlier explicit concerns,
+undercurrent and choice; explicit empty concerns or choice, and a null
+undercurrent, retain their clearing meaning through the merge.
+
+At commit, `affect.normalize_wants` receives the compiler's original
+`enacted_want` and `suppressed_want` indexes and reindexes them after
+deduplication and capacity trimming. A valid enacted choice gets first
+protection, then a valid suppressed choice where the existing caps permit it;
+only one situational want may survive. A counterpull removed by a cap or folded
+into the enacted desire is not replaced with another suppressed desire.
+Invalid or absent indexes retain the
+legacy urgency fallback. This preserves a deliberate lower-urgency choice,
+such as restraint, instead of silently turning the strongest urge into the
+chosen act. `active_concerns: []` clears carried concerns, while omission in a
+legacy answer preserves them. Explicit `affect.undercurrent: null` clears prior
+residue and prevents fresh synthesis on that call; an omitted key keeps the
+existing decay, relief and synthesis behavior.
 
 `self.embodiment_capabilities` contains conditional facts hidden from ordinary
 observers but necessarily known by their owner. When a chosen completed process
@@ -698,6 +797,27 @@ Intentions remain visible after they stop steering for autobiographical
 continuity, but only
 `steering_intention_ids` may authorize new wants or selected responses; commit
 applies the same boundary when normalizing the settled active state.
+
+Each accepted intention `add`, `progress`, `block`, `satisfy`, `abandon` or
+`nonviable` operation replaces a single
+`last_transition: {op, turn, why, evidence}` on that intention. Its reason and
+each evidence fact are at most 240 characters, with up to three evidence
+references retaining exact engine ids. A duplicate `add` that advances an
+existing aim records `progress`; rejected or barren operations leave the
+previous rationale intact. The record survives subsequent normalization and
+continues to explain a closed or redirected goal without accumulating a
+history of private reasoning.
+
+Belief revision uses `updates.beliefs` with `operation: revise` and
+`target_belief` naming one held claim exactly after trimming and casefolding.
+The replacement `belief` and `confidence` describe the desired resulting
+conviction. Evidence remains required; an unknown or ambiguous target, a target
+used with another operation, or a replacement colliding with another held
+belief is rejected. A revised card belief retains its original wording in
+`authored_belief`: commit uses that origin to prevent reseeding, and the
+character payload removes the superseded card copy while supplying the live
+belief. The active sheet of selected hypotheses is the top-level
+`active_hypotheses` payload field, as named by the prompt.
 
 The authored card is resolved per story: `chat_chars.sheet` wins when present,
 otherwise the reusable library `characters.sheet` is used. This override never
@@ -1029,6 +1149,21 @@ that local rewrite rather than handing the new person's pronouns to the first
 target.
 
 ### `narrator`
+
+The narrator uses the same perception partition: `current_events` contains
+ordered witnessed delivery records (`order`, permitted `actor`, `kind`,
+`channel`, `fidelity`, `ambiguity`, exact `text`), with reconciled player
+actions first. Actor metadata remains attached to its own delivery; no label
+is inferred from preceding prose. Quoted requests and conditions establish
+what was said, never compliance or an intermediate action.
+`changes_noticed` contains changes without an invented instant, and `present_scene` contains standing facts. Legacy prose stays in
+`unstructured_context`, whose supplied actions and dialogue remain material
+without invented event boundaries or times. Each sentence is supplied once across these fields.
+The production sensory manifest keeps channel limits and standing sensations
+without copying event text into `this_beat` again. The full original view stays
+local for dialogue-token substitution and fidelity checks; the exact dialogue
+lookup table remains part of the existing token protocol. Extra-player
+narration partitions that player's own observations, never another observer's.
 
 Renders the player-facing prose. **The stage blocks on being parseable JSON
 and on nothing else** (2026-09-06): the fidelity correction pass, the craft

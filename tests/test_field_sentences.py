@@ -54,9 +54,22 @@ def scene(rooms, positions, *, entities=None, stations=None,
             "contained": dict(contained or {}), "poses": {}}
 
 
-ANCHORS = {"table": {"desc": "the table", "dir": "n", "height": "waist"},
-           "hearth": {"desc": "the hearth", "dir": "s"},
-           "shelf": {"desc": "the shelf", "dir": "e", "height": "waist"}}
+#: PINNED, because what these tests need is a GRADIENT. Three fixtures at
+#: three distances from one lamp is how "grouped bright to dark" and
+#: "grouped loud to quiet" have anything to group; the bands are the
+#: subject, and where a placement formula happens to put three anchors is
+#: not. They rode the formula until 2026-09-16, when fixtures stopped being
+#: pushed a pace off their walls (`spatial_fov.DEFAULT_LANE`, owner ruling:
+#: wall-adjacent cells are not restricted in any way), every one of them
+#: moved a cell further from the lamp, and the middle band vanished -- the
+#: shelf fell out of the light entirely and the sentence lost its `dim`.
+#: The cells below are the distances the bands were written for; `dir`
+#: stays, because it is still the wall each fixture is against.
+ANCHORS = {"table": {"desc": "the table", "dir": "n", "height": "waist",
+                     "cell": [1, 1]},
+           "hearth": {"desc": "the hearth", "dir": "s", "cell": [4, 5]},
+           "shelf": {"desc": "the shelf", "dir": "e", "height": "waist",
+                     "cell": [4, 4]}}
 
 
 def lamp_hall(*, generator=False):
@@ -276,7 +289,15 @@ def test_a_doorway_the_observer_cannot_see_names_nothing():
 def test_a_sound_beyond_the_door_is_named_by_the_opening_and_an_unheard_one_never():
     two = {
         "a": room("A", light="lit", anchors={
-            "c": {"desc": "a counter", "dir": "n", "height": "waist"}},
+            # PINNED for the same reason ANCHORS above is: room B has to
+            # grade UNEVENLY or `sound_shape` says nothing at all (rule a),
+            # and that depends on how near the source stands to the doorway
+            # between them. The counter held this cell until 2026-09-16,
+            # when fixtures stopped being pushed a pace off their walls; on
+            # the wall it is one cell further from the opening, B flattens,
+            # and the test loses its subject rather than its numbers.
+            "c": {"desc": "a counter", "dir": "n", "height": "waist",
+                  "cell": [4, 1]}},
             adjacent=[{"to": "b", "barrier": "open_door", "dir": "e"}]),
         "b": room("B", light="lit", anchors={
             "w": {"desc": "the far window", "dir": "e"},

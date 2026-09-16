@@ -188,7 +188,7 @@ def test_touching_cells_see_each_other_and_a_fixture_is_still_cover():
     from world.spatial import anchor_cells, body_visibility
     sc = {"rooms": {"wheel": {"name": "Wheel", "extent": {"w": 12, "d": 10}, "exposure": "enclosed",
                               "adjacent": [], "anchors": {
-                                  "stair": {"desc": "the stair foot", "dir": "n", "height": "head", "footprint": "small"}}}},
+                                  "stair": {"desc": "the stair foot", "dir": "n", "height": "head", "footprint": "small", "lane": True}}}},
           "positions": {"Ada": "wheel", "Cal": "wheel"},
           "stations": {"Ada": {"cell": [8, 1]}, "Cal": {"at": "stair", "cell": [9, 2]}},
           "orientation": {"Ada": {"facing": "e"}, "Cal": {"facing": "s"}}, "entities": {}}

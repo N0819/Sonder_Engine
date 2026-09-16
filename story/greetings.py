@@ -1088,9 +1088,37 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
                 except Exception:
                     raise      # kept and marked by the guard, as above
 
+        # THE OPENING IS PLANNED BEFORE THE FIRST TURN ROW EXISTS
+        # (`docs/design/DESIGN_OPENING_PLAN.md`): a package published now
+        # is published at turn -1, and turn 0 sees it. The step never
+        # raises; a plan that did not land leaves the launch exactly as it
+        # was, with the `opening_plan` row saying why.
+        if not db.q("SELECT id FROM turns WHERE chat_id=? LIMIT 1", (cid,), one=True):
+            from agents.story_planner import run_opening_plan
+            logger.info("quick start: planning the opening for chat %s", cid)
+            with language_scope(language or DEFAULT_LANGUAGE):
+                run_opening_plan(cid, None, passage=prose_final)
         # Turn 0: run establishment (valid, committed), then show the greeting verbatim.
-        tid = db.qi("INSERT INTO turns(chat_id,idx,player_input,created,frame_id) VALUES(?,?,?,?,?)",
-                    (cid, 0, "", time.time(), None))
+        #
+        # THE TURN ROW IS A STAGE LIKE ANY OTHER, AND IT ASKS TOO. Every
+        # stage above asks the CHAT whether its own work is already there;
+        # this one trusted that the row was not, and a start that died
+        # AFTER writing it could never be retried. Measured on chat 128
+        # (2026-09-16): turn 0 written, `compile_world_context` saved, the
+        # establish stage raised, and every retry answered 500 with
+        # `UNIQUE constraint failed: turns.chat_id, turns.idx` -- the
+        # failure that was kept so the story could be resumed was the
+        # failure that made resuming impossible. `_run_pipeline` already
+        # restores a turn that holds steps and re-runs what is stale, so
+        # reusing the row is the whole of the repair.
+        existing = db.q("SELECT id FROM turns WHERE chat_id=? AND idx=0",
+                        (cid,), one=True)
+        if existing:
+            tid = int(existing["id"])
+            logger.info("quick start: reusing turn 0 (%s) for chat %s", tid, cid)
+        else:
+            tid = db.qi("INSERT INTO turns(chat_id,idx,player_input,created,frame_id) VALUES(?,?,?,?,?)",
+                        (cid, 0, "", time.time(), None))
         # `_run_pipeline` is called directly here rather than through
         # `run_pipeline`, which is the ONLY place the story language was ever set.
         # The opening beat is the first prose a reader sees, and it was always

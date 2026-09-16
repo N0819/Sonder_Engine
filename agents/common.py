@@ -1172,6 +1172,7 @@ _MERGE_UNION_FIELDS = (
 #: accumulate into -- and saying nothing about one is not retracting it.
 _MERGE_PRESERVE_FIELDS = (
     "active_state",
+    "decision_continuity",
     "ponder",
     # No-op/null means preserve the prior micro-round's explicit decision;
     # start/stop are both truthy dicts and the later explicit one wins.
@@ -1259,8 +1260,35 @@ def _merge_character_results(existing, new):
         if combined or field in existing or field in new:
             merged[field] = combined
     for field in _MERGE_PRESERVE_FIELDS:
-        if not new.get(field) and existing.get(field):
+        # An empty decision is an explicit clearing operation. Only an absent
+        # legacy note preserves an earlier round's choice.
+        silent = (new.get(field) is None if field == "decision_continuity"
+                  else not new.get(field))
+        previous = existing.get(field)
+        present = (previous is not None if field == "decision_continuity"
+                   else bool(previous))
+        if silent and present:
             merged[field] = existing.get(field)
+    previous_active = existing.get("active_state")
+    current_active = merged.get("active_state")
+    if (isinstance(previous_active, dict) and isinstance(current_active, dict)
+            and current_active.get("active_concerns") is None
+            and previous_active.get("active_concerns") is not None):
+        merged["active_state"] = {
+            **current_active,
+            "active_concerns": previous_active["active_concerns"],
+        }
+    if isinstance(previous_active, dict) and isinstance(current_active, dict):
+        previous_affect = previous_active.get("affect")
+        current_affect = current_active.get("affect")
+        if (isinstance(previous_affect, dict) and isinstance(current_affect, dict)
+                and "undercurrent" in previous_affect
+                and "undercurrent" not in current_affect):
+            merged["active_state"] = {
+                **merged["active_state"],
+                "affect": {**current_affect,
+                           "undercurrent": previous_affect["undercurrent"]},
+            }
     return merged
 
 def _contextual_rooms(sc, cast, *extra_room_ids, hops=1):
@@ -5284,10 +5312,8 @@ def _delivery_ok(relation, scene, observer_name, source_name, channel,
     # `sight_verdict` is the grade the LIGHT allowed plus what the place did
     # to it (A87), in one derivation: passing both is what lets an authored
     # sight that does not need light answer here -- the dark lifts for that
-    # perceiver and a glare in the eyes never dazzles it, while a wall and a
-    # shut container do exactly what they do to an eye. `sense_adjusted`
-    # spends the glare cap for every perceiver the light feeds, senses=None
-    # included, so this reads the same for an ordinary card as
+    # perceiver, while a wall and a shut container do exactly what they do
+    # to an eye. For an ordinary card this reads the same as
     # `sight_level(relation)` always did.
     level, block = sight_verdict(relation)
     level = sense_adjusted(level, "sight", senses, blocked_by=block)
@@ -9787,7 +9813,7 @@ def _check_action_attribution(prose, observations, player_forms=(),
 
     warnings = []
     for obs in observations:
-        if not isinstance(obs, dict) or obs.get("kind") != "action":
+        if not isinstance(obs, dict) or obs.get("kind") not in ("act", "action"):
             continue
         actor = str(obs.get("actor") or "").strip()
         if not actor or actor not in forms:

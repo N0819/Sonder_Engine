@@ -30,14 +30,21 @@ from world.spatial import (
 # ---------------------------------------------------------------------------
 
 def taproom(*, geometry=True):
-    """A large room. A waist-high bar runs along the north wall one pace off
-    it; a head-high folding screen runs along the east wall one pace off
-    it; a hearth on the south wall; the door on the west wall."""
+    """A large room. A waist-high bar runs along the north wall and keeps a
+    lane behind it, the way a bar does; a head-high folding screen runs
+    along the east wall and keeps one too, because its whole use is that
+    somebody can be on its blind side; a hearth on the south wall and the
+    door on the west wall, both flush, because neither has a behind.
+
+    `lane` is authored here rather than inferred from height: until
+    2026-09-16 anything with a height was pushed a pace off its wall
+    automatically, which put a bench against no wall at all
+    (`spatial_fov.DEFAULT_LANE`)."""
     bar = {"desc": "the long bar", "dir": "n"}
     screen = {"desc": "a folding screen", "dir": "e"}
     if geometry:
-        bar.update({"footprint": "run", "height": "waist"})
-        screen.update({"footprint": "run", "height": "head"})
+        bar.update({"footprint": "run", "height": "waist", "lane": True})
+        screen.update({"footprint": "run", "height": "head", "lane": True})
     return {
         "tap": {"name": "the Taproom", "size": "large",
                 "notes": "Sawdust on the boards.",
@@ -74,13 +81,25 @@ def test_placement_is_keyed_on_room_and_anchor_alone():
     assert again == {aid: rec["cells"] for aid, rec in after.items()}
 
 
-def test_a_wall_run_stands_one_pace_off_its_wall_and_a_door_is_the_wall():
+def test_a_fixture_is_against_its_wall_unless_it_keeps_a_lane():
+    """The owner's ruling, 2026-09-16: wall-adjacent cells are not
+    restricted in any way. A fixture sits ON the wall its `dir` names; the
+    pace of floor behind it is `lane`, authored by whoever knows whether
+    this thing has a behind, and it is what a body takes cover in."""
     cells = anchor_cells(scene({"P": "tap"}), "tap")
-    assert all(y == 1 for _x, y in cells["bar"]["cells"])       # north, inset
-    assert all(x == 6 for x, _y in cells["screen"]["cells"])    # east, inset
+    assert all(y == 1 for _x, y in cells["bar"]["cells"])       # north + lane
+    assert all(x == 6 for x, _y in cells["screen"]["cells"])    # east + lane
     assert all(x == 0 for x, _y in cells["door"]["cells"])      # west wall
     assert all(y == 7 for _x, y in cells["hearth"]["cells"])    # south wall
     assert len(cells["bar"]["cells"]) >= 2
+    # Without the lane the same bar is flush with the north wall, and the
+    # wall cells are free for anything else the fiction puts there.
+    flush = dict(taproom())
+    flush["tap"]["anchors"]["bar"] = {
+        "desc": "the long bar", "dir": "n", "footprint": "run",
+        "height": "waist"}
+    assert all(y == 0 for _x, y in
+               anchor_cells(scene({"P": "tap"}, rooms=flush), "tap")["bar"]["cells"])
 
 
 def test_a_body_cell_is_derived_from_its_station_and_never_stored():

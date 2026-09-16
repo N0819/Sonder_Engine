@@ -1,5 +1,191 @@
 # Changelog
 
+## alpha 10.0.0 — The Writers' Room plans the opening, and a fixture stands against its wall
+
+Two features, and they meet at the same place: the ground a story opens on.
+The Writers' Room now plans that ground before the Director ever runs, and
+the geometry lets a fixture stand where its own description says it does.
+
+Everything below was found by launching stories rather than by reading code.
+Six live quick starts from one greeting produced five distinct defects in the
+opening path, every one of them in work landed the same day, and the sixth
+run is the first where a plan published.
+
+### Known failures, carried into this release deliberately
+
+**31 tests fail on this tag.** Twenty-nine of them were already failing
+before any of this work began; the other two are Japanese twins of two of
+those, visible only now that the English-only mandate is retired and the
+Japanese checks run again. None is a regression from this release.
+
+They were triaged rather than fixed, and the triage is the finding:
+fourteen are stale locations where the rule is alive and has moved to a
+specialist hand, five ask about structures retired on purpose, and ten are
+real. The real ones share a cause. `38b560c6` (2026-09-12) correctly retired
+the Director's monolithic sheet and moved its channels to the five hands,
+but only seven clauses were relocated and the rest went out with the sheet,
+including duties that still have an owner and still have code feeding them.
+The full list, each verified against the tree, is `docs/UNBUILT_PIPELINE.md`
+§ 1.164. The one to fix first is that the world-pressure must-tick retry
+cannot fire on a real beat, which means the floor that makes the world act
+while the cast talks is off.
+
+**The opening plan is new and thinly proven.** It published on one of six
+live runs. Three defects in it were fixed today and the fixes have one
+successful run behind them, not a measured rate. It fails silently by
+design: a plan that does not land costs nothing but the plan, and the
+opening runs as it always did.
+
+**Two other things are named and not changed.** The establish sheet grew by
+half when it took the shared place vocabulary, and the provider silence
+budget is ten seconds while that sheet's successful call ran forty-three;
+two of six runs died on that timeout before any token arrived. Both numbers
+are the owner's to set.
+
+All of the above will be addressed. They are written down here so the next
+person to ask "when did this break" has a dated answer.
+
+
+### The opening plan, after its first six live runs (2026-09-16)
+
+It published nothing in five quick starts from one greeting, for three
+separate reasons, all of them in the feature rather than around it. The step
+budget cut the plan off one call from the end: chat 127 drafted every
+operation, validated clean, and stopped without publishing a finished
+package. A placement drafted before the rooms it names could never validate,
+because the package preview only knew about rooms from `plan_rooms`
+operations it had already walked past -- so chat 131's placements at
+`reception` were refused as nowhere while the same package planted
+`reception` two operations later, and the planner spent seventeen calls
+re-drafting rooms that had been right all along. A package lands in one
+transaction, so its rooms are known to the whole preview now. And nothing
+recorded what the room did: a planner exchange is captured against a turn,
+and this stage runs before turn 0 exists, so the `opening_plan` row carries
+a tool-by-tool trace, refusals included.
+
+### Japanese is back at protocol parity, and the English-only mandate is over (2026-09-16)
+
+`tools/project_check.DEFERRED_PACK_PARITY` is empty again, so every English
+prompt edit must carry its canonical tokens into `ja` in the same change. The
+week the deferral ran cost 97 tokens across 17 prompt leaves: schema keys,
+enum values and JSON shape fragments that a translation pass had rendered into
+Japanese or dropped, and whole paragraphs `ja` had never had at all -- storeys
+and what the walls give back, the cell grid, the errand that carries word, the
+detail a body perceives on a thing, and the opening the Story Planner now runs
+before the first beat. A Japanese Director emits routable JSON again.
+
+Two things worth knowing about that work. A token is never translated: `look`,
+`left`, `where`, `spent`, `proven`, `at`, `purpose` and `bare` are field names
+and enum values that happen to be ordinary English words, and every one of them
+had been translated. And the Japanese narrator has adopted its first section
+marker, so the dialogue-placeholder block is now loaded only on beats that
+carry dialogue, exactly as English does; the rest of that sheet is still one
+core section.
+
+### Wall-adjacent cells are not restricted in any way (2026-09-16)
+
+Two rules kept fixtures off the ring of cells against a room's walls, and
+both are gone on the owner's ruling. A fixture with a bearing was pushed one
+pace inward whenever it carried any height other than `floor`, to leave a
+lane a body could take cover in; a fixture with no bearing was seeded into
+the interior only, so it could never reach the ring at all. Between them the
+outer ring of every room was reserved for doorways.
+
+Measured on chat 127, a four-pace-square reception room: four of its five
+authored fixtures stood off the walls their own descriptions name, the west
+and south walls held nothing, and the remaining two-by-two middle had to
+hold five fixtures, so the door shared a cell with the table and the bench
+with the chair. The corpus hid it -- 918 of 930 authored anchors predate the
+height field and normalise to `floor`, so only 8 had ever been pushed -- and
+every story authored under the current card would have been chat 127.
+
+The lane is now AUTHORED, not inferred: an anchor says `lane` when it is
+something you work behind, which a bar, a shop counter and a screen with a
+blind side are, and a bench, a shelf and a hearth are not. Height was the
+wrong proxy, because a bench and a counter are both waist-high and only one
+of them has a behind. Cover still works where a lane is authored, and where
+one is not it falls through to the room side, which is the right answer: a
+thing flat against a wall has no behind to hide in. 155 free-standing
+anchors move in the live corpus, and every wall-bearing anchor now touches
+its wall.
+
+### A failed quick start can be retried again (2026-09-16)
+
+A greeting quick start that died AFTER writing turn 0 could never be
+resumed: the retry re-inserted the same row and answered 500 with `UNIQUE
+constraint failed: turns.chat_id, turns.idx`. Every other stage of the
+resume path asks the chat whether its own work is already there; the turn
+insert was the one that did not, so the failure kept so the story could be
+resumed was the failure that made resuming impossible. Measured on chat 128,
+which had turn 0 written and one stage saved. The row is reused now, and the
+pipeline restores and re-runs what is stale, which it already knew how to
+do.
+
+### Glare is gone (2026-09-16)
+
+The light field's glare cap -- a `lit` source within two cells of the
+observer's front cone, with the target beyond it, capping sight at `shapes`
+-- is removed outright, with its two constants and its `glare` cause. Owner's
+ruling: light that falls on a thing shows it, and a source between two faces
+does not hide either one's detail short of something no fiction here has
+authored. Measured over every checkpoint of chats 60-126 before the cut:
+**5 firings, all one wall sconce** stationed at the bench its observer sat
+on (chat 126, turns 2-6 -- a guest at arm's reach became "an indistinct
+figure"), and **0** on a case a reader would accept. Raising the threshold to
+`bright` would have fired 0 times on the corpus and dazzled every occupant
+of a bright room, since a bright room is lit by bright fixtures; so the rule
+is gone, not weakened. `tests/test_light_field.
+test_a_lamp_held_in_your_face_costs_nothing` pins the rule's own strongest
+fixture at `full`. `DESIGN_LIGHT_FIELD.md` § 4b carries the retraction.
+
+### A room the opening does not see is a stub (2026-09-16)
+
+Chat 126's opening wrote the parlor's back room, which nobody had seen, as a
+described room: a placeholder desc ("not currently visible from the
+reception parlor"), a guessed `light: dim`, no anchors. Nothing in the
+engine could tell that from a description, so when the door opened and the
+player walked in the spatial hand was handed moves and nothing else, the
+placeholder rendered verbatim into every view, the guessed light told the
+narrator sight was "degraded: dim light -- shapes, not detail", and the
+narrator invented a table. The establish sheet now says A ROOM THE OPENING
+DOES NOT SEE IS A STUB: `planned: true`, a `purpose`, exits, and no desc,
+light or anchors -- the registry's own stub shape -- and `RoomDef` declares
+the three keys, so the first beat that enters or looks into it is briefed
+and furnishes it (`tests/test_opening_room_stubs.py`).
+
+### The opening is planned before the Director runs (2026-09-16)
+
+Both launches -- a scenario chat's first turn and the greeting quick start
+-- now run the Story Planner once before the first turn row exists, in a new
+`opening` regime: an engine-minted mandate covering `plan_rooms`, a new
+`place_at_opening` operation and `director_note`, expiring with turn 0; ten
+steps, one pass, questions dropped rather than asked, and no
+`request_location` -- **a charter is an option the player takes on the
+launch screen, never one the planner assumes** (owner). The package it
+publishes is at turn -1, which turn 0 sees; the establish stage reads
+`opening_placements`, furnishes those rooms as the plan's, and moves a placed
+body the Director put elsewhere back, with a warning. The string match on
+planned names is now the fallback. Chat 126 is the measured case: its Room
+drafted the parlor at turn -1 in 21 calls, asked for a charter grant nobody
+answered, and never published. `docs/design/DESIGN_OPENING_PLAN.md`,
+`tests/test_opening_plan.py`.
+
+### The opening reads the hands' place vocabulary (2026-09-16)
+
+`director_establish` had drifted 23 rule headings behind the spatial hand
+(the same opening wrote every anchor without a height). The ten place
+paragraphs -- size, shape, light, quiet, bearings, insides, anchors and
+their heights, storeys, surfaces -- are now one fragment,
+`room_vocabulary.txt`, that the rooms chunk and the establish sheet embed by
+reference, en and ja; the establish sheet also gains the page rule for the
+greeting quick start (the passage is on the page verbatim; the scene fits
+its words) and the hands' shape for quiet, surface, storeys, anchor opacity
+and station cover/cell. The Japanese sheet carries the vocabulary and not
+the new English clauses (english-first mandate). The fan-out of the opening
+-- the destination -- is filed as `UNBUILT_PIPELINE.md` § 1.163; the doorway
+cone's cell blindness, found in the same chat, as `UNBUILT_WORLD.md`
+§ 1.162.
+
 ## alpha 9.10.2 — The latch was narrower than the answer
 
 Three audit workflows against two stated conventions: ask the model broad

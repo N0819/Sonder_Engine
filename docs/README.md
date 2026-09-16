@@ -142,6 +142,7 @@ they answer different questions about it:
   the three above as sources.
 - [`DESIGN_CROWDS.md`](design/DESIGN_CROWDS.md) — crowd blobs: one row with many
   people in it. Built 2026-08-10; §7a records what the building changed.
+- [`DESIGN_OPENING_PLAN.md`](design/DESIGN_OPENING_PLAN.md) — the opening is planned before the Director runs: the Story Planner's `opening` regime on both launches, the engine-minted mandate, `place_at_opening`, and the four owner decisions of 2026-09-16 (no questions, a hard budget, rooms only with a charter as an option, the planner picks the room).
 - [`DESIGN_WRITERS_ROOM_PLAN.md`](design/DESIGN_WRITERS_ROOM_PLAN.md) — the
   current plan for the Writers' Room (2026-09-03): the plan / render /
   simulate division of labour, what already landed that the room stands

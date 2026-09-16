@@ -2320,6 +2320,64 @@ def _apply_director_note(cid, frame_id, op, turn_idx):
     return {"delivered_from_turn": int(turn_idx or 0) + 1}
 
 
+# -- place_at_opening ---------------------------------------------------------
+#
+# WHERE A PRESENT BODY STANDS WHEN THE STORY OPENS (`docs/design/
+# DESIGN_OPENING_PLAN.md`). The opening plan names the room each present
+# body -- the player, an attached cast member -- is in before the Director
+# runs, so the establish stage furnishes a room the plan holds instead of
+# guessing one from the passage's spelling. Not `arrival`: that moves charter
+# bodies and planned entities through charter surgery, and the player and
+# the cast are neither. What lands is the `opening_placements` row and
+# nothing else, because where a body stands in the SCENE is the establish
+# stage's to write.
+
+def _shape_place_at_opening(op):
+    who = _text(op.get("who"), 160)
+    if not who:
+        raise ValueError("place_at_opening names who stands there: the "
+                         "player or an attached cast member, by name")
+    room = _text(op.get("room"), 120)
+    if not room:
+        raise ValueError("place_at_opening names the room they stand in")
+    return {"who": who, "room": room, "at": _text(op.get("at"), 160)}
+
+
+def _present_names(world):
+    from story.opening_plan import present_bodies
+    try:
+        return present_bodies(int(world["chat"]["id"]))
+    except Exception:
+        return []
+
+
+def _preview_place_at_opening(cid, frame_id, op, world):
+    errors = []
+    if not _room_known(world, op["room"]):
+        errors.append("placed at %r, which exists nowhere and this package "
+                      "does not plant" % op["room"])
+    if op["room"] in (world.get("containment") or {}):
+        errors.append("placed at %r, the inside of a body; where the world "
+                      "puts a body is the Director's" % op["room"])
+    names = _present_names(world)
+    folded = {n.casefold(): n for n in names}
+    if op["who"].casefold() not in folded:
+        errors.append("nobody present is called %r; the opening places the "
+                      "player and the attached cast (%s) and nobody else"
+                      % (op["who"], ", ".join(names) or "nobody"))
+    return {"changes": [{"kind": "placed_at_opening", "who": op["who"],
+                         "room": op["room"]}],
+            "errors": errors, "warnings": []}
+
+
+def _apply_place_at_opening(cid, frame_id, op, turn_idx):
+    from story.opening_plan import present_bodies, record_placement
+    names = {n.casefold(): n for n in present_bodies(cid)}
+    who = names.get(op["who"].casefold(), op["who"])
+    return {"placed": record_placement(cid, frame_id, who, op["room"],
+                                       op.get("at") or "")}
+
+
 # -- the nudge toolkit: surgeries as kinds -------------------------------------
 
 def _surgery_shape(kind, fields):
@@ -2511,6 +2569,11 @@ OPERATIONS = {
                       "apply": _apply_director_note, "long": False,
                       "seam": "agents.director payload author_notes "
                               "(read by the Director's stages and hands)"},
+    "place_at_opening": {"shape": _shape_place_at_opening,
+                         "preview": _preview_place_at_opening,
+                         "apply": _apply_place_at_opening, "long": False,
+                         "seam": "story.opening_plan.record_placement -> "
+                                 "agents.director payload opening_placements"},
     # The nudge toolkit: author surgery on an institution (v2 § 9.1).
     **{kind: {"shape": _surgery_shape(kind, fields),
               "preview": _surgery_preview_for(kind),
@@ -2650,6 +2713,9 @@ OPERATION_FIELDS = {
     "director_note": {"text": "what the plan MEANS, for the Director alone (prose, at most DIRECTOR_NOTE_CHARS characters): what a placed thing is and is for, never how a character will take it -- a mind's conclusion is its own",
                       "rooms?": "[<room_id>] -- applies while a cast member is in or beside one of them; absent = everywhere",
                       "clock?": "package clock id (applies once due)"},
+    "place_at_opening": {"who": "the player or an attached cast member, by name",
+                         "room": "<room_id> they stand in when the story opens -- a room the world holds or this package plants",
+                         "at?": "where in the room, in a phrase (the establish stage reads it as a station hint)"},
     "move_body": {"charter": "charter key", "body": "body key", "room": "<room_id>",
                   "berth?": "true to make it their home too", "clock?": ""},
     "assign_post": {"charter": "charter key", "body": "body key", "post": "post key",
@@ -2707,6 +2773,7 @@ ROOM_FIELDS = {
     "summons": ("place",),
     "scheduled_consequence": ("room",),
     "director_note": ("rooms",),
+    "place_at_opening": ("room",),
     "move_body": ("room",),
     "plant_claim": ("place",),
     "region_event": ("footprint.rooms", "footprint.epicentre"),
@@ -3076,10 +3143,25 @@ def preview_package(cid, uid, *, frame_id=None):
     pkg = _require(cid, uid, frame_id)
     world = _world_snapshot(cid, frame_id)
     changes, errors, warnings = [], [], []
+    # A PACKAGE LANDS ALL AT ONCE, SO ITS ROOMS EXIST FOR ALL OF IT. Every
+    # room any `plan_rooms` in this draft plants is known before the first
+    # operation is previewed, because `publish_package` applies the whole
+    # list in ONE transaction and nothing there cares which order the
+    # author drafted them in. This read used to teach itself only from
+    # `plan_rooms` ops it had already walked past, which made a placement
+    # drafted before the rooms it names unfixable by anything except
+    # re-drafting it lower down -- and said so in the words "exists
+    # nowhere and this package does not plant", which is not what was
+    # wrong. Measured on chat 131 (2026-09-16): the opening planner drafted
+    # two `place_at_opening` at `reception`, then a `plan_rooms` planting
+    # `reception`, and spent seventeen calls and sixteen steps drafting,
+    # removing and re-drafting rooms it had already planted correctly,
+    # then stopped without publishing a package that was right all along.
+    for op in pkg["operations"]:
+        if op["op"] == "plan_rooms":
+            world["planned"].update(op.get("rooms") or {})
     for i, op in enumerate(pkg["operations"]):
         result = OPERATIONS[op["op"]]["preview"](cid, frame_id, op, world)
-        # Operations see what EARLIER operations in the package establish:
-        # a plan placed in a room the package plants is placed somewhere.
         if op["op"] == "plan_rooms" and not result["errors"]:
             world["planned"].update(op["rooms"])
         for change in result["changes"]:

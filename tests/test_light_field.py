@@ -10,8 +10,8 @@ the lamp's rays -- decayed, shaped, shadowed, bounced, floored, quantised
 LAST -- and the synthetic cases of `docs/design/DESIGN_LIGHT_FIELD.md`
 § 9.3 each hold: rings round a source, a cone against its side, a candle
 behind a counter, a ceiling light over it, a doorway wedge, bounce in the
-corners. Plus glare, the flicker hash, the schema round trip through the
-merge, and the commit-time notice for a source that fails.
+corners. Plus the flicker hash, the schema round trip through the merge,
+the commit-time notice for a source that fails, and the absence of glare.
 
 Every import goes through the `world.spatial` facade; the sibling is named
 only where a test PATCHES it, which the facade rule permits.
@@ -30,11 +30,11 @@ from world import spatial
 from world.spatial import (
     BEAT_KEY, BOUNCE, BOUNCE_PASSES_CAP, BOUNCE_REACH, BRIGHT_T,
     CONE_GAIN, CONE_HALF_ANGLE, CONE_PENUMBRA, DARK_THRESHOLD, DIM_T, FAIL_RATE,
-    FLICKER_RATE, FLOOR_SPILL, GLARE_CELLS, GLARE_POWER, LIGHT_LEVELS, LIGHT_SHAPES,
+    FLICKER_RATE, FLOOR_SPILL, LIGHT_LEVELS, LIGHT_SHAPES,
     LIT_T, POWER, SIGHT_LEVELS, STEADINESS, _LIGHT_SIGHT, _ENTITY_DEFAULT_FIELDS,
     _ENTITY_STRUCTURAL_FIELDS, body_cell, compute_light_field, effective_light,
     emitted_level, failing_sources_out, fails_on, field_rows, flickers_on,
-    glare_between, light_at, light_field, light_geometry_exists,
+    light_at, light_field, light_geometry_exists,
     merge_scene_with_diff, quantise, reach_radius, sight_level,
     spatial_rel_between, visual_level_between,
 )
@@ -236,13 +236,15 @@ def test_pointed_at_an_anchor_resolves_through_its_cell():
 # ---------------------------------------------------------------------------
 
 def counter_room(source_height):
-    """A waist-high counter runs along the north wall one pace off it. The
-    candle stands at the counter on the room side; H stands at it on the
-    wall side (`cover`)."""
+    """A waist-high counter keeps its lane along the north wall. The candle
+    stands at the counter on the room side; H stands at it on the wall side
+    (`cover`). The lane is authored since 2026-09-16 rather than inferred
+    from the counter's height (`spatial_fov.DEFAULT_LANE`); a counter you
+    serve from behind is exactly the fixture that has one."""
     return _scene(
         {"r": _room("the Shop", anchors={
             "counter": {"desc": "the counter", "dir": "n", "footprint": "run",
-                        "height": "waist"}})},
+                        "height": "waist", "lane": True}})},
         {"candle": "r", "H": "r", "P": "r"},
         entities={"candle": {"name": "the candle", "light_source": "lit",
                              "light_height": source_height}},
@@ -481,8 +483,8 @@ def test_the_ladders_and_the_light_to_sight_table_are_untouched():
     # `docs/experiments/PLAY_2026_09_05C_quiet.md`): dim withholds detail,
     # not conduct, so the word an author means by "indoors, late afternoon"
     # stopped grading to the silhouette a barrier leaves. `shapes` is
-    # untouched and is still what the caps, the crossings and the glare
-    # answer; `dark` and the two lit words are exactly what they were.
+    # untouched and is still what the caps and the crossings answer;
+    # `dark` and the two lit words are exactly what they were.
     assert SIGHT_LEVELS == ("none", "shapes", "conduct", "full")
     assert _LIGHT_SIGHT == {"dark": "none", "dim": "conduct", "lit": "full",
                             "bright": "full"}
@@ -496,8 +498,11 @@ def test_the_ladders_and_the_light_to_sight_table_are_untouched():
     assert POWER["dark"] < DIM_T <= POWER["dim"] < LIT_T <= POWER["lit"] \
         < BRIGHT_T <= POWER["bright"]
     assert (DIM_T, LIT_T, BRIGHT_T) == (0.5, 2.5, 8.0) and DARK_THRESHOLD == DIM_T
-    assert (BOUNCE_REACH, BOUNCE_PASSES_CAP, GLARE_CELLS) == (3, 4, 2)
-    assert GLARE_POWER == POWER["lit"] and (FLICKER_RATE, FAIL_RATE) == (4, 12)
+    assert (BOUNCE_REACH, BOUNCE_PASSES_CAP) == (3, 4)
+    assert (FLICKER_RATE, FAIL_RATE) == (4, 12)
+    # The glare pair (GLARE_POWER, GLARE_CELLS) left with the rule, 2026-09-16.
+    assert not hasattr(spatial, "GLARE_POWER")
+    assert not hasattr(spatial, "GLARE_CELLS")
 
 
 def test_light_at_speaks_the_ladder_and_reads_the_body_cell():
@@ -605,7 +610,6 @@ def test_a_scene_without_geometry_composes_byte_identically(monkeypatch, sc):
     import world.spatial_light_field as sibling   # patched, not called
     monkeypatch.setattr(sibling, "field_light_at", lambda scene, name: None)
     monkeypatch.setattr(sibling, "field_effective_light", lambda scene, rid: None)
-    monkeypatch.setattr(sibling, "glare_between", lambda scene, a, b: False)
     off = _compose(sc)
     assert live == off
 
@@ -622,12 +626,13 @@ def test_a_room_with_geometry_and_no_source_reads_its_own_light():
 
 
 # ---------------------------------------------------------------------------
-# Glare
+# There is no glare
 # ---------------------------------------------------------------------------
 
-def glare_scene(*, lit=True, facing=None, level="lit"):
+def lamp_in_face_scene(*, lit=True, facing=None, level="lit"):
     """P at the table, facing Q, who stands beside P holding a lamp: the
-    light is in P's eyes and Q is behind it."""
+    light is in P's eyes and Q is behind it. Until 2026-09-16 this was the
+    glare rule's own fixture and graded P's sight of Q at `shapes`."""
     sc = _scene({"r": _room("the Hall", light="lit",
                             anchors={"table": {"desc": "a table"}})},
                 {"P": "r", "Q": "r", "lamp": "r"},
@@ -640,30 +645,30 @@ def glare_scene(*, lit=True, facing=None, level="lit"):
     return sc
 
 
-def test_a_lamp_held_in_your_face_caps_sight_at_shapes():
-    sc = glare_scene()
-    assert glare_between(sc, "P", "Q")
+def test_a_lamp_held_in_your_face_costs_nothing():
+    """THE RULE IS GONE, NOT WEAKENED (owner ruling 2026-09-16). Light that
+    falls on a thing shows it; a source between two faces obscures nothing
+    short of something no story here has authored. Measured before the cut
+    over every checkpoint of chats 60-126: five firings, all one wall sconce
+    beside the bench its observer sat on (chat 126, turns 2-6, "An
+    indistinct figure says"), and none on a case a reader would accept.
+
+    Pinned on the rule's own fixture: the strongest case it was written for
+    -- a lit lamp held up between two faces, one pace apart, in the
+    observer's front cone -- grades `full` on both carriers, the relation
+    carries no `glare` stamp, and a stray stamp on a relation is ignored."""
+    sc = lamp_in_face_scene()
     rel = spatial_rel_between(sc, "P", "Q")
-    assert rel.get("glare") is True and sight_level(rel) == "shapes"
-    assert visual_level_between(sc, "P", "Q") == "shapes"
-    # The holder, looking out past their own lamp, is not dazzled by it.
-    assert not glare_between(sc, "Q", "P")
-
-
-def test_glare_needs_the_light_on_the_power_and_the_facing():
-    assert not glare_between(glare_scene(lit=False), "P", "Q")
-    assert visual_level_between(glare_scene(lit=False), "P", "Q") == "full"
-    assert not glare_between(glare_scene(level="dim"), "P", "Q")
-    # Facing away: the source is not in the front cone.
-    sc = glare_scene()
-    p, q = body_cell(sc, "P"), body_cell(sc, "Q")
-    sc["orientation"]["P"] = {"facing": spatial.opposite_bearing(
-        spatial.bearing_between(p, q))}
-    assert not glare_between(sc, "P", "Q")
-    # No station for the observer: no cell, no evidence, no glare.
-    sc = glare_scene()
-    del sc["stations"]["P"]
-    assert not glare_between(sc, "P", "Q")
+    assert "glare" not in rel
+    assert sight_level(rel) == "full"
+    assert visual_level_between(sc, "P", "Q") == "full"
+    assert visual_level_between(sc, "Q", "P") == "full"
+    # A relation stamped by an older reader grades exactly as an unstamped
+    # one: nothing in the sight ladder reads the word any more.
+    assert sight_level({**rel, "glare": True}) == "full"
+    assert spatial.sight_block({**rel, "glare": True}) == ""
+    assert spatial.sight_verdict({**rel, "glare": True}) == ("full", "")
+    assert not hasattr(spatial, "glare_between")
 
 
 # ---------------------------------------------------------------------------

@@ -284,9 +284,9 @@ def _quote_count(text):
     return str(text).count('"') // 2
 
 
-def test_the_cap_does_not_weld_two_quoted_lines_into_one_delivery():
+def test_every_delivery_survives_the_recorded_nine_span_scene():
     out = composer.observations_from_render("player", _turn29_rendered())
-    assert len(out) <= composer._MAX_OBSERVATION_ATOMS
+    assert len(out) == len(RUN98_TURN29)
     welded = [o for o in out
               if _quote_count((o.get("observed") or {}).get("text") or "") > 1]
     assert not welded, (
@@ -332,32 +332,16 @@ def _welds_two_mouths(out):
     return None
 
 
-def test_two_mouths_do_not_weld_while_a_cheaper_merge_remains():
-    """The rank makes the two-mouth weld the LAST resort. It cannot make it
-    impossible -- nine alternating quotes against a cap of eight leave no
-    other pair to spend -- so the contract is that it is never spent while
-    something cheaper is on the table. Regression guard for the blanking:
-    the merge that folds across kinds erases `kind` and `speaker`, so a rank
-    reading those goes blind after the first merge and welds two mouths with
-    silent atoms still unspent.
-    """
-    cap = composer._MAX_OBSERVATION_ATOMS
-    for extra in (1, 2, 4, 8):
+def test_two_mouths_keep_separate_deliveries_among_standing_details():
+    for silent in (1, 2, 4, 8):
         out = composer.observations_from_render(
-            "player", _two_mouths(cap, silent=extra))
-        assert len(out) <= cap
-        welded = _welds_two_mouths(out)
-        assert welded is None, (
-            "%d silent atoms were available and the cap welded two mouths "
-            "anyway: %r" % (extra, welded))
+            "player", _two_mouths(8, silent=silent))
+        assert len(out) == 8 + silent
+        assert _welds_two_mouths(out) is None
 
 
-def test_the_forced_weld_is_still_bounded_when_nothing_cheaper_exists():
-    """All-speech, alternating, over the cap: a weld is arithmetic. It must
-    still stop at the minimum the cap requires rather than cascading."""
-    cap = composer._MAX_OBSERVATION_ATOMS
-    out = composer.observations_from_render("player", _two_mouths(cap + 1))
-    assert len(out) == cap
-    multi = [e for e in out
-             if _quote_count(str((e.get("observed") or {}).get("text") or "")) > 1]
-    assert len(multi) == 1, "one merge was required; %d groups hold two quotes" % len(multi)
+def test_alternating_quotes_never_weld_when_every_row_is_dialogue():
+    out = composer.observations_from_render("player", _two_mouths(40))
+    assert len(out) == 40
+    assert all(_quote_count(e["observed"]["text"]) == 1 for e in out)
+    assert _welds_two_mouths(out) is None

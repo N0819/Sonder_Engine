@@ -63,11 +63,15 @@ def scene(rooms, positions, stations=None, entities=None, contained=None,
 
 
 def hall(*, geometry=True, extra=None):
-    """A large room: a waist-high counter running along the north wall one
-    pace off it, a lamp on the west wall, a window east, a hearth south."""
+    """A large room: a waist-high counter running along the north wall and
+    keeping its lane, a lamp on the west wall, a window east, a hearth
+    south. The lane is authored since 2026-09-16 (`spatial_fov.DEFAULT_LANE`)
+    rather than inferred from the counter's height; this room's whole
+    subject is a body standing BEHIND the counter, so it is a fixture that
+    has a behind."""
     counter = {"desc": "the counter", "dir": "n"}
     if geometry:
-        counter.update({"footprint": "run", "height": "waist"})
+        counter.update({"footprint": "run", "height": "waist", "lane": True})
     anchors = {"counter": counter,
                "west": {"desc": "the west wall lamp", "dir": "w"},
                "east": {"desc": "the east window", "dir": "e"},
@@ -312,7 +316,8 @@ def test_a_counter_is_crossed_and_a_partition_is_gone_round():
     assert levels(behind, "S", "L")["normal"] == "full"
     # A body standing behind a waist counter four paces off still converses.
     kitchen = {"kitchen": room("large", {
-        "counter": {"desc": "the counter", "dir": "n", "footprint": "run",
+        "counter": {"desc": "the counter", "dir": "n", "lane": True,
+                    "footprint": "run",
                     "height": "waist"},
         "table": {"desc": "the table", "cell": [3, 2], "footprint": "large",
                   "height": "waist"},

@@ -9,7 +9,7 @@ import re
 from pydantic import BaseModel, Field, StrictInt, ValidationError, validator
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, NamedTuple, Optional, Union, get_args, get_origin
+from typing import Any, Literal, NamedTuple, Optional, Union, get_args, get_origin
 
 
 def _note_drop(message):
@@ -1639,6 +1639,20 @@ class RoomDef(LenientModel):
     # as "enclosed" gets no weather at all. Absent falls back to
     # weather.room_exposure's keyword derivation, never to "it rains here".
     exposure: Optional[str] = None
+    # A STUB THE OPENING DOES NOT SEE (2026-09-16). `planned: true` beside an
+    # empty `desc` marks a room written from outside -- the far side of a
+    # shut door, the back room a sign names -- so `world/structure.
+    # is_planned_stub` reads it as undeveloped and the first beat that enters
+    # or looks into it is handed a brief (`planned_room_brief`: `purpose` and
+    # the exits) and furnishes it. Before this the opening had no way to say
+    # "there is a room here and I have not seen it": chat 126's establish
+    # wrote a placeholder desc and a guessed `light: dim` for a treatment
+    # room, the desc rendered verbatim into every view for nine turns, and
+    # nothing ever asked for the real room. The registry's planted stubs
+    # carry the same three keys (`structure.skeleton_rooms`).
+    planned: Optional[bool] = None
+    purpose: Optional[str] = None
+    access: Optional[str] = None
     # HOW QUIET THE PLACE IS OF ITSELF: hushed | dead
     # (`world.spatial.QUIET_SCALE`). Declared for the same reason `light`
     # and `exposure` are -- the validation round-trip drops what it does not
@@ -1914,6 +1928,14 @@ class Observation(LenientModel):
     channel: str = "mixed"
     fidelity: str = "rendered"
     observed: dict[str, Any] = Field(default_factory=dict)
+    actor: str = ""
+    kind: str = ""
+    standing: bool = False
+    # Empty phase retains archived standing/event semantics. A noticed
+    # change has no invented occurrence time; context is undivided legacy
+    # prose. These are engine-produced observations, not model output.
+    phase: Literal["", "event", "change", "state", "context"] = ""
+    order: int | None = None
     # These three ARE composer.OBSERVATION_DEFAULTS, and must stay so. The
     # comment above says absent means the default; it said that while the two
     # sides disagreed on every axis (0.5/0.0/0.5 here against 0.35/0.1/0.15
@@ -3584,7 +3606,8 @@ class CharacterActiveState(LenientModel):
     wants: list[dict] = Field(default_factory=list)
     enacted_want: Optional[int] = None
     suppressed_want: Optional[int] = None
-    active_concerns: list[str] = Field(default_factory=list)
+    # Legacy omission preserves the prior concerns; an explicit [] clears.
+    active_concerns: Optional[list[str]] = None
     stress: StressState = Field(default_factory=StressState)
     hedonic: HedonicState = Field(default_factory=HedonicState)
 
@@ -3710,6 +3733,8 @@ class ResponseCandidate(LenientModel):
 
 class BeliefUpdate(LenientModel):
     belief: str
+    # Only targeted revise replaces an existing conviction in place.
+    target_belief: str = ""
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     evidence: list[EvidenceRef] = Field(default_factory=list)
 
@@ -3757,7 +3782,7 @@ class InteractionControl(LenientModel):
 class CharacterKernelWant(LenientModel):
     """One live pull, named locally for this call's decision join."""
     id: str
-    want: str
+    want: str = Field(max_length=240)
     urgency: float = Field(default=0.5, ge=0.0, le=1.0)
     serves: str = "situational"
     conflicts_with: Optional[str] = None
@@ -3775,8 +3800,8 @@ class CharacterKernelDecision(LenientModel):
     # in the first database replay of the kernel.
     enact: str
     suppress: str
-    hinge: str
-    uncertainty: str
+    hinge: str = Field(max_length=240)
+    uncertainty: str = Field(max_length=240)
 
     if _PYDANTIC_V2:
         from pydantic import model_validator as _model_validator
@@ -3794,7 +3819,8 @@ class CharacterKernelActiveState(LenientModel):
     # The object itself is required as a structural checksum.  Values may be
     # empty, but a brace slip cannot move wants/decision under ``affect`` and
     # then pass merely because every missing sibling had a default.
-    mood: Any
+    # Legacy alias; current models supply the surface label once in affect.
+    mood: Any = ""
     affect: dict
     wants: list[CharacterKernelWant]
     active_concerns: list[str]
@@ -3868,6 +3894,39 @@ class CharacterKernelDriveUpdate(LenientModel):
     because: str
 
 
+class CharacterKernelBeliefEvidence(EvidenceRef):
+    """A live belief update must cite an observation or memory handle."""
+    event_id: str = Field(..., min_length=1)
+
+
+class CharacterKernelBeliefUpdate(BeliefUpdate):
+    """Complete current learning operation; legacy belief updates stay lenient."""
+    operation: Literal["reinforce", "weaken", "contradict", "revise"] = Field(...)
+    target_belief: str = Field(...)
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    evidence: list[CharacterKernelBeliefEvidence] = Field(
+        ..., **({"min_length": 1} if _PYDANTIC_V2 else {"min_items": 1}))
+
+    @validator("confidence", pre=True, allow_reuse=True)
+    def _confidence(cls, value):
+        # The inherited legacy validator treats null as the default. A live
+        # update has no default confidence: the model must make that judgment.
+        if value is None:
+            raise ValueError("belief update requires a confidence")
+        return _clamp_float(value, 0.0, 1.0, 0.5)
+
+    @validator("operation", allow_reuse=True)
+    def _target_for_operation(cls, value, values):
+        # Inherited field order puts target_belief before operation, so this
+        # sees its validated value under either supported Pydantic major.
+        target = str(values.get("target_belief") or "").strip()
+        if value == "revise" and not target:
+            raise ValueError("revise requires a nonempty target_belief")
+        if value != "revise" and target:
+            raise ValueError("target_belief must be empty unless operation is revise")
+        return value
+
+
 class CharacterKernelMemoryUpdates(LenientModel):
     keep: list[RememberLine]
     reinterpret: list[MemoryDispute]
@@ -3882,7 +3941,7 @@ class CharacterKernelUpdates(LenientModel):
     intentions: list[CharacterKernelIntentionUpdate]
     projects: list[CharacterKernelProjectUpdate]
     drive: Optional[CharacterKernelDriveUpdate] = Field(...)
-    beliefs: list[BeliefUpdate]
+    beliefs: list[CharacterKernelBeliefUpdate]
     associations: list[AssociationUpdate]
     people: list[MindHypothesis]
     relationships: list[RelationshipUpdate]
@@ -3922,6 +3981,18 @@ class CharacterKernelOutput(LenientModel):
         _canonicalize = _root_validator(pre=True, allow_reuse=True)(
             lambda cls, value: _canonical_character_kernel_output(value))
 
+class CharacterDecisionContinuity(LenientModel):
+    """One private choice and its reason, never an action outcome."""
+    chosen: str = ""
+    suppressed: str = ""
+    why: str = ""
+    uncertainty: str = ""
+
+    _bounded = validator(
+        "chosen", "suppressed", "why", "uncertainty", pre=True,
+        allow_reuse=True)(lambda cls, value: " ".join(str(value or "").split())[:240])
+
+
 class CharacterOutput(LenientModel):
     observations_used: list[EvidenceRef] = Field(default_factory=list)
     present_evidence_used: list[EvidenceRef] = Field(default_factory=list)
@@ -3951,6 +4022,7 @@ class CharacterOutput(LenientModel):
     action: Optional[dict] = None
     actions: list[dict] = Field(default_factory=list)
     active_state: Optional[CharacterActiveState] = None
+    decision_continuity: Optional[CharacterDecisionContinuity] = None
     # Interior depth (all optional; the deterministic floors in affect.py apply
     # at commit). Kept as permissive dicts/lists -- affect.py validates/normalizes.
     intent_ops: list[dict] = Field(default_factory=list)
@@ -5228,6 +5300,45 @@ def _uncross_concealed_speech(result, flow):
     return notes
 
 
+def _lift_swallowed_siblings(step_key, result, *containers):
+    """A dict-of-records channel that swallowed a SIBLING top-level field.
+
+    The same failure `_unwrap_envelope` repairs, one level in: the content
+    is right and its nesting is wrong. Measured on chat 132's opening
+    (2026-09-16), which died with `entities.contact_ops.name: Field
+    required; entities.contact_action_ops.name: Field required;
+    entities.substance_ops.name: Field required` -- the model had written
+    three top-level channels inside `entities`, so each was validated as an
+    entity record and refused for lacking a name. The whole opening was
+    thrown away, the quick start answered 422, and the complaint named a
+    missing `name` rather than the misplacement.
+
+    LIFTED ONLY WHEN IT CANNOT MEAN ANYTHING ELSE, on the same three tests
+    the envelope uses. The key must name a field this step's own schema
+    declares -- a closed set the engine owns, never a guess about wording.
+    The value must be a LIST, where every record of a `rooms` or `entities`
+    map is an object, so a thing legitimately keyed by that name cannot be
+    caught. And the top-level field must be absent or empty, so a real
+    answer is never overwritten by a stray one. Anything else is a genuine
+    disagreement and belongs in the error.
+    """
+    model = SCHEMA_MAP.get(step_key)
+    if model is None:
+        return
+    fields = set(_fields(model))
+    for container in containers:
+        holder = result.get(container)
+        if not isinstance(holder, dict):
+            continue
+        for key in [k for k in holder if str(k) in fields and k != container]:
+            value = holder[key]
+            if not isinstance(value, list):
+                continue
+            if result.get(key) not in (None, [], {}, ""):
+                continue
+            result[key] = holder.pop(key)
+
+
 def preprocess_llm_output(step_key: str, raw: dict) -> dict:
     if not isinstance(raw, dict):
         return {}
@@ -5356,6 +5467,7 @@ def preprocess_llm_output(step_key: str, raw: dict) -> dict:
             _fill_entity_names(result)
 
     if step_key == "director_establish":
+        _lift_swallowed_siblings(step_key, result, "entities", "rooms")
         # Establishment has no `state_diff` field: its channels ARE the
         # output, so the diff-shaped half of the preparation below runs on
         # the top-level object. The sibling hoist and the `time`/`conditions`
@@ -5836,7 +5948,7 @@ OUTPUT_EXAMPLES = {
                 "goal_impacts": [],
             },
             "active": {
-                "mood": "", "affect": {}, "wants": [],
+                "affect": {}, "wants": [],
                 "active_concerns": [], "stress": {}, "hedonic": {},
             },
             "decision": {

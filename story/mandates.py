@@ -99,6 +99,12 @@ MANDATE_CAPABILITIES = (
     # is which live thing, what a consequence is for); read into the
     # Director payload alone, never a mind's.
     "director_note",
+    # WHERE A PRESENT BODY STANDS AT THE OPENING (`plot_packages.
+    # place_at_opening`, `docs/design/DESIGN_OPENING_PLAN.md`): the one
+    # capability the engine-minted opening mandate carries that nothing
+    # else does. It names the player or an attached cast member and a room
+    # the plan holds; the establish stage places the body there.
+    "place_at_opening",
     # The nudge toolkit: author surgery on an institution (v2 § 9.1).
     "move_body", "assign_post", "plant_claim", "adjust_stock", "arm_trigger",
     "charter_shock",

@@ -34,7 +34,7 @@ consumers with different needs:
   `standing_verdicts` against this observer's own previous ledger -- never
   against the objective scene, which is the shape that leaks -- and the
   changed half is marked `beat`, so those percepts reach the narrator as
-  numbered deliveries instead of wallpaper. An explicit look/examine intent
+  noticed changes without invented occurrence times. An explicit look/examine intent
   (``full_render=True``) re-renders the whole standing state on purpose.
 - ``memory`` -- `render_episode`: the salient delta, minted from the IR in
   first person, with typed entities. A percept list that is all unchanged
@@ -253,8 +253,8 @@ def _sense_graded(level, channel, senses):
 
     No `blocked_by` here: every builder in this module grades a level that
     came back from `visual_level_between`, which was handed the senses and
-    has already spent what the place did (A87) -- the dark has lifted and no
-    glare has been applied by the time the level arrives. The one reader that
+    has already spent what the place did (A87) -- the dark has lifted by the
+    time the level arrives. The one reader that
     grades a ROOM-level `sight_level` and needs the cause is
     `agents.common._delivery_ok`, and it calls `sense_adjusted` directly.
     """
@@ -3574,7 +3574,7 @@ def _presence_clause(p, *, brief=False, fresh=False):
             else _TIER_PHRASES.get(str(p.data.get("tier")),
                                    _TIER_PHRASES["default"]))
     if brief:
-        where = str(p.data.get("at") or "").strip()
+        where = _strip_sentence_ends(p.data.get("at"))
         return _en("presence_unchanged", label=p.source_label,
                    where=_en("presence_at_bare", at=where) if where else tier)
     side = p.data.get("side")
@@ -3588,7 +3588,7 @@ def _presence_clause(p, *, brief=False, fresh=False):
     # Where they are standing, when the scene knows and they are in this
     # room. It rides the tier rather than replacing it: "close by" is how
     # far, "at the hearth" is where, and a reader wants both.
-    at = str(p.data.get("at") or "").strip()
+    at = _strip_sentence_ends(p.data.get("at"))
     at_clause = _en("presence_at", at=at) if at else ""
     # Seen over something: name what, and how much of them shows. Plain
     # words -- "behind the counter, from the waist up" -- never a fraction.
@@ -4679,8 +4679,6 @@ def render_episode(percepts, *, prev_standing=frozenset(),
 _FIDELITY_AMBIGUITY = {"full": 0.15, "degraded": 0.5, "fragment": 0.7,
                        "trace": 0.8}
 
-_MAX_OBSERVATION_ATOMS = 8
-
 # What an observation says when it has nothing to say: the advisory axes'
 # resting values, and the two identity fields that repeat what the payload
 # structure already states. Measured over the stored corpus (1,692
@@ -4751,218 +4749,109 @@ def compact_observation(obs):
 
 
 def observations_from_render(pid, rendered):
-    """Project one rendered view into structured observations.
+    """Project each admitted rendered span into its own evidence row.
 
-    channel/suddenness/intensity/directed_at_self are KNOWN from the IR, not
-    cue-guessed. The invariant that survives from the prose-derivation era:
-    each observation's ``observed.text`` is a rendered sentence span, so the
-    second representation still cannot exceed the first -- both derive from
-    the same gated IR, and the text is byte-for-byte part of the view.
+    A delivery boundary is part of the evidence: merging two actions can
+    attach the second actor's conduct to the first, and merging quotes makes
+    a narrator read two deliveries as one. There is no row-count cap here.
+    Each sentence remains byte-for-byte within the observer's rendered view.
     """
     pid = str(pid)
-    atoms = []
-    for p, sentence in rendered.spans:
-        ambiguity = _FIDELITY_AMBIGUITY.get(p.fidelity, 0.15)
-        atoms.append({
-            "percept": p,
-            "channel": p.channel if p.channel in CHANNELS else "mixed",
-            # WHOSE DELIVERY, and WHETHER IT HAPPENED. Both are known from the
-            # IR and both were being thrown away here. `order_key is None` is
-            # standing state (the room, a pose, an appearance); an int is this
-            # beat's arrival order. `force` marks an appearance the engine has
-            # judged CHANGED this beat -- a garment gone, a mask down, a
-            # disguise dropped -- which is an event wearing a standing
-            # percept's shape.
-            "speaker": str(p.source_label or ""),
-            "kind": p.kind,
-            # A re-encounter is deliberately NOT excluded here: meeting
-            # someone again is standing state that became sayable again,
-            # not something that happened, so it stays reference and the
-            # narrator owes it nothing. Only an actual change promotes a
-            # standing percept to an obligation -- and `beat`, set by the
-            # renderer from this observer's own ledger, is what says one
-            # changed. `force` still counts because it is what a stage
-            # without a ledger (an opening view) has instead; the renderer
-            # never marks a percept it suppressed, so a forced-but-identical
-            # appearance is no longer in `spans` to be asked.
-            "standing": p.order_key is None and not p.data.get("force")
-            and not p.data.get("beat"),
-            "text": sentence,
-            "intensity": min(1.0, 0.35 + 0.4 * p.salience),
-            "suddenness": p.suddenness,
-            "ambiguity": ambiguity,
-            "directed_at_self": bool(
-                p.data.get("directed_at_self")
-                or p.channel == "interoception"),
-        })
-    # Merge consecutive atoms ONLY when their whole delivery verdict matches:
-    # channel AND fidelity class AND self-direction. Aggregation keyed on
-    # anything less can launder an information boundary -- a degraded atom
-    # folded into a full one would read as clearly perceived. When the cap
-    # later forces a merge across verdicts, the group degrades to the WEAKEST
-    # verdict present (max ambiguity, channel -> mixed), never the strongest.
-    #
-    # A DELIVERY BOUNDARY IS SUCH A BOUNDARY, and three more keys keep it.
-    # Two speakers welded into one entry is the exact shape the merged-speaker
-    # check exists to catch, and this function was MINTING it: measured over
-    # the 248 stored beats whose perception step carries a composer ledger --
-    # the ones the live projection wrote -- 46 entries across 39 beats (15.7%)
-    # carried two or more speakers' lines, every one of them `hearing`, which
-    # is this loop's signature rather than the cap's (a cap merge marks the
-    # channel `mixed`). The quotes inside stayed whole; what lied was the
-    # entry boundary, against a sheet that tells the narrator each numbered
-    # entry is a separate delivery.
-    #
-    # SAME SPEAKER, CONSECUTIVE SPEECH NO LONGER MERGES HERE. It is an
-    # honest description of the atom count and a dishonest one of the
-    # DELIVERY count: the joined parts render as a single numbered entry
-    # containing two complete attribution-plus-quote spans, the sheet tells
-    # the narrator each numbered entry is one delivery, and the model obeys
-    # by writing one -- dropping the second attribution and welding the
-    # quotes. Measured, chat 95 turns 2, 6 and 11: three welds on the page in
-    # sixteen turns, three of three with a merged entry as their direct
-    # antecedent. A rule the model is asked to follow downstream ("never weld
-    # two entries' quotes into one quoted span") cannot fire against a weld
-    # made upstream of it -- there is only one entry left to compare.
-    #
-    # What that spends is the atom cap, which is why the cap below now picks
-    # its victim by what the weld COSTS rather than by size alone. Measured
-    # over the 4,108 stored observer-beats in the bench corpus: 668 carry a
-    # same-mouth weld and refusing it newly overflows the cap on 345, of
-    # which 333 hold no standing entry for the cap to spend instead. So on a
-    # genuinely crowded beat the cap re-forms exactly this group, and on
-    # every beat under the cap the boundary survives.
-    #
-    # OBLIGATION IS A BOUNDARY TOO. A standing atom folded into an event one
-    # (or the reverse) makes wallpaper indistinguishable from what happened,
-    # which is exactly the distinction `_render_observed_events` now files on.
-    def _may_merge(last, atom):
-        if last["channel"] != atom["channel"]:
-            return False
-        if (last["ambiguity"] >= 0.5) != (atom["ambiguity"] >= 0.5):
-            return False
-        if last["directed_at_self"] != atom["directed_at_self"]:
-            return False
-        if last["standing"] != atom["standing"]:
-            return False
-        if len(last["parts"]) >= 3:
-            return False
-        if last["kind"] == "speech" or atom["kind"] == "speech":
-            # A spoken line is a delivery, and a delivery is a boundary this
-            # projection may not spend before the cap forces it to.
-            return False
-        return True
-
-    merged = []
-    for atom in atoms:
-        same_verdict = bool(merged) and _may_merge(merged[-1], atom)
-        if same_verdict:
-            last = merged[-1]
-            last["parts"].append(atom["text"])
-            last["intensity"] = max(last["intensity"], atom["intensity"])
-            last["suddenness"] = max(last["suddenness"], atom["suddenness"])
-            last["ambiguity"] = max(last["ambiguity"], atom["ambiguity"])
-        else:
-            merged.append({**atom, "parts": [atom["text"]]})
-    # THE CAP IS A LAST RESORT, AND IT PRICES THE PAIR IT IS ABOUT TO WELD.
-    # It used to take the shortest group wherever it sat and fold it into
-    # whichever neighbour happened to be there, so a forced merge could weld
-    # two speakers by accident after the loop above had deliberately refused
-    # to. Now the boundaries are ranked, cheapest spent first: wallpaper into
-    # wallpaper costs a boundary nobody is scored on; one mouth's consecutive
-    # lines cost an attribution; folding standing state into what happened
-    # costs the obligation boundary `_render_observed_events` files on; and
-    # welding two mouths costs the one the merged-speaker fidelity check
-    # hunts, so it goes last. With the same-mouth merge refused above this
-    # ordering is what keeps 333 crowded beats (of 4,108 measured) from
-    # trading a dropped attribution for a misattributed line.
-    def _same_mouth(a, b):
-        return bool(a["speaker"]) and a["speaker"] == b["speaker"]
-
-    # ONE MOUTH'S TWO QUOTED LINES ARE DEARER THAN A SILENT ATOM. The ranks
-    # below used to price a same-mouth speech weld (then rank 1) BELOW every
-    # other event pair, so the cap reached for it first -- and a group holding
-    # two complete attribution-plus-quote spans is exactly the antecedent the
-    # loop above refuses to mint, for the measured reason it states: the sheet
-    # tells the narrator each numbered entry is one delivery, the model obeys,
-    # and the two quotes come out welded. Measured, chat 98 turn 29: nine
-    # atoms against a cap of eight, the cap folded Picard's first two lines
-    # into one entry, and the page carried them back to back with no
-    # attribution or beat between them -- the worst dialogue sample in the run.
-    #
-    # Folding a SILENT atom into a spoken one cannot produce that shape: the
-    # group still holds one quote, so there is nothing to weld. It costs the
-    # channel (the entry degrades to `mixed`) and the attribution, which the
-    # loop below already spends on it. So the order is: wallpaper into
-    # wallpaper, then two silent events, then a silent event into a spoken
-    # one, then one mouth's two deliveries, then the obligation boundary, and
-    # last the two-mouth weld the fidelity check hunts.
-    def _pair_cost(i):
-        a, b = merged[i], merged[i + 1]
-        both_speech = a["kind"] == "speech" and b["kind"] == "speech"
-        if both_speech and not _same_mouth(a, b):
-            rank = 5
-        elif a["standing"] != b["standing"]:
-            rank = 4
-        elif both_speech:
-            rank = 3
-        elif a["standing"]:
-            rank = 0
-        elif a["kind"] == "speech" or b["kind"] == "speech":
-            rank = 2
-        else:
-            rank = 1
-        return (rank, len(" ".join(a["parts"] + b["parts"])))
-
-    while len(merged) > _MAX_OBSERVATION_ATOMS:
-        target = min(range(len(merged) - 1), key=_pair_cost)
-        source = target + 1
-        if merged[target]["channel"] != merged[source]["channel"]:
-            merged[target]["channel"] = "mixed"
-        if (merged[target]["kind"] != merged[source]["kind"]
-                or not _same_mouth(merged[target], merged[source])):
-            # No longer one mouth's delivery, and it must not be read as one
-            # by a later pass of this same loop.
-            merged[target]["kind"] = ""
-            merged[target]["speaker"] = ""
-        # Obligation wins the merge. The target is the earlier group, so a
-        # standing entry sitting in front of an event used to make the whole
-        # welded group skippable -- the direction this file's own comment
-        # calls the unsafe one ("replay can never make something skippable
-        # that was not already").
-        merged[target]["standing"] = (
-            merged[target]["standing"] and merged[source]["standing"])
-        merged[target]["parts"].extend(merged[source]["parts"])
-        merged[target]["ambiguity"] = max(
-            merged[target]["ambiguity"], merged[source]["ambiguity"])
-        merged[target]["directed_at_self"] = (
-            merged[target]["directed_at_self"]
-            or merged[source]["directed_at_self"])
-        merged.pop(source)
     out = []
-    for index, atom in enumerate(merged):
+    for index, (percept, sentence) in enumerate(rendered.spans):
+        ambiguity = _FIDELITY_AMBIGUITY.get(percept.fidelity, 0.15)
+        phase = ("event" if percept.order_key is not None else
+                 "change" if percept.data.get("force") or
+                 percept.data.get("beat") else "state")
+        # A presence sentence can enumerate several bodies. Its first
+        # percept is a rendering representative, not the actor of the group.
+        actor = percept.source_label if percept.kind != "presence" else ""
         out.append(compact_observation({
             "observation_id": f"current:{pid}:{index}",
             "perceiver_id": pid,
             "source_atom_id": "current",
-            "channel": atom["channel"],
-            "fidelity": "ambiguous" if atom["ambiguity"] >= 0.5 else "rendered",
-            "observed": {"text": " ".join(atom["parts"])},
-            # WHO DID IT, as this mind may call them -- the IR's own source
-            # label, already the subject of the rendered sentence, kept so
-            # the page can be read against the record
-            # (`common._check_action_attribution`). Empty when atoms of
-            # different mouths were merged, exactly as `speaker` is.
-            **({"actor": atom["speaker"]} if atom.get("speaker") else {}),
-            **({"kind": atom["kind"]} if atom.get("kind") else {}),
-            "intensity": atom["intensity"],
-            "suddenness": atom["suddenness"],
-            "ambiguity": atom["ambiguity"],
-            "directed_at_self": atom["directed_at_self"],
-            # Absent on a stored row written before this field existed, which
-            # reads back as False -- obligation. That is today's behaviour and
-            # it fails in the safe direction: replay can never make something
-            # skippable that was not already.
-            "standing": atom["standing"],
+            "channel": percept.channel,
+            "fidelity": "ambiguous" if ambiguity >= 0.5 else "rendered",
+            "observed": {"text": sentence},
+            **({"actor": actor} if actor else {}),
+            "kind": percept.kind,
+            "phase": phase,
+            **({"order": percept.order_key}
+               if percept.order_key is not None else {}),
+            "intensity": min(1.0, 0.35 + 0.4 * percept.salience),
+            "suddenness": percept.suddenness,
+            "ambiguity": ambiguity,
+            "directed_at_self": bool(
+                percept.data.get("directed_at_self")
+                or percept.channel == "interoception"),
+            # Retained for archived consumers and the memory boundary.
+            "standing": phase == "state",
         }))
     return out
+
+
+def perception_packet(observations, *, fallback_view=None):
+    """Partition already admitted evidence for a character or narrator.
+
+    No scene, identity lookup, prose classifier or model participates here.
+    Witnessed events retain delivery order. A noticed change has no inferred
+    occurrence time. Standing rows for the same labelled subject are adjacent;
+    their exact wording, fidelity and citation ids are preserved.
+
+    Archived observations lacking a phase retain the old standing verdict.
+    A string-only archived view remains unstructured context; we cannot
+    recover individual events or their times by reading its prose.
+    """
+    packet = {"events": [], "changes_noticed": [], "current_state": []}
+    sections = {"event": "events", "change": "changes_noticed",
+                "state": "current_state", "context": "unstructured_context"}
+    for observation in observations or ():
+        if not isinstance(observation, dict):
+            continue
+        observed = observation.get("observed")
+        if not isinstance(observed, dict) or not str(observed.get("text") or "").strip():
+            continue
+        if (fallback_view is not None
+                and str(observed["text"]).strip() not in str(fallback_view or "")):
+            # Some archived observations precede the final view repair.
+            # They may not restore wording that the admitted view removed.
+            continue
+        phase = observation.get("phase")
+        row = dict(observation)
+        if phase not in sections:
+            phase = "state" if observation.get("standing") else "event"
+            # Older repairs scrubbed the delivered text without repairing
+            # actor metadata. That label cannot newly identify a safe voice
+            # on archive replay. Keep the admitted wording; modern rows have
+            # an explicit phase and pass the shared actor identity repair.
+            row.pop("actor", None)
+        packet.setdefault(sections[phase], []).append(row)
+    # Source order keys are local to an onset or micro-round. The model
+    # sees one accumulated delivery stream, so its ordinal must not restart
+    # each time a different speaker takes a turn. Stored rows stay intact.
+    for order, event in enumerate(packet["events"], 1):
+        event["order"] = order
+    # Older views can contain safe sentences whose merged observation was
+    # removed by a later identity repair. Preserve any uncovered wording,
+    # but never infer events from it. Consume each exact span once so two
+    # identical delivered lines still require two matching rows.
+    remaining = [str(fallback_view or "")]
+    for rows in packet.values():
+        for row in rows:
+            text = str(row["observed"]["text"])
+            for index, fragment in enumerate(remaining):
+                at = fragment.find(text)
+                if at >= 0:
+                    remaining[index:index + 1] = [fragment[:at], fragment[at + len(text):]]
+                    break
+    context = "\n".join(fragment.strip() for fragment in remaining if fragment.strip())
+    if context:
+        packet.setdefault("unstructured_context", []).append(
+            {"channel": "mixed", "phase": "context", "observed": {"text": context}})
+    groups = {}
+    for index, row in enumerate(packet["current_state"]):
+        actor = str(row.get("actor") or "").strip()
+        key = ("actor", actor) if actor else ("unattributed", index)
+        groups.setdefault(key, []).append(row)
+    packet["current_state"] = [row for group in groups.values() for row in group]
+    return packet

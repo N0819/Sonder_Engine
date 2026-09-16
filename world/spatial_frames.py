@@ -650,8 +650,8 @@ def infer_focus(chat_id, frame_id, prev_scene, new_scene, dr_output, cast_names)
         which takes its axis from the holder's facing, pointed at the wall
         behind him. The composer answered "Through the opening, only
         darkness" and it was right about the field it was given. Every
-        egocentric reader is downstream of this: sight, the cone, glare,
-        and every left/right in the prose.
+        egocentric reader is downstream of this: sight, the cone, and
+        every left/right in the prose.
         """
         focus = focus_on(name, other)
         if isinstance(focus, dict) and focus.get("kind") == "edge":

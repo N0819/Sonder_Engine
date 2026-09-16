@@ -28,10 +28,12 @@ from world.spatial import (
 # ---------------------------------------------------------------------------
 
 ANCHORS = {
+    # `lane` on the two fixtures whose fiction has a behind, so the
+    # reference below exercises both branches of the placement (2026-09-16).
     "bar": {"desc": "the long bar", "dir": "n", "footprint": "run",
-            "height": "waist"},
+            "height": "waist", "lane": True},
     "screen": {"desc": "a folding screen", "dir": "e", "footprint": "run",
-               "height": "head"},
+               "height": "head", "lane": True},
     "hearth": {"desc": "the hearth", "dir": "s"},
     "door": {"desc": "the front door", "dir": "w"},
     "urn": {"desc": "an urn", "dir": "ne", "height": "waist"},
@@ -79,9 +81,16 @@ _OPP = {"n": "s", "s": "n", "e": "w", "w": "e", "ne": "sw", "sw": "ne",
 
 
 def _square_reference(room_id, side, anchors):
-    """`_place_anchors` as it stood before extents existed, verbatim in its
-    arithmetic. The claim under test is that the new form REDUCES to this
-    for a square, not that it resembles it."""
+    """`_place_anchors` for a square, verbatim in its arithmetic. The claim
+    under test is that the shaped form REDUCES to this for a square, not
+    that it resembles it.
+
+    THE REFERENCE MOVED ONCE, on 2026-09-16, and this is the record of it:
+    the inset off a wall stopped being inferred from height and became the
+    authored `lane`, and the seed for a bearingless anchor stopped skipping
+    the wall ring (`spatial_fov.DEFAULT_LANE`, owner ruling: wall-adjacent
+    cells are not restricted in any way). Both arithmetics below carry the
+    new rule. Any OTHER drift is still a failing test."""
     out = {}
     for aid, anchor in anchors.items():
         fp = anchor.get("footprint") or "point"
@@ -94,8 +103,7 @@ def _square_reference(room_id, side, anchors):
             offset = 1 + seed % max(1, side - 2 - (length - 1)) \
                 if side > 2 else 0
             cells = _square_wall_cells(side, bearing, offset, length)
-            standing = height != "floor" or fp in ("run", "large")
-            if standing and side > 3:
+            if bool(anchor.get("lane")) and side > 3:
                 dx, dy = _UNIT[_OPP[bearing]]
                 cells = [(x + dx, y + dy) for x, y in cells]
             if fp == "large" and cells:
@@ -103,9 +111,8 @@ def _square_reference(room_id, side, anchors):
                 cells = cells + [(x + dx, y + dy) for x, y in cells
                                  if 0 <= x + dx < side and 0 <= y + dy < side]
         else:
-            inner = max(1, side - 2)
-            x = 1 + seed % inner
-            y = 1 + (seed // 7) % inner
+            x = seed % max(1, side)
+            y = (seed // 7) % max(1, side)
             cells = [(x, y)]
             if fp in ("small", "run"):
                 cells.append((min(side - 1, x + 1), y))
@@ -278,16 +285,16 @@ def test_anchors_sit_on_the_wall_their_bearing_names_along_its_own_length():
     paces; a `run` on the east wall runs most of four."""
     sc = scene({"name": "R", "extent": {"w": 12, "d": 4}, "anchors": {
         "bar": {"desc": "the bar", "dir": "n", "footprint": "run",
-                "height": "waist"},
+                "height": "waist", "lane": True},
         "rack": {"desc": "a rack", "dir": "e", "footprint": "run",
-                 "height": "head"},
+                 "height": "head", "lane": True},
         "hearth": {"desc": "the hearth", "dir": "s"},
         "urn": {"desc": "an urn", "dir": "sw"},
     }})
     placed = anchor_cells(sc, "r")
-    assert all(y == 1 for _x, y in placed["bar"]["cells"])       # inset of north
+    assert all(y == 1 for _x, y in placed["bar"]["cells"])       # north + lane
     assert len(placed["bar"]["cells"]) == 10
-    assert all(x == 10 for x, _y in placed["rack"]["cells"])     # inset of east
+    assert all(x == 10 for x, _y in placed["rack"]["cells"])     # east + lane
     assert len(placed["rack"]["cells"]) == 2
     assert all(y == 3 and 0 <= x < 12 for x, y in placed["hearth"]["cells"])
     assert placed["urn"]["cells"] == [(0, 3)]

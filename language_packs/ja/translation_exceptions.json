@@ -277,5 +277,11 @@
   "→ ${verdict.reroute_to}": "placeholders and punctuation only — no prose to translate",
   "⚙ API": "the menu's own label, kept as the glyph",
   "🧩 ${lane.ext_id}${lane.description ? \" — \" + lane.description : \"\"}": "placeholders and punctuation only — no prose to translate",
-  "wb-map-canvas pipeline-map": "CSS class list, not a message"
+  "wb-map-canvas pipeline-map": "CSS class list, not a message",
+  "${order}.": "An event delivery ordinal followed by a period; the number is preserved across UI languages.",
+  "${prefix}${label} ${row.observed.text}": "Joins the event marker, already formatted metadata, and the exact saved observer wording; translating that wording would alter the evidence being inspected.",
+  "${t(title)} (${rows.length})": "The section title is translated before interpolation and is followed only by its row count.",
+  "[${metadata.join(\" · \")}]": "Brackets and separators around observer attribution, stored channel/fidelity labels, and individually translated UI hints.",
+  "place_at_opening names the room they stand in": "engine refusal text for the `place_at_opening` package operation, naming the operation and its fields; kept in English under the english-first mandate (2026-09-09) until the Japanese pass -- docs/UNBUILT_PIPELINE.md § 1.163",
+  "place_at_opening names who stands there: the player or an attached cast member, by name": "engine refusal text for the `place_at_opening` package operation, naming the operation and its fields; kept in English under the english-first mandate (2026-09-09) until the Japanese pass -- docs/UNBUILT_PIPELINE.md § 1.163"
 }

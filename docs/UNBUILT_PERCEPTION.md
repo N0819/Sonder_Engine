@@ -1634,9 +1634,11 @@ Light is a scalar on the composite sight grid: per-source shadowcast from
 the source's cell, blocked by occluders at or above the source's height
 rank and by the wall line outside its doorway, inverse-square decay, a cone
 with a linear penumbra, summed, bounced by the room's `exposure`, floored
-by `room_light`, quantised LAST; `light_at`, `effective_light` (median
-cell) and `sight_level` (glare) read it where a room has a size tier or
-anchors and a body a cell, and answer exactly as before everywhere else
+by `room_light`, quantised LAST; `light_at` and `effective_light` (median
+cell) read it where a room has a size tier or anchors and a body a cell
+(the glare cap `sight_level` also read was removed 2026-09-16, owner
+ruling: a light on a thing shows it; `DESIGN_LIGHT_FIELD.md` § 4b), and
+answer exactly as before everywhere else
 (pinned byte-for-byte on seven no-geometry scenes). `flickering` and
 `failing` are a hash of (beat, source); the commit stamps `scene.beat_idx`,
 records a failed source `state.lit: false` and files an `engine_notices`
@@ -1656,8 +1658,9 @@ WHERE the light falls and WHERE the sound is (`light_shape` ->
 `composer.render_light_shape`, `sound_shape` -> `composer.render_sound_shape`,
 en and ja, under the owner's five rules; `tests/test_field_sentences.py`);
 the ambient floor SPILLS through apertures (`FLOOR_SPILL` 0.25); a body with
-no station reads the room's median; glare counts an all-round lantern; a
-listener whose station lands on an occluder's cell hears. The corpus was
+no station reads the room's median; glare counted an all-round lantern
+(the rule is gone since 2026-09-16); a listener whose station lands on an
+occluder's cell hears. The corpus was
 re-measured in the light note's § 9.6 and the sound note's § 9a. Left:
 
   * **Two of the owner's three open questions**: median or mean for a

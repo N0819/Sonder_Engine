@@ -188,28 +188,39 @@ def digest(field):
     return hashlib.sha1(json.dumps(body, sort_keys=True).encode()).hexdigest()
 
 
-#: `observer_field` digests computed by the PRE-CHANGE module
-#: (`git show c3f274ea:world/spatial_fov.py`) over SCENES. A change here is
-#: a change to what every sight caller sees, and must be argued for.
+#: `observer_field` digests over SCENES. A change here is a change to what
+#: every sight caller sees, and must be argued for.
+#:
+#: ARGUED ONCE, on 2026-09-16, and this is the record. The baseline was the
+#: pre-2026-09-04 module (`git show c3f274ea:world/spatial_fov.py`); it moved
+#: when anchor placement stopped reserving the ring of cells against the
+#: walls (`spatial_fov.DEFAULT_LANE`, owner ruling: "I'm still not convinced
+#: wall adjacent tiles should be restricted in any way"). A fixture with a
+#: bearing now sits ON its wall unless it authors a `lane`, and a fixture
+#: with no bearing may be seeded anywhere in the room rather than only
+#: inside the ring. Every scene here draws waist-high fixtures against
+#: walls, so every digest moved; what the test still pins is that ONE grid
+#: derivation serves sight, light and sound, which is what it was written
+#: for.
 EXPECTED = {
-    "bars_pair": "3796973826aa3c0a4a6211793cffc0f8c6278aa9",
-    "closed_door_pair": "3796973826aa3c0a4a6211793cffc0f8c6278aa9",
-    "diagonal_pair": "2e2eb8e469813172e41303c82c1138c4121be5f7",
-    "far_declared_only": "c342947b51366ee97117f60f45c6db45d0b2a8bd",
-    "hall": "0ae1c558ac6de0c157d99516f46204af5837ce1f",
-    "l_with_neighbour": "aeace15bc3be46010d6b1f354568ebfb79f12c3c",
-    "membrane_pair": "3796973826aa3c0a4a6211793cffc0f8c6278aa9",
-    "no_geometry": "630197359f0cc6916dbe0f35a819c9c49251f6d2",
-    "open_door_pair": "c342947b51366ee97117f60f45c6db45d0b2a8bd",
-    "open_pair_north": "a758de50ca04096764c204e439902327ef4ed584",
-    "round_behind_a_shut_door": "1bb832e9dc6c9940f0819fc17767a1fd8cfbfd85",
-    "round_with_neighbour": "9666deb948172a79d2028d21af8b5c32d28cabee",
-    "small_into_large": "c97ca61399d4dfbbd3b5da8c975fb9d3956fb088",
-    "steel_door_pair": "3796973826aa3c0a4a6211793cffc0f8c6278aa9",
+    "bars_pair": "cb562083148b2d4a6fafa6363f73288f20ee52d6",
+    "closed_door_pair": "cb562083148b2d4a6fafa6363f73288f20ee52d6",
+    "diagonal_pair": "6c422dc51cc3adc13e131e90d588c221f9e07d56",
+    "far_declared_only": "38c5bfcbde7c7e6c00e2a3c5e67e11fba8c9b9c7",
+    "hall": "50b995ca60f8d23c3858db3c3046ea5663f4536a",
+    "l_with_neighbour": "a411af6056c27b99ff72ec8c2c96257cad81ad5a",
+    "membrane_pair": "cb562083148b2d4a6fafa6363f73288f20ee52d6",
+    "no_geometry": "3cce115d541ecb942fcddce09c2c4d71fa6259a8",
+    "open_door_pair": "38c5bfcbde7c7e6c00e2a3c5e67e11fba8c9b9c7",
+    "open_pair_north": "ff1c1d1109b1a2c831a04e75bb169004a13374bb",
+    "round_behind_a_shut_door": "49d9dff13daef87e0421bc5b05e8839143477dd4",
+    "round_with_neighbour": "12813c28d2d6891352a4792a8b72ac4b5cf9895a",
+    "small_into_large": "36924b2bf82df05cd11caa257fd4921af2fbaf8a",
+    "steel_door_pair": "cb562083148b2d4a6fafa6363f73288f20ee52d6",
     "two_small_off_a_long_wall": "9af688f28380803d833cc5e381bcbec4888f1537",
-    "wall_pair": "3796973826aa3c0a4a6211793cffc0f8c6278aa9",
-    "wide_with_north_room": "9cb35b70c0ed5742c1bd10e013ce78de5bbb5716",
-    "window_pair": "3796973826aa3c0a4a6211793cffc0f8c6278aa9",
+    "wall_pair": "cb562083148b2d4a6fafa6363f73288f20ee52d6",
+    "wide_with_north_room": "789542b33cc2244bbdbe1868615f17427314cccc",
+    "window_pair": "cb562083148b2d4a6fafa6363f73288f20ee52d6",
 }
 
 

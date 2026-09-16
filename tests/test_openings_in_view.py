@@ -42,6 +42,16 @@ def _scene(rooms, positions=None):
             "stations": {}}
 
 
+#: THE ALTAR IS PINNED, NOT SEEDED. It carried `dir: "c"`, which is not a
+#: compass bearing the engine reads, so it was placed by the seed formula
+#: and these tests passed on wherever that formula happened to put it. Since
+#: the wall ring opened up (2026-09-16, `spatial_fov.DEFAULT_LANE`) the seed
+#: may place it against a wall, outside the cone through the doorway. What
+#: these tests are about is whether furniture BEYOND arrives at all, so the
+#: altar holds a cell in the middle of the far room and the question stays
+#: the one they were written to ask.
+
+
 def _pair(barrier="open_door", far_light="lit", near_light="lit",
           dirs=(None, None), far_anchors=None, near_anchors=None,
           at_door=False):
@@ -159,7 +169,7 @@ class TestWhatSightReachesPastIt:
             dirs=("e", "w"), at_door=True,
             near_anchors={"bench": {"desc": "a low bench", "dir": "n",
                                     "height": "waist", "opacity": "opaque"}},
-            far_anchors={"altar": {"desc": "a stone altar", "dir": "c",
+            far_anchors={"altar": {"desc": "a stone altar", "cell": [3, 3],
                                    "height": "waist", "opacity": "opaque"}})
         rows = _visible_openings(sc, "Ada", "hall", sweep=True)
         assert [f["desc"] for f in rows[0].get("features") or ()] \
@@ -174,7 +184,7 @@ class TestWhatSightReachesPastIt:
         of them."""
         sc = _pair(
             at_door=True,
-            far_anchors={"altar": {"desc": "a stone altar", "dir": "c",
+            far_anchors={"altar": {"desc": "a stone altar", "cell": [3, 3],
                                    "height": "waist", "opacity": "opaque"}})
         rows = _visible_openings(sc, "Ada", "hall", sweep=True)
         assert rows[0]["room_name"] == "Vault"
@@ -186,7 +196,7 @@ class TestWhatSightReachesPastIt:
         state a distance nobody took."""
         sc = _pair(
             dirs=("e", "w"), at_door=True,
-            far_anchors={"altar": {"desc": "a stone altar", "dir": "c",
+            far_anchors={"altar": {"desc": "a stone altar", "cell": [3, 3],
                                    "height": "waist", "opacity": "opaque"}})
         rendered = composer._render_openings(
             _visible_openings(sc, "Ada", "hall", sweep=True))
@@ -288,10 +298,15 @@ class TestStandingInTheDarkLookingIntoTheLight:
     def test_furniture_beyond_can_still_hide_furniture_beyond(self):
         """The far room's own geometry keeps working: a full-height dresser
         between the door and the stove hides the stove."""
+        # Both PINNED on the line from the doorway, for the reason the
+        # altar is: what this test is about is the far room's own occlusion,
+        # not where a seed happens to drop two fixtures. The kitchen's door
+        # is on its west wall, so the dresser stands between it and the
+        # stove.
         rows = self._rows(self._cellar(anchors={
-            "dresser": {"desc": "a tall pine dresser", "dir": "n",
+            "dresser": {"desc": "a tall pine dresser", "cell": [2, 2],
                         "height": "full", "opacity": "opaque"},
-            "stove": {"desc": "a black iron stove", "dir": "c",
+            "stove": {"desc": "a black iron stove", "cell": [4, 2],
                       "height": "waist", "opacity": "opaque"}}))
         seen = [f["desc"] for f in rows[0].get("features") or ()]
         assert "a tall pine dresser" in seen

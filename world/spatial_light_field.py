@@ -67,11 +67,9 @@ from world.scene_memo import scene_memo, scene_read_parts
 from world.spatial_barriers import _SIGHT_BARRIERS, normalize_barrier
 from world.spatial_containment import container_of
 from world.spatial_fov import (
-    _FRONT_SECTORS,
     _HEIGHT_RANK,
     _centre,
     _cone_sector,
-    _line,
     _observer_cell,
     _on_wall_line,
     _sector_verdict,
@@ -93,7 +91,7 @@ from world.spatial_geometry import door_anchor_id, effective_facing
 from world.spatial_identity import PositionsIndex, room_of, room_of_record
 from world.spatial_light import (
     LIGHT_LEVELS, _light_radius, normalize_light, room_light)
-from world.spatial_orientation import _BEARING_DEG, normalize_bearing, relative_bearing
+from world.spatial_orientation import _BEARING_DEG, normalize_bearing
 
 
 # ---------------------------------------------------------------------------
@@ -137,7 +135,6 @@ def normalize_steadiness(value) -> str:
 #     CONE_HALF_ANGLE 30 deg     CONE_PENUMBRA 20 deg
 #     BOUNCE          enclosed 0.25 | sheltered 0.12 | open 0.05
 #     BOUNCE_REACH    3 cells    BOUNCE_PASSES_CAP 4
-#     GLARE_POWER     = POWER[lit]   GLARE_CELLS 2
 #     FLICKER_RATE    1 beat in 4    FAIL_RATE 1 beat in 12
 # ---------------------------------------------------------------------------
 
@@ -194,16 +191,15 @@ BOUNCE = {"enclosed": 0.25, "sheltered": 0.12, "open": 0.05}
 BOUNCE_REACH = 3
 BOUNCE_PASSES_CAP = 4
 
-#: Glare: a source of at least this power, inside the observer's front cone
-#: at no more than this many cells, with the target on the far side of it,
-#: caps sight at `shapes`. The flashlight in your face -- and the all-round
-#: lantern held up between two faces, decided 2026-09-04: glare is about
-#: POWER IN THE EYES, not about the source's shape; a cone decides only
-#: whether the power reaches the eye at all (`per_source` at the observer's
-#: cell), so a cone pointed away dazzles nobody and a lantern does.
-GLARE_POWER = POWER["lit"]
-GLARE_CELLS = 2
-
+#: THERE IS NO GLARE. A rule capping sight at `shapes` for a source of
+#: `lit` power within two cells of the observer's front cone lived here
+#: from 2026-09-04 to 2026-09-16. Measured over every checkpoint of chats
+#: 60-126 it fired five times, all on one wall sconce beside the bench a
+#: character sat on (chat 126, turns 2-6), and never once on a case a
+#: reader would accept; the owner's ruling is that light shining on a thing
+#: does not hide the thing's detail short of something no fiction here has
+#: authored. A room's word and a source's power are all the light says
+#: about sight; nothing here dazzles anyone.
 #: THE AMBIENT FLOOR SPILLS THROUGH DOORWAYS (the owner agreed, 2026-09-04;
 #: the note's open question 1). Each aperture cell of a wall between two
 #: placed rooms emits the GIVING room's floor into the TAKING room at height
@@ -689,7 +685,7 @@ def quantise(intensity: float) -> str:
 class LightField:
     """One room's light, over the composite field that room's observers
     see over: per-cell intensity before and after bounce and floor, the
-    per-source contributions (glare reads them), and the sources."""
+    per-source contributions, and the sources."""
 
     def __init__(self, room_id, field):
         self.room_id = room_id
@@ -997,62 +993,6 @@ def field_effective_light(scene: dict, room_id) -> Optional[str]:
     if lf is None:
         return None
     return lf.room_level(room_id)
-
-
-def glare_between(scene: dict, observer: str, target: str) -> bool:
-    """Is the observer's sight of the target capped by GLARE: a source of
-    power >= GLARE_POWER, lighting the observer's cell, inside the
-    observer's front cone at <= GLARE_CELLS cells, with the target on the
-    far side of it -- the source's cell lies on the straight line to the
-    target, or IS the target's cell (the target holds it).
-
-    Needs the observer's facing and both cells; without them there is no
-    evidence and the answer is False, the wider answer.
-    """
-    o_room = room_of(scene, observer)
-    t_room = room_of(scene, target)
-    if not o_room or not t_room or not light_geometry_exists(scene, o_room):
-        return False
-    facing = effective_facing(scene, observer)
-    if facing not in _BEARING_DEG:
-        return False
-    lf = light_field(scene, o_room)
-    if lf is None or t_room not in lf.field.offsets:
-        return False
-    o_cell = body_cell(scene, observer)
-    t_cell = body_cell(scene, target)
-    if o_cell is None or t_cell is None:
-        return False
-    origin = lf.field.cell_of(o_room, o_cell)
-    goal = lf.field.cell_of(t_room, t_cell)
-    if origin == goal:
-        return False
-    between = set(_line(origin, goal)) | {goal}
-    for src in lf.sources:
-        if src["power"] < GLARE_POWER or src["cell"] == origin:
-            continue
-        if src["cell"] not in between:
-            continue
-        d = math.hypot(src["cell"][0] - origin[0], src["cell"][1] - origin[1])
-        if d > GLARE_CELLS:
-            continue
-        angle = _angle_deg(origin, src["cell"])
-        if angle is None:
-            continue
-        sector = relative_bearing(facing, _bearing_word(angle))
-        if sector not in _FRONT_SECTORS:
-            continue
-        # The light has to be in the observer's eyes: a cone pointed away,
-        # or a source the counter shadows the observer from, dazzles nobody.
-        if lf.per_source.get(src["id"], {}).get(origin, 0.0) <= 0.0:
-            continue
-        return True
-    return False
-
-
-def _bearing_word(angle: float) -> str:
-    from world.spatial_orientation import _BEARINGS
-    return _BEARINGS[int(round(angle / 45.0)) % 8]
 
 
 # ---------------------------------------------------------------------------

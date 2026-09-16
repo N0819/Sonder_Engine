@@ -97,6 +97,28 @@ _HEIGHT_RANK = {"floor": 0.0, "waist": 1.0, "head": 2.0, "full": 3.0}
 OPACITIES = ("opaque", "see_through")
 DEFAULT_OPACITY = "opaque"
 
+#: A FIXTURE IS AGAINST ITS WALL UNLESS IT IS SOMETHING YOU WORK BEHIND
+#: (owner ruling 2026-09-16: "I don't think wall adjacent spaces should be
+#: restricted at all"). `lane` is the anchor's own word for the pace of floor
+#: between it and its wall -- the lane a body takes cover in
+#: (`stations.cover`): a bar, a shop counter, a reception desk, a screen with
+#: a blind side. Absent, the fixture sits ON the wall its `dir` names, which
+#: is what a bench set against the south wall, a shelf, a hearth and a door
+#: all want.
+#:
+#: This was inferred until 2026-09-16, from `height != DEFAULT_HEIGHT`, and
+#: that proxy had the two cases backwards as often as not: a bench and a
+#: counter are both waist-high and only one of them has a behind. Measured on
+#: chat 127 ("Test 3"), a four-pace-square reception room whose five authored
+#: fixtures ALL carried a height because the card now asks for one: four were
+#: pushed off the walls their own descs name, the west wall and the south
+#: wall held nothing at all, and the remaining two-by-two middle had to hold
+#: five fixtures, so the door shared a cell with the table and the bench with
+#: the chair. The corpus hid it -- 918 of 930 authored anchors predate the
+#: height field and normalise to `floor`, so only 8 were ever inset -- and
+#: every story authored under the current card would have been Test 3.
+DEFAULT_LANE = False
+
 #: Cells per side, by room size tier, for a room with no `extent`. One cell is
 #: roughly a pace; a `vast` hall at twelve paces is coarse on purpose (the
 #: metric-space note's test: model only what changes the fiction, and a pace
@@ -176,6 +198,15 @@ def normalize_opacity(value) -> str:
     return v if v in OPACITIES else DEFAULT_OPACITY
 
 
+def normalize_lane(value) -> bool:
+    """Whether this fixture keeps a pace of floor behind it. Read through
+    `authored_bool`, so the words a human or a model writes for true and
+    false ("yes", "false") answer as themselves and a shape nobody meant to
+    write reads as the default -- a fixture against its wall."""
+    from story.character_schema import authored_bool
+    return bool(authored_bool(value, DEFAULT_LANE))
+
+
 def anchor_geometry(anchor: dict) -> dict:
     """One anchor's geometry fields, normalized to the closed sets."""
     anchor = anchor if isinstance(anchor, dict) else {}
@@ -183,6 +214,7 @@ def anchor_geometry(anchor: dict) -> dict:
         "footprint": normalize_footprint(anchor.get("footprint")),
         "height": normalize_height(anchor.get("height")),
         "opacity": normalize_opacity(anchor.get("opacity")),
+        "lane": normalize_lane(anchor.get("lane")),
     }
 
 
@@ -580,13 +612,12 @@ def _place_anchors(room_id, grid: RoomGrid, anchors) -> dict:
                 offset = 1 + seed % max(1, along - 2 - (length - 1)) \
                     if along > 2 else 0
             cells = _wall_cells(grid, bearing, offset, length)
-            # A THING stands one pace off its wall -- a counter, a table, a
-            # screen, anything with a height -- leaving the lane a body
-            # takes COVER in (`stations.cover`). A door, a window or a
-            # hearth, which has no height of its own, is the wall itself.
-            standing_thing = geo["height"] != DEFAULT_HEIGHT \
-                or fp in ("run", "large")
-            if standing_thing and bearing in _UNIT and min(grid.w, grid.d) > 3:
+            # A FIXTURE IS AGAINST ITS WALL UNLESS IT SAYS IT KEEPS A LANE
+            # (`lane`, and the note on DEFAULT_LANE for what it replaced and
+            # why). The lane is the pace of floor a body takes COVER in
+            # (`stations.cover`), so a bar has one and a bench does not, and
+            # a room too small to spare the pace never has one.
+            if geo["lane"] and bearing in _UNIT and min(grid.w, grid.d) > 3:
                 dx, dy = _inward(bearing)
                 inset = [(x + dx, y + dy) for x, y in cells
                          if grid.contains((x + dx, y + dy))]
@@ -596,8 +627,19 @@ def _place_anchors(room_id, grid: RoomGrid, anchors) -> dict:
                 cells = cells + [(x + dx, y + dy) for x, y in cells
                                  if grid.contains((x + dx, y + dy))]
         else:
-            x = 1 + seed % max(1, grid.w - 2)
-            y = 1 + (seed // 7) % max(1, grid.d - 2)
+            # EVERY CELL OF THE ROOM, THE WALL RING INCLUDED (owner ruling
+            # 2026-09-16: "I'm still not convinced wall adjacent tiles
+            # should be restricted in any way. Yes they can contain doors,
+            # but an object in front of a door is entirely spatially
+            # valid."). This seeded `1 + seed % (side - 2)` until then, so a
+            # fixture with no bearing could land anywhere EXCEPT the ring
+            # against the walls -- the half of a small room's floor that a
+            # four-pace-square room has most of. Nothing is reserved now,
+            # for doorways or anything else: a chest against a door, a rack
+            # beside one, a screen across it are all placements the world
+            # allows, and a cell two anchors share blocks at the taller.
+            x = seed % max(1, grid.w)
+            y = (seed // 7) % max(1, grid.d)
             x, y = grid.nearest((x, y))
             cells = [(x, y)]
             more = []
@@ -612,6 +654,7 @@ def _place_anchors(room_id, grid: RoomGrid, anchors) -> dict:
             "height": geo["height"],
             "opacity": geo["opacity"],
             "footprint": fp,
+            "lane": geo["lane"],
             "dir": bearing,
             "desc": str(anchor.get("desc") or aid),
             "implicit": bool(anchor.get("implicit")),

@@ -190,6 +190,50 @@ nothing behind. Both are consumed at merge and neither is persisted; the
 scene blob's shape is unchanged, so no migration, archive change or checkpoint
 change follows from either.
 
+## Private character continuity
+
+`persist/commit_memory.py` owns the character's live cognitive state in
+`chat_chars.state` and its frame override. Compact continuity uses these
+existing JSON blobs; no new table or migration is required. Checkpoints,
+archives and branches already carry the whole state, including:
+
+- `decision_continuity: {turn, chosen, suppressed, why, uncertainty}`: one
+  latest private choice record. `agents/character_kernel.py` resolves temporary
+  want ids to the chosen/suppressed text and compiles the hinge and open
+  uncertainty, bounding each text field to 240 characters. Commit adds the
+  turn. The next call reads it as `self.decision_continuity`; it records what
+  the mind chose and why, without proving a world outcome. An explicit empty
+  record clears it; a legacy omission preserves it.
+- `active_state.wants` with reindexed `enacted_want` and `suppressed_want`:
+  commit preserves valid explicit choices through deduplication and trimming,
+  protecting the enacted choice first. The existing capacity and one-situational
+  limits still apply. Invalid or absent indexes retain the urgency fallback.
+  Explicit `active_concerns: []` clears the carried list; omission preserves it.
+  Within `active_state.affect`, explicit `undercurrent: null` clears residue
+  and prevents synthesis on that call; omission runs the existing decay,
+  relief and synthesis rules.
+- `interior.intentions[*].last_transition: {op, turn, why, evidence}`: one
+  record for the latest accepted `add`, `progress`, `block`, `satisfy`,
+  `abandon` or `nonviable` operation. A folded `add` records its effective
+  `progress`. The reason and evidence facts are each bounded to 240 characters,
+  with at most three evidence references; evidence ids retain their exact
+  spelling. Rejected or barren operations leave the record intact. Later
+  normalization carries it with the intention, including after closure.
+- `interior.beliefs[*].authored_belief`: the original card claim when a
+  targeted revision replaces it. `target_belief` must select one held claim
+  exactly after trimming and casefolding; replacement `belief` and `confidence`
+  describe the resulting conviction. Unknown or ambiguous targets and
+  collisions with another held claim are rejected. The origin prevents the
+  original card claim from being seeded again, and the character payload
+  prunes that superseded card copy while retaining the live conviction.
+
+`self.earlier_this_beat` is a read-time projection from the same mind's
+loop-owned `beat_declared` result. It supplies earlier feelings, decision and
+active concerns with `status: proposed_before_resolution`. It does not replace
+the settled state blob or turn provisional action into an accomplished event.
+The stored active hypothesis sheet is delivered separately at the top-level
+`active_hypotheses` payload field.
+
 ## Structured world tables
 
 - `world_entities`: normalized projection of the scene's entities, derived at commit (`commit_world_entities(prepared=...)`). Read at runtime only for fixed-point existence checks (`paradox._entity_exists`) and book-anchor alias resolution (`commit._entity_alias_map`). **Which** entities a beat touched comes from the post-dedup diff; **what** they now are comes from the merged scene, and taking the second from the diff too is how this projection drifted: `spatial._merge_entity` sits between the diff and the blob, reading a schema default as silence and refusing a name `schemas._fill_entity_names` derived from the dict key. Writing the raw diff skipped all of it, so a pose-only beat left the blob saying "Blue Police Box"/vehicle and the row saying "Tardis 001"/object — 15 of 480 live rows named literally `Object`, 19 disagreeing with the blob about `name`, 24 about `kind`. A row heals the next time a beat touches that entity; `tools/reproject_world_entities.py` sweeps the ones nothing will touch again (read-only without `--apply`, and it skips an entity whose frames disagree, since `scene` is frame-scoped and this table is not).
@@ -545,3 +589,23 @@ scene `contained` ledger. It uses the same transitive placement and
 concealment rules as authored containment; no additional table, interior room,
 or derived position authority is introduced. Explicit domain writes for the
 subject take precedence over this inventory projection.
+
+
+## Perception presentation records
+
+Perception remains deterministic. Its existing variant JSON `observations`
+now preserves one row per rendered span, with `actor`, `kind`, `phase` and
+optional `order` alongside the existing text, fidelity and observation id.
+`phase` is `event`, `change`, `state`, or `context`; legacy rows without it
+retain their old `standing` semantics. No schema migration or world-state
+write is involved. These records ride the existing step-variant archive and
+branch paths. Loop variants likewise store `delivered_observations` and
+`self_observations` beside their view strings so resume reconstructs the same
+per-observer evidence. Their context maps are derived, not durable world keys.
+
+Model-facing packets are pure projections of these admitted records. They do
+not replace the archived human-readable view or the memory episode. Character
+short evidence handles still expand to the original observation ids before
+validation; `persist.commit_memory.prepare_memory_commit` still rebinds those
+ids to the resulting witnessed episode at commit. A legacy string-only view
+has no recoverable per-event timing and remains unstructured context.

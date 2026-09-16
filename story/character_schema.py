@@ -736,7 +736,7 @@ def default_character_data(name: str = "Unnamed") -> dict:
         "embodiment": {
             # `needs_light` and `equivalent` are the two fields that make
             # sight AUTHORABLE (A87): a sense that says it does not need
-            # light sees in a dark room (and is not dazzled by glare), and a
+            # light sees in a dark room, and a
             # sense the engine does not model says which engine channel it
             # DELIVERS on. Both are optional everywhere they are read -- an
             # absent field is ordinary eyes -- and both are written into the
@@ -870,7 +870,7 @@ def default_persona_data(name: str = "Player") -> dict:
         "embodiment": {
             # `needs_light` and `equivalent` are the two fields that make
             # sight AUTHORABLE (A87): a sense that says it does not need
-            # light sees in a dark room (and is not dazzled by glare), and a
+            # light sees in a dark room, and a
             # sense the engine does not model says which engine channel it
             # DELIVERS on. Both are optional everywhere they are read -- an
             # absent field is ordinary eyes -- and both are written into the

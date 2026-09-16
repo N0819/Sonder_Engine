@@ -113,7 +113,10 @@ def test_companions_walk_with_the_walker(temp_db, monkeypatch):
 
 def test_every_anchor_is_asked_for_its_height_and_footprint():
     establish = get_prompt_body("director_establish", "en")
-    assert "anchors:{anchor_id:{desc, dir, height, footprint}}" in establish
+    # `opacity` joined the establish shape on 2026-09-16 with the shared
+    # place vocabulary; the height and footprint the owner asked for stay.
+    assert "anchors:{anchor_id:{desc, dir, height, footprint, opacity OPTIONAL:'opaque'|'see_through'}}" in establish
+    assert "EVERY anchor you write states its `height` and its `footprint`" in establish
     from llm.prompts import DEFAULT_PROMPTS
     spatial = DEFAULT_PROMPTS["director_spatial"]
     assert "EVERY anchor you write states its `height` and its `footprint`" in spatial
