@@ -49,7 +49,7 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 97    # -31 +8 (2026-09-12): causal Director plus new hand chunks
+PART_COUNT = 98    # +1 (2026-09-15): social obligation lifecycle owner
                    # serves both invocation points and replaces the 29-part
                    # prose-author sheet.
                    # +5 (2026-09-10): `co_hands/<hand>.txt`, one shared

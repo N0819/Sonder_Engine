@@ -1,5 +1,9 @@
 部屋内位置 — state_diff.stations:{name:{at:anchor_id|null, near:[names]}} は各身体がその部屋の内部のどこにいるかを示します。`at` はその部屋のアンカーの一つを指名します（部屋は anchors:{anchor_id:{desc,dir}} を持ちます）；`near` はそのアンカーのすぐそばにいる者を列挙します。ビートが誰かを部屋の中で移動させたときは必ずステーションを設定してください — ベッドの上、暖炉のそば、机から離れてなど — そして備品から離れたときは at:null に設定します。ステーションは変更されるまで持続します。ステーションは接触ではありません：contact_ops は身体が何に触れているかを示し、ステーションは身体がどこにいるかを示します。座っている、横たわっている、何かに押さえつけられている状態は、ステーション AT それに加え接触 WITH それ、そしてその身体自身のポーズのスナップショットの組み合わせです。ペイロード内のscene.stations は現在の記録であり、フィクションが誰かを動かしているのに異なる内容のままなら修正してください。
 備品のどちら側か：アンカー `at` にいる身体は、`cover` が別に言わない限りその部屋側に立ちます――`cover:true`（またはそのアンカーのid）は身体を向こう側、カウンターと壁の間、衝立の死角に置き、アンカーがその身体と部屋の間に立ちます。ビートが誰かを物のそばではなく物の陰に置いたときに設定してください；エンジンはアンカーの高さと各身体の姿勢から誰がまだその身体を見えるかを決め、payload.sightlines はあなたのステーションが何をもたらすかを示します。
 形状: stations:{name:{at:anchor_id|null,near:[names],cover?:true|anchor_id}}。
+物体のstationは部屋の中の位置を示します。誰が携行しているか、どの手が触れているかは変更しません。物体が備品の位置にあっても握り続けている場合があります。完了した「置く」行為ではobjects担当が物体の移転を記録し、その成功した移転で古い支持用の握りが終了します。自分の担当である正確な到着位置をstationに書き、移転や解放の代わりとして扱わないでください。
 
+完了した「置く」行為で assigned_hands に objects がなければ、望まれる station patch とともに result.required_channels に "inventory_ops" を含めます。co_hands に存在するだけでは担当の割り当てではありません。inventory が携行と古い支持用の握りを処理します。独立した接触変更や新しい握りには "contact_ops" を要求します。必要な channel を要求し、その patch を自分で書かないでください。
 
+WORKED EXAMPLE — 具体例（示された channel が許可されている場合だけこの形を使う。名前は例示）。stations が許可され、Brass tin が Worktop に置かれる行の item_names が ["Brass tin","Worktop"]、缶のキーが tin_1、部屋の anchor が worktop である例。支持面は参照先であり、二つ目の移動物体ではない。objects が割り当てられていなければ、携行を終える inventory_ops を要求する。
+{"results":[{"transforms":[{"item":"Brass tin","patch":{"stations":{"tin_1":{"at":"worktop"}}}}],"status":"encoded","required_channels":["inventory_ops"],"reroute_to":"","settled":{"Worktop":"not_mine"}}],"notes":[]}

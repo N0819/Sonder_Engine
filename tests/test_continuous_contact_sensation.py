@@ -110,7 +110,10 @@ class TestTheMannerReading:
 
         assert "relation is surface|interior and motion is settled|moving" in prompt
         assert "ALWAYS emit both" in prompt
-        assert "target_interior names what currently encloses actor_part" in prompt
+        assert "An inserted part can be interior and moving simultaneously" in prompt
+        assert "target_interior names the enclosing passage" in prompt
+        assert "target_part names the contacted boundary or endpoint" in prompt
+        assert "body-to-body, body-to-object and object-to-object contact" in prompt
         assert "CROSSING AN ENDPOINT IS AN EXPLICIT TRANSITION" in prompt
 
 
@@ -665,12 +668,17 @@ def test_contact_prompt_accepts_any_body_part_as_actor_part():
 
     The fix: the resolve prompt contract opens actor_part to whatever the
     prose describes, and the contact specialist encodes the named part
-    directly. The Director and specialists judge feasibility; the engine
-    rejects only what the body verifiably lacks.
+    directly. The Director resolves the act; the specialist uses the named
+    part or reports a structural blocker without substituting a different
+    part or outcome.
     """
     prompt = DEFAULT_PROMPTS["director_contact"]
     assert "ANY BODY PART THE FICTION DESCRIBES" in prompt
-    assert "DIRECTOR AND SPECIALISTS JUDGE FEASIBILITY" in prompt
+    assert "THE FICTION SUPPLIES THE PARTS; THE DIRECTOR RESOLVES THE ACT" in prompt
+    assert "valid actor_part without membership in a fixed anatomy list" in prompt
+    assert "Encode the resolved contact using that part" in prompt
+    assert "report the structural blocker" in prompt
+    assert "do not silently replace the part or invent a different outcome" in prompt
     assert "CONTAINER'S SEAL IS A SEPARATE CONTACT" in prompt
 
 

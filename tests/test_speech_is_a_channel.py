@@ -601,7 +601,8 @@ class TestAWordedRowReachesTheChannelEvenUnnamed:
     def test_the_category_is_still_what_the_contract_asks_for(self):
         from llm.prompts import get_prompt_body
         sheet = get_prompt_body("director_resolve_lean", "en")
-        assert "A row carrying words always names speech" in sheet
+        assert "Speech names speech" in sheet
+        assert "claims are not world_facts" in sheet
 
 
 class TestARowBelongsToWhoseConductItIs:
@@ -627,13 +628,23 @@ class TestARowBelongsToWhoseConductItIs:
         sheet = get_prompt_body("director_resolve_lean", "en")
         assert "WHOSE CONDUCT THE ROW IS, not whose input it came from" in sheet
 
-    def test_the_contract_says_another_bodys_conduct_is_contestable(self):
-        """An input's author states their own conduct and only CLAIMS anyone
-        else's -- which is what keeps a narrated NPC line out of that NPC's
-        mouth until they answer for themselves."""
+    @pytest.mark.parametrize("language, grant, outcomes, agency", [
+        ("en", "that input's authority_mode determines commitment",
+         "external outcomes remain contestable unless the input authority_mode grants them",
+         "Other minds' interior states and autonomous decisions remain theirs"),
+        ("ja", "その入力の authority_mode で commitment を判断します",
+         "外部の結果は入力の authority_mode が認めない限り contestable",
+         "他者の内面状態と自律的な意思決定は本人のものです"),
+    ])
+    def test_the_input_grant_and_other_minds_agency_are_separate(
+            self, language, grant, outcomes, agency):
+        """Attribution cannot revoke world-author outcomes or another mind's agency."""
         from llm.prompts import get_prompt_body
-        sheet = get_prompt_body("director_resolve_lean", "en")
-        assert "only claims anyone else's" in sheet.casefold()
+        sheet = get_prompt_body("director_resolve_lean", language)
+        assert grant in sheet
+        assert outcomes in sheet
+        assert agency in sheet
+        assert "only claims anyone else's" not in sheet.casefold()
 
     def test_a_narrated_characters_row_is_not_refused(self):
         """AND THE FIX FOR THE FIX. Telling the Director to attribute a row to
@@ -768,7 +779,8 @@ class TestANonEventIsNotARow:
     def test_the_contract_says_a_row_is_something_that_happened(self):
         from llm.prompts import get_prompt_body
         sheet = get_prompt_body("director_resolve_lean", "en")
-        assert "A row is something that HAPPENED" in sheet
+        assert "preserve each actual speech, action and event in scene order" in sheet
+        assert "A failed attempt is still an event" in sheet
 
     def test_it_names_the_shapes_absence_takes(self):
         """Stated as a class with instances marked as such, not as a list to
@@ -776,16 +788,17 @@ class TestANonEventIsNotARow:
         and 'nothing changing' is the parent that covers the rest."""
         from llm.prompts import get_prompt_body
         sheet = get_prompt_body("director_resolve_lean", "en").casefold()
-        for shape in ("silence", "stillness", "not answering",
-                      "nothing changing"):
+        for shape in ("silence", "stillness", "nothing changed"):
             assert shape in sheet, shape
+        assert "do not create extra rows" in sheet
 
     def test_it_also_refuses_a_row_that_only_restates(self):
         """`Sera is the intended recipient of Corin's directive` is not an
         event; it is the addressee, which `targets` already carries."""
         from llm.prompts import get_prompt_body
         sheet = get_prompt_body("director_resolve_lean", "en")
-        assert "only restates who or where" in sheet
+        assert "Initial standing descriptions and unchanged background facts are context" in sheet
+        assert "A reference to a thing does not by itself require a transform" in sheet
 
 
 class TestTheCoverageDetectorNoLongerBuysARepairCall:

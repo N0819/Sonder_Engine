@@ -17,7 +17,7 @@ from world.spatial import _merge_entity, _merge_room
 # Ordered-operation ledgers preserve every entry. Object maps instead preserve
 # every transform in ``history`` while exposing the latest compiled snapshot.
 LIST_CHANNELS = frozenset({
-    "cast_changes", "introductions", "world_facts", "public_evidence",
+    "cast_changes", "introductions", "world_facts", "public_evidence", "obligations",
     "crowd_ops", "courier_ops", "telling_ops", "charter_ops",
     "ratified_claims", "contradicted_claims", "contact_ops",
     "contact_action_ops", "substance_ops", "remove_entities",
@@ -107,14 +107,24 @@ def _merge_attire_record(previous: Any, current: Any) -> Any:
         "add": list(merged.get("add") or []),
         "remove": list(merged.get("remove") or []),
     }
+    def garment_key(garment):
+        # Structured add entries name the same garment that remove names
+        # as a string. Coverage metadata is not a second garment identity.
+        name = garment.get("name") if isinstance(garment, dict) else garment
+        return str(name or "").strip().casefold()
+
     for action in ("add", "remove"):
         opposite = "remove" if action == "add" else "add"
         for garment in current.get(action) or []:
             operations[opposite] = [
-                held for held in operations[opposite] if held != garment
+                held for held in operations[opposite]
+                if garment_key(held) != garment_key(garment)
             ]
-            if garment not in operations[action]:
-                operations[action].append(deepcopy(garment))
+            operations[action] = [
+                held for held in operations[action]
+                if garment_key(held) != garment_key(garment)
+            ]
+            operations[action].append(deepcopy(garment))
 
     for key, value in current.items():
         if key in ("add", "remove"):
@@ -179,18 +189,18 @@ def _stamp_from_event(channel: str, value: Any, chrono_id: int) -> Any:
     copied = deepcopy(value)
     if channel in LIST_CHANNELS and isinstance(copied, list):
         for row in copied:
-            if isinstance(row, dict) and not row.get("from_event"):
+            if isinstance(row, dict):
                 row["from_event"] = chrono_id
     elif channel in LIST_MAP_CHANNELS and isinstance(copied, dict):
         for rows in copied.values():
             if not isinstance(rows, list):
                 continue
             for row in rows:
-                if isinstance(row, dict) and not row.get("from_event"):
+                if isinstance(row, dict):
                     row["from_event"] = chrono_id
     elif isinstance(copied, dict):
         for row in copied.values():
-            if isinstance(row, dict) and not row.get("from_event"):
+            if isinstance(row, dict):
                 row["from_event"] = chrono_id
     return copied
 
@@ -246,7 +256,13 @@ def compile_transforms(
                              or "").strip()
         meta = {"chrono_id": chrono_id,
                 "object_name": str(row.get("object_name") or "").strip(),
-                "item_ids": handles, "names": names}
+                "item_ids": handles, "names": names,
+                "speech_source": (
+                    str(row.get("type") or row.get("kind") or "").casefold()
+                    in {"speech", "communication"}
+                    or "speech" in {str(value).casefold()
+                                    for value in row.get("categories") or []}),
+                "source_event_id": str(row.get("source_event_id") or "")}
         # THE CHRONO ID IS THE ROW'S KEY (the owner, 2026-09-15): an item
         # id is the object's and several rows share it. A transform that
         # cites its row's chrono id joins by it; one that cites only an
@@ -290,7 +306,8 @@ def compile_transforms(
         except (TypeError, ValueError):
             chrono_id = 0
         object_name = str(((meta or {}).get("names") or {}).get(item_id)
-                          or (meta or {}).get("object_name") or "").strip()
+                          or (meta or {}).get("object_name")
+                          or raw.get("object_name") or "").strip()
         patch = raw.get("patch")
         # ORDERED SO THE REPORTED REASON IS THE ACTUAL ONE. A transform with
         # no id at all used to be rejected as "item has no valid chronology"
@@ -322,16 +339,33 @@ def compile_transforms(
             rejected.append({"reason": "unowned channels",
                              "chrono_id": chrono_id, "item_id": item_id,
                              "channels": foreign})
+        # Speech establishes that the utterance occurred, not that its
+        # proposition is objective world truth. A specialist cannot promote
+        # a claim by putting it in world_facts, even for world-author input.
+        # Real performatives remain in their owned social channels. A fact
+        # independently established by authored/mechanical events belongs to
+        # its own non-speech row. Require an exact chrono join: legacy item-
+        # only transforms lack sufficient provenance to impose this guard.
+        if row_key in row_index and row_index[row_key]["speech_source"] \
+                and "world_facts" in owned:
+            facts = owned.pop("world_facts")
+            if facts:
+                rejected.append({
+                    "reason": "speech does not establish objective world_facts",
+                    "chrono_id": chrono_id, "item_id": item_id,
+                    "source_event_id": row_index[row_key]["source_event_id"],
+                    "channels": ["world_facts"], "value": deepcopy(facts),
+                })
         if not owned:
             continue
         accepted.append((chrono_id, response_order, item_id, object_name,
-                         legacy_object_id, owned))
+                         legacy_object_id, owned, raw.get("specialist") or specialist))
 
     compiled: dict[str, Any] = {}
     history: list[dict] = []
     last_touch: dict[tuple[str, str], tuple[int, int]] = {}
     for (chrono_id, response_order, item_id, object_name, legacy_object_id,
-         patch) in sorted(
+         patch, source_specialist) in sorted(
             accepted, key=lambda row: (row[0], row[1])):
         channels_written = []
         supersedes = []
@@ -382,7 +416,7 @@ def compile_transforms(
             **({"object_name": object_name} if object_name else {}),
             **({"object_id": legacy_object_id}
                if legacy_object_id and not item_id else {}),
-            "specialist": str(specialist or ""),
+            "specialist": str(source_specialist or ""),
             "response_order": response_order,
             "channels": channels_written,
             "patch": history_patch,

@@ -757,18 +757,22 @@ def test_the_generator_sees_the_whole_card_and_the_unsaved_draft(
 
 
 def test_the_director_is_told_damage_lands_on_both_and_heals_differently():
-    """A slash across the chest cuts the coat and the chest. The two are not
-    the same kind of fact: a cut coat stays cut until mended, a wound heals.
-    Neither may be written into the body's stable appearance."""
+    """Encode both resolved injuries in their separate ledgers and lifecycles.
+
+    Torn fabric does not by itself prove a bodily injury. The specialist
+    follows the Director's actual outcome rather than inventing penetration.
+    """
     from llm.prompts import DEFAULT_PROMPTS
 
     prompt = DEFAULT_PROMPTS["director_body"]
-    assert "A BLOW LANDS ON BOTH" in prompt
-    assert "conditions" in prompt
-    assert "STAYS cut until" in prompt
-    assert "heals with time" in prompt
-    assert "Never write an injury into a body's stable appearance" in prompt
-    assert "If the region was bare, mark only the body" in prompt
+    assert "WHEN A RESOLVED BLOW DAMAGES CLOTHING AND BODY, RECORD BOTH" in prompt
+    assert "Damage to cloth belongs in attire.<wearer>.conditions" in prompt
+    assert "bodily injury belongs in vitals.injury, conditions or overlays" in prompt
+    assert "a cut coat can stay cut while a wound heals" in prompt
+    assert "Follow the Director's actual outcome" in prompt
+    assert "do not infer an injury merely because fabric tore" in prompt
+    assert "or damage clothing on an unrelated region" in prompt
+    assert "Never write a recent injury into stable appearance" in prompt
 
 
 def test_the_director_is_told_a_garments_condition_belongs_to_the_garment():
@@ -791,18 +795,21 @@ def test_the_middle_states_are_offered_without_being_urged():
     narration puts it on the floor. The clamp was inverted in alpha 8.1 so the
     engine honours a resolved removal; the prompt had not been.
 
-    So the resolution leads and the middle states follow as what they are: for
-    an act genuinely mid-flight, evidenced by the Director's OWN prose.
+    So the resolved removal leads and middle states follow as what they are:
+    an option for a row the Director resolved as genuinely mid-flight. The
+    specialist neither slows a completed act nor completes an ongoing attempt.
     """
     from llm.prompts import DEFAULT_PROMPTS
 
     prompt = DEFAULT_PROMPTS["director_body"]
-    assert "`remove` IS YOUR RESOLUTION AND THE ENGINE HONOURS IT" in prompt
+    assert "A COMPLETED REMOVAL NEEDS remove in this row" in prompt
+    assert "The Director has resolved whether the garment came off" in prompt
     assert "worn -> loosened -> open -> removed" in prompt
-    assert "STILL BEING WORN" in prompt
+    assert "A loosened or open garment is still worn; keep it in wearing" in prompt
+    assert "do not slow a completed removal or complete a still-in-progress attempt" in prompt
     # the ladder is offered, never urged
     assert "not a pacing instruction" in prompt
-    assert prompt.index("`remove` IS YOUR RESOLUTION") < prompt.index(
+    assert prompt.index("A COMPLETED REMOVAL NEEDS remove") < prompt.index(
         "worn -> loosened -> open -> removed"), "the staging rule leads again"
 
 

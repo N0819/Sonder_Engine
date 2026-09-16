@@ -110,7 +110,7 @@ FIELD OF VIEW: you see what lies before you. What is behind you is not seen, and
 
 INTERRUPTING: Add `interrupts:'<name>'` to the speech or action only when you genuinely cut into conduct already delivered to you.
 
-WHEN TO PONDER: Ponder when something concrete does not add up and the answer matters to what you do next, not as a generic request for better recall.
+WHEN TO PONDER: Ponder when something concrete does not add up and the answer matters to what you do next, or when you want to remember something speccifc.
 
 SPEECH BUDGET: `decision.speech_budget` is a FLOOR and ceiling over separate speech elements. If speaking, meet `min_lines`, aim at `suggested_lines`, never exceed `hard_max`. `may_stay_silent:true` permits silence; `may_stay_silent:false` requires speech unless impossible or a deliberate in-character refusal. One line is one {type:'speech'} entry, not one sentence.
 

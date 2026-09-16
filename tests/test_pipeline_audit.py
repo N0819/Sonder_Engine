@@ -271,13 +271,13 @@ class TestDirectorResolveMergesUncoveredCharacterResults:
         seen = {}
 
         def fake_agent_json(role, step_key, system, payload, **kw):
-            # The declaration merge under test is the PROSE AUTHOR's payload;
+            # The declaration merge under test is the causal Director's input;
             # a specialist's payload is a different, narrower slice and would
             # overwrite it here.
             if step_key == "director_resolve":
                 seen["payload"] = payload
-            return {"resolved_event": "Voices overlap.", "summary": "beat",
-                    "dialogue_log": [], "state_diff": {}}
+            # Declared speech must survive even when the Director omits it.
+            return {"ledgers": []}
 
         monkeypatch.setattr(director, "_agent_json", fake_agent_json)
         monkeypatch.setattr(director, "validate_llm_output",
@@ -285,9 +285,14 @@ class TestDirectorResolveMergesUncoveredCharacterResults:
 
         out = director.director_resolve(ctx, 0)
 
-        declared_names = {d.get("name") for d in
-                          seen["payload"]["character_declarations"]}
-        assert {"Alice", "Bob"} <= declared_names
+        payload = seen["payload"]
+        declared = {payload["identity_index"][group["entity_id"]]: group["events"]
+                    for group in payload["event_inputs"]}
+        assert {"Alice", "Bob"} <= declared.keys()
+        assert any(event.get("text") == "Stay where you are."
+                   for event in declared["Alice"])
+        assert any(event.get("text") == "Everyone calm down."
+                   for event in declared["Bob"])
 
         by_speaker = {}
         for d in out["dialogue_log"]:

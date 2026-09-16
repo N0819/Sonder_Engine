@@ -88,7 +88,7 @@ BEAT_EVENTS_KEY = "beat_events"
 #: more, because a record that also decides policy is how one field came to
 #: mean two things.
 EVENT_FIELDS = ("order", "actor", "declared", "surface", "account", "kind",
-                "text", "category", "note")
+                "text", "category", "note", "execution")
 
 
 def _clean_event(row):

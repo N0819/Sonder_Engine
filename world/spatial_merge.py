@@ -1566,6 +1566,10 @@ def merge_scene_with_diff(
     inventory_report=None,
     light_report=None,
     carriers=None,
+    causal_worlds=None,
+    causal_apply=None,
+    causal_guard=None,
+    age_contacts=True,
 ) -> dict:
     """`carriers` is ``{spelling: room}`` for the bodies another ledger
     stands in the scene's rooms this beat (`charter_runtime.charter_carriers`),
@@ -1592,6 +1596,45 @@ def merge_scene_with_diff(
     next one can write the lamp as an entity and the light field can place
     its rays instead of flooding the room from nowhere."""
     diff = diff or {}
+    if diff.get("causal_steps"):
+        from world.causal_program import program_steps
+        steps = program_steps(diff)
+        current = copy.deepcopy(scene)
+        contact_aged = False
+        from world.mechanics import time_diff_duration
+        duration = time_diff_duration(diff.get("time"))
+        elapsed_paid = 0.0
+        for index, step in enumerate(steps):
+            before = current
+            patch = step.get("patch") or {}
+            if causal_guard is not None:
+                causal_guard(current, patch)
+            execution_patch = patch
+            if isinstance(patch.get("time"), dict):
+                # Time records are cumulative beat readings. Pay only the
+                # newly elapsed portion; keep the authored reading in history.
+                reached = min(duration, time_diff_duration(patch["time"]))
+                execution_patch = {**patch, "time": {
+                    **patch["time"], "duration_seconds": max(0.0, reached - elapsed_paid)}}
+                elapsed_paid = max(elapsed_paid, reached)
+            current = merge_scene_with_diff(
+                current, execution_patch, contact_report=contact_report,
+                substance_report=substance_report, sleeping=sleeping,
+                clock_seconds=clock_seconds if index == len(steps) - 1 else None,
+                crossing_report=crossing_report, inventory_report=inventory_report,
+                light_report=light_report, carriers=carriers,
+                age_contacts=age_contacts and not contact_aged)
+            from world.spatial_contacts import _contact_ops_are_evidence
+            contact_aged |= _contact_ops_are_evidence(
+                (step.get("patch") or {}).get("contact_ops"))
+            if causal_apply is not None:
+                causal_apply(current, step.get("patch") or {})
+            if causal_worlds is not None:
+                from world.causal_completion import execution_receipt
+                causal_worlds.append({**copy.deepcopy(step),
+                                      "before": before, "after": current,
+                                      "completion": execution_receipt(before, current, step)})
+        return current
     # A scene is a nested mutable structure.  A shallow copy allowed
     # downstream normalization and deterministic backstops (zone stamping,
     # adjacency edits, overlays, attire) to mutate the caller's supposedly
@@ -2028,8 +2071,8 @@ def merge_scene_with_diff(
                   if isinstance(g, str) and g.strip()])
     derive_inventory_placements(
         merged, diff.get("inventory_ops"),
-        declared=(set(incoming_positions or {})
-                  | set(diff.get("containment") or {})),
+        declared=set(diff.get("containment") or {}),
+        positions=incoming_positions, stations=incoming_stations,
         report=inventory_report, carriers=carriers)
     # ...AND A BODY THAT HANDED A THING OVER IS NO LONGER HOLDING IT, in the
     # one field that says so in prose. `poses[x]["detail"]` is re-derived by
@@ -2149,7 +2192,7 @@ def merge_scene_with_diff(
 
     _contacts_before_ops = copy.deepcopy(merged.get("contacts") or [])
     apply_contact_ops(merged, diff.get("contact_ops"),
-                      report=contact_report)
+                      report=contact_report, _age=age_contacts)
     # BEFORE contact hygiene, and that is the whole of it. A beat that names
     # a region of an enclosure its inside has no room for has DECLARED a
     # station, and `_restation_interior_contact` -- one line below, inside

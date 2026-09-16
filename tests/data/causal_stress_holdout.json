@@ -1,0 +1,2206 @@
+{
+  "title": "Held-out causal completion prose (authored before live calls)",
+  "version": 1,
+  "method": "Expected events are semantic boundaries, not assumed Director chrono IDs. Record reviewed alignment before scoring intermediate states. Frozen before the first live call; subsequent prompt tuning makes this regression data, not held-out evidence.",
+  "cases": [
+    {
+      "id": "seed_case_repeated_lid_and_release",
+      "primary_name": "Ada",
+      "characters": [
+        "Jun"
+      ],
+      "authority_mode": "world_author",
+      "prose": "Rain ticked against the potting-room panes. Ada picked up the green seed case from the stone worktop and opened its lid. \"Still dry,\" she said to Jun. She closed the lid, handed the case to him, and took the brass scoop from the worktop. Jun opened the same case, looked into its empty interior, and closed it again. \"I will leave it here,\" he said. He set the case on the seed shelf, let go, and walked through the open doorway into the glasshouse. Ada laid the scoop back on the worktop. From beside the shelf she opened the case once more without lifting it, then shut it. \"Now it is closed,\" she called.",
+      "scene": {
+        "rooms": {
+          "potting": {
+            "name": "Potting room",
+            "desc": "A well-lit room with the listed fixtures and no unlisted obstructions.",
+            "light": "bright",
+            "size": "small",
+            "adjacent": [
+              {
+                "to": "glasshouse",
+                "barrier": "open_door",
+                "dir": "e"
+              }
+            ],
+            "anchors": {
+              "worktop": {
+                "desc": "Stone worktop"
+              },
+              "shelf": {
+                "desc": "Seed shelf"
+              }
+            }
+          },
+          "glasshouse": {
+            "name": "Glasshouse",
+            "desc": "A well-lit room with the listed fixtures and no unlisted obstructions.",
+            "light": "bright",
+            "size": "small",
+            "adjacent": [
+              {
+                "to": "potting",
+                "barrier": "open_door",
+                "dir": "w"
+              }
+            ],
+            "anchors": {
+              "seat": {
+                "desc": "Wooden seat"
+              }
+            }
+          }
+        },
+        "entities": {
+          "seed_case": {
+            "name": "Green seed case",
+            "kind": "object",
+            "portable": true,
+            "container": true,
+            "state": {
+              "hatch": "closed"
+            }
+          },
+          "scoop": {
+            "name": "Brass scoop",
+            "kind": "object",
+            "portable": true,
+            "container": false,
+            "state": {}
+          },
+          "worktop": {
+            "name": "Stone worktop",
+            "kind": "fixture",
+            "portable": false,
+            "container": false,
+            "state": {}
+          },
+          "shelf": {
+            "name": "Seed shelf",
+            "kind": "fixture",
+            "portable": false,
+            "container": false,
+            "state": {}
+          },
+          "seat": {
+            "name": "Wooden seat",
+            "kind": "fixture",
+            "portable": false,
+            "container": false,
+            "state": {}
+          }
+        },
+        "positions": {
+          "Ada": "potting",
+          "Jun": "potting",
+          "worktop": "potting",
+          "shelf": "potting",
+          "seat": "glasshouse",
+          "seed_case": "potting",
+          "scoop": "potting"
+        },
+        "stations": {
+          "worktop": {
+            "at": "worktop",
+            "near": []
+          },
+          "shelf": {
+            "at": "shelf",
+            "near": []
+          },
+          "seat": {
+            "at": "seat",
+            "near": []
+          },
+          "Ada": {
+            "at": "worktop",
+            "near": []
+          },
+          "Jun": {
+            "at": "worktop",
+            "near": []
+          },
+          "seed_case": {
+            "at": "worktop",
+            "near": []
+          },
+          "scoop": {
+            "at": "worktop",
+            "near": []
+          }
+        },
+        "contained": {},
+        "attire": {
+          "Ada": {
+            "wearing": [],
+            "state": [],
+            "regions": {}
+          },
+          "Jun": {
+            "wearing": [],
+            "state": [],
+            "regions": {}
+          }
+        },
+        "poses": {
+          "Ada": {
+            "posture": "standing"
+          },
+          "Jun": {
+            "posture": "standing"
+          }
+        },
+        "contacts": [],
+        "substances": [],
+        "orientation": {}
+      },
+      "expectations": {
+        "events": [
+          {
+            "id": "e01",
+            "source": "picked up the green seed case",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "seed_case",
+                "equals": "Ada"
+              }
+            ]
+          },
+          {
+            "id": "e02",
+            "source": "opened its lid",
+            "checks": [
+              {
+                "kind": "path",
+                "path": [
+                  "entities",
+                  "seed_case",
+                  "state",
+                  "hatch"
+                ],
+                "equals": "open"
+              }
+            ]
+          },
+          {
+            "id": "e03",
+            "source": "Still dry",
+            "checks": []
+          },
+          {
+            "id": "e04",
+            "source": "closed the lid",
+            "checks": [
+              {
+                "kind": "path",
+                "path": [
+                  "entities",
+                  "seed_case",
+                  "state",
+                  "hatch"
+                ],
+                "equals": "closed"
+              }
+            ]
+          },
+          {
+            "id": "e05",
+            "source": "handed the case to him",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "seed_case",
+                "equals": "Jun"
+              }
+            ]
+          },
+          {
+            "id": "e06",
+            "source": "took the brass scoop",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "scoop",
+                "equals": "Ada"
+              }
+            ]
+          },
+          {
+            "id": "e07",
+            "source": "Jun opened the same case",
+            "checks": [
+              {
+                "kind": "path",
+                "path": [
+                  "entities",
+                  "seed_case",
+                  "state",
+                  "hatch"
+                ],
+                "equals": "open"
+              }
+            ]
+          },
+          {
+            "id": "e08",
+            "source": "closed it again",
+            "checks": [
+              {
+                "kind": "path",
+                "path": [
+                  "entities",
+                  "seed_case",
+                  "state",
+                  "hatch"
+                ],
+                "equals": "closed"
+              }
+            ]
+          },
+          {
+            "id": "e09",
+            "source": "I will leave it here",
+            "checks": []
+          },
+          {
+            "id": "e10",
+            "source": "set the case on the seed shelf, let go",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "seed_case",
+                "equals": null
+              },
+              {
+                "kind": "no_grip",
+                "entity": "seed_case"
+              },
+              {
+                "kind": "station",
+                "entity": "seed_case",
+                "equals": "shelf"
+              }
+            ]
+          },
+          {
+            "id": "e11",
+            "source": "walked through the open doorway into the glasshouse",
+            "checks": [
+              {
+                "kind": "room",
+                "entity": "Jun",
+                "equals": "glasshouse"
+              },
+              {
+                "kind": "room",
+                "entity": "seed_case",
+                "equals": "potting"
+              }
+            ]
+          },
+          {
+            "id": "e12",
+            "source": "laid the scoop back on the worktop",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "scoop",
+                "equals": null
+              },
+              {
+                "kind": "no_grip",
+                "entity": "scoop"
+              },
+              {
+                "kind": "station",
+                "entity": "scoop",
+                "equals": "worktop"
+              }
+            ]
+          },
+          {
+            "id": "e13",
+            "source": "opened the case once more without lifting it",
+            "checks": [
+              {
+                "kind": "path",
+                "path": [
+                  "entities",
+                  "seed_case",
+                  "state",
+                  "hatch"
+                ],
+                "equals": "open"
+              },
+              {
+                "kind": "parent",
+                "entity": "seed_case",
+                "equals": null
+              },
+              {
+                "kind": "no_grip",
+                "entity": "seed_case"
+              }
+            ]
+          },
+          {
+            "id": "e14",
+            "source": "then shut it",
+            "checks": [
+              {
+                "kind": "path",
+                "path": [
+                  "entities",
+                  "seed_case",
+                  "state",
+                  "hatch"
+                ],
+                "equals": "closed"
+              }
+            ]
+          },
+          {
+            "id": "e15",
+            "source": "Now it is closed",
+            "checks": []
+          }
+        ],
+        "quotes": [
+          {
+            "speaker": "Ada",
+            "text": "Still dry,"
+          },
+          {
+            "speaker": "Jun",
+            "text": "I will leave it here,"
+          },
+          {
+            "speaker": "Ada",
+            "text": "Now it is closed,"
+          }
+        ],
+        "final": [
+          {
+            "kind": "path",
+            "path": [
+              "entities",
+              "seed_case",
+              "state",
+              "hatch"
+            ],
+            "equals": "closed"
+          },
+          {
+            "kind": "parent",
+            "entity": "seed_case",
+            "equals": null
+          },
+          {
+            "kind": "no_grip",
+            "entity": "seed_case"
+          },
+          {
+            "kind": "station",
+            "entity": "seed_case",
+            "equals": "shelf"
+          },
+          {
+            "kind": "room",
+            "entity": "seed_case",
+            "equals": "potting"
+          },
+          {
+            "kind": "parent",
+            "entity": "scoop",
+            "equals": null
+          },
+          {
+            "kind": "no_grip",
+            "entity": "scoop"
+          },
+          {
+            "kind": "station",
+            "entity": "scoop",
+            "equals": "worktop"
+          },
+          {
+            "kind": "entity_count",
+            "name": "Green seed case",
+            "equals": 1
+          }
+        ],
+        "non_events": [
+          {
+            "description": "Looking into the case neither creates seeds nor moves the empty case off its shelf on the last opening.",
+            "checks": [
+              {
+                "kind": "entity_count",
+                "name": "Green seed case",
+                "equals": 1
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "clipped_tag_follows_then_detaches",
+      "primary_name": "Tess",
+      "characters": [
+        "Ivo"
+      ],
+      "authority_mode": "world_author",
+      "prose": "The sorting desk was bare except for a grey canvas satchel and a yellow tag with a spring clip. Tess lifted the tag and clipped it firmly to the satchel's outer handle, releasing the clip. \"The yellow tag goes with this bag,\" she said. Ivo picked up the satchel by that handle and carried it through the open doorway into the dispatch hall; the clipped tag travelled with it. He placed the satchel on the dispatch bench and let go. Tess followed him into the hall. \"Leave the bag there,\" she said. She unclipped the tag and held it in her hand, then put the tag on the bench beside the satchel and released it. Ivo took the satchel from the bench and returned to the sorting room with it. The yellow tag remained on the dispatch bench.",
+      "scene": {
+        "rooms": {
+          "sorting": {
+            "name": "Sorting room",
+            "desc": "A well-lit room with the listed fixtures and no unlisted obstructions.",
+            "light": "bright",
+            "size": "small",
+            "adjacent": [
+              {
+                "to": "hall",
+                "barrier": "open_door",
+                "dir": "e"
+              }
+            ],
+            "anchors": {
+              "desk": {
+                "desc": "Sorting desk"
+              }
+            }
+          },
+          "hall": {
+            "name": "Dispatch hall",
+            "desc": "A well-lit room with the listed fixtures and no unlisted obstructions.",
+            "light": "bright",
+            "size": "small",
+            "adjacent": [
+              {
+                "to": "sorting",
+                "barrier": "open_door",
+                "dir": "w"
+              }
+            ],
+            "anchors": {
+              "bench": {
+                "desc": "Dispatch bench"
+              }
+            }
+          }
+        },
+        "entities": {
+          "satchel": {
+            "name": "Grey canvas satchel",
+            "kind": "object",
+            "portable": true,
+            "container": true,
+            "state": {}
+          },
+          "tag": {
+            "name": "Yellow clip tag",
+            "kind": "object",
+            "portable": true,
+            "container": false,
+            "state": {}
+          },
+          "desk": {
+            "name": "Sorting desk",
+            "kind": "fixture",
+            "portable": false,
+            "container": false,
+            "state": {}
+          },
+          "bench": {
+            "name": "Dispatch bench",
+            "kind": "fixture",
+            "portable": false,
+            "container": false,
+            "state": {}
+          }
+        },
+        "positions": {
+          "Tess": "sorting",
+          "Ivo": "sorting",
+          "desk": "sorting",
+          "bench": "hall",
+          "satchel": "sorting",
+          "tag": "sorting"
+        },
+        "stations": {
+          "desk": {
+            "at": "desk",
+            "near": []
+          },
+          "bench": {
+            "at": "bench",
+            "near": []
+          },
+          "Tess": {
+            "at": "desk",
+            "near": []
+          },
+          "Ivo": {
+            "at": "desk",
+            "near": []
+          },
+          "satchel": {
+            "at": "desk",
+            "near": []
+          },
+          "tag": {
+            "at": "desk",
+            "near": []
+          }
+        },
+        "contained": {},
+        "attire": {
+          "Tess": {
+            "wearing": [],
+            "state": [],
+            "regions": {}
+          },
+          "Ivo": {
+            "wearing": [],
+            "state": [],
+            "regions": {}
+          }
+        },
+        "poses": {
+          "Tess": {
+            "posture": "standing"
+          },
+          "Ivo": {
+            "posture": "standing"
+          }
+        },
+        "contacts": [],
+        "substances": [],
+        "orientation": {}
+      },
+      "expectations": {
+        "events": [
+          {
+            "id": "e01",
+            "source": "Tess lifted the tag",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "tag",
+                "equals": "Tess"
+              }
+            ]
+          },
+          {
+            "id": "e02",
+            "source": "clipped it firmly to the satchel's outer handle, releasing the clip",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "tag",
+                "equals": "satchel"
+              },
+              {
+                "kind": "no_grip",
+                "entity": "tag"
+              }
+            ]
+          },
+          {
+            "id": "e03",
+            "source": "The yellow tag goes with this bag",
+            "checks": []
+          },
+          {
+            "id": "e04",
+            "source": "Ivo picked up the satchel",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "satchel",
+                "equals": "Ivo"
+              },
+              {
+                "kind": "parent",
+                "entity": "tag",
+                "equals": "satchel"
+              }
+            ]
+          },
+          {
+            "id": "e05",
+            "source": "carried it through the open doorway into the dispatch hall",
+            "checks": [
+              {
+                "kind": "room",
+                "entity": "Ivo",
+                "equals": "hall"
+              },
+              {
+                "kind": "room",
+                "entity": "satchel",
+                "equals": "hall"
+              },
+              {
+                "kind": "room",
+                "entity": "tag",
+                "equals": "hall"
+              },
+              {
+                "kind": "parent",
+                "entity": "tag",
+                "equals": "satchel"
+              }
+            ]
+          },
+          {
+            "id": "e06",
+            "source": "placed the satchel on the dispatch bench and let go",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "satchel",
+                "equals": null
+              },
+              {
+                "kind": "no_grip",
+                "entity": "satchel"
+              },
+              {
+                "kind": "station",
+                "entity": "satchel",
+                "equals": "bench"
+              },
+              {
+                "kind": "parent",
+                "entity": "tag",
+                "equals": "satchel"
+              }
+            ]
+          },
+          {
+            "id": "e07",
+            "source": "Tess followed him into the hall",
+            "checks": [
+              {
+                "kind": "room",
+                "entity": "Tess",
+                "equals": "hall"
+              }
+            ]
+          },
+          {
+            "id": "e08",
+            "source": "Leave the bag there",
+            "checks": []
+          },
+          {
+            "id": "e09",
+            "source": "unclipped the tag and held it in her hand",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "tag",
+                "equals": "Tess"
+              }
+            ]
+          },
+          {
+            "id": "e10",
+            "source": "put the tag on the bench beside the satchel and released it",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "tag",
+                "equals": null
+              },
+              {
+                "kind": "no_grip",
+                "entity": "tag"
+              },
+              {
+                "kind": "station",
+                "entity": "tag",
+                "equals": "bench"
+              }
+            ]
+          },
+          {
+            "id": "e11",
+            "source": "Ivo took the satchel from the bench",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "satchel",
+                "equals": "Ivo"
+              }
+            ]
+          },
+          {
+            "id": "e12",
+            "source": "returned to the sorting room with it",
+            "checks": [
+              {
+                "kind": "room",
+                "entity": "Ivo",
+                "equals": "sorting"
+              },
+              {
+                "kind": "room",
+                "entity": "satchel",
+                "equals": "sorting"
+              },
+              {
+                "kind": "room",
+                "entity": "tag",
+                "equals": "hall"
+              }
+            ]
+          }
+        ],
+        "quotes": [
+          {
+            "speaker": "Tess",
+            "text": "The yellow tag goes with this bag,"
+          },
+          {
+            "speaker": "Tess",
+            "text": "Leave the bag there,"
+          }
+        ],
+        "final": [
+          {
+            "kind": "parent",
+            "entity": "satchel",
+            "equals": "Ivo"
+          },
+          {
+            "kind": "room",
+            "entity": "satchel",
+            "equals": "sorting"
+          },
+          {
+            "kind": "parent",
+            "entity": "tag",
+            "equals": null
+          },
+          {
+            "kind": "no_grip",
+            "entity": "tag"
+          },
+          {
+            "kind": "room",
+            "entity": "tag",
+            "equals": "hall"
+          },
+          {
+            "kind": "station",
+            "entity": "tag",
+            "equals": "bench"
+          },
+          {
+            "kind": "entity_count",
+            "name": "Yellow clip tag",
+            "equals": 1
+          },
+          {
+            "kind": "entity_count",
+            "name": "Grey canvas satchel",
+            "equals": 1
+          }
+        ],
+        "non_events": [
+          {
+            "description": "The tag does not follow the satchel after being explicitly detached and set down.",
+            "checks": [
+              {
+                "kind": "room",
+                "entity": "tag",
+                "equals": "hall"
+              },
+              {
+                "kind": "parent",
+                "entity": "tag",
+                "equals": null
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "coat_off_handover_and_rewear",
+      "primary_name": "Noa",
+      "characters": [
+        "Kit"
+      ],
+      "authority_mode": "world_author",
+      "prose": "Noa's violet rehearsal coat caught on the chair until she stepped clear of it. \"Hold this a moment,\" she told Kit. She took the coat off, held it in both hands, and passed it to Kit. Kit laid it across the slatted chair and released it. Noa picked up the white cloakroom ticket from the narrow shelf and handed it to Kit. \"The ticket, not the coat, is yours,\" she said. Kit set the ticket back on the shelf, then lifted the coat from the chair and handed the coat back to Noa. Noa put the same violet coat on and let her hands fall free. She walked through the open doorway onto the landing. Kit stayed beside the chair. \"It fits again,\" Noa said from the landing.",
+      "scene": {
+        "rooms": {
+          "dressing": {
+            "name": "Dressing room",
+            "desc": "A well-lit room with the listed fixtures and no unlisted obstructions.",
+            "light": "bright",
+            "size": "small",
+            "adjacent": [
+              {
+                "to": "landing",
+                "barrier": "open_door",
+                "dir": "e"
+              }
+            ],
+            "anchors": {
+              "chair": {
+                "desc": "Slatted chair"
+              },
+              "shelf": {
+                "desc": "Narrow shelf"
+              }
+            }
+          },
+          "landing": {
+            "name": "Landing",
+            "desc": "A well-lit room with the listed fixtures and no unlisted obstructions.",
+            "light": "bright",
+            "size": "small",
+            "adjacent": [
+              {
+                "to": "dressing",
+                "barrier": "open_door",
+                "dir": "w"
+              }
+            ],
+            "anchors": {
+              "rail": {
+                "desc": "Landing rail"
+              }
+            }
+          }
+        },
+        "entities": {
+          "coat": {
+            "name": "Violet rehearsal coat",
+            "kind": "object",
+            "portable": true,
+            "container": false,
+            "state": {}
+          },
+          "ticket": {
+            "name": "White cloakroom ticket",
+            "kind": "object",
+            "portable": true,
+            "container": false,
+            "state": {}
+          },
+          "chair": {
+            "name": "Slatted chair",
+            "kind": "fixture",
+            "portable": false,
+            "container": false,
+            "state": {}
+          },
+          "shelf": {
+            "name": "Narrow shelf",
+            "kind": "fixture",
+            "portable": false,
+            "container": false,
+            "state": {}
+          },
+          "rail": {
+            "name": "Landing rail",
+            "kind": "fixture",
+            "portable": false,
+            "container": false,
+            "state": {}
+          }
+        },
+        "positions": {
+          "Noa": "dressing",
+          "Kit": "dressing",
+          "chair": "dressing",
+          "shelf": "dressing",
+          "rail": "landing",
+          "coat": "dressing",
+          "ticket": "dressing"
+        },
+        "stations": {
+          "chair": {
+            "at": "chair",
+            "near": []
+          },
+          "shelf": {
+            "at": "shelf",
+            "near": []
+          },
+          "rail": {
+            "at": "rail",
+            "near": []
+          },
+          "Noa": {
+            "at": "chair",
+            "near": []
+          },
+          "Kit": {
+            "at": "chair",
+            "near": []
+          },
+          "ticket": {
+            "at": "shelf",
+            "near": []
+          }
+        },
+        "contained": {
+          "coat": {
+            "in": "Noa",
+            "mode": "worn",
+            "by": "attire"
+          }
+        },
+        "attire": {
+          "Noa": {
+            "wearing": [
+              "Violet rehearsal coat"
+            ],
+            "state": [],
+            "regions": {
+              "torso": {
+                "garments": [
+                  {
+                    "name": "Violet rehearsal coat",
+                    "state": "worn",
+                    "covers": [
+                      "torso",
+                      "arms"
+                    ],
+                    "attaches": false
+                  }
+                ],
+                "beneath": ""
+              },
+              "arms": {
+                "garments": [
+                  {
+                    "name": "Violet rehearsal coat",
+                    "state": "worn",
+                    "covers": [
+                      "torso",
+                      "arms"
+                    ],
+                    "attaches": false
+                  }
+                ],
+                "beneath": ""
+              }
+            }
+          },
+          "Kit": {
+            "wearing": [],
+            "state": [],
+            "regions": {}
+          }
+        },
+        "poses": {
+          "Noa": {
+            "posture": "standing"
+          },
+          "Kit": {
+            "posture": "standing"
+          }
+        },
+        "contacts": [],
+        "substances": [],
+        "orientation": {}
+      },
+      "expectations": {
+        "events": [
+          {
+            "id": "e01",
+            "source": "stepped clear of it",
+            "checks": []
+          },
+          {
+            "id": "e02",
+            "source": "Hold this a moment",
+            "checks": []
+          },
+          {
+            "id": "e03",
+            "source": "took the coat off, held it in both hands",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "coat",
+                "equals": "Noa"
+              },
+              {
+                "kind": "path",
+                "path": [
+                  "contained",
+                  "coat",
+                  "mode"
+                ],
+                "equals": "held"
+              }
+            ]
+          },
+          {
+            "id": "e04",
+            "source": "passed it to Kit",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "coat",
+                "equals": "Kit"
+              }
+            ]
+          },
+          {
+            "id": "e05",
+            "source": "laid it across the slatted chair and released it",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "coat",
+                "equals": null
+              },
+              {
+                "kind": "no_grip",
+                "entity": "coat"
+              },
+              {
+                "kind": "station",
+                "entity": "coat",
+                "equals": "chair"
+              }
+            ]
+          },
+          {
+            "id": "e06",
+            "source": "picked up the white cloakroom ticket",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "ticket",
+                "equals": "Noa"
+              }
+            ]
+          },
+          {
+            "id": "e07",
+            "source": "handed it to Kit",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "ticket",
+                "equals": "Kit"
+              }
+            ]
+          },
+          {
+            "id": "e08",
+            "source": "The ticket, not the coat, is yours",
+            "checks": []
+          },
+          {
+            "id": "e09",
+            "source": "set the ticket back on the shelf",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "ticket",
+                "equals": null
+              },
+              {
+                "kind": "no_grip",
+                "entity": "ticket"
+              },
+              {
+                "kind": "station",
+                "entity": "ticket",
+                "equals": "shelf"
+              }
+            ]
+          },
+          {
+            "id": "e10",
+            "source": "lifted the coat from the chair",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "coat",
+                "equals": "Kit"
+              }
+            ]
+          },
+          {
+            "id": "e11",
+            "source": "handed the coat back to Noa",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "coat",
+                "equals": "Noa"
+              }
+            ]
+          },
+          {
+            "id": "e12",
+            "source": "put the same violet coat on and let her hands fall free",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "coat",
+                "equals": "Noa"
+              },
+              {
+                "kind": "path",
+                "path": [
+                  "contained",
+                  "coat",
+                  "mode"
+                ],
+                "equals": "worn"
+              },
+              {
+                "kind": "no_grip",
+                "entity": "coat"
+              }
+            ]
+          },
+          {
+            "id": "e13",
+            "source": "walked through the open doorway onto the landing",
+            "checks": [
+              {
+                "kind": "room",
+                "entity": "Noa",
+                "equals": "landing"
+              },
+              {
+                "kind": "room",
+                "entity": "coat",
+                "equals": "landing"
+              },
+              {
+                "kind": "room",
+                "entity": "ticket",
+                "equals": "dressing"
+              }
+            ]
+          },
+          {
+            "id": "e14",
+            "source": "It fits again",
+            "checks": []
+          }
+        ],
+        "quotes": [
+          {
+            "speaker": "Noa",
+            "text": "Hold this a moment,"
+          },
+          {
+            "speaker": "Noa",
+            "text": "The ticket, not the coat, is yours,"
+          },
+          {
+            "speaker": "Noa",
+            "text": "It fits again,"
+          }
+        ],
+        "final": [
+          {
+            "kind": "parent",
+            "entity": "coat",
+            "equals": "Noa"
+          },
+          {
+            "kind": "path",
+            "path": [
+              "contained",
+              "coat",
+              "mode"
+            ],
+            "equals": "worn"
+          },
+          {
+            "kind": "no_grip",
+            "entity": "coat"
+          },
+          {
+            "kind": "room",
+            "entity": "coat",
+            "equals": "landing"
+          },
+          {
+            "kind": "entity_count",
+            "name": "Violet rehearsal coat",
+            "equals": 1
+          },
+          {
+            "kind": "parent",
+            "entity": "ticket",
+            "equals": null
+          },
+          {
+            "kind": "no_grip",
+            "entity": "ticket"
+          },
+          {
+            "kind": "station",
+            "entity": "ticket",
+            "equals": "shelf"
+          },
+          {
+            "kind": "room",
+            "entity": "Kit",
+            "equals": "dressing"
+          }
+        ],
+        "non_events": [
+          {
+            "description": "The spoken claim of ownership does not leave the ticket physically held by Kit after he sets it down.",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "ticket",
+                "equals": null
+              },
+              {
+                "kind": "station",
+                "entity": "ticket",
+                "equals": "shelf"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "two_tins_swap_and_split_destination",
+      "primary_name": "Bea",
+      "characters": [
+        "Luca"
+      ],
+      "authority_mode": "world_author",
+      "prose": "Bea held the round copper tin; Luca held the square one. \"We will swap, but keep both lids shut,\" Bea said. She set her round tin on the parcel counter and released it. Luca handed the square tin to Bea, then picked up the round tin from the counter. Bea put the square tin on the round stool. Luca put the round tin beside the ribbon on the counter and let go. \"You said, ‘Open the square one,’ yesterday,\" he remarked, without opening either tin. Bea lifted both tins, one in each hand, and carried them through the open doorway into the yard. She set the square tin on the yard ledge and released it, kept the round tin in her hand, and returned to the parcel room. \"This one stays with me,\" she said, raising the round tin. The blue ribbon had not moved.",
+      "scene": {
+        "rooms": {
+          "counterroom": {
+            "name": "Parcel room",
+            "desc": "A well-lit room with the listed fixtures and no unlisted obstructions.",
+            "light": "bright",
+            "size": "small",
+            "adjacent": [
+              {
+                "to": "yard",
+                "barrier": "open_door",
+                "dir": "e"
+              }
+            ],
+            "anchors": {
+              "counter": {
+                "desc": "Parcel counter"
+              },
+              "stool": {
+                "desc": "Round stool"
+              }
+            }
+          },
+          "yard": {
+            "name": "Yard",
+            "desc": "A well-lit room with the listed fixtures and no unlisted obstructions.",
+            "light": "bright",
+            "size": "small",
+            "adjacent": [
+              {
+                "to": "counterroom",
+                "barrier": "open_door",
+                "dir": "w"
+              }
+            ],
+            "anchors": {
+              "ledge": {
+                "desc": "Yard ledge"
+              }
+            }
+          }
+        },
+        "entities": {
+          "round_tin": {
+            "name": "Round copper tin",
+            "kind": "object",
+            "portable": true,
+            "container": true,
+            "state": {
+              "hatch": "closed"
+            }
+          },
+          "square_tin": {
+            "name": "Square copper tin",
+            "kind": "object",
+            "portable": true,
+            "container": true,
+            "state": {
+              "hatch": "closed"
+            }
+          },
+          "ribbon": {
+            "name": "Blue ribbon",
+            "kind": "object",
+            "portable": true,
+            "container": false,
+            "state": {}
+          },
+          "counter": {
+            "name": "Parcel counter",
+            "kind": "fixture",
+            "portable": false,
+            "container": false,
+            "state": {}
+          },
+          "stool": {
+            "name": "Round stool",
+            "kind": "fixture",
+            "portable": false,
+            "container": false,
+            "state": {}
+          },
+          "ledge": {
+            "name": "Yard ledge",
+            "kind": "fixture",
+            "portable": false,
+            "container": false,
+            "state": {}
+          }
+        },
+        "positions": {
+          "Bea": "counterroom",
+          "Luca": "counterroom",
+          "counter": "counterroom",
+          "stool": "counterroom",
+          "ledge": "yard",
+          "round_tin": "counterroom",
+          "square_tin": "counterroom",
+          "ribbon": "counterroom"
+        },
+        "stations": {
+          "counter": {
+            "at": "counter",
+            "near": []
+          },
+          "stool": {
+            "at": "stool",
+            "near": []
+          },
+          "ledge": {
+            "at": "ledge",
+            "near": []
+          },
+          "Bea": {
+            "at": "counter",
+            "near": []
+          },
+          "Luca": {
+            "at": "counter",
+            "near": []
+          },
+          "ribbon": {
+            "at": "counter",
+            "near": []
+          }
+        },
+        "contained": {
+          "round_tin": {
+            "in": "Bea",
+            "mode": "held"
+          },
+          "square_tin": {
+            "in": "Luca",
+            "mode": "held"
+          }
+        },
+        "attire": {
+          "Bea": {
+            "wearing": [],
+            "state": [],
+            "regions": {}
+          },
+          "Luca": {
+            "wearing": [],
+            "state": [],
+            "regions": {}
+          }
+        },
+        "poses": {
+          "Bea": {
+            "posture": "standing"
+          },
+          "Luca": {
+            "posture": "standing"
+          }
+        },
+        "contacts": [],
+        "substances": [],
+        "orientation": {}
+      },
+      "expectations": {
+        "events": [
+          {
+            "id": "e01",
+            "source": "We will swap, but keep both lids shut",
+            "checks": []
+          },
+          {
+            "id": "e02",
+            "source": "set her round tin on the parcel counter and released it",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "round_tin",
+                "equals": null
+              },
+              {
+                "kind": "no_grip",
+                "entity": "round_tin"
+              },
+              {
+                "kind": "station",
+                "entity": "round_tin",
+                "equals": "counter"
+              }
+            ]
+          },
+          {
+            "id": "e03",
+            "source": "handed the square tin to Bea",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "square_tin",
+                "equals": "Bea"
+              }
+            ]
+          },
+          {
+            "id": "e04",
+            "source": "picked up the round tin from the counter",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "round_tin",
+                "equals": "Luca"
+              }
+            ]
+          },
+          {
+            "id": "e05",
+            "source": "put the square tin on the round stool",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "square_tin",
+                "equals": null
+              },
+              {
+                "kind": "no_grip",
+                "entity": "square_tin"
+              },
+              {
+                "kind": "station",
+                "entity": "square_tin",
+                "equals": "stool"
+              }
+            ]
+          },
+          {
+            "id": "e06",
+            "source": "put the round tin beside the ribbon on the counter and let go",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "round_tin",
+                "equals": null
+              },
+              {
+                "kind": "no_grip",
+                "entity": "round_tin"
+              },
+              {
+                "kind": "station",
+                "entity": "round_tin",
+                "equals": "counter"
+              }
+            ]
+          },
+          {
+            "id": "e07",
+            "source": "You said, ‘Open the square one,’ yesterday",
+            "checks": []
+          },
+          {
+            "id": "e08",
+            "source": "lifted both tins, one in each hand",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "round_tin",
+                "equals": "Bea"
+              },
+              {
+                "kind": "parent",
+                "entity": "square_tin",
+                "equals": "Bea"
+              }
+            ]
+          },
+          {
+            "id": "e09",
+            "source": "carried them through the open doorway into the yard",
+            "checks": [
+              {
+                "kind": "room",
+                "entity": "round_tin",
+                "equals": "yard"
+              },
+              {
+                "kind": "room",
+                "entity": "square_tin",
+                "equals": "yard"
+              },
+              {
+                "kind": "room",
+                "entity": "Bea",
+                "equals": "yard"
+              }
+            ]
+          },
+          {
+            "id": "e10",
+            "source": "set the square tin on the yard ledge and released it",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "square_tin",
+                "equals": null
+              },
+              {
+                "kind": "no_grip",
+                "entity": "square_tin"
+              },
+              {
+                "kind": "station",
+                "entity": "square_tin",
+                "equals": "ledge"
+              },
+              {
+                "kind": "parent",
+                "entity": "round_tin",
+                "equals": "Bea"
+              }
+            ]
+          },
+          {
+            "id": "e11",
+            "source": "returned to the parcel room",
+            "checks": [
+              {
+                "kind": "room",
+                "entity": "round_tin",
+                "equals": "counterroom"
+              },
+              {
+                "kind": "room",
+                "entity": "square_tin",
+                "equals": "yard"
+              }
+            ]
+          },
+          {
+            "id": "e12",
+            "source": "This one stays with me",
+            "checks": []
+          },
+          {
+            "id": "e13",
+            "source": "raising the round tin",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "round_tin",
+                "equals": "Bea"
+              }
+            ]
+          }
+        ],
+        "quotes": [
+          {
+            "speaker": "Bea",
+            "text": "We will swap, but keep both lids shut,"
+          },
+          {
+            "speaker": "Luca",
+            "text": "You said, ‘Open the square one,’ yesterday,"
+          },
+          {
+            "speaker": "Bea",
+            "text": "This one stays with me,"
+          }
+        ],
+        "final": [
+          {
+            "kind": "parent",
+            "entity": "round_tin",
+            "equals": "Bea"
+          },
+          {
+            "kind": "room",
+            "entity": "round_tin",
+            "equals": "counterroom"
+          },
+          {
+            "kind": "parent",
+            "entity": "square_tin",
+            "equals": null
+          },
+          {
+            "kind": "no_grip",
+            "entity": "square_tin"
+          },
+          {
+            "kind": "station",
+            "entity": "square_tin",
+            "equals": "ledge"
+          },
+          {
+            "kind": "room",
+            "entity": "square_tin",
+            "equals": "yard"
+          },
+          {
+            "kind": "entity_count",
+            "name": "Round copper tin",
+            "equals": 1
+          },
+          {
+            "kind": "entity_count",
+            "name": "Square copper tin",
+            "equals": 1
+          }
+        ],
+        "non_events": [
+          {
+            "description": "Embedded remembered command and stated refusal open neither lid.",
+            "checks": [
+              {
+                "kind": "path",
+                "path": [
+                  "entities",
+                  "round_tin",
+                  "state",
+                  "hatch"
+                ],
+                "equals": "closed"
+              },
+              {
+                "kind": "path",
+                "path": [
+                  "entities",
+                  "square_tin",
+                  "state",
+                  "hatch"
+                ],
+                "equals": "closed"
+              }
+            ]
+          },
+          {
+            "description": "Ribbon remains on the counter.",
+            "checks": [
+              {
+                "kind": "station",
+                "entity": "ribbon",
+                "equals": "counter"
+              },
+              {
+                "kind": "room",
+                "entity": "ribbon",
+                "equals": "counterroom"
+              },
+              {
+                "kind": "parent",
+                "entity": "ribbon",
+                "equals": null
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "failed_key_quoted_command_and_cup",
+      "primary_name": "Edda",
+      "characters": [
+        "Sol"
+      ],
+      "authority_mode": "world_author",
+      "prose": "The red folder lay sealed on the reading table beside a cup and a short iron key. Edda picked up the key. \"Sol told me, ‘Break the seal,’ but I refused,\" she said. She inserted the key into the archive door's lock and tried to turn it; it would not turn, and the door remained locked and closed. She withdrew the key and set it on the reading table, releasing it. Sol did not touch the folder. \"Then leave it sealed,\" he said. Edda picked up the cup, walked through the open side doorway into the alcove, and set the cup on the alcove shelf. She released the cup, returned to the vestibule empty-handed, and sat beside the table. \"The key did not fit,\" she said.",
+      "scene": {
+        "rooms": {
+          "vestibule": {
+            "name": "Archive vestibule",
+            "desc": "A well-lit room with the listed fixtures and no unlisted obstructions.",
+            "light": "bright",
+            "size": "small",
+            "adjacent": [
+              {
+                "to": "alcove",
+                "barrier": "open_door",
+                "dir": "e"
+              }
+            ],
+            "anchors": {
+              "table": {
+                "desc": "Reading table"
+              },
+              "door": {
+                "desc": "Locked archive door"
+              }
+            }
+          },
+          "alcove": {
+            "name": "Side alcove",
+            "desc": "A well-lit room with the listed fixtures and no unlisted obstructions.",
+            "light": "bright",
+            "size": "small",
+            "adjacent": [
+              {
+                "to": "vestibule",
+                "barrier": "open_door",
+                "dir": "w"
+              }
+            ],
+            "anchors": {
+              "shelf": {
+                "desc": "Alcove shelf"
+              }
+            }
+          }
+        },
+        "entities": {
+          "key": {
+            "name": "Short iron key",
+            "kind": "object",
+            "portable": true,
+            "container": false,
+            "state": {}
+          },
+          "cup": {
+            "name": "Plain stoneware cup",
+            "kind": "object",
+            "portable": true,
+            "container": false,
+            "state": {}
+          },
+          "folder": {
+            "name": "Sealed red folder",
+            "kind": "object",
+            "portable": true,
+            "container": false,
+            "state": {
+              "seal": "intact"
+            }
+          },
+          "table": {
+            "name": "Reading table",
+            "kind": "fixture",
+            "portable": false,
+            "container": false,
+            "state": {}
+          },
+          "shelf": {
+            "name": "Alcove shelf",
+            "kind": "fixture",
+            "portable": false,
+            "container": false,
+            "state": {}
+          },
+          "door": {
+            "name": "Locked archive door",
+            "kind": "fixture",
+            "portable": false,
+            "container": false,
+            "state": {
+              "locked": true,
+              "hatch": "closed",
+              "condition": "intact"
+            }
+          }
+        },
+        "positions": {
+          "Edda": "vestibule",
+          "Sol": "vestibule",
+          "table": "vestibule",
+          "shelf": "alcove",
+          "door": "vestibule",
+          "key": "vestibule",
+          "cup": "vestibule",
+          "folder": "vestibule"
+        },
+        "stations": {
+          "table": {
+            "at": "table",
+            "near": []
+          },
+          "shelf": {
+            "at": "shelf",
+            "near": []
+          },
+          "door": {
+            "at": "door",
+            "near": []
+          },
+          "Edda": {
+            "at": "table",
+            "near": []
+          },
+          "Sol": {
+            "at": "table",
+            "near": []
+          },
+          "key": {
+            "at": "table",
+            "near": []
+          },
+          "cup": {
+            "at": "table",
+            "near": []
+          },
+          "folder": {
+            "at": "table",
+            "near": []
+          }
+        },
+        "contained": {},
+        "attire": {
+          "Edda": {
+            "wearing": [],
+            "state": [],
+            "regions": {}
+          },
+          "Sol": {
+            "wearing": [],
+            "state": [],
+            "regions": {}
+          }
+        },
+        "poses": {
+          "Edda": {
+            "posture": "standing"
+          },
+          "Sol": {
+            "posture": "standing"
+          }
+        },
+        "contacts": [],
+        "substances": [],
+        "orientation": {}
+      },
+      "expectations": {
+        "events": [
+          {
+            "id": "e01",
+            "source": "picked up the key",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "key",
+                "equals": "Edda"
+              }
+            ]
+          },
+          {
+            "id": "e02",
+            "source": "Sol told me, ‘Break the seal,’ but I refused",
+            "checks": []
+          },
+          {
+            "id": "e03",
+            "source": "inserted the key into the archive door's lock",
+            "checks": []
+          },
+          {
+            "id": "e04",
+            "source": "tried to turn it; it would not turn",
+            "checks": [
+              {
+                "kind": "path",
+                "path": [
+                  "entities",
+                  "door",
+                  "state",
+                  "locked"
+                ],
+                "equals": true
+              },
+              {
+                "kind": "path",
+                "path": [
+                  "entities",
+                  "door",
+                  "state",
+                  "hatch"
+                ],
+                "equals": "closed"
+              }
+            ]
+          },
+          {
+            "id": "e05",
+            "source": "withdrew the key",
+            "checks": []
+          },
+          {
+            "id": "e06",
+            "source": "set it on the reading table, releasing it",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "key",
+                "equals": null
+              },
+              {
+                "kind": "no_grip",
+                "entity": "key"
+              },
+              {
+                "kind": "station",
+                "entity": "key",
+                "equals": "table"
+              }
+            ]
+          },
+          {
+            "id": "e07",
+            "source": "Then leave it sealed",
+            "checks": []
+          },
+          {
+            "id": "e08",
+            "source": "picked up the cup",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "cup",
+                "equals": "Edda"
+              }
+            ]
+          },
+          {
+            "id": "e09",
+            "source": "walked through the open side doorway into the alcove",
+            "checks": [
+              {
+                "kind": "room",
+                "entity": "Edda",
+                "equals": "alcove"
+              },
+              {
+                "kind": "room",
+                "entity": "cup",
+                "equals": "alcove"
+              }
+            ]
+          },
+          {
+            "id": "e10",
+            "source": "set the cup on the alcove shelf",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "cup",
+                "equals": null
+              },
+              {
+                "kind": "no_grip",
+                "entity": "cup"
+              },
+              {
+                "kind": "station",
+                "entity": "cup",
+                "equals": "shelf"
+              }
+            ]
+          },
+          {
+            "id": "e11",
+            "source": "returned to the vestibule empty-handed",
+            "checks": [
+              {
+                "kind": "room",
+                "entity": "Edda",
+                "equals": "vestibule"
+              },
+              {
+                "kind": "room",
+                "entity": "cup",
+                "equals": "alcove"
+              },
+              {
+                "kind": "parent",
+                "entity": "cup",
+                "equals": null
+              }
+            ]
+          },
+          {
+            "id": "e12",
+            "source": "sat beside the table",
+            "checks": [
+              {
+                "kind": "path",
+                "path": [
+                  "poses",
+                  "Edda",
+                  "posture"
+                ],
+                "equals": "sitting"
+              }
+            ]
+          },
+          {
+            "id": "e13",
+            "source": "The key did not fit",
+            "checks": []
+          }
+        ],
+        "quotes": [
+          {
+            "speaker": "Edda",
+            "text": "Sol told me, ‘Break the seal,’ but I refused,"
+          },
+          {
+            "speaker": "Sol",
+            "text": "Then leave it sealed,"
+          },
+          {
+            "speaker": "Edda",
+            "text": "The key did not fit,"
+          }
+        ],
+        "final": [
+          {
+            "kind": "parent",
+            "entity": "key",
+            "equals": null
+          },
+          {
+            "kind": "no_grip",
+            "entity": "key"
+          },
+          {
+            "kind": "station",
+            "entity": "key",
+            "equals": "table"
+          },
+          {
+            "kind": "room",
+            "entity": "key",
+            "equals": "vestibule"
+          },
+          {
+            "kind": "parent",
+            "entity": "cup",
+            "equals": null
+          },
+          {
+            "kind": "no_grip",
+            "entity": "cup"
+          },
+          {
+            "kind": "station",
+            "entity": "cup",
+            "equals": "shelf"
+          },
+          {
+            "kind": "room",
+            "entity": "cup",
+            "equals": "alcove"
+          },
+          {
+            "kind": "room",
+            "entity": "Edda",
+            "equals": "vestibule"
+          }
+        ],
+        "non_events": [
+          {
+            "description": "Unsuccessful turning does not unlock/open/break the archive door.",
+            "checks": [
+              {
+                "kind": "path",
+                "path": [
+                  "entities",
+                  "door",
+                  "state",
+                  "locked"
+                ],
+                "equals": true
+              },
+              {
+                "kind": "path",
+                "path": [
+                  "entities",
+                  "door",
+                  "state",
+                  "hatch"
+                ],
+                "equals": "closed"
+              },
+              {
+                "kind": "path",
+                "path": [
+                  "entities",
+                  "door",
+                  "state",
+                  "condition"
+                ],
+                "equals": "intact"
+              }
+            ]
+          },
+          {
+            "description": "Quoted command and denied touching do not open, move, or damage the sealed folder.",
+            "checks": [
+              {
+                "kind": "path",
+                "path": [
+                  "entities",
+                  "folder",
+                  "state",
+                  "seal"
+                ],
+                "equals": "intact"
+              },
+              {
+                "kind": "station",
+                "entity": "folder",
+                "equals": "table"
+              },
+              {
+                "kind": "parent",
+                "entity": "folder",
+                "equals": null
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -667,6 +667,9 @@ def prune_blocked_phase_changes(diff, dispositions):
         if isinstance(row, dict) and row.get("status") == "blocked"
         and row.get("event_id") not in (None, "", 0, "0")
     }
+    if diff.get("causal_steps"):
+        from world.causal_program import prune_program
+        return prune_program(diff, blocked)
     dropped = []
     phase_sources = diff.pop("phase_sources", {})
     numeric_list_drops = {}
@@ -3966,7 +3969,10 @@ def collapse_duplicate_events(sequence, warn=None, asserted=None):
                          for t in (element.get("targets") or []))
         return (str(element.get("type") or "action"), _content(element),
                 tuple(targets), str(element.get("stage") or ""),
-                str(element.get("phase") or ""))
+                str(element.get("phase") or ""),
+                # Identical words at different causal moments are distinct
+                # events: close, reopen, close must retain both closes.
+                str(element.get("chrono_id") or ""))
 
     def _words(text):
         words = re.sub(r"[^\w\s]", " ", str(text or "")).lower().split()
@@ -3977,6 +3983,7 @@ def collapse_duplicate_events(sequence, warn=None, asserted=None):
         key = _key(element)
         survivor = seen.get(key)
         if survivor is None and asserted is not None and index >= asserted \
+                and not element.get("chrono_id") \
                 and str(element.get("type") or "action") == "action":
             mine = _words(element.get("observable") or element.get("attempt"))
             if len(mine) >= 3:
@@ -6271,8 +6278,16 @@ def repair_narrated_speech_elements(out):
     changed = []
     if not isinstance(out, dict):
         return changed
+    causal_speech = False
     for element in (out.get("sequence") or []):
         if not isinstance(element, dict) or element.get("type") != "speech":
+            continue
+        if element.get("chrono_id") and element.get("source_entity_id"):
+            # A causal speech span already contains the spoken words alone.
+            # Re-running the old narration heuristic can turn a recollection
+            # and refusal (Yesterday you said 'Break the lock', but I won't)
+            # into the opposite instruction by keeping only its inner quote.
+            causal_speech = True
             continue
         before = element.get("text")
         after = repair_narrated_speech(before)
@@ -6280,7 +6295,7 @@ def repair_narrated_speech_elements(out):
             element["text"] = after
             changed.append((before, after))
     before = out.get("speech")
-    if before:
+    if before and not causal_speech:
         after = repair_narrated_speech(before)
         if after != before:
             out["speech"] = after
@@ -11094,7 +11109,7 @@ def validated_player_state_assertions(sc, raw, player_name, report=None):
 
 
 def preview_player_state_assertions(sc, assertions, ctx=None,
-                                    player_name=None):
+                                    player_name=None, *, causal_worlds=None):
     """Apply asserted state to a scene COPY and return it.
 
     The copy is the whole safety property. Pass 1 and the resolving Director
@@ -11102,23 +11117,25 @@ def preview_player_state_assertions(sc, assertions, ctx=None,
     it. `merge_scene_with_diff` deep-copies before it touches anything, so the
     caller's scene is never the one that changes.
 
-    TWO CALLS, in commit's own order, because commit makes two: attire is not
-    a channel `merge_scene_with_diff` applies -- it has its own applier, since
-    the removal ladder's clamp has to read the beat's prose to tell an
-    undressing in progress from one that finished. A preview that merged and
-    stopped would show every other channel changed and the body still dressed,
-    which is the exact bug this exists to fix, reproduced inside the fix.
+    Surface marks and attire use commit's body appliers after the spatial
+    merge. Run both inside each chronological span, before its receipt and
+    observer snapshot; applying only the flattened final changes would lose
+    a mark added and removed within this declaration. Attire's removal clamp
+    reads only the player's input here, the account available before resolve.
     """
     if not assertions:
         return sc
-    merged = merge_scene_with_diff(sc, assertions)
-    if assertions.get("attire") and ctx is not None:
-        from persist.commit import apply_attire_diff
-        # No resolve payload: the clamp's attribution reads
-        # `ctx.turn.player_input`, which at pass 1 is the only account of this
-        # beat that exists -- and the only one perception may ever have.
-        apply_attire_diff(merged, {"attire": assertions["attire"]}, ctx, {},
-                          report=False)
+    def apply_body(merged, patch):
+        from persist.commit import _merge_overlays
+        _merge_overlays(merged, patch.get("overlays") or {})
+        if patch.get("attire") and ctx is not None:
+            from persist.commit import apply_attire_diff
+            apply_attire_diff(merged, {"attire": patch["attire"]}, ctx, {},
+                              report=False)
+    merged = merge_scene_with_diff(sc, assertions, causal_apply=apply_body,
+                                   causal_worlds=causal_worlds, age_contacts=False)
+    if not assertions.get("causal_steps"):
+        apply_body(merged, assertions)
     return merged
 
 
@@ -11138,6 +11155,11 @@ def merge_player_state_assertions(assertions, resolved, player_name=None,
     out = dict(resolved) if isinstance(resolved, dict) else {}
     for channel, value in (assertions or {}).items():
         current = out.get(channel)
+        if channel == "causal_steps":
+            # Invocation-local item and chrono ids must not collide. Each
+            # step carries its stage, and onset executes before resolution.
+            out[channel] = list(value or []) + list(current or [])
+            continue
         if isinstance(value, dict):
             merged = dict(current) if isinstance(current, dict) else {}
             for subject, payload in value.items():

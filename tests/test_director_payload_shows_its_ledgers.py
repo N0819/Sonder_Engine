@@ -28,9 +28,9 @@ see it. Verified by ablation rather than asserted: deleting each of the four
 earlier fixes in turn makes
 `test_every_hand_is_shown_the_scene_ledgers_it_is_asked_to_write` name that
 exact channel and hand ("director_spatial writes `comms_ops` and cannot see
-scene.comms"). The overlay fix of 254d898d is the one it does NOT reproduce,
-because that hand READS a ledger it does not own -- see
-`test_the_prose_author_can_see_the_ledgers_it_is_asked_to_end`.
+scene.comms"). Under the current causal contract, the owning specialists
+receive these standing ledgers; dedicated checks also preserve the exact
+contact endpoint and overlay records the hands need to end them.
 
 SCOPE, stated because it is the honest half. The guard covers ledgers that
 live in the frame-scoped `world.scene` blob, which is one object a test can
@@ -126,6 +126,8 @@ LEDGERS = {
     "cast_changes": (None, "the roster is chat_chars; the hand gets `cast`"),
     "introductions": (None, "the recognition ledger is a table"),
     "world_facts": (None, "the world store, not the scene"),
+    "obligations": (None, "the world store; delivered as pending_obligations "
+                           "at both Director stages; covered by test_causal_obligations"),
     # Compiled by the ENGINE, not by any hand (`ENGINE_CATEGORIES`), so no
     # specialist is ever shown a standing ledger of it -- there is none to
     # show. What was said is over when the beat is, like `sensory_events`.
@@ -176,7 +178,7 @@ LEDGERS = {
                               "`unratified_claims`"),
     "contradicted_claims": (None, "background claims; delivered as "
                                   "`unratified_claims`"),
-    # --- the prose author's own five, plus the two nobody writes here -----
+    # --- scene-wide spatial state and non-scene channels ------------------
     "time": ("time_of_day", "zoldawn"),
     "weather": ("weather", "thundersnow"),
     "location": ("location", "Zolmirath"),
@@ -186,6 +188,8 @@ LEDGERS = {
     "claim_dispositions": (None, "the claims are this turn's, from interpret"),
     "phase_sources": (None, "provenance stamped on this beat's own diff, not "
                             "a standing ledger"),
+    "causal_steps": (None, "engine-authored execution order for this beat; "
+                           "private to recompilation and never shown to a hand"),
     "movement_refused": (None, "engine-authored by the movement backstop "
                                "about this beat's own refusal; no hand "
                                "writes it and there is no standing ledger "
@@ -349,6 +353,52 @@ def test_every_hand_is_shown_the_scene_ledgers_it_is_asked_to_write(
     assert not blind, blind
 
 
+@pytest.mark.parametrize("has_clock", [False, True])
+def test_current_causal_spatial_hand_sees_standing_scene_and_clock(
+        temp_db, monkeypatch, has_clock):
+    """The current row contract must carry the state its new owner writes.
+
+    A scene predating the clock still has an authored time-of-day label. The
+    payload can expose that label without inventing a clock or its elapsed
+    time; a real existing clock must arrive unchanged.
+    """
+    scene = json.loads(json.dumps(RICH_SCENE))
+    ctx = _make_ctx(temp_db, scene=scene, interp={"sequence": []})
+    clock = {"elapsed_seconds": 7200, "display": scene["time_of_day"],
+             "time_scale": "scene", "anchor_hour": 1.25}
+    if has_clock:
+        temp_db.wset(ctx.chat.id, "simulation_clock", clock)
+    calls = []
+
+    def fake(role, step_key, system, payload, **kw):
+        calls.append({"step_key": step_key, "payload": payload})
+        if step_key == "director_resolve":
+            return {"ledgers": [{
+                "chrono_id": 1, "item_ids": [1], "item_names": ["Zolwarden"],
+                "source_entity_id": "Zolwarden", "commitment": "asserted",
+                "event": "Zolwarden stops following as dawn arrives at the lighthouse.",
+                "resolution_notes": "Record the travel relation and scene-wide changes.",
+                "categories": ["following_ops", "location", "time", "weather"],
+            }]}
+        return {"results": [{"status": "already_true", "transforms": [], "settled": {}}]}
+
+    monkeypatch.setattr(director, "_agent_json", fake)
+    director.director_resolve(ctx, nonce=0)
+    spatial = next(call["payload"] for call in calls
+                   if call["step_key"] == "director_spatial")
+    assert len(spatial["ledgers"]) == 1
+    assert "director_note" not in spatial  # current categories dispatch the hand
+    for key in ("following", "location", "weather", "time_of_day"):
+        assert spatial[key] == scene[key]
+    if has_clock:
+        assert spatial["simulation_clock"] == clock
+        assert temp_db.wget(ctx.chat.id, "simulation_clock", None) == clock
+    else:
+        assert spatial["simulation_clock"]["elapsed_seconds"] == 0
+        assert spatial["simulation_clock"]["display"] == ""
+        assert temp_db.wget(ctx.chat.id, "simulation_clock", None) is None
+
+
 def test_resolve_and_its_hands_see_the_room_interpret_just_authored(
         temp_db, monkeypatch):
     """`docs/guides/PIPELINE.md`: director_resolve "receives the same
@@ -357,9 +407,9 @@ def test_resolve_and_its_hands_see_the_room_interpret_just_authored(
     82: the interpret spatial hand authored the plenum the player climbed
     into, with `vertical: "down"` and a see-through sleeve; the resolve hand
     never saw it, wrote the same room blind under another name with neither
-    field, and the merge let the blind version win. Both the prose author
-    and the spatial hand must be handed the room the beat has already
-    asserted into being."""
+    field, and the merge let the blind version win. The causal Director's
+    world index must include the asserted room and occupants, while the
+    spatial hand receives the full room record it owns."""
     interp = _interp()
     interp["onset_state_assertions"] = {
         "rooms": {"asserted_attic": {
@@ -386,9 +436,12 @@ def test_resolve_and_its_hands_see_the_room_interpret_just_authored(
     assert spatial["rooms"]["asserted_attic"]["adjacent"][0]["vertical"] == "down"
     assert spatial["positions"]["Mara"] == "asserted_attic"
 
-    prose = payloads["director_resolve"]["scene"]
-    assert "asserted_attic" in prose["rooms"], sorted(prose["rooms"])
-    assert prose["positions"]["Mara"] == "asserted_attic"
+    causal = payloads["director_resolve"]
+    rooms = causal["world_index"]["rooms"]
+    assert "asserted_attic" in rooms, sorted(rooms)
+    assert "keeper_room" in rooms["asserted_attic"]["exits"]
+    assert any(body["id"] == "Mara" for body in rooms["asserted_attic"]["holds"])
+    assert causal["standing_relations"]["positions"]["Mara"] == "asserted_attic"
 
 
 def test_a_world_pressure_tick_dispatches_the_hand_that_owns_sensory_events(
@@ -456,51 +509,39 @@ def test_the_ledger_table_covers_every_channel_a_hand_writes():
     }
 
 
-def test_the_prose_author_can_see_the_ledgers_it_is_asked_to_end(
+def test_contact_and_body_hands_can_see_the_ledgers_they_are_asked_to_end(
         temp_db, monkeypatch):
-    """The one case the owner-side guard above cannot state.
+    """The current owners receive the exact records an ending addresses.
 
-    `contacts` and `overlays` are DELEGATED -- their owners are `contact` and
-    `body`, and the guard above checks them there. But chunk 12 asks the
-    PROSE AUTHOR, which writes neither, to read both against what just
-    happened and name what this beat brought to an end ("You can see the
-    standing contact and overlay ledgers in the scene"). A hand asked to read
-    a ledger it does not own is a second way to be blind, and it is the one
-    that shipped: chat 111 turn 54 ended a mark that was in no payload it
-    had, inferring the record's existence from the transcript prose.
+    Chat 111 turn 54 ended a mark that the old prose author had never been
+    shown. Causal dispatch assigns those endings to contact and body; those
+    hands must see the standing endpoint and overlay rather than reconstruct
+    them from the transcript.
     """
     scene, payloads = _resolve_payloads(temp_db, monkeypatch)
-    view = payloads["director_resolve"]["scene"]
-    assert view["overlays"] == scene["overlays"]
-    assert [row["actor_part"] for row in view["contacts"]] == ["hand"]
-    assert "zolgrip" in json.dumps(view["contacts"])
+    assert payloads["director_body"]["overlays"] == scene["overlays"]
+    contacts = payloads["director_contact"]["contacts"]
+    assert [row["actor_part"] for row in contacts] == ["hand"]
+    assert "zolgrip" in json.dumps(contacts)
+    assert contacts[0]["contact_id"] == scene["contacts"][0]["contact_id"]
 
 
 # ---------------------------------------------------------------------------
 # The sky, which is the instance this file was written for.
 # ---------------------------------------------------------------------------
 
-def test_the_prose_author_can_see_the_sky_it_owns(temp_db, monkeypatch):
-    """`weather` is the prose author's own channel and was in no payload.
+def test_the_spatial_hand_can_see_the_sky_it_owns(temp_db, monkeypatch):
+    """Weather's current owner sees the standing sky without rewriting it.
 
-    The sheet (prose_author_sheet/08.txt) asks for an edit ONLY when the beat
-    changes the sky and says the engine drifts it in between, so the hand
-    needs the standing value to answer either half -- and whether a flash and
-    a clap reach a room is the `electrical` axis, which the same chunk says
-    is the only thing that decides it (A88, review 2026-09-07). The stored
-    record below is a pre-axis one, carrying the retired `thundersnow` flag;
-    the payload hands the scene's own weather through untouched, which is
-    exactly what a story written before the axes needs it to do.
+    The spatial weather chunk asks for an edit only when the event changes
+    the sky. The engine may have drifted the weather since its last edit.
+    The stored record here predates operational axes and carries the retired
+    `thundersnow` flag; payload assembly must preserve that record too.
     """
     scene, payloads = _resolve_payloads(temp_db, monkeypatch)
-    view = payloads["director_resolve"]["scene"]
+    view = payloads["director_spatial"]
     assert view["weather"] == scene["weather"]
-    # Under its own name, like `time_of_day` beside it: showing the `time`
-    # channel's owner a duration phrase under the key `time` is what taught
-    # the model to write one back (see the comment on that key).
     assert view["weather"]["thundersnow"] is True
-    assert "weather" not in payloads["director_resolve"], (
-        "the sky belongs to the scene view, not beside it")
 
 
 def test_an_undeclared_sky_costs_two_characters(temp_db, monkeypatch):
@@ -522,12 +563,12 @@ def test_an_undeclared_sky_costs_two_characters(temp_db, monkeypatch):
     bare = json.loads(json.dumps(RICH_SCENE))
     bare.pop("weather")
     _scene, payloads = _resolve_payloads(temp_db, monkeypatch, scene=bare)
-    assert payloads["director_resolve"]["scene"]["weather"] == {}
+    assert payloads["director_spatial"]["weather"] == {}
     assert len(json.dumps(
-        payloads["director_resolve"]["scene"]["weather"])) == 2
+        payloads["director_spatial"]["weather"])) == 2
 
     _scene, payloads = _resolve_payloads(temp_db, monkeypatch)
-    cost = len(json.dumps(payloads["director_resolve"]["scene"]["weather"]))
+    cost = len(json.dumps(payloads["director_spatial"]["weather"]))
     assert 100 < cost < 160, cost
 
 
@@ -555,4 +596,4 @@ def test_the_sky_reaches_the_payload_in_the_vocabulary_it_is_stored_in(
     scene = json.loads(json.dumps(RICH_SCENE))
     scene["weather"] = normalize_weather(weather)
     scene, payloads = _resolve_payloads(temp_db, monkeypatch, scene=scene)
-    assert payloads["director_resolve"]["scene"]["weather"] == scene["weather"]
+    assert payloads["director_spatial"]["weather"] == scene["weather"]

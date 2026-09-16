@@ -1,0 +1,144 @@
+{
+  "kind": "zero-call diagnostic follow-up, outside scored prose",
+  "source": "/tmp/sonder-causal-contract-final/garment_badge_and_water/result.json",
+  "added_room": {
+    "name": "Diagnostic corridor",
+    "adjacent": [
+      "bay"
+    ],
+    "light": "bright",
+    "size": "small",
+    "anchors": {}
+  },
+  "diff": {
+    "positions": {
+      "Nia": "corridor_probe"
+    }
+  },
+  "before": {
+    "Nia": {
+      "room": "bay",
+      "containment": null,
+      "station": {
+        "at": "cart",
+        "near": [
+          "badge",
+          "jacket",
+          "bottle"
+        ]
+      }
+    },
+    "jacket": {
+      "room": "bay",
+      "containment": {
+        "in": "Nia",
+        "mode": "worn"
+      },
+      "station": {
+        "at": "rail",
+        "near": [
+          "Nia",
+          "Rin"
+        ],
+        "from_event": 6
+      }
+    },
+    "badge": {
+      "room": "bay",
+      "containment": null,
+      "station": {
+        "at": "tray",
+        "near": [
+          "Nia",
+          "Tomas"
+        ],
+        "from_event": 7
+      }
+    }
+  },
+  "after": {
+    "Nia": {
+      "room": "corridor_probe",
+      "containment": null,
+      "station": {
+        "at": null,
+        "near": [
+          "jacket"
+        ],
+        "cell": [
+          2,
+          2
+        ]
+      }
+    },
+    "jacket": {
+      "room": "corridor_probe",
+      "containment": {
+        "in": "Nia",
+        "mode": "worn"
+      },
+      "station": {
+        "at": null,
+        "near": [
+          "Nia"
+        ],
+        "from_event": 6
+      }
+    },
+    "badge": {
+      "room": "bay",
+      "containment": null,
+      "station": {
+        "at": "tray",
+        "near": [
+          "Tomas"
+        ],
+        "from_event": 7
+      }
+    }
+  },
+  "contacts_before": [
+    {
+      "actor": "bottle",
+      "actor_part": "",
+      "target": "cart",
+      "target_part": "",
+      "target_interior": "",
+      "manner": "rest",
+      "relation": "surface",
+      "motion": "settled",
+      "detail": "",
+      "unasserted": 0,
+      "contact_id": "contact:8521cfefbe7bd3129c21"
+    },
+    {
+      "actor": "badge",
+      "actor_part": "clip",
+      "target": "jacket",
+      "target_part": "chest",
+      "target_interior": "",
+      "manner": "grip",
+      "relation": "surface",
+      "motion": "settled",
+      "detail": "clipped fast",
+      "unasserted": 0,
+      "contact_id": "contact:8548cef792a963d6269f"
+    }
+  ],
+  "contacts_after": [
+    {
+      "actor": "bottle",
+      "actor_part": "",
+      "target": "cart",
+      "target_part": "",
+      "target_interior": "",
+      "manner": "rest",
+      "relation": "surface",
+      "motion": "settled",
+      "detail": "",
+      "unasserted": 0,
+      "contact_id": "contact:8521cfefbe7bd3129c21"
+    }
+  ],
+  "inventory_report": []
+}

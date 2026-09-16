@@ -297,6 +297,14 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
         if isinstance(prepared, dict) else None
     if not isinstance(_merged_entities, dict):
         _merged_entities = {}
+        if diff.get("causal_steps"):
+            from world.spatial import merge_scene_with_diff
+            _merged_entities = merge_scene_with_diff(
+                _prior_scene, diff).get("entities") or {}
+    # The flattened removal list also contains temporary removals followed
+    # by recreation. Project the executed result, not that intermediate act.
+    removed_entities = [entity_id for entity_id in (diff.get("remove_entities") or [])
+                        if not diff.get("causal_steps") or entity_id not in _merged_entities]
 
     def _projected(entity_id, entity_def, prior_payload):
         """What world_entities should now hold for this entity.
@@ -416,7 +424,7 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
                             ),
                         )
 
-        for entity_id in (diff.get("remove_entities") or []):
+        for entity_id in removed_entities:
             c.execute("DELETE FROM world_entities WHERE entity_id=? AND chat_id=?",
                       (entity_id, cid))
             c.execute("DELETE FROM world_placements WHERE subject_id=? AND chat_id=?",
@@ -565,4 +573,4 @@ def commit_world_entities(ctx, nonce, *, prepared=None):
                 _supersede_disguises(c, cid, cond, cid_val)
 
     return {"entities_committed": len(diff.get("entities") or {}),
-            "entities_removed": len(diff.get("remove_entities") or [])}
+            "entities_removed": len(removed_entities)}

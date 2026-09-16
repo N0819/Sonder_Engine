@@ -362,7 +362,19 @@ def _specialist_span_slice(name, view):
                 if actor in aimed or (item.get("type") == "speech"
                                       and targets & aimed):
                     rows.append(item)
-    return rows
+    # Additional addressed-figure rows may precede an explicitly routed row.
+    # The hand processes one ordered batch, so restore chronology before its
+    # positional response is paired with that same slice during assembly.
+    positions = {id(item): index for index, item in enumerate(view.get("spans") or [])}
+
+    def chronology(item):
+        try:
+            return int(item.get("chrono_id") or item.get("event_id")
+                       or positions[id(item)] + 1)
+        except (TypeError, ValueError):
+            return positions[id(item)] + 1
+
+    return sorted(rows, key=chronology)
 
 
 def specialist_co_hands(name, view):
@@ -628,6 +640,9 @@ def _specialist_ledger(item):
     visible.pop("item_id", None)
     visible.pop("item_ids", None)
     visible.pop("chrono_id", None)
+    # _span_items aliases the private chrono as event_id for legacy readers.
+    # Positional specialist results need neither spelling of that join key.
+    visible.pop("event_id", None)
     # AUTHORITY IS THE DIRECTOR'S WORKING INPUT, NOT A HAND'S.
     #
     # It is how an asserted act is judged contestable or not, and that
@@ -793,6 +808,7 @@ def _specialist_payload(name, ctx, sc, view, extras):
     payload = {
         "source": view["source"],
         "variant_seed": extras.get("nonce"),
+        "completion_contract": "verified_effects_v1",
     }
     if extras.get("identity_index"):
         # Causal rows retain stable persona/character ids.  Hands write scene
@@ -841,14 +857,21 @@ def _specialist_payload(name, ctx, sc, view, extras):
     manifest = _specialist_manifest_slice(name, view)
     if manifest:
         payload["changes_asserted"] = manifest
-    internal_rows = [_without_private_keys(span)
-                     for span in _specialist_span_slice(name, view)]
+    selected_spans = _specialist_span_slice(name, view)
+    internal_rows = [_without_private_keys(span) for span in selected_spans]
     if internal_rows:
         ledgers = [_specialist_ledger(row) for row in internal_rows]
         identity_index = extras.get("identity_index") or {}
-        for ledger in ledgers:
+        for span, ledger in zip(selected_spans, ledgers):
             if not isinstance(ledger, dict):
                 continue
+            ledger["assigned_hands"] = span_owners(span)
+            if name not in ledger["assigned_hands"]:
+                ledger["assigned_hands"].append(name)
+            if span.get("_requested_channels"):
+                ledger["requested_channels"] = list(span["_requested_channels"])
+            if span.get("_prior_work"):
+                ledger["prior_work"] = span["_prior_work"]
             source_name = identity_index.get(str(
                 ledger.get("source_entity_id") or ""))
             if source_name:
@@ -895,7 +918,7 @@ def _specialist_payload(name, ctx, sc, view, extras):
                 [want(name) for name in names],
             ))
 
-        def match(kind, key, display, aliases=()):
+        def match(kind, key, display, aliases=(), **details):
             forms = {str(key).strip().casefold(),
                      str(display).strip().casefold()}
             forms.update(str(value).strip().casefold()
@@ -904,11 +927,22 @@ def _specialist_payload(name, ctx, sc, view, extras):
                 "kind": kind,
                 "world_key": str(key),
                 "world_name": str(display or key),
+                **details,
             }
             for query in forms & set(queries):
                 queries[query].add(tuple(sorted(found.items())))
 
-        for who in (sc.get("positions") or {}):
+        # Positions also contains portable objects and fixtures. Calling
+        # every placed key a body made a jacket a candidate wearer of itself
+        # in live causal output. Keep the legacy placed-subject convention
+        # only for subjects without entity records; explicit body ledgers
+        # and registered identities can vouch for an entity-backed body.
+        entities = sc.get("entities") or {}
+        bodies = set(sc.get("positions") or {}) - set(entities)
+        bodies.update(sc.get("attire") or {})
+        bodies.update(sc.get("scales") or {})
+        bodies.update(str(who) for who in identity_index.values() if who)
+        for who in sorted(bodies):
             match("body", who, who)
         for entity_id, entity in (sc.get("entities") or {}).items():
             entity = entity if isinstance(entity, dict) else {}
@@ -922,7 +956,7 @@ def _specialist_payload(name, ctx, sc, view, extras):
             if not isinstance(attire, dict):
                 continue
             for garment in attire.get("wearing") or []:
-                match("garment", garment, garment)
+                match("garment", garment, garment, worn_by=str(who))
         def candidates(query):
             return sorted(
                 (dict(entry) for entry in queries.get(query) or ()),
@@ -1042,6 +1076,11 @@ def _specialist_payload(name, ctx, sc, view, extras):
         # op names. A crowd is a charter projection and a courier a body on
         # a route, so charter SIMULATES both; the ops are this hand's.
         payload.update({
+            # Existing debts and evident public roles constrain the social
+            # consequence of a routed act. They are standing context only;
+            # receiving them grants no new output channel or invented act.
+            "pending_obligations": extras.get("pending_obligations") or [],
+            "social_standing": extras.get("social_standing") or {},
             "crowds": extras.get("crowds") or [],
             "couriers": extras.get("couriers") or [],
             "carried_reports": extras.get("carried_reports") or [],
@@ -1167,6 +1206,16 @@ def _specialist_payload(name, ctx, sc, view, extras):
         # each declared mover's heading -- never lore, minds, or bodies.
         payload.update({
             "player": view.get("player"),
+            # These channels moved to this owner with causal dispatch. Their
+            # standing values must move with them, so silence/change can be
+            # judged against the actual travel relation, place, and sky.
+            "following": sc.get("following") or {},
+            "location": sc.get("location") or "",
+            "weather": sc.get("weather") or {},
+            # The clock normally repeats this label in display. Older scenes
+            # may have the label without a clock; show the stored fact without
+            # manufacturing elapsed time or modifying the clock record.
+            "time_of_day": sc.get("time_of_day") or "",
             "rooms": sc.get("rooms") or {},
             "positions": sc.get("positions") or {},
             "stations": sc.get("stations") or {},
@@ -1244,8 +1293,8 @@ def _stage_container(out, stage, channel):
     which the interpret contract spells `contact_assertions` (the same ops,
     validated by `_validated_player_contact_assertions` downstream exactly
     as a model-authored copy would be)."""
-    if stage == "resolve" and channel == "public_evidence":
-        return out, "public_evidence"
+    if channel == "obligations" or (stage == "resolve" and channel == "public_evidence"):
+        return out, channel
     if stage == "interpret" and channel == "contact_ops":
         return out, "contact_assertions"
     key = "state_diff" if stage == "resolve" else "state_assertions"
@@ -1391,9 +1440,9 @@ def _resolved_event_verdicts(result, granted_ids):
             continue
         if event_id in granted and status in _EVENT_VERDICTS:
             record = {"status": status}
-            # An address is only meaningful ON a decline, and only when it
-            # names a hand that exists. Anything else is dropped rather
-            # than carried into routing as a half-fact.
+            # Legacy manifest receipts carry a forwarding vote only on a
+            # decline. Current positional results request complementary work
+            # separately, before this compatibility receipt is assembled.
             target = str(entry.get("reroute_to") or "").strip().casefold()
             if status == "not_mine" and target in SPECIALISTS:
                 record["reroute_to"] = target

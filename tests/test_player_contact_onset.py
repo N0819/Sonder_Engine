@@ -86,7 +86,8 @@ def test_interpret_schema_and_prompt_carry_exact_contact_assertions():
     assert "coarse visibility region" in contact
     assert "relation is surface|interior" in contact
     assert "motion is settled|moving" in contact
-    assert "target_interior names what currently encloses" in contact
+    assert "target_interior names the enclosing" in contact
+    assert "target_part names the contacted boundary or endpoint" in contact
     assert "op:'cross'" in contact
     # The firewall half moved with the rest and is now pinned, which it never
     # was: `detail` is free prose, so no key whitelist can hold this and the

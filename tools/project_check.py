@@ -409,7 +409,12 @@ OPS_MENTIONED_BUT_NOT_OWNED: dict[str, set[str]] = {
     # precisely to DISCLAIM it ("Stations are not contact: contact_ops says
     # what a body is AGAINST...") -- contact is the contact specialist's
     # channel, and the shared segments reference it to draw that boundary.
-    "director_spatial": {"contact_ops"},
+    # Complementary completion requests name these owners' channels in
+    # required_channels; they still cannot write them inside patch.
+    "director_spatial": {"contact_ops", "inventory_ops"},
+    "director_body": {"contact_ops", "inventory_ops"},
+    "director_objects": {"contact_ops"},
+    "director_contact": {"inventory_ops"},
 }
 
 #: Prompt ids validated against another stage's model: the orchestrated
@@ -846,6 +851,11 @@ def check_specialist_prompt_chunks(errors: list[str]) -> None:
         order = list(prompt_spec.get("order") or ())
         step_key = runtime.get("step_key")
         schema_owned = set(schema_channels.get(step_key) or ())
+        defaults = set(runtime.get("default_channels") or ())
+        if defaults - owned:
+            errors.append(
+                f"specialist {name!r} defaults to unowned channels "
+                f"{sorted(defaults - owned)}")
 
         for missing in sorted(owned - chunks):
             errors.append(

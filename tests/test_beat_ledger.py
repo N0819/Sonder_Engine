@@ -159,6 +159,234 @@ class TestWhatTheRecompilerHandsOver:
         assert row["text"] == ""
 
 
+class TestCausalInvocationsFormOneBeat:
+    """A live nine-span box scene compiled correctly but stored zero events:
+    asserted input was absent from resolve, as intended, and the event writer
+    still expected resolve to repeat the entire beat."""
+
+    @staticmethod
+    def span(chrono, kind, text, *, actor="persona:1", commitment="asserted",
+             source="turn:1:primary:raw", event_id=None):
+        row = {
+            "chrono_id": chrono, "actor": actor, "type": kind,
+            "event_id": event_id or f"turn:1:player:{chrono - 1}:{kind}",
+            "from_declaration": source, "commitment": commitment,
+            "item_ids": [1], "item_names": ["brass box"],
+        }
+        if kind == "speech":
+            row["text"] = text
+        elif kind == "event":
+            row["description"] = text
+        else:
+            row.update(attempt=text, observable=text)
+        return row
+
+    def test_asserted_novel_prose_survives_an_empty_resolve(self):
+        occurrences = [
+            ("action", "lifts the brass box from the workbench"),
+            ("action", "opens the box"),
+            ("speech", "The seal is intact."),
+            ("action", "takes the copper key out"),
+            ("action", "closes the box"),
+            ("action", "puts the key on the workbench"),
+            ("action", "opens the box again"),
+            ("speech", "Now it is empty."),
+            ("action", "sets the open box beside the key"),
+        ]
+        interp = {"ledgers": [{}], "sequence": [
+            self.span(n, kind, text)
+            for n, (kind, text) in enumerate(occurrences, 1)]}
+        rows = director.beat_event_ledger(
+            {"ledgers": [], "sequence": []}, interp, [],
+            identity_index={"persona:1": "Iona"})
+        assert [row["account"] for row in rows] == [text for _, text in occurrences]
+        assert [row["order"] for row in rows] == list(range(9))
+        assert [row["text"] for row in rows if row["kind"] == "speech"] == [
+            "The seal is intact.", "Now it is empty."]
+        assert {row["actor"] for row in rows} == {"Iona"}
+        assert len({row["declared"] for row in rows}) == 9
+        assert all("raw" not in row["declared"] for row in rows)
+        assert all("item_ids" not in row and "chrono_id" not in row for row in rows)
+
+    def test_contestable_onset_is_replaced_and_asserted_echo_not_repeated(self):
+        open_box = self.span(1, "action", "opens the box")
+        attempt = self.span(2, "action", "tries to catch the falling key",
+                            commitment="contestable")
+        result = self.span(2, "action", "misses the falling key",
+                           source=attempt["event_id"], event_id=2)
+        response = self.span(3, "speech", "I saw it fall.", actor="character:2",
+                             source="turn:1:character:2:0:speech", event_id=3)
+        echoed = self.span(1, "action", "opens the box",
+                           source=open_box["event_id"], event_id=1)
+        rows = director.beat_event_ledger(
+            {"ledgers": [{}], "sequence": [echoed, result, response]},
+            {"ledgers": [{}], "sequence": [open_box, attempt]}, [],
+            identity_index={"persona:1": "Iona", "character:2": "Nera"})
+        assert [row["account"] for row in rows] == [
+            "opens the box", "misses the falling key", "I saw it fall."]
+        assert [row["actor"] for row in rows] == ["Iona", "Iona", "Nera"]
+        assert rows[1]["declared"] == attempt["event_id"]
+
+    def test_resolve_spans_sharing_a_raw_source_remain_separate(self):
+        rows = director.beat_event_ledger({"ledgers": [{}], "sequence": [
+            self.span(1, "action", "turns the handle", actor="Nera", event_id=1),
+            self.span(2, "speech", "It is locked.", actor="Nera", event_id=2),
+            self.span(3, "event", "the latch snaps", actor="world", event_id=3),
+        ]}, {}, [])
+        assert [row["account"] for row in rows] == [
+            "turns the handle", "It is locked.", "the latch snaps"]
+        assert [row["kind"] for row in rows] == ["action", "speech", "event"]
+        assert rows[0]["surface"] == "turns the handle"
+        assert rows[2]["surface"] == "the latch snaps"
+
+    def test_extra_player_spans_join_by_chronology_without_local_id_collisions(self):
+        first = self.span(1, "speech", "Ready?", actor="persona:2",
+                          event_id="turn:1:persona:2:0:speech")
+        second = self.span(2, "speech", "Ready.")
+        final = self.span(1, "event", "the bell rings", actor="world", event_id=1)
+        rows = director.beat_event_ledger(
+            {"ledgers": [{}], "sequence": [final]},
+            {"ledgers": [{}], "sequence": [second],
+             "other_players": {"2": {"sequence": [first]}}}, [],
+            identity_index={"persona:1": "Iona", "persona:2": "Perrin"})
+        assert [row["account"] for row in rows] == ["Ready?", "Ready.", "the bell rings"]
+        assert [row["actor"] for row in rows] == ["Perrin", "Iona", "world"]
+
+    def test_causal_surface_keeps_private_purpose_out(self):
+        row = self.span(1, "action", "opens the box to hide the stolen note")
+        row["observable"] = "opens the box"
+        output, = director.beat_event_ledger(
+            {"ledgers": [], "sequence": []},
+            {"ledgers": [{}], "sequence": [row]}, [])
+        assert output["surface"] == "opens the box"
+        assert "stolen" not in output["surface"]
+
+
+class TestCausalSpansReachPerception:
+    class Context(dict):
+        __getattr__ = dict.__getitem__
+
+    def context(self, declaration=None):
+        return self.Context(
+            chat={"persona_id": 1}, extra_players=[], cast=[],
+            character_results={}, reaction_results={},
+            reaction_loop={"rounds": []},
+            interaction_loop={"rounds": [{
+                "speaker": "Nera", "speaker_id": 7,
+                "result": {"sequence": [declaration] if declaration else []}}]},
+        )
+
+    def test_one_declaration_can_resolve_into_several_distinct_moments(self):
+        from world.causal_program import event_worlds, program_from_history
+        span = TestCausalInvocationsFormOneBeat.span
+        declaration = {"event_id": "character:7:act", "type": "action",
+                       "observable": "walks out, calls, and returns"}
+        rows = [
+            span(1, "action", "walks into the corridor", actor="character:7",
+                 source=declaration["event_id"], event_id=1),
+            span(2, "speech", "Come here.", actor="character:7",
+                 source=declaration["event_id"], event_id=2),
+            span(3, "action", "returns to the workshop", actor="character:7",
+                 source=declaration["event_id"], event_id=3),
+        ]
+        resolved = {"ledgers": [{}], "sequence": rows}
+        stream = perception._outcome_event_stream(
+            self.context(declaration), {}, {}, resolved, "Iona",
+            [{"speaker": "Nera", "exact_quote": "Come here."}], [])
+        assert [event["kind"] for event in stream] == ["action", "speech", "action"]
+        assert [event.get("actor") or event["entry"]["speaker"]
+                for event in stream] == ["Nera"] * 3
+        assert [event.get("attempt") for event in stream] == [
+            "walks into the corridor", None, "returns to the workshop"]
+        steps = program_from_history([], rows)
+        worlds = [{**step, "before": {"moment": n}}
+                  for n, step in enumerate(steps)]
+        assert event_worlds(worlds, stream) == {
+            0: {"moment": 0}, 1: {"moment": 1}, 2: {"moment": 2}}
+
+    def test_resolved_surface_does_not_render_original_purpose_or_blocked_source(self):
+        span = TestCausalInvocationsFormOneBeat.span
+        declaration = {"event_id": "character:7:act", "type": "action",
+                       "observable": "reaches for the latch",
+                       "attempt": "unbolt the door to help the thief"}
+        row = span(1, "action", "fails to unbolt it to help the thief",
+                   actor="character:7", source=declaration["event_id"], event_id=1)
+        row["observable"] = "tugs at the stuck latch"
+        resolved = {"ledgers": [{}], "sequence": [row]}
+        stream = perception._outcome_event_stream(
+            self.context(declaration), {}, {}, resolved, "Iona", [], [])
+        assert [event["attempt"] for event in stream] == ["tugs at the stuck latch"]
+        resolved["sequence_dispositions"] = [{
+            "event_id": declaration["event_id"], "status": "blocked"}]
+        assert perception._outcome_event_stream(
+            self.context(declaration), {}, {}, resolved, "Iona", [], []) == []
+
+    def test_private_source_does_not_gain_an_outward_surface(self):
+        span = TestCausalInvocationsFormOneBeat.span
+        declaration = {"event_id": "character:7:act", "type": "action",
+                       "attempt": "silently decides to help the thief", "observable": ""}
+        resolved = {"ledgers": [{}], "sequence": [span(
+            1, "action", "decides to help the thief", actor="character:7",
+            source=declaration["event_id"], event_id=1)]}
+        assert perception._outcome_event_stream(
+            self.context(declaration), {}, {}, resolved, "Iona", [], []) == []
+
+    def test_a_concealed_source_line_stays_concealed_after_splitting(self):
+        from agents import composer
+        span = TestCausalInvocationsFormOneBeat.span
+        declaration = {"event_id": "character:7:secret", "type": "speech",
+                       "text": "The lock is broken.", "visibility": "concealed",
+                       "conceal_from": []}
+        event = span(1, "speech", declaration["text"], actor="character:7",
+                     source=declaration["event_id"], event_id=1)
+        event.update(visibility="concealed", conceal_from=["Iona"])
+        resolved = {"ledgers": [{}], "sequence": [event]}
+        stream = perception._outcome_event_stream(
+            self.context(declaration), {}, {}, resolved, "Iona",
+            [{"speaker": "Nera", "exact_quote": declaration["text"]}], [])
+        speech, = stream
+        for observer in ("Iona", "Perrin"):
+            assert composer.speech_percept(
+                speech["entry"], {"same_room": True, "barrier": "open"}, observer,
+                display="Nera", can_see=True) is None
+
+    def test_resolve_raw_spans_and_interpret_spans_do_not_share_a_moment(self):
+        from world.causal_program import event_worlds
+        span = TestCausalInvocationsFormOneBeat.span
+        onset = span(1, "action", "opens the box")
+        result = span(1, "action", "closes the box", actor="character:7", event_id=1)
+        stream = perception._outcome_event_stream(
+            self.context(), {}, {"ledgers": [{}], "sequence": [onset]},
+            {"ledgers": [{}], "sequence": [result]}, "Iona", [], [])
+        worlds = [{"stage": stage, "chrono_id": 1, "events": ["1"],
+                   "before": {"moment": stage}} for stage in ("interpret", "resolve")]
+        assert event_worlds(worlds, stream) == {
+            0: {"moment": "interpret"}, 1: {"moment": "resolve"}}
+
+    def test_empty_schema_defaults_do_not_reclassify_an_archived_beat(self):
+        declaration = {"event_id": "character:7:act", "type": "action",
+                       "observable": "turns toward the door",
+                       "attempt": "turns to find a way to escape"}
+        resolved = {"ledgers": [], "causal_ledger": [], "sequence": [{
+            "actor": "Nera", "attempt": "looks for an escape",
+            "from_declaration": declaration["event_id"]}]}
+        declared = [{"sequence": [declaration]}]
+        row, = director.beat_event_ledger(resolved, {"ledgers": []}, declared)
+        assert row["surface"] == "turns toward the door"
+        stream = perception._outcome_event_stream(
+            self.context(declaration), {}, {"ledgers": []}, resolved, "Iona", [], [])
+        assert [event["attempt"] for event in stream] == ["turns toward the door"]
+
+    def test_a_story_without_a_persona_keeps_the_primary_actor_label(self):
+        span = TestCausalInvocationsFormOneBeat.span
+        ctx = self.context()
+        ctx["chat"] = {"persona_id": None}
+        interp = {"ledgers": [{}], "sequence": [span(
+            1, "action", "opens the box", actor="persona:primary")]}
+        stream = perception._outcome_event_stream(ctx, {}, interp, {}, "Iona", [], [])
+        assert [event["actor"] for event in stream] == ["Iona"]
+
+
 class TestWhatTheWorldKeeps:
     """`world/beat_ledger.py` -- the beat number IS the lifetime."""
 

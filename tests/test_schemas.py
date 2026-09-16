@@ -218,6 +218,13 @@ def test_the_prose_authors_example_shows_only_channels_it_still_owns():
     shown = OUTPUT_EXAMPLES["director_resolve"]
     assert "ledgers" in shown
     assert "state_diff" not in shown
+    for step in ("director_interpret", "director_resolve"):
+        for row in OUTPUT_EXAMPLES[step]["ledgers"]:
+            assert {"chrono_id", "item_ids", "item_names", "source_entity_id",
+                    "source_event_id", "event", "commitment", "resolution_notes",
+                    "categories"} <= row.keys()
+            assert len(row["item_ids"]) == len(row["item_names"])
+            assert not {"item_id", "object_name", "authority_mode", "kind"} & row.keys()
 
 
 def test_the_character_repair_example_names_the_psychology_tier():

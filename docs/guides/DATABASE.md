@@ -150,6 +150,24 @@ Housekeeping tables not described below: `schema_meta` (the migration version), 
 - `checkpoints`: whole-state restoration blobs keyed by chat and turn index.
 
 Sequence causality adds no world table and no persistent scene ledger.
+`inventory_ops` is consumed as a complete typed physical placement. A
+successful transfer updates containment and removes obsolete bearing contacts
+(`carry`, `hold`, `grip`, `support` only), `held_by`, `held_items`, body support
+and stale stations; ordinary touch remains. A matching new position/station
+supplements the operation, while contradictory explicit containment or room
+placement keeps its authority and reports the unfinished transfer. Room-anchor
+destinations also establish the exact station; an entity without a matching
+room anchor can supply only the room and reports the missing exact placement.
+`relation: mounted` targeting an established entity records a durable parent
+in `scene.contained`, so badge → jacket → wearer moves transitively. A later
+transfer to a room or another holder detaches it. This is separate from
+`inside`/`container`/`pocket`, which require the target's `container: true`.
+Transfers retire old wardrobe membership only through an unambiguous entity
+identity. Rewearing retires obsolete free-object grips and preserves a shed
+garment's entity when physical records reference it, so attachments retain
+their parent. All these records ride the existing scene archive/checkpoint
+path; no new persistent store is introduced.
+
 `DirectorResolve.sequence_dispositions` is retained with the step result for
 author diagnostics and replay inspection. `StateDiff.phase_sources` is a
 transient source map consumed by the deterministic causal floor before the
@@ -508,3 +526,22 @@ adding a key means adding it to that list too, or the check can never be built.
 The repair is not free either: a migration deleting retired keys runs on the
 owner's database at next launch, which is their call to make, not a
 housekeeping commit's.
+
+## Executable causal variants
+
+Director step variants retain the engine-authored `state_diff.causal_steps`
+(or interpret's `state_assertions.causal_steps`): ordered span patches with
+invocation-local chronology and declaration aliases. This is replay data in
+the existing variant JSON, not a new table or a persistent scene ledger.
+Perception and commit share one composition; its intermediate worlds live
+only in `ComposedBeat.causal_worlds` and are not written into `world.scene`.
+Legacy variants without the program keep their original merge behavior.
+The normalized entity projection uses the executed scene to distinguish a
+final removal from a temporary removal followed by recreation in the same beat.
+
+An inventory transfer explicitly placed `inside`, `container`, or `pocket`
+of an established `container: true` entity persists through the existing
+scene `contained` ledger. It uses the same transitive placement and
+concealment rules as authored containment; no additional table, interior room,
+or derived position authority is introduced. Explicit domain writes for the
+subject take precedence over this inventory projection.

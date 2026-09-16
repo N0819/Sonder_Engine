@@ -98,6 +98,36 @@ def _run_resolve(ctx, monkeypatch, agent_out=None, captured=None):
     return director.director_resolve(ctx, nonce=0)
 
 
+def _capture_causal_social_resolve(ctx, monkeypatch):
+    """Exercise current row dispatch, not a legacy author-only response."""
+    import agents.director as director
+
+    captured = {}
+
+    def fake_agent_json(role, step_key, system, payload, **kwargs):
+        captured[step_key] = payload
+        if step_key == "director_resolve":
+            return {"ledgers": [{
+                "chrono_id": 1, "item_ids": [1], "item_names": ["Mara"],
+                "source_entity_id": f"character:{ctx.cast[0]['id']}",
+                "authority_mode": "autonomous",
+                "event": "Mara refuses the request.",
+                "resolution_notes": "Record the explicit refusal.",
+                "categories": ["public_evidence"],
+            }]}
+        assert step_key == "director_social", step_key
+        return {"results": [{"status": "already_true", "transforms": []}]}
+
+    monkeypatch.setattr(director, "_agent_json", fake_agent_json)
+    director.director_resolve(ctx, nonce=0)
+    assert captured["director_social"]["ledgers"][0]["item_names"] == ["Mara"]
+    # The slicer keeps its minimal causal contract. Context moves to the
+    # granted owner; it does not return as a whole-beat author payload.
+    assert "pending_obligations" not in captured["director_resolve"]
+    assert "social_standing" not in captured["director_resolve"]
+    return captured["director_social"]
+
+
 # ---- W1: obligation ledger ----
 
 def test_open_op_appends_ledger_and_dedupes(temp_db, monkeypatch):
@@ -183,8 +213,7 @@ def test_resolve_payload_surfaces_overdue_flag(temp_db, monkeypatch):
          "kind": "announced_action", "opened_turn": 4},
     ])
 
-    captured = {}
-    _run_resolve(ctx, monkeypatch, captured=captured)
+    captured = _capture_causal_social_resolve(ctx, monkeypatch)
 
     obls = {o["id"]: o for o in captured["pending_obligations"]}
     assert obls["obl:2:0"]["age_beats"] == 3
@@ -243,8 +272,7 @@ def test_resolve_payload_carries_social_standing(temp_db, monkeypatch):
         temp_db,
         public_history="Visiting ethics observer with no command authority.",
     )
-    captured = {}
-    _run_resolve(ctx, monkeypatch, captured=captured)
+    captured = _capture_causal_social_resolve(ctx, monkeypatch)
 
     standing = captured["social_standing"]
     assert standing["Mara"].startswith("Visiting ethics observer")

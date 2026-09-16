@@ -6,7 +6,7 @@ import json
 import math
 import re
 
-from pydantic import BaseModel, Field, ValidationError, validator
+from pydantic import BaseModel, Field, StrictInt, ValidationError, validator
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, NamedTuple, Optional, Union, get_args, get_origin
@@ -1364,8 +1364,9 @@ class CausalLedgerEntry(LenientModel):
     ``chrono_id`` orders the beat. ``source_entity_id`` and the adjacent
     ``authority_mode`` identify the source without assigning it a special
     role in the contract.
-    ``categories`` contains one or more exact specialist channel names; every
-    owner named there receives the same span. ``resolution_notes`` is the
+    ``categories`` contains routing names; every owner named there receives
+    the same span. Surface appearance routes to ``body``; ``overlays`` is
+    only that hand's output channel. ``resolution_notes`` is the
     Director's causal ruling. ``item_id`` is the small numeric join used by
     independently produced transforms; ``object_name`` is what a specialist
     uses to match the standing world record.
@@ -1384,7 +1385,9 @@ class CausalLedgerEntry(LenientModel):
     act: str = ""
     observable: str = ""
     commitment: str = "asserted"
-    targets: list[str] = Field(default_factory=list)
+    targets: list[str] = Field(
+        default_factory=list,
+        description="Exact world/identity keys or readable referent names; never private item_ids.")
     visibility: str = "overt"
     conceal_from: list[str] = Field(default_factory=list)
     volume: str = "normal"
@@ -1398,13 +1401,15 @@ class CausalLedgerEntry(LenientModel):
     # for the hands, to match against the world or to mint. `item_id` and
     # `object_name` are the first of each, kept for every reader that
     # predates the lists.
-    item_ids: list[int] = Field(default_factory=list)
+    item_ids: list[StrictInt] = Field(default_factory=list)
     item_names: list[str] = Field(default_factory=list)
     look: str = ""
     ability: str = ""
     difficulty: str = ""
     resolution_notes: str = ""
-    categories: list[str] = Field(default_factory=list)
+    categories: list[str] = Field(
+        default_factory=list,
+        description="Routing categories from the Director sheet. Surface appearance uses body.")
 
 
 class CausalDirectorOutput(LenientModel):
@@ -1423,6 +1428,9 @@ class DirectorInterpret(LenientModel):
     # fields are compatibility projections populated by deterministic code.
     ledgers: list[CausalLedgerEntry] = Field(default_factory=list)
     causal_ledger: list[CausalLedgerEntry] = Field(default_factory=list)
+    # Social effects of asserted input, committed once with later resolve
+    # effects. Metadata, never scene state or a license to settle an attempt.
+    obligations: list[dict] = Field(default_factory=list)
     # The ruling channel, mirroring DirectorResolve. `director_interpret` fans
     # out to the same five specialists (director.py's `_run_specialists`), so a
     # hand reading only the player's declaration was left to infer what the
@@ -2409,6 +2417,9 @@ class ArtifactOp(LenientModel):
 
 
 class StateDiff(LenientModel):
+    # Engine-only executable spans. Specialists cannot author this channel.
+    # The other fields are its compatibility projection plus guarded edits.
+    causal_steps: list[dict] = Field(default_factory=list)
     # Source ids for scalar/map changes that cannot carry source_event_id in
     # their own value, e.g. {"positions.Dana": "turn:4:..."}.  Consumed and
     # removed by the causal phase floor before scene merge/persistence.
@@ -2897,8 +2908,8 @@ class CausalTransform(LenientModel):
 class LedgerPatchTransform(LenientModel):
     """One model-authored patch; its ledger identity is positional. `item`
     names which of the row's `item_names` this patch changes (the owner's
-    contract, 2026-09-15: one transform per thing); a row about one thing
-    needs none."""
+    contract, 2026-09-15: one transform per thing). Current wire output
+    requires one exact row item; archives may omit it on a single-item row."""
     item: str = ""
     patch: dict[str, Any] = Field(default_factory=dict)
 
@@ -2908,10 +2919,14 @@ class LedgerTransformResult(LenientModel):
 
     `settled` is the verdict per THING (the owner, 2026-09-15: "the verdict
     follows the thing"): for each of the row's `item_names` the hand did not
-    transform, its name -> already_true | not_mine | no_referent. A row
-    about one thing needs none; the row's `status` is its verdict."""
+    transform, its name -> not_mine | no_referent. A desired effect is always
+    a typed patch, even when believed unchanged. Only chronological execution
+    can verify that it is already true. Legacy strings remain readable."""
     transforms: list[LedgerPatchTransform] = Field(default_factory=list)
     status: str = ""
+    # Completion is local to this hand. Missing complementary channels are
+    # requested even beside encoded/already_true; code chooses their owners.
+    required_channels: list[str] = Field(default_factory=list)
     reroute_to: str = ""
     settled: dict[str, str] = Field(default_factory=dict)
 
@@ -2954,6 +2969,7 @@ class DirectorSocialSpecialist(LenientModel):
     cast_changes: list[dict] = Field(default_factory=list)
     introductions: list[dict] = Field(default_factory=list)
     world_facts: list = Field(default_factory=list)
+    obligations: list[dict] = Field(default_factory=list)
     public_evidence: list[CharterPublicEvidence] = Field(default_factory=list)
     # The world's traffic, carried by this hand since the offscreen hand's
     # retirement (2026-09-04): StateDiff's own shapes, same contract.
@@ -4560,7 +4576,7 @@ SPECIALIST_CHANNELS = {
     "director_social": ("cast_changes", "introductions", "world_facts",
                         "public_evidence", "crowd_ops", "courier_ops",
                         "telling_ops", "ratified_claims", "contradicted_claims",
-                        "charter_ops", "claim_dispositions", "consequences"),
+                        "charter_ops", "claim_dispositions", "consequences", "obligations"),
     "director_contact": ("contact_ops", "contact_action_ops",
                          "substance_ops", "containment", "scales"),
     "director_objects": ("entities", "remove_entities", "inventory_ops",
@@ -4569,6 +4585,10 @@ SPECIALIST_CHANNELS = {
                          "remove_adjacent", "stations", "poses", "comms_ops",
                          "following_ops", "location", "time", "weather"),
 }
+
+# Read compatibility for retired Director categories. These remain valid
+# specialist patch channels where owned, but are no longer routing choices.
+CAUSAL_CATEGORY_REDIRECTS = {"overlays": "body", "marks": "body"}
 
 def _specialist_channel_shapes():
     """Which empty spelling each specialist channel has to be corrected TO.
@@ -5591,12 +5611,10 @@ OUTPUT_EXAMPLES = {
     "director_interpret": {
         "ledgers": [{
             "chrono_id": 1,
-            "item_id": 1,
-            "object_name": "north door",
+            "item_ids": [1],
+            "item_names": ["north door"],
             "source_entity_id": "persona:12",
-            "authority_mode": "world_author",
             "source_event_id": "turn:9:primary:raw",
-            "kind": "action",
             "event": "opens the north door",
             "observable": "opens the north door",
             "commitment": "asserted",
@@ -5673,72 +5691,88 @@ OUTPUT_EXAMPLES = {
             "time_scale": "scene",
         },
     },
-    # The Director decides causality and routing only. Engine code stamps the
-    # ids densely after validation; the worked values show the intended shape.
+    # The Director supplies private item handles and chronological span ids;
+    # these examples illustrate the current outer envelope, never a channel
+    # allowlist or a substitute for the scoped instructions on a repair call.
     "director_resolve": {
         "ledgers": [
             {
                 "chrono_id": 1,
-                "item_id": 1,
-                "object_name": "north door",
+                "item_ids": [1, 2],
+                "item_names": ["crate", "north door"],
                 "source_entity_id": "character:17",
-                "authority_mode": "autonomous",
                 "source_event_id": "turn:9:character:17:0:action",
-                "event": "The crate is wedged against the north door.",
+                "event": "wedges the crate against the north door",
+                "observable": "wedges the crate against the north door",
+                "commitment": "asserted",
+                "targets": ["crate", "north_door"],
                 "resolution_notes": (
                     "The crate remains at the doorway and the passage is "
                     "blocked by it."),
-                "categories": ["entities", "positions", "rooms"],
+                "categories": ["inventory_ops", "rooms"],
             },
         ],
     },
     "director_body": {
         "results": [{
-            "transforms": [{"patch": {"attire": {
+            "transforms": [{"item": "Mara", "patch": {"attire": {
                 "Mara": {"add": [], "remove": ["wool coat"]},
             }}}],
             "status": "encoded",
+            "settled": {},
+            "required_channels": [],
         }],
         "notes": [],
     },
     "director_social": {
         "results": [{
-            "transforms": [{"patch": {"introductions": [
+            "transforms": [{"item": "Mara", "patch": {"introductions": [
                 {"who": "Mara", "learns": "Sable"},
             ]}}],
             "status": "encoded",
+            "settled": {},
+            "required_channels": [],
         }],
         "notes": [],
     },
     "director_contact": {
         "results": [{
-            "transforms": [{"patch": {"contact_ops": [{
+            "transforms": [{"item": "Mara", "patch": {"contact_ops": [{
                 "op": "add", "actor": "Mara", "actor_part": "hand",
                 "target": "Sable", "target_part": "shoulder",
                 "manner": "rest", "relation": "surface",
                 "motion": "settled",
             }]}}],
             "status": "encoded",
+            "settled": {},
+            "required_channels": [],
         }],
         "notes": [],
     },
     "director_objects": {
         "results": [{
-            "transforms": [{"patch": {"entities": {"storm_lantern": {
+            "transforms": [{"item": "Storm Lantern", "patch": {"entities": {"storm_lantern": {
                 "name": "Storm Lantern", "kind": "object",
                 "description": "a brass storm lantern",
                 "state": {"lit": True},
-            }}}}],
+            }}, "inventory_ops": [{
+                "op": "transfer", "object_id": "storm_lantern",
+                "from_id": "workbench", "to_id": "Mara", "relation": "held",
+            }]}}],
             "status": "encoded",
+            "settled": {},
+            "required_channels": [],
         }],
         "notes": [],
     },
     "director_spatial": {
         "results": [{
-            "transforms": [{"patch": {
+            "transforms": [{"item": "Mara", "patch": {
                 "positions": {"Mara": "lamp_room"},
             }}],
             "status": "encoded",
+            "settled": {},
+            "required_channels": [],
         }],
         "notes": [],
     },
@@ -6123,6 +6157,138 @@ def _resolved_source_event(written, event_ids):
     return scored[0][1]
 
 
+def _causal_patch_errors(step_key, result, ledger, source_payload, index,
+                         notes):
+    """Refuse an encoded receipt whose writes schema validation would lose.
+
+    This checks typed channels, never the prose's meaning. Existing entity
+    patches may omit their names; assembly hydrates those after identity
+    binding, so a temporary name here validates shape without requiring a
+    specialist to repeat the standing entity. Explicit clears stay writes.
+    """
+    errors = []
+    written = set()
+    owned = set(SPECIALIST_CHANNELS[step_key])
+    known_bodies = {
+        str(name).strip().casefold()
+        for name in (source_payload.get("identity_index") or {}).values()
+    } | {
+        str(name).strip().casefold()
+        for name in (source_payload.get("attire") or {})
+    }
+    garments = {
+        str(entry.get("name") or "").strip().casefold()
+        for entry in source_payload.get("worn_garments") or []
+        if isinstance(entry, dict)
+    } - {""}
+    for number, transform in enumerate(result.get("transforms") or []):
+        path = f"results.{index}.transforms.{number}.patch"
+        if source_payload.get("completion_contract") == "verified_effects_v1":
+            label = str((transform or {}).get("item") or "").strip().casefold() \
+                if isinstance(transform, dict) else ""
+            names = [str(name).strip().casefold() for name in ledger.get("item_names") or []]
+            if not label or names.count(label) != 1:
+                errors.append(f"results.{index}.transforms.{number}.item must name exactly one "
+                              "item in this ledger row; never borrow another item's identity")
+        patch = transform.get("patch") if isinstance(transform, dict) else None
+        if not isinstance(patch, dict):
+            errors.append(f"{path} must be an object")
+            continue
+        # Same read compatibility as _bind_specialist_patches; the current
+        # prompt teaches channels directly, but an archived wrapper is usable.
+        if isinstance(patch.get("state_diff"), dict) \
+                and set(patch) <= {"state_diff", "notes"}:
+            patch = patch["state_diff"]
+        normalized = normalize_causal_patch_shape(patch)
+        if normalized is not patch:
+            notes.append(f"{path}: lifted poses table out of stations")
+            patch = normalized
+        scoped = {key: value for key, value in patch.items() if key in owned}
+        contacts = scoped.get("contact_ops")
+        for operation in contacts if isinstance(contacts, list) else []:
+            if not isinstance(operation, dict) or operation.get("op", "add") not in {"add", "cross"}:
+                continue
+            identities = source_payload.get("identity_index") or {}
+            def endpoint(field):
+                value = str(operation.get(field) or "").strip()
+                return str(identities.get(value, value)).strip().casefold()
+            if endpoint("actor") and endpoint("actor") == endpoint("target"):
+                errors.append(f"{path}.contact_ops has identical actor and target; "
+                              "identify the actual second object at this chronological row")
+        checked = dict(scoped)
+        supplied_entity_names = set()
+        if isinstance(scoped.get("entities"), dict):
+            checked["entities"] = {}
+            for key, value in scoped["entities"].items():
+                folded = _record_folded_into_string(value)
+                record = folded if folded is not None else value
+                if isinstance(record, dict) and "name" not in record:
+                    supplied_entity_names.add(key)
+                    record = {**record, "name": str(key)}
+                checked["entities"][key] = record
+        try:
+            clean, dropped = validated_specialist_patch_channels(step_key, checked)
+        except (ValidationError, TypeError, ValueError):
+            errors.append(f"{path} has no valid owned channel shape")
+            continue
+        for channel in dropped:
+            errors.append(f"{path}.{channel} has an invalid channel shape")
+        for key in supplied_entity_names:
+            record = (clean.get("entities") or {}).get(key)
+            if isinstance(record, dict):
+                record.pop("name", None)
+        stations = scoped.get("stations")
+        if isinstance(stations, dict):
+            for subject in set(stations) - set(clean.get("stations") or {}):
+                errors.append(
+                    f"{path}.stations.{subject} is not a station; "
+                    "stations and poses are sibling channels")
+        poses = scoped.get("poses")
+        if isinstance(poses, dict):
+            pose_fields = {"posture", "support", "relative_to", "relation",
+                           "constraint", "detail"}
+            for subject, record in poses.items():
+                folded = _record_folded_into_string(record)
+                record = folded if folded is not None else record
+                if isinstance(record, dict) and record \
+                        and not (set(record) & pose_fields):
+                    errors.append(
+                        f"{path}.poses.{subject} has no pose fields; "
+                        "channel tables cannot be nested inside a pose")
+        attire = scoped.get("attire")
+        if step_key == "director_body" and isinstance(attire, dict):
+            for subject in attire:
+                label = str(subject).strip().casefold()
+                if label in garments and label not in known_bodies:
+                    errors.append(
+                        f"{path}.attire.{subject} names a known worn garment; "
+                        "key attire by its wearer, not the garment")
+        surviving = set()
+        for channel, value in clean.items():
+            if channel in {"entities", "rooms"} and isinstance(value, dict):
+                # An empty entity/room record changes nothing. For poses,
+                # containment and attire an explicit empty record may clear.
+                value = {key: record for key, record in value.items()
+                         if isinstance(record, dict)
+                         and set(record) - {"from_event"}}
+            if value:
+                surviving.add(channel)
+        if not surviving:
+            errors.append(f"{path} contains no surviving owned state write")
+        written.update(surviving)
+    categories = set(ledger.get("categories") or []) & owned
+    if "poses" in categories and "poses" not in written:
+        message = f"results.{index} routes poses but writes no poses"
+        if categories == {"poses"}:
+            errors.append(message)
+        else:
+            # With several channels, the pose may already be true while a
+            # station changes. The protocol settles items, not channels;
+            # do not invent a required unchanged snapshot to disambiguate it.
+            notes.append(message + "; verify whether the pose was already true")
+    return errors
+
+
 def semantic_output_errors(
     step_key: str,
     output: dict,
@@ -6139,8 +6305,8 @@ def semantic_output_errors(
         a check may be fatal only if nothing downstream reads the field,
         repairs it, or already reports it.
 
-    Everything demoted below failed that test. `item_id` uniqueness and
-    positivity are REPAIRED by `normalize_causal_ledger`, the very next
+    Everything demoted below failed that test. Legacy singular `item_id`
+    positivity is REPAIRED by `normalize_causal_ledger`, the very next
     function to touch the output -- the beat was dying for something already
     fixed a line later. Density is needed by nobody: the join is id equality,
     not position. Ordering is REDUNDANT: `compile_transforms` sorts by
@@ -6149,7 +6315,10 @@ def semantic_output_errors(
     losing the beat that span was in. `object_name` is a matching hint, so
     its absence degrades matching rather than invalidating a ruling.
 
-    What stays fatal is the answer being malformed or saying nothing.
+    Explicit item lists also carry a scene-wide identity contract: a handle
+    cannot change its stable name, repeat within a row, or lose its paired
+    name. Repairing those faults requires the author to identify the thing;
+    code cannot safely guess. Distinct handles may share a readable name.
     """
     errors = []
     noted = notes if notes is not None else []
@@ -6198,11 +6367,13 @@ def semantic_output_errors(
                 identity_forms.setdefault(form, []).append(str(identity_id))
 
         item_ids = []
+        item_labels = {}
         chrono_ids = []
         allowed_categories = {
             channel
             for channels in SPECIALIST_CHANNELS.values()
             for channel in channels
+            if channel not in CAUSAL_CATEGORY_REDIRECTS
         }
         # The channels no hand owns because the ENGINE settles them. Spelled
         # here rather than imported: `agents` imports this module, so reading
@@ -6229,7 +6400,35 @@ def semantic_output_errors(
                 continue
             prefix = f"ledgers.{index}"
             listed = ledger.get("item_ids")
-            if not isinstance(listed, list):
+            names = ledger.get("item_names")
+            # Empty default lists also appear when reading legacy singular
+            # rows. Only populated explicit lists claim the current contract.
+            explicit_items = bool(listed or names)
+            if explicit_items:
+                if not isinstance(listed, list) or not isinstance(names, list):
+                    found.append(f"{prefix}.item_ids and item_names must be parallel arrays")
+                else:
+                    if len(listed) != len(names):
+                        found.append(f"{prefix}.item_ids and item_names must have equal lengths")
+                    seen_items = set()
+                    for offset, item_id in enumerate(listed):
+                        if not isinstance(item_id, int) or isinstance(item_id, bool) or item_id <= 0:
+                            found.append(f"{prefix}.item_ids.{offset} must be a positive integer")
+                            continue
+                        if item_id in seen_items:
+                            found.append(f"{prefix}.item_ids repeats handle {item_id} within one row")
+                        seen_items.add(item_id)
+                        if offset >= len(names):
+                            continue
+                        label = str(names[offset] or "").strip().casefold()
+                        if not label:
+                            found.append(f"{prefix}.item_names.{offset} must name handle {item_id}")
+                            continue
+                        previous = item_labels.setdefault(item_id, label)
+                        if previous != label:
+                            found.append(f"{prefix}.item_ids handle {item_id} changed stable item_name "
+                                         f"from {previous!r} to {label!r}; keep one scene-wide item registry")
+            if not explicit_items or not isinstance(listed, list):
                 listed = [ledger.get("item_id")]
             chrono_id = ledger.get("chrono_id")
             for item_id in listed:
@@ -6303,8 +6502,7 @@ def semantic_output_errors(
             # 2026-09-15): one per thing, in step. A matching hint, not a
             # ruling: a missing name resolves nothing and the hand works
             # harder, but the row is still a valid causal statement.
-            names = ledger.get("item_names")
-            if not isinstance(names, list):
+            if not explicit_items or not isinstance(names, list):
                 names = [ledger.get("object_name")]
             if not any(str(name or "").strip() for name in names):
                 noted.append(f"{prefix}.item_names is empty; the hand gets "
@@ -6329,8 +6527,14 @@ def semantic_output_errors(
             if not isinstance(categories, list):
                 found.append(f"{prefix}.categories must be an array")
             else:
+                retired = sorted({str(value) for value in categories}
+                                 & CAUSAL_CATEGORY_REDIRECTS.keys())
+                for category in retired:
+                    noted.append(
+                        f"{prefix}.categories: {category} is a retired category; "
+                        f"use {CAUSAL_CATEGORY_REDIRECTS[category]} instead")
                 unknown = sorted({str(value) for value in categories}
-                                 - allowed_categories)
+                                 - allowed_categories - CAUSAL_CATEGORY_REDIRECTS.keys())
                 if unknown:
                     # `_unrouted_rulings` already reports this per span, to
                     # the Director, on the next beat -- with the one word
@@ -6485,14 +6689,27 @@ def semantic_output_errors(
                 if status == "encoded" and not transforms:
                     errors.append(
                         f"results.{index} says encoded without a transform")
+                if source_payload.get("completion_contract") == "verified_effects_v1":
+                    if status == "already_true":
+                        errors.append(
+                            f"results.{index} must supply the typed desired patch; "
+                            "already_true is determined by chronological execution")
+                    for item, verdict in (result.get("settled") or {}).items():
+                        if verdict == "already_true":
+                            errors.append(
+                                f"results.{index}.settled.{item} needs a desired "
+                                "patch; a model verdict cannot verify unchanged state")
                 if status != "encoded" and transforms:
                     errors.append(
                         f"results.{index} emits transforms but status is "
                         f"{status or 'blank'}")
+                ledger = ledgers[index] if index < len(ledgers) \
+                    and isinstance(ledgers[index], dict) else {}
+                if status == "encoded" and transforms:
+                    errors.extend(_causal_patch_errors(
+                        step_key, result, ledger, source_payload, index, noted))
                 if step_key != "director_spatial" or index >= len(ledgers):
                     continue
-                ledger = ledgers[index] if isinstance(ledgers[index], dict) \
-                    else {}
                 categories = {
                     str(channel) for channel in ledger.get("categories") or []
                 }
@@ -6809,6 +7026,67 @@ def validated_state_diff_channels(raw):
         model = StateDiff(**kept)
         return _entity_names_are_words(_dump_unset(model)), sorted(channels)
     return _entity_names_are_words(_dump_unset(model)), []
+
+
+def normalize_causal_patch_shape(raw):
+    """Lift an unambiguous poses table accidentally nested under stations.
+
+    The observed shape was stations:{body:{at:...},poses:{body:{posture:...}}}.
+    A typed pose table cannot be a station, and the two channels are siblings.
+    Do not infer a pose from prose, move arbitrary fields, or merge competing
+    outer poses. Ambiguous shapes remain errors for the specialist to repair.
+    """
+    if not isinstance(raw, dict) or "poses" in raw:
+        return raw
+    stations = raw.get("stations")
+    nested = stations.get("poses") if isinstance(stations, dict) else None
+    if not isinstance(nested, dict) or not nested \
+            or "poses" in _coerce_station_table({"poses": nested}):
+        return raw
+    fields = {"posture", "support", "relative_to", "relation", "constraint",
+              "detail"}
+    for subject, record in nested.items():
+        if not isinstance(subject, str) or not subject.strip() \
+                or not isinstance(record, dict) or not (set(record) & fields) \
+                or set(record) - fields - {"from_event"} \
+                or any(not isinstance(value, str) for key, value in record.items()
+                       if key in fields) \
+                or ("from_event" in record
+                    and not isinstance(record["from_event"], int)):
+            return raw
+    return {**raw,
+            "stations": {key: value for key, value in stations.items()
+                         if key != "poses"},
+            "poses": nested}
+
+
+def validated_specialist_patch_channels(step_key, raw):
+    """Validate owned patch channels, including resolve-envelope channels.
+
+    Most channels live in StateDiff. Public evidence lives on DirectorResolve
+    itself; validating the whole patch as StateDiff silently erased that
+    legitimate social write. Use the owning model for such outer channels,
+    with the same channel-level pruning as the state diff validator.
+    """
+    raw = normalize_causal_patch_shape(raw)
+    clean, dropped = validated_state_diff_channels(raw)
+    outer = {key: value for key, value in raw.items()
+             if key in SPECIALIST_CHANNELS.get(step_key, ())
+             and key not in _fields(StateDiff)}
+    if not outer:
+        return clean, dropped
+    model_cls = SCHEMA_MAP[step_key]
+    try:
+        model = model_cls(**outer)
+    except ValidationError as exc:
+        channels = _prunable_specialist_fields(step_key, exc.errors())
+        if not channels:
+            raise
+        model = model_cls(**{key: value for key, value in outer.items()
+                             if key not in channels})
+        dropped = sorted(set(dropped) | channels)
+    clean.update(_dump_unset(model))
+    return clean, dropped
 
 
 def _entity_names_are_words(clean):

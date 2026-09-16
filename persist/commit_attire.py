@@ -16,7 +16,8 @@ from story import attire as attire_model
 from story.attire import (_NAME_FUNCTION_WORDS, _NON_ATTIRE_TERMS,
                           sanitize_attire_items)
 from persist.commit_common import _player_name_or_none
-from world.spatial import room_of_record
+from world.spatial import (room_of_record, same_subject, retire_carriage_evidence,
+                           derive_contained_positions)
 
 def _unstated(value):
     """Nothing said, as opposed to something said that is falsey.
@@ -453,6 +454,22 @@ def _fold_duplicate_shed_garments(sc, diff=None, ctx=None):
             ctx.add_warning(note)
 
 
+def _garment_has_physical_references(sc, eid):
+    """A garment named by another physical record must keep its entity key."""
+    contained = sc.get("contained") or {}
+    if any(same_subject(sc, key, eid)
+           or isinstance(row, dict) and same_subject(sc, row.get("in"), eid)
+           for key, row in contained.items()):
+        return True
+    for field, slots in (("contacts", ("actor", "target")),
+                         ("substances", ("source", "target"))):
+        if any(isinstance(row, dict)
+               and any(same_subject(sc, row.get(slot), eid) for slot in slots)
+               for row in (sc.get(field) or [])):
+            return True
+    return False
+
+
 def _fold_worn_garment_entities(sc, diff, ctx=None):
     """WHILE IT IS WORN, THE ATTIRE LEDGER OWNS THE GARMENT.
 
@@ -509,6 +526,8 @@ def _fold_worn_garment_entities(sc, diff, ctx=None):
         condition = str(state.get("condition") or "").strip()
         if condition:
             _set_worn_garment_condition(entry, match, condition)
+        if _garment_has_physical_references(sc, eid):
+            continue
         entities.pop(eid, None)
         if isinstance(projected, dict):
             projected.pop(eid, None)
@@ -673,7 +692,32 @@ def _stamp_shed(entity, garment, owner, condition, eid=None):
         aliases.append(str(garment))
 
 
-def _mint_shed_garments(sc, shed, diff=None):
+def _owned_garment_entities(sc, owner, garment):
+    """Exact ordinary object records already worn or held by this body.
+
+    The wardrobe supplies a garment label; containment supplies its owner.
+    Neither a shared noun nor a descriptive sentence establishes identity.
+    Legacy clothing proxies retain their existing adoption/reclaim path.
+    """
+    from world.spatial import _entities_named, _unique_entity_keyed
+
+    primary, aliased = _entities_named(sc, garment)
+    named = {eid: entity for eid, entity in (primary or aliased)
+             if not _is_clothing_entity(entity)}
+    owned = {}
+    for subject, relation in (sc.get("contained") or {}).items():
+        if not isinstance(relation, dict) or \
+                str(relation.get("in") or "").strip().casefold() \
+                != str(owner).strip().casefold() or \
+                relation.get("mode") not in ("held", "worn"):
+            continue
+        eid, _ = _unique_entity_keyed(sc, subject)
+        if eid in named:
+            owned[eid] = (named[eid], subject, relation)
+    return owned
+
+
+def _mint_shed_garments(sc, shed, diff=None, ctx=None):
     """A garment that has come off becomes a thing in the room.
 
     Clothes that vanish when removed cannot be picked up, taken, hidden or
@@ -695,6 +739,32 @@ def _mint_shed_garments(sc, shed, diff=None):
     projected = diff.setdefault("entities", {}) if isinstance(diff, dict) else None
     for owner, garment, *rest in shed:
         condition = (rest[0] if rest else "") or ""
+        existing = _owned_garment_entities(sc, owner, garment)
+        if existing:
+            if len(existing) == 1:
+                eid, (entity, subject, relation) = next(iter(existing.items()))
+                # This is already a permanent world object. Do not stamp it
+                # as a wardrobe proxy: reclaiming such a proxy on re-wear
+                # deletes its entity key and strands references to it.
+                if condition:
+                    entity.setdefault("state", {})["condition"] = condition
+                if relation.get("mode") == "worn":
+                    sc["contained"].pop(subject, None)
+                    if isinstance(diff, dict):
+                        diff.setdefault("containment", {})[subject] = None
+                if projected is not None:
+                    projected[eid] = entity
+                where = positions.get(owner)
+                if where and not positions.get(eid):
+                    positions[eid] = where
+            elif ctx is not None:
+                ctx.tell_director(
+                    f"attire: {owner!r}'s removed garment {garment!r} "
+                    f"matches several owned objects {list(existing)!r}; "
+                    "their identities were kept separate. Supply an exact "
+                    "object handle to settle which garment changed.")
+            # Ambiguity cannot authorize a merge or a third copy.
+            continue
         key = re.sub(r"[^a-z0-9]+", "_", str(garment).casefold()).strip("_")
         if not key:
             continue
@@ -926,22 +996,27 @@ def _reclaim_worn_shed_garments(sc, diff, ctx, gained):
                     if other != eid
                     and _is_the_same_garment(match, other_ledger)]:
                 continue          # two shed objects answer to it
-            entities.pop(eid, None)
-            if isinstance(projected, dict):
-                projected.pop(eid, None)
-            positions.pop(eid, None)
+            retained = _garment_has_physical_references(sc, eid)
+            if retained:
+                entities[eid].setdefault("state", {})["shed"] = False
+            else:
+                entities.pop(eid, None)
+                if isinstance(projected, dict):
+                    projected.pop(eid, None)
+                positions.pop(eid, None)
             names = [n for n in names if n != match]
             if ledger != match:
                 _rename_worn_garment(
                     attire_model.entry_for(attire, owner), match, ledger)
-            reclaimed.append((eid, owner, match, ledger))
-    for eid, owner, match, ledger in reclaimed:
+            reclaimed.append((eid, owner, match, ledger, retained))
+    for eid, owner, match, ledger, retained in reclaimed:
         note = (
             "objective state: %s put %r back on, which is the shed object "
-            "%r -- one garment, so the object was taken back out of the room "
-            "and the wardrobe keeps its own spelling %r. A garment taken off "
+            "%r -- one garment, so %s and the wardrobe keeps its own spelling %r. A garment taken off "
             "and put on again is the same thing twice." % (
-                owner, match, eid, ledger))
+                owner, match, eid,
+                "its referenced entity remains attached to the wearer" if retained
+                else "the unused floor object was folded into the wardrobe", ledger))
         if ctx is not None:
             ctx.tell_director(note)
     return reclaimed
@@ -1665,7 +1740,8 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
 
     _fold_worn_garment_entities(sc, diff, ctx)
     _mint_shed_garments(
-        sc, [s for s in _shed if s[1].casefold() not in _gained], diff)
+        sc, [s for s in _shed if s[1].casefold() not in _gained], diff,
+        ctx if report else None)
     # Heals scenes that accumulated duplicates BEFORE adopt-or-mint
     # existed, and is idempotent, so it costs nothing on a clean scene.
     _fold_duplicate_shed_garments(sc, diff, ctx)
@@ -1673,6 +1749,33 @@ def apply_attire_diff(sc, diff, ctx, res=None, *, report=True):
     # After the mint and the fold, so what it matches against is the settled
     # set of this body's shed objects rather than a half-built one.
     _reclaim_worn_shed_garments(sc, diff, ctx, _gained_by)
+    # Putting a physical garment on settles its placement as well as its
+    # wardrobe membership. A former free grip cannot keep it in the hand or
+    # drag it back to a table; other ordinary touch is still meaningful.
+    from world.spatial import _unique_entity_keyed
+    placed_wearing = {wearer: list(names) for wearer, names in _gained_by.items()}
+    for wearer, raw in (diff.get("attire") or {}).items():
+        wearer = canonical_attire_key(wearer)
+        stated = attire_model.coerce_diff_shape(raw)
+        entry = attire_model.entry_for(att, wearer)
+        worn = attire_model.flat_wearing(attire_model.normalize_regions(entry))
+        for field in ("add", "replace", "wearing"):
+            for name in stated.get(field) or []:
+                resolved = attire_model.resolve_garment(name, worn)
+                if resolved:
+                    placed_wearing.setdefault(wearer, []).append(resolved)
+    for wearer, names in placed_wearing.items():
+        for name in names:
+            eid, entity = _unique_entity_keyed(sc, name)
+            if not eid or not isinstance(entity, dict) or same_subject(sc, eid, wearer):
+                continue
+            retire_carriage_evidence(sc, eid)
+            contained = sc.setdefault("contained", {})
+            for key in list(contained):
+                if same_subject(sc, key, eid):
+                    contained.pop(key, None)
+            contained[eid] = {"in": wearer, "mode": "worn", "by": "attire"}
+    derive_contained_positions(sc)
     # A REMOVED GARMENT IS AN OBJECT IN THE WORLD, NOT A FACT ABOUT A BODY.
     # It kept a seat in its former wearer's regions -- `state: "removed"`,
     # under `torso`/`waist`/`arms` -- and every relation that seat carried was

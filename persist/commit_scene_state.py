@@ -15,7 +15,7 @@ from story.character_schema import character_name_from_text, persona_name
 from story.provenance_text import strip_engine_provenance
 from world.beat_ledger import record_beat_events
 from world.weather import advance_weather, normalize_weather
-from world.spatial import (contradictory_sight_edges, derived_room_name,
+from world.spatial import (BEARING_MANNERS, contradictory_sight_edges, derived_room_name,
                            guessed_room_sizes,
                            layout_warning, merge_scene_with_diff,
                            room_layout_lint, scene_room_id)
@@ -889,7 +889,6 @@ def _fold_duplicate_mints(ctx, cid, sc, prev_scene, diff):
 #: A SCHEMA THE ENGINE OWNS, not a list of the ways English says "carrying":
 #: a manner outside the vocabulary records nothing here and is still kept
 #: verbatim by the contact ledger it was written in.
-BEARING_MANNERS = frozenset({"carry", "hold", "grip", "support"})
 
 
 def _bearing_subject_key(scene, eid, entity):
@@ -1061,12 +1060,23 @@ def _refuse_unheld_transfers(ctx, sc, diff):
     the movement backstop treats an unknown route. Reported to the Director,
     which is the only hand that can restate it.
     """
+    from world.spatial import (resolve_placement_target, same_subject,
+                               _unique_entity_keyed, _anchor_for_entity)
+
     ops = diff.get("inventory_ops")
     if not isinstance(ops, list) or not ops:
         return []
-    contained = sc.get("contained") if isinstance(sc.get("contained"), dict) \
-        else {}
     kept, refused = [], []
+
+    def accept(op):
+        nonlocal sc
+        kept.append(op)
+        if len(ops) > 1:
+            # Array order is causal inside one span too. Later sources are
+            # checked against accepted earlier transfers, never a stale
+            # beginning-of-span holder. The merger copies its input.
+            sc = merge_scene_with_diff(sc, {"inventory_ops": [op]}, age_contacts=False)
+
     for op in ops:
         if not isinstance(op, dict):
             kept.append(op)
@@ -1074,21 +1084,49 @@ def _refuse_unheld_transfers(ctx, sc, diff):
         source = str(op.get("from_id") or "").strip()
         obj = str(op.get("object_id") or "").strip()
         if not source or not obj:
-            kept.append(op)
+            accept(op)
             continue
+        contained = sc.get("contained") if isinstance(sc.get("contained"), dict) else {}
         record = None
         for key, value in contained.items():
-            if str(key).strip().casefold() == obj.casefold():
+            if same_subject(sc, key, obj):
                 record = value
                 break
-        if isinstance(record, dict) and str(record.get("in") or "") \
-                .strip().casefold() == source.casefold():
-            kept.append(op)
+        if isinstance(record, dict) and same_subject(sc, record.get("in"), source):
+            accept(op)
+            continue
+        # Specialists submit desired effects even when they already stand.
+        # A repeated transfer from a former holder is idempotent only when
+        # the exact typed destination is already satisfied; being nearby is
+        # not enough to acquit another destination or another carry mode.
+        kind, target = resolve_placement_target(sc, op.get("to_id"))
+        relation = str(op.get("relation") or "carried").strip().casefold()
+        _, target_entity = _unique_entity_keyed(sc, target)
+        carried = (kind in ("carrier", "vouched")
+                   or kind == "anchor" and (relation == "mounted"
+                   or relation in ("inside", "container", "pocket")
+                   and bool((target_entity or {}).get("container"))))
+        desired_mode = "container" if relation == "interior" else relation
+        at_destination = (isinstance(record, dict)
+                          and same_subject(sc, record.get("in"), target)
+                          and record.get("mode") == desired_mode) if carried else (
+                              kind == "room" and not record
+                              and _room_of(sc, obj) == target)
+        if kind == "anchor" and not carried and not record:
+            target_room = _room_of(sc, target)
+            anchor = _anchor_for_entity(sc, target_room, target)
+            at_destination = bool(anchor and _room_of(sc, obj) == target_room
+                                  and any(same_subject(sc, key, obj)
+                                          and isinstance(row, dict)
+                                          and row.get("at") == anchor
+                                          for key, row in (sc.get("stations") or {}).items()))
+        if at_destination:
+            accept(op)
             continue
         thing_room = _room_of(sc, obj)
         source_room = _room_of(sc, source)
         if not thing_room or not source_room or thing_room == source_room:
-            kept.append(op)
+            accept(op)
             continue
         refused.append((op, obj, source, thing_room, source_room))
     for _op, obj, source, thing_room, source_room in refused:
@@ -1357,7 +1395,7 @@ class ComposedBeat:
     __slots__ = ("scene", "diff", "prev_scene", "prev_clock", "destruction",
                  "charter_placements", "charter_orders", "clock_reading",
                  "time_block", "planned_error", "warnings", "director_notes",
-                 "key")
+                 "key", "causal_worlds")
 
     def __init__(self, **fields):
         for name in self.__slots__:
@@ -1757,13 +1795,25 @@ def compose_beat_scene(ctx):
     # because that is the arrangement the claim is about: `from_id` says who
     # WAS holding the thing. Against `diff` -- the deep copy above, never the
     # persisted step -- so the merge below never sees a refused op.
-    _refuse_unheld_transfers(ctx, prev_scene, diff)
+    if not diff.get("causal_steps"):
+        _refuse_unheld_transfers(ctx, prev_scene, diff)
+    _causal_worlds = []
+
+    def apply_causal_body(world, patch):
+        _merge_overlays(world, patch.get("overlays") or {})
+        apply_attire_diff(world, patch, ctx, res)
+
     sc = merge_scene_with_diff(
         prev_scene, diff, contact_report=_contact_report,
         substance_report=_substance_report.append,
         sleeping=_sleeping,
         clock_seconds=_beat_end, crossing_report=_crossing_report,
-        inventory_report=_inventory_report, carriers=_carriers)
+        inventory_report=_inventory_report, carriers=_carriers,
+        causal_worlds=_causal_worlds, causal_apply=apply_causal_body,
+        causal_guard=lambda world, patch: _refuse_unheld_transfers(ctx, world, patch))
+    if _causal_worlds:
+        from world.causal_program import fold_steps
+        diff["inventory_ops"] = fold_steps(_causal_worlds).get("inventory_ops", [])
     # Tell the Director how its contact ops were read -- a re-description taken
     # as the same limb moving, a part refused as not being one, an envelopment
     # folded onto the enclosed side. Corrections it can only make if it knows
@@ -1979,7 +2029,8 @@ def compose_beat_scene(ctx):
                     if not (isinstance(e, dict) and e.get("to") in removed)
                 ]
 
-    _merge_overlays(sc, diff.get("overlays") or {})
+    if not diff.get("causal_steps"):
+        _merge_overlays(sc, diff.get("overlays") or {})
 
     # An approach in flight. `MovementDecl.arrives=false` means the mover is
     # closing on somewhere and does not get there this beat; recording it is
@@ -2085,7 +2136,8 @@ def compose_beat_scene(ctx):
         if not _pending:
             sc.pop("approach", None)
 
-    apply_attire_diff(sc, diff, ctx, res)
+    if not diff.get("causal_steps"):
+        apply_attire_diff(sc, diff, ctx, res)
 
     infer_vehicle_zones(cid, ctx.turn.frame_id, prev_scene, sc)
     _carry_names = [character_name_from_text(c["sheet"]) for c in ctx.cast]
@@ -2131,8 +2183,9 @@ def compose_beat_scene(ctx):
     # nothing: "this beat had no events" and "no beat has spoken" are
     # different answers, and leaving the older beat's record in place would
     # let the second be read as the first.
+    from world.causal_completion import annotate_event_execution
     record_beat_events(sc, getattr(getattr(ctx, "turn", None), "idx", None),
-                       res.get("beat_events"))
+                       annotate_event_execution(res.get("beat_events"), _causal_worlds))
 
     planned_error = None
     try:
@@ -2162,7 +2215,7 @@ def compose_beat_scene(ctx):
                        _clock_floored),
         time_block=_td_block, planned_error=planned_error,
         warnings=list(ctx.warnings), director_notes=list(ctx.director_notes),
-        key=_key)
+        key=_key, causal_worlds=_causal_worlds)
 
 
 def prepare_scene_commit(ctx):

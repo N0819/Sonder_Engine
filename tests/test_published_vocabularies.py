@@ -481,7 +481,7 @@ def delegated_channels() -> list[str]:
 
 
 class TestEveryDelegatedChannelIsNamedAsDelegated:
-    def test_the_engine_owns_thirty_eight(self):
+    def test_the_engine_owns_thirty_nine(self):
         """Bounds the tests below: a specialist that gains a channel moves
         this count, and the sheet has to move in the same commit. 31 until
         2026-09-04, when `offscreen_plan_ops` left the Director's diff with
@@ -491,19 +491,25 @@ class TestEveryDelegatedChannelIsNamedAsDelegated:
         nothing to carry until one could be written. 32 later that day, when
         the social hand took `charter_ops`: the Planner could dispatch an
         errand through a package and the Director, which owns objective
-        causality and had just narrated the order, could not (PB13)."""
-        assert len(delegated_channels()) == 38
+        causality and had just narrated the order, could not (PB13).
+        39 on 2026-09-15: obligations moved to the social specialist so
+        causal requests, promises and explicit discharges reach commit."""
+        assert len(delegated_channels()) == 39
 
     @pytest.mark.parametrize("stage", sorted(DELEGATIONS))
     @pytest.mark.parametrize("language", LANGUAGES)
     def test_the_sheet_names_all_of_them(self, language, stage):
+        from llm.schemas import CAUSAL_CATEGORY_REDIRECTS
+
         block = _delegation_block(language, stage)
-        missing = [c for c in delegated_channels() if c not in block]
+        # Body always assesses surface marks. Its engine output channel is
+        # intentionally absent from the Director's routing vocabulary.
+        routes = {CAUSAL_CATEGORY_REDIRECTS.get(c, c) for c in delegated_channels()}
+        missing = sorted(c for c in routes if c not in block)
         assert not missing, (
-            f"{language}/{stage}: channels a specialist owns that this "
-            f"delegation paragraph does not name: {missing}. An unlisted "
-            "channel reads as one the author may still write, and what it "
-            "writes there is discarded unread and re-encoded anyway.")
+            f"{language}/{stage}: specialist routes the causal sheet does "
+            f"not name: {missing}. Every owned output needs a published "
+            "route, either its exact channel or its default-duty owner.")
 
     @pytest.mark.parametrize("stage", sorted(DELEGATIONS))
     @pytest.mark.parametrize("language", LANGUAGES)
@@ -515,9 +521,12 @@ class TestEveryDelegatedChannelIsNamedAsDelegated:
         channel it has translated out of existence. The interpret note had the
         same damage a week longer (review E43): `attire` as 服装, `containment`
         as 封じ込め, `introductions` as 紹介."""
+        from llm.schemas import CAUSAL_CATEGORY_REDIRECTS
+
         block = _delegation_block(language, stage)
         for channel in delegated_channels():
-            assert channel in block, f"{language}/{stage}: {channel!r}"
+            route = CAUSAL_CATEGORY_REDIRECTS.get(channel, channel)
+            assert route in block, f"{language}/{stage}: {route!r}"
 
 
 # ---------------------------------------------------------------------------
