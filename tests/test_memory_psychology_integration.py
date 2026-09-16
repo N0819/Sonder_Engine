@@ -228,8 +228,8 @@ def test_character_prompt_does_not_launder_claim_origin_through_memory_form():
     # for it. What this pins is the intent the old strings stood for, not
     # the strings: it is capped at one per beat, it is private, and a beat
     # the character understands does not call for it.
-    assert "At most one in a beat" in prompt
-    assert "a private thought nobody sees or hears" in prompt
-    assert "a beat you understand needs no pondering" in prompt
+    assert "At most one per beat" in prompt
+    assert "a private recall request nobody sees or hears" in prompt
+    assert "a beat you understand needs none" in prompt
     # And it now names an OCCASION, which is the thing it never had.
     assert "WHEN TO PONDER" in prompt

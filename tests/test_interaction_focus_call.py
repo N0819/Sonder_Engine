@@ -91,7 +91,7 @@ def _install(monkeypatch, calls_log, asks_player_ids):
                         lambda prev, new: new)
     # Returns (delivered_views, perceived_by); the real one needs full sheets.
     monkeypatch.setattr(loops, "deterministic_micro_perception",
-                        lambda ctx, actor_id, actor_result, scene: ({}, set()))
+                        lambda ctx, actor_id, actor_result, scene, **kwargs: ({}, set()))
     monkeypatch.setattr(loops, "_asks_player",
                         lambda result, chat, cast: result["cid"] in asks_player_ids)
 

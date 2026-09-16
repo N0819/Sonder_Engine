@@ -1149,7 +1149,9 @@ def prepare_memory_commit(ctx, *, scene=None):
             # beat, beside the episode row every character already gets.
             should_store_own_acts = bool(seq) and (
                 own_salience >= 0.7
-                or any(event.get("type") == "speech" for event in seq)
+                or any(isinstance(event, dict)
+                       and event.get("type") in ("speech", "communication")
+                       for event in seq)
             )
             # ALWAYS beside the episode, never instead of it. d290ca4 gated
             # this on `not episode_content`, reasoning that the view was
@@ -1405,7 +1407,9 @@ def prepare_memory_commit(ctx, *, scene=None):
 
                 wants, enacted, suppressed = affect.normalize_wants(
                     asv.get("wants") or [], _steering | _project_ids,
-                    want_cap=_want_cap)
+                    want_cap=_want_cap,
+                    enacted_want=asv.get("enacted_want"),
+                    suppressed_want=asv.get("suppressed_want"))
 
                 appraisal_input = dict(own_result.get("appraisal") or {})
                 # Past experience may change familiarity, expectation and
@@ -1598,11 +1602,23 @@ def prepare_memory_commit(ctx, *, scene=None):
                     "memory_echo": _memory_echo,
                     "active_concerns": (
                         asv.get("active_concerns")
-                        or prev_as.get("active_concerns")
-                        or character_initial_active_state(sh).get("active_concerns")
-                        or []
+                        if asv.get("active_concerns") is not None else
+                        prev_as.get("active_concerns")
+                        if prev_as.get("active_concerns") is not None else
+                        character_initial_active_state(sh).get("active_concerns") or []
                     ),
                 }
+                # The character's reason is private continuity, not evidence
+                # that its chosen act succeeded. An explicit empty note
+                # clears the old one; legacy omission has no new claim to make.
+                _choice = own_result.get("decision_continuity")
+                if isinstance(_choice, dict):
+                    _note = {key: " ".join(str(_choice.get(key) or "").split())[:240]
+                             for key in ("chosen", "suppressed", "why", "uncertainty")}
+                    if any(_note.values()):
+                        st["decision_continuity"] = {"turn": turn.idx, **_note}
+                    else:
+                        st.pop("decision_continuity", None)
                 # --- Project service ledger + boundary review (Tier 1.5).
                 # A held project stopped failing by being outranked and
                 # started failing by being FORGOTTEN (A15 run 5: pa1 held at

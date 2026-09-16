@@ -154,9 +154,10 @@ class TestEveryStepIsReadableThroughALens:
                          "function renderEngineNotes(")
         assert "nothing registered" in block
 
-    def test_the_observations_ride_with_the_view_they_came_from(self):
-        """The structured observations are the projection of the prose. Read
-        apart from it, a channel missing from one is invisible in the other."""
+    def test_cached_servers_keep_the_original_view_and_observation_fallback(self):
+        """A tab may receive an older response without presentation packets.
+        Keep that response readable while current packets use grouped sections;
+        the executed rendering behavior is tested in the Node regression file."""
         block = _between(CHAT_JS, "function perceiverSlice(",
                          "function renderEngineNotes(")
         assert "content.observations" in block

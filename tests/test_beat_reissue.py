@@ -296,7 +296,7 @@ class TestTheLoopOwnsTheChannel:
         monkeypatch.setattr(loops, "_sequence_has_content", lambda r: True)
         monkeypatch.setattr(
             loops, "deterministic_micro_perception",
-            lambda ctx, actor_id, actor_result, scene: (
+            lambda ctx, actor_id, actor_result, scene, **kwargs: (
                 {other["id"]: [f"{actor_id} spoke"]
                  for other in ctx.cast if other["id"] != actor_id},
                 {other["id"] for other in ctx.cast if other["id"] != actor_id},

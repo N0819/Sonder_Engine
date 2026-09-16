@@ -238,7 +238,8 @@ def test_the_character_is_told_its_own_ceiling():
     from llm import prompts
     block = prompts.DEFAULT_PROMPTS["character"]
     assert "self.attention" in block
-    assert "self.attention.wants beat wants" in block
+    assert "`self.attention.wants` and `self.attention.intentions`" in block
+    assert "ceilings on beat-wants and active intentions, not targets" in block
 
 
 def test_commit_reads_the_same_pair_the_payload_showed():

@@ -281,9 +281,9 @@ def _chosen_wants(active, warnings, decision=None):
     The first kernel put ``choice`` on each want.  That was small, but it did
     not require the model to state why one live pull beat another and its
     one-want example taught away ambivalence.  The current kernel names wants
-    locally (w1, w2) and carries one decision hinge beside them.  The hinge is
-    deliberation scratch; the stable character state still stores only wants
-    and the enacted/suppressed indexes it has always understood.
+    locally (w1, w2) and carries one decision hinge beside them. The indexes
+    continue to serve existing readers; the short private reason travels in
+    decision_continuity rather than being discarded at this join.
     """
     active = deepcopy(active) if isinstance(active, dict) else {}
     decision = decision if isinstance(decision, dict) else {}
@@ -430,6 +430,27 @@ def _compile_named_updates(updates, compiled, warnings):
             compiled.setdefault(lane, []).append(deepcopy(row))
 
 
+def decision_continuity(active, decision):
+    """Resolve temporary want handles into a bounded private choice record."""
+    active = active if isinstance(active, dict) else {}
+    decision = decision if isinstance(decision, dict) else {}
+    wants = active.get("wants") or []
+
+    def selected(key):
+        index = active.get(key)
+        if type(index) is int and 0 <= index < len(wants):
+            return str((wants[index] or {}).get("want") or "")
+        return ""
+
+    return {key: " ".join(str(value or "").split())[:240]
+            for key, value in {
+                "chosen": selected("enacted_want"),
+                "suppressed": selected("suppressed_want"),
+                "why": decision.get("hinge"),
+                "uncertainty": decision.get("uncertainty"),
+            }.items()}
+
+
 def compile_character_kernel(raw):
     """Expand a compact character answer into ``CharacterOutput`` fields.
 
@@ -455,6 +476,13 @@ def compile_character_kernel(raw):
         "interaction": deepcopy(raw.get("interaction") or {}),
         "salience": raw.get("salience", 0.5),
     }
+    affect = compiled["active_state"].get("affect") or {}
+    surface = affect.get("surface") if isinstance(affect, dict) else None
+    if not compiled["active_state"].get("mood") and isinstance(surface, dict):
+        compiled["active_state"]["mood"] = str(surface.get("label") or "")
+    if isinstance(state.get("decision"), dict):
+        compiled["decision_continuity"] = decision_continuity(
+            compiled["active_state"], state["decision"])
     updates = raw.get("updates")
     if isinstance(updates, dict):
         _compile_named_updates(updates, compiled, warnings)

@@ -117,7 +117,7 @@ def _install(monkeypatch, calls_log, *, wave=2, physical=(), asks_player=(),
     # what must NOT have happened yet while their wave-mates were deciding.
     monkeypatch.setattr(
         loops, "deterministic_micro_perception",
-        lambda ctx, actor_id, actor_result, scene: (
+        lambda ctx, actor_id, actor_result, scene, **kwargs: (
             {other["id"]: [f"{actor_id} spoke"]
              for other in ctx.cast if other["id"] != actor_id},
             {other["id"] for other in ctx.cast if other["id"] != actor_id},

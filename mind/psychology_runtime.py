@@ -535,8 +535,8 @@ def resolve_stress(previous, appraisal, profile, hedonic, elapsed_units,
 
 
 # Which way an update's evidence points. `weaken` and `contradict` are
-# unambiguous: the beat argued AGAINST the belief text as written. `revise`
-# is not -- a revision may arrive spelling the OLD belief (then it is a
+# unambiguous: the beat argued AGAINST the belief text as written. A legacy,
+# untargeted `revise` is not -- it may arrive spelling the OLD belief (then a
 # weakening) or the NEW one (then it is an assertion) -- so it moves a HELD
 # belief down, where there is an old confidence to move, and mints as an
 # ordinary assertion where there is nothing to revise.
@@ -636,18 +636,22 @@ def _authored_beliefs(psychology):
 
 
 def apply_belief_updates(existing, psychology, updates, turn_idx, clock_seconds):
-    """Merge bounded self/world belief revisions with protected-belief inertia."""
+    """Merge evidence-backed beliefs; targeted revisions replace one held claim."""
     result = [
         dict(item) for item in (existing or [])
         if isinstance(item, dict) and str(item.get("belief") or "").strip()
     ]
     by_text = {str(item["belief"]).strip().casefold(): item for item in result}
+    revised_authored = {
+        str(item.get("authored_belief") or "").strip().casefold()
+        for item in result
+    } - {""}
     authored_keys = set()
     for authored in _authored_beliefs(psychology):
         key = str(authored.get("belief") or "").strip().casefold()
         if key:
             authored_keys.add(key)
-        if key and key not in by_text:
+        if key and key not in by_text and key not in revised_authored:
             item = {
                 **authored,
                 "authored": True,
@@ -668,7 +672,48 @@ def apply_belief_updates(existing, psychology, updates, turn_idx, clock_seconds)
         item = by_text.get(key)
         operation = str(update.get("operation") or "reinforce").casefold()
         confidence = _clamp(update.get("confidence"), default=0.5)
-        if item is None:
+        target = str(update.get("target_belief") or "").strip()
+        if target:
+            from core.pipeline_context import note_step_warning
+
+            if operation != "revise":
+                note_step_warning(
+                    f"belief update rejected: target_belief requires revise, "
+                    f"got {operation!r}")
+                continue
+            target_key = target.casefold()
+            matches = [held for held in result
+                       if str(held["belief"]).strip().casefold() == target_key]
+            if len(matches) != 1:
+                reason = "unknown" if not matches else "ambiguous"
+                note_step_warning(
+                    f"belief revision rejected: {reason} target {target!r}")
+                continue
+            item = matches[0]
+            if any(held is not item
+                   and str(held["belief"]).strip().casefold() == key
+                   for held in result):
+                note_step_warning(
+                    f"belief revision rejected: replacement {text!r} "
+                    "is already held by another belief")
+                continue
+            # The card's original wording identifies its seed even after the
+            # live conviction changes. Without this link the next beat seeds
+            # the old claim again, undoing the revision and consuming a slot.
+            if target_key in authored_keys or item.get("authored"):
+                item.setdefault("authored_belief", item["belief"])
+            del by_text[target_key]
+            item["belief"] = text
+            by_text[key] = item
+            # Here confidence describes the resulting replacement claim, not
+            # the strength of evidence to mix into the old claim. Inertia for
+            # untargeted weakening and reinforcement remains below.
+            item["confidence"] = confidence
+            item["emotional_charge"] = _clamp(
+                update.get("emotional_charge", item.get("emotional_charge")),
+                -1.0, 1.0,
+            )
+        elif item is None:
             # A belief nobody holds has no old confidence to move, so the mint
             # branch read the update's number and nothing else -- including
             # not reading `operation`. "contradict: the north stair is safe,
@@ -708,7 +753,8 @@ def apply_belief_updates(existing, psychology, updates, turn_idx, clock_seconds)
             dict(ev) for ev in evidence if isinstance(ev, dict)
         ][-3:]
     return _within_cap(result, lambda item: str(
-        item.get("belief") or "").strip().casefold() in authored_keys)
+        item.get("authored_belief") or item.get("belief") or ""
+    ).strip().casefold() in authored_keys)
 
 
 def apply_association_updates(existing, psychology, updates, turn_idx,

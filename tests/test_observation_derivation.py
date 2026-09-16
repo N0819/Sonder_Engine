@@ -66,10 +66,12 @@ def test_a_view_decomposes_into_per_channel_atoms():
         "current:7:0", "current:7:1", "current:7:2"]
 
 
-def test_atoms_are_capped_but_never_collapse_to_one():
+def test_crowded_dialogue_preserves_every_delivery():
     percepts = [_voice(f"line number {i}", order_key=i) for i in range(40)]
     atoms = _atoms(percepts)
-    assert 1 < len(atoms) <= 8
+    assert len(atoms) == 40
+    assert len({a["observation_id"] for a in atoms}) == 40
+    assert all(a["observed"]["text"].count('"') == 2 for a in atoms)
 
 
 def test_one_quoted_line_no_longer_relabels_a_whole_view():

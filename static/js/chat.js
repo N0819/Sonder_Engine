@@ -1528,9 +1528,11 @@ function renderLensBar(bar, lenses, lens, content, names, onPick) {
   );
 }
 
-function lensSlice(lenses, content, id, names) {
+function lensSlice(lenses, content, id, names, perceptionPackets) {
   if (lenses.kind === "specialist") return specialistSlice(content, id);
-  if (lenses.kind === "perceiver") return perceiverSlice(content, id, names);
+  if (lenses.kind === "perceiver") {
+    return perceiverSlice(content, id, names, perceptionPackets);
+  }
   if (lenses.kind === "mind") return mindSlice(content, id, names);
   return keySlice(content, id);
 }
@@ -1632,14 +1634,66 @@ function specialistSlice(content, id) {
   return out.join("\n");
 }
 
-// One perceiver's slice: the prose they received, then the structured
-// observations derived from it. A null view is shown as the answer it is --
-// this mind registered nothing -- rather than as an absent key.
-function perceiverSlice(content, id, names) {
+// Read the server's admitted packet without reclassifying prose or sorting
+// events. Equal words at different moments remain separate deliveries.
+function perceptionPacketSlice(packet) {
+  const sections = [
+    ["events", "Events"],
+    ["changes_noticed", "Changes noticed"],
+    ["current_state", "Current state"],
+    ["unstructured_context", "Additional context"]
+  ];
+  const out = [];
+  for (const [key, title] of sections) {
+    const rows = (Array.isArray(packet[key]) ? packet[key] : []).filter(
+      row => row && row.observed && typeof row.observed.text === "string"
+        && row.observed.text.trim()
+    );
+    if (key === "unstructured_context" && !rows.length) continue;
+    if (out.length) out.push("");
+    out.push(`${t(title)} (${rows.length})`);
+    rows.forEach((row, index) => {
+      const metadata = [];
+      if (row.actor) metadata.push(String(row.actor));
+      if (key === "events" && row.kind) metadata.push(String(row.kind));
+      if (row.channel) metadata.push(String(row.channel));
+      if (row.fidelity && row.fidelity !== "rendered") {
+        metadata.push(String(row.fidelity));
+      }
+      if (typeof row.ambiguity === "number" && Number.isFinite(row.ambiguity)
+          && row.ambiguity > 0) {
+        metadata.push(t(`uncertainty: ${row.ambiguity}`));
+      }
+      if (row.directed_at_self) metadata.push(t("← at them"));
+      const order = Number.isInteger(row.order) && row.order > 0
+        ? row.order : index + 1;
+      const prefix = key === "events" ? `${order}.` : "•";
+      const label = metadata.length ? ` [${metadata.join(" · ")}]` : "";
+      out.push(`${prefix}${label} ${row.observed.text}`);
+    });
+  }
+  return out.join("\n");
+}
+
+// One observer's presentation packet. An older cached server can still send
+// only the paragraph and observations; the raw JSON lens always stays intact.
+function perceiverSlice(content, id, names, perceptionPackets) {
   const view = (content.views || {})[id];
   const out = [perceiverLabel(id, names), ""];
+  const noView = view === null || view === undefined || view === "";
+  const packet = perceptionPackets
+    && Object.prototype.hasOwnProperty.call(perceptionPackets, id)
+    ? perceptionPackets[id] : null;
+  if (packet && ["events", "changes_noticed", "current_state"].every(
+    key => Array.isArray(packet[key])
+  )) {
+    out.push(noView
+      ? "(no view — nothing registered, or this mind was not asked)"
+      : perceptionPacketSlice(packet));
+    return out.join("\n");
+  }
   out.push(
-    view === null || view === undefined || view === ""
+    noView
       ? "(no view — nothing registered, or this mind was not asked)"
       : String(view)
   );
@@ -2045,7 +2099,8 @@ async function openPipeline(tid) {
         );
         pre.textContent = lens === ""
           ? JSON.stringify(content, null, 2)
-          : lensSlice(lenses, content, lens, p.perceivers || {});
+          : lensSlice(lenses, content, lens, p.perceivers || {},
+                      variant.perception_packets);
       }
 
       // A thinking model's own trace, when it exposed one. Collapsed by
@@ -2157,7 +2212,7 @@ async function openPipeline(tid) {
                   style:
                     "width:100%;height:300px"
                 },
-                pre.textContent
+                variants[cur].content
               );
 
               modal(`Edit step — ${s.label}`,

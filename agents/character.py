@@ -3303,8 +3303,9 @@ def _prune_seeded_psychology(psych, interior):
     if payload_legacy("self") or not isinstance(interior, dict):
         return
     held_beliefs = {
-        _fold_claim(row.get("belief")) for row in (interior.get("beliefs") or [])
-        if isinstance(row, dict) and str(row.get("belief") or "").strip()}
+        _fold_claim(row.get(field)) for row in (interior.get("beliefs") or [])
+        if isinstance(row, dict) and str(row.get("belief") or "").strip()
+        for field in ("belief", "authored_belief") if row.get(field)}
     held_cues = {
         _fold_claim(row.get("cue")) for row in (interior.get("associations") or [])
         if isinstance(row, dict) and str(row.get("cue") or "").strip()}
@@ -3321,6 +3322,21 @@ def _prune_seeded_psychology(psych, interior):
             block[key] = kept
         else:
             block.pop(key, None)
+    # A revised authored conviction still carries its protected status in the
+    # live ledger. Repeating the old wording here would teach both convictions.
+    protected_origins = {
+        _fold_claim(row.get("authored_belief"))
+        for row in (interior.get("beliefs") or [])
+        if isinstance(row, dict) and row.get("belief")
+        and row.get("protected") and row.get("authored_belief")}
+    self_model = psych.get("self_model")
+    if isinstance(self_model, dict) and protected_origins:
+        kept = [claim for claim in (self_model.get("protected_beliefs") or [])
+                if _fold_claim(claim) not in protected_origins]
+        if kept:
+            self_model["protected_beliefs"] = kept
+        else:
+            self_model.pop("protected_beliefs", None)
 
 
 def _extension_character_payload(ctx, cid, payload, sheet=None):
@@ -3342,6 +3358,86 @@ def _extension_character_payload(ctx, cid, payload, sheet=None):
             ctx, cid, payload, names)
     except Exception:
         return payload
+
+
+def _character_perception(ctx, cid, nonce):
+    """Select a view and its matching evidence, including resumed micro-rounds."""
+    base = ctx.get("perception_act", {}) or {}
+    base_view = (base.get("views") or {}).get(str(cid))
+    for prefix in ("reaction", "interaction"):
+        views = ctx.get(f"{prefix}_views", {}) or {}
+        view = views.get(cid) or views.get(str(cid))
+        if not view:
+            continue
+        evidence = ctx.get(f"{prefix}_observations", {}) or {}
+        if cid in evidence or str(cid) in evidence:
+            return view, list(evidence.get(cid, evidence.get(str(cid))) or [])
+        if view == base_view:
+            return view, list((base.get("observations") or {}).get(str(cid)) or [])
+        # Archived loop outputs may have only prose. Keep that admitted
+        # context, without claiming a channel or inventing event boundaries.
+        from .composer import compact_observation
+        return view, [compact_observation({
+            "observation_id": f"current:{cid}:micro:{nonce}",
+            "channel": "mixed", "phase": "context",
+            "observed": {"text": str(view)},
+            "intensity": 0.5, "ambiguity": 0.3,
+        })]
+    return base_view, list((base.get("observations") or {}).get(str(cid)) or [])
+
+
+def _private_continuity(ctx, cid, stored_state):
+    """This mind's last settled choice and earlier provisional self-report.
+
+    Only the loop-owned declaration map identifies this beat's prior rounds.
+    The merged result map may still contain a discarded reroll, and another
+    body's private appraisal never belongs in this projection.
+    """
+    def note(value):
+        if not isinstance(value, dict):
+            return {}
+        return {key: " ".join(str(value.get(key) or "").split())[:240]
+                for key in ("chosen", "suppressed", "why", "uncertainty")}
+
+    out = {}
+    previous = stored_state.get("decision_continuity")
+    if isinstance(previous, dict):
+        choice = note(previous)
+        if any(choice.values()):
+            out["decision_continuity"] = {**choice, "turn": previous.get("turn")}
+    declared = ctx.get("beat_declared", {}) or {}
+    earlier = declared.get(cid, declared.get(str(cid)))
+    if not isinstance(earlier, dict):
+        return out
+    active = earlier.get("active_state")
+    active = active if isinstance(active, dict) else {}
+    choice = note(earlier.get("decision_continuity"))
+    if not active and not any(choice.values()):
+        return out
+    feelings = {"mood": str(active.get("mood") or "")[:240]}
+    affect = active.get("affect") or {}
+    if isinstance(affect, dict):
+        for layer in ("surface", "undercurrent"):
+            value = affect.get(layer)
+            if isinstance(value, dict):
+                feelings[layer] = {
+                    key: value[key][:240] if isinstance(value[key], str)
+                    else value[key] for key in
+                    ("label", "valence", "arousal", "source", "serves")
+                    if key in value and isinstance(value[key], (str, int, float))}
+            elif layer in affect and value is None:
+                feelings[layer] = None
+    stress = active.get("stress") or {}
+    if isinstance(stress, dict) and stress.get("coping_mode"):
+        feelings["coping_mode"] = str(stress["coping_mode"])[:240]
+    out["earlier_this_beat"] = {
+        "status": "proposed_before_resolution",
+        "feelings": feelings,
+        "decision": choice,
+        "active_concerns": [str(item)[:240] for item in
+                            (active.get("active_concerns") or [])],
+    }
+    return out
 
 
 def character_step(ctx, cid, nonce):
@@ -3442,39 +3538,7 @@ def character_step(ctx, cid, nonce):
                 "name": character_name(sh), "char_id": cid,
                 "_absent_gated": True}
 
-    interaction_views = ctx.get("interaction_views", {}) or {}
-    reaction_views = ctx.get("reaction_views", {}) or {}
-    view = reaction_views.get(cid) or interaction_views.get(cid)
-    if view is None:
-        view = ((ctx.get("perception_act", {}).get("views") or {}).get(str(cid)))
-    base_observations = (
-        (ctx.get("perception_act", {}).get("observations") or {}).get(str(cid))
-        or []
-    )
-    base_view = ((ctx.get("perception_act", {}).get("views") or {}).get(str(cid)))
-    # Interaction/reaction micro-views are already filtered for this mind but
-    # do not pass through the full perception stage. Never reuse stale base
-    # metadata for a changed view; project only the permitted text itself.
-    if view and view != base_view:
-        from .composer import compact_observation
-        observations = [compact_observation({
-            # A character may receive several micro-views in one turn.  The
-            # old constant id collapsed them into one apparent observation,
-            # making later evidence impossible to audit against the round it
-            # actually came from.
-            "observation_id": f"current:{cid}:micro:{nonce}",
-            "perceiver_id": str(cid),
-            "source_atom_id": "current",
-            "channel": "mixed",
-            "fidelity": "rendered",
-            "observed": {"text": str(view)},
-            "intensity": 0.5,
-            "suddenness": 0.1,
-            "ambiguity": 0.3,
-            "directed_at_self": False,
-        })]
-    else:
-        observations = base_observations
+    view, observations = _character_perception(ctx, cid, nonce)
 
     # Resolved before the memory context, not after: where the character is
     # standing is a retrieval cue, and the recall is built here.
@@ -3972,6 +4036,7 @@ def character_step(ctx, cid, nonce):
         "former_drives": _interior.get("former_drives") or [],
         "learned_beliefs": _interior.get("beliefs") or [],
         "learned_associations": _interior.get("associations") or [],
+        **_private_continuity(ctx, cid, stored_state),
     }
     # Exact handles for contacts this body can deliberately end.  The prose
     # view already tells the character what they feel; these opaque refs make
@@ -4154,11 +4219,14 @@ def character_step(ctx, cid, nonce):
     _impossible = _impossible_knowledge(
         ctx, cid, sh, sc, observations, knowledge, _contact_label, shared)
 
+    from .composer import perception_packet
+
     payload = {
         "self": _self,
         "perception": {
-            "view": view or compositor_text("narrator_nothing", ctx.language),
-            "observations": observations,
+            **perception_packet(
+                observations,
+                fallback_view=view or compositor_text("narrator_nothing", ctx.language)),
             # What THIS room visibly affords -- "rest (the bed)" -- a
             # structured echo of what the view already shows, from anchors
             # and co-present unconcealed entities under full light. Never

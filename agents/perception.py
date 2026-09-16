@@ -5033,7 +5033,12 @@ def _repaired_observations(observations, view, name, known, roster):
                 unknown_sources=unknown)
         if re.sub(r"\s+", " ", text).strip() not in haystack:
             continue
-        out.append({**obs, "observed": {**observed, "text": text}})
+        repaired = {**obs, "observed": {**observed, "text": text}}
+        if unknown and repaired.get("actor"):
+            repaired["actor"], _leaked = _scrub_unknown_identities(
+                str(repaired["actor"]), allowed_forms=[name, *recognized],
+                unknown_sources=unknown)
+        out.append(repaired)
     return out
 
 
