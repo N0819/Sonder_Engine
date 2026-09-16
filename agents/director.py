@@ -341,6 +341,7 @@ from .director_scopes import (
     unnamed_work,
     ENGINE_CATEGORIES,
     _dispatch_specialists,
+    specialist_scope,
 )
 from .director_fanout import (
     addressed_figures, addressed_house,
@@ -1220,6 +1221,68 @@ def _hydrate_existing_entity_patch(sc, patch, minted=None):
     return hydrated
 
 
+def _validated_causal_contact_program(sc, state, contacts, player_name, *,
+                                      world_author=False, allow_new=True,
+                                      report=None):
+    """Validate contacts in their own spans and keep that normalized program.
+
+    Normalizing only the flat projection changes the operation's shape. The
+    program reconciler then sees a removed operation plus a new engine write,
+    moving an early grip after a later release. Span-local validation also
+    lets a later removal see an earlier add and keeps repeated operations.
+    """
+    from world.causal_program import fold_steps, program_steps
+
+    state["contact_ops"] = copy.deepcopy(contacts or [])
+    if not contacts:
+        return []
+    steps = program_steps(state)
+    world = copy.deepcopy(sc)
+    for step in steps:
+        patch = step["patch"]
+        operations = patch.get("contact_ops")
+        if operations:
+            # Same-span arrivals and mints establish the endpoints before
+            # contact validation; this preview is not the execution world.
+            floor = merge_scene_with_diff(
+                world, {k: v for k, v in patch.items() if k != "contact_ops"},
+                age_contacts=False)
+            kept = []
+            for raw in operations:
+                if not isinstance(raw, dict):
+                    continue
+                op = str(raw.get("op") or "add").strip().casefold()
+                if op in {"remove", "clear"}:
+                    actor = _canonical_scene_subject(floor, raw.get("actor"))
+                    target = _canonical_scene_subject(floor, raw.get("target"))
+                    own = same_subject(floor, actor, player_name) or (
+                        op == "remove" and same_subject(floor, target, player_name))
+                    if not world_author and not own:
+                        if report:
+                            report("discarded a contact ending that did not involve the player")
+                        continue
+                    clean = dict(raw, op=op)
+                    if actor:
+                        clean["actor"] = actor
+                    if target:
+                        clean["target"] = target
+                    normalized = [clean]
+                else:
+                    normalized = _validated_player_contact_assertions(
+                        floor, [raw], raw.get("actor") if world_author else player_name,
+                        report=report, allow_new_player_contacts=allow_new)
+                for clean in normalized:
+                    clean["from_event"] = raw.get("from_event", step["chrono_id"])
+                    kept.append(clean)
+                # A remove/cross later in this span reads earlier contacts.
+                floor = apply_contact_ops(floor, normalized, _age=False)
+            patch["contact_ops"] = kept
+        world = merge_scene_with_diff(world, patch, age_contacts=False)
+    state["causal_steps"] = steps
+    state["contact_ops"] = fold_steps(steps).get("contact_ops", [])
+    return copy.deepcopy(state["contact_ops"])
+
+
 def director_interpret(ctx, nonce):
     from persist.commit import presence_name_items
     chat = ctx.chat
@@ -1535,7 +1598,9 @@ def director_interpret(ctx, nonce):
     # author filed it under (`restore_declared_quotes`).
     restore_declared_quotes(out, ctx.input, warn=ctx.add_warning)
     normalize_causal_ledger(
-        out, authority_by_entity(_event_inputs), _interpret_identities)
+        out, authority_by_entity(_event_inputs), _interpret_identities,
+        known_targets={key for table in _interpret_model_payload["object_index"].values()
+                       for key in table})
     for _door_row in _route_doorway_rows(sc, out, _causal_rooms):
         ctx.add_warning(f"interpret: {_door_row!r} names a doorway of a room "
                         "in view; the engine routed rooms")
@@ -1758,6 +1823,7 @@ def director_interpret(ctx, nonce):
     _any_hand = any(bool((d or {}).get("scope"))
                     for d in (_idispatch or {}).values())
     if _any_hand:
+        from persist.commit import pending_obligation_view
         _iparts = scene_extra_parts(ctx.cast, pers, p_name)
         _iextras = {
             "nonce": nonce,
@@ -1788,6 +1854,7 @@ def director_interpret(ctx, nonce):
             "couriers": _icouriers(),
             "carried_reports": _ireports(),
             "unratified_claims": _iunratified(),
+            "pending_obligations": pending_obligation_view(chat["id"], ctx.turn.idx),
         }
     else:
         _iextras = {"nonce": nonce, "clock": clock}
@@ -1800,15 +1867,21 @@ def director_interpret(ctx, nonce):
     ]
     _allows_new_onset_contact = any(
         item.get("commitment") == "asserted" for item in _declared_actions)
-    out["contact_assertions"] = _validated_player_contact_assertions(
-        sc, out.get("contact_assertions"), p_name,
-        report=lambda note: ctx.add_warning(f"player contact: {note}"),
-        allow_new_player_contacts=_allows_new_onset_contact,
-    )
     out["state_assertions"] = validated_player_state_assertions(
         sc, out.get("state_assertions"), p_name,
         report=lambda note: ctx.add_warning(f"player state: {note}"),
     )
+    if out["state_assertions"].get("causal_steps"):
+        out["contact_assertions"] = _validated_causal_contact_program(
+            sc, out["state_assertions"], out.get("contact_assertions"), p_name,
+            world_author=player_authority(chat["id"])["mode"] == "world_author",
+            allow_new=_allows_new_onset_contact,
+            report=lambda note: ctx.add_warning(f"player contact: {note}"))
+    else:
+        out["contact_assertions"] = _validated_player_contact_assertions(
+            sc, out.get("contact_assertions"), p_name,
+            report=lambda note: ctx.add_warning(f"player contact: {note}"),
+            allow_new_player_contacts=_allows_new_onset_contact)
     _onset_assertions = copy.deepcopy(out["state_assertions"])
     # The contact channel rides beside the state assertions at this stage
     # (`_stage_container`), under its own key; the phase floor prunes one
@@ -1827,7 +1900,9 @@ def director_interpret(ctx, nonce):
                 "continuation", "completion"))
     ]
     prune_blocked_phase_changes(_onset_assertions, _deferred_verdicts)
-    out["onset_contact_assertions"] = _onset_assertions.pop("contact_ops", [])
+    out["onset_contact_assertions"] = (
+        _onset_assertions.get("contact_ops", []) if _onset_assertions.get("causal_steps")
+        else _onset_assertions.pop("contact_ops", []))
     out["onset_state_assertions"] = _onset_assertions
 
     fl = out.get("flow")
@@ -1966,6 +2041,12 @@ def director_interpret(ctx, nonce):
             _contacts = {"contact_ops": out.get("contact_assertions") or []}
             _dropped += void_span_records(_contacts, _voided)
             out["contact_assertions"] = _contacts.get("contact_ops") or []
+            # The onset preview was copied before the authority ruling. It
+            # must lose the same spans before perception or resolve reads it.
+            void_span_records(out.get("onset_state_assertions"), _voided)
+            _onset_contacts = {"contact_ops": out.get("onset_contact_assertions") or []}
+            void_span_records(_onset_contacts, _voided)
+            out["onset_contact_assertions"] = _onset_contacts.get("contact_ops") or []
             # On the step, beside the downgrade record it belongs to, and in
             # front of the Director in the SAME beat for the same reason: a
             # refusal the player can read about is answerable, one that lands
@@ -2388,6 +2469,7 @@ def _specialist_repairs(ctx, sc, sd, routed, view, extras, recon):
         scope = ([ch for ch in spec["channels"]]
                  if _REROUTE_FULL_SCOPE in omitted
                  else [ch for ch in spec["channels"] if ch in omitted])
+        scope = specialist_scope(name, scope)
         report = {"scope": scope, "ok": False}
         reports[name] = report
         payload = _specialist_payload(name, ctx, sc, view, extras)
@@ -3469,41 +3551,42 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
         if aborted is not None:
             raise aborted
 
-    # ---- Forward: "not mine, ask X" is acted on, once ------------------
-    #
-    # A hand answering `not_mine` names the hand it belongs to
-    # (`reroute_to`). That address was recorded as a routing vote and
-    # never acted on: the repair tier runs off the evidence scan, so a row
-    # whose only fault was reaching the wrong hand stayed unaddressed.
-    # Chat 12 turn 192: a crumpled page tossed down the steps into the
-    # square was categorised `positions`, the spatial hand answered "not
-    # mine, objects", nobody asked the objects hand, and the world kept
-    # the page in her fist while the page said it tumbled toward the fair.
-    #
-    # So each such row is handed on, once, to the hand it named -- the
-    # same call, the same sheet, a view holding only the forwarded rows
-    # -- and its answer is attached like any other. Once: a second
-    # decline is recorded, not forwarded again. A hand that already
-    # answered that row is not asked twice.
-    forwards = _rows_to_forward(jobs, results, dispatch)
+    # Completion belongs to one (span, item, hand), not the whole event.
+    # A valid local write may still need a complementary owner. Forward each
+    # missing owner once. An inserted earlier write can invalidate this
+    # owner's later already_true verdicts, so replace that owner's whole
+    # chronological suffix in the same call. Second declines remain explicit
+    # diagnostics rather than an unbounded call loop.
+    requests = _completion_requests(jobs, results, scene=sc)
+    forwards = _rows_to_forward(jobs, results, dispatch, requests=requests)
     for target, entries in forwards.items():
-        spans = [entry["span"] for entry in entries]
-        seen = dict(view)
-        seen["spans"] = [dict(span, _forwarded_to=[target]) for span in spans]
         state = dispatch.get(target)
         fresh = not (state and state.get("run"))
         if fresh:
             state = {
-                "run": True,
-                "scope": list(SPECIALISTS[target]["channels"]),
-                "gated": None, "addressed_by": [],
+                "run": True, "scope": [], "gated": None,
+                "addressed_by": [],
                 "channels": list(SPECIALISTS[target]["channels"]),
                 "ledger_items": [], "event_ids": [],
             }
             dispatch[target] = state
         elif isinstance(results.get(target), Exception) \
                 or results.get(target) is None:
-            continue   # its own round failed; nothing to attach onto
+            continue
+        boundary, prefix, suffix = _completion_suffix_rows(
+            target, entries, state.get("ledger_items") or [])
+        seen = dict(view, spans=suffix)
+        prior = _earlier_specialist_work(target, boundary, dispatch, results, sc)
+        if prior:
+            # The answer will supply every row from the boundary onward.
+            # None of the superseded suffix's old decisions may be shown as
+            # prior work, including to later rows within this same call.
+            suffix[0]["_prior_work"] = prior
+        required = {channel for entry in entries for channel in entry["channels"]}
+        if any(entry["full_scope"] for entry in entries):
+            required.update(SPECIALISTS[target]["channels"])
+        state["scope"] = specialist_scope(
+            target, required | set(state["scope"]))
         state["forwarded"] = [
             {"chrono_id": entry["chrono_id"], "from": entry["from"]}
             for entry in entries]
@@ -3514,6 +3597,10 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
         try:
             answer = _call_isolated(target, state,
                                     contextvars.copy_context(), seen)
+            positional = answer.get("results") if isinstance(answer, dict) else None
+            if not isinstance(positional, list) or len(positional) != len(suffix) \
+                    or not all(isinstance(row, dict) for row in positional):
+                raise ValueError("completion response does not align with its chronological suffix")
         except Aborted:
             raise
         except Exception as exc:
@@ -3522,21 +3609,41 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
             if fresh:
                 results[target] = exc
             continue
-        rows = [_without_private_keys(span) for span in seen["spans"]]
+        rows = [dict(_without_private_keys(span),
+                     requested_channels=list(span["_requested_channels"]))
+                for span in seen["spans"]]
         chronos = _granted_event_ids(target, seen)
+        # Replace requests made by answers that this call superseded, too.
+        # Any new requests are recorded but cannot open another round.
+        requests = [request for request in requests
+                    if request["from"] != target or request["chrono_id"] < boundary]
+        requests.extend(_completion_requests(
+            [(target, {"ledger_items": rows})], {target: answer}, scene=sc))
         if fresh or not isinstance(results.get(target), dict):
             results[target] = answer if isinstance(answer, dict) else {}
             state["ledger_items"] = rows
             state["event_ids"] = chronos
         else:
-            _append_forwarded_answer(results[target], answer)
-            state["ledger_items"] = list(state.get("ledger_items") or []) + rows
-            state["event_ids"] = list(state.get("event_ids") or []) + chronos
+            replaced = dict(results[target])
+            original_answers = replaced.get("results") or []
+            replaced["results"] = [original_answers[index] for index, _ in prefix
+                                   if index < len(original_answers)]
+            _append_forwarded_answer(replaced, answer)
+            results[target] = replaced
+            state["ledger_items"] = [row for _, row in prefix] + rows
+            state["event_ids"] = [event_id for event_id in state.get("event_ids") or []
+                                  if event_id < boundary] + chronos
+        record.setdefault("recompiled_rows", {})[target] = chronos
     if forwards:
         record["forwards"] = {
             target: [entry["chrono_id"] for entry in entries]
             for target, entries in forwards.items()}
 
+    # Bind the complete set before validating partial updates. A later hand
+    # may use another key for the item an earlier row minted; validating it
+    # first would discard a nameless update before the item join could help.
+    bound_patches, item_bindings, binding_notes = _bind_specialist_patches(
+        results, dispatch, sc, extras.get("identity_index"))
     # ---- Assemble: canonical order, ownership per granted channel ------
     for name in SPECIALISTS:
         state = dispatch.get(name)
@@ -3585,6 +3692,7 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
                     alignment_errors.append(
                         f"result {index + 1} is not an object")
                     continue
+                row_error_count = len(alignment_errors)
                 try:
                     item_id = int((ledger or {}).get("item_id") or 0)
                 except (TypeError, ValueError):
@@ -3599,16 +3707,21 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
                     alignment_errors.append(
                         f"result {index + 1} transforms is not a list")
                     transforms = []
-                for transform in transforms:
-                    patch = transform.get("patch") \
+                for transform_index, transform in enumerate(transforms):
+                    patch = bound_patches.get((name, index, transform_index))
+                    if patch is None:
+                        patch = transform.get("patch") \
                         if isinstance(transform, dict) else None
                     if isinstance(patch, dict) and patch:
                         patch = _hydrate_existing_entity_patch(sc, patch, minted)
                         patch = _resolve_identity_handles(
                             patch, extras.get("identity_index"))
+                        patch = schemas.normalize_causal_patch_shape(patch)
+                        raw_stations = patch.get("stations")
                         try:
                             patch, dropped = \
-                                schemas.validated_state_diff_channels(patch)
+                                schemas.validated_specialist_patch_channels(
+                                    f"director_{name}", patch)
                         except Exception as exc:
                             alignment_errors.append(
                                 f"result {index + 1} has an invalid patch: "
@@ -3618,14 +3731,24 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
                             alignment_errors.append(
                                 f"result {index + 1} dropped invalid patch "
                                 "channel(s): " + ", ".join(dropped))
+                        if isinstance(raw_stations, dict):
+                            lost_stations = set(raw_stations) - set(
+                                patch.get("stations") or {})
+                            if lost_stations:
+                                alignment_errors.append(
+                                    f"result {index + 1} dropped malformed stations "
+                                    "record(s): " + ", ".join(sorted(
+                                        str(key) for key in lost_stations)))
                         if not patch:
                             alignment_errors.append(
                                 f"result {index + 1} contains an empty transform")
                             continue
+                        attached_item = _transform_item_id(
+                            ledger, transform, item_id, alignment_errors, index)
+                        if attached_item is None:
+                            continue
                         raw_transforms.append({
-                            "item_id": _transform_item_id(
-                                ledger, transform, item_id, alignment_errors,
-                                index),
+                            "item_id": attached_item,
                             "chrono_id": chrono_id,
                             "patch": patch,
                         })
@@ -3638,6 +3761,15 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
                         alignment_errors.append(
                             f"result {index + 1} contains an empty transform")
                 status = str(row.get("status") or "").strip().casefold()
+                if status == "already_true":
+                    if emitted:
+                        # Read compatibility: the typed effect can be checked;
+                        # the old label cannot certify it before execution.
+                        status = "encoded"
+                    else:
+                        alignment_errors.append(
+                            f"result {index + 1} has no typed desired effect; "
+                            "already_true is not an execution receipt")
                 if status == "encoded" and not emitted:
                     alignment_errors.append(
                         f"result {index + 1} says encoded without a transform")
@@ -3647,7 +3779,9 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
                     state.setdefault("item_verdicts", []),
                     state.setdefault("things_unaccounted", []),
                     alignment_errors, index, sc)
-                if status:
+                # Keep valid writes, but an incomplete or malformed row is
+                # not a receipt settling every item for this owner.
+                if status and len(alignment_errors) == row_error_count:
                     receipt = {"item_id": item_id, "chrono_id": chrono_id,
                                "status": status}
                     reroute = str(row.get("reroute_to") or "").strip()
@@ -3817,6 +3951,45 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
             int(entry.get("response_order") or 0),
         ),
     )
+    if out.get("ledgers"):
+        from world.causal_program import bind_items, program_from_history
+        bound, bindings, final_binding_notes = bind_items(record["transform_history"], sc)
+        binding_notes += final_binding_notes
+        compiled, history, rejected = compile_transforms(
+            bound, allowed_channels={channel for spec in SPECIALISTS.values()
+                                     for channel in spec["channels"]
+                                     if channel_serves_stage(channel, stage)})
+        record["transform_history"] = history
+        record["item_bindings"] = item_bindings or bindings
+        record["binding_notes"] = binding_notes
+        for note in binding_notes + rejected:
+            ctx.add_warning("causal binding: " + str(note))
+        for channel, value in compiled.items():
+            container, key = _stage_container(out, stage, channel)
+            container[key] = value
+        # Complete spans, not a per-hand execution order. Several hands and
+        # several items at one chrono remain complementary patches in one step.
+        # Public evidence is resolve metadata, consumed by its observer
+        # grounding path. Keep it in transform history and on the stage
+        # envelope, never replay it as a scene-state channel.
+        state_history = [dict(entry, patch={
+            channel: value for channel, value in entry["patch"].items()
+            if channel not in {"public_evidence", "obligations"}}) for entry in history]
+        _stage_state(out, stage)["causal_steps"] = program_from_history(
+            state_history, out.get("sequence") or [], stage,
+            requirements=_causal_completion_requirements(dispatch, history, scene=sc))
+        for step in _stage_state(out, stage)["causal_steps"]:
+            # Commit-only domains are pending verification, not empty failed
+            # scene patches. Preserve their requested effects for receipts.
+            step["transforms"] = [copy.deepcopy(entry) for entry in history
+                                  if entry.get("chrono_id") == step["chrono_id"]]
+    unfinished = _unfulfilled_completion_requests(
+        requests, dispatch, record["transform_history"])
+    if unfinished:
+        record["unfulfilled_requests"] = unfinished
+        for request in unfinished:
+            ctx.add_warning("causal completion: " + str(request))
+            ctx.tell_director("causal completion: " + str(request))
     # A MISSING ROOM IS A WRONG SCENE, NOT A LEAK, AND A WRONG SCENE IS THE
     # SENTENCE'S JOB (AGENTS.md, "a check may be fatal only if nothing
     # downstream reads the field, repairs it, or already reports it"). The
@@ -4423,35 +4596,296 @@ def _address_from_spans(out, figure_names, cast_info):
 def _transform_item_id(ledger, transform, default_id, notes, index):
     """Which of the row's things this transform changes: the handle whose
     name the hand wrote in `item` (the owner's contract, 2026-09-15: one
-    transform per thing). A row about one thing needs no `item`; on a row
-    about several, a transform naming none or a name the row does not
-    carry takes the first thing and says so, rather than being lost."""
+    transform per thing). A legacy row about one thing needs no `item`.
+    An unknown or ambiguous name cannot acquire another thing's identity."""
     ids = ledger.get("item_ids") if isinstance(ledger.get("item_ids"), list) else []
     names = ledger.get("item_names") if isinstance(ledger.get("item_names"), list) else []
-    if len(ids) <= 1:
+    if not ids:
         return default_id
     named = str((transform or {}).get("item") or "").strip().casefold()
     if named:
-        for one, name in zip(ids, names):
-            if str(name or "").strip().casefold() == named:
-                return int(one)
+        matches = [one for one, name in zip(ids, names)
+                   if str(name or "").strip().casefold() == named]
+        if len(matches) == 1:
+            return int(matches[0])
+    elif len(ids) == 1:
+        return int(ids[0])
     notes.append(
         f"result {index + 1}: a transform on a row about {len(ids)} things "
         + (f"names {named!r}, which the row does not carry; " if named
            else "names none of them; ")
-        + f"filed under the first, {names[0]!r}")
-    return int(ids[0])
+        + "transform rejected rather than assigned another item's identity")
+    return None
 
 
-_THING_VERDICTS = ("already_true", "not_mine", "no_referent")
+def _bind_specialist_patches(results, dispatch, scene, identities):
+    """Rejoin hidden item handles before any partial patch is validated."""
+    from world.causal_program import bind_items
+    attached = []
+    shape_notes = []
+    for name in SPECIALISTS:
+        state, result = dispatch.get(name) or {}, results.get(name)
+        if not isinstance(result, dict):
+            continue
+        for index, (ledger, row) in enumerate(zip(
+                state.get("ledger_items") or [], result.get("results") or [])):
+            if not isinstance(row, dict):
+                continue
+            for at, transform in enumerate(row.get("transforms") or []):
+                patch = transform.get("patch") if isinstance(transform, dict) else None
+                if not isinstance(patch, dict):
+                    continue
+                # Measured live: the hand emitted the right inventory ops
+                # inside the familiar StateDiff envelope. This is a wrapper,
+                # not an identity or channel inference. Unwrap only the sole
+                # state object; competing outer channels remain untouched.
+                if isinstance(patch.get("state_diff"), dict) \
+                        and set(patch) <= {"state_diff", "notes"}:
+                    patch = patch["state_diff"]
+                    shape_notes.append({
+                        "specialist": name, "result": index + 1,
+                        "reason": "unwrapped sole patch.state_diff envelope"})
+                unowned = set(patch) - set(SPECIALISTS[name]["channels"])
+                if unowned:
+                    shape_notes.append({
+                        "specialist": name, "result": index + 1,
+                        "reason": "ignored unrecognized or unowned transform channels",
+                        "channels": sorted(unowned)})
+                item = _transform_item_id(ledger, transform,
+                                          int(ledger.get("item_id") or 0), [], index)
+                if item is None:
+                    continue
+                names = dict(zip(ledger.get("item_ids") or [], ledger.get("item_names") or []))
+                attached.append({
+                    "item_id": item, "chrono_id": int(ledger.get("chrono_id") or index + 1),
+                    "object_name": names.get(item) or ledger.get("object_name") or "",
+                    "address": (name, index, at),
+                    "patch": _resolve_identity_handles(
+                        {k: v for k, v in patch.items() if k in SPECIALISTS[name]["channels"]},
+                        identities),
+                })
+    attached.sort(key=lambda row: row["chrono_id"])
+    bound, bindings, notes = bind_items(attached, scene)
+    patches, minted = {}, {}
+    for row in bound:
+        patch = _hydrate_existing_entity_patch(scene, row["patch"], minted)
+        patches[tuple(row["address"])] = patch
+        for key, entity in (patch.get("entities") or {}).items():
+            if isinstance(entity, dict) and entity.get("name"):
+                minted.setdefault(key, entity)
+    return patches, bindings, shape_notes + notes
 
 
-def _rows_to_forward(jobs, results, dispatch):
-    """{target hand: [{"span", "chrono_id", "from"}]} for every row a hand
-    declined with an address, where the addressed hand has not answered
-    that row. The span is the view's own (private keys and all), so the
-    forwarding round can hand it on unchanged."""
-    forwards = {}
+_THING_VERDICTS = ("not_mine", "no_referent")
+
+
+def _completion_reference_scene(scene, transforms):
+    """Identity-only lookup including things minted by these typed patches."""
+    reference = dict(scene or {})
+    for channel in ("entities", "rooms"):
+        records = dict(reference.get(channel) or {})
+        for transform in transforms:
+            for key, value in ((transform.get("patch") or {}).get(channel) or {}).items():
+                if isinstance(value, dict):
+                    records[key] = {**(records.get(key) or {}), **value}
+        reference[channel] = records
+    return reference
+
+
+def _transform_covered_items(ledger, transform, scene=None):
+    """A relation accounts for both typed endpoints without duplicating it.
+
+    Primary attribution stays private, but an established referent needs a
+    typed target on its own identity. A hand mapping a new descriptive item
+    name still supplies that first identity binding. Additional coverage is
+    only for uniquely identified subjects or mutable relation endpoints;
+    descriptive prose and readonly references such as station.near or
+    pose.relative_to cannot settle another item's work.
+    """
+    ids = ledger.get("item_ids") or [ledger.get("item_id") or 0]
+    names = ledger.get("item_names") or [ledger.get("object_name") or ""]
+    pairs = [(int(item), _thing_forms(name)) for item, name in zip(ids, names)]
+    primary = int(transform.get("item_id") or 0)
+    covered = set()
+    scene = scene or {}
+
+    def identities(label):
+        query = _thing_forms(label)
+        if not query:
+            return set()
+        found = set()
+        for channel in ("entities", "rooms"):
+            direct, aliases = set(), set()
+            for key, record in (scene.get(channel) or {}).items():
+                record = record if isinstance(record, dict) else {}
+                identity = (channel, str(key))
+                if query in {_thing_forms(key), _thing_forms(record.get("name"))}:
+                    direct.add(identity)
+                elif query in {_thing_forms(value) for value in record.get("aliases") or []}:
+                    aliases.add(identity)
+            found.update(direct or aliases)
+        # Registered and projected bodies may have no entity record. When a
+        # body ledger uses an entity spelling it is the same identity, not a
+        # second candidate competing with itself.
+        for channel in ("positions", "attire", "scales", "vitals", "overlays"):
+            if any(_thing_forms(key) == query for key in scene.get(channel) or {}):
+                if not any(kind == "entities" for kind, _ in found):
+                    found.add(("body", query))
+        return found
+
+    targets = []
+    patch = transform.get("patch") or {}
+    for channel in ("entities", "positions", "stations", "poses", "containment",
+                    "attire", "conditions", "vitals", "overlays", "scales", "rooms"):
+        table = patch.get(channel)
+        if isinstance(table, dict):
+            targets.extend(table)
+    for channel in ("remove_entities", "remove_rooms"):
+        targets.extend(patch.get(channel) or [])
+    for operation in patch.get("contact_ops") or []:
+        if isinstance(operation, dict):
+            targets.extend(operation.get(key) for key in ("actor", "target"))
+    for operation in patch.get("inventory_ops") or []:
+        if isinstance(operation, dict):
+            targets.extend(operation.get(key) for key in ("object_id", "from_id", "to_id"))
+    for record in (patch.get("containment") or {}).values():
+        if isinstance(record, dict):
+            targets.append(record.get("in") or record.get("container"))
+    for record in (patch.get("rooms") or {}).values():
+        if isinstance(record, dict):
+            targets.append(record.get("parent_entity"))
+    for record in (patch.get("attire") or {}).values():
+        if not isinstance(record, dict):
+            continue
+        for key in ("add", "remove", "wearing", "replace"):
+            for garment in record.get(key) or []:
+                targets.append(garment.get("name") if isinstance(garment, dict) else garment)
+    named = {item: identities(name) for item, name in pairs}
+    touched = set()
+    for target in targets:
+        if not isinstance(target, str) or not target:
+            continue
+        resolved = identities(target)
+        if len(resolved) == 1:
+            touched.update(resolved)
+        forms = _settled_forms(scene, target)
+        matches = {item for item, name in pairs if name and (
+            len(named[item]) == 1 and named[item] == resolved or
+            not named[item] and name in forms)}
+        if len(matches) == 1:
+            covered.update(matches)
+    expected = named.get(primary, set())
+    if primary in named and (not expected or len(expected) == 1 and expected <= touched):
+        covered.add(primary)
+    return covered - {0}
+
+
+def _causal_completion_requirements(dispatch, history, scene=None):
+    """Record assigned work without accepting model completion as proof.
+
+    Exact channel assignments are checked for the row as a whole; individual
+    items must carry a desired effect or an explicit non-applicability verdict.
+    The latter cannot settle an entirely empty, unforwarded owner response.
+    """
+    requirements = []
+    reference_scene = _completion_reference_scene(scene, history)
+    for name, state in dispatch.items():
+        if not state.get("run"):
+            continue
+        owned = set(SPECIALISTS[name]["channels"])
+        answers = state.get("results") or []
+        for index, ledger in enumerate(state.get("ledger_items") or []):
+            chrono = int(ledger.get("chrono_id") or ledger.get("event_id") or 0)
+            span = [entry for entry in history if entry.get("chrono_id") == chrono]
+            own = [entry for entry in span if entry.get("specialist") == name]
+            answer = answers[index] if index < len(answers) else {}
+            status = str(answer.get("status") or "").casefold()
+            referrals = _completion_requests(
+                [(name, {"ledger_items": [ledger]})],
+                {name: {"results": [answer]}}, scene=reference_scene)
+            def forwarded_effects(item_id=None):
+                if not referrals:
+                    return False
+                for referral in referrals:
+                    target = referral["to"]
+                    if target == name or target not in SPECIALISTS:
+                        return False
+                    accepted = [entry for entry in history
+                                if entry.get("chrono_id") == chrono
+                                and entry.get("specialist") == target
+                                and (item_id is None or item_id in _transform_covered_items(
+                                    ledger, entry, reference_scene))]
+                    channels = {channel for entry in accepted for channel in entry.get("patch") or {}}
+                    if not accepted or set(referral["channels"]) - channels:
+                        return False
+                return True
+            forwarding = forwarded_effects()
+            row_exempt = status == "not_mine" and forwarding
+            exact = set(ledger.get("requested_channels") or []) & owned
+            # Archived category aliases dispatch an owner, not a particular
+            # representation. For example, "artifacts" may describe a lid
+            # whose actual state belongs in entities, not artifact_ops.
+            exact.update(set(ledger.get("categories") or []) & owned)
+            if not row_exempt:
+                requirements.append({
+                    "chrono_id": chrono, "specialist": name,
+                    "item_id": None, "channels": sorted(exact),
+                    "status": "proposed" if own else "unresolved",
+                    "reason": "assigned owner supplied no desired effect" if not own else "",
+                })
+            ids = ledger.get("item_ids") or [ledger.get("item_id") or 0]
+            names = ledger.get("item_names") or [ledger.get("object_name") or ""]
+            verdicts = {entry["item_id"]: entry.get("status")
+                        for entry in state.get("item_verdicts") or []
+                        if entry.get("chrono_id") == chrono}
+            for item_id, item_name in zip(ids, names):
+                coverage = [at for at, entry in enumerate(span)
+                            if entry.get("specialist") == name and item_id in
+                            _transform_covered_items(ledger, entry, reference_scene)]
+                changed = bool(coverage)
+                verdict = verdicts.get(item_id, status if len(ids) == 1 else "")
+                exempt = not changed and verdict == "not_mine" and (bool(own) or forwarded_effects(item_id))
+                requirements.append({
+                    "chrono_id": chrono, "specialist": name,
+                    "item_id": item_id, "item": item_name,
+                    "transform_indices": coverage,
+                    "status": ("proposed" if changed else
+                               "not_applicable" if exempt else "unresolved"),
+                    "reason": "" if changed or exempt else
+                              "item has no typed desired effect",
+                })
+    return requirements
+
+
+def _garment_transfer_needs_attire(scene, operation):
+    """A known garment's worn relation also requires its wardrobe owner."""
+    if not isinstance(operation, dict) or operation.get("relation") != "worn":
+        return False
+    from world.spatial import _unique_entity_keyed
+    target = operation.get("object_id")
+    key, entity = _unique_entity_keyed(scene or {}, target)
+    state = entity.get("state") if isinstance(entity, dict) else None
+    if isinstance(state, dict) and (state.get("clothing") is True or state.get("garment")):
+        return True
+    forms = _settled_forms(scene, target)
+    if key:
+        forms.update(_settled_forms(scene, key))
+    for wardrobe in ((scene or {}).get("attire") or {}).values():
+        if not isinstance(wardrobe, dict):
+            continue
+        garments = list(wardrobe.get("wearing") or [])
+        for region in (wardrobe.get("regions") or {}).values():
+            if isinstance(region, dict):
+                garments.extend(region.get("garments") or [])
+        if any(_thing_forms(garment.get("name") if isinstance(garment, dict) else garment)
+               in forms for garment in garments):
+            return True
+    return False
+
+
+def _completion_requests(jobs, results, scene=None):
+    """Typed complementary work requested beside any local verdict."""
+    requests = []
     for name, state in jobs:
         result = results.get(name)
         if not isinstance(result, dict):
@@ -4460,32 +4894,231 @@ def _rows_to_forward(jobs, results, dispatch):
         if not isinstance(positional, list):
             continue
         rows = state.get("ledger_items") or []
-        for index, row in enumerate(positional):
-            if not isinstance(row, dict) or index >= len(rows):
+        for ledger, row in zip(rows, positional):
+            if not isinstance(row, dict) or not isinstance(ledger, dict):
                 continue
-            if str(row.get("status") or "").strip().casefold() != "not_mine":
-                continue
-            target = str(row.get("reroute_to") or "").strip().casefold()
-            if target not in SPECIALISTS or target == name:
-                continue
-            ledger = rows[index] or {}
             try:
-                chrono = int(ledger.get("chrono_id")
-                             or ledger.get("event_id") or 0)
+                chrono = int(ledger.get("chrono_id") or ledger.get("event_id") or 0)
             except (TypeError, ValueError):
                 continue
             if chrono <= 0:
                 continue
-            answered = dispatch.get(target) or {}
-            if answered.get("run") and chrono in (
-                    answered.get("event_ids") or []):
-                continue
-            if any(e["chrono_id"] == chrono
-                   for e in forwards.get(target, [])):
-                continue
-            forwards.setdefault(target, []).append(
-                {"span": ledger, "chrono_id": chrono, "from": name})
+            targets = {}
+            channels = row.get("required_channels") or []
+            channels = list(channels) if isinstance(channels, list) else []
+            # This is a typed cross-channel dependency, not an inference
+            # from prose: a known garment cannot be worn in containment and
+            # absent from its wearer's wardrobe. The body hand still owns
+            # the attire patch and its placement/coverage choices.
+            for transform in row.get("transforms") or []:
+                if "inventory_ops" not in SPECIALISTS.get(name, {}).get("channels", ()):
+                    continue
+                if not isinstance(transform, dict):
+                    continue
+                if _transform_item_id(ledger, transform,
+                                      int(ledger.get("item_id") or 0), [], 0) is None:
+                    continue
+                patch = transform.get("patch") if isinstance(transform, dict) else None
+                if not isinstance(patch, dict):
+                    continue
+                if isinstance(patch.get("state_diff"), dict) and set(patch) <= {"state_diff", "notes"}:
+                    patch = patch["state_diff"]
+                inventory = patch.get("inventory_ops") or []
+                if any(_garment_transfer_needs_attire(scene, operation)
+                       for operation in (inventory if isinstance(inventory, list) else [])):
+                    if "attire" not in channels:
+                        channels.append("attire")
+            for channel in channels if isinstance(channels, list) else []:
+                channel = str(channel).strip()
+                if not channel:
+                    continue
+                # A known hand in the channel field has one exact meaning:
+                # the compatibility reroute_to request. Widen to that hand's
+                # scope; never guess an owner for an unknown spelling.
+                if channel in SPECIALISTS:
+                    targets.setdefault(channel, {
+                        "channels": [], "full_scope": False})["full_scope"] = True
+                    continue
+                target = _CHANNEL_SPECIALISTS.get(channel, "")
+                entry = targets.setdefault(target, {"channels": [], "full_scope": False})
+                if channel not in entry["channels"]:
+                    entry["channels"].append(channel)
+            target = str(row.get("reroute_to") or "").strip().casefold()
+            if target:
+                targets.setdefault(target, {"channels": [], "full_scope": False})["full_scope"] = True
+            for target, details in targets.items():
+                requests.append({"span": ledger, "chrono_id": chrono,
+                                 "from": name, "to": target, **details})
+    return requests
+
+
+def _rows_to_forward(jobs, results, dispatch, requests=None):
+    """One chronologically ordered call per missing owner, deduped per span."""
+    forwards = {}
+    for request in requests if requests is not None else _completion_requests(jobs, results):
+        target, chrono = request["to"], request["chrono_id"]
+        if target not in SPECIALISTS or target == request["from"]:
+            continue
+        answered = dispatch.get(target) or {}
+        if answered.get("run") and chrono in (answered.get("event_ids") or []):
+            continue
+        entries = forwards.setdefault(target, [])
+        entry = next((entry for entry in entries if entry["chrono_id"] == chrono), None)
+        if entry is None:
+            entries.append(dict(request, channels=list(request["channels"])))
+        else:
+            entry["channels"] = sorted(set(entry["channels"]) | set(request["channels"]))
+            entry["full_scope"] |= request["full_scope"]
+    for entries in forwards.values():
+        entries.sort(key=lambda entry: entry["chrono_id"])
     return forwards
+
+
+def _completion_suffix_rows(target, entries, ledger_items):
+    """Keep an owner's prefix and replay its rows after the first insertion.
+
+    A missing set-down changes the starting state for a later pickup. The
+    later answer must therefore be recomputed in the same chronological batch,
+    not appended beside an already_true verdict made without the set-down.
+    """
+    boundary = min(entry["chrono_id"] for entry in entries)
+    prefix, suffix = [], {}
+    for index, row in enumerate(ledger_items):
+        chrono = int(row.get("chrono_id") or row.get("event_id") or 0)
+        if chrono < boundary:
+            prefix.append((index, row))
+        else:
+            suffix[chrono] = dict(
+                row, _forwarded_to=[target],
+                _requested_channels=list(row.get("requested_channels") or []))
+    for entry in entries:
+        suffix[entry["chrono_id"]] = dict(
+            entry["span"], _forwarded_to=[target],
+            _requested_channels=list(entry["channels"]))
+    return boundary, prefix, [suffix[chrono] for chrono in sorted(suffix)]
+
+
+def _earlier_specialist_work(name, chrono, dispatch, results, scene):
+    """This owner's earlier admissible writes, without private correlation ids.
+
+    A forwarded release must see its earlier pickup rather than mistake the
+    initial world's table placement for proof that the release is already true.
+    Never include a later answer or another owner's standing channel state.
+    """
+    result = results.get(name)
+    if not isinstance(result, dict):
+        return []
+    spec = SPECIALISTS[name]
+    owned = set(spec["channels"])
+    ordered = sorted(zip((dispatch.get(name) or {}).get("ledger_items") or [],
+                         result.get("results") or []),
+                     key=lambda pair: int(pair[0].get("chrono_id")
+                                          or pair[0].get("event_id") or 0))
+    work, minted = [], {}
+    for ledger, answer in ordered:
+        prior_chrono = int(ledger.get("chrono_id") or ledger.get("event_id") or 0)
+        if prior_chrono >= chrono:
+            continue
+        if not isinstance(answer, dict):
+            continue
+        attached, item_names, row_minted = [], [], dict(minted)
+        for transform in answer.get("transforms") or []:
+            raw = transform.get("patch") if isinstance(transform, dict) else None
+            if not isinstance(raw, dict):
+                continue
+            if isinstance(raw.get("state_diff"), dict) and set(raw) <= {"state_diff", "notes"}:
+                raw = raw["state_diff"]
+            raw = {channel: value for channel, value in raw.items() if channel in owned}
+            try:
+                hydrated = _hydrate_existing_entity_patch(scene, raw, row_minted)
+                if spec["step_key"] in schemas.SCHEMA_MAP:
+                    patch, _ = schemas.validated_specialist_patch_channels(
+                        spec["step_key"], hydrated)
+                else:
+                    # Extension output already passed its own schema at the
+                    # call boundary; core StateDiff cannot validate it again.
+                    patch = hydrated
+            except (TypeError, ValueError):
+                continue
+            if patch:
+                attached.append({
+                    "chrono_id": prior_chrono,
+                    "item_id": _transform_item_id(
+                        ledger, transform, int(ledger.get("item_id") or 0), [], 0),
+                    "patch": patch,
+                })
+                item_names.append(str(transform.get("item") or ""))
+                row_minted.update(patch.get("entities") or {})
+        _, history, _ = compile_transforms(
+            attached, allowed_channels=owned, ledger_items=[ledger],
+            allowed_chrono_ids=[prior_chrono], specialist=name)
+        transforms = [{"item": item_names[entry["response_order"]],
+                       "patch": _without_provenance(entry["patch"])}
+                      for entry in history]
+        status = str(answer.get("status") or "").strip().casefold()
+        if status == "already_true":
+            if not transforms:
+                continue
+            status = "encoded"
+        if status == "encoded" and not transforms:
+            # Do not tell the next call an unsupported speech-derived fact
+            # or an unowned patch was encoded when assembly will reject it.
+            continue
+        for entry in history:
+            minted.update(entry["patch"].get("entities") or {})
+        known = {_thing_forms(value) for value in ledger.get("item_names") or []}
+        if not known and ledger.get("object_name"):
+            known.add(_thing_forms(ledger["object_name"]))
+        settled = {key: value for key, value in (answer.get("settled") or {}).items()
+                   if value in _THING_VERDICTS and _settled_forms(scene, key) & known}
+        work.append({"ledger": _specialist_ledger(ledger),
+                     "result": {"status": status,
+                                "transforms": transforms,
+                                "settled": settled}})
+    return work
+
+
+def _unfulfilled_completion_requests(requests, dispatch, history):
+    """Check requests against their exact owner's accepted chronological work."""
+    missing, seen = [], set()
+    for request in requests:
+        chrono, target = request["chrono_id"], request["to"]
+        state = dispatch.get(target) or {}
+        verdict = next((entry.get("status") for entry in state.get("events_resolved") or []
+                        if entry.get("event_id") == chrono), "")
+        channels = {channel for entry in history
+                    if entry.get("chrono_id") == chrono and entry.get("specialist") == target
+                    for channel in entry.get("patch") or {}}
+        answered_channels = set()
+        for ledger in state.get("ledger_items") or []:
+            if int(ledger.get("chrono_id") or ledger.get("event_id") or 0) != chrono:
+                continue
+            answered_channels.update(ledger.get("requested_channels") or [])
+            for category in span_categories(ledger):
+                for kind, owner in manifest_category_targets(category):
+                    if kind == "channel":
+                        answered_channels.add(owner)
+                    elif owner == target:
+                        answered_channels.update(SPECIALISTS[target]["channels"])
+        answered_channels.intersection_update(state.get("scope") or [])
+        if target not in SPECIALISTS:
+            reason = "no owner for requested channel or hand"
+        elif not state.get("ran"):
+            reason = "requested owner failed or did not run"
+        elif verdict not in {"encoded", "already_true"}:
+            reason = "requested owner did not settle this span"
+        elif verdict == "already_true" and set(request["channels"]) - answered_channels:
+            reason = "requested channel was not part of the owner's answered row"
+        elif verdict != "already_true" and set(request["channels"]) - channels:
+            reason = "requested channel has no accepted transform"
+        else:
+            continue
+        key = (chrono, request["from"], target, tuple(request["channels"]), reason)
+        if key not in seen:
+            seen.add(key)
+            missing.append({"chrono_id": chrono, "from": request["from"], "to": target,
+                            "channels": request["channels"], "reason": reason})
+    return missing
 
 
 def _append_forwarded_answer(first, answer):
@@ -4539,15 +5172,18 @@ def _account_for_every_thing(ledger, row, raw_transforms, chrono_id, status,
     name -> verdict, for the things it did not transform, and this records
     one verdict per thing: encoded for a thing a transform names, the
     hand's word for the rest, and `things_unaccounted` for a thing with
-    neither -- report-only, so the rate can be measured before anything
-    is done about it. A row about one thing is accounted for by its
-    status."""
+    neither. Valid writes stand, but the caller cannot use an incomplete
+    row as a completion receipt. A row about one thing is accounted for by
+    its status."""
     ids = ledger.get("item_ids") if isinstance(ledger.get("item_ids"), list) else []
     names = ledger.get("item_names") if isinstance(ledger.get("item_names"), list) else []
     if len(ids) <= 1:
         return
-    changed = {int(t.get("item_id") or 0) for t in raw_transforms
-               if int(t.get("chrono_id") or 0) == int(chrono_id)}
+    reference_scene = _completion_reference_scene(sc, raw_transforms)
+    changed = set().union(*(
+        _transform_covered_items(ledger, transform, reference_scene)
+        for transform in raw_transforms
+        if int(transform.get("chrono_id") or 0) == int(chrono_id)))
     settled = row.get("settled") if isinstance(row.get("settled"), dict) else {}
     known = {_thing_forms(n) for n in names} - {""}
     by_name = {}
@@ -4852,6 +5488,9 @@ def director_resolve(ctx, nonce, _corrections=None):
                    if interp.get("onset_state_assertions") is not None
                    else interp.get("state_assertions"))
     onset_state = onset_state if isinstance(onset_state, dict) else {}
+    if onset_state.get("causal_steps"):
+        # Contacts execute at their own span, not before every other onset act.
+        resolve_sc = copy.deepcopy(sc)
     resolve_sc = preview_player_state_assertions(
         resolve_sc, onset_state, ctx, p_name)
     # ONSCREEN CHARTER BODIES: LAID INTO THE SCENE THE DIRECTOR RESOLVES,
@@ -5467,7 +6106,9 @@ def director_resolve(ctx, nonce, _corrections=None):
     )
     normalize_causal_ledger(
         out, authority_by_entity(_model_payload.get("event_inputs")),
-        _identity_index)
+        _identity_index,
+        known_targets={key for table in _model_payload["object_index"].values()
+                       for key in table})
     for _door_row in _route_doorway_rows(resolve_sc, out, _resolve_causal_rooms):
         ctx.add_warning(f"resolve: {_door_row!r} names a doorway of a room "
                         "in view; the engine routed rooms")
@@ -5866,6 +6507,10 @@ def director_resolve(ctx, nonce, _corrections=None):
         "planned_rooms": payload.get("planned_rooms"),
         "planned_elsewhere": payload.get("planned_elsewhere"),
         "author_notes": payload.get("author_notes"),
+        # Standing social context belongs to the hand that adjudicates
+        # claims and speech consequences, not the minimal event slicer.
+        "pending_obligations": payload.get("pending_obligations") or [],
+        "social_standing": payload.get("social_standing") or {},
         "crowds": payload.get("crowds") or [],
         "couriers": payload.get("couriers") or [],
         "carried_reports": payload.get("carried_reports") or [],
@@ -6568,6 +7213,30 @@ def director_resolve(ctx, nonce, _corrections=None):
     if not out.get("summary"):
         out["summary"] = (out.get("resolved_event") or "")[:200]
 
+    # Authored prose can contain several speakers. The causal row names who
+    # spoke; the primary input container is not itself speaker identity.
+    _speech_identities = {
+        **{f"character:{c['id']}": character_name_from_text(c["sheet"])
+           for c in ctx.cast},
+        **{f"persona:{p['persona_id']}": p.get("name")
+           for p in ctx.extra_players},
+        **_identity_index,
+    }
+    _player_spoken = []
+    for _speech in interp.get("sequence") or []:
+        if _speech.get("type") != "speech" or not _speech.get("text"):
+            continue
+        _speaker_ref = str(_speech.get("actor") or _speech.get("source_entity_id") or "")
+        _speaker = _speech_identities.get(_speaker_ref) or _speaker_ref or p_name
+        if str(_speaker).casefold() == p_name.casefold():
+            _player_spoken.append(_speech)
+        else:
+            char_speech.setdefault(str(_speaker), []).append(_speech)
+    if not _player_spoken and not any(
+            e.get("type") == "speech" for e in interp.get("sequence") or []) and interp.get("speech"):
+        _player_spoken = [{"text": interp["speech"],
+                           "volume": interp.get("speech_volume", "normal")}]
+
     dlog = out.get("dialogue_log") or []
 
     # The prompt now explicitly invites the director to voice unsheeted
@@ -6595,7 +7264,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     # propagated as canonical player speech through perception -> narrator ->
     # memory. Any player-attributed entry whose quote is not among the player's
     # OWN declared speech this beat is dropped.
-    player_speech_bodies = {_quote_body(s) for s in player_speech_lines(interp)}
+    player_speech_bodies = {_quote_body(s["text"]) for s in _player_spoken}
 
     # PLAYER-ACT AUTHORITY for the player's CONDUCT is enforced earlier, at the
     # point resolved_event is generated (correction retry). The loop below is
@@ -6742,8 +7411,8 @@ def director_resolve(ctx, nonce, _corrections=None):
     # transcribed, keyed by (speaker, quote body) so a dropped/altered
     # dialogue_log tag can never leak concealed or quieted speech.
     speech_concealment = {}
-    for e in (interp.get("sequence") or []):
-        if e.get("type") == "speech" and e.get("text"):
+    for e in _player_spoken:
+        if e.get("text"):
             speech_concealment[(p_name.casefold(), _quote_body(e["text"]))] = (
                 e.get("visibility", "overt"), e.get("conceal_from") or [],
                 e.get("volume", "normal"))
@@ -6826,9 +7495,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     # keyed on the quote body, which is the same key the concealment
     # backstop above already matches on.
     _player_addressee = {}
-    for _element in interp.get("sequence") or []:
-        if not isinstance(_element, dict) or _element.get("type") != "speech":
-            continue
+    for _element in _player_spoken:
         _body = _quote_body(str(_element.get("text") or ""))
         if not _body:
             continue
@@ -6838,7 +7505,8 @@ def director_resolve(ctx, nonce, _corrections=None):
             _aimed = _targets[0] if _targets else None
         _player_addressee.setdefault(_body, _aimed)
 
-    for line in player_speech_lines(interp):
+    for _element in _player_spoken:
+        line = _element["text"]
         body = _quote_body(line)
         if body and (p_name.casefold(), body) not in existing_keys:
             vis, cf, vol = speech_concealment.get(
@@ -6892,6 +7560,35 @@ def director_resolve(ctx, nonce, _corrections=None):
         seen_quotes[key] = len(deduped)
         deduped.append(d)
 
+    if out.get("ledgers") or interp.get("ledgers"):
+        # Deduplicate transcription mirrors, then restore the actual number
+        # of spoken occurrences from causal spans. Identical words before and
+        # after a move are two utterances with different listeners.
+        templates = {(str(d.get("speaker") or "").casefold(),
+                      _quote_body(d.get("exact_quote") or "")): d for d in deduped}
+        declared_speech = declared_elements(interp, decls)
+        occurrences, represented = [], set()
+        for moment in beat_timeline(out, interp, decls, identity_index=_speech_identities):
+            element = moment.get("declared") or {}
+            if element.get("type") != "speech" or not element.get("text"):
+                continue
+            key = (str(moment.get("actor") or "").casefold(),
+                   _quote_body(element["text"]))
+            if key not in templates:
+                continue                    # no surviving speech authority
+            cited = declared_speech.get(str(element.get("from_declaration") or "")) or {}
+            tags = cited if cited.get("type") == "speech" else element
+            line = dict(templates[key])
+            for field in ("volume", "tone", "visibility", "conceal_from"):
+                if field in tags:
+                    line[field] = tags[field]
+            aimed = tags.get("intended_target") or (tags.get("targets") or [None])[0]
+            line["intended_target"] = aimed
+            occurrences.append(line)
+            represented.add(key)
+        deduped = occurrences + [d for d in deduped if (
+            str(d.get("speaker") or "").casefold(),
+            _quote_body(d.get("exact_quote") or "")) not in represented]
     out["dialogue_log"] = deduped
     for _kind in _ground_public_evidence(out, _orch_view):
         ctx.add_warning(
@@ -7039,7 +7736,13 @@ def director_resolve(ctx, nonce, _corrections=None):
     # refusal re-enters this whole function: the corrected result builds its
     # own ledger from its own sequence, which is the point of re-entering
     # rather than patching.
-    out["beat_events"] = beat_event_ledger(out, interp, decls)
+    out["beat_events"] = beat_event_ledger(out, interp, decls, identity_index={
+        **{f"character:{c['id']}": character_name_from_text(c["sheet"])
+           for c in ctx.cast},
+        **{f"persona:{p['persona_id']}": p.get("name")
+           for p in ctx.extra_players},
+        **_identity_index,
+    })
 
     # EXTENSION RESULT VALIDATION, last of all and deliberately so. A validator
     # judges the merged result AFTER every deterministic floor this engine owns

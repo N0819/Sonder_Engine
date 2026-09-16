@@ -18,17 +18,10 @@ def test_both_director_invocations_share_one_minimal_contract():
     assert "state_diff" not in shared
     assert "resolved_event" not in shared
     assert "player_declaration" not in shared
-    # 4,500 sat eight characters above the sheet as first written, so the
-    # three lines of 2026-09-14 (where a walk ends, a speaker is not their own
-    # addressee, an act out of a room is a positions row -- about 200
-    # characters, measured 4,696 with the policy suffix) needed the ceiling
-    # moved. It is a test's number, not the owner's; the point it keeps is
-    # that the contract stays a page, not that it never grows a line.
-    # 5,200 since 2026-09-15: the owner asked for two more row fields on
-    # one day (`look`, the sixth volume) and each is a line. 5,300 the same
-    # day: `object_name` became `item_names` beside `item_ids` (one row per
-    # span, the owner's sketch), one line more; measured 5,201.
-    assert len(shared) < 5_300
+    # The contract explains the job and includes a complete four-row
+    # worked example. Bound its size without forcing causal instructions
+    # back into the ambiguous shorthand exposed by live prose stress.
+    assert len(shared) < 12_000
 
 
 def test_a_body_is_not_a_room_until_the_world_has_made_it_one():
@@ -121,6 +114,96 @@ def test_projected_sequence_keeps_the_movement_the_spatial_hand_needs():
     normalize_causal_ledger(out)
     assert out["sequence"][0]["movement"] == {
         "mover": "self", "to_room": "tardis", "arrives": True}
+
+
+def test_private_item_targets_become_readable_names_before_dispatch():
+    out = {"ledgers": [{
+        "chrono_id": 1, "item_ids": [1, 2, 3],
+        "item_names": ["brass box", "copper key", "Nera"],
+        "source_entity_id": "persona:1", "source_event_id": "turn:1:primary:raw",
+        "event": "The seal is intact.", "categories": ["speech"],
+        "targets": ["3", "1"],
+    }]}
+    normalize_causal_ledger(
+        out, identity_index={"persona:1": "Iona", "character:1": "Nera"},
+        known_targets={"brass_box", "copper_key"})
+    ledger = out["ledgers"][0]
+    assert ledger["targets"] == ["Nera", "brass box"]
+    assert ledger["item_ids"] == [1, 2, 3]
+    assert out["sequence"][0]["intended_target"] == "Nera"
+    visible = director._specialist_ledger(ledger)
+    assert visible["targets"] == ["Nera", "brass box"]
+    assert not {"item_id", "item_ids", "chrono_id"} & visible.keys()
+
+
+def test_real_world_and_identity_keys_win_over_private_handle_collisions():
+    out = {"ledgers": [{
+        "chrono_id": 1, "item_ids": [1, 2], "item_names": ["box", "key"],
+        "event": "points at the numbered lockers", "categories": [],
+        "targets": ["1", "2", "character:4", "existing_room"],
+    }]}
+    normalize_causal_ledger(
+        out, identity_index={"2": "Mara", "character:4": "Nera"},
+        known_targets={"1", "existing_room"})
+    assert out["ledgers"][0]["targets"] == ["1", "2", "character:4", "existing_room"]
+
+
+def test_legacy_numeric_character_target_is_not_reinterpreted_as_an_item():
+    out = {"ledgers": [{
+        "chrono_id": 1, "item_id": 4, "object_name": "brass box",
+        "event": "shows the box to Mara", "categories": ["entities"],
+        "targets": ["4"],
+    }]}
+    normalize_causal_ledger(out)
+    assert out["ledgers"][0]["targets"] == ["4"]
+
+
+def test_conflicting_names_for_a_private_handle_do_not_choose_an_object():
+    out = {"ledgers": [
+        {"chrono_id": 1, "item_ids": [1], "item_names": ["brass box"],
+         "event": "opens the box", "categories": ["entities"], "targets": ["1"]},
+        {"chrono_id": 2, "item_ids": [1], "item_names": ["copper key"],
+         "event": "lifts the key", "categories": ["inventory_ops"], "targets": ["1"]},
+    ]}
+    normalize_causal_ledger(out)
+    assert [row["targets"] for row in out["ledgers"]] == [["1"], ["1"]]
+
+
+def test_both_language_contracts_use_item_lists_and_distinct_public_targets():
+    import json
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    for language in ("en", "ja"):
+        text = (root / "language_packs" / language / "cards" / "system_prompts"
+                / "causal_director.txt").read_text()
+        example = json.loads(text[text.rfind('{"ledgers":'):].strip())
+        rows = example["ledgers"]
+        payload = {"event_inputs": [{"entity_id": "character:11",
+                    "authority_mode": "world_author", "events": [
+                        {"event_id": "scene:1", "type": "raw_input"}]}],
+                   "identity_index": {"character:11": "Mara", "character:12": "Ivo"}}
+        for stage in ("director_interpret", "director_resolve"):
+            report = validate_llm_output_strict(stage, example, source_payload=payload)
+            assert report.valid, report.errors
+            schema = _step_json_schema(stage)
+            required = schema.get("$defs", schema.get("definitions"))["CausalLedgerEntry"]["required"]
+            assert all(set(required) <= row.keys() for row in rows)
+        assert [row["chrono_id"] for row in rows] == [1, 2, 3, 4]
+        assert rows[0]["item_ids"] == [1, 2]
+        assert rows[0]["item_names"] == ["red tin", "blue tin"]
+        assert rows[2]["item_ids"] == [1] and rows[3]["item_ids"] == [2]
+        assert rows[1]["event"] == "Keep them shut,"
+        assert rows[1]["categories"] == ["speech"]
+        assert set(rows[2]["categories"]) == {"inventory_ops", "contact_ops", "stations"}
+        assert "bench" in rows[2]["targets"] and "bench" not in rows[2]["item_names"]
+        for row in rows:
+            assert not {"item_id", "object_name", "authority_mode", "kind"} & row.keys()
+            public = director._specialist_ledger(row)
+            assert not {"item_ids", "item_id", "chrono_id"} & public.keys()
+        assert "engine: speech, attention" in text
+        target_line = next(line for line in text.splitlines() if line.startswith("- targets"))
+        assert "world/identity" in target_line and "item_ids" in target_line
 
 
 def _spatial_interior_payload(interior_rooms=None, *, movement=True):
@@ -290,23 +373,43 @@ def test_specialist_results_are_positional_and_match_every_input_ledger():
                for error in report.errors)
 
 
-def test_specialists_are_prompted_for_multiple_transforms_not_direct_diffs():
+def test_specialist_cores_teach_the_positional_envelope_without_private_ids():
+    import json
+
     for name in ("body", "social", "contact", "objects", "spatial"):
         sheet = specialist_prompt(name, [], "en")
-        assert "emit a transform" in sheet
         assert "same array position" in sheet
-        assert "Do not emit item_id or chrono_id" in sheet
-        assert 'Output STRICT JSON {"results":[' in sheet
+        assert "item_id" not in sheet and "chrono_id" not in sheet
+        assert "required_channels" in sheet and "assigned_hands" in sheet
+        assert "Output STRICT JSON" in sheet
+        example = json.loads(next(line for line in sheet.splitlines()
+                                  if line.startswith('{"results":')))
+        assert set(example) == {"results", "notes"}
+        assert all({"transforms", "status", "settled"} <= row.keys()
+                   for row in example["results"])
 
 
 def test_wire_grammars_expose_only_the_current_contracts():
     for step in ("director_interpret", "director_resolve"):
         schema = _step_json_schema(step)
         assert set(schema["properties"]) == {"ledgers"}
+        row = schema.get("$defs", schema.get("definitions"))["CausalLedgerEntry"]
+        assert {"event", "resolution_notes", "categories", "item_ids", "item_names"} <= set(row["required"])
+        assert not {"item_id", "object_name", "authority_mode"} & set(row["properties"])
+        assert row["properties"]["event"]["minLength"] == 1
+        assert row["properties"]["resolution_notes"]["minLength"] == 1
     for step in ("director_body", "director_social", "director_contact",
                  "director_objects", "director_spatial"):
         schema = _step_json_schema(step)
         assert set(schema["properties"]) == {"results", "notes"}
+        definitions = schema.get("$defs", schema.get("definitions"))
+        transform = definitions["LedgerPatchTransform"]
+        assert {"item", "patch"} <= set(transform["required"])
+        patch = transform["properties"]["patch"]
+        assert patch["additionalProperties"] is False
+        assert patch["minProperties"] == 1
+        assert "state_diff" not in patch["properties"]
+        assert "status" in definitions["LedgerTransformResult"]["required"]
 
 
 def test_current_director_rejects_invented_sources_and_unknown_channels():
@@ -489,3 +592,61 @@ def test_transforms_join_by_the_row_and_order_by_its_chronology():
     assert rejected == []
     assert [row["chrono_id"] for row in history] == [1, 2]
     assert compiled["rooms"]["hall"]["state"]["open"] is True, "the later row wins"
+
+
+def test_specialist_matches_distinguish_wearers_from_positioned_garments(monkeypatch):
+    from agents import director_fanout as fanout
+    monkeypatch.setattr(fanout, "survival_enabled", lambda _chat: False)
+    scene = {
+        "rooms": {"bay": {"name": "Bay"}},
+        "positions": {"Nia": "bay", "jacket": "bay", "automaton": "bay"},
+        "entities": {
+            "jacket": {"name": "Orange work jacket"},
+            "automaton": {"name": "Automaton"},
+        },
+        "attire": {"Nia": {"wearing": ["Orange work jacket"]}},
+        "scales": {"automaton": {"ratio": 1}},
+    }
+    view = {"source": "causal_ledger", "player": "Nia", "cast": [], "spans": [{
+        "type": "action", "categories": ["attire"],
+        "item_ids": [1, 2], "item_names": ["Nia", "Orange work jacket"],
+        "object_name": "Orange work jacket", "chrono_id": 1,
+        "targets": ["jacket", "Nia", "automaton"],
+    }]}
+    payload = fanout._specialist_payload(
+        "body", SimpleNamespace(chat={"id": 1}), scene, view,
+        {"identity_index": {"persona:1": "Nia"}})
+    row = payload["ledgers"][0]
+    assert row["target_matches"]["jacket"] == [{
+        "kind": "entity", "world_key": "jacket", "world_name": "Orange work jacket"}]
+    assert row["target_matches"]["Nia"][0]["kind"] == "body"
+    assert {r["kind"] for r in row["target_matches"]["automaton"]} == {"body", "entity"}
+    garment = next(r for r in row["world_matches"] if r["kind"] == "garment")
+    assert garment["worn_by"] == "Nia"
+    assert not {"chrono_id", "item_id", "item_ids"} & row.keys()
+
+
+def test_causal_social_patch_preserves_resolve_evidence_outside_state_diff(temp_db, monkeypatch):
+    from tests.test_director_orchestration import _make_ctx, _fake_agent, _speech_interp
+    calls = []
+    evidence = {"source_id": "speech:The Stranger:0", "speech_act": "greeting"}
+    responses = {
+        "director_resolve": {"ledgers": [{
+            "chrono_id": 1, "item_ids": [1], "item_names": ["The Stranger"],
+            "source_entity_id": "persona:primary", "event": "Quiet night.",
+            "resolution_notes": "A greeting is spoken.",
+            "categories": ["speech", "public_evidence"],
+        }]},
+        "director_social": {"results": [{"status": "encoded", "transforms": [
+            {"item": "The Stranger", "patch": {"public_evidence": [evidence]}}
+        ]}]},
+    }
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, responses))
+    ctx = _make_ctx(temp_db, interp=_speech_interp())
+    out = director.director_resolve(ctx, nonce=0)
+    history = out["orchestration"]["transform_history"]
+    rows = [row for row in history if row.get("patch", {}).get("public_evidence")]
+    assert len(rows) == 1
+    assert rows[0]["patch"]["public_evidence"][0]["source_id"] == evidence["source_id"]
+    assert "public_evidence" not in out["state_diff"]
+    assert "public_evidence" in out["orchestration"]["specialists"]["social"]["channels_filled"]

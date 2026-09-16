@@ -118,7 +118,7 @@ from persist.commit_entities import (_is_gated_awareness, _subjects_that_moved,
     _subjects_targeted_by_an_action, _supersede_disguises, _inherit_known_to,
     commit_world_entities)
 from persist.commit_ledgers import (OBLIGATION_OVERDUE_AGE, OBLIGATION_CAP,
-    pending_obligation_view, _find_obligation, commit_obligations,
+    pending_obligation_view, _find_obligation, causal_obligation_ops, commit_obligations,
     WORLD_PRESSURE_STALL_AGE, WORLD_PRESSURE_CAP, world_pressure_view,
     _find_pressure, commit_world_pressure,
     WORLD_FACTS_CAP, WORLD_FACT_CHARS, commit_world_facts)
@@ -578,7 +578,8 @@ def _commit_all_locked(ctx, nonce):
             )
             _commit_domain(
                 ctx, results, "obligations",
-                lambda: commit_obligations(ctx, nonce),
+                lambda: commit_obligations(ctx, nonce, causal_program=(
+                    prepared["scene"].get("diff") or {}).get("causal_steps")),
             )
             _commit_domain(
                 ctx, results, "world_pressure",

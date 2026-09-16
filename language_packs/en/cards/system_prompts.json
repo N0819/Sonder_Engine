@@ -199,7 +199,8 @@
         "contradicted_claims",
         "charter_ops",
         "claim_dispositions",
-        "consequences"
+        "consequences",
+        "obligations"
       ],
       "chunks": {
         "cast_changes": {
@@ -237,6 +238,9 @@
         },
         "consequences": {
           "$text": "specialists/social/chunks/consequences.txt"
+        },
+        "obligations": {
+          "$text": "specialists/social/chunks/obligations.txt"
         }
       }
     },

@@ -220,6 +220,29 @@ def test_pose_only_diff_does_not_gut_the_durable_row(temp_db):
         ["Doctor", "Theta Sigma", "John Smith"]
 
 
+def test_recreated_entity_survives_the_durable_projection(temp_db):
+    from tests.test_causal_program import program
+
+    chat_id = _chat_with_committed_scene(temp_db)
+    entity = {"name": "Brass Box", "kind": "object"}
+    diff = program({"entities": {"box": entity}},
+                   {"remove_entities": ["box"]},
+                   {"entities": {"box": entity}, "positions": {"box": "lobby"}})
+    ctx = _ctx_for(temp_db, chat_id, diff)
+    prepared = commit.prepare_scene_commit(ctx)
+    assert "box" in prepared["scene"]["entities"]
+    result = commit.commit_world_entities(ctx, "n1", prepared=prepared)
+    assert _row(temp_db, chat_id, "box")["name"] == "Brass Box"
+    assert result["entities_removed"] == 0
+
+    # Reversing the last two acts must still remove the durable object.
+    diff = program({"entities": {"box": entity}}, {"remove_entities": ["box"]})
+    ctx = _ctx_for(temp_db, chat_id, diff)
+    prepared = commit.prepare_scene_commit(ctx)
+    commit.commit_world_entities(ctx, "n2", prepared=prepared)
+    assert _row(temp_db, chat_id, "box") is None
+
+
 def test_a_direct_caller_gets_the_same_row(temp_db):
     """A caller that prepared no scene must not be the way back in.
 

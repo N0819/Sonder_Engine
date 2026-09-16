@@ -45,7 +45,7 @@ from world.spatial_fov import (
     room_grid,
 )
 from world.spatial_geometry import normalize_cell
-from world.spatial_identity import room_of
+from world.spatial_identity import room_of, scene_names_body
 from world.spatial_routing import passable_path
 
 #: An unhurried walk: 1.8 paces a second, about 1.35 m/s at the 0.75 m pace
@@ -98,6 +98,12 @@ def held_cells(scene: dict, room_id, walker=None) -> frozenset:
     held = set()
     for name, where in ((scene or {}).get("positions") or {}).items():
         if str(where) != str(room_id) or str(name).strip().casefold() == me:
+            continue
+        # A fixture's derived standing cell is where someone AT it stands,
+        # not another body occupying that cell. Its physical footprint is
+        # already handled by blocked_cells. The shared identity predicate
+        # also retains cast and projected Charter bodies with no entity row.
+        if not scene_names_body(scene, name):
             continue
         cell = body_cell(scene, name)
         if cell is not None:

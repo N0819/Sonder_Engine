@@ -16,6 +16,7 @@ import copy
 
 from story import attire as attire_model
 from core.db import get_setting
+from llm.schemas import CAUSAL_CATEGORY_REDIRECTS
 from world.spatial import (
     ARTICULATION_STIFLED,
     _clean_containment,
@@ -595,8 +596,12 @@ def _route_repair_omissions(omissions, addressed=None):
                 and om.get("event_id")):
             routed.setdefault(target, []).append((_REROUTE_FULL_SCOPE, om))
             continue
-        channel = _CATEGORY_CHANNELS.get(
-            _normalize_omission_category(om.get("category")))
+        category = _normalize_omission_category(om.get("category"))
+        if category in CAUSAL_CATEGORY_REDIRECTS:
+            owner = CAUSAL_CATEGORY_REDIRECTS[category]
+            routed.setdefault(owner, []).append((_REROUTE_FULL_SCOPE, om))
+            continue
+        channel = _CATEGORY_CHANNELS.get(category)
         owner = _CHANNEL_SPECIALISTS.get(channel) if channel else None
         if owner:
             routed.setdefault(owner, []).append((channel, om))

@@ -109,6 +109,70 @@ def test_a_failed_attempt_and_the_repair_that_followed_are_two_rows(
     assert repaired["payload"]["original_request"] == {"x": 1}
 
 
+@pytest.mark.parametrize("fallback", [False, True])
+def test_causal_rebuild_keeps_the_scoped_inventory_protocol(
+        monkeypatch, captured, fallback):
+    """The live repair knew which key moved but had lost the instructions
+    explaining inventory_ops, so it answered with entity definitions instead.
+    Both full-repair routes must retain the actual hand's channel sheet."""
+    original_sheet = (
+        "SCOPED OBJECTS SHEET. Transfer an existing object using inventory_ops: "
+        "{op:transfer, object_id, from_id, to_id, relation:held}. "
+        "Do not replace transfers with entities definitions."
+    )
+    payload = {"ledgers": [{
+        "item_names": ["Copper key", "Leah"],
+        "object_name": "Copper key", "event": "Leah lifts the key",
+        "categories": ["inventory_ops"],
+    }]}
+    operation = {"op": "transfer", "object_id": "key",
+                 "from_id": "table", "to_id": "Leah", "relation": "held"}
+    answer = {"results": [{
+        "transforms": [{"item": "Copper key", "patch": {"inventory_ops": [operation]}}],
+        "status": "encoded", "settled": {"Leah": "not_mine"},
+    }], "notes": []}
+    _candidates(monkeypatch, 2 if fallback else 1)
+    monkeypatch.setattr(llm_quality, "_targeted_field_patch", lambda *args, **kw: None)
+    monkeypatch.setattr(llm_quality, "output_ran_out_of_room", lambda raw: False)
+    llm = _script(monkeypatch, [
+        LLMError("provider unavailable") if fallback else "not JSON", json.dumps(answer)])
+
+    out = _agent_json("director_objects", "director_objects", original_sheet, payload)
+
+    assert out["results"][0]["transforms"][0]["patch"]["inventory_ops"] == [operation]
+    assert len(llm.calls) == 2
+    assert llm.calls[1]["system"].startswith(original_sheet)
+    assert "outer response envelope only" in llm.calls[1]["system"]
+    assert "original instructions above for channel ownership and patch shapes" in llm.calls[1]["system"]
+    repair_payload = json.loads(llm.calls[1]["user"])
+    assert repair_payload["original_request"] == payload
+    assert captured[1]["system"] == llm.calls[1]["system"]
+    assert captured[1]["ok"] is True
+
+
+def test_causal_director_repair_keeps_its_decompilation_contract(monkeypatch, captured):
+    from llm.schemas import output_example
+
+    payload = {"event_inputs": [{
+        "entity_id": "persona:12", "authority_mode": "world_author",
+        "events": [{"event_id": "turn:9:primary:raw", "type": "raw_input",
+                    "raw_text": "I open the north door."}],
+    }]}
+    answer = output_example("director_interpret")
+    monkeypatch.setattr(llm_quality, "_targeted_field_patch", lambda *args, **kw: None)
+    monkeypatch.setattr(llm_quality, "output_ran_out_of_room", lambda raw: False)
+    llm = _script(monkeypatch, ["not JSON", json.dumps(answer)])
+    original_sheet = "Split prose into causal spans; preserve exact dialogue and item identity."
+
+    out = _agent_json("director", "director_interpret", original_sheet, payload)
+
+    assert out["ledgers"][0]["item_names"] == ["north door"]
+    assert llm.calls[1]["system"].startswith(original_sheet)
+    example = json.loads(llm.calls[1]["user"])["required_json_example"]["ledgers"][0]
+    assert example["item_ids"] == [1]
+    assert not {"item_id", "object_name", "authority_mode", "kind"} & example.keys()
+
+
 def test_a_provider_error_is_recorded_rather_than_left_as_silence(
         monkeypatch, captured):
     """A down provider produced no row at all, so a beat that died on auth

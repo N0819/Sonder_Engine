@@ -106,6 +106,7 @@ from world.spatial_transit import (
 
 
 from world.spatial_containment import (
+    BEARING_MANNERS, bearing_contact_holder, retire_carriage_evidence,
     _body_interior_holder, _clean_containment, _hiding_holders,
     _innermost_hiding_holder, _MAX_CONTAINED, _MAX_SCALE, _MAX_SCALES,
     _MIN_SCALE, _NEVER_STATIONED_KINDS, _OPEN_CONTAINMENT_MODES,

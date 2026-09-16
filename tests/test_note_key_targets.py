@@ -48,12 +48,14 @@ def test_the_establish_sheets_crowd_op_spelling_is_tolerated():
 
 
 def test_no_sheet_teaches_a_roster_the_dispatcher_does_not_have(temp_db):
-    """The causal prompt publishes channels, not a second hand-name roster."""
+    """Publish each current route; default surface work names its body owner."""
 
     from llm import prompts
+    from llm.schemas import CAUSAL_CATEGORY_REDIRECTS
 
     channels = {
-        channel for spec in SPECIALISTS.values()
+        CAUSAL_CATEGORY_REDIRECTS.get(channel, channel)
+        for spec in SPECIALISTS.values()
         for channel in spec["channels"]
     }
     for language in ("en", "ja"):

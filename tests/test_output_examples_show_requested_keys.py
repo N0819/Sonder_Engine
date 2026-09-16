@@ -118,8 +118,9 @@ class TestASpecialistShowsTheTransformEnvelope:
         missing = sorted({"results", "notes"} - set(example))
         assert not missing, f"{step_key}'s example omits {missing}"
         result = example["results"][0]
-        assert {"transforms", "status"} <= set(result)
+        assert {"transforms", "status", "settled"} <= set(result)
         assert "item_id" not in result
+        assert all(transform.get("item") for transform in result["transforms"])
 
 
 class TestAnExampleTeachesOnlyChannelsTheHandOwns:

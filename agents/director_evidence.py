@@ -410,6 +410,7 @@ _REPAIR_ADD_ONLY = frozenset({"positions", "poses", "stations"})
 # that encoded the beat from one that did not, which is the only question the
 # tripwire asks.
 _NON_SUBSTANTIVE_CHANNELS = {
+    "causal_steps": "engine executable history; its projection is counted in the domain channels",
     "phase_sources": "provenance for another channel's value, stripped by the "
                      "causal floor before merge; the change is in the channel "
                      "it points at",
@@ -514,6 +515,7 @@ _CHANNEL_WORD_SUBJECTS = {
 
 # The rest: channels holding no world identity at all, and why not.
 _SUBJECTLESS_CHANNELS = {
+    "causal_steps": "engine executable history, not another authored domain channel",
     "phase_sources": "keys are '<channel>.<subject>' provenance strings; the "
                      "subject they name is already read in that channel",
     "time": "a clock reading",
@@ -1156,6 +1158,9 @@ def declared_elements(interp, declarations):
     """
     index = {}
     groups = [(interp or {}).get("sequence") or []]
+    for player in ((interp or {}).get("other_players") or {}).values():
+        if isinstance(player, dict):
+            groups.append(player.get("sequence") or [])
     for declaration in (declarations or []):
         if isinstance(declaration, dict):
             groups.append(declaration.get("sequence") or [])
@@ -1169,12 +1174,17 @@ def declared_elements(interp, declarations):
     return index
 
 
-def beat_timeline(resolved, interp, declarations):
+def beat_timeline(resolved, interp, declarations, *, identity_index=None):
     """The beat as one ordered list, each entry paired with what was declared.
 
     `[{"order", "actor", "element", "declared", "category", "note"}]` in the
     author's order -- which is the beat's chronology, because the sheet asks
     for "one element for EVERYTHING that happened, in the order it happened".
+
+    Current causal output joins asserted interpret spans before resolve spans;
+    the latter deliberately excludes already applied human input. A span's
+    typed outward form survives even when its source is a whole raw paragraph.
+    Archived output retains the original citation join below.
 
     `declared` is the element the author CITED (`from_declaration`), or None
     for something nobody declared: a consequence, a thing the world did back.
@@ -1184,6 +1194,64 @@ def beat_timeline(resolved, interp, declarations):
     this returns the pair rather than a merged row.
     """
     index = declared_elements(interp, declarations)
+    identities = identity_index if isinstance(identity_index, dict) else {}
+    # Compatibility schemas add empty ledger defaults to archived outputs.
+    # Only actual causal rows replace the archive's declaration join.
+    causal = any((output or {}).get("ledgers") or (output or {}).get("causal_ledger")
+                 for output in (resolved, interp))
+    if causal:
+        # Interpret has already executed asserted human input, so resolve is
+        # deliberately never asked to repeat it. Its sequence alone is not
+        # the beat. Join both invocations here, in the same order as their
+        # executable programs, without confusing a raw paragraph's source id
+        # with the several spans the Director cut from it.
+        onset = list((interp or {}).get("sequence") or [])
+        for player in ((interp or {}).get("other_players") or {}).values():
+            if isinstance(player, dict):
+                onset.extend(player.get("sequence") or [])
+        onset = [element for element in onset if isinstance(element, dict)
+                 and str(element.get("commitment") or "").casefold()
+                 != "contestable"]
+        onset.sort(key=lambda element: int(element.get("chrono_id") or 0))
+        onset_ids = {str(element.get("event_id")) for element in onset
+                     if element.get("event_id")}
+        timeline, seen = [], set()
+        for stage, elements in (("interpret", onset),
+                                ("resolve", (resolved or {}).get("sequence") or [])):
+            for at, element in enumerate(elements):
+                if not isinstance(element, dict):
+                    continue
+                cited = str(element.get("from_declaration") or "").strip()
+                # Older causal outputs sometimes echoed an already executed
+                # assertion. Keep its first, onset occurrence. Contestable
+                # declarations were excluded above and reach only this pass.
+                if stage == "resolve" and cited in onset_ids:
+                    continue
+                event_id = str(element.get("event_id") or "").strip()
+                span = element.get("chrono_id") or event_id or at
+                key = (stage, str(span))
+                if key in seen:
+                    continue
+                seen.add(key)
+                actor = str(element.get("actor")
+                            or element.get("source_entity_id") or "")
+                # Current causal rows already carry their typed outward
+                # form. The raw-input citation names an entire paragraph,
+                # never a declaration whose surface can replace this span.
+                source = element if element.get("type") else index.get(cited)
+                citation = (event_id if stage == "interpret" else cited
+                            if cited in index else "")
+                if not citation and isinstance(source, dict):
+                    citation = f"{stage}:{event_id or span}"
+                timeline.append({
+                    "order": len(timeline),
+                    "actor": str(identities.get(actor) or actor),
+                    "element": element, "declared": source,
+                    "citation": citation, "event_key": key,
+                    "category": element.get("category"),
+                    "note": element.get("note"),
+                })
+        return timeline
     timeline = []
     for order, element in enumerate((resolved or {}).get("sequence") or []):
         if not isinstance(element, dict):
@@ -1191,7 +1259,8 @@ def beat_timeline(resolved, interp, declarations):
         cited = str(element.get("from_declaration") or "").strip()
         timeline.append({
             "order": order,
-            "actor": str(element.get("actor") or ""),
+            "actor": str(identities.get(str(element.get("actor") or ""))
+                         or element.get("actor") or ""),
             "element": element,
             "declared": index.get(cited),
             "category": element.get("category"),
@@ -1200,7 +1269,7 @@ def beat_timeline(resolved, interp, declarations):
     return timeline
 
 
-def beat_event_ledger(resolved, interp, declarations):
+def beat_event_ledger(resolved, interp, declarations, *, identity_index=None):
     """The beat's events as rows for the world's ledger (`world.beat_ledger`).
 
     The owner's rule for what the world keeps: "just because a majority of
@@ -1236,8 +1305,10 @@ def beat_event_ledger(resolved, interp, declarations):
     ledger -- a latent leak with no consumer yet, which is the shape that gets
     found later by whatever innocently renders the field.
 
-    So `surface` is non-empty exactly when `declared` is. What may be RENDERED
-    from either is the renderer's decision and not this function's.
+    Current causal output also carries each span's own typed outward form.
+    Those spans cite their individual event id, never the raw paragraph's id,
+    and retain the same separation between an action's observable surface and
+    its account. What may be RENDERED is the renderer's decision.
     """
     rows = []
     # ONE DECLARATION IS ONE EVENT. Two elements may cite the same declared
@@ -1254,10 +1325,11 @@ def beat_event_ledger(resolved, interp, declarations):
     # perception reads was never affected by this -- it is the world's own
     # record that was double-counting.
     seen_declarations = set()
-    for entry in beat_timeline(resolved, interp, declarations):
+    for entry in beat_timeline(resolved, interp, declarations,
+                               identity_index=identity_index):
         element = entry.get("element") or {}
         declared = entry.get("declared")
-        cited = str(element.get("from_declaration") or "").strip() \
+        cited = str(entry.get("citation", element.get("from_declaration")) or "").strip() \
             if isinstance(declared, dict) else ""
         if isinstance(declared, dict):
             kind = str(declared.get("type") or "").strip()
@@ -1290,12 +1362,20 @@ def beat_event_ledger(resolved, interp, declarations):
             kind = ""
             surface = ""
             text = ""
-        if cited:
-            if cited in seen_declarations:
+        event_key = entry.get("event_key") or cited
+        if event_key:
+            if event_key in seen_declarations:
                 continue
-            seen_declarations.add(cited)
+            seen_declarations.add(event_key)
+        account = str(element.get("attempt") or "")
+        if entry.get("event_key") and not account:
+            account = str(element.get("description")
+                          or communication_surface(element)
+                          or element.get("text") or "")
         rows.append({
             "order": entry.get("order"),
+            **({"causal_span": list(entry["event_key"])}
+               if isinstance(entry.get("event_key"), tuple) else {}),
             "actor": entry.get("actor") or "",
             "declared": cited,
             "surface": surface,
@@ -1305,7 +1385,7 @@ def beat_event_ledger(resolved, interp, declarations):
             # a cited row they genuinely differ (measured: declared "scratch
             # runes of slow and soften", vetted "crouches over the sill",
             # author "works at the windowsill").
-            "account": str(element.get("attempt") or ""),
+            "account": account,
             "kind": kind,
             "text": text,
             "category": entry.get("category") or "",
@@ -1757,6 +1837,13 @@ def beat_worlds(sc, sd, apply_diff):
     The unattributed slice is folded in before the first span (see the module
     note) and is never a span of its own: it happened at no point in the order.
     """
+    if (sd or {}).get("causal_steps"):
+        from world.causal_program import program_steps
+        world, worlds = copy.deepcopy(sc or {}), []
+        for step in program_steps(sd):
+            worlds.append((step["chrono_id"], world))
+            world = apply_diff(world, step["patch"])
+        return worlds
     slices, loose = span_slices(sd)
     world = apply_diff(sc or {}, loose) if loose else copy.deepcopy(sc or {})
     worlds = []
@@ -1858,7 +1945,7 @@ def span_slices(sd):
         return slices.setdefault(span_id, {}) if span_id else loose
 
     for channel, content in (sd or {}).items():
-        if channel in ("phase_sources", "resolved_events", "notes"):
+        if channel in ("phase_sources", "causal_steps", "resolved_events", "notes"):
             continue
         if isinstance(content, list):
             for index, record in enumerate(content):
@@ -1947,7 +2034,7 @@ def span_records(sd):
                 walk(inner, channel, f"{path}[{index}]", depth + 1)
 
     for channel, content in (sd or {}).items():
-        if channel in ("phase_sources", "resolved_events", "notes"):
+        if channel in ("phase_sources", "causal_steps", "resolved_events", "notes"):
             continue
         walk(content, channel, str(channel))
     return found
@@ -2525,12 +2612,13 @@ def restore_declared_quotes(out, raw_input, warn=None):
     return out
 
 
-def normalize_causal_ledger(out, authority=None, identity_index=None):
+def normalize_causal_ledger(out, authority=None, identity_index=None, *,
+                            known_targets=()):
     """Make the Director's ledgers authoritative for legacy sequence readers.
 
     Positive model-authored ``chrono_id`` values preserve chronology across
-    several event ledgers. ``item_id`` is the unique numeric cross-specialist
-    join for one ledger row. ``sequence`` and ``causal_ledger`` are
+    several event ledgers. ``item_id`` joins one prose object across rows and
+    specialists; a span may involve several items. ``sequence`` and ``causal_ledger`` are
     compatibility projections for existing perception, archive, and migration
     readers.
     """
@@ -2558,6 +2646,30 @@ def normalize_causal_ledger(out, authority=None, identity_index=None):
     # handle could never span two rows -- the owner's chat 126 saw four
     # numbers for Hinami.)
     used_item_ids = set()
+    target_names = {}
+    public_targets = {str(value) for value in known_targets or ()}
+    public_targets.update(str(value) for value in identity_index)
+    # Reserve the whole answer before repairing a missing handle. A missing
+    # first handle must not steal a valid handle on a later, unrelated item.
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        # A current Director occasionally copies its private item handle into
+        # targets. The parallel names it supplied are an exact, code-readable
+        # replacement; identifying the actual world object remains the hand's
+        # job. Legacy singular rows never grant this repair, and a genuine
+        # standing numeric key always wins over a colliding private handle.
+        if isinstance(entry.get("item_ids"), list) \
+                and isinstance(entry.get("item_names"), list):
+            for item, name in zip(entry["item_ids"], entry["item_names"]):
+                if str(item).isdigit() and int(item) > 0 and str(name or "").strip():
+                    target_names.setdefault(str(item), set()).add(str(name).strip())
+        for value in entry.get("item_ids") or [entry.get("item_id")]:
+            try:
+                if int(value or 0) > 0:
+                    used_item_ids.add(int(value))
+            except (TypeError, ValueError):
+                pass
     used_chrono_ids = set()
 
     for order, entry in enumerate(raw, start=1):
@@ -2624,6 +2736,12 @@ def normalize_causal_ledger(out, authority=None, identity_index=None):
         worldly = str(entry.get("authority_mode") or "").strip().casefold() \
             in ("world", "mechanical")
         note = str(entry.get("resolution_notes") or "").strip()
+        targets = [str(value) for value in entry.get("targets") or []]
+        if entry.get("item_ids") and entry.get("item_names"):
+            targets = [next(iter(target_names[value]))
+                       if value not in public_targets
+                       and len(target_names.get(value, ())) == 1 else value
+                       for value in targets]
         normalized = {
             "chrono_id": chrono_id,
             "item_id": item_id,
@@ -2649,7 +2767,7 @@ def normalize_causal_ledger(out, authority=None, identity_index=None):
             "act": act,
             "observable": str(entry.get("observable") or "").strip(),
             "commitment": str(entry.get("commitment") or "asserted"),
-            "targets": [str(value) for value in entry.get("targets") or []],
+            "targets": targets,
             "visibility": str(entry.get("visibility") or "overt"),
             "conceal_from": [str(value)
                              for value in entry.get("conceal_from") or []],

@@ -1,0 +1,1283 @@
+{
+  "title": "Prompt clarity first-pass prose and retained coat regression",
+  "version": 1,
+  "method": "The two novel cases and all expectations were frozen before paid calls for the prompt-clarity rewrite. Manual checks are part of the frozen checklist. Event IDs are semantic expectations, not assumed Director chrono IDs. A missing intermediate boundary is a failure of observable fidelity, not passed by the final state. The coat case is explicitly a previously observed regression.",
+  "cases": [
+    {
+      "id": "flasks_exchange_unchanged_support",
+      "primary_name": "Mara",
+      "characters": [
+        "Eren"
+      ],
+      "authority_mode": "world_author",
+      "prose": "The last of the rain whispered against the dispensary window. Mara lifted the striped glass flask from the oak counter. She opened its hinged cap, then snapped the cap shut. \"Take the striped one; I will take the dotted one,\" she told Eren. In one exchange, she handed him the striped flask while taking the dotted flask from his hand. Eren set the striped flask on the counter and let go. \"Yesterday you said, 'Open the dotted one,'\" he remarked, leaving both caps shut. Mara put the dotted flask on the low stool and released it. Eren lifted the striped flask from the counter, then passed it back to Mara. \"Both can wait here,\" she said. She set the striped flask beside the dotted flask on the stool and let go. The oak counter itself had not moved.",
+      "scene": {
+        "rooms": {
+          "dispensary": {
+            "name": "Dispensary",
+            "desc": "A well-lit room with the listed fixtures and no unlisted obstructions.",
+            "light": "bright",
+            "size": "small",
+            "adjacent": [],
+            "anchors": {
+              "counter": {
+                "desc": "Oak counter"
+              },
+              "stool": {
+                "desc": "Low stool"
+              }
+            }
+          }
+        },
+        "entities": {
+          "striped_flask": {
+            "name": "Striped glass flask",
+            "kind": "object",
+            "portable": true,
+            "container": true,
+            "state": {
+              "hatch": "closed"
+            }
+          },
+          "dotted_flask": {
+            "name": "Dotted glass flask",
+            "kind": "object",
+            "portable": true,
+            "container": true,
+            "state": {
+              "hatch": "closed"
+            }
+          },
+          "counter": {
+            "name": "Oak counter",
+            "kind": "fixture",
+            "portable": false,
+            "container": false,
+            "state": {}
+          },
+          "stool": {
+            "name": "Low stool",
+            "kind": "fixture",
+            "portable": false,
+            "container": false,
+            "state": {}
+          }
+        },
+        "positions": {
+          "Mara": "dispensary",
+          "Eren": "dispensary",
+          "striped_flask": "dispensary",
+          "dotted_flask": "dispensary",
+          "counter": "dispensary",
+          "stool": "dispensary"
+        },
+        "stations": {
+          "counter": {
+            "at": "counter",
+            "near": []
+          },
+          "stool": {
+            "at": "stool",
+            "near": []
+          },
+          "Mara": {
+            "at": "counter",
+            "near": []
+          },
+          "Eren": {
+            "at": "counter",
+            "near": []
+          },
+          "striped_flask": {
+            "at": "counter",
+            "near": []
+          }
+        },
+        "contained": {
+          "dotted_flask": {
+            "in": "Eren",
+            "mode": "held",
+            "by": "inventory"
+          }
+        },
+        "attire": {
+          "Mara": {
+            "wearing": [],
+            "state": [],
+            "regions": {}
+          },
+          "Eren": {
+            "wearing": [],
+            "state": [],
+            "regions": {}
+          }
+        },
+        "poses": {
+          "Mara": {
+            "posture": "standing"
+          },
+          "Eren": {
+            "posture": "standing"
+          }
+        },
+        "contacts": [],
+        "substances": [],
+        "orientation": {}
+      },
+      "expectations": {
+        "events": [
+          {
+            "id": "e01",
+            "source": "lifted the striped glass flask",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "striped_flask",
+                "equals": "Mara"
+              }
+            ]
+          },
+          {
+            "id": "e02",
+            "source": "opened its hinged cap",
+            "checks": [
+              {
+                "kind": "path",
+                "path": [
+                  "entities",
+                  "striped_flask",
+                  "state",
+                  "hatch"
+                ],
+                "equals": "open"
+              }
+            ]
+          },
+          {
+            "id": "e03",
+            "source": "snapped the cap shut",
+            "checks": [
+              {
+                "kind": "path",
+                "path": [
+                  "entities",
+                  "striped_flask",
+                  "state",
+                  "hatch"
+                ],
+                "equals": "closed"
+              }
+            ]
+          },
+          {
+            "id": "e04",
+            "source": "Take the striped one; I will take the dotted one",
+            "checks": []
+          },
+          {
+            "id": "e05",
+            "source": "In one exchange, she handed him the striped flask while taking the dotted flask from his hand",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "striped_flask",
+                "equals": "Eren"
+              },
+              {
+                "kind": "parent",
+                "entity": "dotted_flask",
+                "equals": "Mara"
+              }
+            ]
+          },
+          {
+            "id": "e06",
+            "source": "set the striped flask on the counter and let go",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "striped_flask",
+                "equals": null
+              },
+              {
+                "kind": "station",
+                "entity": "striped_flask",
+                "equals": "counter"
+              },
+              {
+                "kind": "no_grip",
+                "entity": "striped_flask"
+              }
+            ]
+          },
+          {
+            "id": "e07",
+            "source": "Yesterday you said, 'Open the dotted one,'",
+            "checks": []
+          },
+          {
+            "id": "e08",
+            "source": "put the dotted flask on the low stool and released it",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "dotted_flask",
+                "equals": null
+              },
+              {
+                "kind": "station",
+                "entity": "dotted_flask",
+                "equals": "stool"
+              },
+              {
+                "kind": "no_grip",
+                "entity": "dotted_flask"
+              }
+            ]
+          },
+          {
+            "id": "e09",
+            "source": "lifted the striped flask from the counter",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "striped_flask",
+                "equals": "Eren"
+              }
+            ]
+          },
+          {
+            "id": "e10",
+            "source": "passed it back to Mara",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "striped_flask",
+                "equals": "Mara"
+              }
+            ]
+          },
+          {
+            "id": "e11",
+            "source": "Both can wait here",
+            "checks": []
+          },
+          {
+            "id": "e12",
+            "source": "set the striped flask beside the dotted flask on the stool and let go",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "striped_flask",
+                "equals": null
+              },
+              {
+                "kind": "station",
+                "entity": "striped_flask",
+                "equals": "stool"
+              },
+              {
+                "kind": "no_grip",
+                "entity": "striped_flask"
+              },
+              {
+                "kind": "station",
+                "entity": "dotted_flask",
+                "equals": "stool"
+              }
+            ]
+          }
+        ],
+        "quotes": [
+          {
+            "speaker": "Mara",
+            "text": "Take the striped one; I will take the dotted one,"
+          },
+          {
+            "speaker": "Eren",
+            "text": "Yesterday you said, 'Open the dotted one,'"
+          },
+          {
+            "speaker": "Mara",
+            "text": "Both can wait here,"
+          }
+        ],
+        "final": [
+          {
+            "kind": "parent",
+            "entity": "striped_flask",
+            "equals": null
+          },
+          {
+            "kind": "parent",
+            "entity": "dotted_flask",
+            "equals": null
+          },
+          {
+            "kind": "station",
+            "entity": "striped_flask",
+            "equals": "stool"
+          },
+          {
+            "kind": "station",
+            "entity": "dotted_flask",
+            "equals": "stool"
+          },
+          {
+            "kind": "no_grip",
+            "entity": "striped_flask"
+          },
+          {
+            "kind": "no_grip",
+            "entity": "dotted_flask"
+          },
+          {
+            "kind": "path",
+            "path": [
+              "entities",
+              "striped_flask",
+              "state",
+              "hatch"
+            ],
+            "equals": "closed"
+          },
+          {
+            "kind": "path",
+            "path": [
+              "entities",
+              "dotted_flask",
+              "state",
+              "hatch"
+            ],
+            "equals": "closed"
+          },
+          {
+            "kind": "entity_count",
+            "name": "Striped glass flask",
+            "equals": 1
+          },
+          {
+            "kind": "entity_count",
+            "name": "Dotted glass flask",
+            "equals": 1
+          }
+        ],
+        "non_events": [
+          {
+            "description": "The embedded remembered command never opens the dotted flask; the supporting counter has no state mutation.",
+            "checks": [
+              {
+                "kind": "path",
+                "path": [
+                  "entities",
+                  "dotted_flask",
+                  "state",
+                  "hatch"
+                ],
+                "equals": "closed"
+              },
+              {
+                "kind": "path",
+                "path": [
+                  "entities",
+                  "counter",
+                  "state"
+                ],
+                "equals": {}
+              },
+              {
+                "kind": "station",
+                "entity": "counter",
+                "equals": "counter"
+              }
+            ]
+          }
+        ],
+        "manual_checks": [
+          {
+            "id": "exchange_same_boundary",
+            "expected": "Both reciprocal transfers occur in one simultaneous causal span, rather than a false intermediate in which a recipient holds both."
+          },
+          {
+            "id": "no_reference_duty",
+            "expected": "Unchanged counter and stool references do not leave valid actions unresolved merely because their fixture records have no patch."
+          },
+          {
+            "id": "chronological_flask_states",
+            "expected": "Pickup, cap opening, cap closing, final pickup, handover and set-down remain separately observable; the striped and dotted flask identities never merge."
+          }
+        ]
+      },
+      "evaluation_group": "new_first_pass"
+    },
+    {
+      "id": "partial_key_insertion_failed_turn",
+      "primary_name": "Neri",
+      "characters": [
+        "Olan"
+      ],
+      "authority_mode": "world_author",
+      "prose": "Dust shone in the slant of afternoon light above the maple bench. Neri picked up the short silver key, leaving the long silver key where it lay. \"Try the short one first,\" Olan said. Keeping her fingers around its bow, Neri pushed the short key partway into the red cashbox's lock; its tip entered the keyway, but its shoulder stopped outside. She tried to turn the key, but it would not rotate and the cashbox stayed locked and shut. \"Wrong key,\" she said. She pulled the short key completely out of the lock. Then she laid it on the bench and released it. Olan picked up the long silver key and, after a pause, set it back beside the short one and let go. \"Neither has opened it,\" he said.",
+      "scene": {
+        "rooms": {
+          "office": {
+            "name": "Cash office",
+            "desc": "A well-lit room with the listed fixtures and no unlisted obstructions.",
+            "light": "bright",
+            "size": "small",
+            "adjacent": [],
+            "anchors": {
+              "bench": {
+                "desc": "Maple bench"
+              }
+            }
+          }
+        },
+        "entities": {
+          "short_key": {
+            "name": "Short silver key",
+            "kind": "object",
+            "portable": true,
+            "container": false,
+            "state": {}
+          },
+          "long_key": {
+            "name": "Long silver key",
+            "kind": "object",
+            "portable": true,
+            "container": false,
+            "state": {}
+          },
+          "cashbox": {
+            "name": "Red cashbox",
+            "kind": "object",
+            "portable": true,
+            "container": true,
+            "state": {
+              "hatch": "closed",
+              "locked": true
+            }
+          },
+          "lock": {
+            "name": "Cashbox lock",
+            "kind": "fixture",
+            "portable": false,
+            "container": false,
+            "state": {}
+          },
+          "bench": {
+            "name": "Maple bench",
+            "kind": "fixture",
+            "portable": false,
+            "container": false,
+            "state": {}
+          }
+        },
+        "positions": {
+          "Neri": "office",
+          "Olan": "office",
+          "short_key": "office",
+          "long_key": "office",
+          "cashbox": "office",
+          "lock": "office",
+          "bench": "office"
+        },
+        "stations": {
+          "bench": {
+            "at": "bench",
+            "near": []
+          },
+          "Neri": {
+            "at": "bench",
+            "near": []
+          },
+          "Olan": {
+            "at": "bench",
+            "near": []
+          },
+          "short_key": {
+            "at": "bench",
+            "near": []
+          },
+          "long_key": {
+            "at": "bench",
+            "near": []
+          },
+          "cashbox": {
+            "at": "bench",
+            "near": []
+          }
+        },
+        "contained": {
+          "lock": {
+            "in": "cashbox",
+            "mode": "mounted",
+            "by": "inventory"
+          }
+        },
+        "attire": {
+          "Neri": {
+            "wearing": [],
+            "state": [],
+            "regions": {}
+          },
+          "Olan": {
+            "wearing": [],
+            "state": [],
+            "regions": {}
+          }
+        },
+        "poses": {
+          "Neri": {
+            "posture": "standing"
+          },
+          "Olan": {
+            "posture": "standing"
+          }
+        },
+        "contacts": [],
+        "substances": [],
+        "orientation": {}
+      },
+      "expectations": {
+        "events": [
+          {
+            "id": "e01",
+            "source": "picked up the short silver key",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "short_key",
+                "equals": "Neri"
+              },
+              {
+                "kind": "parent",
+                "entity": "long_key",
+                "equals": null
+              }
+            ]
+          },
+          {
+            "id": "e02",
+            "source": "Try the short one first",
+            "checks": []
+          },
+          {
+            "id": "e03",
+            "source": "pushed the short key partway into the red cashbox lock, tip entered keyway",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "short_key",
+                "equals": "Neri"
+              },
+              {
+                "kind": "path",
+                "path": [
+                  "entities",
+                  "cashbox",
+                  "state",
+                  "hatch"
+                ],
+                "equals": "closed"
+              },
+              {
+                "kind": "path",
+                "path": [
+                  "entities",
+                  "cashbox",
+                  "state",
+                  "locked"
+                ],
+                "equals": true
+              }
+            ]
+          },
+          {
+            "id": "e04",
+            "source": "tried to turn the key, but it would not rotate",
+            "checks": [
+              {
+                "kind": "path",
+                "path": [
+                  "entities",
+                  "cashbox",
+                  "state",
+                  "hatch"
+                ],
+                "equals": "closed"
+              },
+              {
+                "kind": "path",
+                "path": [
+                  "entities",
+                  "cashbox",
+                  "state",
+                  "locked"
+                ],
+                "equals": true
+              }
+            ]
+          },
+          {
+            "id": "e05",
+            "source": "Wrong key",
+            "checks": []
+          },
+          {
+            "id": "e06",
+            "source": "pulled the short key completely out of the lock",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "short_key",
+                "equals": "Neri"
+              }
+            ]
+          },
+          {
+            "id": "e07",
+            "source": "laid it on the bench and released it",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "short_key",
+                "equals": null
+              },
+              {
+                "kind": "station",
+                "entity": "short_key",
+                "equals": "bench"
+              },
+              {
+                "kind": "no_grip",
+                "entity": "short_key"
+              }
+            ]
+          },
+          {
+            "id": "e08",
+            "source": "Olan picked up the long silver key",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "long_key",
+                "equals": "Olan"
+              }
+            ]
+          },
+          {
+            "id": "e09",
+            "source": "set it back beside the short one and let go",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "long_key",
+                "equals": null
+              },
+              {
+                "kind": "station",
+                "entity": "long_key",
+                "equals": "bench"
+              },
+              {
+                "kind": "no_grip",
+                "entity": "long_key"
+              }
+            ]
+          },
+          {
+            "id": "e10",
+            "source": "Neither has opened it",
+            "checks": []
+          }
+        ],
+        "quotes": [
+          {
+            "speaker": "Olan",
+            "text": "Try the short one first,"
+          },
+          {
+            "speaker": "Neri",
+            "text": "Wrong key,"
+          },
+          {
+            "speaker": "Olan",
+            "text": "Neither has opened it,"
+          }
+        ],
+        "final": [
+          {
+            "kind": "parent",
+            "entity": "short_key",
+            "equals": null
+          },
+          {
+            "kind": "parent",
+            "entity": "long_key",
+            "equals": null
+          },
+          {
+            "kind": "station",
+            "entity": "short_key",
+            "equals": "bench"
+          },
+          {
+            "kind": "station",
+            "entity": "long_key",
+            "equals": "bench"
+          },
+          {
+            "kind": "no_grip",
+            "entity": "short_key"
+          },
+          {
+            "kind": "no_grip",
+            "entity": "long_key"
+          },
+          {
+            "kind": "path",
+            "path": [
+              "entities",
+              "cashbox",
+              "state",
+              "hatch"
+            ],
+            "equals": "closed"
+          },
+          {
+            "kind": "path",
+            "path": [
+              "entities",
+              "cashbox",
+              "state",
+              "locked"
+            ],
+            "equals": true
+          },
+          {
+            "kind": "entity_count",
+            "name": "Short silver key",
+            "equals": 1
+          },
+          {
+            "kind": "entity_count",
+            "name": "Long silver key",
+            "equals": 1
+          }
+        ],
+        "non_events": [
+          {
+            "description": "No successful turn, unlocking, opening, invented rotation or transfer to the cashbox occurs. The long key never enters the lock.",
+            "checks": [
+              {
+                "kind": "path",
+                "path": [
+                  "entities",
+                  "cashbox",
+                  "state",
+                  "hatch"
+                ],
+                "equals": "closed"
+              },
+              {
+                "kind": "path",
+                "path": [
+                  "entities",
+                  "cashbox",
+                  "state",
+                  "locked"
+                ],
+                "equals": true
+              }
+            ]
+          }
+        ],
+        "manual_checks": [
+          {
+            "id": "actual_object_object_insertion",
+            "boundary_event": "e03",
+            "expected": "A typed contact represents short_key tip/shaft in the lock keyway/interior, with Neri retaining her grip. A hand-to-lock contact or key inside the cashbox is not equivalent."
+          },
+          {
+            "id": "failed_attempt_is_event",
+            "boundary_event": "e04",
+            "expected": "The failed turning attempt remains a present action and does not falsely rotate the key, unlock or open the cashbox; no enduring world change is required for the failure itself."
+          },
+          {
+            "id": "complete_withdrawal",
+            "boundary_event": "e06",
+            "expected": "The key-to-lock insertion contact is ended while the key remains held by Neri. It must not disappear before this boundary or persist afterward."
+          },
+          {
+            "id": "distinct_key_identity",
+            "expected": "Short and long keys never merge or inherit each other's actions."
+          }
+        ]
+      },
+      "evaluation_group": "new_first_pass"
+    },
+    {
+      "id": "coat_off_handover_and_rewear",
+      "primary_name": "Noa",
+      "characters": [
+        "Kit"
+      ],
+      "authority_mode": "world_author",
+      "prose": "Noa's violet rehearsal coat caught on the chair until she stepped clear of it. \"Hold this a moment,\" she told Kit. She took the coat off, held it in both hands, and passed it to Kit. Kit laid it across the slatted chair and released it. Noa picked up the white cloakroom ticket from the narrow shelf and handed it to Kit. \"The ticket, not the coat, is yours,\" she said. Kit set the ticket back on the shelf, then lifted the coat from the chair and handed the coat back to Noa. Noa put the same violet coat on and let her hands fall free. She walked through the open doorway onto the landing. Kit stayed beside the chair. \"It fits again,\" Noa said from the landing.",
+      "scene": {
+        "rooms": {
+          "dressing": {
+            "name": "Dressing room",
+            "desc": "A well-lit room with the listed fixtures and no unlisted obstructions.",
+            "light": "bright",
+            "size": "small",
+            "adjacent": [
+              {
+                "to": "landing",
+                "barrier": "open_door",
+                "dir": "e"
+              }
+            ],
+            "anchors": {
+              "chair": {
+                "desc": "Slatted chair"
+              },
+              "shelf": {
+                "desc": "Narrow shelf"
+              }
+            }
+          },
+          "landing": {
+            "name": "Landing",
+            "desc": "A well-lit room with the listed fixtures and no unlisted obstructions.",
+            "light": "bright",
+            "size": "small",
+            "adjacent": [
+              {
+                "to": "dressing",
+                "barrier": "open_door",
+                "dir": "w"
+              }
+            ],
+            "anchors": {
+              "rail": {
+                "desc": "Landing rail"
+              }
+            }
+          }
+        },
+        "entities": {
+          "coat": {
+            "name": "Violet rehearsal coat",
+            "kind": "object",
+            "portable": true,
+            "container": false,
+            "state": {}
+          },
+          "ticket": {
+            "name": "White cloakroom ticket",
+            "kind": "object",
+            "portable": true,
+            "container": false,
+            "state": {}
+          },
+          "chair": {
+            "name": "Slatted chair",
+            "kind": "fixture",
+            "portable": false,
+            "container": false,
+            "state": {}
+          },
+          "shelf": {
+            "name": "Narrow shelf",
+            "kind": "fixture",
+            "portable": false,
+            "container": false,
+            "state": {}
+          },
+          "rail": {
+            "name": "Landing rail",
+            "kind": "fixture",
+            "portable": false,
+            "container": false,
+            "state": {}
+          }
+        },
+        "positions": {
+          "Noa": "dressing",
+          "Kit": "dressing",
+          "chair": "dressing",
+          "shelf": "dressing",
+          "rail": "landing",
+          "coat": "dressing",
+          "ticket": "dressing"
+        },
+        "stations": {
+          "chair": {
+            "at": "chair",
+            "near": []
+          },
+          "shelf": {
+            "at": "shelf",
+            "near": []
+          },
+          "rail": {
+            "at": "rail",
+            "near": []
+          },
+          "Noa": {
+            "at": "chair",
+            "near": []
+          },
+          "Kit": {
+            "at": "chair",
+            "near": []
+          },
+          "ticket": {
+            "at": "shelf",
+            "near": []
+          }
+        },
+        "contained": {
+          "coat": {
+            "in": "Noa",
+            "mode": "worn",
+            "by": "attire"
+          }
+        },
+        "attire": {
+          "Noa": {
+            "wearing": [
+              "Violet rehearsal coat"
+            ],
+            "state": [],
+            "regions": {
+              "torso": {
+                "garments": [
+                  {
+                    "name": "Violet rehearsal coat",
+                    "state": "worn",
+                    "covers": [
+                      "torso",
+                      "arms"
+                    ],
+                    "attaches": false
+                  }
+                ],
+                "beneath": ""
+              },
+              "arms": {
+                "garments": [
+                  {
+                    "name": "Violet rehearsal coat",
+                    "state": "worn",
+                    "covers": [
+                      "torso",
+                      "arms"
+                    ],
+                    "attaches": false
+                  }
+                ],
+                "beneath": ""
+              }
+            }
+          },
+          "Kit": {
+            "wearing": [],
+            "state": [],
+            "regions": {}
+          }
+        },
+        "poses": {
+          "Noa": {
+            "posture": "standing"
+          },
+          "Kit": {
+            "posture": "standing"
+          }
+        },
+        "contacts": [],
+        "substances": [],
+        "orientation": {}
+      },
+      "expectations": {
+        "events": [
+          {
+            "id": "e01",
+            "source": "stepped clear of it",
+            "checks": []
+          },
+          {
+            "id": "e02",
+            "source": "Hold this a moment",
+            "checks": []
+          },
+          {
+            "id": "e03",
+            "source": "took the coat off, held it in both hands",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "coat",
+                "equals": "Noa"
+              },
+              {
+                "kind": "path",
+                "path": [
+                  "contained",
+                  "coat",
+                  "mode"
+                ],
+                "equals": "held"
+              }
+            ]
+          },
+          {
+            "id": "e04",
+            "source": "passed it to Kit",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "coat",
+                "equals": "Kit"
+              }
+            ]
+          },
+          {
+            "id": "e05",
+            "source": "laid it across the slatted chair and released it",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "coat",
+                "equals": null
+              },
+              {
+                "kind": "no_grip",
+                "entity": "coat"
+              },
+              {
+                "kind": "station",
+                "entity": "coat",
+                "equals": "chair"
+              }
+            ]
+          },
+          {
+            "id": "e06",
+            "source": "picked up the white cloakroom ticket",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "ticket",
+                "equals": "Noa"
+              }
+            ]
+          },
+          {
+            "id": "e07",
+            "source": "handed it to Kit",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "ticket",
+                "equals": "Kit"
+              }
+            ]
+          },
+          {
+            "id": "e08",
+            "source": "The ticket, not the coat, is yours",
+            "checks": []
+          },
+          {
+            "id": "e09",
+            "source": "set the ticket back on the shelf",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "ticket",
+                "equals": null
+              },
+              {
+                "kind": "no_grip",
+                "entity": "ticket"
+              },
+              {
+                "kind": "station",
+                "entity": "ticket",
+                "equals": "shelf"
+              }
+            ]
+          },
+          {
+            "id": "e10",
+            "source": "lifted the coat from the chair",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "coat",
+                "equals": "Kit"
+              }
+            ]
+          },
+          {
+            "id": "e11",
+            "source": "handed the coat back to Noa",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "coat",
+                "equals": "Noa"
+              }
+            ]
+          },
+          {
+            "id": "e12",
+            "source": "put the same violet coat on and let her hands fall free",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "coat",
+                "equals": "Noa"
+              },
+              {
+                "kind": "path",
+                "path": [
+                  "contained",
+                  "coat",
+                  "mode"
+                ],
+                "equals": "worn"
+              },
+              {
+                "kind": "no_grip",
+                "entity": "coat"
+              }
+            ]
+          },
+          {
+            "id": "e13",
+            "source": "walked through the open doorway onto the landing",
+            "checks": [
+              {
+                "kind": "room",
+                "entity": "Noa",
+                "equals": "landing"
+              },
+              {
+                "kind": "room",
+                "entity": "coat",
+                "equals": "landing"
+              },
+              {
+                "kind": "room",
+                "entity": "ticket",
+                "equals": "dressing"
+              }
+            ]
+          },
+          {
+            "id": "e14",
+            "source": "It fits again",
+            "checks": []
+          }
+        ],
+        "quotes": [
+          {
+            "speaker": "Noa",
+            "text": "Hold this a moment,"
+          },
+          {
+            "speaker": "Noa",
+            "text": "The ticket, not the coat, is yours,"
+          },
+          {
+            "speaker": "Noa",
+            "text": "It fits again,"
+          }
+        ],
+        "final": [
+          {
+            "kind": "parent",
+            "entity": "coat",
+            "equals": "Noa"
+          },
+          {
+            "kind": "path",
+            "path": [
+              "contained",
+              "coat",
+              "mode"
+            ],
+            "equals": "worn"
+          },
+          {
+            "kind": "no_grip",
+            "entity": "coat"
+          },
+          {
+            "kind": "room",
+            "entity": "coat",
+            "equals": "landing"
+          },
+          {
+            "kind": "entity_count",
+            "name": "Violet rehearsal coat",
+            "equals": 1
+          },
+          {
+            "kind": "parent",
+            "entity": "ticket",
+            "equals": null
+          },
+          {
+            "kind": "no_grip",
+            "entity": "ticket"
+          },
+          {
+            "kind": "station",
+            "entity": "ticket",
+            "equals": "shelf"
+          },
+          {
+            "kind": "room",
+            "entity": "Kit",
+            "equals": "dressing"
+          }
+        ],
+        "non_events": [
+          {
+            "description": "The spoken claim of ownership does not leave the ticket physically held by Kit after he sets it down.",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "ticket",
+                "equals": null
+              },
+              {
+                "kind": "station",
+                "entity": "ticket",
+                "equals": "shelf"
+              }
+            ]
+          }
+        ],
+        "manual_checks": [
+          {
+            "id": "held_after_removal",
+            "boundary_event": "e03",
+            "expected": "Coat is held by Noa; no simultaneous containment clear erases the inventory handover."
+          },
+          {
+            "id": "wearing_coherence",
+            "boundary_event": "e12",
+            "expected": "The same coat is worn in containment, Noa wardrobe and garment-region records; hands are free."
+          }
+        ]
+      },
+      "evaluation_group": "known_regression"
+    }
+  ]
+}

@@ -79,6 +79,9 @@ def _apply_room_renames(diff, renames):
     """Rewrite every reference to a renamed/redirected room key inside the
     diff: the rooms table itself, adjacency 'to' edges, positions, room
     removals, entity interior_rooms, and transit destinations."""
+    for step in diff.get("causal_steps") or []:
+        if isinstance(step, dict) and isinstance(step.get("patch"), dict):
+            _apply_room_renames(step["patch"], renames)
     rooms = diff.get("rooms")
     if isinstance(rooms, dict):
         for old, new in renames.items():

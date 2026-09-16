@@ -163,3 +163,97 @@ def test_a_different_garment_with_the_same_head_noun_is_not_the_shed_one(
     assert "a grey travelling coat" in entry["wearing"]
     assert _COAT not in entry["wearing"]
     assert list(sc["entities"]) == shed_ids
+
+
+def test_removing_and_rewearing_an_existing_world_garment_keeps_its_key(
+        temp_db):
+    """Live causal span: inventory has put the jacket in hand before attire.
+
+    The chest badge continues to name the original jacket through removal
+    and re-wear; a temporary shed proxy must never appear at either span.
+    """
+    garment = "Orange work jacket"
+    jacket = {"name": garment, "kind": "object", "portable": True,
+              "state": {"condition": "dry"}}
+    sc = {"positions": {"Nia": "bay", "jacket": "bay", "badge": "bay"},
+          "entities": {"jacket": jacket, "badge": {"name": "Badge"}},
+          "contained": {"jacket": {"in": "Nia", "mode": "held"},
+                        "badge": {"in": "jacket", "mode": "worn"}},
+          "attire": {"Nia": attire.authored_entry([garment], [], None)}}
+    off = _ctx(temp_db, resolved="Nia removes the orange work jacket.")
+    removed = {"attire": {"Nia": {"remove": [garment]}}}
+    commit.apply_attire_diff(sc, removed, off, _result(off))
+
+    assert set(sc["entities"]) == {"jacket", "badge"}
+    assert sc["entities"]["jacket"] is jacket
+    assert sc["contained"]["jacket"] == {"in": "Nia", "mode": "held"}
+    assert garment not in sc["attire"]["Nia"]["wearing"]
+    assert removed["entities"]["jacket"] is jacket
+
+    sc["contained"]["jacket"] = {"in": "Nia", "mode": "worn"}
+    on = _ctx(temp_db, idx=2, resolved="Nia puts the orange work jacket on.")
+    commit.apply_attire_diff(
+        sc, {"attire": {"Nia": {"add": [garment]}}}, on, _result(on))
+
+    assert set(sc["entities"]) == {"jacket", "badge"}
+    assert sc["entities"]["jacket"] is jacket
+    assert sc["contained"]["badge"]["in"] == "jacket"
+    assert garment in sc["attire"]["Nia"]["wearing"]
+
+
+def test_existing_worn_entity_is_released_without_a_second_garment():
+    garment = "Orange work jacket"
+    sc = {"positions": {"Nia": "bay"},
+          "entities": {"jacket": {"name": garment, "state": {}}},
+          "contained": {"jacket": {"in": "Nia", "mode": "worn",
+                                     "by": "attire"}}}
+    diff = {}
+    commit._mint_shed_garments(sc, [("Nia", garment, "wet cuff")], diff)
+
+    assert list(sc["entities"]) == ["jacket"]
+    assert "jacket" not in sc["contained"]
+    assert sc["positions"]["jacket"] == "bay"
+    assert diff["containment"] == {"jacket": None}
+    assert sc["entities"]["jacket"]["state"] == {"condition": "wet cuff"}
+
+
+def test_two_identical_owned_garments_remain_ambiguous_and_separate():
+    from copy import deepcopy
+    from types import SimpleNamespace
+
+    sc = {"entities": {
+        "first": {"name": "Orange work jacket", "state": {"mark": "A"}},
+        "second": {"name": "Orange work jacket", "state": {"mark": "B"}}},
+        "contained": {"first": {"in": "Nia", "mode": "held"},
+                      "second": {"in": "Nia", "mode": "held"}}}
+    before = deepcopy(sc)
+    notes = []
+    commit._mint_shed_garments(
+        sc, [("Nia", "Orange work jacket")], {},
+        SimpleNamespace(tell_director=notes.append))
+
+    assert sc["entities"] == before["entities"]
+    assert sc["contained"] == before["contained"]
+    assert len(notes) == 1 and "several owned objects" in notes[0]
+
+
+def test_exact_owner_relation_distinguishes_identically_named_garments():
+    sc = {"entities": {
+        "first": {"name": "Orange work jacket", "state": {"mark": "A"}},
+        "second": {"name": "Orange work jacket", "state": {"mark": "B"}}},
+        "contained": {"first": {"in": "Nia", "mode": "held"},
+                      "second": {"in": "Tomas", "mode": "held"}}}
+    commit._mint_shed_garments(sc, [("Nia", "Orange work jacket", "wet")], {})
+
+    assert set(sc["entities"]) == {"first", "second"}
+    assert sc["entities"]["first"]["state"]["condition"] == "wet"
+    assert sc["entities"]["second"]["state"] == {"mark": "B"}
+
+
+def test_owned_object_name_overlap_does_not_prove_garment_identity():
+    sc = {"entities": {"rack": {"name": "Orange work jacket rack"}},
+          "contained": {"rack": {"in": "Nia", "mode": "held"}}}
+    commit._mint_shed_garments(sc, [("Nia", "Orange work jacket")], {})
+
+    assert set(sc["entities"]) == {"rack", "orange_work_jacket_nia"}
+    assert sc["entities"]["rack"] == {"name": "Orange work jacket rack"}

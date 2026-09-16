@@ -187,7 +187,7 @@ def test_the_fanout_is_the_only_path_and_has_no_off_switch(temp_db,
 
     sheet = calls[0]["system"]
     assert "Convert event_inputs into ordered event ledgers" in sheet
-    assert "no narration" in sheet
+    assert "not narration, invented dialogue, psychology, or world-state encoding" in sheet
     assert "player_declaration" not in calls[0]["payload"]
     assert "CLOTHING TRACKING" not in sheet, (
         "the prose author loaded a delegated channel's machinery")
@@ -498,7 +498,7 @@ def test_a_ruling_widens_a_closed_gate(temp_db, monkeypatch):
 
     body = out["orchestration"]["specialists"]["body"]
     assert body["gated"] == []               # the gate read nothing to do
-    assert body["run"] is True and body["scope"] == ["conditions"]
+    assert body["run"] is True and body["scope"] == ["conditions", "overlays"]
     assert "director_body" in _steps(calls)
 
 
@@ -709,7 +709,7 @@ class TestTheInstructionRidesOnTheEvent:
             sheet = specialist_prompt(name,
                                       director.SPECIALISTS[name]["channels"])
             assert "AUTHORITATIVE prose" not in sheet, name
-            assert "causal ledger rows" in sheet, name
+            assert "Director's resolved causal rows into typed desired effects" in sheet, name
             assert "Do not narrate" in sheet, name
 
     def test_the_beats_prose_is_not_in_the_payload(self):
@@ -918,7 +918,9 @@ class TestTheSpanIsTheWorkItem:
         for _field in ("categories", "resolution_notes", "item_names",
                        "item_ids"):
             assert _field in sheet, _field
-        assert "smallest useful speech, action, and event spans" in sheet
+        assert "A span is one causal step, not necessarily a sentence" in sheet
+        assert ("Split whenever one stated action leaves a condition that a "
+                "later action uses or changes") in sheet
 
 
 class TestTheSheetAsksForNothingUnread:
@@ -1082,7 +1084,7 @@ class TestBothHalvesEmitWorkItems:
             assert _field in _body, _field
         resolve = prose_author_prompt(None)
         assert '"ledgers"' in resolve
-        assert "A row may name several categories" in resolve
+        assert "One step can affect several things and require several channels" in resolve
 
     def test_a_resolve_span_is_reconciled_by_its_actor(self):
         """An interpret span is the player's own and names no subject; a
@@ -1185,7 +1187,8 @@ class TestTheOpCarriesTheChunkId:
         for name in director.SPECIALISTS:
             sheet = specialist_prompt(name,
                                       director.SPECIALISTS[name]["channels"])
-            assert "chrono_id" in sheet, name
+            assert "same array position" in sheet, name
+            assert "chrono_id" not in sheet and "item_id" not in sheet, name
 
 
 class TestAnEncodedClaimNeedsSomethingEncoded:
@@ -1732,15 +1735,15 @@ def test_specialist_payload_is_the_body_slice_and_nothing_more(temp_db,
     assert spayload["ledgers"][0]["item_names"] == ["wool coat"]
     assert spayload["ledgers"][0]["item_matches"] == {"wool coat": [{
         "kind": "garment",
-        "world_key": "wool coat", "world_name": "wool coat",
+        "world_key": "wool coat", "world_name": "wool coat", "worn_by": "Mara",
     }]}
     assert spayload["ledgers"][0]["world_matches"] == [{
         "kind": "garment",
-        "world_key": "wool coat", "world_name": "wool coat",
+        "world_key": "wool coat", "world_name": "wool coat", "worn_by": "Mara",
     }]
     assert spayload["ledgers"][1]["world_matches"] == [{
         "kind": "garment",
-        "world_key": "linen scarf", "world_name": "linen scarf",
+        "world_key": "linen scarf", "world_name": "linen scarf", "worn_by": "Mara",
     }]
     assert out["state_diff"]["attire"]["Mara"]["remove"] == [
         "wool coat", "linen scarf"]
@@ -2530,7 +2533,7 @@ def test_prose_author_core_keeps_the_never_gated_blocks():
 
     core = prose_author_prompt([])
     assert "ordered event ledgers" in core
-    assert "no narration" in core
+    assert "not narration, invented dialogue, psychology, or world-state encoding" in core
     assert "categories" in core and "item_names" in core
     for name, heading in PROSE_DUTY_HEADINGS.items():
         assert heading not in core, (name, heading)
@@ -2751,7 +2754,10 @@ def test_prose_backstop_reports_a_duty_shipped_without_its_block(temp_db,
     notes = [n for n in ctx.engine_feedback if "'obligations' duty" in n]
     assert notes == []
     assert not any("'obligations' duty" in w for w in ctx.warnings)
-    assert out["orchestration"].get("gate_flags", []) == []
+    # Obligations now has a social owner. Archived author-only output is
+    # retained, and the ownership backstop accurately reports its source.
+    assert out["orchestration"].get("gate_flags", []) == [
+        "obligations carries content for 'obligations'"]
 
 
 def test_prose_registries_are_level():
@@ -3556,48 +3562,13 @@ def test_already_true_verifier_trusts_what_it_cannot_decide():
     assert ok
 
 
-def test_diff_application_is_order_independent_by_construction():
-    """Design note 21's other residual, closed as a PROVEN INVARIANT rather
-    than built machinery: applying the merged diff needs no event-id
-    ordering, and this test is the tripwire that forces the decision to be
-    remade consciously if a future channel breaks the reasons why.
+def test_channel_ownership_is_disjoint_within_a_span():
+    """A span assembles complementary channels under one domain applier.
 
-    The reasons, precisely:
-
-    1. EXCLUSIVE OWNERSHIP. Every delegated channel has exactly one
-       specialist, and assembly replaces whole channels -- so no channel is
-       ever interleaved from two model sources, and "op order across
-       specialists" cannot exist within a channel.
-    2. END-STATE CHANNELS COMMUTE. Every dict channel is a keyed end-state
-       upsert (attire, conditions, vitals, overlays, entities, containment,
-       scales, positions, rooms, stations, poses); one writer per beat per
-       key means application order across channels changes nothing.
-    3. THE SEQUENTIAL APPLIERS SHARE ONE OWNER. The only appliers that walk
-       an op list against evolving state are apply_contact_ops and
-       apply_substance_ops, and their whole read/write family -- contact_ops,
-       substance_ops, containment, scales -- belongs to the ONE contact
-       specialist. Within-beat chronology there IS that specialist's own
-       list order, preserved verbatim through assembly; the engine-side
-       sources merged into contact_ops (player onset assertions, character
-       contact endings) are ordered by fixed conventions that match
-       chronology (onset precedes resolve).
-    4. CROSS-CHANNEL COUPLINGS ARE ADJUDICATED BY DELIBERATE FIXED
-       CONVENTIONS in spatial.merge_scene_with_diff, each with a stated
-       causal reason: substances resolve against the PRE-BEAT contact
-       topology and apply before contact removals (a release can route
-       through an interior relation the same beat's withdrawal ends); scale
-       changes cancel contacts BEFORE the beat's own contact ops (a
-       re-established hold survives); stations derive AFTER contacts settle;
-       vitals last. Event-id ordering would re-litigate conventions that
-       were each chosen deliberately -- including the coordinating suspect
-       (a contact ending and a new contact on the same part in one beat),
-       which lives entirely inside one specialist's one list.
-
-    What would have to become true for ordering to be needed -- and what
-    this test therefore refuses: a sequential-stateful op channel granted
-    to a specialist other than the owner of the state its applier reads; a
-    new delegated op channel left unclassified below; two owners able to
-    write the same coupled family."""
+    Ownership does not prove that successive spans commute. The executable
+    causal program orders those spans; test_causal_program drives the
+    remove/recreate, repeated-write and cross-channel counterexamples.
+    """
     from agents.director import (
         SPECIALISTS, _CHANNEL_SPECIALISTS, _DELEGATED_CHANNELS,
         _LIST_DELEGATED,
@@ -3622,7 +3593,7 @@ def test_diff_application_is_order_independent_by_construction():
         "ratified_claims", "contradicted_claims",
         # Observer evidence is stage metadata applied later to independent
         # Charter minds; it reads no scene-diff channel while assembling.
-        "public_evidence",
+        "public_evidence", "obligations",
         # `apply_comms_ops` records what the beat said and checks nothing
         # against the rooms: every prune is `normalize_scene_comms`, which runs
         # once rooms have settled. That split is deliberate and is what keeps
@@ -3768,7 +3739,7 @@ def test_every_alias_normalizes_onto_a_routed_category():
     core_owned = {"time", "transit", "other"}
     aliases = director._ling("_OMISSION_CATEGORY_ALIASES")
     for alias, normalized in aliases.items():
-        assert (normalized in director._CATEGORY_CHANNELS
+        assert (director.manifest_category_targets(normalized)
                 or normalized in core_owned), (
             f"alias {alias!r} normalizes to {normalized!r}, which reaches "
             f"neither a specialist channel nor a core-owned category")
@@ -3924,9 +3895,11 @@ def test_the_sheet_tells_every_hand_a_body_is_not_a_thing_it_keeps():
     from llm.prompts import specialist_prompt
 
     sheet = specialist_prompt("objects", ["entities"])
-    assert "item_matches resolves each to an existing world key" in sheet
-    assert "one transform per thing whose record you change" in sheet
-    assert "Do not narrate, reinterpret a row" in sheet
+    assert ("item_matches, target_matches and your supplied world indexes "
+            "help resolve them to existing keys") in sheet
+    assert "Name the thing whose record or relation this transform changes" in sheet
+    assert "If all work belongs elsewhere, use not_mine and request those channels" in sheet
+    assert "Do not narrate, invent an outcome, or reinterpret the Director's ruling" in sheet
 
 
 # ---------------------------------------------------------------------------
@@ -4713,11 +4686,11 @@ class TestTwoKnownNamesInOneStringAreTwoNames:
         from llm.schemas import output_example
         for sheet in (DEFAULT_PROMPTS["director_interpret"],
                       prose_author_prompt(None, "en")):
-            assert "name several categories" in sheet
+            assert "One step can affect several things and require several channels" in sheet
             assert "exact channel names" in sheet.casefold()
         worked = [e.get("categories") for e in
                   output_example("director_resolve").get("ledgers")]
-        assert ["entities", "positions", "rooms"] in worked
+        assert ["inventory_ops", "rooms"] in worked
 
 
 class TestAHandIsAnswerableForTheWorkItemsItGot:
@@ -4854,6 +4827,7 @@ class TestADialRefusesTheSpanAndTheRecordWithIt:
             assert out["voided_spans"] == [
                 {"event_id": 1, "dropped": ["rooms.bay"]}], mode
             assert out["state_assertions"].get("rooms") == {}, mode
+            assert out["onset_state_assertions"].get("rooms") == {}, mode
 
     def test_the_refusal_is_reported_never_silent(self, temp_db, monkeypatch):
         """A refused assertion must not silently vanish -- the player wrote it
@@ -5250,7 +5224,7 @@ class TestTheBeatNumbersTheThingsItTouches:
                       prose_author_prompt(None, "en")):
             assert "item_names" in sheet
             assert "item_ids" in sheet
-            assert "the hands match by these" in sheet
+            assert "The hands match these names to the world" in sheet
 
 
 class TestWhichRecordOfAThingIsAllowedToExist:
@@ -6489,8 +6463,8 @@ def test_a_row_about_several_things_files_each_transform_under_its_thing(
     for the recompiler and `item_names` for the hands in step, and a hand
     that changes two of the row's things emits two transforms, each naming
     its thing in `item`. The attach site resolves the name back to the
-    handle; a transform that names nothing on a several-thing row is filed
-    under the first thing, with a warning, rather than lost."""
+    handle; a transform that names nothing on a several-thing row is rejected
+    with a warning rather than acquiring the first thing's identity."""
     calls = []
     responses = {
         "director_resolve": {
@@ -6542,7 +6516,7 @@ def test_a_row_about_several_things_files_each_transform_under_its_thing(
         "linen scarf", "wool coat"]
     history = out["orchestration"]["transform_history"]
     assert [(h["item_id"], h["chrono_id"]) for h in history] == [
-        (9, 1), (7, 1), (7, 1)]
+        (9, 1), (7, 1)]
     assert any("names none of them" in w for w in ctx.warnings)
     # Both things were transformed, so both are accounted for.
     body = out["orchestration"]["specialists"]["body"]
@@ -6605,9 +6579,10 @@ def test_the_verdict_follows_the_thing(temp_db, monkeypatch):
             for v in body["item_verdicts"]] == [
         (7, "wool coat", "encoded"),
         (8, "pencil", "not_mine"),
-        (9, "linen scarf", "already_true"),
+        (9, "linen scarf", ""),
     ]
-    assert body["things_unaccounted"] == []
+    # A model label without its typed desired effect cannot settle the scarf.
+    assert [v["item"] for v in body["things_unaccounted"]] == ["linen scarf"]
     # A row where the hand does not answer for a thing at all:
     responses["director_body"]["results"][0]["settled"] = {
         "pencil": "not_mine"}

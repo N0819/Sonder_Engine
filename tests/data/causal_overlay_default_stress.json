@@ -1,0 +1,422 @@
+{
+  "title": "Always-on body surface assessment — one novel bounded scene",
+  "version": 1,
+  "method": "Frozen before provider calls for the body-default overlay change. Expectations are semantic boundaries, not assumed model chrono IDs. Manual checks are part of the frozen checklist. One first capture and at most one explicitly labeled correction regression; never replace the original.",
+  "cases": [
+    {
+      "id": "body_default_cheek_mark_and_clear",
+      "primary_name": "Sela",
+      "characters": [
+        "Bram"
+      ],
+      "authority_mode": "world_author",
+      "prose": "At the washstand, Sela dabbed a small blue dot onto her left cheek. \"Can you see the dot?\" she asked Bram. Bram took off his grey wool cap and kept it in his left hand. \"Yes, on your left cheek,\" he said. Sela smiled briefly. Then she wiped the blue dot completely away, leaving her cheek clean. \"It is gone now,\" Bram said. His cap remained in his hand; neither the cap nor his skin had acquired a mark.",
+      "scene": {
+        "rooms": {
+          "washroom": {
+            "name": "Washroom",
+            "desc": "A bright quiet room with an uncovered washstand. Both people stand face to face within easy sight and hearing.",
+            "light": "bright",
+            "size": "small",
+            "adjacent": [],
+            "anchors": {
+              "washstand": {
+                "desc": "Oak washstand"
+              }
+            }
+          }
+        },
+        "entities": {
+          "cap": {
+            "name": "Grey wool cap",
+            "kind": "object",
+            "portable": true,
+            "container": false,
+            "state": {}
+          },
+          "coat": {
+            "name": "Brown work coat",
+            "kind": "object",
+            "portable": true,
+            "container": false,
+            "state": {}
+          },
+          "tunic": {
+            "name": "Plain linen tunic",
+            "kind": "object",
+            "portable": true,
+            "container": false,
+            "state": {}
+          },
+          "washstand": {
+            "name": "Oak washstand",
+            "kind": "fixture",
+            "portable": false,
+            "container": false,
+            "state": {}
+          }
+        },
+        "positions": {
+          "Sela": "washroom",
+          "Bram": "washroom",
+          "cap": "washroom",
+          "coat": "washroom",
+          "tunic": "washroom",
+          "washstand": "washroom"
+        },
+        "stations": {
+          "Sela": {
+            "at": "washstand",
+            "near": []
+          },
+          "Bram": {
+            "at": "washstand",
+            "near": []
+          },
+          "washstand": {
+            "at": "washstand",
+            "near": []
+          }
+        },
+        "contained": {
+          "cap": {
+            "in": "Bram",
+            "mode": "worn",
+            "by": "attire"
+          },
+          "coat": {
+            "in": "Bram",
+            "mode": "worn",
+            "by": "attire"
+          },
+          "tunic": {
+            "in": "Sela",
+            "mode": "worn",
+            "by": "attire"
+          }
+        },
+        "attire": {
+          "Sela": {
+            "wearing": [
+              "Plain linen tunic"
+            ],
+            "state": [],
+            "regions": {
+              "torso": {
+                "garments": [
+                  {
+                    "name": "Plain linen tunic",
+                    "state": "worn",
+                    "covers": [
+                      "torso",
+                      "arms"
+                    ],
+                    "attaches": false
+                  }
+                ],
+                "beneath": ""
+              },
+              "arms": {
+                "garments": [
+                  {
+                    "name": "Plain linen tunic",
+                    "state": "worn",
+                    "covers": [
+                      "torso",
+                      "arms"
+                    ],
+                    "attaches": false
+                  }
+                ],
+                "beneath": ""
+              }
+            }
+          },
+          "Bram": {
+            "wearing": [
+              "Grey wool cap",
+              "Brown work coat"
+            ],
+            "state": [],
+            "regions": {
+              "head": {
+                "garments": [
+                  {
+                    "name": "Grey wool cap",
+                    "state": "worn",
+                    "covers": [
+                      "head"
+                    ],
+                    "attaches": false
+                  }
+                ],
+                "beneath": ""
+              },
+              "torso": {
+                "garments": [
+                  {
+                    "name": "Brown work coat",
+                    "state": "worn",
+                    "covers": [
+                      "torso",
+                      "arms"
+                    ],
+                    "attaches": false
+                  }
+                ],
+                "beneath": ""
+              },
+              "arms": {
+                "garments": [
+                  {
+                    "name": "Brown work coat",
+                    "state": "worn",
+                    "covers": [
+                      "torso",
+                      "arms"
+                    ],
+                    "attaches": false
+                  }
+                ],
+                "beneath": ""
+              }
+            }
+          }
+        },
+        "overlays": {
+          "Sela": [],
+          "Bram": []
+        },
+        "poses": {
+          "Sela": {
+            "posture": "standing"
+          },
+          "Bram": {
+            "posture": "standing"
+          }
+        },
+        "contacts": [],
+        "substances": [],
+        "orientation": {}
+      },
+      "expectations": {
+        "events": [
+          {
+            "id": "e01",
+            "source": "dabbed a small blue dot onto her left cheek",
+            "checks": [
+              {
+                "kind": "path",
+                "path": [
+                  "overlays",
+                  "Bram"
+                ],
+                "equals": []
+              }
+            ]
+          },
+          {
+            "id": "e02",
+            "source": "Can you see the dot",
+            "checks": []
+          },
+          {
+            "id": "e03",
+            "source": "Bram took off his grey wool cap and kept it in his left hand",
+            "checks": [
+              {
+                "kind": "parent",
+                "entity": "cap",
+                "equals": "Bram"
+              },
+              {
+                "kind": "path",
+                "path": [
+                  "contained",
+                  "cap",
+                  "mode"
+                ],
+                "equals": "held"
+              },
+              {
+                "kind": "path",
+                "path": [
+                  "attire",
+                  "Bram",
+                  "wearing"
+                ],
+                "equals": [
+                  "Brown work coat"
+                ]
+              },
+              {
+                "kind": "path",
+                "path": [
+                  "overlays",
+                  "Bram"
+                ],
+                "equals": []
+              }
+            ]
+          },
+          {
+            "id": "e04",
+            "source": "Yes, on your left cheek",
+            "checks": []
+          },
+          {
+            "id": "e05",
+            "source": "Sela smiled briefly",
+            "checks": []
+          },
+          {
+            "id": "e06",
+            "source": "wiped the blue dot completely away, leaving her cheek clean",
+            "checks": [
+              {
+                "kind": "path",
+                "path": [
+                  "overlays",
+                  "Sela"
+                ],
+                "equals": []
+              },
+              {
+                "kind": "path",
+                "path": [
+                  "overlays",
+                  "Bram"
+                ],
+                "equals": []
+              }
+            ]
+          },
+          {
+            "id": "e07",
+            "source": "It is gone now",
+            "checks": []
+          }
+        ],
+        "quotes": [
+          {
+            "speaker": "Sela",
+            "text": "Can you see the dot?"
+          },
+          {
+            "speaker": "Bram",
+            "text": "Yes, on your left cheek,"
+          },
+          {
+            "speaker": "Bram",
+            "text": "It is gone now,"
+          }
+        ],
+        "final": [
+          {
+            "kind": "path",
+            "path": [
+              "overlays",
+              "Sela"
+            ],
+            "equals": []
+          },
+          {
+            "kind": "path",
+            "path": [
+              "overlays",
+              "Bram"
+            ],
+            "equals": []
+          },
+          {
+            "kind": "parent",
+            "entity": "cap",
+            "equals": "Bram"
+          },
+          {
+            "kind": "path",
+            "path": [
+              "contained",
+              "cap",
+              "mode"
+            ],
+            "equals": "held"
+          },
+          {
+            "kind": "path",
+            "path": [
+              "attire",
+              "Bram",
+              "wearing"
+            ],
+            "equals": [
+              "Brown work coat"
+            ]
+          },
+          {
+            "kind": "entity_count",
+            "name": "Grey wool cap",
+            "equals": 1
+          }
+        ],
+        "non_events": [
+          {
+            "description": "The fleeting smile does not become a persistent surface mark, disguise or condition; cap removal causes no surface mark. Neither the negative assertion nor the spoken confirmation creates an extra physical event.",
+            "checks": [
+              {
+                "kind": "path",
+                "path": [
+                  "overlays",
+                  "Sela"
+                ],
+                "equals": []
+              },
+              {
+                "kind": "path",
+                "path": [
+                  "overlays",
+                  "Bram"
+                ],
+                "equals": []
+              }
+            ]
+          }
+        ],
+        "manual_checks": [
+          {
+            "id": "surface_rows_route_body",
+            "expected": "Director mark addition and removal rows route through body and never name overlays as a Director category; body is actually dispatched."
+          },
+          {
+            "id": "overlay_instructions_always_loaded",
+            "expected": "Every body provider call receives overlay decision and lifecycle instructions regardless of whether a separate overlays category or gate exists."
+          },
+          {
+            "id": "mark_exists_between_boundaries",
+            "boundary_event": "e01",
+            "expected": "A blue dot on Sela left cheek is a stored overlay after addition, survives both dialogue and unrelated cap removal, and ends only at the wipe boundary."
+          },
+          {
+            "id": "same_mark_is_removed",
+            "boundary_event": "e06",
+            "expected": "Removal identifies the previously added mark, removes it completely, and leaves no duplicate or reworded residual mark."
+          },
+          {
+            "id": "ordinary_body_work_has_no_marks",
+            "boundary_event": "e03",
+            "expected": "Bram cap is removed from his wardrobe and held by him, with the coat still worn and no invented overlay on Bram or his cap."
+          },
+          {
+            "id": "smile_is_transient",
+            "boundary_event": "e05",
+            "expected": "Brief smiling remains an observable action and never persists as overlay, condition or changed stable appearance."
+          },
+          {
+            "id": "observer_delivery",
+            "expected": "Bram perceives mark application, brief smile and wiping in chronological order. Sela perceives the cap removal and Bram dialogue. No final standing description continues to show the erased dot."
+          }
+        ]
+      }
+    }
+  ]
+}

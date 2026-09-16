@@ -58,7 +58,7 @@ def pending_obligation_view(chat_id, turn_idx):
         })
     return view
 
-def _find_obligation(ledger, op):
+def _find_obligation(ledger, op, *, exact=False):
     """Index of the ledger entry an op targets: exact id first, then a
     fuzzy same-debtor/overlapping-text fallback (models routinely echo the
     text but not the id)."""
@@ -67,6 +67,19 @@ def _find_obligation(ledger, op):
         for i, entry in enumerate(ledger):
             if str(entry.get("id") or "") == oid:
                 return i
+        if exact:
+            return None
+    if exact:
+        # Causal rows name a specific debt, not prose to search within a
+        # larger debt. Case/spacing are identity normalization only.
+        identity = lambda value: " ".join(str(value or "").split()).casefold()
+        who, what = identity(op.get("who")), identity(op.get("what"))
+        if not what:
+            return None
+        for i, entry in enumerate(ledger):
+            if identity(entry.get("who")) == who and identity(entry.get("what")) == what:
+                return i
+        return None
     who = _normalized_fact(op.get("who"))
     what = _normalized_fact(op.get("what"))
     if not what:
@@ -91,8 +104,71 @@ def _beats_open(turn_idx, opened_turn):
         return 0
 
 
-def commit_obligations(ctx, nonce):
-    """Apply director_resolve's obligation ops to the pending_obligations
+def causal_obligation_ops(ctx, *, causal_program=None, with_origins=False):
+    """Ordered surviving onset/resolve debts, each operation selected once.
+
+    Current outputs retain their private chronology in transform history.
+    The finalized scene program is the allowlist after causal/authority
+    guards. Its empty list is meaningful: all spans were refused. Standalone
+    domain calls use the available stage programs and explicit dispositions;
+    archived resolve outputs retain their top-level operation list.
+    ``with_origins`` additionally returns whether each operation is causal,
+    so commit can use exact debt identity without changing archive matching.
+    """
+    if causal_program is None:
+        composed = ctx.get("_composed_beat")
+        diff = getattr(composed, "diff", None)
+        if isinstance(diff, dict) and "causal_steps" in diff:
+            causal_program = diff["causal_steps"]
+    final_allowed = None if causal_program is None else {
+        (str(step.get("stage") or "resolve"), str(step.get("chrono_id")))
+        for step in causal_program if isinstance(step, dict)
+    }
+    operations = []
+    for stage, output in (("interpret", ctx.director_interpret or {}),
+                          ("resolve", ctx.director_resolve or {})):
+        history = (output.get("orchestration") or {}).get("transform_history")
+        current = bool(output.get("ledgers")) or bool(history)
+        if not current:
+            if stage == "resolve":
+                operations.extend((op, False) for op in output.get("obligations") or []
+                                  if isinstance(op, dict))
+            continue
+        rows = {str(row.get("chrono_id")): row for row in output.get("sequence") or []
+                if isinstance(row, dict) and row.get("chrono_id") is not None}
+        state_key = "state_assertions" if stage == "interpret" else "state_diff"
+        state = output.get(state_key) or {}
+        stage_allowed = None if "causal_steps" not in state else {
+            str(step.get("chrono_id")) for step in state["causal_steps"]
+            if isinstance(step, dict)
+        }
+        blocked = {str(row.get("event_id"))
+                   for row in (ctx.director_resolve or {}).get("sequence_dispositions") or []
+                   if isinstance(row, dict) and row.get("status") == "blocked"}
+        # History is already compiled chronology; stable sort also protects
+        # restored variants which saved hands in completion order.
+        ordered = sorted((row for row in history or [] if isinstance(row, dict)),
+                         key=lambda row: int(row.get("chrono_id") or 0))
+        for transform in ordered:
+            chrono = str(transform.get("chrono_id"))
+            row = rows.get(chrono)
+            if stage == "interpret" and (
+                    not row or str(row.get("commitment") or "").casefold() != "asserted"):
+                continue
+            if final_allowed is not None and (stage, chrono) not in final_allowed:
+                continue
+            if final_allowed is None and stage_allowed is not None and chrono not in stage_allowed:
+                continue
+            if row and {str(row.get(field) or "") for field in
+                        ("event_id", "source_event_id", "from_declaration")} & blocked:
+                continue
+            operations.extend((op, True) for op in (transform.get("patch") or {}).get("obligations") or []
+                              if isinstance(op, dict))
+    return operations if with_origins else [op for op, _current in operations]
+
+
+def commit_obligations(ctx, nonce, *, causal_program=None):
+    """Apply surviving causal obligation ops to the pending_obligations
     ledger. Deterministic: open appends (deduped -- re-demanding an open
     debt is not a second debt), discharge/refuse removes. The commit-side
     reminder: any entry still open past OBLIGATION_OVERDUE_AGE after this
@@ -100,8 +176,7 @@ def commit_obligations(ctx, nonce):
     leave it flagged for the next beat's payload."""
     cid = ctx.chat.id
     turn = ctx.turn
-    res = ctx.director_resolve or {}
-    ops = res.get("obligations") if isinstance(res.get("obligations"), list) else []
+    ops = causal_obligation_ops(ctx, causal_program=causal_program, with_origins=True)
     ledger = [
         dict(entry)
         for entry in (wget(cid, "pending_obligations", []) or [])
@@ -109,13 +184,13 @@ def commit_obligations(ctx, nonce):
     ]
 
     opened = discharged = 0
-    for op in ops:
+    for op, current in ops:
         if not isinstance(op, dict):
             continue
         op_kind = str(op.get("op") or "").strip().lower()
         if op_kind == "open":
             what = str(op.get("what") or "").strip()
-            if not what or _find_obligation(ledger, op) is not None:
+            if not what or _find_obligation(ledger, op, exact=current) is not None:
                 continue
             ledger.append({
                 "id": f"obl:{turn.idx}:{opened}",
@@ -126,7 +201,7 @@ def commit_obligations(ctx, nonce):
             })
             opened += 1
         elif op_kind in ("discharge", "refuse"):
-            idx = _find_obligation(ledger, op)
+            idx = _find_obligation(ledger, op, exact=current)
             if idx is None:
                 ctx.add_warning(
                     f"obligation {op_kind} matched no open ledger entry: "

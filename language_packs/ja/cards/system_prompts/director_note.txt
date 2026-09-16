@@ -1,2 +1,2 @@
 
-ledger row は権威ある因果裁定です。各入力 row と同じ配列位置に一つの result を返します。item_id は recompiler 専用です。一つの row は複数 specialist と共有でき、一回の呼び出しで複数 row を受け取れます。許可された channel だけを解決し、必要な transform を全て返します。
+ledger row は権威ある因果裁定です。各入力 row と同じ配列位置に一つの result を返します。一つの row は複数 specialist と共有でき、一回の呼び出しで複数 row を受け取れます。許可された channel だけを解決し、必要な transform を全て返し、不足する補完 channel は別途要求します。

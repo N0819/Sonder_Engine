@@ -1,225 +1,210 @@
-"""The specialist core sheets are one text with one header per hand.
+"""Executable documentation for the current causal specialist contract.
 
-`language_packs/<id>/cards/system_prompts/specialists/<hand>/core.txt` is
-maintained as five files, one per registered hand. Only the first two
-paragraphs (three for spatial, which carries the movement backstop note) are
-about the hand that reads them; everything after that is the shared contract
-every specialist answers under -- how to read payload.source, what a referent
-may be, how to answer numbered events, where to forward one that is not yours.
-
-One copy of one text per hand is a copy-paste surface, and it has already
-failed as one. Both defects repaired on 2026-09-01 were present IDENTICALLY in
-all six sheets of the time, in both packs: the WHEN AN EVENT IS NOT YOURS block
-spliced into the middle of the sentence that closes ANSWER THE NUMBERED EVENTS
-(leaving the word "events." orphaned at the head of the next paragraph), and
-body's own three channels -- overlays, conditions, vitals -- handed to every
-other hand of the time, none of which has a block for any of them, as the only
-illustration of what "the closest channel you own" means. Neither was a
-divergence between the sheets; both were an edit made once and pasted into
-every sheet, which is exactly what no existing test could see.
-
-These tests pin the shared text so the NEXT such edit costs one failure
-instead of one paste per hand. They deliberately do not merge the files: the en
-paragraphs are byte-identical and a `{{fragment:...}}` would collapse them,
-but the ja renderings of those same paragraphs are one independent
-translation per hand (pairwise similarity 0.70-0.93, never 1.0), so one
-fragment would impose one hand's Japanese on all the others. So en is pinned
-by equality and ja by the structure equality cannot reach.
+Check the duplicated shared text for drift, then validate the English and
+Japanese examples models may imitate against real schemas and item accounting.
+These checks exercise examples, not live model reliability.
 """
-
 from __future__ import annotations
 
+import json
 import re
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
 
-from agents.director import SPECIALISTS
-
+from agents import director
+from llm import prompts
+from llm.llm_quality import _step_json_schema
+from llm.schemas import validate_llm_output_strict
 
 ROOT = Path(__file__).resolve().parents[1]
 LANGUAGES = ("en", "ja")
 HANDS = ("body", "social", "contact", "objects", "spatial")
-#: How many trailing paragraphs are the shared contract rather than the hand's
-#: own preamble. 8 of 10 (spatial has one extra preamble paragraph, the
-#: movement backstop, so 8 of 11).
-SHARED_TAIL = 8
+PRIVATE_FIELDS = {"chrono_id", "item_id", "item_ids"}
+
+# Standing context from each example's premise, kept separate from its output
+# so a syntactically valid patch on the wrong existing record still fails.
+SCENARIOS = {
+    "body": {
+        "channels": ["attire"], "hands": ["body"], "bodies": ["Nia"],
+        "entities": {"Orange jacket": {"name": "Orange jacket"}},
+        "attire": {"Nia": {"wearing": ["Orange jacket"]}},
+    },
+    "social": {
+        "channels": ["obligations"], "hands": ["social"],
+        "bodies": ["Mira"], "entities": {},
+    },
+    "contact": {
+        "channels": ["contact_ops"], "hands": ["contact"], "bodies": [],
+        "entities": {"key_1": {"name": "Brass key"},
+                     "door_1": {"name": "Storeroom door"}},
+    },
+    "objects": {
+        "channels": ["inventory_ops"], "hands": ["objects", "contact"],
+        "bodies": ["Sera", "Tomas"],
+        "entities": {"tin_1": {"name": "Brass tin"}},
+    },
+    "spatial": {
+        "channels": ["stations"], "hands": ["spatial"], "bodies": [],
+        "entities": {"tin_1": {"name": "Brass tin"},
+                     "worktop": {"name": "Worktop"}},
+    },
+}
 
 
-def _core(language: str, hand: str) -> str:
-    return (ROOT / "language_packs" / language / "cards" / "system_prompts"
-            / "specialists" / hand / "core.txt").read_text(encoding="utf-8")
+def _example(language, hand):
+    directory = (ROOT / "language_packs" / language / "cards"
+                 / "system_prompts" / "specialists" / hand)
+    text = (directory / "core.txt").read_text(encoding="utf-8")
+    assert text.count("\nSHARED CONTRACT\n") == 1
+    assert text.count("\nOUTPUT ENVELOPE") == 1
+    shared = text.split("\nSHARED CONTRACT\n", 1)[1].split(
+        "\nOUTPUT ENVELOPE", 1)[0]
+    channel, = SCENARIOS[hand]["channels"]
+    chunk = (directory / "chunks" / f"{channel}.txt").read_text(encoding="utf-8")
+    assert chunk.count("\nWORKED EXAMPLE") == 1
+    worked = chunk.split("\nWORKED EXAMPLE", 1)[1]
+    # Both translations publish the literal item_names array in the premise.
+    items = re.search(r"item_names[^\[\n]*(\[[^\]\n]*\])", worked)
+    assert items is not None, f"{language}/{hand}: missing example input items"
+    names = json.loads(items.group(1))
+    lines = [line for line in worked.splitlines()
+             if line.startswith('{"results":')]
+    assert len(lines) == 1, f"{language}/{hand}: expected one complete example"
+    return shared.strip(), names, json.loads(lines[0])
 
 
-def _paragraphs(text: str) -> list[str]:
-    return [p for p in text.split("\n\n") if p.strip()]
+def _example_context(hand, names):
+    scenario = deepcopy(SCENARIOS[hand])
+    bodies = scenario["bodies"]
+    scene = {
+        "entities": scenario["entities"],
+        "positions": {name: "workroom" for name in bodies},
+        "attire": scenario.get("attire", {}),
+        "rooms": {"workroom": {"name": "Workroom", "anchors": {
+            "worktop": {"desc": "Worktop", "dir": "n"}}}},
+    }
+    ledger = {
+        "chrono_id": 1, "item_ids": list(range(1, len(names) + 1)),
+        "item_names": names, "categories": scenario["channels"],
+        "assigned_hands": scenario["hands"],
+    }
+    public = director._specialist_ledger(ledger)
+    matches = {}
+    for label in names:
+        candidates = [{"kind": "entity", "world_key": key, "name": record["name"]}
+                      for key, record in scene["entities"].items()
+                      if record["name"] == label]
+        if label in bodies:
+            candidates.append({"kind": "body", "world_key": label, "name": label})
+        if candidates:
+            matches[label] = candidates
+    public["item_matches"] = matches
+    payload = {
+        "ledgers": [public], "completion_contract": "verified_effects_v1",
+        "identity_index": {f"character:{i}": name for i, name in enumerate(bodies, 1)},
+        "attire": scene["attire"],
+        "worn_garments": [{"name": garment, "worn_by": wearer}
+                          for wearer, attire in scene["attire"].items()
+                          for garment in attire["wearing"]],
+    }
+    return ledger, payload, scene
+
+
+def _all_keys(value):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            yield key
+            yield from _all_keys(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _all_keys(item)
 
 
 def test_the_roster_this_file_pins_is_the_engines_roster():
-    """If a sixth hand is registered, these tests must be told about it."""
-    assert set(HANDS) == set(SPECIALISTS)
+    assert set(HANDS) == set(director.SPECIALISTS) == set(SCENARIOS)
+
+
+def test_the_english_shared_contracts_agree_word_for_word():
+    reference, _, _ = _example("en", "body")
+    assert reference
+    for hand in HANDS:
+        shared, _, _ = _example("en", hand)
+        assert shared == reference, f"en/{hand}: shared contract diverged"
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
-def test_every_core_carries_the_shared_contract(language):
-    for hand in HANDS:
-        paragraphs = _paragraphs(_core(language, hand))
-        assert len(paragraphs) >= SHARED_TAIL + 2, (
-            f"{language}/{hand}: {len(paragraphs)} paragraphs, too few to "
-            "hold a preamble plus the shared contract")
-
-
-def test_the_english_cores_agree_word_for_word():
-    """The load-bearing one: en is six copies, so it must be six IDENTICAL
-    copies. A fix applied to one sheet and not the other five fails here."""
-    reference = _paragraphs(_core("en", "body"))[-SHARED_TAIL:]
-    for hand in HANDS:
-        shared = _paragraphs(_core("en", hand))[-SHARED_TAIL:]
-        first = next((i for i, (a, b) in enumerate(zip(shared, reference))
-                      if a != b), None)
-        assert shared == reference, (
-            f"en/{hand} diverges from en/body in the shared contract "
-            f"(first differing paragraph: {first}, counting from the start "
-            f"of the shared tail of {SHARED_TAIL}). The shared text is "
-            "maintained as six copies: an edit to one is an edit to all six.")
+@pytest.mark.parametrize("hand", HANDS)
+def test_channel_example_is_only_shown_when_its_channel_is_granted(language, hand, monkeypatch):
+    _, _, example = _example(language, hand)
+    granted = set(SCENARIOS[hand]["channels"])
+    others = set(director.SPECIALISTS[hand]["channels"]) - granted
+    # Exercise shipped prompt assembly, independent of host preset settings.
+    monkeypatch.setattr(prompts, "_preset_override", lambda *_: None)
+    for scope in (granted, others, set()):
+        rendered = prompts.specialist_prompt(hand, scope, language)
+        examples = [json.loads(line) for line in rendered.splitlines()
+                    if line.startswith('{"results":')]
+        assert examples.count(example) == int(granted <= scope), (
+            f"{language}/{hand}: worked example escaped its channel grant")
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
-def test_the_forwarding_note_publishes_the_hand_names_verbatim(language):
-    """The roster of hands is the value vocabulary of `reroute_to`, and it is
-    checked by identity: `target in SPECIALISTS` in
-    `agents/director_fanout.py` (the hand's own verdict) and in
-    `agents/director_reconcile.py` (the routing decision). A translated or
-    misspelt row is an address the engine silently drops, and routing falls
-    back to the category map that just mis-sent the event -- the re-ask the
-    block exists to prevent. Measured 2026-09-01: ja/body had translated
-    three of the six rows and ja/objects all six, so on the Japanese pack the
-    objects hand could not address anyone at all.
-    """
-    for hand in HANDS:
-        text = _core(language, hand)
-        for name in SPECIALISTS:
-            assert re.search(rf"^  {name} +-- ", text, re.M), (
-                f"{language}/{hand} does not publish '{name}' as a "
-                "reroute_to value; an address the engine cannot match is an "
-                "address it drops")
+@pytest.mark.parametrize("hand", HANDS)
+def test_worked_example_survives_current_scoped_validation(language, hand):
+    _, names, example = _example(language, hand)
+    _, payload, _ = _example_context(hand, names)
+    step = f"director_{hand}"
+    report = validate_llm_output_strict(step, deepcopy(example), source_payload=payload)
+    assert report.valid, report.errors
+    assert not report.warnings, report.warnings
+    assert len(example["results"]) == len(payload["ledgers"])
+
+    # Archive readers supply defaults; examples must contain current provider
+    # generation requirements instead of passing through compatibility alone.
+    schema = _step_json_schema(step)
+    definitions = schema.get("$defs", schema.get("definitions"))
+    result_schema = definitions["LedgerTransformResult"]
+    transform_schema = definitions["LedgerPatchTransform"]
+    assert set(schema["required"]) <= example.keys()
+    granted = set(SCENARIOS[hand]["channels"])
+    assert granted <= set(director.SPECIALISTS[hand]["channels"])
+    possible_channels = {channel for spec in director.SPECIALISTS.values()
+                         for channel in spec["channels"]}
+    for result in example["results"]:
+        assert set(result_schema["required"]) <= result.keys()
+        assert result["status"] in result_schema["properties"]["status"]["enum"]
+        assert set(result["settled"]) <= set(names)
+        assert set(result["settled"].values()) <= {"not_mine", "no_referent"}
+        assert set(result["required_channels"]) <= possible_channels
+        assert result["reroute_to"] in {"", *HANDS}
+        for transform in result["transforms"]:
+            assert set(transform_schema["required"]) <= transform.keys()
+            assert names.count(transform["item"]) == 1
+            assert transform["patch"] and set(transform["patch"]) <= granted
+    assert not PRIVATE_FIELDS & set(_all_keys(example))
+    assert not PRIVATE_FIELDS & set(_all_keys(payload))
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
-def test_the_forwarding_block_starts_its_own_paragraph(language):
-    """The 2026-09-01 splice, pinned in the form that survives translation.
-
-    The en test above catches a re-splice by equality only if it happens to
-    ONE sheet; a paste into all six would pass it. This asks the structural
-    question instead: the omit rule and the forwarding note are two
-    paragraphs, and neither may open inside the other's sentence.
-    """
-    opener = ("WHEN AN EVENT IS NOT YOURS" if language == "en"
-              else "イベントがあなたの")
-    for hand in HANDS:
-        paragraphs = _paragraphs(_core(language, hand))
-        starts = [p for p in paragraphs if p.startswith(opener)]
-        assert len(starts) == 1, (
-            f"{language}/{hand}: the forwarding note must begin exactly one "
-            f"paragraph (found {len(starts)})")
-        mid = [p for p in paragraphs
-               if opener in p and not p.startswith(opener)]
-        assert not mid, (
-            f"{language}/{hand}: the forwarding note is spliced into the "
-            "middle of another paragraph")
-
-
-@pytest.mark.parametrize("language", LANGUAGES)
-def test_the_omit_rule_kept_its_object(language):
-    """The other half of the splice: the sentence it cut in half.
-
-    'Omit resolved_events entirely when you were given no numbered events.'
-    lost its last word to the splice in en, and in ja -- translated from the
-    already-spliced English -- lost it before the sentence was ever written.
-    A rule whose object is missing is a rule about nothing, and the orphan
-    ('events.', 'イベント。') read as the opening of the paragraph after it.
-    """
-    needle = ("no numbered events." if language == "en" else "番号付きイベント")
-    orphan = re.compile(r"^(events|イベント(です)?)[.。]")
-    for hand in HANDS:
-        paragraphs = _paragraphs(_core(language, hand))
-        assert any(needle in p for p in paragraphs), (
-            f"{language}/{hand}: the omit rule has lost its object")
-        stranded = [p[:24] for p in paragraphs if orphan.match(p)]
-        assert not stranded, (
-            f"{language}/{hand}: a paragraph opens on the orphaned object of "
-            f"another paragraph's sentence: {stranded}")
-
-
-#: Channel stems the shared contract may say anyway, with the reason. The
-#: payload's room INDEX is what a subject is named from -- every hand gets one
-#: and no hand owns it -- so it is not the `rooms` channel wearing the same
-#: word. Anything else on this list should be argued for in the same commit.
-STEM_EXEMPT = {"room"}
-
-
-def _channel_stems() -> set[str]:
-    """`SPECIALISTS` is a closed set the engine owns, so it can be enumerated
-    -- the case CLAUDE.md exempts from its no-word-lists rule."""
-    return {c[:-1] if c.endswith("s") and not c.endswith("ss") else c
-            for spec in SPECIALISTS.values() for c in spec["channels"]}
-
-
-def test_no_core_illustrates_the_closest_channel_with_one_hands_channels():
-    """The second 2026-09-01 defect, stated as the rule it broke.
-
-    'the closest channel you own' was illustrated with body's own three --
-    'a visible bodily manifestation onto the surface it marks, an impairment
-    as a condition, a spent reserve as a vital' -- in all six sheets. A hand
-    cannot encode into a channel it was given no block for, so five sheets
-    taught the rule with the one example that contradicted it. The general
-    form, which is what this asserts: the core is read by every hand, so it
-    may name NO hand's channel; the channel blocks appended after it are
-    where a channel is named and the only place a hand is told it owns one.
-
-    Singular as well as plural, because that is the form an example takes:
-    on the pre-fix text this catches 'condition' and 'vital' (not 'overlay',
-    which was spelt out in prose) -- two of three is a failure. English only:
-    the ja cores carry these ideas as Japanese prose, so a token scan there
-    would prove nothing and quietly pass.
-    """
-    stems = sorted(_channel_stems() - STEM_EXEMPT)
-    for hand in HANDS:
-        shared = "\n\n".join(_paragraphs(_core("en", hand))[-SHARED_TAIL:])
-        named = [s for s in stems if re.search(rf"\b{s}s?\b", shared)]
-        assert not named, (
-            f"en/{hand}: the shared contract names the channel(s) {named}, "
-            "which the other hands have no block for. State the class the "
-            "channels are instances of, or move the sentence into the "
-            "channel's own chunk.")
-
-
-@pytest.mark.parametrize("language", LANGUAGES)
-def test_the_referent_rule_separates_naming_from_existence(language):
-    """A THING THAT DOES NOT EXIST YET IS NOT A THING YOU COULD NOT NAME.
-
-    "NEVER INVENT A REFERENT" is right about naming and was read as a rule
-    about existence: a hand asked to record something the world has never
-    held answered `structural blocker` and encoded nothing, which is the one
-    answer that guarantees the record stays missing. Its own stated reason
-    -- an invented record becomes a SECOND COPY of a thing that already
-    exists -- does not reach a thing the indexes have never held.
-
-    Measured, descent chat 117 turn 13: a pry bar the player had carried
-    through four beats of prose was in no index because nothing had ever
-    minted it. The manifest's "wedges the steel pry bar into the seam"
-    reached the contact hand, which correctly declined (a held tool is not a
-    body part), and the engine rerouted it to the objects hand -- the one
-    hand whose `entities` channel can bring a record into being. It answered
-    `structural blocker: referents 'plant_room_door' and 'pry_bar' not in
-    entity index` and encoded nothing, so the beat committed with the
-    player's declared act in the prose and in no channel. The same beat run
-    twice gave both answers, which is what an ambiguous rule looks like.
-    """
-    needle = ("NOT FOR A THING THAT DOES NOT YET EXIST"
-              if language == "en" else "まだ存在しないもののこと")
-    for hand in HANDS:
-        assert needle in _core(language, hand), (
-            f"{language}/{hand}: the referent rule no longer separates "
-            "naming a thing from a thing existing, so the only hand that "
-            "can mint a record is told to block instead")
+@pytest.mark.parametrize("hand", ("body", "contact", "objects", "spatial"))
+def test_physical_example_accounts_for_each_item_without_duplicate_relations(language, hand):
+    _, names, example = _example(language, hand)
+    ledger, _, scene = _example_context(hand, names)
+    result = example["results"][0]
+    covered, operations = set(), []
+    for transform in result["transforms"]:
+        item_id = names.index(transform["item"]) + 1
+        touched = director._transform_covered_items(
+            ledger, {**transform, "item_id": item_id}, scene)
+        assert item_id in touched, "patch writes a different existing object"
+        covered.update(touched)
+        for channel in ("inventory_ops", "contact_ops"):
+            operations.extend(json.dumps([channel, op], sort_keys=True)
+                              for op in transform["patch"].get(channel, []))
+    assert len(operations) == len(set(operations)), "relation duplicated per endpoint"
+    uncovered = {name for item, name in zip(ledger["item_ids"], names)
+                 if item not in covered}
+    assert set(result["settled"]) == uncovered
+    assert all(verdict == "not_mine" for verdict in result["settled"].values())

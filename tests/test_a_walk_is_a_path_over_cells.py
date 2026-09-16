@@ -8,7 +8,7 @@ room's, advanced by a budget of paces (the owner, 2026-09-15: bodies do not
 have to land at anchors).
 """
 from world.spatial import (blocked_cells, cell_path, door_cell, entry_cell,
-                           inside_the_door, paces_for, walk)
+                           held_cells, inside_the_door, paces_for, walk)
 
 
 def _scene():
@@ -85,3 +85,97 @@ def test_paces_follow_the_beats_seconds_at_the_owners_pace():
     assert paces_for(None) == paces_for(10) == 18
     assert paces_for(0.1) == 1
     assert paces_for("nonsense") == paces_for(10)
+
+
+def test_positioned_things_do_not_become_bodies_in_a_doorway():
+    sc = _scene()
+    door = door_cell(sc, "hall", "parlour")
+    for key, kind in (("shelf", "fixture"), ("tin", "object")):
+        sc["entities"][key] = {"name": key, "kind": kind}
+        sc["positions"][key] = "hall"
+        sc["stations"][key] = {"cell": list(door)}
+    assert door not in held_cells(sc, "hall", "Ada")
+    assert walk(sc, "Ada", "parlour", paces=40)["arrived"]
+    # Their existence does not disable the separate fixture footprint floor.
+    assert blocked_cells(sc, "hall")
+
+
+def test_actual_body_and_unpromoted_charter_projection_still_hold_doorways():
+    from world.charter_place import scene_with_charter_bodies
+
+    for entity in (None, {"name": "Keeper", "kind": "person"},
+                   {"name": "Keeper", "kind": "creature"}):
+        sc = _scene()
+        door = door_cell(sc, "hall", "parlour")
+        if entity:
+            sc["entities"]["Keeper"] = entity
+        sc["positions"]["Keeper"] = "hall"
+        sc["stations"]["Keeper"] = {"cell": list(door)}
+        result = walk(sc, "Ada", "parlour", paces=40)
+        assert not result["arrived"] and result["held_by"] == "doorway"
+
+    sc = _scene()
+    door = door_cell(sc, "hall", "parlour")
+    projected = scene_with_charter_bodies(sc, {"charter:watch:keeper": {
+        "key": "Keeper", "room": "hall", "station": {"cell": list(door)},
+    }})
+    assert "Keeper" not in sc["positions"]
+    assert door in held_cells(projected, "hall", "Ada")
+    assert walk(projected, "Ada", "parlour", paces=40)["held_by"] == "doorway"
+
+
+def test_juns_causal_arrival_is_not_rewound_by_the_shelfs_standing_cell():
+    """Reduced live Jun capture: the final shelf station occupies the door.
+
+    Resolve walks the declared arrival against the composed route world;
+    the shelf itself must not be mistaken for a person blocking that walk.
+    """
+    from copy import deepcopy
+    from types import SimpleNamespace
+
+    from agents.director import walk_declared
+    from world.causal_program import fold_steps
+    from world.spatial import merge_scene_with_diff
+
+    scene = {
+        "rooms": {
+            "potting": {"size": "small", "adjacent": [
+                {"to": "glasshouse", "barrier": "open_door", "dir": "e"}],
+                "anchors": {"worktop": {"desc": "Stone worktop"},
+                            "shelf": {"desc": "Seed shelf"}}},
+            "glasshouse": {"size": "small", "adjacent": [
+                {"to": "potting", "barrier": "open_door", "dir": "w"}]},
+        },
+        "entities": {"shelf": {"kind": "fixture", "name": "Seed shelf"},
+                     "worktop": {"kind": "fixture", "name": "Stone worktop"}},
+        "positions": {"Ada": "potting", "Jun": "potting",
+                      "shelf": "potting", "worktop": "potting"},
+        "stations": {name: {"at": "worktop", "near": []}
+                     for name in ("Ada", "Jun", "worktop")},
+    }
+    scene["stations"]["shelf"] = {"at": "shelf", "near": []}
+    steps = [
+        {"stage": "interpret", "chrono_id": 11, "patch": {"stations": {
+            "Jun": {"at": "shelf", "near": ["shelf"]},
+            "shelf": {"at": "shelf", "near": ["Jun"]}}}},
+        {"stage": "interpret", "chrono_id": 13, "patch": {
+            "positions": {"Jun": "glasshouse"},
+            "stations": {"Jun": {"at": None, "near": []}}}},
+        {"stage": "interpret", "chrono_id": 15, "patch": {"stations": {
+            "Ada": {"at": "shelf", "near": []},
+            "shelf": {"at": "shelf", "near": ["Ada"]}}}},
+    ]
+    diff = fold_steps(steps)
+    diff["causal_steps"] = deepcopy(steps)
+    route_scene = merge_scene_with_diff(scene, diff)
+    from world.spatial import body_cell
+    assert body_cell(route_scene, "shelf") == door_cell(
+        route_scene, "potting", "glasshouse")
+    warnings = []
+    ctx = SimpleNamespace(chat={"id": 0}, add_warning=warnings.append)
+    out = {}
+    result = walk_declared(ctx, scene, route_scene, diff, out, "Jun",
+                           {"to_room": "glasshouse", "arrives": True}, "potting")
+    assert result["arrived"]
+    assert diff["positions"]["Jun"] == "glasshouse"
+    assert not warnings

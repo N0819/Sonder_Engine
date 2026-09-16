@@ -20,7 +20,9 @@ No story nouns: rooms are room ids, bodies are bodies, things are things.
 """
 
 from agents.director import _evidence_present, _unplaced_minted_entities
+import pytest
 from world.spatial import (
+    containment_conceals,
     hiding_holders_of,
     merge_scene_with_diff,
     resolve_placement_target,
@@ -117,6 +119,65 @@ def test_a_destination_that_is_a_body_writes_a_carrier_relation():
     merged = merge_scene_with_diff(scene(), sd)
     assert (merged.get("contained") or {}).get(THING, {}).get("in") == BODY
     assert room_of(merged, THING) == room_of(merged, BODY)
+
+
+@pytest.mark.parametrize("relation", ["inside", "container", "pocket"])
+def test_explicit_transfer_into_a_portable_container_follows_and_conceals(relation):
+    """A live needle-to-pouch transfer placed the needle on the room floor:
+    the pouch was treated as an anchor even though the op explicitly put the
+    needle inside it. Both objects must follow the pouch's bearer."""
+    sc = scene()
+    sc["entities"] = {
+        **mint()["entities"],
+        "pouch": {"name": "Leather pouch", "kind": "container",
+                  "container": True, "portable": True},
+    }
+    sc["positions"].update({"pouch": "room_a", THING: "room_a", OTHER: "room_a"})
+    sc["contained"] = {"pouch": {"in": BODY, "mode": "held"},
+                       THING: {"in": BODY, "mode": "held"}}
+    merged = merge_scene_with_diff(sc, {"inventory_ops": [
+        op(op="transfer", from_id=BODY, to_id="Leather pouch", relation=relation)]})
+    assert merged["contained"][THING] == {"in": "pouch", "mode": relation}
+    assert containment_conceals(merged, OTHER, THING)
+    assert set(merged["rooms"]) == {"room_a", "room_b"}
+
+    moved = merge_scene_with_diff(merged, {"positions": {BODY: "room_b"}})
+    assert room_of(moved, THING) == room_of(moved, "pouch") == "room_b"
+    assert moved["contained"][THING]["in"] == "pouch"
+
+
+@pytest.mark.parametrize("relation", [None, "on", "held"])
+def test_container_destination_without_an_enclosure_relation_is_still_a_setdown(relation):
+    sc = scene()
+    sc["entities"] = {**mint()["entities"], "pouch": {
+        "name": "pouch", "kind": "container", "container": True, "portable": True}}
+    sc["positions"].update({"pouch": "room_a", THING: "room_a"})
+    sc["contained"] = {THING: {"in": BODY, "mode": "held"}}
+    merged = merge_scene_with_diff(sc, {"inventory_ops": [op(to_id="pouch", relation=relation)]})
+    assert THING not in merged["contained"]
+    assert room_of(merged, THING) == "room_a"
+
+
+def test_inside_relation_needs_an_explicit_container_record():
+    sc = scene()
+    sc["entities"] = {**mint()["entities"], "surface": {
+        "name": "container-shaped surface", "kind": "container", "portable": True}}
+    sc["positions"].update({"surface": "room_a", THING: "room_a"})
+    merged = merge_scene_with_diff(sc, {"inventory_ops": [op(to_id="surface", relation="inside")]})
+    assert THING not in merged["contained"]
+
+
+def test_explicit_containment_still_outranks_a_container_transfer():
+    sc = scene()
+    sc["entities"] = {**mint()["entities"], "pouch": {
+        "name": "pouch", "kind": "container", "container": True, "portable": True}}
+    sc["positions"].update({"pouch": "room_a", THING: "room_a"})
+    merged = merge_scene_with_diff(sc, {
+        "inventory_ops": [op(to_id="pouch", relation="inside")],
+        "containment": {THING: {"in": OTHER, "mode": "held"}},
+    })
+    assert merged["contained"][THING] == {"in": OTHER, "mode": "held"}
+    assert room_of(merged, THING) == "room_b"
 
 
 def test_body_ness_is_derived_from_evidence_not_from_a_kind_label():

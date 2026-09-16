@@ -170,9 +170,10 @@ def test_the_output_template_names_every_field_the_stage_owns(step):
 @pytest.mark.parametrize("step", SHEET_STAGES)
 def test_every_specialist_publishes_the_transform_envelope(step):
     sheet = DEFAULT_PROMPTS[step]
-    for name in ("results", "transforms", "patch", "status", "notes"):
+    for name in ("results", "transforms", "patch", "status", "notes", "required_channels"):
         assert _names(sheet, name), f"{step} does not publish {name}"
-    assert "Do not emit item_id or chrono_id" in sheet
+    assert "item_id" not in sheet and "chrono_id" not in sheet
+    assert "same array position" in sheet
 
 
 def test_the_unpublished_ledger_has_no_stale_entries():

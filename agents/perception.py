@@ -692,6 +692,66 @@ def _settled_character_result(ctx, character_id):
     ) or {}
 
 
+def _restrict_causal_concealment(event, source):
+    """Preserve both exclusions; an empty concealed audience excludes all."""
+    hidden = [row for row in (event, source) if row.get("visibility") == "concealed"]
+    if hidden:
+        audience = [] if any(not row.get("conceal_from") for row in hidden) else list(
+            dict.fromkeys(value for row in hidden for value in row["conceal_from"]))
+        event.update(visibility="concealed", conceal_from=audience)
+
+
+def _causal_outcome_sequences(ctx, interp, res, player_name, sequences, cast_names):
+    """Use resolved causal spans without turning their accounts into percepts.
+
+    A declaration may resolve into several events, all citing the same input.
+    Keep each span's own outward surface and private time coordinate, while
+    carrying the declaration's concealment and causal-floor restrictions.
+    """
+    from .director_evidence import beat_timeline, declared_elements
+    declarations = [{"sequence": sequence} for _, sequence, _ in sequences]
+    declared = declared_elements(interp, declarations)
+    identities = {f"character:{key}": name for key, name in cast_names.items()}
+    identities["persona:primary"] = player_name
+    chat = ctx.get("chat") or {}
+    if chat.get("persona_id") is not None:
+        identities[f"persona:{chat['persona_id']}"] = player_name
+    players = {str(player_name).casefold()}
+    for player in ctx.extra_players:
+        name = player.get("name") or "Player"
+        identities[f"persona:{player['persona_id']}"] = name
+        players.add(str(name).casefold())
+    owner = {str(event.get("event_id")): actor
+             for actor, sequence, _ in sequences for event in sequence
+             if isinstance(event, dict) and event.get("event_id")}
+    result = []
+    for row in beat_timeline(res, interp, declarations, identity_index=identities):
+        event = dict(row["element"])
+        source_id = str(event.get("from_declaration") or "")
+        source = declared.get(source_id) or event
+        if not sequence_event_allowed(source, res) or not sequence_event_allowed(event, res):
+            continue
+        actor = str(row.get("actor") or owner.get(source_id) or "")
+        if actor.startswith(("persona:", "character:")) and source_id in owner:
+            actor = owner[source_id]
+        for field in ("phase", "phase_id", "depends_on", "participants",
+                      "requires_contacts", "referents"):
+            if field in source:
+                event.setdefault(field, source[field])
+        _restrict_causal_concealment(event, source)
+        # The Director may split an action, but cannot give an entirely
+        # private declaration an outward surface that it never had.
+        if source.get("type") == "action" and source.get("observable") == "":
+            event["observable"] = ""
+        stage, span = row["event_key"]
+        event["_causal_span"] = (stage, span)
+        event["_ledger_citation"] = row.get("citation") or ""
+        event["_causal_resolved"] = stage == "resolve"
+        event["event_id"] = f"{stage}:{span}"
+        result.append((actor, [event], actor.casefold() in players))
+    return result
+
+
 def _outcome_event_stream(ctx, scene, interp, res, player_name,
                           dialogue, background_beats):
     """One causally ordered speech/action stream for outcome perception.
@@ -702,6 +762,10 @@ def _outcome_event_stream(ctx, scene, interp, res, player_name,
     declarations carry the original interleaving.  Bind each declared speech
     element back to its exact dialogue row, keep each observable action beside
     it, then append only genuinely unbound dialogue/background events.
+
+    Current causal output supplies the resolved spans instead of the original
+    declarations, which may each contain several events. Their individual
+    outward forms and before-span worlds survive that decomposition.
 
     This is deliberately still pre-perceiver.  Concealment, sight, hearing,
     containment and identity remain per-observer decisions in the loop that
@@ -744,6 +808,8 @@ def _outcome_event_stream(ctx, scene, interp, res, player_name,
                 represented_ids.add(char_id)
             actor = (round_data.get("reactor") or round_data.get("speaker")
                      or cast_names.get(char_id))
+            if actor and char_id is not None:
+                cast_names.setdefault(char_id, str(actor))
             result = round_data.get("result") or {}
             if actor and isinstance(result, dict):
                 sequences.append((str(actor), result.get("sequence") or [],
@@ -771,6 +837,13 @@ def _outcome_event_stream(ctx, scene, interp, res, player_name,
         if isinstance(figure, dict) and figure.get("sequence"):
             sequences.append((str(figure.get("name") or ""),
                               figure["sequence"], False))
+
+    declaration_sequences = sequences
+    causal = any((output or {}).get("ledgers") or (output or {}).get("causal_ledger")
+                 for output in (interp, res))
+    if causal:
+        sequences = _causal_outcome_sequences(
+            ctx, interp, res, player_name, sequences, cast_names)
 
     def _same_speaker(actual, declared, is_player):
         if (is_player
@@ -811,7 +884,7 @@ def _outcome_event_stream(ctx, scene, interp, res, player_name,
             # real phase id is carried -- `event_key` falls back to a JSON
             # blob for an element that has none, and a blob is a dedup key,
             # not an identity the world could ever name.
-            declared_id = str(event.get("event_id") or "").strip()
+            declared_id = str(event.get("_ledger_citation", event.get("event_id")) or "").strip()
             if event.get("type") == "speech" and event.get("text"):
                 wanted = _quote_body(str(event.get("text") or "")).strip()
                 match = next((
@@ -823,25 +896,33 @@ def _outcome_event_stream(ctx, scene, interp, res, player_name,
                 ), None)
                 if match is not None:
                     used_dialogue.add(match)
+                    line = dialogue[match]
+                    if causal:
+                        line = dict(line)
+                        _restrict_causal_concealment(line, event)
                     destination.append({"kind": "speech",
                                         "declared": declared_id,
+                                        "causal_span": event.get("_causal_span"),
                                         "deferred": _deferred,
-                                        "entry": dialogue[match]})
+                                        "entry": line})
             elif (event.get("type") == "communication"
                   and communication_surface(event)):
                 destination.append({
                     "kind": "communication", "actor": actor,
                     "declared": declared_id, "deferred": _deferred,
+                    "causal_span": event.get("_causal_span"),
                     "entry": {**event, "speaker": actor},
                 })
             elif (event.get("type") == "action"
                   and event.get("visibility") != "concealed"):
                 surface = (adjudicated_player_action_text(event, res)
-                           if is_player else observable_action_text(event))
+                           if is_player and not event.get("_causal_resolved")
+                           else observable_action_text(event))
                 if surface:
                     destination.append({
                         "kind": "action", "actor": actor,
                         "declared": declared_id, "deferred": _deferred,
+                        "causal_span": event.get("_causal_span"),
                         "attempt": surface, "event": event})
 
     # A dependent player phase occurs only after present minds had the chance
@@ -867,8 +948,10 @@ def _outcome_event_stream(ctx, scene, interp, res, player_name,
                       "visibility": "overt",
                       "event_id": "background:%s" % beat["name"]},
         })
-    stream.extend(_unanswered_addresses(scene, sequences, stream, res))
-    return _world_ordered_stream(scene, ctx, stream)
+    stream.extend(_unanswered_addresses(scene, declaration_sequences, stream, res))
+    # Causal spans already use the same chronology as the world's writer.
+    # Reordering by a shared declaration id would collapse that chronology.
+    return stream if causal else _world_ordered_stream(scene, ctx, stream)
 
 
 def _world_ordered_stream(scene, ctx, stream):
@@ -2574,7 +2657,8 @@ def perception_act(ctx, nonce):
     # it on a copy so pass 1 carries each participant's bodily endpoint while
     # leaving persistence solely to director_resolve/commit. No ageing here:
     # the durable merge will apply this beat exactly once.
-    if interp.get("contact_assertions"):
+    if interp.get("contact_assertions") and not (
+            interp.get("state_assertions") or {}).get("causal_steps"):
         sc = apply_contact_ops(
             copy.deepcopy(sc), interp.get("contact_assertions"), _age=False)
     pers = persona_of(chat)
@@ -2599,10 +2683,12 @@ def perception_act(ctx, nonce):
     # onto the scene: the room half of the walk this beat may contain (PA1).
     p_room_at_start = room_of(sc, p_name)
     origin_sc = sc          # the beat's opening scene: where every act began
+    onset_worlds = []
     sc = preview_player_state_assertions(
         sc, (interp.get("onset_state_assertions")
              if interp.get("onset_state_assertions") is not None
-             else interp.get("state_assertions")), ctx, p_name)
+             else interp.get("state_assertions")), ctx, p_name,
+        causal_worlds=onset_worlds)
     # RESOLVED AGAINST THE SCENE THE VIEWS ARE BUILT FROM, which is this one:
     # the preview above is what puts a declared step into the next room into
     # `sc`, and a room resolved before it grades every observer's channel to
@@ -2781,7 +2867,8 @@ def perception_act(ctx, nonce):
         ctx, sc, interp, perceivers, known, p_name, p_visible,
         p_disguise_known, p_disguise_conceals, p_disguise_terms, co_present,
         amap, speech_elems, action, onset_legs, p_room=p_room,
-        origin_sc=origin_sc, origin_room=p_room_at_start), ctx)
+        origin_sc=origin_sc, origin_room=p_room_at_start,
+        causal_worlds=onset_worlds), ctx)
 
 def _touch_only_sources(scene, perceiver_name, spatial_to_sources,
                         visual_channel_to_sources):
@@ -5189,8 +5276,21 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                         p_disguise_known, p_disguise_conceals,
                         p_disguise_terms, co_present, amap, speech_elems,
                         action, onset_legs=(), *, p_room, origin_sc=None,
-                        origin_room=None):
+                        origin_room=None, causal_worlds=()):
     onset_sequence = sequence_onset_elements(interp.get("sequence") or [])
+    actor_names = {f"character:{c['id']}": character_name_from_text(c["sheet"])
+                   for c in ctx.cast}
+    actor_names.update({f"persona:{p['persona_id']}": p.get("name") or "Player"
+                        for p in ctx.extra_players})
+    actor_names["persona:primary"] = p_name
+    if ctx.chat.get("persona_id") is not None:
+        actor_names[f"persona:{ctx.chat['persona_id']}"] = p_name
+    from world.causal_program import event_worlds
+    causal_moments = event_worlds(causal_worlds,
+                                 [{"event": event} for event in onset_sequence])
+    from world.causal_completion import event_execution_statuses
+    execution_statuses = event_execution_statuses(
+        causal_worlds, [{"event": event} for event in onset_sequence], action=True)
     # WHERE EACH ONSET EVENT HAPPENED. The stage resolves the player's room
     # ONCE against the previewed scene, so `p_room` is where the beat LEAVES
     # her; every event was graded there, and the lamp she took off the
@@ -5225,6 +5325,8 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
     def _event_room(idx):
         """The room an onset event happened in, or None when the beat
         cannot say (no move, or a move with no element to pin it to)."""
+        if idx in causal_moments:
+            return room_of(causal_moments[idx], p_name)
         if not _moved or _cut_index is None:
             return None
         return _beat_origin if idx < _cut_index else _beat_dest
@@ -5287,6 +5389,10 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
     all_bodies = [b for b in co_present if b.get("name") != p_name]
     all_bodies.append(actor_body)
     bodies_by_name = {b["name"]: b for b in all_bodies if b.get("name")}
+    onset_appearances = {key: body.get("appearance") or ""
+                         for key, body in bodies_by_name.items()}
+    onset_aliases = {key: body.get("aliases") or []
+                    for key, body in bodies_by_name.items()}
     joint_labels = _joint_stranger_labels(all_bodies)
     # Every body this beat could NAME, and every spelling prose reaches for
     # it by -- the input `_act_surface_admission` (PX5) reads to decide
@@ -5374,7 +5480,8 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                 name, known, roster, bodies_by_name)
             continuity = bool(rel.get("open_group_continuity"))
 
-            def _spoken_from(room, _p=p, _name=name, _rel=rel, _vis=vis):
+            def _spoken_from(room, idx=None, actor=p_name,
+                             _p=p, _name=name, _rel=rel, _vis=vis):
                 """(relation, can_see) for a line said in ``room``.
 
                 One relation per observer per room, built the way the
@@ -5391,6 +5498,17 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                 moved the actor, the origin's sight is graded on the scene
                 the beat opened with.
                 """
+                if idx in causal_moments or actor != p_name:
+                    then = causal_moments.get(idx, sc)
+                    observer_room = room_of(then, _name) or _p.get("room")
+                    alt = spatial_rel_between(
+                        then, _name, actor, observer_room=observer_room,
+                        target_room=room_of(then, actor),
+                        sound=_sound_field_for(ctx, then, _name, observer_room,
+                                               events=act_sounds))
+                    alt_vis = _sight_reaches(then, _name, actor,
+                                             _p.get("sense_card"), rel=alt)
+                    return alt, _in_plain_view(alt, alt_vis)
                 if room == actor_body.get("room") or not room:
                     return _rel, _in_plain_view(_rel, _vis)
                 if (_moved and room == _beat_origin
@@ -5427,15 +5545,33 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
             for idx, event in enumerate(onset_sequence):
                 if not isinstance(event, dict):
                     continue
+                if event.get("type") != "speech" and execution_statuses.get(idx) == "unresolved":
+                    # Keep the event in the audit ledger, but never render a
+                    # known unexecuted effect as an accomplished outward act.
+                    continue
+                actor_ref = str(event.get("actor") or event.get("source_entity_id") or "")
+                event_actor = actor_names.get(actor_ref) or actor_ref or p_name
+                if _is_the_observer(sc, event_actor, name):
+                    continue
+                event_scene = causal_moments.get(idx, sc)
+                event_observer_room = room_of(event_scene, name) or p.get("room")
+                event_proximity = (measured_proximity_rel(event_scene, name, event_actor)
+                                   if idx in causal_moments or event_actor != p_name
+                                   else p.get("proximity_to_actor"))
+                event_display = display if event_actor == p_name else _attributed_label(
+                    event_actor, name, recognized=recognized, display_map=display_map,
+                    bodies_by_name=bodies_by_name,
+                    can_see=_spoken_from(None, idx, event_actor)[1], unseen="a voice",
+                    appearances=onset_appearances, cast_aliases=onset_aliases)
                 if event.get("type") == "speech":
                     said_rel, said_seen = _spoken_from(
                         _event_room(idx) or _speech_room_for(
-                            sc, event, arrival_room, actor_body.get("room")))
-                    speech_rel = said_rel if continuity else {
+                            sc, event, arrival_room, actor_body.get("room")), idx, event_actor)
+                    speech_rel = said_rel if continuity and event_actor == p_name else {
                         **said_rel, "open_group_continuity": False}
                     speech_rel = _with_comm_channel(
-                        sc, speech_rel, speaker=p_name, observer=name,
-                        observer_room=p.get("room"))
+                        event_scene, speech_rel, speaker=event_actor, observer=name,
+                        observer_room=event_observer_room)
                     # LOUD ENOUGH FOR THE ONE ADDRESSED, AT ONSET TOO. The
                     # addressee is on the interpret's own span (its
                     # `intended_target`/`targets`), so the level is solved
@@ -5449,12 +5585,12 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                     if onset_volume.strip().casefold() == "pitched":
                         from world.spatial import pitched_level_db, word_for_level
                         onset_level = pitched_level_db(
-                            sc, p_name, _addressee_name(
+                            event_scene, event_actor, _addressee_name(
                                 ctx, event.get("intended_target")
                                 or (event.get("targets") or [None])[0]))
                         onset_volume = word_for_level(onset_level)
                     entry = {
-                        "speaker": p_name,
+                        "speaker": event_actor,
                         "text": event.get("text"),
                         "volume": onset_volume,
                         **({"level_db": onset_level} if onset_level is not None else {}),
@@ -5463,27 +5599,27 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                         "conceal_from": event.get("conceal_from") or [],
                     }
                     percept = composer.speech_percept(
-                        entry, speech_rel, name, display=display,
+                        entry, speech_rel, name, display=event_display,
                         can_see=said_seen,
-                        proximity=p.get("proximity_to_actor"),
+                        proximity=event_proximity,
                         order_key=idx, observer_id=pid,
                         senses=p.get("sense_card"),
-                        voice=_voice_register_for(ctx, p_name),
+                        voice=_voice_register_for(ctx, event_actor),
                         prev_standing=prev_standing)
                     if percept:
                         percepts.append(percept)
                 elif event.get("type") == "communication":
                     said_rel, said_seen = _spoken_from(_speech_room_for(
-                        sc, event, arrival_room, actor_body.get("room")))
-                    speech_rel = said_rel if continuity else {
+                        sc, event, arrival_room, actor_body.get("room")), idx, event_actor)
+                    speech_rel = said_rel if continuity and event_actor == p_name else {
                         **said_rel, "open_group_continuity": False}
-                    entry = {**event, "speaker": p_name}
+                    entry = {**event, "speaker": event_actor}
                     percept = composer.communication_percept(
                         entry, _with_comm_channel(
-                            sc, speech_rel, speaker=p_name, observer=name,
-                            observer_room=p.get("room")),
-                        name, display=display, can_see=said_seen,
-                        proximity=p.get("proximity_to_actor"),
+                            event_scene, speech_rel, speaker=event_actor, observer=name,
+                            observer_room=event_observer_room),
+                        name, display=event_display, can_see=said_seen,
+                        proximity=event_proximity,
                         order_key=idx, observer_id=pid,
                         senses=p.get("sense_card"))
                     if percept:
@@ -5498,10 +5634,10 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                     # rewrites the very names this reads.
                     surface, _cut = _act_surface_admission(
                         observable_action_onset_text(event),
-                        actor=p_name, observer=name,
+                        actor=event_actor, observer=name,
                         forms_by_body=forms_by_body,
                         perceived=seen_bodies,
-                        who="%s -> %s" % (p_name, name))
+                        who="%s -> %s" % (event_actor, name))
                     if _cut and not surface:
                         continue        # refusal already recorded
                     surface = _composer_scrub_surface(
@@ -5510,7 +5646,7 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                     surface = resolve_action_referents(
                         surface, event, {
                             **{key: value for key, value in display_map.items()},
-                            name: "you", p_name: display,
+                            name: "you", event_actor: event_display,
                         })
                     # WHERE THE ACT WAS MADE (`_event_room`): before the
                     # cut, where the beat found her; from it on, where it
@@ -5519,7 +5655,8 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                     # The moving element itself is the crossing: it answers
                     # to every leg, as before. Anything the order places in
                     # one room is graded in that room.
-                    anchored = act_room is not None and idx != _cut_index
+                    anchored = (idx in causal_moments or event_actor != p_name
+                                or (act_room is not None and idx != _cut_index))
                     if onset_legs and not anchored and not _channel_to_every_leg(
                             sc, None, name, p.get("room"), onset_legs,
                             p.get("sense_card")):
@@ -5530,12 +5667,12 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                             "channel did not stand in all of them"
                             % len(onset_legs))
                         continue
-                    act_rel, act_seen = (_spoken_from(act_room) if anchored
+                    act_rel, act_seen = (_spoken_from(act_room, idx, event_actor) if anchored
                                          else (rel, can_see))
                     percept = composer.act_percept(
-                        sc, event, name, p_name, act_rel, display=display,
+                        event_scene, event, name, event_actor, act_rel, display=event_display,
                         can_see=act_seen,
-                        sight=_sight_detail(sc, name, p_name, act_rel),
+                        sight=_sight_detail(event_scene, name, event_actor, act_rel),
                         self_forms=self_forms,
                         self_pronouns=p.get("pronouns"),
                         other_forms=tuple(
@@ -5850,6 +5987,13 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
     beat_events = _outcome_event_stream(
         ctx, sc, interp, res, p_name, enriched_dlog,
         _background_beats(ctx, sc))
+    from world.causal_program import event_worlds
+    _composed = ctx.get("_composed_beat")
+    causal_moments = event_worlds(
+        getattr(_composed, "causal_worlds", None), beat_events)
+    from world.causal_completion import event_execution_statuses
+    execution_statuses = event_execution_statuses(
+        getattr(_composed, "causal_worlds", None), beat_events, action=True)
 
     # WHERE EACH BODY WAS WHEN EACH EVENT HAPPENED. The stream above is
     # causally ordered and says so; until 2026-09-09 nothing downstream asked
@@ -6253,6 +6397,16 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                 ahead -- so the ordinary beat allocates nothing and every
                 downstream reader is handed exactly the object it was handed
                 before."""
+                if at_index in causal_moments:
+                    key = ("causal", at_index)
+                    cached = _as_of_scenes.get(key)
+                    if cached is None:
+                        then = causal_moments[at_index]
+                        room = room_of(then, _observer) or _p.get("room")
+                        cached = (then, room, _sound_field_for(
+                            ctx, then, _observer, room, events=beat_sounds))
+                        _as_of_scenes[key] = cached
+                    return cached
                 pending = frozenset(
                     b for b, cut in movement_cuts.items() if at_index < cut)
                 if not pending:
@@ -6281,9 +6435,9 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                 gesture as SIGHT through a shut door and two rooms, because
                 she had seen him when the beat began. Where either body
                 moved this beat, the scene at the event's moment decides."""
-                if not movement_cuts or not (
+                if at_index not in causal_moments and (not movement_cuts or not (
                         _observer in movement_cuts
-                        or counterparty in movement_cuts):
+                        or counterparty in movement_cuts)):
                     return visual.get(counterparty, False)
                 moment = _as_of(at_index)
                 then = sc if moment is None else moment[0]
@@ -6296,7 +6450,7 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
             def _channel_as_of(counterparty, at_index, _observer=name,
                                _spatial=spatial):
                 standing = _spatial.get(counterparty)
-                moment = None if standing is None else _as_of(at_index)
+                moment = _as_of(at_index)
                 if moment is None:
                     return standing, measured_proximity_rel(
                         sc, _observer, counterparty)
@@ -6310,6 +6464,10 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                     then, _observer, counterparty)
 
             for at_index, beat_event in enumerate(beat_events):
+                if beat_event.get("kind") != "speech" and execution_statuses.get(at_index) == "unresolved":
+                    continue
+                event_scene = causal_moments.get(at_index, sc)
+                event_observer_room = room_of(event_scene, name) or p.get("room")
                 if beat_event.get("kind") == "speech":
                     d = beat_event.get("entry") or {}
                     speaker = d.get("speaker", "?")
@@ -6344,7 +6502,8 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                             # (tests/test_background_presence_channels.py).
                             sp_room = (
                                 room_of(_then, speaker)
-                                if _moment is not None and speaker in movement_cuts
+                                if _moment is not None and (speaker in movement_cuts
+                                                           or at_index in causal_moments)
                                 else (d.get("speaker_room")
                                       or room_of(_then, speaker)))
                             # ONE BEAT, ONE FIELD. This fallback used to omit
@@ -6371,9 +6530,11 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                         cast_aliases=cast_aliases)
                     percept = composer.speech_percept(
                         d, _with_comm_channel(
-                            sc, rel, speaker=speaker, observer=name,
-                            observer_room=p.get("room"),
-                            speaker_room=d.get("speaker_room")),
+                            event_scene, rel, speaker=speaker, observer=name,
+                            observer_room=event_observer_room,
+                            speaker_room=(room_of(event_scene, speaker)
+                                          if at_index in causal_moments
+                                          else d.get("speaker_room"))),
                         name, display=display, can_see=can_see,
                         proximity=_prox,
                         order_key=order, observer_id=pid,
@@ -6436,8 +6597,8 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                         cast_aliases=cast_aliases)
                     percept = composer.communication_percept(
                         entry, _with_comm_channel(
-                            sc, rel, speaker=actor, observer=name,
-                            observer_room=p.get("room")),
+                            event_scene, rel, speaker=actor, observer=name,
+                            observer_room=event_observer_room),
                         name, display=display, can_see=can_see,
                         proximity=_prox,
                         order_key=order, observer_id=pid,
@@ -6466,7 +6627,7 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                 # for the rear arc was dead on every outcome beat.
                 can_see = _in_plain_view(rel, _sight_as_of(actor, at_index))
                 legs = _legs_of_actor(sc, crossed_legs, actor)
-                if legs and not _channel_to_every_leg(
+                if at_index not in causal_moments and legs and not _channel_to_every_leg(
                         sc, prev_scene, name, p.get("room"), legs,
                         p.get("sense_card")):
                     note_step_decision(
@@ -6498,9 +6659,9 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                         name: "you", actor: display,
                     })
                 percept = composer.act_percept(
-                    sc, act.get("event") or {}, name, actor, rel,
+                    event_scene, act.get("event") or {}, name, actor, rel,
                     display=display, can_see=can_see,
-                    sight=_sight_detail(sc, name, actor, rel),
+                    sight=_sight_detail(event_scene, name, actor, rel),
                     self_forms=self_forms,
                     self_pronouns=p.get("pronouns"),
                     other_forms=tuple(

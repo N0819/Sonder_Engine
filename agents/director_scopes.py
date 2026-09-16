@@ -100,6 +100,9 @@ SPECIALISTS = {
         "step_key": "director_body",
         "role": "director_body",
         "channels": ("attire", "conditions", "vitals", "overlays"),
+        # Surface appearance is part of every body job, not a category the
+        # Director must remember to request separately.
+        "default_channels": ("overlays",),
     },
     "social": {
         "step_key": "director_social",
@@ -113,10 +116,10 @@ SPECIALISTS = {
         "channels": ("cast_changes", "introductions", "world_facts",
                      "public_evidence", "crowd_ops", "courier_ops",
                      "telling_ops", "ratified_claims", "contradicted_claims",
-                     "charter_ops", "claim_dispositions", "consequences"),
+                     "charter_ops", "claim_dispositions", "consequences", "obligations"),
         # This channel is step metadata rather than StateDiff, so its list
         # shape cannot be derived from StateDiff's annotations below.
-        "list_channels": ("public_evidence",),
+        "list_channels": ("public_evidence", "obligations"),
     },
     "contact": {
         "step_key": "director_contact",
@@ -156,10 +159,12 @@ RETIRED_HANDS = {"offscreen": "social"}
 
 #: Channels an ACT OF SPEECH can write. Saying a thing is not a physical
 #: action, so for most channels a line of dialogue is material a hand cannot
-#: act on and can only restate; for these it is the act itself.
+#: act on and can only restate; for these it is the act itself. Objective
+#: world_facts need independent events: an assertion spoken aloud is a claim,
+#: and the causal compiler refuses to promote it into a world fact.
 SPEECH_WRITTEN_CHANNELS = frozenset((
+    "obligations",           # explicit requests, promises, answers and refusals
     "introductions",         # a name is given by being said
-    "world_facts",           # a fact can be asserted aloud
     "comms_ops",             # a line carried by a device IS the op
     "telling_ops",           # who told whom what
     "ratified_claims",       # a claim is made in speech
@@ -236,13 +241,6 @@ _CATEGORY_CHANNELS = {
     # is a change nobody is handed and nobody can encode, so it is detected
     # as an omission every beat and buys a repair from a mind that never
     # saw it -- measured live at 49.2s for two such events in one beat.
-    "overlays": "overlays",
-    # What lies ON a body without changing it -- mud, wet, blood, paint,
-    # ash -- is the channel `overlays`, a name no Director ever reached for
-    # because it names the storage, not the fact (owner, 2026-09-14). The
-    # causal sheet publishes it as `marks`; the ledger key is unchanged so
-    # every archive still reads.
-    "marks": "overlays",
     "vitals": "vitals",
     "containment": "containment",
     "scales": "scales",
@@ -250,6 +248,7 @@ _CATEGORY_CHANNELS = {
     "artifacts": "artifact_ops",
     "introductions": "introductions",
     "world_facts": "world_facts",
+    "obligations": "obligations",
 }
 
 #: The delegated channels whose value is a LIST rather than a keyed table.
@@ -350,6 +349,7 @@ _CHANNEL_GATES = {
     "cast_changes": lambda f: f["physical_beat"],
     "introductions": lambda f: f["speech_present"],
     "world_facts": lambda f: f["speech_present"] or f["physical_beat"],
+    "obligations": lambda f: f["speech_present"] or f["physical_beat"],
     # Evidence describes only a FINISHED beat.  Interpret serves the same
     # specialists but has not adjudicated attempts yet, so granting it there
     # would turn an intention into a witnessed outcome.
@@ -851,7 +851,14 @@ def note_key_targets(key):
       (`inventory`, `entity`) were category words the manifest table owns
       and the note lookup did not consult.
     """
+    from llm.schemas import CAUSAL_CATEGORY_REDIRECTS
+
     forms = _note_key_forms(key)
+    retired = {("hand", owner)
+               for category, owner in CAUSAL_CATEGORY_REDIRECTS.items()
+               if forms & _note_key_forms(category)}
+    if retired:
+        return retired
     targets = set()
     for name in SPECIALISTS:
         if forms & _note_key_forms(name):
@@ -866,6 +873,8 @@ def note_key_targets(key):
     if not targets:
         cat = str(key or "").strip().casefold()
         cat = _ling("_OMISSION_CATEGORY_ALIASES").get(cat, cat)
+        if cat in CAUSAL_CATEGORY_REDIRECTS:
+            return {("hand", CAUSAL_CATEGORY_REDIRECTS[cat])}
         channel = _CATEGORY_CHANNELS.get(cat)
         if channel:
             targets.add(("channel", channel))
@@ -1104,6 +1113,17 @@ def _unrouted_rulings(view):
     return unrouted
 
 
+def specialist_scope(name, channels):
+    """An invoked hand's granted channels, including its standing duties.
+
+    This widens a call already selected by dispatch, forwarding or repair;
+    it never selects a hand or adds completion requirements to a row.
+    """
+    spec = SPECIALISTS[name]
+    granted = set(channels or ()) | set(spec.get("default_channels") or ())
+    return [channel for channel in spec["channels"] if channel in granted]
+
+
 def _dispatch_specialists(ctx, sc, facts, view):
     """The orchestrator measuring how much of a job each specialist needs
     to do, from the Director's own ruling.
@@ -1188,6 +1208,7 @@ def _dispatch_specialists(ctx, sc, facts, view):
                       if channel_serves_stage(channel, _stage)])
             if not scope:
                 scope = kept
+            scope = specialist_scope(name, scope)
         dispatch[name] = {
             "run": bool(scope),
             "scope": scope,

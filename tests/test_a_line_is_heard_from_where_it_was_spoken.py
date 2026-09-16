@@ -278,6 +278,131 @@ def _beat(temp_db):
     return ctx
 
 
+def test_a_line_between_two_moves_uses_the_intermediate_world(temp_db):
+    from world.causality import compile_transforms
+    from world.causal_program import program_from_history
+    ctx = _beat(temp_db)
+    sequence = ctx["interaction_loop"]["rounds"][0]["result"]["sequence"]
+    sequence.append({"type": "action", "attempt": "returns to the shelf",
+                     "observable": "walks back down to the shelf",
+                     "event_id": "turn:1:character:1:3:action"})
+    transforms = [
+        {"chrono_id": 2, "item_id": 1, "patch": {"stations": {
+            "The Doctor": {"at": DUNE, "near": []}}}},
+        {"chrono_id": 4, "item_id": 1, "patch": {"stations": {
+            "The Doctor": {"at": SHELF, "near": []}}}},
+    ]
+    diff, history, rejected = compile_transforms(transforms, allowed_channels=["stations"])
+    assert not rejected
+    diff["causal_steps"] = program_from_history(history, [
+        {"chrono_id": i + 1, "event_id": row["event_id"]}
+        for i, row in enumerate(sequence)])
+    ctx.director_resolve["state_diff"] = diff
+    out = perception_outcome(ctx, "n0")
+    assert "Okinawa! Japan" in out["views"]["player"]
+    assert "But here's the thing, Hinami: kitsune." not in out["views"]["player"]
+    worlds = ctx["_composed_beat"].causal_worlds
+    assert worlds[2]["before"]["stations"]["The Doctor"]["at"] == DUNE
+
+
+def test_onset_also_reads_the_world_between_two_moves(temp_db):
+    from agents.perception import perception_act
+    from world.causality import compile_transforms
+    from world.causal_program import program_from_history
+    ctx = _beat(temp_db)
+    sequence = [
+        {"type": "action", "attempt": "walks up the beach", "observable": "walks up the beach",
+         "event_id": "player:move:1", "commitment": "asserted"},
+        {"type": "speech", "text": "Can you hear me up here?", "volume": "normal",
+         "event_id": "player:speech:2"},
+        {"type": "action", "attempt": "returns", "observable": "walks back down",
+         "event_id": "player:move:3", "commitment": "asserted"},
+    ]
+    diff, history, _ = compile_transforms([
+        {"chrono_id": 1, "item_id": 7, "patch": {"stations": {"Hinami": {"at": DUNE, "cell": [37, 10]}}}},
+        {"chrono_id": 3, "item_id": 7, "patch": {"stations": {"Hinami": {"at": SHELF, "cell": [7, 22]}}}},
+    ], allowed_channels=["stations"])
+    diff["causal_steps"] = program_from_history(history, [
+        {"chrono_id": i + 1, "event_id": row["event_id"]}
+        for i, row in enumerate(sequence)], "interpret")
+    ctx.director_interpret.update(sequence=sequence, state_assertions=diff)
+    out = perception_act(ctx, "n0")
+    other_views = [view for key, view in out["views"].items() if key != "player"]
+    assert other_views
+    assert all("Can you hear me up here?" not in view for view in other_views)
+
+
+def test_split_resolve_spans_use_their_own_world_despite_a_shared_declaration(temp_db):
+    from world.causality import compile_transforms
+    from world.causal_program import program_from_history
+    ctx = _beat(temp_db)
+    sequence = ctx["interaction_loop"]["rounds"][0]["result"]["sequence"]
+    resolved_rows = [dict(event) for event in sequence]
+    resolved_rows.append({"type": "action", "observable": "walks back to the shelf"})
+    source_id = "turn:1:character:1:whole"
+    for n, event in enumerate(resolved_rows, 1):
+        event.update(chrono_id=n, event_id=n, actor="The Doctor",
+                     from_declaration=source_id)
+    # One prose declaration contains the entire trip; resolve disassembles it.
+    sequence[:] = [{"type": "action", "event_id": source_id,
+                   "observable": "speaks, walks away, speaks again, and returns"}]
+    diff, history, _ = compile_transforms([
+        {"chrono_id": 2, "item_id": 1, "patch": {"stations": {
+            "The Doctor": {"at": DUNE, "near": []}}}},
+        {"chrono_id": 4, "item_id": 1, "patch": {"stations": {
+            "The Doctor": {"at": SHELF, "near": []}}}},
+    ], allowed_channels=["stations"])
+    diff["causal_steps"] = program_from_history(history, resolved_rows)
+    ctx.director_resolve.update(ledgers=[{}], sequence=resolved_rows, state_diff=diff)
+    out = perception_outcome(ctx, "n0")
+    assert "Okinawa! Japan" in out["views"]["player"]
+    assert "But here's the thing, Hinami: kitsune." not in out["views"]["player"]
+
+
+def test_a_gesture_between_opening_and_closing_a_door_is_seen(temp_db, monkeypatch):
+    from agents import composer
+    from tests.test_causal_program import program
+    admitted = {}
+    original = composer.act_percept
+
+    def record(scene, event, observer, actor, rel, **kwargs):
+        percept = original(scene, event, observer, actor, rel, **kwargs)
+        if observer == "Hinami":
+            admitted[event.get("event_id")] = percept
+        return percept
+
+    monkeypatch.setattr(composer, "act_percept", record)
+    ctx = _beat(temp_db)
+    rooms = {"hall": {"name": "Hall", "light": "lit", "adjacent": [
+                {"to": "study", "barrier": "closed_door"}]},
+             "study": {"name": "Study", "light": "lit", "adjacent": [
+                {"to": "hall", "barrier": "closed_door"}]}}
+    temp_db.wset(ctx.chat.id, "scene", {
+        "rooms": rooms, "positions": {"Hinami": "hall", "The Doctor": "study"},
+        "entities": {}, "stations": {}, "attire": {}})
+    sequence = [{"type": "action", "observable": text, "attempt": text,
+                 "visibility": "overt", "commitment": "asserted",
+                 "event_id": f"door:{n}"}
+                for n, text in enumerate(["opens the door", "raises two fingers", "closes the door"], 1)]
+    ctx["interaction_loop"]["rounds"][0]["result"]["sequence"] = sequence
+    ctx.character_results[int(ctx.cast[0]["id"])] = {"sequence": sequence}
+    diff = program({"rooms": {"hall": {"adjacent": [{"to": "study", "barrier": "open_door"}]}}},
+                   {},
+                   {"rooms": {"hall": {"adjacent": [{"to": "study", "barrier": "closed_door"}]}}})
+    diff["causal_steps"].insert(1, {"chrono_id": 2, "stage": "resolve", "patch": {}})
+    for n, step in enumerate(diff["causal_steps"], 1):
+        step["events"] = [f"door:{n}"]
+    ctx.director_resolve = {"resolved_event": "He briefly opens the door and signals.",
+                            "state_diff": diff, "dialogue_log": []}
+    out = perception_outcome(ctx, "n0")
+    # The distant doorway admits motion, not finger-level detail.
+    assert admitted["door:2"].channel == "sight"
+    assert admitted["door:1"] is None
+    assert "moves" in out["views"]["player"]
+    final = ctx["_composed_beat"].scene
+    assert final["rooms"]["hall"]["adjacent"][0]["barrier"] == "closed_door"
+
+
 def test_the_line_he_spoke_beside_her_reaches_her(temp_db):
     """The live failure, at the stage that produced it. Before this fix the
     player's view carried the walk and neither line."""

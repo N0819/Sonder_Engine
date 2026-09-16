@@ -20,6 +20,117 @@ _NEVER_STATIONED_KINDS = frozenset({
     "technology", "bedding", "flora", "location", "group",
 })
 
+# Exact contact manners which assert carriage. Shared with the commit's
+# bearing projection; arbitrary touch and free-text detail never qualify.
+BEARING_MANNERS = frozenset({"carry", "hold", "grip", "support"})
+
+
+def bearing_contact_holder(scene, contact, subject):
+    """The body bearing this object in a typed contact, else None."""
+    if not isinstance(contact, dict) or str(contact.get("manner") or "").strip().casefold() \
+            not in BEARING_MANNERS:
+        return None
+    if str(contact.get("relation") or "surface").strip().casefold() != "surface":
+        return None
+    actor, target = contact.get("actor"), contact.get("target")
+    for thing, holder in ((target, actor), (actor, target)):
+        if same_subject(scene, thing, subject) and holder and _is_body_entity(
+                scene, holder, _entity_named(scene, holder)):
+            return holder
+    return None
+
+
+def retire_carriage_evidence(scene, subject, *, keep_holder=None,
+                             clear_station=True):
+    """Complete an explicit transfer/re-wear across its physical ledgers.
+
+    Only structured carriage claims are retired. A hand merely touching the
+    object stays in contact, and incoming contact ops run after this pass so
+    a deliberately restated grip remains possible. The destination's grip
+    survives an ordinary handover; wearing or setting down has no free holder.
+    """
+    def keep(holder):
+        return bool(keep_holder and same_subject(scene, holder, keep_holder))
+
+    contacts = scene.get("contacts")
+    if isinstance(contacts, list):
+        scene["contacts"] = [row for row in contacts
+                             if not (holder := bearing_contact_holder(scene, row, subject))
+                             or keep(holder)]
+    for eid, entity in (scene.get("entities") or {}).items():
+        if not isinstance(entity, dict):
+            continue
+        if same_subject(scene, eid, subject):
+            holder = entity.get("held_by")
+            if holder and not keep(holder):
+                entity.pop("held_by", None)
+        state = entity.get("state")
+        if isinstance(state, dict) and same_subject(scene, eid, subject) \
+                and state.get("held_by") and not keep(state["held_by"]):
+            state.pop("held_by", None)
+        if isinstance(state, dict) and isinstance(state.get("held_items"), list) \
+                and not keep(eid):
+            state["held_items"] = [name for name in state["held_items"]
+                                   if not same_subject(scene, name, subject)]
+    poses = scene.get("poses")
+    if isinstance(poses, dict):
+        for name, pose in poses.items():
+            if not same_subject(scene, name, subject) or not isinstance(pose, dict):
+                continue
+            holder = pose.get("support")
+            if holder and _is_body_entity(scene, holder, _entity_named(scene, holder)) \
+                    and not keep(holder):
+                pose.pop("support", None)
+    if clear_station and isinstance(scene.get("stations"), dict):
+        for key in list(scene["stations"]):
+            if same_subject(scene, key, subject):
+                scene["stations"].pop(key, None)
+        # A reciprocal proximity record is the other half of a station.
+        for row in scene["stations"].values():
+            if isinstance(row, dict) and isinstance(row.get("near"), list):
+                row["near"] = [name for name in row["near"]
+                               if not same_subject(scene, name, subject)]
+
+
+def _retire_transferred_wearing(scene, subject, prior_wearer=None, keep_wearer=None):
+    """An exact entity transfer also ends its former worn placement.
+
+    A shared garment display name is insufficient evidence. Each wardrobe
+    name must resolve uniquely to the transferred entity, and either its
+    standing worn parent identifies the wearer or exactly one wardrobe does.
+    """
+    from story import attire as attire_model
+
+    eid, entity = _unique_entity_keyed(scene, subject)
+    if not eid or not isinstance(entity, dict):
+        return
+    owner = prior_wearer or (entity.get("state") or {}).get("worn_by")
+    candidates = []
+    for wearer, entry in (scene.get("attire") or {}).items():
+        if not isinstance(entry, dict) or owner and not same_subject(scene, wearer, owner):
+            continue
+        regions = attire_model.normalize_regions(entry)
+        names = [name for name in attire_model.flat_wearing(regions)
+                 if _unique_entity_keyed(scene, name)[0] == eid]
+        if names:
+            candidates.append((wearer, entry, regions, names))
+    if len(candidates) != 1:
+        return
+    wearer, entry, regions, names = candidates[0]
+    if keep_wearer and same_subject(scene, wearer, keep_wearer):
+        return
+    for region in regions.values():
+        for garment in region.get("garments") or []:
+            if garment.get("name") in names:
+                garment["state"] = "removed"
+    entry["regions"] = regions
+    entry["wearing"] = [name for name in (entry.get("wearing") or [])
+                        if name not in names]
+    scene["attire"][wearer] = attire_model.release_removed_garments(entry)
+    state = entity.setdefault("state", {})
+    state.update({"clothing": True, "shed": True, "worn_by": wearer,
+                  "garment": names[0]})
+
 
 # ---------------------------------------------------------------------------
 # SCALE -- how big each body currently is, relative to its own baseline.
@@ -1292,7 +1403,8 @@ def mint_transferred_objects(scene: dict, inventory_ops, shedding=()) -> list:
 
 def derive_inventory_placements(scene: dict, inventory_ops,
                                 *, declared=(), report=None,
-                                carriers=None) -> list:
+                                carriers=None, positions=None,
+                                stations=None) -> list:
     """Place what a transfer op moved, from the ledger the objects hand fills.
 
     THREE RULES, ALL SUBTRACTIVE:
@@ -1322,16 +1434,24 @@ def derive_inventory_placements(scene: dict, inventory_ops,
     3. A null or blank endpoint is SILENCE, never an erasure -- the standing
        `_merge_entity` doctrine. Nothing is unplaced by this pass.
 
+    An established entity with `container: true` also carries a transfer
+    whose explicit relation is `inside`, `container`, or `pocket`. This is
+    containment in the named object, never an inferred interior room. An
+    absent relation or an ordinary setdown still borrows the object's room.
+    `mounted` explicitly attaches to any established entity, independently
+    of whether it has an interior. Its contents follow the parent transitively.
+
     The `op` verb is deliberately not read at all. Where a thing ENDED UP is
     the only question here, and a verb vocabulary would reject the words the
     fiction actually reaches for (465 barrier words and 577 entity kinds
     outside their known sets, measured, are what that costs).
 
-    `declared` is the set of subject spellings a hand placed by name in this
-    beat's own diff. An explicit write always outranks a derivation, which is
+    `declared` names explicit containment writes. An explicit write always outranks a derivation, which is
     also what keeps this from re-opening the ownership race the fan-out exists
     to prevent: the spatial specialist still owns `positions` and the contact
     specialist still owns `containment`; this speaks only where they did not.
+    Compatible explicit `positions` and `stations` supplement a transfer;
+    a conflicting room refuses it rather than preserving contradictory ledgers.
 
     `report` is a list the refusal in rule 4 appends a Director-facing
     sentence to.
@@ -1373,8 +1493,6 @@ def derive_inventory_placements(scene: dict, inventory_ops,
                   str(entity.get("name") or "").strip().casefold()}
         labels |= {str(a).strip().casefold()
                    for a in (entity.get("aliases") or [])}
-        if labels & spoken_for:
-            continue          # a hand placed it by name; the derivation yields
         kind, destination = resolve_placement_target(
             scene, op.get("to_id"), carriers=carriers)
         if not kind:
@@ -1386,7 +1504,47 @@ def derive_inventory_placements(scene: dict, inventory_ops,
             continue
         subject = _placement_subject_key(scene, eid, entity)
         folded_subject = subject.strip().casefold()
-        if kind in ("carrier", "vouched"):
+        prior_record = _ci_get(scene.get("contained") or {}, subject)
+        prior_wearer = (prior_record.get("in") if isinstance(prior_record, dict)
+                        and prior_record.get("mode") == "worn" else None)
+        relation = str(op.get("relation") or "").strip().casefold()
+        if kind == "anchor" and relation == "mounted":
+            holder_id, _holder = _unique_entity_keyed(scene, destination)
+            if holder_id:
+                kind = "attachment"
+        if kind == "anchor" and relation in {"inside", "container", "pocket"}:
+            _, holder = _unique_entity_keyed(scene, destination)
+            if isinstance(holder, dict) and holder.get("container") is True:
+                kind = "container"
+        if labels & spoken_for:
+            # Explicit containment is the final authority, but a contradictory
+            # transfer is outstanding work rather than a silent acquittal.
+            record = _ci_get(scene.get("contained") or {}, subject)
+            carried = kind in ("carrier", "vouched", "container", "attachment")
+            agrees = (isinstance(record, dict)
+                      and same_subject(scene, record.get("in"), destination)
+                      and record.get("mode") == (relation or "carried")) if carried else not record
+            if not agrees:
+                if report is not None:
+                    report.append("possession: transfer of %r conflicts with this span's explicit containment; the containment was kept." % subject)
+                continue
+        expected_room = destination if kind == "room" else room_of(scene, destination)
+        if kind == "vouched" and not expected_room:
+            _, expected_room = carrier_lookup(carriers, destination)
+        stated_rooms = [value for key, value in (positions or {}).items()
+                        if same_subject(scene, key, subject)]
+        if stated_rooms and expected_room and any(value != expected_room for value in stated_rooms):
+            if report is not None:
+                report.append("possession: transfer of %r conflicts with this span's explicit room; the explicit room was kept." % subject)
+            continue
+        carried = kind in ("carrier", "vouched", "container", "attachment")
+        if carried and (same_subject(scene, destination, subject)
+                        or any(same_subject(scene, holder, subject)
+                               for holder in carrier_chain(scene, destination))):
+            if report is not None:
+                report.append("possession: transfer of %r would create a containment cycle; nothing was moved." % subject)
+            continue
+        if carried:
             if str(destination).strip().casefold() == folded_subject:
                 continue
             raw = {"in": destination, "mode": op.get("relation")}
@@ -1421,16 +1579,29 @@ def derive_inventory_placements(scene: dict, inventory_ops,
                 for key in [k for k in contained
                             if str(k).strip().casefold() == folded_subject]:
                     contained.pop(key, None)
-            positions = scene.get("positions")
-            if not isinstance(positions, dict):
-                positions = scene["positions"] = {}
-            _positions_write(positions, subject, room)
-            # DELIBERATELY NO STATION. Being set down ON a thing is a within-
-            # room fact, and `normalize_scene_stations` blanks any `at` that is
-            # not one of the room's own declared anchors -- so a station
-            # written here would be erased later in this same merge and read,
-            # from every caller, as a field nothing honours. The room is what
-            # this ledger can prove; `derive_scene_stations` owns the rest.
+            scene_positions = scene.get("positions")
+            if not isinstance(scene_positions, dict):
+                scene_positions = scene["positions"] = {}
+            _positions_write(scene_positions, subject, room)
+            # The station is established below only when the destination
+            # resolves to one of this room's declared anchors.
+        retire_carriage_evidence(
+            scene, subject,
+            keep_holder=destination if kind in ("carrier", "vouched")
+            and relation in ("", "held", "carried") else None,
+            clear_station=not any(same_subject(scene, key, subject)
+                                  for key in (stations or {})))
+        _retire_transferred_wearing(
+            scene, subject, prior_wearer,
+            destination if carried and relation == "worn" else None)
+        if kind == "anchor":
+            from world.spatial_geometry import _anchor_for_entity
+            anchor = _anchor_for_entity(scene, room, destination)
+            if not any(same_subject(scene, key, subject) for key in (stations or {})):
+                if anchor:
+                    scene.setdefault("stations", {})[subject] = {"at": anchor, "near": []}
+                elif report is not None:
+                    report.append("possession: %r reached %r's room, but its exact placement needs a station naming a room anchor." % (subject, destination))
         placed.append((subject, kind, destination))
     return placed
 
@@ -3080,4 +3251,3 @@ def containment_facts(scene: dict, observer: str, source_names) -> list:
             record = _ci_get(scene.get("contained") or {}, c) or {}
             facts.append(f"{c} is {record.get('mode') or 'carried'} by {name}.")
     return facts
-

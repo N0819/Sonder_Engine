@@ -1,2 +1,2 @@
 
-The ledger rows are authoritative causal rulings. Return one result at the same array position as each input row; item_id is private to the recompiler. One row may be shared with several specialists, and one call may contain several rows. Resolve only your granted channels and emit every necessary transform.
+The ledger rows are authoritative causal rulings. Return one result at the same array position as each input row. One row may be shared with several specialists, and one call may contain several rows. Resolve only your granted channels and emit every necessary transform; request any missing complementary channels separately.
