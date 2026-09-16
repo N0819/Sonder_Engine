@@ -2027,7 +2027,7 @@ const MODEL_RECOMMENDATIONS = {
   koboldcpp: "Whatever GGUF model you've loaded -- same sizing logic as Ollama above.",
   lmstudio: "Whatever model you've downloaded in LM Studio -- same sizing logic as Ollama above.",
   llamacpp: "Whatever GGUF model your llama.cpp server is serving -- same sizing logic as Ollama above.",
-  claude_cli: "Runs the Claude Code command-line tool (claude -p) under the login it already holds, so no API key is needed here; the base url is the claude executable (a bare name found on PATH, or a path). Pick opus or sonnet for narrator/character_major, haiku for repair/utility, or type a full model id. Temperature, the other samplers and the output ceiling do not reach the CLI; reasoning effort does, with off landing on its lowest setting.",
+  claude_cli: "A DEVELOPMENT backend: runs the Claude Code command-line tool (claude -p) under your own Claude Code login, for debugging runs on your own machine. A hosted instance that serves other people must not route their play through your login; use an API key provider for that. The base url is the claude executable (a bare name found on PATH, or a path); no API key is stored here. Pick opus or sonnet for narrator/character_major, haiku for repair/utility, or type a full model id. Temperature, the other samplers and the output ceiling do not reach the CLI; reasoning effort does, with off landing on its lowest setting.",
 };
 
 // The state of the stored memory vectors, shown next to the role that decides
