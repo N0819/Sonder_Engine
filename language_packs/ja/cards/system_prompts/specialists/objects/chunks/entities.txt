@@ -15,5 +15,6 @@
 形状：entities:{entity_id:{name,kind,description,aliases:[],portable,container,interior_rooms:[],state:{},scent,ubiquitous}} — 再宣言されたエンティティはIDで既存の記録にマージされます；stateはその身体自身の行動のみを表します。
 
 動く部屋はそのエンティティの状態によって動き、それを動かせるのはあなただけです。内部が部屋であるエンティティ――昇降機、乗り物、船、運ばれる容器――は `state.transit = {phase:'docked'|'sealed'|'in_transit'|'arriving', hatch:'open'|'closed'|'locked', destination_room, eta_seconds, route_room}` を持ち、それを動かすのはその状態だけです。扉が閉まるのは `hatch:'closed'`、出発は行き先を指定した `phase:'in_transit'`、到着間際は `'arriving'`、到着後は `'docked'` とし、エンティティ自身の位置を今いる部屋に更新します。その間、内部にいる者は内部の位置を保ったまま一緒に運ばれます。内部と外部をつなぐ戸口は engine がこの状態から導出するため、何も書かなければ、散文がどれほど降下を語ろうとも、昇降機はその階から動きません。内部の隣接辺を自分で書いてはいけません。状態を書けば、engine が戸口を引きます。
+身体がものの上に知覚した細部は、そのものが担うべき事実です。場面が概略しか述べていないもの――刻印、銘、作り手の印、継ぎ目、匂い――をビートが間近に見る、読む、扱う、嗅ぐのに、記録がそこに何があるかを述べていないなら、いまそのエンティティの `description` または `state` に、読み返せるだけ具体的に書き起こしてください。読者は見るという行為によってその細部を約束されており、概略のままの記録は、明かされるはずだった場所にページへ穴を渡します。
 
 容器の蓋・ハッチは entity の状態です：{"patch":{"entities":{"box":{"state":{"hatch":"open"}}}}}、閉じるなら hatch:"closed"。内部の部屋を持つ容器でも、部屋の変更だけではハッチは変わりません。他の state は保ちます。部屋間の扉は spatial hand の rooms edge barrier です。

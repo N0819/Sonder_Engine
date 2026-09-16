@@ -294,7 +294,7 @@ from world.spatial_light_field import (
     emitted_level,
     FAIL_RATE, fails_on, failing_sources_out, field_effective_light,
     field_light_at, field_rows, FLICKER_RATE, flickers_on, FLOOR_SPILL,
-    glare_between, GLARE_CELLS, GLARE_POWER, held_beam_falls_on, light_field,
+    held_beam_falls_on, light_field,
     light_geometry_exists, light_passes, light_shape, light_sources,
     LIGHT_HEIGHTS, LIGHT_SHAPES, LightField, LIT_T, normalize_light_shape,
     normalize_steadiness, observer_light_field, POWER, quantise,

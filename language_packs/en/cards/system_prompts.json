@@ -8,6 +8,9 @@
   "transit_note": {
     "$text": "transit_note.txt"
   },
+  "room_vocabulary": {
+    "$text": "room_vocabulary.txt"
+  },
   "extra_parts_note": {
     "$text": "extra_parts_note.txt"
   },
@@ -421,12 +424,6 @@
       ]
     ],
     [
-      "SPEAKING WITH YOUR MOUTH ENGAGED:",
-      [
-        "self.speaking_now"
-      ]
-    ],
-    [
       "MATERIAL EFFECTS YOU COMPLETE:",
       [
         "self.embodiment_capabilities"
@@ -441,7 +438,7 @@
     [
       "ACTIVE HYPOTHESES:",
       [
-        "self.active_hypotheses"
+        "active_hypotheses"
       ]
     ],
     [
@@ -508,6 +505,18 @@
       "WHAT THEY COULD NOT KNOW:",
       [
         "perception.impossible_knowledge"
+      ]
+    ],
+    [
+      "YOUR PREVIOUS DECISION:",
+      [
+        "self.decision_continuity"
+      ]
+    ],
+    [
+      "EARLIER THIS BEAT:",
+      [
+        "self.earlier_this_beat"
       ]
     ]
   ],

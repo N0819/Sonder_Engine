@@ -570,7 +570,13 @@ class TestLightIsLocalNotRoomWide:
         large dark hall lifts that median to `dim` -- the hall's typical
         light, still not `lit` anywhere but round the bearer."""
         assert effective_light(self._hall_without_geometry(), "hall") == "dark"
-        assert effective_light(self._hall(), "hall") == "dim"
+        # `dark` since 2026-09-16, and the one-cell move is the whole of
+        # it: the lamp's anchor stopped being pushed a pace off its wall
+        # (`spatial_fov.DEFAULT_LANE`), so the median cell of a large hall
+        # is one cell further from the only source, and inverse-square
+        # decay puts it over the line. The claim under test is unchanged --
+        # a room with one lamp in it is not declared lit room-wide.
+        assert effective_light(self._hall(), "hall") == "dark"
 
     def test_a_room_filling_source_does_light_everyone(self):
         """`light_radius: room` is the room-level model's word for a source

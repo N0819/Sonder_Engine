@@ -1,3 +1,3 @@
 
 
-WEATHER。この event が scene 全体の空を変える場合だけ weather を出力します。sky と precipitation は setting 固有の名前、動作 axis は air, cloud, electrical, precipitation_kind, intensity, wind, temperature です。省略は変更なしです。
+WEATHER。この event が scene 全体の空を変える場合だけ weather を出力します。`sky` と `precipitation` は setting 固有の名前、動作 axis は air, cloud, electrical, precipitation_kind, intensity, wind, temperature です。省略は変更なしです。

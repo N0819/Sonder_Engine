@@ -8,6 +8,9 @@
   "transit_note": {
     "$text": "transit_note.txt"
   },
+  "room_vocabulary": {
+    "$text": "room_vocabulary.txt"
+  },
   "extra_parts_note": {
     "$text": "extra_parts_note.txt"
   },
@@ -421,12 +424,6 @@
       ]
     ],
     [
-      "口を動かしながら話す：",
-      [
-        "self.speaking_now"
-      ]
-    ],
-    [
       "あなたが完了する物質的効果：",
       [
         "self.embodiment_capabilities"
@@ -441,7 +438,7 @@
     [
       "現在の仮説：",
       [
-        "self.active_hypotheses"
+        "active_hypotheses"
       ]
     ],
     [
@@ -508,6 +505,18 @@
       "WHAT THEY COULD NOT KNOW:",
       [
         "perception.impossible_knowledge"
+      ]
+    ],
+    [
+      "前回の判断：",
+      [
+        "self.decision_continuity"
+      ]
+    ],
+    [
+      "このビートの先ほど：",
+      [
+        "self.earlier_this_beat"
       ]
     ]
   ],

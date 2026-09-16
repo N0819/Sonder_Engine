@@ -1,1 +1,1 @@
-STRICT JSON {ledgers:[{chrono_id,item_id,object_name,source_entity_id,authority_mode,source_event_id,event,resolution_notes,categories:[]}]} を出力します。この互換用 fragment は現在の因果 Director sheet には含まれません。
+STRICT JSON {ledgers:[{chrono_id,item_ids:[],item_names:[],source_entity_id,authority_mode,source_event_id,event,resolution_notes,categories:[]}]} を出力します。この互換用 fragment は現在の因果 Director sheet には含まれません。

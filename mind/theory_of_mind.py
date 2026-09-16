@@ -277,6 +277,18 @@ def _elapsed(hypothesis, turn_idx, elapsed_seconds=None):
             delta = 0.0
         if delta > 0.0:
             return delta / 60.0
+    # BEFORE THE FIRST BEAT, NOTHING HAS ELAPSED. `turn_idx` is None for a
+    # story with no turn row yet, which is where the opening plan reads the
+    # cast from (`agents/story_planner.run_opening_plan` -> `inspect_minds`,
+    # 2026-09-16): `int(None)` raised, the tool came back as an error the
+    # model had to work around, and the Room lost a call to it on chat 132.
+    # `last` was already guarded here and the subject of the subtraction
+    # was not.
+    if not isinstance(turn_idx, int) or isinstance(turn_idx, bool):
+        try:
+            turn_idx = int(turn_idx)
+        except (TypeError, ValueError):
+            return 0
     last = hypothesis.get("last_updated_turn", turn_idx)
     try:
         last = int(last)

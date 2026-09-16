@@ -450,8 +450,8 @@ def light_blocks_sight(level) -> bool:
 #   * `shapes` -- a body is there and moving, and nothing about what it is
 #     doing. This is what a BARRIER leaves: a silhouette in a doorway, a
 #     figure across a courtyard, a shape through a curtained opening. It is
-#     reached by the view-cone caps, by an authored far edge, by a crossing
-#     and by glare, and it is exactly what it always was.
+#     reached by the view-cone caps, by an authored far edge and by a
+#     crossing, and it is exactly what it always was.
 #   * `conduct` -- what a body DOES, without what it IS. Where it moved,
 #     whether it sat, what it took up and set down: the gross conduct a
 #     silhouette genuinely carries. What it does not carry is the face, the

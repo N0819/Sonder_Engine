@@ -141,8 +141,14 @@ def test_juns_causal_arrival_is_not_rewound_by_the_shelfs_standing_cell():
         "rooms": {
             "potting": {"size": "small", "adjacent": [
                 {"to": "glasshouse", "barrier": "open_door", "dir": "e"}],
+                # The shelf is PINNED to the doorway cell, which is what
+                # this test is about. It landed there by the seed formula
+                # until 2026-09-16, when the wall ring opened up
+                # (`spatial_fov.DEFAULT_LANE`) and the seed re-rolled; a
+                # test whose subject is "a fixture occupies the door" must
+                # say so rather than depend on where a hash puts it.
                 "anchors": {"worktop": {"desc": "Stone worktop"},
-                            "shelf": {"desc": "Seed shelf"}}},
+                            "shelf": {"desc": "Seed shelf", "cell": [3, 2]}}},
             "glasshouse": {"size": "small", "adjacent": [
                 {"to": "potting", "barrier": "open_door", "dir": "w"}]},
         },

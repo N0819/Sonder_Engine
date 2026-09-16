@@ -15,19 +15,19 @@ What holds now: a sense entry may say it does not need light (`needs_light`)
 and may name the engine channel it delivers on (`equivalent`); one derivation
 (`_sight_verdict`, read as `sight_level`, `sight_block` and `sight_verdict`)
 carries the grade and what the PLACE did to it; a `none` the light caused
-lifts for a perceiver whose sight does not need light, the glare cap is not
-spent against one, and what a BODY or a BOUNDARY did never lifts. Hearing,
-touch and smell were never gated by light and are not touched.
+lifts for a perceiver whose sight does not need light, and what a BODY or a
+BOUNDARY did never lifts. Hearing, touch and smell were never gated by light
+and are not touched. The glare cap this file once also covered was removed
+outright on 2026-09-16 (`tests/test_light_field.
+test_a_lamp_held_in_your_face_costs_nothing`).
 """
 
 from __future__ import annotations
 
 import pytest
 
-from tests.test_light_field import glare_scene
 from world import spatial
 from world.scene_memo import scene_read_pass
-from world.spatial import glare_between
 
 
 ORDINARY = [
@@ -91,7 +91,8 @@ class TestTheNoneNowSaysWhichNoneItWas:
         ({"same_room": True, "concealed": True}, "concealed"),
         ({"same_room": True, "light": "lit"}, ""),
         ({"same_room": True, "light": "dim"}, ""),
-        ({"same_room": True, "light": "lit", "glare": True}, "glare"),
+        # A stamp an older reader might still write names no cause.
+        ({"same_room": True, "light": "lit", "glare": True}, ""),
     ])
     def test_the_cause_is_carried_out_of_the_same_derivation(self, rel,
                                                              expected):
@@ -99,26 +100,23 @@ class TestTheNoneNowSaysWhichNoneItWas:
 
     def test_the_level_and_the_cause_cannot_disagree(self):
         """One derivation, three readers: every `none` names which refusal it
-        was, and the only cause a level above `none` carries is `glare` --
-        the cap that is reported unapplied so the perceiver can decide
-        whether the light that would dazzle it feeds it at all."""
+        was, and a level above `none` carries no cause at all."""
         for light in ("dark", "dim", "lit", "bright"):
             for barrier in ("", "wall", "door", "curtain", "window"):
                 for concealed in (False, True):
                     for crossing in (False, True):
-                        for glare in (False, True):
-                            rel = {"light": light, "barrier": barrier,
-                                   "concealed": concealed,
-                                   "crossing": crossing, "glare": glare}
-                            if not barrier:
-                                rel["same_room"] = True
-                            level, block = spatial.sight_verdict(rel)
-                            assert block == spatial.sight_block(rel)
-                            assert spatial.sight_level(rel) == (
-                                "shapes" if block == "glare" else level)
-                            assert (level == "none") == (
-                                block in ("dark", "barrier", "concealed")), (
-                                    rel, level, block)
+                        rel = {"light": light, "barrier": barrier,
+                               "concealed": concealed,
+                               "crossing": crossing}
+                        if not barrier:
+                            rel["same_room"] = True
+                        level, block = spatial.sight_verdict(rel)
+                        assert block == spatial.sight_block(rel)
+                        assert spatial.sight_level(rel) == level
+                        assert (level == "none") == (
+                            block in ("dark", "barrier", "concealed")), (
+                                rel, level, block)
+                        assert (level != "none") == (block == "")
 
 
 # ---------------------------------------------------------------------------
@@ -187,82 +185,6 @@ class TestABodyOrBoundaryCausedNoneNeverLifts:
         assert spatial.sense_adjusted("full", "sight", blind) == "none"
 
 
-class TestGlareDoesNotDazzleASightTheLightDoesNotFeed:
-    """A light in the eyes caps sight at `shapes`; a light that does not feed
-    the sense cannot do that (A87/R1).
-
-    Measured on `tests/test_light_field.glare_scene()` -- P at the table
-    facing Q, who stands beside P holding a lit lamp -- where
-    `glare_between(sc, 'P', 'Q')` is True and `rel['glare']` is True. Before
-    the fix the two carriers of that rule disagreed about the same perceiver:
-    the per-body one answered `full` (it skips the cap for a lightless sight)
-    while the room-level one answered `shapes`, because `sight_level` folded
-    the cap into the word and reported no cause. Now `sight_verdict` hands
-    back the grade the light allowed plus the cap still owed, and
-    `sense_adjusted` is the one reader that spends it.
-    """
-
-    def test_the_scene_really_glares(self):
-        sc = glare_scene()
-        assert glare_between(sc, "P", "Q") is True
-        rel = spatial.spatial_rel_between(sc, "P", "Q")
-        assert rel.get("glare") is True
-
-    def test_an_ordinary_eye_is_still_dazzled_on_both_carriers(self):
-        sc = glare_scene()
-        rel = spatial.spatial_rel_between(sc, "P", "Q")
-        assert spatial.sight_level(rel) == "shapes"
-        for senses in (None, [], ORDINARY):
-            level, block = spatial.sight_verdict(rel)
-            assert spatial.sense_adjusted(
-                level, "sight", senses, blocked_by=block) == "shapes"
-            assert spatial.visual_level_between(sc, "P", "Q", senses) \
-                == "shapes"
-
-    @pytest.mark.parametrize("senses", LIGHTLESS)
-    def test_both_carriers_drop_the_cap_for_the_same_perceiver(self, senses):
-        """The two answers that used to disagree, in a lit room where the
-        room grade and the target's cell agree: `full` on both."""
-        sc = glare_scene()
-        rel = spatial.spatial_rel_between(sc, "P", "Q")
-        level, block = spatial.sight_verdict(rel)
-        assert block == "glare"
-        room_level = spatial.sense_adjusted(
-            level, "sight", senses, blocked_by=block)
-        assert room_level == "full"
-        assert spatial.visual_level_between(sc, "P", "Q", senses) == "full"
-
-    @pytest.mark.parametrize("senses", LIGHTLESS)
-    def test_the_cap_comes_off_without_the_light_being_credited(self, senses):
-        """Dropping the cap gives back what the LIGHT allowed, never more: in
-        an unlit room whose only source is the lamp in the observer's eyes the
-        room grades `dim`, so the room-level answer is `conduct` -- glare must
-        not become a way of seeing better than the place allows. (The per-body
-        carrier answers `full` here for a reason that predates glare: it reads
-        the light at the target's own cell, and Q is holding the lamp.)
-        """
-        sc = glare_scene()
-        sc["rooms"]["r"]["light"] = "dark"
-        rel = spatial.spatial_rel_between(sc, "P", "Q")
-        level, block = spatial.sight_verdict(rel)
-        assert (level, block) == ("conduct", "glare")
-        assert spatial.sight_level(rel) == "shapes"
-        assert spatial.sense_adjusted(
-            level, "sight", senses, blocked_by=block) == "conduct"
-
-    def test_a_glare_block_never_lifts_a_wall_or_a_shut_container(self):
-        """`glare` is reported only where there is a line and light: what a
-        BODY or a BOUNDARY did keeps its own cause and never lifts."""
-        for rel in ({"barrier": "wall", "light": "lit", "glare": True},
-                    {"same_room": True, "concealed": True, "light": "lit",
-                     "glare": True}):
-            level, block = spatial.sight_verdict(rel)
-            assert level == "none" and block in ("barrier", "concealed")
-            for senses in LIGHTLESS:
-                assert spatial.sense_adjusted(
-                    level, "sight", senses, blocked_by=block) == "none"
-
-
 # ---------------------------------------------------------------------------
 # An invented sense costs nothing, and delivers only where it says it does
 # ---------------------------------------------------------------------------
@@ -315,16 +237,15 @@ class TestAnOrdinaryCardIsUnchanged:
                     level, "sight", senses, blocked_by=block) == \
                     spatial.sense_adjusted(level, "sight", senses)
 
-    @pytest.mark.parametrize("senses", [None, [], ORDINARY])
-    def test_an_eye_the_light_feeds_pays_the_glare_cap_here(self, senses):
-        """`glare` is the one cause reported unapplied, so this reader is
-        where an ordinary eye pays it -- and it pays exactly what
-        `sight_level` charges a caller that never asked about a perceiver."""
+    @pytest.mark.parametrize("senses", [None, [], ORDINARY, *LIGHTLESS])
+    def test_a_glare_block_is_a_word_nobody_reads(self, senses):
+        """Until 2026-09-16 `blocked_by='glare'` was the one cause that
+        CAPPED rather than refused. The rule is gone; a caller still passing
+        the word gets exactly the unblocked answer, for every kind of eye."""
         for level in spatial.SIGHT_LEVELS:
-            capped = spatial.sense_adjusted(
-                level, "sight", senses, blocked_by="glare")
-            assert capped == ("shapes" if level in ("conduct", "full")
-                              else level)
+            assert spatial.sense_adjusted(
+                level, "sight", senses, blocked_by="glare") == \
+                spatial.sense_adjusted(level, "sight", senses)
 
     def test_an_absent_or_malformed_field_reads_as_ordinary_eyes(self):
         """The safe direction for a field a generator might write as a word:
@@ -345,7 +266,7 @@ class TestAnOrdinaryCardIsUnchanged:
         """Hearing, touch and smell were never gated by light; `blocked_by`
         reaches sight and nothing else."""
         for channel in ("hearing", "scent"):
-            for block in ("", "dark", "barrier", "concealed", "glare"):
+            for block in ("", "dark", "barrier", "concealed"):
                 assert spatial.sense_adjusted(
                     "none", channel, NIGHT_EYES, blocked_by=block) == "none"
                 assert spatial.sense_adjusted(

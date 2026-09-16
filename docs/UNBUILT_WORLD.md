@@ -1432,8 +1432,8 @@ ranks addressing above everything but a disorienting jump, and addressing
 someone in ANOTHER room resolves to an EDGE focus -- which `infer_facing`
 reads as the whole body's heading. So a word over the shoulder spun him 180
 degrees, and the lamp's cone, which takes its axis from the holder's facing,
-turned to point at the wall behind him. Sight, glare and every left/right in
-the prose are downstream of the same value.
+turned to point at the wall behind him. Sight, the lamp's cone and every
+left/right in the prose are downstream of the same value.
 
 **Fixed by a precedence change, not new machinery** (`address_focus` in
 `world/spatial_frames.py`): a cross-room address yields to a pose this beat
@@ -1829,6 +1829,39 @@ checklist for exactly this kind of change.
 
 At minimum the skip should not be silent: it is the one branch here that
 discards a write and says nothing.
+
+<a id="unbuilt-1-162"></a>
+### 1.162 The doorway cone reads no cell, so a body a pace from the door is a shape through it
+
+`world/spatial_senses._opening_view_cap` grades what a body in the next room
+shows through an opening: in the cone (the strip from the doorway through the
+centre to the far wall) it is `full`, beside the doorframe it is `none`, and
+with "placement unknown" it falls back on the room's size, which for a
+`large` room is `shapes`. The bearing test reads `_anchor_dir(at)` and
+nothing else, so a body stationed by `cell` and no anchor is "placement
+unknown" even though the grid knows exactly where it stands.
+
+Measured on the owner's chat 126, turn 9 (2026-09-16): Hinami stood at cell
+(6,1) of the reception parlor, one pace from the north wall the door is in,
+and her step into the treatment room -- graded from its origin room, which is
+the right rule (PA1) -- reached Mirelle through the open door as "Hinami
+moves, too little of it to make out". The parlor is authored `size: small`
+and measured `extent: 8x10`, and the extent wins (`size_from_extent`), so the
+fallback was the large-room one. Across the checkpoints of chats 100-126 the
+same fallback capped a cell-placed body 20 times (chats 122, 123, 126).
+
+**Why this is filed and not fixed.** Reading the cell is one line -- bearing
+from the room's centre to the cell, then the same one-sector test -- but on
+this very beat it would have graded Hinami `none`: at (6,1) she was two paces
+to the side of the door and one pace back, which is exactly the "beside the
+doorframe" case the cone is built to refuse. The spatial hand had placed her
+there as `near` Mirelle, who stood AT the door anchor; the fiction had her
+leaning past Mirelle's shoulder to look through it. So the honest fix has two
+parts, and the second needs a measurement: read the cell, and let a body
+`near` one that stands at the door share the door (or let the hand write the
+door's own cell, which its stations chunk already asks for). Until both land,
+a cell-placed body in a large room is graded by the size fallback, which
+withholds and never grants.
 
 ## 2. Roadmap
 

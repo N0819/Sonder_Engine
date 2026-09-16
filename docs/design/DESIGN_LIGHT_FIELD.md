@@ -44,7 +44,8 @@ every sense (`spatial_fov.room_field` takes a placement predicate;
 § 4.6, the note's open question 1 answered yes); the composer says WHERE the
 light falls (`light_shape`, § 4b, `tests/test_field_sentences.py`); a body
 with no station reads the room's MEDIAN, not the room-level model (§ 4b);
-glare counts an all-round lantern (§ 4b, decided); and the commit's
+glare counted an all-round lantern (§ 4b, decided -- and the whole rule was
+removed 2026-09-16, § 4b); and the commit's
 failed-source block is shared with the sound field (§ 5). The corpus was
 re-measured (§ 9.6): the room, body and pair distributions are unchanged
 from § 9.4, chats 73 and 74's back office reads `dim` in the three cells at
@@ -289,15 +290,24 @@ by decay, which is why it can be dropped without a special case.
     working and stop being fooled by one candle. (§ 9 asks whether median
     is the right statistic; a mean is the alternative.)
   * `sight_level(rel)` keeps reading the TARGET's light -- a body in the
-    dark sees a lit body across the room, and is not seen back -- with one
-    addition: **glare**. A source of power >= `GLARE_POWER` inside the
-    observer's front cone at <= `GLARE_CELLS` cells, with the target on the
-    far side of it (the source's cell lies on the target's line), caps
-    sight at `shapes`. The flashlight in your face is the whole reason a
-    cone exists in fiction, and it is one line once the field is there.
-    An all-round lantern held up between two faces counts too (decided
-    2026-09-04): glare is about power in the eyes, not the source's shape;
-    the cone only decides whether the power reaches the eye at all.
+    dark sees a lit body across the room, and is not seen back. **Glare is
+    gone (owner ruling 2026-09-16).** From 2026-09-04 to 2026-09-16 a source
+    of power >= `GLARE_POWER` (`lit`) inside the observer's front cone at
+    <= `GLARE_CELLS` (2) cells, with the target on the far side of it,
+    capped sight at `shapes`, and an all-round lantern counted (decided
+    2026-09-04). Measured over every checkpoint of chats 60-126 before the
+    cut: 5 firings, all one `lit` wall sconce stationed at the bench its
+    observer sat on (chat 126, turns 2-6), which made a guest at arm's
+    reach "an indistinct figure"; 0 on a case a reader would accept. The
+    owner's ruling is broader than the false-positive rate: light that
+    falls on a thing shows it, and a source between two faces does not
+    hide either one's detail short of something no fiction here has
+    authored. The rule, its two constants and its `glare` cause are
+    removed rather than weakened -- a threshold of `bright` would have
+    dazzled every occupant of a bright room, since a bright room is lit by
+    bright fixtures -- and `tests/test_light_field.
+    test_a_lamp_held_in_your_face_costs_nothing` pins the rule's own
+    strongest fixture at `full`.
   * `feature_visibility(scene, observer)` -> A THING IS SEEN BY THE LIGHT
     THAT FALLS ON IT, exactly as a body is: an anchor no light reaches is
     refused, with `basis: "light"` beside `"cone"` and `"line"` (2026-09-05).
@@ -387,8 +397,8 @@ four, and reaches the far wall as `dark`, and so that a `bright` fixture at
     CONE_HALF_ANGLE 30 deg     CONE_PENUMBRA 20 deg
     BOUNCE          enclosed 0.25 | sheltered 0.12 | open 0.05
     BOUNCE_REACH    3 cells    BOUNCE_PASSES_CAP 4
-    GLARE_POWER     = POWER[lit]   GLARE_CELLS 2
     FLICKER_RATE    1 beat in 4    FAIL_RATE 1 beat in 12
+    (GLARE_POWER / GLARE_CELLS left with the glare rule, 2026-09-16 -- § 4b)
     FLOOR_SPILL     0.25   (added 2026-09-04, § 4.6a; 0 = no spill)
 
 The cap on bounce passes is a SAFETY ceiling, expected never to bind: with

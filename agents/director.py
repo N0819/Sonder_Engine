@@ -435,6 +435,12 @@ def director_establish(ctx, nonce):
         # story has no plan, so that opening's payload is unchanged.
         **({"planned_rooms": _planned}
            if (_planned := _opening_planned_rooms(ctx)) else {}),
+        # WHERE THE OPENING STANDS (`docs/design/DESIGN_OPENING_PLAN.md`):
+        # the room the opening plan put each present body in, and a station
+        # hint. Absent when no plan placed anybody, so that opening's
+        # payload is unchanged.
+        **({"opening_placements": _placed}
+           if (_placed := _opening_placements_view(ctx)) else {}),
         # The room's notes on what its plan MEANS, scoped to the rooms the
         # scenario names and their planned neighbours (`_author_notes_view`);
         # absent when there are none.
@@ -466,6 +472,11 @@ def director_establish(ctx, nonce):
     # THE PLAYER'S SLOT IS THE PERSONA (`substitute_player_token`).
     out = substitute_player_token(out, player_name)
     ctx.warnings.extend(warnings)
+    # THE PLAN'S ROOM IS WHERE THE BODY STANDS. A placement the opening
+    # plan published names a room the plan holds; a Director that put the
+    # body in a room of its own beside it is the defect
+    # `seed_scene_from_plan` was written for, one body at a time.
+    _enforce_opening_placements(ctx, out)
 
     attire = out.get("attire") or {}
     for entity, state in attire.items():
@@ -616,15 +627,76 @@ def _world_facts_view(ctx):
     return facts[-WORLD_FACTS_IN_PAYLOAD:] or None
 
 
+def _opening_placements_view(ctx):
+    """`{name: {room, at}}` the opening plan left, or None
+    (`story.opening_plan.opening_placements`)."""
+    try:
+        from story.opening_plan import opening_placements
+        return opening_placements(
+            ctx.chat["id"], getattr(ctx.turn, "frame_id", None)) or None
+    except Exception:
+        return None
+
+
 def _opening_rooms(ctx):
-    """The planned rooms the scenario names by uid or name -- the opening's
-    rooms before the Director has drawn any. Fail-open: no plan, no rooms."""
+    """The opening's rooms before the Director has drawn any: the rooms the
+    opening plan placed bodies in, then the planned rooms the scenario names
+    by uid or name -- the string match that was the only answer until the
+    plan could say (`docs/design/DESIGN_OPENING_PLAN.md` § 3, decision 4).
+    Fail-open: no plan, no rooms."""
+    out = []
+    for entry in (_opening_placements_view(ctx) or {}).values():
+        room = str((entry or {}).get("room") or "")
+        if room and room not in out:
+            out.append(room)
     try:
         from world.structure import planned_rooms_named_in
-        return planned_rooms_named_in(
-            ctx.chat["id"], str(ctx.chat.get("scenario") or ""))
+        for room in planned_rooms_named_in(
+                ctx.chat["id"], str(ctx.chat.get("scenario") or "")):
+            if room not in out:
+                out.append(room)
     except Exception:
-        return []
+        pass
+    return out
+
+
+def _enforce_opening_placements(ctx, out):
+    """Move each placed body to the room the opening plan named, when that
+    room exists -- in the plan's registry or in the rooms this opening
+    wrote -- and warn about each move and each placement nothing holds.
+    A placement names a body by display name; positions are matched
+    case-folded."""
+    placements = _opening_placements_view(ctx) or {}
+    if not placements:
+        return
+    positions = out.get("positions")
+    if not isinstance(positions, dict):
+        positions = {}
+        out["positions"] = positions
+    held = set((out.get("rooms") or {}).keys())
+    try:
+        from world.structure import planned_room_ids
+        held |= set(planned_room_ids(ctx.chat["id"]))
+    except Exception:
+        pass
+    folded = {str(k).casefold(): k for k in positions}
+    for who, entry in placements.items():
+        room = str((entry or {}).get("room") or "")
+        if not room:
+            continue
+        if room not in held:
+            ctx.add_warning(
+                "opening placement: %s was placed at %r, a room neither the "
+                "plan nor this opening holds; left where the Director put "
+                "them" % (who, room))
+            continue
+        key = folded.get(str(who).casefold(), who)
+        if positions.get(key) == room:
+            continue
+        ctx.add_warning(
+            "opening placement: %s stands in %r by the plan; the Director "
+            "wrote %r" % (who, room, positions.get(key)))
+        positions[key] = room
 
 
 def _opening_planned_rooms(ctx):

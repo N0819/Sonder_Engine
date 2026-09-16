@@ -1221,7 +1221,9 @@ class TestOffset:
         # a standing thing keeps its one pace off the wall.
         client.patch(f"/api/chats/{cid}/rooms/kitchen", json={"anchors": {
             "hearth": {**hearth, "offset": 1, "footprint": "run", "height": "waist"}}})
-        assert grid_of()["anchors"]["hearth"]["cells"] == [[x, 1] for x in range(2, 8)]
+        # Flush with the wall: a hearth is masonry in it, so it authors no
+        # `lane` and sits on the wall's own row (2026-09-16).
+        assert grid_of()["anchors"]["hearth"]["cells"] == [[x, 0] for x in range(2, 8)]
         # Refused outside the range, naming it; never clamped.
         for bad in (1.5, -0.2, "far", [0.5], True):
             r = client.patch(f"/api/chats/{cid}/rooms/kitchen",
@@ -1580,7 +1582,13 @@ class TestNoCharterIsByteIdentical:
         """Frozen at 527ffcc3, before `grid_view`, `map_view` and `body_rows`
         learned to lay townspeople: a story that has none must produce the
         same bytes, so nothing about the charter path leaks a key, a count
-        or an order into every other story."""
+        or an order into every other story.
+
+        RE-FROZEN ONCE, on 2026-09-16: anchor placement stopped reserving
+        the ring of cells against the walls (`spatial_fov.DEFAULT_LANE`,
+        owner ruling), so every fixture in the capture moved onto its wall
+        and the doorway cells with them. The charter question this test
+        exists to ask is unchanged; only the cells underneath it are."""
         cid = story["chat_id"]
         _lay_out(temp_db, cid)
         views = _frozen_views(client, cid)

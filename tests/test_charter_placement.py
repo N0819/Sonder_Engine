@@ -44,6 +44,7 @@ def _scene():
                      "anchors": {
                          "screen": {"desc": "a folding screen", "dir": "e",
                                     "footprint": "run", "height": "head",
+                                    "lane": True,
                                     "opacity": "opaque"},
                          "counter": {"desc": "the long counter", "dir": "s",
                                      "footprint": "run", "height": "waist"},

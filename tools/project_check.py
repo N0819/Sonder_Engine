@@ -3348,7 +3348,7 @@ def check_pipeline_side_channels(errors: list[str]) -> None:
 #: Emptying this tuple is the last step of the English pass; the debt is
 #: `docs/UNBUILT.md` and the test is
 #: test_language_pack_integrity.test_no_pack_translates_a_canonical_protocol_span.
-DEFERRED_PACK_PARITY = ("ja",)
+DEFERRED_PACK_PARITY = ()
 
 
 def main() -> int:

@@ -6261,6 +6261,14 @@ def turn_new(cid: int, body: dict = Body(...), detach: int = 0):
         # thread-local, so every concurrent writer is visible to it. A false
         # positive -- some unrelated write landing in the window -- costs one
         # rebuild under the lock, which is exactly the pre-change behaviour.
+        # THE OPENING IS PLANNED BEFORE THE FIRST TURN ROW EXISTS
+        # (`docs/design/DESIGN_OPENING_PLAN.md`): the Story Planner reads
+        # the scenario and the first input, plants the rooms they imply and
+        # says where each present body stands, and a package published now
+        # is published at turn -1 so turn 0 sees it. Outside the
+        # transaction, because it is model time; never raises.
+        if _latest_turn(cid) is None:
+            _plan_opening(cid, frame_id, _player_input(body))
         pre_version = data_version()
         pre_blob = snapshot_blob(cid)
         with transaction():
@@ -6280,6 +6288,19 @@ def turn_new(cid: int, body: dict = Body(...), detach: int = 0):
         _detach(run_pipeline(cid, tid, abort=abort, frame_id=frame_id))
         return {"turn_id": tid, "running": True}
     return _stream(run_pipeline(cid, tid, abort=abort, frame_id=frame_id))
+
+
+def _plan_opening(cid, frame_id, first_input):
+    """The scenario chat's opening plan: the scenario and the first input
+    are the passage. A quick start plans in `greetings.start_story` with the
+    greeting as the passage and arrives here with its turn 0 already
+    written, so this runs for a scenario chat alone."""
+    from agents.story_planner import run_opening_plan
+    chat = q("SELECT scenario FROM chats WHERE id=?", (cid,), one=True)
+    scenario = str(chat["scenario"] if chat else "").strip()
+    passage = "\n\n".join(part for part in (scenario, str(first_input or "").strip())
+                          if part)
+    return run_opening_plan(cid, frame_id, passage=passage)
 
 
 def _truthy(value) -> bool:
@@ -6947,6 +6968,8 @@ def turn_narration_select(tid: int, body: dict = Body(...)):
 
 @app.get("/api/turns/{tid}/pipeline")
 def pipeline_get(tid: int):
+    from web.pipeline_views import saved_perception_packets
+
     steps = []
     for s in q("SELECT * FROM steps WHERE turn_id=? ORDER BY ord", (tid,)):
         # `reasoning` is a thinking model's own trace, kept for debugging. It
@@ -6957,6 +6980,10 @@ def pipeline_get(tid: int):
         vs = [dict(r) for r in q(
             "SELECT id,content,active,created,reasoning FROM variants "
             "WHERE step_id=? ORDER BY id", (s["id"],))]
+        for variant in vs:
+            packets = saved_perception_packets(variant["content"])
+            if packets is not None:
+                variant["perception_packets"] = packets
         steps.append({"id": s["id"], "key": s["key"], "label": s["label"], "ord": s["ord"], "stale": bool(s["stale"]), "variants": vs})
     turn = q("SELECT * FROM turns WHERE id=?", (tid,), one=True)
     if not turn:

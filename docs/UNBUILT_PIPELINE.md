@@ -1448,6 +1448,149 @@ every action to `character:79`, an id that exists in no table, and it leaked
 into memory 27815 ("I suspected this about character:79"). Twelve provider
 calls, ~176k input tokens, for one beat.
 
+<a id="unbuilt-1-163"></a>
+### 1.163 The opening is still one call with its own sheet
+
+`director_establish` is the last Director monolith. Resolve and interpret
+each fan out to a prose author plus five hands whose sheets are assembled
+from chunks (`llm/prompts._assembled_sheets`), so a rule the spatial hand
+learns is a rule every beat reads; the opening runs one model call over one
+hand-written prompt, and by 2026-09-16 that prompt had drifted 23 rule
+headings behind the hands -- the owner's chat 126 opened with every anchor
+written without a height and a back room nobody had seen written as a
+described room with a guessed `light: dim`.
+
+**What landed instead (2026-09-16), and what it does not reach.** The place
+vocabulary -- size, shape, light, quiet, bearings, insides, anchors and
+their heights, storeys, surfaces -- is one fragment
+(`cards/system_prompts/room_vocabulary.txt`) that the spatial hand's rooms
+chunk and the establish sheet embed by reference, so those ten rules cannot
+drift again; the establish sheet gained the stub rule (A ROOM THE OPENING
+DOES NOT SEE, `RoomDef.planned`/`purpose`/`access`,
+`tests/test_opening_room_stubs.py`) and the page rule for the greeting quick
+start. Everything else the hands teach -- cells and cover on stations, the
+door-is-its-edge rule, interiors, poses in the hand's words -- is still a
+copy the establish sheet keeps by hand.
+
+**The opening is now PLANNED before the stage runs (2026-09-16, later the
+same day; `docs/design/DESIGN_OPENING_PLAN.md`).** Both launches run the
+Story Planner once before the first turn row exists, under an engine-minted
+mandate for rooms, placements and a note, and the establish stage reads
+`opening_placements`. That takes the "which room is the opening in" guess
+out of the stage and hands it the plan's rooms to furnish; it does not
+change how the stage writes them, which is the paragraph below.
+
+**The destination is the fan-out.** The opening is a beat that has already
+happened: the prose author reads the scenario or the verbatim greeting and
+writes one row per thing it establishes, and the five hands encode under the
+sheets they already have. The greeting quick start (`story/greetings.py`,
+which runs `director_establish` with the greeting as the scenario and then
+overwrites the narrator step with the prose) rides on it unchanged. The
+seams it touches: `director_fanout._stage_container` and the beat-view
+builder (an "establish" case), the `DirectorEstablish` schema and
+validator, `_establish_identity_floor`, and the rows contract, which is
+event-shaped and would need "what holds at the opening" rows. Owner decision
+2026-09-16: the fan-out is the destination; the fragment is the step that
+holds the line until it is built.
+
+**The Japanese sheet carries the vocabulary and not the stub rule.** Under
+the english-first mandate (2026-09-09) the ja fragment is the same paragraphs
+moved out of ja `rooms.txt`, and the ja establish sheet embeds it; the stub
+clause, the page clause and the `planned`/`purpose` tokens on the shape line
+exist in English only. `tools/project_check.DEFERRED_PACK_PARITY` is what
+keeps that green; a Japanese opening cannot write a stub until the pass ends.
+
+<a id="unbuilt-1-164"></a>
+### 1.164 The Director's doctrine moved to the hands and what did not move was dropped
+
+`38b560c6` (2026-09-12, "The Director stops encoding the world and only
+slices, routes and rules") retired the monolithic resolve sheet: the
+twenty-nine-part `prose_author_sheet/` became one segment
+(`causal_director.txt`), and the channels it used to teach became the five
+specialist hands' own chunks. The architecture is right and is not in
+question here. What is in question is that seven clauses were relocated and
+the rest went out WITH the sheet, including duties that still have an owner
+and still have code feeding them.
+
+Found by triaging the suite's standing failures on 2026-09-16, which is the
+uncomfortable part: the tests caught every one of these the day it landed,
+and twenty-nine reds were read as staleness from a big refactor. Of those
+twenty-nine, fourteen were stale locations, five asked about structures
+retired on purpose, and the rest are below. Each was verified against the
+tree, not inferred from the test name.
+
+**a. The world-pressure must-tick floor never fires in production.**
+`agents/director.py` sets `_must_tick = [] if out.get("causal_ledger") else
+[...]`, and `director_evidence.normalize_causal_ledger` sets
+`out["causal_ledger"]` unconditionally whenever `ledgers` is non-empty --
+which is every real beat. So the correction retry that makes the world act
+when a pressure is due fires only for a stub that returns no ledger, which
+is exactly why its own test still passes. `_causal_event_inputs` separately
+skips any pressure without `must_tick_this_beat`, so a fire, a siege or a
+running countdown reaches the author only on the beat it is already overdue,
+and never earlier. No prompt surface teaches the duty any more:
+`20_world_pressure.txt` went with the sheet and no hand owns a
+`world_pressure` channel. This is the "world acts" floor, and it is off.
+
+**b. A player reading a text aloud loses the words.** The clause that made
+the world fill in what a notice, a stencil or an order says when a player
+reads it aloud is in no Director sheet, and `causal_director.txt` now says
+flatly "never invent a quote", which forbids it. Both packs.
+
+**c. Nothing stops a player being written through a stranger's door.** The
+threshold rule for a room someone sleeps in -- entry is by leave, leave is a
+line the resident speaks, a knock ends the beat at the threshold -- is gone,
+while `agents/director.py` still computes `dwellings` onto the resolve
+payload for it and `AGENTS.md` still names the deleted file as its home. The
+routing table's own note says entry is adjudicated by the CLAUSE and not a
+guard, so with the clause gone nothing adjudicates it.
+
+**d. The presence-knowledge rule is gone and its payload block is not.**
+`background_presence_knowledge` is still built every resolve, and the
+comment beside it states the split outright: the deterministic floor holds
+the entity-reference slice and "the rest rides on the prompt's
+presence-knowledge rule". That rule is in no sheet. The generic-knowledge
+half is unguarded; the entity-reference half still holds.
+
+**e. `overlays` is unroutable.** `causal_director.txt`'s hand-to-channel
+table is the only place the channel vocabulary now reaches the author, and
+the `body:` row lists body, attire, conditions and vitals. `overlays` is a
+body channel and is not published, so nothing can name the route. This is
+the same defect class `test_director_comms_channel` was written to catch,
+live now, and invisible because that test's reader is stale.
+
+**f. `paradox` is computed twice a turn and read by nobody.**
+`paradox_visible_to` lands on both the interpret and the resolve payload;
+no code reads the key and the word appears in no prompt in either pack. A
+fixed-point violation is detected correctly by `world/paradox.py` and then
+nothing in the beat is told.
+
+**g. `author_notes` reaches two hands with nothing telling them what it
+is.** The objects and spatial hands receive the Writers' Room's notes, and
+no sheet says they are author knowledge that may not reach a mind or the
+page, or that a note never licenses replacing the player's declaration. Only
+`director_establish` still carries the clause, and that is a different call.
+
+**h. A filled mouth and a tongue mid-act.** The clauses naming those
+occasions, and the remedy (end the contact, or a word or two at `mutter`),
+are in no sheet. Lowest cost of the set: the rendering half is
+deterministic and intact, so the result is prose that contradicts the
+contact ledger rather than a leak.
+
+**And the citations rotted with them.** Three comments in
+`agents/director.py` and three rows of `AGENTS.md` cite
+`prose_author_sheet/16.txt`, `/17_approach.txt` and `/20_world_pressure.txt`
+as live files; only `00.txt` exists. `make structure` is green through all
+six, so whatever checks docs for unresolvable references does not reach
+these.
+
+**The fix is re-homing, not reverting.** Every orphan above has an obvious
+owner among the five hands or the engine floor, and (a) and (f) want code
+as well as prose. The lesson worth keeping is the one the reds already
+tried to give: a sheet that holds both retired and surviving duties cannot
+be deleted wholesale, and a red test after a refactor is a question, not
+noise.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-18"></a>

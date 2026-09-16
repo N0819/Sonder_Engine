@@ -180,6 +180,8 @@ Not scheduled and not committed to a phase. See the
 - [§1.154 — What the Director could not parse is filed as a thing to be built](UNBUILT_PIPELINE.md#unbuilt-1-154)
 - [§1.156 — The player is never told what their own attempt DID](UNBUILT_PIPELINE.md#unbuilt-1-156)
 - [§1.159 — One beat, read at every stage: what a stage-by-stage audit of turn 82 found and did not fix](UNBUILT_PIPELINE.md#unbuilt-1-159)
+- [§1.163 — The opening is still one call with its own sheet](UNBUILT_PIPELINE.md#unbuilt-1-163)
+- [§1.164 — The Director's doctrine moved to the hands and what did not move was dropped](UNBUILT_PIPELINE.md#unbuilt-1-164)
 
 **2. Roadmap**
 
@@ -289,6 +291,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.153 — The corridor grows as fast as the player walks it, so a search can recede forever](UNBUILT_WORLD.md#unbuilt-1-153)
 - [§1.155 — A fixture is two records with two owners and no link, so the player was not told what his own hands had just done](UNBUILT_WORLD.md#unbuilt-1-155)
 - [§1.157 — A room in a chat with no lorebook is never registered, and the escape route died of it](UNBUILT_WORLD.md#unbuilt-1-157)
+- [§1.162 — The doorway cone reads no cell, so a body a pace from the door is a shape through it](UNBUILT_WORLD.md#unbuilt-1-162)
 
 **2. Roadmap**
 
