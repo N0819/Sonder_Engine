@@ -8,11 +8,14 @@ never fire against a key that IS present, and the paragraphs that are an
 INVITATION rather than an explanation are never gated at all.
 """
 
+import json
 import re
 
 import pytest
 
 from llm.prompts import CHARACTER_BLOCK_KEYS, DEFAULT_PROMPTS, character_prompt
+from language_runtime import language_pack
+from llm.schemas import validate_llm_output_strict
 
 BASE = DEFAULT_PROMPTS["character"]
 
@@ -23,7 +26,11 @@ FULL = {
         "speaking_now": {"articulation": "slurred"},
         "embodiment_capabilities": ["a"],
         "attire": "a coat",
-        "active_hypotheses": [{"i_suspect": "x"}],
+        "decision_continuity": {"turn": 1, "chosen": "Find the key"},
+        "earlier_this_beat": {
+            "status": "proposed_before_resolution",
+            "decision": {"chosen": "Ask where the key is"},
+        },
         "following": {"target": "Hinami"},
         "project_review": {"why": "arrived"},
         "en_route": {"to": "the shrine"},
@@ -55,6 +62,7 @@ FULL = {
     # the rest of the tree writes.
     "decision": {"they_said_nothing": True, "awaiting_your_answer": "?",
                  "comes_to_you": ["p"]},
+    "active_hypotheses": [{"i_suspect": "x"}],
 }
 
 EMPTY = {"self": {}, "memory": {}, "perception": {}, "decision": {}}
@@ -206,3 +214,105 @@ def test_surviving_text_keeps_its_authored_order_and_spacing():
     original = [line for line in BASE.split("\n") if line.strip()]
     assert kept == [line for line in original if line in kept]
     assert not re.search(r"\n{3,}", out)
+
+
+@pytest.mark.parametrize("language", ["en", "ja"])
+def test_hypotheses_explanation_reads_the_actual_top_level_payload(language):
+    """The finished payload carries hypotheses beside self, not inside it."""
+    card = language_pack(language).card("system_prompts")
+    marker = next(marker for marker, paths in card["character_block_keys"]
+                  if "active_hypotheses" in paths)
+    assert marker in character_prompt(
+        {"active_hypotheses": [{"i_suspect": "The offer is sincere"}]},
+        language=language,
+    )
+    assert marker not in character_prompt(
+        {"self": {"active_hypotheses": [{"i_suspect": "The offer is sincere"}]}},
+        language=language,
+    )
+
+
+@pytest.mark.parametrize("language", ["en", "ja"])
+@pytest.mark.parametrize("field,value", [
+    ("decision_continuity", {"turn": 1, "chosen": "Open the door"}),
+    ("earlier_this_beat", {"status": "proposed_before_resolution"}),
+])
+def test_private_continuity_instructions_follow_the_own_state_fields(
+        language, field, value):
+    card = language_pack(language).card("system_prompts")
+    marker = next(marker for marker, paths in card["character_block_keys"]
+                  if f"self.{field}" in paths)
+    assert marker in character_prompt({"self": {field: value}}, language=language)
+    assert marker not in character_prompt({field: value}, language=language)
+    assert marker not in character_prompt({}, language=language)
+
+
+@pytest.mark.parametrize("language", ["en", "ja"])
+def test_character_output_example_matches_the_kernel_without_duplicate_affect(
+        language):
+    """The final copyable example must validate against the provider schema."""
+    text = language_pack(language).card("system_prompts")["prompts"]["character"]
+    line = next(line for line in text.splitlines()
+                if '"state":{"appraisal":' in line)
+    example, _ = json.JSONDecoder().raw_decode(line[line.index('{'):])
+    report = validate_llm_output_strict("character_kernel", example)
+    assert report.valid, report.errors
+
+    assert set(example) == {
+        "state", "sequence", "manifest", "updates", "effects", "interaction",
+        "salience",
+    }
+    active = example["state"]["active"]
+    assert "mood" not in active
+    assert "baseline" not in active["affect"]
+    assert set(active["affect"]) == {"surface", "undercurrent"}
+    assert active["affect"]["undercurrent"] is None
+    assert active["active_concerns"] == []
+    assert report.output["state"]["decision"]["hinge"] == ""
+    assert report.output["state"]["decision"]["uncertainty"] == ""
+    assert set(example["updates"]["memory"]) == {"keep", "reinterpret", "effects"}
+
+    # The worked belief revision must also satisfy the current strict row
+    # contract; copying it should never turn a revision into a silent no-op.
+    belief_line = next(line for line in text.splitlines()
+                       if '{"operation":"revise"' in line)
+    belief, _ = json.JSONDecoder().raw_decode(
+        belief_line[belief_line.index('{"operation":"revise"'):])
+    assert {"belief", "operation", "target_belief", "confidence", "evidence"} <= set(belief)
+    assert belief["belief"] != belief["target_belief"]
+    assert belief["target_belief"] and belief["evidence"]
+    example["updates"]["beliefs"] = [belief]
+    report = validate_llm_output_strict("character_kernel", example)
+    assert report.valid, report.errors
+
+
+def test_character_state_and_learning_instructions_match_their_commit_meaning():
+    text = character_prompt(FULL, base=BASE)
+    assert "propose the feelings you now carry, including feelings that persist" in text
+    assert "not proof that the intended action succeeded" in text
+    assert "`status:proposed_before_resolution`" in text
+    assert "`self.active_state` holds settled emotion values" in text
+    assert "physical facts come from `self.body_state` and current perception" in text
+    assert "explicit `undercurrent:null` clears" in text
+    assert "`[]` clears them" in text
+    assert "Use `updates.memory.keep` rows" in text
+    assert "`reinforce` acquires a belief" in text
+    assert "copy the exact held claim into `target_belief`" in text
+    assert "`belief` and `confidence` are the desired replacement and its confidence" in text
+    assert "unadopted possibilities belong in appraisal or decision uncertainty" in text
+    assert "Every update requires" in text and "nonempty grounded evidence" in text
+    assert "`target_belief:''`" in text
+    assert "target_belief?" not in text
+    assert "at most 240 characters each" in text
+    assert "`state` is transient" not in text
+
+
+def test_terse_voice_obeys_the_explicit_line_budget_and_mouth_rules_stay_core():
+    text = character_prompt(EMPTY, base=BASE)
+    assert "terse voice must not be inflated within each line" in text
+    assert "If speaking, meet `min_lines`" in text
+    assert "unless impossible or a deliberate in-character refusal" in text
+    assert "must not be inflated to reach a line floor" not in text
+    assert "WHAT YOUR MOUTH IS DOING:" in text
+    assert "SPEAKING WITH YOUR MOUTH ENGAGED:" not in text
+    assert text.count("At most one per beat") == 1

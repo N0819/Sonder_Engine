@@ -840,7 +840,8 @@ def resolve_affect(prev_affect, appraisal_out, baseline, turns_since, proposed,
     (d) undercurrent: a model-proposed undercurrent is adopted
         (normalized, clamped) and supersedes stale prior residue; relief
         — a positive confirmed impact serving the same goal — still
-        clears it. When the model proposes none, the prior undercurrent
+        clears it. Explicit `undercurrent: None` clears prior residue and
+        prevents synthesis on this call. When the key is omitted, the prior undercurrent
         decays on the faster half-life (relief clears it, the floor
         retires it) and a new one is synthesized only when the proposed
         label contradicts a strong appraisal signal.
@@ -926,6 +927,8 @@ def resolve_affect(prev_affect, appraisal_out, baseline, turns_since, proposed,
     prop_under = (proposed.get("undercurrent")
                   if isinstance(proposed, dict)
                   and isinstance(proposed.get("undercurrent"), dict) else None)
+    clear_under = (isinstance(proposed, dict) and "undercurrent" in proposed
+                   and proposed["undercurrent"] is None)
     new_undercurrent = None
     if proposed_label is None:
         # no proposal: keep the old label if it still fits, else rename
@@ -933,7 +936,7 @@ def resolve_affect(prev_affect, appraisal_out, baseline, turns_since, proposed,
     else:
         # kept even when the computed signs disagree — masking is real
         label = proposed_label
-        if (prop_under is None and has_signal
+        if (not clear_under and prop_under is None and has_signal
                 and not label_matches(proposed_label, v, a)):
             # The character insists on a label the appraisal contradicts
             # and authored no undercurrent of their own: record what is
@@ -954,7 +957,9 @@ def resolve_affect(prev_affect, appraisal_out, baseline, turns_since, proposed,
         return bool(serves) and any(
             str(i.get("serves") or "") == serves for i in relief)
 
-    if prop_under is not None:
+    if clear_under:
+        undercurrent = None
+    elif prop_under is not None:
         u_v, u_a = _va_pair(prop_under)
         undercurrent = {
             "label": (str(prop_under.get("label") or "").strip()
@@ -1003,7 +1008,8 @@ def resolve_affect(prev_affect, appraisal_out, baseline, turns_since, proposed,
 def _want_text(want):
     return str(want.get("want") or want.get("desire") or want.get("text") or "").strip()
 
-def normalize_wants(wants, valid_intention_ids, *, want_cap=None):
+def normalize_wants(wants, valid_intention_ids, *, want_cap=None,
+                    enacted_want=None, suppressed_want=None):
     """Deterministic floor for a character's declared wants.
 
     `want_cap` is this character's attentional capacity (see `capacity_caps`);
@@ -1012,19 +1018,31 @@ def normalize_wants(wants, valid_intention_ids, *, want_cap=None):
 
     Caps to `want_cap` -- 1 at the `narrow` rung through 5 at `wide`, and 3
     at `ordinary`, which is the default and the number this used to hardcode
-    -- merges near-duplicates (claim_similarity >= 0.4, higher
-    urgency wins), rewrites unknown `serves` (neither "drive" nor a known
+    -- merges near-duplicates (claim_similarity >= 0.4), rewrites unknown
+    `serves` (neither "drive" nor a known
     intention/project id -- the caller passes the union) to "situational",
     and lets at most one situational want
     survive — weak models otherwise multiply free-floating urges that
-    serve nothing. Picks enacted = highest-urgency want and suppressed =
-    highest-urgency remaining want with `conflicts_with` set (the desire
-    the character is sitting on), annotating both for leak_scan. Returns
-    (wants, enacted_idx, suppressed_idx); indices are None when empty.
+    serve nothing. Valid `enacted_want` / `suppressed_want` indexes refer to
+    the ORIGINAL list: protect those choices through deduplication and caps,
+    enacted first, then suppressed if space permits. A selected duplicate
+    supplies the surviving text; an enacted desire cannot also be suppressed.
+    Without a valid explicit index, retain the legacy urgency selection
+    (suppression also requires `conflicts_with`). Annotates both for leak_scan
+    and returns (wants, enacted_idx, suppressed_idx), reindexed to survivors.
     """
     valid_ids = {str(i) for i in (valid_intention_ids or [])}
-    kept: list[dict] = []
-    for raw in wants or []:
+    originals = list(wants or [])
+    valid_indexes = {i for i, raw in enumerate(originals)
+                     if isinstance(raw, dict) and _want_text(raw)}
+    enacted = (enacted_want if type(enacted_want) is int
+               and enacted_want in valid_indexes else None)
+    suppressed = (suppressed_want if type(suppressed_want) is int
+                  and suppressed_want in valid_indexes else None)
+    # Each group carries its original indexes so choices can be remapped after
+    # filtering; none of this bookkeeping enters the returned character state.
+    groups: list[tuple[dict, set[int], int]] = []
+    for original_idx, raw in enumerate(originals):
         if not isinstance(raw, dict):
             continue
         text = _want_text(raw)
@@ -1049,45 +1067,61 @@ def normalize_wants(wants, valid_intention_ids, *, want_cap=None):
         want.pop("enacted", None)
         want.pop("suppressed", None)
 
-        # merge near-duplicates: same underlying desire, keep the max urgency
+        priority = 2 if original_idx == enacted else 1 if original_idx == suppressed else 0
+        # The chosen formulation survives a stronger urge that restates it.
+        # With no explicit choices this remains the old max-urgency fold.
         merged = False
-        for i, other in enumerate(kept):
+        for i, (other, origins, other_priority) in enumerate(groups):
             if claim_similarity(text, other["want"]) >= _WANT_SIMILARITY:
-                if want["urgency"] > other["urgency"]:
-                    kept[i] = want
+                origins.add(original_idx)
+                if (priority, want["urgency"]) > (other_priority, other["urgency"]):
+                    groups[i] = (want, origins, priority)
                 merged = True
                 break
         if not merged:
-            kept.append(want)
+            groups.append((want, {original_idx}, priority))
 
-    # at most one free-floating situational want survives (highest urgency)
+    # The situational cap still holds; enactment takes its one slot before
+    # suppression, and either deliberate choice takes it before an unchosen urge.
     best_situational = None
-    for want in kept:
+    for group in groups:
+        want, _, priority = group
         if want["serves"] == "situational":
-            if best_situational is None or want["urgency"] > best_situational["urgency"]:
-                best_situational = want
-    kept = [w for w in kept
-            if w["serves"] != "situational" or w is best_situational]
+            if (best_situational is None
+                    or (priority, want["urgency"])
+                    > (best_situational[2], best_situational[0]["urgency"])):
+                best_situational = group
+    groups = [g for g in groups
+              if g[0]["serves"] != "situational" or g is best_situational]
 
-    # cap by urgency, preserving original relative order of survivors
+    # Protect the decisions, then rank urgency; keep surviving group order.
     cap = _WANT_CAP if want_cap is None else max(1, int(want_cap))
-    if len(kept) > cap:
-        ranked = sorted(range(len(kept)), key=lambda i: (-kept[i]["urgency"], i))
+    if len(groups) > cap:
+        ranked = sorted(range(len(groups)),
+                        key=lambda i: (-groups[i][2], -groups[i][0]["urgency"], i))
         keep_idx = set(ranked[:cap])
-        kept = [w for i, w in enumerate(kept) if i in keep_idx]
+        groups = [g for i, g in enumerate(groups) if i in keep_idx]
 
+    kept = [g[0] for g in groups]
     if not kept:
         return ([], None, None)
 
-    enacted_idx = max(range(len(kept)), key=lambda i: (kept[i]["urgency"], -i))
+    enacted_idx = next((i for i, (_, origins, _) in enumerate(groups)
+                        if enacted in origins), None)
+    if enacted_idx is None:
+        enacted_idx = max(range(len(kept)), key=lambda i: (kept[i]["urgency"], -i))
     kept[enacted_idx]["enacted"] = True
 
     suppressed_idx = None
-    for i, want in enumerate(kept):
-        if i == enacted_idx or not want.get("conflicts_with"):
-            continue
-        if suppressed_idx is None or want["urgency"] > kept[suppressed_idx]["urgency"]:
-            suppressed_idx = i
+    if suppressed is not None:
+        suppressed_idx = next((i for i, (_, origins, _) in enumerate(groups)
+                               if suppressed in origins and i != enacted_idx), None)
+    else:
+        for i, want in enumerate(kept):
+            if i == enacted_idx or not want.get("conflicts_with"):
+                continue
+            if suppressed_idx is None or want["urgency"] > kept[suppressed_idx]["urgency"]:
+                suppressed_idx = i
     if suppressed_idx is not None:
         kept[suppressed_idx]["suppressed"] = True
 
@@ -1112,6 +1146,33 @@ def _find_intent(intentions, intent_id):
         if str(intent.get("id") or "") == intent_id:
             return intent
     return None
+
+def _record_intent_transition(target, op, kind, turn_idx):
+    """Keep one compact reason for the latest accepted change, not a history.
+
+    Evidence ids retain their exact engine spelling. Only the two public
+    evidence fields survive, with at most three references and short facts.
+    """
+    evidence = op.get("evidence") or []
+    if isinstance(evidence, (str, dict)):
+        evidence = [evidence]
+    refs = []
+    for row in evidence if isinstance(evidence, (list, tuple)) else []:
+        if isinstance(row, str):
+            row = {"fact": row}
+        if not isinstance(row, dict):
+            continue
+        ref = {"event_id": str(row.get("event_id") or "").strip(),
+               "fact": " ".join(str(row.get("fact") or "").split())[:240]}
+        if any(ref.values()) and ref not in refs:
+            refs.append(ref)
+        if len(refs) == 3:
+            break
+    target["last_transition"] = {
+        "op": kind, "turn": turn_idx,
+        "why": " ".join(str(op.get("why") or "").split())[:240],
+        "evidence": refs,
+    }
 
 def _revive_intent(target):
     """Engagement revives a set-aside goal. A blocked goal progressed again is
@@ -1248,7 +1309,9 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok, *,
     `progress` on a goal already at the ceiling gains nothing, so it does not
     touch the clock and counts toward a stall instead (see _advance_intent);
     anything active but untouched for more than 30 turns goes dormant. New ids
-    are assigned i<max+1> deterministically. Returns (intentions, warnings).
+    are assigned i<max+1> deterministically. Each accepted change replaces one
+    bounded `last_transition` reason/evidence record; rejected and barren ops
+    leave it intact. Returns (intentions, warnings).
     """
     result = [dict(i) for i in (intentions or []) if isinstance(i, dict)]
     warnings: list[str] = []
@@ -1285,6 +1348,7 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok, *,
                 if _advance_intent(match, turn_idx, warnings,
                                    barren_beat=barren_beat):
                     _revive_intent(match)
+                    _record_intent_transition(match, op, "progress", turn_idx)
                 continue
             active = sum(1 for i in result if i.get("status") == "active")
             if active >= _cap:
@@ -1300,6 +1364,7 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok, *,
                 "last_progress_turn": turn_idx,
                 "progress": 0.0,
             })
+            _record_intent_transition(result[-1], op, kind, turn_idx)
             continue
 
         target = _find_intent(result, op.get("id"))
@@ -1343,6 +1408,8 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok, *,
                                         barren_beat=barren_beat)
             if moved and target.get("status") in ("dormant", "blocked"):
                 _revive_intent(target)
+            if moved:
+                _record_intent_transition(target, op, kind, turn_idx)
         elif kind == "nonviable":
             # The world has CLOSED this goal this beat (route sealed, target
             # destroyed, tool lost). Guarded like satisfy/abandon: the op must
@@ -1362,6 +1429,7 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok, *,
             target["blocked_why"] = str(op.get("why") or "").strip()
             target["blocked_turn"] = turn_idx
             target["last_progress_turn"] = turn_idx
+            _record_intent_transition(target, op, kind, turn_idx)
         elif kind in ("satisfy", "abandon"):
             formed = int(_float_or(target.get("formed_turn"), turn_idx))
             if turn_idx - formed <= _INTENT_EVIDENCE_WINDOW:
@@ -1378,6 +1446,7 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok, *,
             if kind == "satisfy":
                 target["progress"] = 1.0
             target["last_progress_turn"] = turn_idx
+            _record_intent_transition(target, op, kind, turn_idx)
         else:
             warnings.append(f"unknown intent op {kind!r}")
 

@@ -148,12 +148,16 @@ def test_voice_anchor_and_instruction_survive_poisoned_memory(temp_db, monkeypat
 
 def test_low_verbosity_symmetry_guard(temp_db, monkeypatch):
     """The fix must not inflate laconic characters: the instruction must
-    explicitly protect low/terse baselines."""
+    protect short lines while honoring the configured number of lines."""
     chat_id, char_id = _make_verbose_doctor_chat(temp_db, "low")
     cap = _run_character_step(temp_db, monkeypatch, chat_id, char_id, current_turn_idx=3)
 
     assert cap["payload"]["self"]["voice"]["verbosity"] == "low"
-    assert "must not be inflated" in cap["system"]
+    rule = next(line for line in cap["system"].splitlines()
+                if line.startswith("VOICE AND REGISTER"))
+    assert "must not be inflated within each line" in rule
+    assert "decision.speech_budget.min_lines" in rule
+    assert "required number of separate lines when speaking" in rule
 
 
 def test_consolidator_is_forbidden_from_describing_manner(temp_db, monkeypatch):

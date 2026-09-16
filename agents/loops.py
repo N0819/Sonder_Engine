@@ -118,9 +118,11 @@ def rehydrate_loop_views(ctx, key, content):
         for cid, view in ((ctx.perception_act or {}).get("views") or {}).items()
         if str(cid).isdigit()
     }
+    base_observations = _base_loop_observations(ctx)
     rounds = _dict_list(content.get("rounds"))
     if key == "reaction_loop":
         views = ctx._extra.setdefault("reaction_views", {})
+        observations = ctx._extra.setdefault("reaction_observations", {})
         for round_data in rounds:
             try:
                 rid = int(round_data.get("reactor_id"))
@@ -128,10 +130,13 @@ def rehydrate_loop_views(ctx, key, content):
                 continue
             if rid in base:
                 views.setdefault(rid, base[rid])
+                observations.setdefault(rid, base_observations.get(rid, []))
         return
     if key != "interaction_loop":
         return
     local_views = dict(base)
+    local_observations = base_observations
+    unstructured = set()
     for round_data in rounds:
         for observer, additions in _dict(
                 round_data.get("delivered_views")).items():
@@ -141,6 +146,15 @@ def rehydrate_loop_views(ctx, key, content):
                 continue
             local_views[observer_id] = _append_micro_view(
                 local_views.get(observer_id, ""), _list(additions))
+            recorded = _dict(round_data.get("delivered_observations"))
+            if str(observer) in recorded:
+                local_observations.setdefault(observer_id, []).extend(
+                    _dict_list(recorded[str(observer)]))
+            elif additions:
+                # Old round records have only strings. Keep the compatibility
+                # view; character.py projects it as one unclassified context
+                # row rather than inventing event boundaries or attribution.
+                unstructured.add(observer_id)
         # ...and the speaker's own conduct, from the same record, so a
         # rehydrated view is the live one rather than an approximation of it.
         try:
@@ -151,10 +165,63 @@ def rehydrate_loop_views(ctx, key, content):
             local_views[speaker_id] = _append_micro_view(
                 local_views.get(speaker_id, ""),
                 _list(round_data.get("self_view")))
+            if "self_observations" in round_data:
+                local_observations.setdefault(speaker_id, []).extend(
+                    _dict_list(round_data.get("self_observations")))
+            elif round_data.get("self_view"):
+                unstructured.add(speaker_id)
     ctx._extra["interaction_views"] = local_views
+    ctx._extra["interaction_observations"] = {
+        cid: rows for cid, rows in local_observations.items()
+        if cid not in unstructured
+    }
 
 
-def self_micro_view(actor_result):
+def _base_loop_observations(ctx):
+    """Copy onset observations so a later micro-round cannot mutate onset."""
+    from copy import deepcopy
+    from .composer import compact_observation
+
+    observations = {
+        int(cid): deepcopy(rows)
+        for cid, rows in ((ctx.perception_act or {}).get("observations") or {}).items()
+        if str(cid).isdigit() and isinstance(rows, list)
+    }
+    for cid, view in ((ctx.perception_act or {}).get("views") or {}).items():
+        if not str(cid).isdigit() or int(cid) in observations or not view:
+            continue
+        observations[int(cid)] = [compact_observation({
+            "observation_id": f"current:{cid}:legacy:onset",
+            "channel": "mixed", "phase": "context",
+            "observed": {"text": str(view)},
+        })]
+    return observations
+
+
+def _micro_observation(observer_id, sentence, *, event_prefix, event_index,
+                       kind, channel, actor="", fidelity="rendered",
+                       directed_at_self=False):
+    """Wrap one admitted delivery without consulting its raw declaration."""
+    from .composer import compact_observation
+
+    return compact_observation({
+        "observation_id": f"current:{observer_id}:{event_prefix}:{event_index}",
+        "perceiver_id": str(observer_id),
+        "channel": channel,
+        "fidelity": fidelity,
+        "observed": {"text": sentence},
+        **({"actor": actor} if actor else {}),
+        "kind": kind,
+        "phase": "event",
+        "order": event_index,
+        "standing": False,
+        "ambiguity": 0.15 if fidelity == "rendered" else 0.65,
+        "directed_at_self": directed_at_self,
+    })
+
+
+def self_micro_view(actor_result, *, observation_out=None, observer_id="",
+                    event_prefix="micro:self"):
     """What a body itself carries out of its own micro-round.
 
     A MIND IS PRESENT AT ITS OWN CONDUCT. `deterministic_micro_perception`
@@ -182,7 +249,8 @@ def self_micro_view(actor_result):
     exactly as it is to everybody else.
     """
     additions = []
-    for event in (actor_result or {}).get("sequence") or []:
+    for event_index, event in enumerate((actor_result or {}).get("sequence") or []):
+        previous_count = len(additions)
         kind = event.get("type")
         if kind in ("speech", "communication"):
             # `text`, the same field the observer branch reads (:273). The
@@ -199,6 +267,12 @@ def self_micro_view(actor_result):
             if surface:
                 additions.append(
                     compositor_text("loop_self_did", surface=surface))
+        if observation_out is not None and len(additions) > previous_count:
+            observation_out.append(_micro_observation(
+                observer_id, additions[-1], event_prefix=event_prefix,
+                event_index=event_index, kind=kind,
+                channel="hearing" if kind in ("speech", "communication")
+                else "interoception", directed_at_self=True))
     return additions
 
 
@@ -241,7 +315,8 @@ def _micro_seen_bodies(scene, observer_name, senses=None):
     return seen
 
 
-def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
+def deterministic_micro_perception(ctx, actor_id, actor_result, scene, *,
+                                   observation_out=None, event_prefix="micro"):
     actor_row = _character_by_id(ctx, actor_id)
     # Four normalizations of the one card (name, appearance, room, scene keys)
     # became one memoised read (C14).
@@ -302,7 +377,9 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
         # acuity shifts anything.
         observer_senses = character_senses(observer_sheet)
         additions = []
-        for event in actor_result.get("sequence") or []:
+        observations = []
+        for event_index, event in enumerate(actor_result.get("sequence") or []):
+            previous_count = len(additions)
             if event.get("type") in ("speech", "communication"):
                 # A concealed line is an absolute exclusion, not a volume: it
                 # must never be delivered to an observer named in its
@@ -374,6 +451,13 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
                         additions.append(compositor_text(
                             "loop_muffled", label=display, fragment=fragment))
                 perceived_by.add(observer_id)
+                if len(additions) > previous_count:
+                    observations.append(_micro_observation(
+                        observer_id, additions[-1], event_prefix=event_prefix,
+                        event_index=event_index,
+                        kind="sound" if level == "trace" else event.get("type"),
+                        channel="hearing", actor="" if level == "trace" else display,
+                        fidelity="rendered" if level == "full" else "ambiguous"))
             elif event.get("type") == "action":
                 if event.get("visibility") == "concealed":
                     continue
@@ -402,9 +486,15 @@ def deterministic_micro_perception(ctx, actor_id, actor_result, scene):
                 sentence = _observable_predicate(display, surface) if surface else None
                 if sentence:
                     additions.append(sentence)
+                    observations.append(_micro_observation(
+                        observer_id, sentence, event_prefix=event_prefix,
+                        event_index=event_index, kind="action", channel="sight",
+                        actor=display))
                     perceived_by.add(observer_id)
         if additions:
             views[observer_id] = additions
+            if observation_out is not None:
+                observation_out[observer_id] = observations
     return views, perceived_by
 
 def _drop_non_awake(ctx, reactor_ids):
@@ -681,6 +771,13 @@ def _isolated_wave(ctx, scene, queue_ids, enabled):
 
 
 def interaction_loop(ctx, nonce):
+    # This invocation owns the interaction declarations. Reroll hydration can
+    # include the discarded loop's results, including characters who will
+    # not run this time. Clear both projections before even a no-call exit.
+    # Reactions belong to their separate map; the plan runs either this loop
+    # or standalone character steps, never both.
+    ctx.character_results = {}
+    ctx._extra["beat_declared"] = {}
     config = dialogue_config(ctx.chat.id)
 
     interp = _dict(ctx.director_interpret)
@@ -821,16 +918,6 @@ def interaction_loop(ctx, nonce):
         scene = get_scene(ctx.chat.id, ctx.chat)
         shared["scene"] = scene
 
-    # What each mouth has ALREADY declared this beat, for `character_step`'s
-    # within-beat self-ledger and reissue floor. Loop-owned and RESET here,
-    # never read from `ctx.character_results`: the single-step reroll path
-    # hydrates every stored step -- including the one being rerolled -- into
-    # ctx before executing, so `character_results` can hold the DISCARDED
-    # roll's output, and judging the fresh roll against a roll the player
-    # threw away would drop lines nobody canonically said. A re-executed
-    # loop starts from nothing said, which is the truth of a reroll.
-    ctx._extra["beat_declared"] = {}
-
     base_views = dict(
         (ctx.perception_act or {}).get("views")
         or {}
@@ -840,6 +927,9 @@ def interaction_loop(ctx, nonce):
         for key, value in base_views.items()
         if str(key).isdigit()
     }
+    local_observations = _base_loop_observations(ctx)
+    # A re-executed loop starts at onset, including its evidence handles.
+    ctx._extra["interaction_observations"] = {}
 
     already_reacted = set(ctx.reaction_results)
 
@@ -1001,6 +1091,8 @@ def interaction_loop(ctx, nonce):
         ctx._extra.setdefault("interaction_views", {})
         ctx._extra["interaction_views"][speaker_id] = local_views.get(
             speaker_id, "")
+        ctx._extra["interaction_observations"][speaker_id] = list(
+            local_observations.get(speaker_id, []))
         result = character_step(ctx, speaker_id, nonce + call_index)
         _apply_interruptions(speaker_id, result)
         # This round joins the mouth's own within-beat record BEFORE anything
@@ -1014,16 +1106,19 @@ def interaction_loop(ctx, nonce):
         _declared = ctx._extra.setdefault("beat_declared", {})
         _declared[speaker_id] = _merge_character_results(
             _declared.get(speaker_id), result)
-        # Merge rather than overwrite: a character can speak in more than one
-        # micro-round, and commit/perception_outcome read
-        # ctx.character_results[id] as that character's SINGLE result. A blind
-        # reassignment dropped the earlier round's sequence/mind_model_updates
-        # entirely at commit.
-        ctx.character_results[speaker_id] = _merge_character_results(
-            ctx.character_results.get(speaker_id), result
-        )
+        # Commit and perception read this projection of the same fresh
+        # declaration ledger. Merge once above so omitted later fields retain
+        # this invocation's earlier choices, never a discarded roll's choices.
+        ctx.character_results[speaker_id] = _declared[speaker_id]
+        delivered_observations = {}
+        event_prefix = f"micro:{len(rounds)}:{speaker_id}"
         delivered, perceived_by = deterministic_micro_perception(
-            ctx, speaker_id, result, scene)
+            ctx, speaker_id, result, scene,
+            observation_out=delivered_observations, event_prefix=event_prefix)
+        self_observations = []
+        self_view = self_micro_view(
+            result, observation_out=self_observations, observer_id=speaker_id,
+            event_prefix=event_prefix)
         for _observer in perceived_by:
             heard_by.setdefault(_observer, set()).add(speaker_id)
         rounds.append({
@@ -1035,13 +1130,17 @@ def interaction_loop(ctx, nonce):
             "delivered_views": {
                 str(key): value for key, value in delivered.items()
             },
+            "delivered_observations": {
+                str(key): value for key, value in delivered_observations.items()
+            },
             # NOT folded into `delivered_views`: that key means "what reached
             # somebody ELSE", and two readers depend on it meaning exactly
             # that -- `character._lines_delivered_to` ("the prose THIS mind is
             # recorded as having received") and `perception`'s outcome
             # composition. A mind recorded as having RECEIVED its own question
             # is a mind that can be prompted to answer it.
-            "self_view": self_micro_view(result),
+            "self_view": self_view,
+            "self_observations": self_observations,
         })
         return result, delivered, perceived_by
 
@@ -1123,15 +1222,20 @@ def interaction_loop(ctx, nonce):
             no_content_streak += 1
 
         # Only now does the wave become visible to itself and to everyone else.
-        for _speaker_id, _result, delivered, _ in spoke:
+        for (_speaker_id, _result, delivered, _), round_data in zip(
+                spoke, rounds[-len(spoke):]):
             for observer_id, additions in delivered.items():
                 local_views[observer_id] = _append_micro_view(
                     local_views.get(observer_id, ""), additions)
+                local_observations.setdefault(observer_id, []).extend(
+                    round_data["delivered_observations"].get(str(observer_id), []))
             # A body is present at its own conduct. Merged in the same place
             # and at the same moment as everyone else's, so a second round
             # sees the first whoever spoke in it.
             local_views[_speaker_id] = _append_micro_view(
-                local_views.get(_speaker_id, ""), self_micro_view(_result))
+                local_views.get(_speaker_id, ""), round_data["self_view"])
+            local_observations.setdefault(_speaker_id, []).extend(
+                round_data["self_observations"])
 
         # The exits are evaluated for the wave as a whole, after all of it has
         # spoken. Evaluating them mid-wave would reinstate exactly the
@@ -1307,6 +1411,7 @@ def interaction_loop(ctx, nonce):
         )
 
     ctx._extra["interaction_views"] = local_views
+    ctx._extra["interaction_observations"] = local_observations
 
     return {
         "rounds": rounds,
@@ -1354,6 +1459,9 @@ def reaction_loop(ctx, nonce):
     Each eligible reactor receives only its filtered perception of the
     player's action onset and declares a reaction blind to other reactors.
     """
+    # A rerolled reaction phase replaces its own declarations, including when
+    # no one reacts now. Interaction results have a different stage owner.
+    ctx.reaction_results = {}
     interp = _dict(ctx.director_interpret)
     flow = _dict(interp.get("flow"))
     flags = _dict(flow.get("resolution_flags"))
@@ -1387,6 +1495,7 @@ def reaction_loop(ctx, nonce):
 
     rounds = []
     calls = 0
+    base_observations = _base_loop_observations(ctx)
 
     for rid in reactor_ids:
         view = perception_views.get(str(rid))
@@ -1395,6 +1504,8 @@ def reaction_loop(ctx, nonce):
 
         ctx._extra.setdefault("reaction_views", {})
         ctx._extra["reaction_views"][rid] = view
+        ctx._extra.setdefault("reaction_observations", {})[rid] = list(
+            base_observations.get(rid, []))
 
         result = character_step(ctx, rid, nonce + calls)
         calls += 1

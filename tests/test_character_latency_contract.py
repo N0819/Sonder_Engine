@@ -44,7 +44,11 @@ def test_runtime_character_schema_is_the_seven_field_typed_kernel():
     # in one list. Paired GLM-5.2 replays then treated list order as priority:
     # the memory rows at the tail disappeared. This remains smaller than the
     # old CharacterOutput grammar while giving each faculty a typed aperture.
-    assert len(wire) < 6000
+    # Live GLM emitted a belief revision without its target/confidence/evidence,
+    # and another response looped inside a want until truncation. Required
+    # learning fields, nonempty citation ids, and 240-character choice bounds
+    # add ~370 bytes to the former 5,993-byte grammar; keep those constraints.
+    assert len(wire) < 6500
     assert set(offered["properties"]) == {
         "state", "sequence", "manifest", "updates", "effects",
         "interaction", "salience",
@@ -64,6 +68,25 @@ def test_runtime_character_schema_is_the_seven_field_typed_kernel():
         "intentions", "projects", "drive", "beliefs", "associations",
         "people", "relationships", "memory",
     }
+    beliefs = definitions[updates_name]["properties"]["beliefs"]
+    belief_name = beliefs["items"]["$ref"].rsplit("/", 1)[-1]
+    belief = definitions[belief_name]
+    assert {"belief", "operation", "target_belief", "confidence", "evidence"} <= set(
+        belief["required"])
+    assert belief["properties"]["evidence"]["minItems"] == 1
+    evidence_name = belief["properties"]["evidence"]["items"]["$ref"].rsplit("/", 1)[-1]
+    assert "event_id" in definitions[evidence_name]["required"]
+    assert definitions[evidence_name]["properties"]["event_id"]["minLength"] == 1
+
+    state_name = offered["properties"]["state"]["$ref"].rsplit("/", 1)[-1]
+    active_name = definitions[state_name]["properties"]["active"]["$ref"].rsplit("/", 1)[-1]
+    active = definitions[active_name]["properties"]
+    assert "mood" not in active  # derived from affect.surface by the compiler
+    want_name = active["wants"]["items"]["$ref"].rsplit("/", 1)[-1]
+    assert definitions[want_name]["properties"]["want"]["maxLength"] == 240
+    decision_name = definitions[state_name]["properties"]["decision"]["$ref"].rsplit("/", 1)[-1]
+    for field in ("hinge", "uncertainty"):
+        assert definitions[decision_name]["properties"][field]["maxLength"] == 240
 
 
 def test_runtime_character_prompt_has_a_small_operational_ceiling():
@@ -101,6 +124,8 @@ def test_compact_character_wire_is_experimental_and_complete():
     # could never catch a breach and nothing read them.
     for canonical in ("sequence", "appraisal", "active_state", "manifest"):
         assert canonical in compact_fields
+    assert "decision_continuity" not in control_fields
+    assert "decision_continuity" not in compact_fields
 
 
 def test_runtime_prompt_moves_identity_behind_the_stable_prefix():

@@ -1070,6 +1070,8 @@ SIDE_CHANNELS = {
     "outcome_scene": "rebuilt: `perception_outcome` is re-run for it",
     "interaction_views": "rebuilt: `loops.rehydrate_loop_views`",
     "reaction_views": "rebuilt: `loops.rehydrate_loop_views`",
+    "interaction_observations": "rebuilt: `loops.rehydrate_loop_views`",
+    "reaction_observations": "rebuilt: `loops.rehydrate_loop_views`",
     "_books": "memo: the chat's lorebook ids",
     "_book_weights": "memo: the chat's lorebook weights",
     "_sound_crowds": "memo: the chat's crowd ledger from world state",

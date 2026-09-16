@@ -264,7 +264,7 @@ def test_the_cue_names_only_this_minds_own_private_matter(temp_db, monkeypatch):
     # points at its line by the SAME handle -- the one the sheet tells the
     # mind to cite.
     assert cues[0]["line_ref"] == \
-        bram_payload["perception"]["observations"][0]["observation_id"]
+        bram_payload["perception"]["events"][0]["observation_id"]
     assert cues[0]["line_ref"].startswith("o")
     # Mira's secret is in the line Bram heard, legitimately; it is not in
     # any cue of his, because it is not his matter.

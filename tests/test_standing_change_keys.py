@@ -267,20 +267,13 @@ class TestOneEntryIsOneDeliveryAtProjectionToo:
                   if "We hold the line here." in t and "No one crosses." in t]
         assert not welded, welded
 
-    def test_the_cap_welds_one_mouth_before_it_welds_two(self):
-        """Refusing the merge upstream spends the atom cap, and the cap is
-        the one place a delivery boundary may still be lost. Measured over
-        the 4,108 stored observer-beats in the bench corpus: 668 carry a
-        same-mouth weld, and refusing it unconditionally would newly overflow
-        the cap on 345 of them -- 333 of which hold no standing entry for the
-        cap to spend instead. So the cap must reach for the same mouth's
-        lines before it reaches for two mouths', or this fix would trade a
-        dropped attribution for a misattributed line."""
+    def test_crowded_deliveries_keep_both_same_and_different_speakers_separate(self):
+        """A row limit must not change how many deliveries the observer got."""
         speakers = ["Mara"] * 9 + ["Vorne"]
         percepts = [self._speech(who, "Line %d." % n, n)
                     for n, who in enumerate(speakers)]
         texts = self._texts(self._project(percepts))
 
-        assert len(texts) <= composer._MAX_OBSERVATION_ATOMS
+        assert len(texts) == len(speakers)
         for text in texts:
             assert not ("Mara" in text and "Vorne" in text), text

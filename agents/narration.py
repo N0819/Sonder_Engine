@@ -587,7 +587,7 @@ def _player_long_established(ctx, turn_idx, depth, pid="player"):
 
 def _sensory_channels_manifest(scene, player_name, view, observations,
                                recognized, cast_info, p_room,
-                               standing_verdicts=None):
+                               standing_verdicts=None, *, include_delivery_text=True):
     """Per-sense delivery manifest for the narrator payload, or {}.
 
     THE DEFECT: percepts carry a real channel from every builder through
@@ -598,6 +598,11 @@ def _sensory_channels_manifest(scene, player_name, view, observations,
     contact delivers no touch at all. Measured over 600 stored perception
     steps: sight 1089 spans against touch 94 and delivered smell ~0 after the
     opening turn.
+
+    The narrator omits `this_beat` prose with `include_delivery_text=False`:
+    each admitted sentence already appears once in its event/state packet.
+    The observations still establish which channels delivered anything.
+    The default keeps the standalone audit helper's archived shape.
 
     EVERY ENTRY IS A RE-DELIVERY, NEVER A WIDENING -- the firewall is a gap
     and guards subtract:
@@ -789,14 +794,15 @@ def _sensory_channels_manifest(scene, player_name, view, observations,
         entry = {"status": status}
         if why:
             entry["why"] = why
-        if by_channel.get(channel):
+        if include_delivery_text and by_channel.get(channel):
             entry["this_beat"] = by_channel[channel]
         if standing.get(channel):
             entry["standing"] = standing[channel]
         manifest[channel] = entry
     if by_channel.get("mixed"):
-        manifest["mixed"] = {"status": "live",
-                             "this_beat": by_channel["mixed"]}
+        manifest["mixed"] = {"status": "live"}
+        if include_delivery_text:
+            manifest["mixed"]["this_beat"] = by_channel["mixed"]
     return manifest
 
 
@@ -1463,23 +1469,11 @@ def _render_observed_events(observations, player_acts=()):
     for obs in observations or []:
         if not isinstance(obs, dict):
             continue
-        # STANDING STATE IS NOT AN EVENT, and numbering it here was the
-        # engine contradicting its own payload comment: `present_scene` is
-        # declared "standing state, not chronology" three fields below, and
-        # then every standing span arrived here too, numbered, under a sheet
-        # rule saying each numbered entry is a delivery the narrator must
-        # render. A beat's list was mostly wallpaper carrying an obligation,
-        # and a model that renders one paragraph per numbered entry is
-        # obeying that, not misreading it.
-        #
-        # `standing` is decided at projection, where the percept is still in
-        # hand (`composer.observations_from_render`), and it is FALSE for an
-        # appearance the engine flagged `force` -- a garment gone, a mask
-        # down. A change of clothing is an event and keeps its number. A row
-        # stored before the field existed reads back False, which is
-        # obligation: replay can never make something skippable that was not
-        # already.
-        if obs.get("standing"):
+        # A perceived change is evidence about the current scene, not a
+        # timestamped action. Legacy observations keep their old standing
+        # interpretation; current rows declare their phase explicitly.
+        if (obs.get("phase") and obs.get("phase") != "event") or (
+                not obs.get("phase") and obs.get("standing")):
             continue
         text = str((obs.get("observed") or {}).get("text") or "").strip()
         if text:
@@ -1488,11 +1482,70 @@ def _render_observed_events(observations, player_acts=()):
     return "\n".join(lines)
 
 
+def _narrator_perception_fields(observations, view, player_acts=()):
+    """Separate admitted events, noticed changes and standing scene facts.
+
+    The original full view remains the local dialogue/fidelity authority.
+    Only these disjoint presentation fields reach the narrator, so an action
+    is not repeated as scenery or assigned to a second invented chronology.
+    Archived views without structured observations remain unstructured.
+    """
+    # Projection precedes the final view scrub in some archived stages. A
+    # row removed there cannot be reintroduced by the presentation packet.
+    admitted = [obs for obs in observations or []
+                if isinstance(obs, dict)
+                and isinstance(obs.get("observed"), dict)
+                and str(obs["observed"].get("text") or "").strip()
+                and str(obs["observed"]["text"]).strip() in str(view or "")]
+    packet = composer.perception_packet(admitted, fallback_view=view)
+
+    def text_of(rows):
+        return "\n".join(str(row["observed"]["text"]).strip()
+                         for row in rows)
+
+    # Keep attribution and delivery type beside the exact admitted words.
+    # Flattening these into numbered sentences made a nearby actor look like
+    # the next quote's speaker and a spoken condition look like an action.
+    events = []
+    for act in player_acts or ():
+        if not isinstance(act, dict):
+            continue
+        action = str(act.get("action") or "").strip()
+        if action:
+            events.append({
+                "order": len(events) + 1,
+                "actor": str(act.get("actor") or "you"),
+                "kind": "action", "source": "reconciled_player_action",
+                "text": action,
+            })
+    for observation in packet["events"]:
+        event = {
+            "order": len(events) + 1,
+            "kind": str(observation.get("kind") or "observation"),
+            "channel": str(observation.get("channel") or "mixed"),
+            "fidelity": observation.get(
+                "fidelity", composer.OBSERVATION_DEFAULTS["fidelity"]),
+            "ambiguity": observation.get(
+                "ambiguity", composer.OBSERVATION_DEFAULTS["ambiguity"]),
+            "text": str(observation["observed"]["text"]).strip(),
+        }
+        if observation.get("actor"):
+            event["actor"] = observation["actor"]
+        events.append(event)
+
+    return {
+        "present_scene": text_of(packet["current_state"]),
+        "unstructured_context": text_of(packet.get("unstructured_context", [])),
+        "changes_noticed": text_of(packet["changes_noticed"]),
+        "current_events": events,
+    }
+
+
 def _render_current_events(events, player_name=""):
     """`event_order` as a plain chronological package.
 
     NOT WHAT THE NARRATOR IS WRITTEN FROM ANY MORE (E14). `narrator` builds
-    `current_events` from `_render_observed_events` -- perception's own record
+    `current_events` from `_narrator_perception_fields` -- perception's own record
     -- and keeps `event_order` on `_fidelity_facts` for the deterministic
     checks alone, so the model is handed what a mind was admitted rather than
     what happened. This renderer survives for `tools/narrator_package_bench.py`
@@ -1919,6 +1972,11 @@ def narrator(ctx, nonce):
     else:
         view = (ctx.get("perception_outcome", {}).get("views") or {}).get("player") \
             or compositor_text("narrator_nothing", ctx.language)
+    perception_stage = ctx.get(
+        "perception_establish" if est else "perception_outcome", {}) or {}
+    player_observations = (perception_stage.get("observations") or {}).get(
+        "player") or []
+    perception_fields = _narrator_perception_fields(player_observations, view)
     # Frame-filtered: t.idx is GLOBAL play order shared by every frame, so
     # without this an OTHER concurrently-played frame's prior text would leak
     # into this frame's own.
@@ -2049,10 +2107,9 @@ def narrator(ctx, nonce):
     # _check_narrator_fidelity. Normal turns only (an opening turn has no
     # prior beat to delta against and no loop order), and gated with the
     # spatial fields on consciousness: a non-awake mind gets no scene.
-    # The chronological package the narrator writes from. Empty on an opening
-    # turn (nothing has happened yet) and for a non-awake mind (no beat
-    # reaches it), which is the same gate the world fields take below.
-    current_events = ""
+    # The chronological package contains only events the observer received.
+    # It can be empty while standing facts or noticed changes remain.
+    current_events = perception_fields["current_events"]
     _world_fields, _fidelity_facts = {}, {}
     if not est and player_awareness not in NON_AWAKE_GATED:
         # The scene this page is written from outranks the cached answer,
@@ -2120,12 +2177,11 @@ def narrator(ctx, nonce):
         # `_render_observed_events`). `event_order` is still built above: it
         # stays on `_fidelity_facts` for the deterministic checks, which score
         # what reached the page rather than deciding what may reach the model.
-        _obs_map = (ctx.get("perception_outcome", {}) or {}).get(
-            "observations") or {}
-        current_events = _render_observed_events(
-            _obs_map.get("player") or [],
+        perception_fields = _narrator_perception_fields(
+            player_observations, view,
             [ev for ev in event_order
              if ev.get("kind") == "action" and ev.get("actor") == player_name])
+        current_events = perception_fields["current_events"]
         # WHAT THE PLAYER IS WEARING, from the ledger that owns it. The
         # narrator sheet already forbids extending "what anyone wears", and
         # the prose dressed the player anyway -- because the payload carried
@@ -2195,8 +2251,8 @@ def narrator(ctx, nonce):
         _verdicts = _player_standing_verdicts(ctx)
         _senses = _sensory_channels_manifest(
             _scene_for_frame, player_name, view,
-            _obs_map.get("player") or [], recognized, cast_info, p_room,
-            standing_verdicts=_verdicts)
+            player_observations, recognized, cast_info, p_room,
+            standing_verdicts=_verdicts, include_delivery_text=False)
         if _senses:
             _world_fields["sensory_channels"] = _senses
         # STILL TRUE, AND NOT SAID SINCE BEFORE THE PAGE'S OWN MEMORY (D7).
@@ -2215,7 +2271,7 @@ def narrator(ctx, nonce):
             # Perception's own record of who did each act, for the
             # attribution check (`_check_action_attribution`): the labels
             # this mind may call the present bodies by.
-            "observations": list(_obs_map.get("player") or []),
+            "observations": list(player_observations),
             "player_forms": list(player_forms),
             "present_labels": sorted({
                 str(f.get("name") or "") for f in pos_facts
@@ -2324,16 +2380,20 @@ def narrator(ctx, nonce):
 
         # -- The three packages, in reading order. `past_narration` is the
         # story so far as one unlabelled text ending in this turn's raw input;
-        # `present_scene` is perception's render of what may legitimately be
-        # perceived right now; `current_events` is what happened this beat, in
-        # order, and is the writing material.
+        # `present_scene` is admitted standing state; `changes_noticed` names
+        # changes without inventing their moment; `current_events` preserves
+        # the observer's event order. The full paragraph stays local.
         "past_narration": past_narration,
         # The player's own writing for THIS turn, in its own right: the same
         # voice as the block above and the sentence the narrator continues
         # from. It is a CLAIM about what they did -- `current_events` is the
         # record of what came of it, and wins wherever the two differ.
         "current_narration": (ctx.input or "").strip(),
-        "present_scene": view,
+        "present_scene": perception_fields["present_scene"],
+        **({"unstructured_context": perception_fields["unstructured_context"]}
+           if perception_fields["unstructured_context"] else {}),
+        **({"changes_noticed": perception_fields["changes_noticed"]}
+           if perception_fields["changes_noticed"] else {}),
         "current_events": current_events,
         "variant_seed": nonce,
     }
@@ -2524,6 +2584,12 @@ def narrator_extra(ctx, nonce):
                 outcome_views.get(f"extra:{pid_key}")) \
             or "Nothing in particular reaches you this beat."
 
+        perception_stage = ctx.get(
+            "perception_establish" if est else "perception_outcome", {}) or {}
+        observations = (perception_stage.get("observations") or {}).get(
+            f"extra:{pid_key}") or []
+        perception_fields = _narrator_perception_fields(observations, view)
+
         past_narration, prev = _past_narration_extra_block(
             chat["id"], ctx.turn["idx"], ctx.turn["frame_id"], pid, _depth)
 
@@ -2563,12 +2629,8 @@ def narrator_extra(ctx, nonce):
         _rhythm2 = _rhythm_report(prev)
         _long2 = _player_long_established(
             ctx, ctx.turn["idx"], _depth, pid="extra:" + pid_key)
-        # Same order as narrator() above, and for the same reason -- see the
-        # ORDER IS THE MESSAGE comment there. This seat has no
-        # `current_events` package: `_ordered_beat_events` reads the PRIMARY
-        # player's declaration and view to build the record, and there is no
-        # per-seat equivalent yet, so an extra player still writes from the
-        # view alone. That gap is this stage's, not the design's.
+        # Each seat partitions its own admitted observations. The primary
+        # player's event reconstruction cannot supply another mind's view.
         payload = {
             "narration_person": narration_person,
             # One story, one tense. Person is per-seat because each human
@@ -2611,7 +2673,12 @@ def narrator_extra(ctx, nonce):
 
             "past_narration": past_narration,
             "current_narration": (extra.get("input") or "").strip(),
-            "present_scene": view,
+            "present_scene": perception_fields["present_scene"],
+            **({"unstructured_context": perception_fields["unstructured_context"]}
+               if perception_fields["unstructured_context"] else {}),
+            **({"changes_noticed": perception_fields["changes_noticed"]}
+               if perception_fields["changes_noticed"] else {}),
+            "current_events": perception_fields["current_events"],
             "variant_seed": nonce,
         }
         payload = _extension_narration_payload(

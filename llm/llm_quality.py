@@ -431,6 +431,8 @@ _CHARACTER_COMPACT_WIRE_FIELDS = frozenset({
 #: first. Both stay on the model with empty defaults so stored variants parse.
 _CHARACTER_RETIRED_WIRE_FIELDS = frozenset({
     "considered_responses", "response_candidates",
+    # Compiled from the kernel's decision, never a second model-authored note.
+    "decision_continuity",
     # The evidence-citation trail. A character cannot receive information it
     # should not have -- perception composes its payload -- so these could
     # never catch a breach, only a mis-cited id, and nothing read them.
@@ -555,6 +557,12 @@ def _step_json_schema(step_key: str, wire_variant=None):
             schema = _constraint_only_schema(schema)
             if step_key == "character":
                 schema = _character_wire_schema(schema, wire_variant)
+            elif step_key == "character_kernel":
+                # The surface affect label already carries mood. Keep the
+                # old alias readable locally without asking for it twice.
+                definitions = schema.get("$defs", schema.get("definitions", {}))
+                active = definitions.get("CharacterKernelActiveState", {})
+                (active.get("properties") or {}).pop("mood", None)
             elif step_key in {"director_interpret", "director_resolve"}:
                 schema = _causal_director_wire_schema(schema)
             elif step_key in (schemas.SPECIALIST_CHANNELS or {}):
