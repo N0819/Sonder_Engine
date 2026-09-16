@@ -200,3 +200,86 @@ def test_both_prestory_steps_have_a_schema_to_send():
     for step in ("prestory_journey", "prestory_resident"):
         schema = _step_json_schema(step)
         assert isinstance(schema, dict) and schema.get("properties"), step
+
+
+# ---------------------------------------------------------------------------
+# A plan cut off mid-structure is asked for once more, with room
+# ---------------------------------------------------------------------------
+
+#: Chat 136's shape: a town plan that ends inside a room's record.
+CUT_OFF = ('{"name": "Tidewatch", "rooms": {"station_hall": {"name": "Station Hall",'
+           ' "purpose": "Arrivals", "adjacent": []}, "washroom": {"name": "Washroom",'
+           ' "purpose": "Bathing and sanitation facilities", "adjacent": [{"to":'
+           ' "station_hall", "barrier": "open_door"}],')
+WHOLE = '{"name": "Tidewatch", "rooms": {"station_hall": {"name": "Station Hall"}}}'
+
+
+def test_a_cut_off_plan_is_asked_for_once_more_with_room(monkeypatch):
+    """REASONING OFF IS A REQUEST, NOT A GUARANTEE. `_json_call` asks for the
+    trace to be off, and a model whose own name says it always thinks ignores
+    it: measured on chat 136 (2026-09-16), `z-ai/glm-5.2:thinking` spent
+    16,000 response tokens -- the whole budget, exactly -- and returned 3,461
+    characters of JSON cut off inside a washroom. Over 99% of what was paid
+    for was the trace. A cut-off object is the one JSON failure more room
+    actually fixes, and it was fatal: the quick start lost its location, its
+    two paid-for calls and 110 seconds.
+    """
+    from world import charter_generate
+    budgets = []
+
+    def answer(*a, **kw):
+        budgets.append(kw.get("max_tokens"))
+        return CUT_OFF if len(budgets) == 1 else WHOLE
+
+    monkeypatch.setattr(providers, "chat_complete", answer)
+    value = charter_generate._json_call("system", {"ask": "a town"})
+    assert value["name"] == "Tidewatch"
+    assert budgets == [charter_generate.PLAN_MAX_TOKENS,
+                       charter_generate.PLAN_MAX_TOKENS * 2]
+
+
+def test_the_happy_path_asks_exactly_once(monkeypatch):
+    """Nothing widens for a plan that arrived whole."""
+    from world import charter_generate
+    budgets = []
+
+    def answer(*a, **kw):
+        budgets.append(kw.get("max_tokens"))
+        return WHOLE
+
+    monkeypatch.setattr(providers, "chat_complete", answer)
+    assert charter_generate._json_call("system", {"ask": "a town"})["name"] == "Tidewatch"
+    assert budgets == [charter_generate.PLAN_MAX_TOKENS]
+
+
+def test_a_malformed_plan_is_not_asked_for_twice(monkeypatch):
+    """More room does not fix a response with no object in it, so it fails at
+    once rather than paying for a second call that cannot help."""
+    from world import charter_generate
+    budgets = []
+
+    def answer(*a, **kw):
+        budgets.append(kw.get("max_tokens"))
+        return "I cannot help with that request."
+
+    monkeypatch.setattr(providers, "chat_complete", answer)
+    with pytest.raises(ValueError):
+        charter_generate._json_call("system", {"ask": "a town"})
+    assert budgets == [charter_generate.PLAN_MAX_TOKENS]
+
+
+def test_a_plan_still_cut_off_after_the_retry_reports_the_wider_budget(monkeypatch):
+    """One retry, not a ladder, and the refusal names the budget it actually
+    ran out of rather than the first one."""
+    from world import charter_generate
+    budgets = []
+
+    def answer(*a, **kw):
+        budgets.append(kw.get("max_tokens"))
+        return CUT_OFF
+
+    monkeypatch.setattr(providers, "chat_complete", answer)
+    with pytest.raises(ValueError) as caught:
+        charter_generate._json_call("system", {"ask": "a town"})
+    assert len(budgets) == 2
+    assert str(charter_generate.PLAN_MAX_TOKENS * 2) in str(caught.value)

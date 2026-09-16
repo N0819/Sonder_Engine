@@ -5339,11 +5339,165 @@ def _lift_swallowed_siblings(step_key, result, *containers):
             result[key] = holder.pop(key)
 
 
+def _empty_for(annotation):
+    """The EMPTY value of a declared type, or `_NO_FILL` when there is none.
+
+    Empty, never invented: `[]`, `{}`, `""`, `0.0`, `None` for an optional,
+    and `{}` for a nested model so its own absent requirements fill the same
+    way. Each of these asserts nothing about the fiction, which is the whole
+    reason filling one is not the thing `LenientModel` refuses to do.
+    """
+    if annotation is None:
+        return _NO_FILL
+    if hasattr(annotation, "model_fields") or hasattr(annotation, "__fields__"):
+        return {}
+    origin = getattr(annotation, "__origin__", None)
+    if origin is not None:
+        args = [a for a in getattr(annotation, "__args__", ()) if a is not type(None)]
+        if len(args) < len(getattr(annotation, "__args__", ())):
+            return None                      # Optional[...] -> the model declined
+        if origin in (list, tuple, set, frozenset):
+            return []
+        if origin is dict:
+            return {}
+        return _NO_FILL
+    for kind, empty in ((list, []), (dict, {}), (str, ""),
+                        (float, 0.0), (int, 0), (bool, False)):
+        if annotation is kind:
+            return empty() if callable(empty) else empty
+    return _NO_FILL
+
+
+_NO_FILL = object()
+
+
+#: WHAT A CHARACTER FUNDAMENTALLY HAS TO DO IS REMEMBER, AND KNOW WHY IT DID
+#: THE THINGS IT DID (owner, 2026-09-16). That is the bar an absence is
+#: measured against, and it cuts the kernel's fourteen required fields in
+#: two.
+#:
+#: FOUR carry it, and an absence in them is worth a retry before anything
+#: else is tried: `sequence` is what the character did, `state.decision` is
+#: why -- which want it enacted, which it suppressed and on what hinge --
+#: `state.active` holds the wants that decision chooses between, so without
+#: it the why dangles, and `state.appraisal` is the reading of the moment
+#: the why rests on. Those are left to fail the first attempt so the repair
+#: gets its chance, and are filled only when the alternative is throwing the
+#: beat away.
+#:
+#: EVERYTHING BELOW is filled before validation and reported nowhere. The
+#: learning lanes are EVENT lanes: a character does not revise a belief,
+#: adopt a project, move a relationship or learn an association every time
+#: it speaks, and an absent one says the event did not happen, which is the
+#: same thing an empty one says and is true far more often than not. An
+#: absent `memory` lane is a beat with nothing worth keeping, which costs
+#: the capacity to remember nothing at all. And `manifest`, `salience` and
+#: `interaction` are demeanour, a weighting and floor control: real losses,
+#: but they touch neither remembering nor knowing why, so no retry is worth
+#: spending on them and a warning per beat would be noise.
+KERNEL_FILL_QUIETLY = frozenset({
+    "effects", "manifest", "salience", "interaction",
+    "updates.associations", "updates.beliefs", "updates.drive",
+    "updates.intentions", "updates.memory", "updates.people",
+    "updates.projects", "updates.relationships",
+})
+
+#: The four the bar rests on, for the last-resort fill that keeps a beat
+#: rather than discarding it (`llm_quality.complete_validated_json`).
+KERNEL_CARRIES_THE_BAR = frozenset({
+    "sequence", "state", "state.appraisal", "state.active", "state.decision",
+})
+
+
+def _under(path, allowed):
+    """Is `path` one of `allowed`, or inside one of them? An event lane
+    filled as an empty object still has to fill its OWN requirements --
+    `updates.memory` is a record with three lanes of its own -- or the fill
+    lands a shape that fails for a new reason."""
+    if path in allowed:
+        return True
+    return any(path.startswith(prefix + ".") for prefix in allowed)
+
+
+def fill_absent_required(model_cls, data, *, notes=None, path="", only=None):
+    """A REQUIRED FIELD THE MODEL SIMPLY DID NOT WRITE READS AS EMPTY.
+
+    `LenientModel` refuses this on purpose -- "inventing a value for something
+    the model was obliged to supply would hide the actual error" -- and that
+    reason is honoured rather than overruled here: the only values written are
+    the EMPTY ones, which invent nothing, and every one is reported.
+
+    The contract is untouched. What a complete answer looks like is still what
+    the schema declares and what the card teaches; this decides only what
+    happens to an INCOMPLETE one, and the answer is now that the beat survives
+    it minus what was left out, rather than being discarded whole.
+
+    Measured on chat 135 (2026-09-16). Three attempts at one beat died on
+    `state.active`, `state.decision`, `state.active.wants.0.want` and
+    `updates.intentions.0.op`, each time throwing away an appraisal, a
+    sequence and a speech that were all sound, and the repair pass -- handed
+    the same complaint, and saying in its own reasoning that it knew which
+    sections to add -- failed the same way. Of the fourteen fields the kernel
+    requires, exactly one is structural: without `sequence` the character does
+    nothing that beat. The rest are its inner life and its learning, and one
+    beat's worth of either is a loss the next beat re-derives.
+
+    Recurses, because the absences are nested: an absent `state` is only
+    fillable if its own required `appraisal`, `active` and `decision` fill too.
+    Present values are never touched.
+    """
+    if not isinstance(data, dict):
+        return data
+    notes = notes if notes is not None else []
+    for name, spec in _fields(model_cls).items():
+        required = getattr(spec, "is_required", None)
+        required = bool(callable(required) and required())
+        annotation = _outer_annotation(spec)
+        here = f"{path}.{name}" if path else name
+        if name not in data:
+            if not required:
+                continue
+            if only is not None and not _under(here, only):
+                continue            # not this pass's business; leave it to fail
+            empty = _empty_for(annotation)
+            if empty is _NO_FILL:
+                continue            # nothing honest to write; let it fail
+            data[name] = empty
+            if notes is not None:
+                notes.append("%s was not written and reads as empty" % here)
+        value = data.get(name)
+        if isinstance(value, dict) and (hasattr(annotation, "model_fields")
+                                        or hasattr(annotation, "__fields__")):
+            fill_absent_required(annotation, value, notes=notes, path=here,
+                                 only=only)
+    return data
+
+
 def preprocess_llm_output(step_key: str, raw: dict) -> dict:
     if not isinstance(raw, dict):
         return {}
 
     result = dict(_unwrap_envelope(step_key, raw))
+
+    if step_key == "character_kernel":
+        # LIFT FIRST, THEN FILL, and the order is not cosmetic. The kernel
+        # routinely writes `effects`, `interaction` and `salience` one brace
+        # too deep, inside `updates`, and `_canonical_character_kernel_output`
+        # lifts them back out -- but it runs as the MODEL's own validator,
+        # after this function. Filling first therefore wrote an empty
+        # `salience` and an empty `interaction` at the top level, the lift
+        # then saw them present and left them, and a turn that had answered
+        # 0.6 and named who it was addressing lost both to a repair meant to
+        # cost nothing. Caught before it shipped; the lift is idempotent, so
+        # running it here as well is free.
+        result = _canonical_character_kernel_output(result)
+        # Only what does not carry the bar, and silently
+        # (`KERNEL_FILL_QUIETLY`). A beat that learned nothing is an ordinary
+        # beat, not a defect, and must not cost a retry or a warning. What
+        # the character did and why is left to fail, so the repair gets its
+        # chance at that first.
+        fill_absent_required(SCHEMA_MAP[step_key], result, notes=None,
+                             only=KERNEL_FILL_QUIETLY)
 
     if step_key == "narrator":
         # PARAGRAPHS ARE MARKED WITH <p>...</p> AND RENDERED HERE.

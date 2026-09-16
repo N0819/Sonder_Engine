@@ -226,7 +226,9 @@ def _json_call(system, payload, *, max_tokens=PLAN_MAX_TOKENS,
                temperature=0.5):
     import time as _time
 
-    from llm.llm_quality import note_provider_exchange, strict_json_parse
+    from core.logging_utils import logger
+    from llm.llm_quality import (note_provider_exchange, output_ran_out_of_room,
+                                 strict_json_parse)
     from llm.providers import chat_complete
     # REASONING OFF, EXPLICITLY. Every OpenAI-style seam counts private
     # reasoning against `max_tokens`, so a thinking model spends the plan's
@@ -252,6 +254,37 @@ def _json_call(system, payload, *, max_tokens=PLAN_MAX_TOKENS,
             role="utility", system=system, payload=payload, response="",
             ok=False, started=_started, error=str(_exc))
         raise
+    # REASONING OFF IS A REQUEST, NOT A GUARANTEE, AND TRUNCATION IS
+    # RECOVERABLE. The call above asks for the trace to be off and a model
+    # whose own name says it always thinks ignores that: measured on chat
+    # 136 (2026-09-16), `z-ai/glm-5.2:thinking` spent 16,000 response tokens
+    # -- the whole budget, exactly -- and returned 3,461 characters of JSON,
+    # cut off inside a washroom. Better than 99% of what was paid for was
+    # the trace, and the plan died one room from the end.
+    #
+    # A cut-off object is the ONE json failure more room actually fixes
+    # (`json_failure_diagnosis` says so, and `output_ran_out_of_room` is its
+    # authority), and it was fatal here: the quick start lost its location,
+    # its two paid-for calls and 110 seconds. One retry with room for a
+    # trace AND an answer. Nothing widens on the happy path, and a malformed
+    # or reasoning-only response still fails at once, because neither is
+    # made better by asking again for more.
+    if raw and output_ran_out_of_room(raw):
+        retry_tokens = int(max_tokens) * 2
+        logger.info("location generator: the plan was cut off at %d tokens; "
+                    "asking once more with %d", max_tokens, retry_tokens)
+        try:
+            retried = chat_complete(
+                "utility", system, json.dumps(payload, ensure_ascii=False),
+                temperature=temperature, max_tokens=retry_tokens,
+                json_mode=True, reasoning_effort="off")
+        except Exception as _exc:
+            note_provider_exchange(
+                role="utility", system=system, payload=payload, response=raw,
+                ok=False, started=_started, error=str(_exc))
+        else:
+            if retried:
+                raw, max_tokens = retried, retry_tokens
     try:
         # THE ONE READER OF A MODEL'S JSON (2026-09-08). This parsed with a
         # bare `json.loads`, so a response wrapped in a ```json fence -- which

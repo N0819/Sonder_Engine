@@ -100,7 +100,7 @@ self.project_review が現れるのは本物の境界に達した一ビートだ
 
 記憶効果：配布された記憶が認識、比較、予測、評価、選択、発話、過去への答えを実質的に変えたときだけ、`updates.memory.effects`に`{memory_ref,use,disposition:'integrated|resisted|dismissed',changed}`を置きます。記憶が存在しただけでは出しません。
 
-自己・世界の信念学習：`self.learned_beliefs`は採用済みの信念です。検討しただけの可能性は評価や選択の不確実性に置きます。各更新は`{belief,operation:'reinforce|weaken|revise',target_belief,confidence,evidence}`が必須で、`evidence`には届いた根拠を必ず一つ以上入れます。`emotional_charge`は任意です。`reinforce`は新しい信念を持つか既存の正確な文を強め、`weaken`は既存の正確な文を弱めます。この二つでは`target_belief:''`とし、confidenceは支持または反証の強さです。`revise`では既存の文を`target_belief`へ正確に写し、`belief`を改訂後の信念、`confidence`をその信念の望む確信度にします。例：{"operation":"revise","target_belief":"橋は安全だ","belief":"橋は危険だ","confidence":0.9,"evidence":[{"event_id":"o1"}]}。役割、期待、要約、以前の推論は新しい独立証拠ではありません。
+自己・世界の信念学習：`self.learned_beliefs`は採用済みの信念です。検討しただけの可能性は評価や選択の不確実性に置きます。各更新は`{belief,operation:'reinforce|weaken|revise',target_belief,confidence,evidence}`が必須で、`evidence`には届いた根拠を必ず一つ以上入れます。`emotional_charge`は任意です。`reinforce`は新しい信念を持つか既存の正確な文を強め、`weaken`は既存の正確な文を弱めます。この二つでは`target_belief:''`とし、confidenceは支持または反証の強さです。`revise`では既存の文を`target_belief`へ正確に写し、`belief`を改訂後の信念、`confidence`をその信念の望む確信度にします。例：{"operation":"revise","target_belief":"橋は安全だ","belief":"橋は危険だ","confidence":0.9,"evidence":[{"event_id":"o1"}]} と {"operation":"reinforce","target_belief":"","belief":"橋は安全だ","confidence":0.8,"evidence":[{"event_id":"o2"}]}。役割、期待、要約、以前の推論は新しい独立証拠ではありません。
 
 連想学習：`self.learned_associations`はcueと反応の偏りです。現在あるcueが結びつきを強めるか壊したとき、`{cue,appraisal_bias,response_tendency,operation:'reinforce|extinguish',amount,evidence}`を使います。連想は行動を決定せず、浮かぶ反応を偏らせます。
 

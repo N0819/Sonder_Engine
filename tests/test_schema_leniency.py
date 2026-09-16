@@ -1,3 +1,5 @@
+import pytest
+
 
 
 class TestNullMeansOmitted:
@@ -272,8 +274,15 @@ class TestAFailedBeatCarriesItsEvidence:
                 role="character_mid", step_key="character", system="sys",
                 payload={"x": 1}, repair_attempts=0)
         msg = str(exc.value)
-        assert "model sent:" in msg, "the shape that failed must be visible"
+        assert "model sent" in msg, "the shape that failed must be visible"
         assert "Mara" in msg, "and it must be the ACTUAL response"
+        # AND WHETHER THAT IS ALL OF IT. The window is 600 characters, so a
+        # response that stopped early and one that merely continues past the
+        # window both end mid-object on the page -- a distinction with
+        # opposite remedies, and one this line's own reader got wrong twice
+        # on 2026-09-16 before the length and the closing brace were said out
+        # loud (2026-09-16).
+        assert "chars" in msg and "closed" in msg, msg[:200]
 
     def test_the_evidence_is_bounded(self, monkeypatch):
         """A whole reasoning-model response in an exception message is not a
@@ -1565,3 +1574,102 @@ def test_a_record_serialised_into_its_own_slot_is_the_record():
     # A plain string is still the short spelling of the subject.
     clean, _ = validated_state_diff_channels({"poses": {"Bram Toll": "sitting"}})
     assert clean["poses"]["Bram Toll"]["posture"] == "sitting"
+
+
+# ---------------------------------------------------------------------------
+# A character has to remember, and know why it did the things it did
+# ---------------------------------------------------------------------------
+
+class TestAnIncompleteKernelKeepsTheBeat:
+    """The owner's bar, 2026-09-16: "all the character fundamentally needs to
+    do is remember and know why it did the things it did", and "the psychology
+    is really good for immersion but mild breaks are mostly acceptable".
+
+    Measured on chat 135. Three attempts at one beat died on `state.active`,
+    `state.decision`, `state.active.wants.0.want` and `updates.intentions.0.op`,
+    each throwing away an appraisal, a sequence and a speech that were sound,
+    plus a revised belief, a progressed intention, a relationship delta, three
+    mind models, a learned association and three memory operations. The repair
+    pass, which said in its own reasoning that it knew which sections to add,
+    failed the same way.
+
+    THE CONTRACT IS NOT TOUCHED. The schema still declares all fourteen
+    fields required and the card still teaches them; what changed is what
+    happens to an answer that does not carry them all.
+    """
+
+    def _kernel(self, raw):
+        from llm.schemas import validate_llm_output
+        return validate_llm_output("character_kernel", raw)
+
+    def _whole(self):
+        from copy import deepcopy
+        from llm.schemas import output_example
+        return deepcopy(output_example("character_kernel"))
+
+    def _fatal(self, raw):
+        return [w for w in self._kernel(raw)[1] if "Schema validation" in w]
+
+    def test_a_clean_answer_is_untouched_and_silent(self):
+        raw = self._whole()
+        out, warnings = self._kernel(self._whole())
+        assert warnings == []
+        assert out["sequence"] == raw["sequence"]
+
+    @pytest.mark.parametrize("field", ["manifest", "salience", "interaction",
+                                       "effects"])
+    def test_a_lane_that_carries_neither_capacity_is_simply_allowed(self, field):
+        """Demeanour, a weighting and floor control are real losses that touch
+        neither remembering nor knowing why, so no retry is spent on them and
+        no warning is raised on a beat that left one out."""
+        raw = self._whole()
+        raw.pop(field, None)
+        raw.get("updates", {}).pop(field, None)
+        out, warnings = self._kernel(raw)
+        assert not [w for w in warnings if "Schema validation" in w]
+        assert warnings == [], warnings
+
+    @pytest.mark.parametrize("lane", ["beliefs", "intentions", "projects",
+                                      "relationships", "people",
+                                      "associations", "memory", "drive"])
+    def test_an_event_lane_is_empty_on_an_ordinary_beat(self, lane):
+        """A character does not revise a belief or move a relationship every
+        time it speaks. An absent lane says the event did not happen, which is
+        what an empty one says."""
+        raw = self._whole()
+        raw["updates"].pop(lane, None)
+        out, warnings = self._kernel(raw)
+        assert warnings == [], warnings
+        # `drive` is nullable, so its empty value is None and the dump drops
+        # it again -- absent and empty really are the same thing there.
+        assert lane in out["updates"] or lane == "drive"
+
+    @pytest.mark.parametrize("field", ["appraisal", "active", "decision"])
+    def test_what_carries_the_bar_still_fails_first(self, field):
+        """These four are what the character did and why it did it, so an
+        absence is worth a retry: it must fail here, where the repair path can
+        still see it, and be filled only when the beat would be lost."""
+        raw = self._whole()
+        raw["state"].pop(field, None)
+        assert self._fatal(raw), f"state.{field} must not be quietly filled"
+
+    def test_the_sequence_still_fails_first(self):
+        raw = self._whole()
+        raw.pop("sequence", None)
+        assert self._fatal(raw)
+
+    def test_the_lift_runs_before_the_fill(self):
+        """This model routinely writes `effects`, `interaction` and `salience`
+        one brace too deep, inside `updates`, and the canonicaliser lifts them
+        back. Filling first wrote an empty `salience` over a real one and
+        blanked an addressee list; the lift runs first now."""
+        raw = self._whole()
+        for field in ("salience", "interaction"):
+            raw.pop(field, None)
+        raw["updates"]["salience"] = 0.6
+        raw["updates"]["interaction"] = {"addresses": ["the young woman"],
+                                         "expects_response": True}
+        out, warnings = self._kernel(raw)
+        assert out["salience"] == 0.6
+        assert out["interaction"]["addresses"] == ["the young woman"]
+        assert warnings == []
