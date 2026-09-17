@@ -47,7 +47,7 @@
 | `llm/llm_quality.py` | 1281 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 590 | Default system prompts and prompt preset access. | `core.db` |
-| `llm/providers.py` | 4337 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
+| `llm/providers.py` | 4640 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
 | `llm/schemas.py` | 7524 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
@@ -667,14 +667,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_chat_complete_once()` | 2926 | 311 lines |
-| `chat_complete()` | 2639 | 139 lines |
-| `async _chat_complete_async_once()` | 3448 | 118 lines |
-| `_sse_openai()` | 2484 | 90 lines |
-| `async chat_complete_async()` | 3357 | 90 lines |
-| `async _sse_openai_async()` | 3567 | 71 lines |
-| `_sse_anthropic()` | 2575 | 63 lines |
-| `_embed_request()` | 3897 | 59 lines |
+| `_chat_complete_once()` | 3209 | 317 lines |
+| `chat_complete()` | 2922 | 139 lines |
+| `async _chat_complete_async_once()` | 3737 | 126 lines |
+| `_claude_cli_complete()` | 2796 | 124 lines |
+| `_sse_openai()` | 2488 | 90 lines |
+| `async chat_complete_async()` | 3646 | 90 lines |
+| `async _sse_openai_async()` | 3864 | 71 lines |
+| `_sse_anthropic()` | 2579 | 63 lines |
 
 ### `llm/research_providers.py`
 
@@ -3087,9 +3087,9 @@ Sections: Library sidebar (`:305`); Data loading (`:504`); Workspace (`:614`); B
 
 Declared functions: `loreBookTypeIcon()`, `inheritanceModes()`, `knowledgeTags()`, `knowledgeRanges()`, `loreLinkTypes()`, `normalizeLoreBook()`, `loreOwnershipKey()`, `loreRootBooks()`, `loreBooksByParent()`, `loreBookMatches()`, `loreVisibleIds()`, `loreBookLabel()`, `parseStoredJSON()`, `loreField()`, `loreSelect()`, `loreBookOptions()`, `renderLoreLibrarySidebar()`, `renderNode()`, `loreStoryQuery()`, `loreBookIsLibrary()`, `loadLoreWorkspaceData()`, `collectLoreLinkTargets()`, `loreWorkspaceVisible()`, `renderLoreWorkspaceBody()`, `openLoreWorkspace()`, `renderLoreInspector()`, `selectTab()`, `buildLoreWorkspace()`, `renderWorkspaceTree()`, `renderNode()`, `renderTreeList()`, `renderLoreBookEditor()`, `moveLoreBook()`, `reorderLoreBook()`, `promoteLoreBook()`, `demoteLoreBook()`, `createSiblingLoreBook()`, `createLoreBookDialog()`, `refreshLoreUI()`, `renderLoreEntries()`, `renderList()`, `buildLoreEntryCard()`, `splitNumberList()`, `reinterpretLoreBook()`, `generateLoreEntriesPrompt()`, `buildDirectLoreRequest()`, `renderRelationshipOverview()`, `renderLoreRelationshipEditor()`, `renderRelationshipList()`, `showNewRelationshipForm()`, `renderLoreGenerator()`, `adoptGeneratorPlan()`, `generatorPlanMessage()`, `loreGenAgo()`, `refreshLoreGenRecovery()`, `normalizeGeneratorPlan()`, `renderLorePlanPreview()`, `renderOperations()`, `planStat()`, `renderAnalysisSection()`, `addPlanGroup()`, `stripPlanUIFields()`, `acceptedGeneratorPlan()`.
 
-### `static/js/settings.js` (4090 lines)
+### `static/js/settings.js` (4091 lines)
 
-Sections: Chat tool modals (`:1`); Condition tab (`:873`); Survival tracker (`:933`); Character relocation (`:1245`); API connections (`:2008`); Software updates (host-only; git fast-forward from GitHub origin) (`:3319`); Legacy checkpoint conversion (host-only maintenance) (`:3351`); Prompts (`:3585`); and be able to load that pack's own sheets to edit, rather than (`:3596`); Extensions (`:3763`).
+Sections: Chat tool modals (`:1`); Condition tab (`:873`); Survival tracker (`:933`); Character relocation (`:1245`); API connections (`:2008`); Software updates (host-only; git fast-forward from GitHub origin) (`:3320`); Legacy checkpoint conversion (host-only maintenance) (`:3352`); Prompts (`:3586`); and be able to load that pack's own sheets to edit, rather than (`:3597`); Extensions (`:3764`).
 
 Declared functions: `paradoxModes()`, `frameQuery()`, `charterDiagnosticsPanel()`, `selectTab()`, `dialogueColorControl()`, `save()`, `renderCastTab()`, `renderConditionTab()`, `hydrateConditionTab()`, `vitalMeter()`, `syncVitalsGutterNow()`, `syncVitalsGutter()`, `hideVitalsHud()`, `vitalsBlock()`, `refreshVitalsHud()`, `clearVitalsHud()`, `hydrateCastLocations()`, `castRoomLabel()`, `castRoomSelect()`, `renderLorebooksTab()`, `renderBookNode()`, `renderMultiplayerTab()`, `renderFramesTab()`, `renderFramesListPanel()`, `renderPersonaStationingPanel()`, `renderParadoxPanel()`, `renderBackgroundPresencesPanel()`, `renderGuestInvitePanel()`, `renderInsightsTab()`, `renderDramaticIronyPanel()`, `renderPromiseLedgerPanel()`, `embeddingBankBlock()`, `modelRecommendationsBlock()`, `renderFirstRunProviderSetup()`, `preferredBackdropSize()`, `renderFullApiSettings()`, `propagateToFollowers()`, `renderUpdateChecking()`, `renderUpdateError()`, `checkpointCompactionBlock()`, `renderUpdateStatus()`, `runUpdateInstall()`, `renderUpdateDone()`, `openPromptsModal()`, `reopenPromptsIfRequested()`, `extensionTrustNote()`, `extensionCapabilitySummary()`, `extensionSettingsSections()`, `openExtensionsMenu()`.
 
