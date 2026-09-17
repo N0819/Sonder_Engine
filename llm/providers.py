@@ -2,6 +2,7 @@
 """LLM providers, streaming, retries, cancellation, and embeddings."""
 
 import json, zlib, asyncio, threading, time, re, os, random
+import queue, shutil, subprocess, tempfile
 import numpy as np
 import httpx
 import requests.exceptions as _req_exc
@@ -782,6 +783,9 @@ DEFAULT_BASES = {
     "lmstudio": "http://localhost:1234/v1",
     "llamacpp": "http://localhost:8080/v1",
     "gemini": "https://generativelanguage.googleapis.com/v1beta/openai",
+    # Not a URL: the Claude Code executable, resolved on PATH or given as
+    # a path. See "Claude Code CLI" below.
+    "claude_cli": "claude",
     "generic": "",
 }
 
@@ -2636,6 +2640,285 @@ def _sse_anthropic(base, headers, body, sink, role=None, model=None):
                    kind="stream")
     return text
 
+# ---- Claude Code CLI ----
+#
+# `kind == "claude_cli"` runs the Claude Code command-line tool in print mode
+# (`claude -p`) as a completion backend, so a host signed in to Claude Code
+# plays under that login with no API key in this engine at all. The provider
+# row's `base_url` is the executable -- the bare name `claude`, resolved on
+# PATH, or a path to it -- and its `api_key` is unused: the CLI carries its
+# own credentials.
+#
+# One call is one process. The user payload goes on stdin (no argv limit),
+# the role's system prompt on `--system-prompt` (which REPLACES the CLI's own
+# coding-assistant prompt), tools are disabled, slash commands and MCP servers
+# are off, no session is persisted, and the child runs in an empty scratch
+# directory so no CLAUDE.md is discovered. Output is `stream-json` with
+# partial messages: each line wraps one raw Anthropic SSE event, so the reader
+# is `_sse_anthropic`'s parse with a subprocess for a socket, and a final
+# `result` line carries the whole call's usage, cost and error.
+#
+# What the CLI cannot take, and is therefore ignored here: temperature and
+# every other sampler, and the engine's output ceiling (`max_tokens`). A JSON
+# schema IS honoured (`--json-schema`) and comes back as `structured_output`;
+# the CLI implements it as a tool call, so the live stream carries
+# `input_json_delta` pieces instead of text, and those are what the sink
+# receives. Reasoning effort maps onto `--effort`, whose lowest rung is `low`:
+# the engine's `off` and `minimal` land there because thinking on the CLI
+# cannot be switched off. Measured 2026-09-15 on Claude Code 2.1.273.
+CLAUDE_CLI_KIND = "claude_cli"
+
+#: The aliases the CLI documents for `--model`. There is no catalogue to ask;
+#: a full model id may be typed in the combobox instead.
+CLAUDE_CLI_MODELS = ("fable", "opus", "sonnet", "haiku")
+
+CLAUDE_CLI_EFFORTS = {
+    "off": "low", "minimal": "low",
+    "low": "low", "medium": "medium", "high": "high",
+}
+
+#: Bytes one argument may carry. Linux caps a single argv string at 128 KiB
+#: (MAX_ARG_STRLEN); the system prompt is the one argument that could reach
+#: it, and the E2BIG `Popen` would raise says nothing about which one did.
+CLAUDE_CLI_ARG_LIMIT = 120_000
+
+# The spawn seam, so a test can stand in a scripted child for the real one.
+_claude_cli_popen = subprocess.Popen
+
+
+def _claude_cli_binary(prov):
+    """The executable to run: the provider's `base_url`, else `claude`."""
+    raw = str(_prov_field(prov, "base_url") or "").strip() or "claude"
+    found = shutil.which(raw)
+    if not found:
+        raise LLMError(
+            f"{_prov_field(prov, 'name') or CLAUDE_CLI_KIND}: Claude Code CLI "
+            f"not found ({raw!r}) -- install it, or set the provider's base "
+            "url to the path of the `claude` executable",
+            None, False)
+    return found
+
+
+def _claude_cli_cwd():
+    """An empty directory for the child, so CLAUDE.md discovery finds nothing."""
+    path = os.path.join(tempfile.gettempdir(), "sonder-claude-cli")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def _claude_cli_effort(role, effort_override=None):
+    effort = (effort_override if effort_override is not None
+              else reasoning_effort_for(role))
+    return CLAUDE_CLI_EFFORTS.get(str(effort or ""), "")
+
+
+def _claude_cli_command(binary, model, system, effort="", json_schema=None):
+    size = len(system.encode("utf-8"))
+    if size > CLAUDE_CLI_ARG_LIMIT:
+        raise LLMError(
+            f"system prompt of {size} bytes exceeds what one command-line "
+            f"argument may carry ({CLAUDE_CLI_ARG_LIMIT})",
+            None, False)
+    argv = [
+        binary, "-p",
+        "--output-format", "stream-json", "--verbose",
+        "--include-partial-messages",
+        "--tools", "",
+        "--no-session-persistence",
+        "--disable-slash-commands",
+        "--strict-mcp-config",
+        "--model", str(model),
+        "--system-prompt", system,
+    ]
+    if effort:
+        argv += ["--effort", effort]
+    if json_schema:
+        argv += ["--json-schema", json.dumps(json_schema)]
+    return argv
+
+
+class _ClaudeCliProcess:
+    """A running `claude -p`, shaped so `_abortable` can close it.
+
+    `close` is what an abort calls (`_close_quietly`), and for a process it
+    means kill: the reader is parked on stdout, and ending the child is what
+    makes that read return. Stdout is pumped by a thread into a queue so the
+    reader can wait WITH a deadline, which a blocking `readline` cannot; the
+    prompt is written by a thread so a child that dies before reading it
+    cannot wedge the writer on a full pipe. Stderr is merged into stdout:
+    the CLI's own diagnostics are the non-JSON lines, kept for the error.
+    """
+
+    def __init__(self, argv, user, cwd):
+        self.proc = _claude_cli_popen(
+            argv, cwd=cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT)
+        self.lines = queue.Queue()
+        threading.Thread(target=self._feed, args=(user,), daemon=True).start()
+        threading.Thread(target=self._pump, daemon=True).start()
+
+    def _feed(self, user):
+        try:
+            self.proc.stdin.write(user.encode("utf-8"))
+            self.proc.stdin.close()
+        except (BrokenPipeError, OSError, ValueError):
+            pass
+
+    def _pump(self):
+        try:
+            for raw in self.proc.stdout:
+                self.lines.put(raw)
+        except (OSError, ValueError):
+            pass
+        finally:
+            self.lines.put(None)
+
+    def readline(self, timeout):
+        """The next stdout line, None at end of stream; `queue.Empty` on a
+        deadline with nothing said."""
+        return self.lines.get(timeout=timeout)
+
+    def close(self):
+        if self.proc.poll() is None:
+            try:
+                self.proc.kill()
+            except OSError:
+                pass
+
+    def wait(self):
+        try:
+            return self.proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            self.close()
+            return self.proc.wait()
+
+
+def _claude_cli_complete(prov, model, system, user, sink, role=None,
+                         json_schema=None, effort_override=None):
+    """One completion through `claude -p`; see the section comment above."""
+    name = _prov_field(prov, "name") or CLAUDE_CLI_KIND
+    binary = _claude_cli_binary(prov)
+    effort = _claude_cli_effort(role, effort_override)
+    argv = _claude_cli_command(binary, model, system, effort=effort,
+                               json_schema=json_schema)
+    # No body goes over a wire; the shape is what the flags said.
+    _note_request_shape({
+        "response_format": {"type": "json_schema"} if json_schema else None,
+        "reasoning_effort": effort,
+        "max_tokens": None,
+    })
+    _think_sink = reasoning_sink.get()
+    # The same deadline a streamed HTTP read gets between chunks, override
+    # included: the CLI emits a line per event and nothing else, so silence
+    # here is the same silence.
+    deadline = _request_timeout()[1]
+    text, json_text, reasoning = "", "", ""
+    usage, served, result = None, "", None
+    noise = []
+    events = 0
+    t0 = time.time()
+    _check_cancel()
+    child = _ClaudeCliProcess(argv, user, _claude_cli_cwd())
+    # Reaped in the outer `finally` so a child an abort closed during
+    # registration -- `_abortable` raises before its body runs -- is
+    # waited on too, not left for the destructor.
+    try:
+        with _abortable(child):
+            while True:
+                _check_cancel()
+                try:
+                    raw = child.readline(deadline)
+                except queue.Empty:
+                    child.close()
+                    raise ProviderSilent(
+                        "claude CLI silent for %.0fs (%s)" % (
+                            deadline,
+                            "after %d events" % events if events
+                            else "before any event"),
+                        0, True)
+                if raw is None:
+                    break
+                line = raw.decode("utf-8", "ignore").strip()
+                if not line:
+                    continue
+                try:
+                    j = json.loads(line)
+                except Exception:
+                    noise.append(line[:300])
+                    del noise[:-5]
+                    continue
+                if not isinstance(j, dict):
+                    continue
+                events += 1
+                if j.get("type") == "result":
+                    result = j
+                    continue
+                if j.get("type") != "stream_event":
+                    continue
+                ev = j.get("event") or {}
+                if ev.get("type") == "message_start":
+                    message = ev.get("message") or {}
+                    usage = _merge_usage(usage, message.get("usage"))
+                    if not served:
+                        served = str(message.get("model") or "").strip()
+                elif ev.get("type") == "message_delta":
+                    usage = _merge_usage(usage, ev.get("usage"))
+                    stop = (ev.get("delta") or {}).get("stop_reason")
+                    if stop:
+                        _capture_finish_reason(stop)
+                elif ev.get("type") == "content_block_delta":
+                    delta = ev.get("delta") or {}
+                    piece = delta.get("text")
+                    if piece:
+                        text += piece
+                        sink(piece)
+                    piece = delta.get("partial_json")
+                    if piece:
+                        json_text += piece
+                        sink(piece)
+                    piece = delta.get("thinking")
+                    if piece:
+                        reasoning += piece
+                        if _think_sink:
+                            _think_sink(piece)
+    finally:
+        rc = child.wait()
+    # A stream the abort ended looks like a short one; ask before judging it.
+    _check_cancel()
+    if result is None:
+        raise LLMError(
+            f"{name}: claude CLI exited {rc} without a result"
+            + (": " + " | ".join(noise) if noise else ""),
+            0, True)
+    if result.get("is_error"):
+        status = _int(result.get("api_error_status")) or None
+        raise LLMError(
+            f"{name}: "
+            f"{str(result.get('result') or '')[:300] or 'claude CLI reported an error'}",
+            status, bool(status) and status in DEFAULT_RETRY.retryable_status)
+    usage = _merge_usage(usage, result.get("usage"))
+    if not served:
+        served = next(iter(result.get("modelUsage") or {}), "")
+    if role:
+        _log_usage(role, model, t0, usage, served=served, kind="stream")
+    if reasoning:
+        try:
+            last_reasoning.set(reasoning)
+        except Exception:
+            pass
+    structured = result.get("structured_output")
+    if structured is not None:
+        return json.dumps(structured, ensure_ascii=False)
+    if text:
+        return text
+    if json_text:
+        return json_text
+    # Nothing streamed but the CLI still has an answer: partial messages
+    # off, or a version that forwards none. Guarded here because the sink
+    # never saw it.
+    return guard_response(str(result.get("result") or ""))
+
+
 def chat_complete(
     role,
     system,
@@ -2965,6 +3248,12 @@ def _chat_complete_once(
     # the second response went unexamined. A guard is about ONE response.
     def guarded():
         return _guarded_sink(raw_sink)
+
+    if prov["kind"] == CLAUDE_CLI_KIND:
+        return _claude_cli_complete(
+            prov, model, system, user, guarded(), role=role,
+            json_schema=json_schema,
+            effort_override=reasoning_effort_override)
 
     if prov["kind"] == "anthropic":
         h = {
@@ -3477,6 +3766,14 @@ async def _chat_complete_async_once(
     def guarded():
         return _guarded_sink(raw_sink)
 
+    if prov["kind"] == CLAUDE_CLI_KIND:
+        # A subprocess read is blocking work; the thread carries the
+        # context (sink, cancel event) with it.
+        return await asyncio.to_thread(
+            _claude_cli_complete, prov, model, system, user,
+            _guarded_sink(raw_sink or (lambda _piece: None)),
+            role=role, json_schema=json_schema)
+
     if prov["kind"] == "anthropic":
         h = {"x-api-key": prov["api_key"] or "", "anthropic-version": "2023-06-01", "content-type": "application/json"}
         body = {"model": model, "max_tokens": max_tokens, "temperature": t, "system": _anthropic_system(system, prov), "messages": [{"role": "user", "content": user}]}
@@ -3728,6 +4025,12 @@ def list_openrouter_endpoints(prov, model):
     return out
 
 def list_models(prov):
+    if prov["kind"] == CLAUDE_CLI_KIND:
+        # No catalogue to ask: the CLI's documented aliases, under
+        # whatever login the CLI holds. A full id may be typed instead.
+        return [{"id": alias, "badge": "claude code login",
+                 "included": True, "ctx": None}
+                for alias in CLAUDE_CLI_MODELS]
     base = prov["base_url"].rstrip("/")
     if prov["kind"] == "anthropic":
         r = _session().get(base + "/v1/models", timeout=REQUEST_TIMEOUT, headers={"x-api-key": prov["api_key"] or "", "anthropic-version": "2023-06-01"})

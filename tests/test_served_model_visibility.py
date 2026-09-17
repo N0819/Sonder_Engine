@@ -105,13 +105,15 @@ def test_without_a_served_name_the_requested_one_stands(monkeypatch):
 
 
 def test_every_response_path_reads_the_field():
-    """Four non-streaming call sites and four streaming ones. The streaming
+    """Four non-streaming call sites and five streaming ones -- the fifth is
+    the Claude Code CLI reader, which takes the served model off the
+    `message_start` event its stream-json wraps. The streaming
     branch is the one the pipeline actually runs — capturing only in the
     non-streaming path would have left substitution invisible exactly where
     it counts, which is how reasoning capture stayed dead for a release.
     """
     source = open(providers.__file__).read()
     assert source.count("served=parsed.get(\"model\")") == 4
-    assert source.count("served=served") == 4
+    assert source.count("served=served") == 5
     # ...and the stream reads it off the chunks rather than guessing.
     assert source.count("served = str(j.get(\"model\") or \"\").strip()") == 2
