@@ -1236,7 +1236,7 @@ def run_prelude(cid, frame_id=None, *, passage, location_requested=False):
     return line
 
 
-def _location_task(cid, frame_id, payload, spec):
+def _location_task(cid, frame_id, payload, spec, closure=None):
     """What the location regime is handed: the ask, the lore that was
     selected for it, the constraints the launch is holding the plan to, and
     the SHAPE the plan must take -- `charter_generate._PLAN_SYSTEM`, the
@@ -1255,6 +1255,14 @@ def _location_task(cid, frame_id, payload, spec):
                 "population", "naming_register"):
         if payload.get(key) not in (None, "", []):
             task[key] = payload[key]
+    # WHETHER THIS PLACE HAS MONTHS BEHIND IT. The closure carries it
+    # because it is the launch's decision, not the payload's: a horizon of
+    # zero means the place exists and has not been lived through yet, and
+    # the Room must not draft a prehistory nobody asked to simulate.
+    closure = closure if isinstance(closure, dict) else {}
+    task["wants_history"] = bool(closure.get("wants_history"))
+    if task["wants_history"]:
+        task["horizon_hours"] = float(closure.get("horizon_hours") or 0.0)
     try:
         from story.prelude import player_wants
         said = [str(w)[:2000] for w in player_wants(cid, frame_id)][:20]
@@ -1287,8 +1295,8 @@ def run_location_plan(cid, frame_id=None, *, payload, closure=None):
     from story import location_design
     from world.charter_generate import plan_specification
 
-    task = _location_task(cid, frame_id, payload, plan_specification())
     closure = dict(closure or {})
+    task = _location_task(cid, frame_id, payload, plan_specification(), closure)
     closure.setdefault("featured_residents",
                        (payload or {}).get("featured_residents") or [])
     closure.setdefault("population", (payload or {}).get("population"))

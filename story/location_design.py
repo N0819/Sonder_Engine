@@ -51,6 +51,11 @@ PIECE_CHARS = 60_000
 #: transaction.
 PLAN_CHARS = 400_000
 
+#: The key the prehistory rides back to the runtime on, inside the plan
+#: object. `charter_runtime._ROOM_PREHISTORY_KEY` is the same string, and
+#: `tests/test_room_prelude.py` holds the two together.
+PREHISTORY_KEY = "prehistory"
+
 
 #: WHAT THE LAST LOCATION PASS DID: `{calls, steps, seconds, stopped, rooms,
 #: charters, error, at}`. Written whatever happened, and kept after the draft
@@ -92,6 +97,7 @@ def open_draft(cid, task):
     return save_draft(cid, {"open": True, "task": copy.deepcopy(task or {}),
                             "plan": {"name": "", "structure": {}, "rooms": {},
                                      "charters": []},
+                            "history": {},
                             "submitted": False, "checked": False})
 
 
@@ -193,6 +199,35 @@ def drop_charter(cid, key):
             "charters": [c.get("key") for c in plan["charters"]]}
 
 
+def set_history(cid, *, eras=None, interventions=None):
+    """The months behind the place, drafted by the same pass that drafted
+    the place (`docs/design/DESIGN_ROOM_PRELUDE.md` § 4b).
+
+    It used to be a second one-shot `utility` call
+    (`charter_generate.propose_history`), and on chat 149 it is what
+    actually failed a launch the Room had already designed correctly.
+    Drafting it HERE also makes the review exact: `close_plan` takes the
+    history, so a review that closed without one was answering a slightly
+    different question from the launch."""
+    row = _require_open(cid)
+    history = row.get("history") or {}
+    if eras is not None:
+        if not isinstance(eras, list):
+            raise ValueError("eras is a list of {name, summary}")
+        history["eras"] = copy.deepcopy(eras)
+    if interventions is not None:
+        if not isinstance(interventions, list):
+            raise ValueError("interventions is a list of operations")
+        history["interventions"] = copy.deepcopy(interventions)
+    if _size(history) > PIECE_CHARS:
+        raise ValueError("that is more prehistory than the simulator will run")
+    row["history"] = history
+    row["checked"] = False
+    save_draft(cid, row)
+    return {"eras": len(history.get("eras") or []),
+            "interventions": len(history.get("interventions") or [])}
+
+
 def check(cid):
     """Run the closure the pipeline will run, and report what it said.
 
@@ -214,12 +249,21 @@ def check(cid):
         errors.append("no rooms")
     if not plan.get("charters"):
         errors.append("no charters: nothing runs this place")
+    if (row.get("task") or {}).get("wants_history") and not (
+            (row.get("history") or {}).get("eras")
+            or (row.get("history") or {}).get("interventions")):
+        errors.append(
+            "this launch asked for a place with months behind it and no "
+            "prehistory is drafted: draft_history")
     town = None
     if not errors:
         try:
             town = close_plan(
                 plan,
-                history=task.get("history") or {},
+                # The history the Room drafted, not an empty one: the launch
+                # closes with it, so a review that did not would be
+                # answering a different question.
+                history=row.get("history") or {},
                 featured_residents=task.get("featured_residents") or [],
                 reservation=_reservation(task, plan),
                 naming_law=task.get("naming_law"),
@@ -292,9 +336,18 @@ def submit(cid):
 
 def submitted_plan(cid):
     """The plan the Room submitted, or None. Shaped exactly as
-    `charter_generate.propose_town` returns one, because it replaces it."""
+    `charter_generate.propose_town` returns one, because it replaces it --
+    plus the prehistory under `PREHISTORY_KEY` when one was drafted, which
+    `charter_runtime._plan_lived_location` lifts off before anything reads
+    the plan. One return value for two products the same pass wrote."""
     row = draft(cid)
     if not row.get("open") or not row.get("submitted"):
         return None
     plan = row.get("plan")
-    return copy.deepcopy(plan) if isinstance(plan, dict) else None
+    if not isinstance(plan, dict):
+        return None
+    out = copy.deepcopy(plan)
+    history = row.get("history") or {}
+    if history.get("eras") or history.get("interventions"):
+        out[PREHISTORY_KEY] = copy.deepcopy(history)
+    return out

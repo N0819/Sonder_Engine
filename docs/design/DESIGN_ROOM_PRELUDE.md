@@ -157,14 +157,6 @@ Room had been told its plan was good. Drafting anything clears the last
 review, so a plan edited after its check is checked again before it can be
 submitted.
 
-**The review closes WITHOUT the prehistory, and the launch closes with it.**
-`propose_history` runs after `propose_town` and takes the finished plan as
-its input, so there is no history to hand the checker while the plan is still
-being drafted. A plan that closes clean under review and fails under the
-launch's `close_plan(history=...)` is therefore possible. It is the one
-difference between the two, it is named here rather than papered over, and
-it has not been seen.
-
 **The reservation is derived from the draft.** Without an authored naming law
 the story's identity reservation depends on the PLAN's own naming laws
 (`_plan_naming_laws`), which do not exist before the plan does -- so the
@@ -194,6 +186,34 @@ in the library, marked, with its retry (2026-09-08) -- and the `location_plan`
 row says what the Room had drafted when it stopped, so the author can decide
 whether to ask for less.
 
+## 4b. The prehistory is the same pass's work
+
+`propose_history` was the second one-shot `utility` call in the family, and on
+the second live run it is what failed the launch (§ 4a). The Room drafts it
+now, in the same pass, through `draft_history`: `eras` for what those months
+were, and two to eight physical `interventions` the simulator runs through
+them -- the same closed vocabulary `_HISTORY_SYSTEM` stated, physical
+circumstances only, the simulator deciding what came of them.
+
+Two things fall out of drafting it there rather than after.
+
+**The review becomes exact.** `close_plan` takes the history, so the review
+that § 4 called "the real closure" was in fact closing a slightly different
+question from the launch — `history={}` against the launch's real one. That
+gap is gone: the draft holds the history, and `review_location` closes with
+it. A launch whose closure asked for months and got none is also a review
+error now, not a surprise at the end.
+
+**One return value carries both.** `propose_town`'s contract is that it
+returns a plan, so the prehistory rides back under `PREHISTORY_KEY` and
+`charter_runtime._plan_lived_location` lifts it off before anything — itself,
+`close_plan`, `_plan_naming_laws` — sees the object. One string, two
+modules, held together by a test. The alternative was a second round trip to
+the planner for a value it had already written.
+
+`propose_history` stays as the fallback for every caller that passes no
+planner, exactly as `propose_town` does.
+
 ## 4a. What the first live run found (2026-09-17)
 
 One greeting quick start, chat 149, the first time any of this ran against a
@@ -222,9 +242,26 @@ and reverting either half of the fix reproduces the exact `TypeError`.
 nothing to read: eight calls, six steps, 249.5 seconds, submitted -- against
 40 steps and 900 seconds. Response tokens per call ranged from 320 to 10,708,
 and the two calls that drafted the map and the institutions were 93s and
-101s. A pass with a real brief and lore to read will make more calls than
-this one did, so the headroom is not as large as 8-of-40 suggests, and it has
-still not been measured on the path that works.
+101s.
+
+**The second run, same chat, with the payload fixed:** six calls, five steps,
+240.5 seconds, fourteen rooms and two institutions again -- this time from a
+real brief and real lore. So a pass with something to read cost no more than
+one without, and the 40-step ceiling is not close to binding. That run then
+died one stage later, in `propose_history`: the `utility` role's router
+served a thinking-only model, which refused `reasoning_effort='none'` with
+HTTP 400, after which four calls spent the whole 4,000-token budget on
+reasoning traces and returned no content at all -- 104 seconds, no answer,
+and the Room's 240 seconds of design thrown away with it. That is § 4b's
+reason for existing, and it is the same complaint the owner made about the
+town prompt, arriving on its sibling.
+
+**A plan is still lost if anything after it raises.** The job's artifact is
+saved after the whole pure prefix, so the retry on chat 149 re-ran the entire
+design. With the prehistory now inside the same pass there is no model call
+between the plan and the save, which removes the case that was actually hit;
+`close_plan` raising still costs the pass, and the review makes that much
+less likely than it was.
 
 **What it costs and what it buys.** The budget is 40 steps / 900 seconds, the
 largest of the four launch regimes, against a one-shot that had one attempt
@@ -287,14 +324,11 @@ floor under that rather than a path anybody walks.
   landed; whether the mid-story paths should route to the Room too is a
   decision, not an oversight, and the Room calling a `utility` model to do
   its own job through `request_location` is the odder of the two.
-- **The location's PREHISTORY is still a `utility` call.**
-  `propose_history` sends `_HISTORY_SYSTEM` to the same role, on the same
-  launches, immediately after the Room has designed the place. The owner
-  named the town-design prompt; this is its sibling and the same argument
-  would appear to apply to it, but it was not asked for and one-shot JSON is
-  a better fit for it -- the months behind a plan that already exists is a
-  smaller and more closed question than designing the plan. Worth a
-  decision, not a silent change. `narrate_actual_history` is a third.
+- **`narrate_actual_history` is the last `utility` call on this path**, and
+  it narrates what the presimulation actually produced rather than authoring
+  anything, which is a different job from designing a place. It is already
+  guarded -- a failure costs the prose and the simulation stands -- so it
+  cannot fail a launch the way `propose_history` did. Left where it is.
 - **Unmeasured live.** Nothing here has run against a real launch: not the
   wall clock of a 40-step design against the one-shot's single call, not how
   many review round-trips a plan actually takes, not whether the Room submits

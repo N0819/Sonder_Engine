@@ -1403,6 +1403,11 @@ def _t_draft_charter(cid, frame_id, *, charter=None, remove=None):
     return set_charter(cid, charter)
 
 
+def _t_draft_history(cid, frame_id, *, eras=None, interventions=None):
+    from story.location_design import set_history
+    return set_history(cid, eras=eras, interventions=interventions)
+
+
 def _t_review_location(cid, frame_id):
     from story.location_design import check
     return check(cid)
@@ -1550,6 +1555,11 @@ TOOLS = [
      "description": "Add or replace ONE institution of the place being designed -- its posts, upkeeps, populations, economy, commons, naming law and look law -- or pass `remove` with a key to drop one. A charter drafted under a key that is already there replaces it, so an institution the review refused is fixed by sending it again rather than by starting over.",
      "args": _schema({"charter": _O, "remove": _S}),
      "handler": _t_draft_charter},
+    {"name": "draft_history",
+     "description": "The months behind the place, when the launch asked for one with a life already lived: `eras` is a list of {name, summary}, `interventions` a list of physical circumstances the simulator will run -- each {id, op, at_hours, cause} plus that op's own fields, where op is upkeep_shock, need_shock or drift_dial. Physical circumstances ONLY: never minds, memories, relationships, judgments, politics, decisions, promises or outcomes -- the simulator decides what came of them. Two to eight consequential ones. Repeatable, and each list replaces the one before it.",
+     "args": _schema({"eras": {"type": "array"},
+                      "interventions": {"type": "array"}}),
+     "handler": _t_draft_history},
     {"name": "review_location",
      "description": "Ask the engine to close the plan as drafted and report what it said: the same deterministic closure the launch will run, so anything it refuses here would have failed the launch. Returns ok, the errors, the room count, the charters, and how many people the closure minted. Free, and worth running after each institution rather than once at the end.",
      "args": _schema({}), "handler": _t_review_location},
