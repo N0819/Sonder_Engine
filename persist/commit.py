@@ -633,6 +633,18 @@ def _commit_all_locked(ctx, nonce):
         ctx.add_warning(f"memory consolidation scheduling failed: {exc}")
         results["memory_consolidation"] = {"error": str(exc)}
 
+    # Every live bubble's own beat, on the same terms: a whole pipeline turn
+    # in a frame nobody is watching is not a cost the player may be asked to
+    # wait for, and none of what it produces is a fact THIS turn needs.
+    # `agents/offscreen_beat.py` states the cost and names the cap.
+    try:
+        from agents.offscreen_beat import schedule_offscreen_beats
+        job = schedule_offscreen_beats(ctx)
+        results["offscreen_beats"] = job.as_dict() if job else None
+    except Exception as exc:
+        ctx.add_warning(f"offscreen beat scheduling failed: {exc}")
+        results["offscreen_beats"] = {"error": str(exc)}
+
     # And the contradiction pass, on the same terms and for the same reason:
     # measured at 114s against a 24-row payload, which is not a cost a player
     # may be asked to pay for an annotation that is not a turn fact. UNBUILT

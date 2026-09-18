@@ -12,7 +12,7 @@ from story.character_schema import (character_name, character_name_from_text,
                               normalize_persona_data, persona_appearance)
 from persist.checkpoints import ensure_checkpoint, restore_checkpoint
 from persist.commit import commit_all
-from core.db import active_frame_id, q, qi, transaction, wset
+from core.db import active_frame_id, q, qi, transaction, wget_for_frame, wset
 from language_runtime import current_language_id, story_language
 from core.pipeline_context import (
     ChatData, PipelineContext, TurnData, current_step_key,
@@ -759,12 +759,14 @@ def resume_key_for_turn(turn_id, chat_id):
         interpretation = active_content(turn_id, "director_interpret")
         if not isinstance(interpretation, dict):
             return "director_interpret"
+        from agents.offscreen_beat import is_offscreen_beat
         plan = build_plan(
             interpretation,
             active_cast(chat_id, turn["frame_id"]),
             chat_id=chat_id,
             frame_id=turn["frame_id"],
             turn_idx=turn["idx"],
+            offscreen=is_offscreen_beat(chat_id, turn),
         )
 
     rows = q(
@@ -811,7 +813,7 @@ def resume_key_for_turn(turn_id, chat_id):
     return None
 
 def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=None,
-               turn_idx=None):
+               turn_idx=None, offscreen=False):
     if not isinstance(interp, dict):
         interp = {}
         
@@ -861,8 +863,20 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
     # turn` under a web handler with no step to note against. The loops and
     # the `character_step` choke point say so.
     if chat_id is not None and reactors:
-        _present = {b["id"] for b in _present_cast_bodies(
-            get_scene(chat_id), cast_rows)}
+        # THE FRAME'S OWN SCENE, not the ambient one. `get_scene` routes
+        # through the `active_frame_id` contextvar, which a pipeline run sets
+        # from the turn row -- and which is NOT set in the two callers that
+        # build a plan outside one: `resume_key_for_turn` under a web handler,
+        # and any test asking what a frame's beat would plan. Both then read
+        # the PRESENT frame's scene, where a spatial frame's cast is placed
+        # nowhere, so every reactor was dropped and the plan came back with no
+        # character step in it. A bubble's own beat is the case where that
+        # stops being a resume-path oddity and becomes the whole beat: the one
+        # body the frame holds is the one this gate would drop.
+        _scene = wget_for_frame(chat_id, "scene", frame_id, None)
+        if not isinstance(_scene, dict):
+            _scene = get_scene(chat_id)
+        _present = {b["id"] for b in _present_cast_bodies(_scene, cast_rows)}
         reactors = [cid for cid in reactors if cid in _present]
 
     # A VOICE THAT CARRIES INTO ANOTHER ROOM REACHES A BODY THE DIRECTOR
@@ -908,6 +922,27 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
         # already_reacted; the parallel path had no equivalent), and the
         # second, full-turn declaration was then silently dropped from
         # dialogue_log while perception_outcome still injected its actions.
+
+    if offscreen:
+        # A BUBBLE'S OWN BEAT STOPS AT THE COMMIT. No narrator, because
+        # narration is the player-facing slice and nobody is reading it --
+        # and a page describing her beat is a page that could be shown, which
+        # is the one way this feature could leak. No background reactors
+        # either: the voice tier answers the demand of a beat somebody is in.
+        # What she did reaches the player the way anything off-screen does,
+        # because she remembers it. See `agents/offscreen_beat.py`.
+        plan += [
+            ("director_resolve", step_label("director_resolve")),
+            ("perception_outcome", step_label("perception_outcome")),
+            # THE COMMIT IS NOT OPTIONAL, and leaving it off is how this was
+            # first wrong: the beat ran every stage, resolved her conduct, and
+            # wrote nothing at all -- measured live (run 4, 2026-09-17), six
+            # stages and no `commit` step, so her frame's scene and her memory
+            # ledger were exactly as they had been. A beat nobody commits is a
+            # beat that did not happen.
+            ("commit", step_label("commit")),
+        ]
+        return _extension_splices(plan, chat_id)
 
     plan += [
         ("director_resolve", step_label("director_resolve")),
@@ -1497,10 +1532,12 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
             step_label("director_interpret"), 0, ctx,
             variant_count(turn_id, "director_interpret"))
 
+    from agents.offscreen_beat import is_offscreen_beat
     plan = build_plan(ctx["director_interpret"], cast_rows, chat_id=chat_id,
                       frame_id=turn_row["frame_id"],
                       extra_players=ctx.extra_players,
-                      turn_idx=getattr(ctx.turn, "idx", None))
+                      turn_idx=getattr(ctx.turn, "idx", None),
+                      offscreen=is_offscreen_beat(chat_id, turn_row))
     keys = [k for k, _ in plan]
     if start_key is not None and start_key not in keys:
         # Refuse before deleting orphans or marking anything stale -- an

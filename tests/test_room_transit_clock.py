@@ -58,8 +58,17 @@ def _chain_scene(*, transit=(10.0, 10.0, None), motion="moving",
         "location": "Nowhere",
         "rooms": rooms,
         "entities": {
-            VESSEL: {"name": "The Vessel", "kind": "person", "aliases": [],
-                     "interior_rooms": list(ids), "state": {}},
+            # `body=False` MAKES IT A VEHICLE, not merely an undressed person.
+            # The wardrobe was the whole of the non-body construction here
+            # until 2026-09-17, when `_is_body_entity` was widened to accept
+            # the engine's own `kind: "person"` record -- so a holder called
+            # a person with an empty `attire` is now a body, correctly: a
+            # creature with no wardrobe is most of what a horror scene
+            # contains, and it was reading as a crate. The rule under test is
+            # unchanged and needs a holder that genuinely is not a body.
+            VESSEL: {"name": "The Vessel",
+                     "kind": "person" if body else "vehicle",
+                     "aliases": [], "interior_rooms": list(ids), "state": {}},
         },
         "positions": {OCCUPANT: ids[start], "The Vessel": "outside"},
         "contacts": [{
@@ -69,11 +78,11 @@ def _chain_scene(*, transit=(10.0, 10.0, None), motion="moving",
         }],
         "contained": {},
         "poses": {}, "stations": {}, "overlays": {}, "substances": [],
-        # `_is_body_entity` reads exactly these two tables: a thing that WEARS
-        # something or has a SIZE is a body, and a lift car, a crate and a
-        # ship have neither.
+        # `_is_body_entity` reads three things: a thing that WEARS something,
+        # a thing that has a SIZE, and the engine's own person record. A lift
+        # car, a crate and a ship have none of them.
         "attire": ({"The Vessel": {"worn": []}, OCCUPANT: {"worn": []}}
-                   if body else {}),
+                   if body else {OCCUPANT: {"worn": []}}),
         "scales": {},
     }
     return scene

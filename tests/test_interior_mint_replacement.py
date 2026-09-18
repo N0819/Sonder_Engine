@@ -95,7 +95,8 @@ def _scene(*, mint_name="Throat", spec=SPEC, occupied=True, mint_extra=None,
         }],
         "contained": {},
         "poses": {}, "stations": {}, "overlays": {}, "substances": [],
-        # `_is_body_entity` reads exactly these two tables.
+        # `_is_body_entity` reads these two tables and the engine's own
+        # `kind: "person"` record.
         "attire": {HOLDER: {"worn": []}, OCCUPANT: {"worn": []}},
         "scales": {},
     }
@@ -217,9 +218,17 @@ class TestSceneTopologyStillBeatsTheCard:
     def test_a_non_body_holder_is_refused(self):
         """The firewall bound `materialize_enclosure_interiors` gate 3
         states, unchanged: an interior minted for a non-body is never
-        indexed and never defaulted opaque."""
+        indexed and never defaulted opaque.
+
+        A VEHICLE, not an undressed person. Emptying `attire` was the whole
+        of the non-body construction here until 2026-09-17, when
+        `_is_body_entity` was widened to accept the engine's own
+        `kind: "person"` record -- a creature with no wardrobe was reading as
+        a crate. The rule is unchanged; the fixture has to mean it.
+        """
         scene = _scene()
         scene["attire"] = {}
+        scene["entities"][HOLDER_EID]["kind"] = "vehicle"
         self._unchanged(scene)
 
     def test_an_occupied_mint_whose_name_matches_no_station_is_left_alone(

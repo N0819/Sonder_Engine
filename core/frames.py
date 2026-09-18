@@ -52,6 +52,24 @@ real reunion where both sides eventually catch each other up. See
 spatial_frames.py for the deterministic proximity-based split/merge
 detector built on top of this; frames.py itself only defines the
 visibility rule, never decides when to split or merge.
+
+COUPLE FRAMES (kind="couple") are the third kind, and they are NOT an
+era at all. When a live comm channel joins two spatial frames -- a
+handset carried on both sides of a split, a broadcast into the away
+party's room -- the beat has to be played somewhere both parties exist,
+because every reader in `agents/` resolves one scene through one active
+frame. A couple frame is that somewhere: a temporary frame holding the
+FUSED view of its two members, opened and closed by
+`spatial_frames.open_couple`/`close_couple`, which record at open the
+map that partitions it back.
+
+THE ONE THING A COUPLE MUST NEVER DO is set `merged_turn_idx` on either
+member. A channel is not a reunion: the two sides stay incomparable for
+the whole call, and every memory a coupled beat forms is stamped with
+its subject's own MEMBER frame, never with the couple. So nothing here
+gives a couple frame an ordinal rule of its own -- no memory is ever
+formed in one, and a couple frame's own `merged_turn_idx` records only
+that the call is over.
 """
 
 from __future__ import annotations
@@ -145,13 +163,15 @@ def list_frames(chat_id):
 
 def create_frame(chat_id, *, label, ordinal, kind="other", travelers=None, nonexistent_cast=None,
                  parent_frame_id=None, split_turn_idx=None):
-    if kind not in ("past", "future", "other", "spatial"):
+    if kind not in ("past", "future", "other", "spatial", "couple"):
         raise ValueError(
-            "kind must be 'past', 'future', 'other', or 'spatial' -- "
+            "kind must be 'past', 'future', 'other', 'spatial' or 'couple' -- "
             "'present' is reserved for the implicit frame_id=None era"
         )
-    if kind == "spatial" and split_turn_idx is None:
-        raise ValueError("a spatial frame requires split_turn_idx (the play-order position of the split)")
+    if kind in ("spatial", "couple") and split_turn_idx is None:
+        raise ValueError(
+            f"a {kind} frame requires split_turn_idx (the play-order position "
+            "of the split)")
     return qi(
         "INSERT INTO frames(chat_id,label,ordinal,kind,travelers,nonexistent_cast,created,"
         "parent_frame_id,split_turn_idx) VALUES(?,?,?,?,?,?,?,?,?)",

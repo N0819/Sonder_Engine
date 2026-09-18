@@ -314,18 +314,29 @@ def comms_reachable_rooms(scene, room=None, name=None, *, cap=None):
     for channel in channels.values():
         if not isinstance(channel, dict) or not channel.get("live"):
             continue
-        far = list(channel.get("rooms") or [])
+        # WHO IS AT THE FAR END, not just where it is. A channel with ROOM
+        # endpoints transmits from the room, so the room alone answers. A
+        # CARRIED one names bodies and no rooms, and `_comms_transmits` then
+        # has nothing to match a bare room against -- so the REVERSE question
+        # below ("can anything come back from there") was asked with no
+        # speaker and answered no, every time. This function's own docstring
+        # says "a handset, an intercom and a field radio all pass"; the
+        # handset did not, and a handset is the one channel shape that is even
+        # expressible across a frame split. Carrying the far carrier's NAME
+        # alongside its room is the whole repair.
+        far = [(str(r), None) for r in (channel.get("rooms") or [])]
         for carrier in (channel.get("carriers") or []):
             carrier_room = _comms_carrier_room(scene, carrier)
             if carrier_room:
-                far.append(carrier_room)
-        for other in far:
-            other = str(other or "")
+                far.append((str(carrier_room), str(carrier)))
+        for other, who in far:
             if not other or other == here or other in out:
                 continue
-            if comms_link(scene, here, other, speaker_name=name) is None:
+            if comms_link(scene, here, other, speaker_name=name,
+                          observer_name=who) is None:
                 continue
-            if comms_link(scene, other, here, observer_name=name) is None:
+            if comms_link(scene, other, here, speaker_name=who,
+                          observer_name=name) is None:
                 continue
             out.append(other)
             if len(out) >= limit:
@@ -373,6 +384,23 @@ def comms_link(scene, speaker_room, observer_room, *,
         return None
     speaker_room = str(speaker_room) if speaker_room else None
     observer_room = str(observer_room) if observer_room else None
+    # A BODY THE SCENE CANNOT PLACE IS NOT AN END OF A CHANNEL. `_comms_delivers`
+    # answers on a bare carrier-NAME match, before it consults `positions` at
+    # all, so a handset whose second carrier is nowhere in this scene still
+    # delivered to them -- and the same-room guard below is skipped when an
+    # endpoint has no room, so nothing else caught it. Harmless while every
+    # carrier is positioned, which is true inside one scene and is exactly what
+    # a frame split stops being true: the away party's carrier is written into
+    # both frames' `comms` and positioned in only one of them. Asked from the
+    # parent, the channel then answered for a ghost.
+    #
+    # Only where the caller gave a NAME and no room: every other call already
+    # states a room, and a room that is not in `positions` is a place, not a
+    # missing body.
+    for side_name, side_room in ((speaker_name, speaker_room),
+                                 (observer_name, observer_room)):
+        if side_name and not side_room and not room_of(scene, str(side_name)):
+            return None
     if speaker_room and observer_room and speaker_room == observer_room \
             and not speaker_name:
         return None

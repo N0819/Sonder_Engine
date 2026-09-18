@@ -1300,6 +1300,7 @@ def _contextual_rooms(sc, cast, *extra_room_ids, hops=1):
     full, unfiltered scene for any deterministic spatial check.
     """
     centers = set()
+    names = []
     for row in cast:
         # The stored sheet TEXT is the key, so normalization is paid once per
         # distinct card per process rather than once per reader (C14). None
@@ -1307,29 +1308,31 @@ def _contextual_rooms(sc, cast, *extra_room_ids, hops=1):
         sheet = normalized_character_of_row(row)
         if sheet is None:
             continue
-        r = room_of(sc, character_name(sheet))
+        name = character_name(sheet)
+        r = room_of(sc, name)
         if r:
             centers.add(r)
+            # The names go with the rooms: a cast member CARRYING a handset is
+            # on a channel that names no room, so the far end is reachable
+            # only when the question is asked as them.
+            if name:
+                names.append(name)
     for extra in extra_room_ids:
         if extra:
             centers.add(extra)
-    # A LIVE CHANNEL'S FAR END IS A ROOM THIS BEAT ATTENDS TO. Everything
+    # THE ROOM MATH IS `spatial.attended_rooms`, and it is shared on purpose.
+    # A live channel's far end is a room this beat attends to -- everything
     # that decides who may act reads where bodies STAND, so a person on the
-    # other end of a radio was outside every payload: the Director could not
-    # see the room, could not address anybody in it, and a call went out with
-    # nothing able to come back. Attending is not disclosing -- the channel
-    # carries the voice and nothing else, exactly as `line_hear_level`'s comm
-    # path does, and what the far end perceives stays theirs.
-    #
-    # Two-way only, and capped: `comms_reachable_rooms` states both rules and
-    # names the cap (`COMMS_ATTENDED_ROOMS`).
+    # other end of a radio was outside every payload -- and the same set is
+    # what `spatial_bubbles` calls the Director's RANGE when it asks whether a
+    # body has left the beat. Two copies of that arithmetic would drift, and
+    # the drift would be a character who is in the payload and outside the
+    # range, or the reverse.
     try:
-        from world.spatial import comms_reachable_rooms
-        for here in list(centers):
-            centers.update(comms_reachable_rooms(sc, here))
+        from world.spatial import attended_rooms
+        return attended_rooms(sc, centers, hops=hops, names=names)
     except Exception:
-        pass
-    return nearby_rooms(sc, centers, hops=hops)
+        return nearby_rooms(sc, centers, hops=hops)
 
 # Entity fields that exist so CODE can resolve a reference, not because an
 # observer could perceive them. See _perceptible_entities.

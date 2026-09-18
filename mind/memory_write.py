@@ -373,6 +373,21 @@ def prepare_memory(chat_id, char_id, turn_id, kind, provenance, salience, conten
     # is the "caller didn't specify" sentinel, since None is itself the
     # valid, meaningful "present" value a caller might deliberately pass.
     resolved_frame_id = _active_frame_id.get() if frame_id is _UNSET else frame_id
+    # A COUPLED BEAT HAS NO ERA OF ITS OWN. While a live comm channel joins two
+    # spatial frames, the beat runs in a temporary `couple` frame holding both
+    # parties (`world/spatial_frames.open_couple`) -- and a memory stamped with
+    # THAT would give the two sides a shared era, which is the one thing
+    # `is_memory_visible`'s incomparability rule has to bite on. So each
+    # memory is stamped with its own subject's member frame instead. Resolved
+    # here because this is the one door every mint path walks through; a rule
+    # stated at the mint sites would be a rule with four copies.
+    #
+    # Free for every chat that is not in a call: the resolver returns its
+    # argument unchanged for `None` without touching the database, and for any
+    # other frame after one indexed lookup that finds nothing.
+    from world.spatial_frames import couple_member_frame
+    resolved_frame_id = couple_member_frame(chat_id, resolved_frame_id,
+                                            char_id=char_id)
     return {
         "chat_id": chat_id, "char_id": char_id, "turn_id": turn_id,
         "turn_idx": turn_idx if turn_idx is not None else _turn_idx_for(turn_id),

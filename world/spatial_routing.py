@@ -346,11 +346,88 @@ def spatial_rel(
                 "light": effective_light(scene, b_room),
             }
 
+    locale_a, locale_b = room_locale(rooms.get(a_room)), room_locale(rooms.get(b_room))
+    if locale_a and locale_b and locale_a != locale_b:
+        # TWO DECLARED LOCALES ARE NOT TWO ROOMS. `separated` means "no edge
+        # happens to join these two", which is the right answer for two rooms
+        # in one building that nobody has mapped a hallway between -- and
+        # `hear_level` gives `separated` a shout as a `fragment`, correctly,
+        # because they share air. A declared locale is the author saying the
+        # opposite: a second starship, a distant city, the far side of a frame
+        # split. Read as `separated`, a shout on the bridge arrived in a market
+        # a continent away, and every other sense was safe only by accident.
+        #
+        # AFTER the edge search on purpose. An edge between two locales is an
+        # author stating that you can cross there -- a gangway, a portal, a
+        # door onto the dock -- and it must keep winning.
+        return {
+            "same_room": False,
+            "barrier": "unknown",
+            "distance": "remote",
+            "note": "different locales: no air between them",
+        }
+
     return {
         "same_room": False,
         "barrier": "separated",
         "distance": "far",
     }
+
+
+#: The disconnected locale a room belongs to, or "" when it declares none.
+#:
+#: TWO SPELLINGS OF ONE FACT, and they are not two facts. `zone` is the
+#: AUTHOR's -- the Director declares it when a scene genuinely introduces a
+#: second starship or a distant city, and it is what `spatial_frames` splits a
+#: frame on. `locale` is the ENGINE's, stamped on the rooms of a fused view
+#: (`spatial_frames.open_couple`) so that the rooms a split carried away
+#: without a zone of their own are still known to be somewhere else. A room
+#: that declares neither is simply here, which is every room in an ordinary
+#: scene.
+def room_locale(room) -> str:
+    if not isinstance(room, dict):
+        return ""
+    for key in ("locale", "zone"):
+        value = room.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def attended_rooms(scene: dict, centers, *, hops: int = 1, names=()) -> dict:
+    """The rooms a beat ATTENDS TO from a set of standing places.
+
+    THE DIRECTOR'S RANGE, and it is not a new notion: this is the room math
+    `agents/common._contextual_rooms` has always done to decide which rooms a
+    stage payload carries, lifted here so the question "is this body inside
+    the beat" can be asked without importing a stage helper into `world/`.
+    `_contextual_rooms` is now this function plus the walk over cast rows, so
+    what the Director is SHOWN and what the engine calls in range cannot drift
+    apart -- which they would the moment they were two pieces of arithmetic.
+
+    Two inputs, both already the engine's own: the rooms within `hops`
+    adjacency steps (`nearby_rooms`, undirected, no barrier allowlist -- a
+    room behind a locked door is still a room the beat may be about), and the
+    far end of any live TWO-WAY channel reaching one of them
+    (`comms_reachable_rooms`, capped at `COMMS_ATTENDED_ROOMS`). Attending is
+    not disclosing: the channel carries the voice and nothing else, and what
+    the far end perceives stays theirs.
+    """
+    from world.spatial_senses import comms_reachable_rooms
+
+    seeds = {r for r in (centers or []) if r}
+    # `names` ARE NOT DECORATION. A channel with ROOM endpoints -- an intercom,
+    # a site PA -- answers from a room alone. A CARRIED one names bodies and no
+    # rooms at all, so `_comms_transmits` has nothing to match on until it is
+    # told who is asking: a handset in a pocket is a channel only for the hand
+    # that holds it. Asked room-only, the one channel shape that is even
+    # expressible across a frame split reached nobody.
+    for here in list(seeds):
+        seeds.update(comms_reachable_rooms(scene, here))
+        for name in (names or ()):
+            if name:
+                seeds.update(comms_reachable_rooms(scene, here, str(name)))
+    return nearby_rooms(scene, seeds, hops=hops)
 
 
 def passable_neighbors(scene: dict) -> dict:

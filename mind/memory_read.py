@@ -121,6 +121,14 @@ def visible_memory_rows(chat_id, char_id, *, before_turn_idx, viewer_frame_id,
         clauses.append("(turn_idx IS NULL OR turn_idx<?)")
         args.append(before_turn_idx)
     vf = _active_frame_id.get() if viewer_frame_id is _UNSET else viewer_frame_id
+    # A mind reading its ledger during a call reads it as a native of its own
+    # MEMBER frame, never of the couple -- the same resolution `build_memory`
+    # applies on the way in, stated at the one seam rows come out of. Without
+    # it, the away party would lose every memory formed since the split for
+    # exactly as long as they are on the radio: their own rows were stamped
+    # with a frame the couple is not, and no ordinal rule joins the two.
+    from world.spatial_frames import couple_member_frame
+    vf = couple_member_frame(chat_id, vf, char_id=char_id)
     key = (vf, tuple(clauses), tuple(args))
     if bank is not None and key in bank:
         return list(bank[key])
