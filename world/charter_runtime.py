@@ -1954,6 +1954,12 @@ def _plan_naming_laws(plan):
             if isinstance(raw, dict) and isinstance(raw.get("naming"), dict)]
 
 
+#: The key the Writers' Room's prehistory rides back on, inside the plan
+#: object, and is removed from before anything reads the plan. Defined here
+#: and in `story/location_design.py` through this one name.
+_ROOM_PREHISTORY_KEY = "prehistory"
+
+
 def _plan_lived_location(cid, request, chat, town_planner=None):
     """The pure prefix: two model calls, a deterministic closure, no writes.
 
@@ -2085,11 +2091,19 @@ def _plan_lived_location(cid, request, chat, town_planner=None):
         authored_naming_profile, naming_law_exists, story_identity_reservation)
     authored = authored_naming_profile(cid)
     naming_law = authored if naming_law_exists(authored) else None
+    wants_history = bool(request.get("generate_history", True)) and horizon > 0
     closure_inputs = {
         "chat_id": int(cid),
         "featured_residents": requested_residents,
         "naming_law": naming_law,
         "population": population,
+        # THE PREHISTORY IS THE PLANNER'S TOO, when there is one
+        # (`docs/design/DESIGN_ROOM_PRELUDE.md` § 4b). It is computed here so
+        # the planner knows whether to draft eras and interventions at all,
+        # and so its review can close against the history it drafted rather
+        # than against an empty one.
+        "wants_history": wants_history,
+        "horizon_hours": horizon,
     }
     # The RESERVATION is deliberately not in there. Without an authored law
     # it is derived from the plan's OWN naming laws, which do not exist
@@ -2115,10 +2129,26 @@ def _plan_lived_location(cid, request, chat, town_planner=None):
     else:
         plan = (propose_town(lore, brief, constraints=constraints)
                 if constraints else propose_town(lore, brief))
+    # THE PLANNER'S OWN PREHISTORY, lifted off the plan it rides back on.
+    # `propose_town`'s contract is that it returns a plan, so the Room's
+    # eras and interventions travel under one extra key that is removed
+    # here, before anything else in this function or `close_plan` sees the
+    # object. The alternative was a second round trip to the planner for a
+    # value it had already written.
+    room_history = (plan.pop(_ROOM_PREHISTORY_KEY, None)
+                    if isinstance(plan, dict) else None)
     history = {}
-    wants_history = bool(request.get("generate_history", True)) and horizon > 0
     if wants_history:
-        history = propose_history(plan, lore, horizon)
+        # A pass that drafted one is not asked for it again. The one-shot is
+        # what the Room replaces here as well: `propose_history` is the same
+        # `utility` call in the same family, and on chat 149 (2026-09-17) it
+        # is what actually failed the launch -- a thinking-only model
+        # refusing `reasoning_effort='none'` with HTTP 400, then four calls
+        # spending the whole 4,000-token budget on traces and returning no
+        # content at all. It stays as the fallback for every caller that
+        # passes no planner.
+        history = (room_history if isinstance(room_history, dict)
+                   and room_history else propose_history(plan, lore, horizon))
     # The cast is not a naming lane, it is the no-fly list. The planner was
     # handed the same lore the cast came from, so its pools arrive holding
     # the cast's own name elements unless something subtracts them. The

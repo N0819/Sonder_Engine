@@ -167,6 +167,103 @@ def test_the_planner_is_handed_the_towns_payload_and_its_plan_is_used(
     assert artifact["town"]["name"] == "Vaunt's Yard"
 
 
+def test_the_room_drafts_the_prehistory_too(chat, monkeypatch):
+    """The prehistory was a SECOND one-shot `utility` call, and on chat 149
+    (2026-09-17) it is what actually failed a launch the Room had already
+    designed correctly: a thinking-only model refused `reasoning_effort=
+    'none'` with HTTP 400, then four calls spent the whole 4,000-token budget
+    on traces and returned no content at all."""
+    from world import charter_generate, charter_runtime
+
+    history = {"eras": [{"name": "The permit years", "summary": "..."}],
+               "interventions": [{"id": "i1", "op": "upkeep_shock",
+                                  "at_hours": 40, "cause": "a storm"}]}
+
+    def planner(payload, closure=None):
+        assert closure["wants_history"] is True
+        assert closure["horizon_hours"] == 720
+        return {"name": "Vaunt's Yard", "structure": {"key": "waterfront"},
+                "rooms": {"quay": {"name": "The quay"}}, "charters": [],
+                "prehistory": copy.deepcopy(history)}
+
+    def refuse(*a, **k):
+        raise AssertionError("propose_history was called; the Room drafted one")
+
+    monkeypatch.setattr(charter_generate, "propose_history", refuse)
+    seen = {}
+
+    def fake_close(plan, **kwargs):
+        seen["history"] = kwargs.get("history")
+        seen["plan_keys"] = sorted(plan)
+        return {"charters": {}, "rooms": plan["rooms"],
+                "structure": plan["structure"], "name": plan["name"]}
+
+    monkeypatch.setattr(charter_generate, "close_plan", fake_close)
+    row = db.q("SELECT * FROM chats WHERE id=?", (chat,), one=True)
+    charter_runtime._plan_lived_location(
+        chat, {"lore": [], "brief": "a port", "generate_history": True,
+               "horizon_hours": 720}, row, planner)
+
+    assert seen["history"] == history
+    # And the carry key never reaches the closure as part of the plan.
+    assert "prehistory" not in seen["plan_keys"]
+
+
+def test_the_prehistory_carry_key_has_one_spelling():
+    from story import location_design
+    from world import charter_runtime
+
+    assert location_design.PREHISTORY_KEY == charter_runtime._ROOM_PREHISTORY_KEY
+
+
+def test_a_launch_that_wants_months_cannot_submit_without_them(chat):
+    from story import location_design
+
+    location_design.open_draft(chat, {"wants_history": True,
+                                      "horizon_hours": 720})
+    location_design.set_skeleton(chat, name="Yard", structure={"key": "w"},
+                                 rooms={"quay": {"name": "Quay"}})
+    location_design.set_charter(chat, {"key": "harbour"})
+    result = location_design.check(chat)
+    assert result["ok"] is False
+    assert any("prehistory" in e for e in result["errors"])
+
+
+def test_a_launch_that_wants_no_months_is_not_asked_for_any(chat):
+    """A horizon of zero means the place exists and has not been lived
+    through yet; the Room must not draft a past nobody asked to simulate."""
+    from story import location_design
+
+    location_design.open_draft(chat, {"wants_history": False})
+    location_design.set_skeleton(chat, name="Yard", structure={"key": "w"},
+                                 rooms={"quay": {"name": "Quay"}})
+    location_design.set_charter(chat, {"key": "harbour"})
+    result = location_design.check(chat)
+    assert not any("prehistory" in e for e in result["errors"])
+
+
+def test_the_review_closes_with_the_history_the_room_drafted(chat, monkeypatch):
+    """The gap this note named in § 4a, closed by the same change: the launch
+    closes with the history, so a review that closed without one was
+    answering a slightly different question."""
+    from story import location_design
+
+    seen = {}
+
+    def fake_close(plan, **kwargs):
+        seen["history"] = kwargs.get("history")
+        return {"charters": {}}
+
+    monkeypatch.setattr("world.charter_generate.close_plan", fake_close)
+    location_design.open_draft(chat, {"wants_history": True})
+    location_design.set_skeleton(chat, name="Yard", structure={"key": "w"},
+                                 rooms={"quay": {"name": "Quay"}})
+    location_design.set_charter(chat, {"key": "harbour"})
+    location_design.set_history(chat, eras=[{"name": "The permit years"}])
+    location_design.check(chat)
+    assert seen["history"]["eras"] == [{"name": "The permit years"}]
+
+
 def test_the_shape_has_one_statement():
     """The Room and the one-shot are held to the same specification, because
     two copies of it would drift into a plan the Room wrote correctly and the
@@ -288,8 +385,8 @@ def test_the_tools_refuse_outside_a_location_pass(chat):
 def test_the_four_tools_are_on_the_table():
     from story.room_tools import TOOL_INDEX
 
-    for name in ("draft_location", "draft_charter", "review_location",
-                 "submit_location"):
+    for name in ("draft_location", "draft_charter", "draft_history",
+                 "review_location", "submit_location"):
         assert name in TOOL_INDEX, name
 
 

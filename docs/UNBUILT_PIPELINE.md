@@ -1599,25 +1599,16 @@ inhabited location off the `utility` role's single 2,800-word JSON prompt and
 onto the Writers' Room's tool loop, and gave a launch a pause in which the
 player can say what they want. Five residuals.
 
-**a. The one-shot is still reachable, and it has two siblings.**
-`propose_town` without a `town_planner` still sends `_PLAN_SYSTEM` to
-`utility`, and two callers still take it: mid-story `POST
-/api/chats/{cid}/charters/generate`, and the Room's own `request_location`
-package operation -- which is the Room paying a `utility` model to do the
-Room's job. Beside it, `propose_history` (`_HISTORY_SYSTEM`) and
-`narrate_actual_history` are still one-shot `utility` calls on the same
-launches, immediately after the Room has designed the place. The owner's
-instruction named the town-design prompt and was scoped to the quick starts;
-routing the others is a decision, not an oversight, and the prehistory is the
-weaker case -- the months behind a plan that already exists is a smaller and
-more closed question than designing the plan.
-
-**a2. The review closes without the prehistory.** `propose_history` takes the
-finished plan as its input, so there is nothing to hand `review_location`
-while the plan is still being drafted; it runs `close_plan(history={})` and
-the launch runs `close_plan(history=...)`. A plan that passes review and
-fails the launch is possible on that one difference. Unseen, and named rather
-than papered over.
+**a. The one-shot is still reachable off the quick starts.** `propose_town`
+without a `town_planner` still sends `_PLAN_SYSTEM` to `utility`, and two
+callers still take it: mid-story `POST /api/chats/{cid}/charters/generate`,
+and the Room's own `request_location` package operation -- which is the Room
+paying a `utility` model to do the Room's job. `propose_history` is the same:
+routed to the Room on the quick starts (§ 4b of the note, after it failed a
+launch), still the one-shot everywhere else. `narrate_actual_history` is a
+third and is staying -- it narrates what the presimulation produced rather
+than authoring a place, and it is already guarded, so it cannot fail a
+launch.
 
 **b. The path that WORKS has still not been measured live.** One run
 happened, chat 149 on 2026-09-17, and it ran the Room with the wrong payload
