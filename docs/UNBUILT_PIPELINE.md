@@ -1619,14 +1619,21 @@ the launch runs `close_plan(history=...)`. A plan that passes review and
 fails the launch is possible on that one difference. Unseen, and named rather
 than papered over.
 
-**b. Nothing has been measured live.** Not the wall clock of a 40-step design
-against one call, not how many `review_location` round-trips a plan takes,
-not whether the Room submits inside the budget at all. The opening plan's
-first five live runs ([1.163](#unbuilt-1-163) § 4a) found three defects in a
-smaller pass; the same measurement is owed here, and `location_plan` (calls,
-steps, seconds, stopped, rooms, charters, error) is the row to read it from.
-A pass that does not submit FAILS the generation by design, so the cost of
-the budget being wrong is a failed launch, not a worse town.
+**b. The path that WORKS has still not been measured live.** One run
+happened, chat 149 on 2026-09-17, and it ran the Room with the wrong payload
+-- the closure instead of the town's, so no brief, no lore, no constraints --
+because the planner seam took two curried arguments of different meanings
+(`DESIGN_ROOM_PRELUDE.md` § 4a). It designed fourteen rooms and two
+institutions out of nothing in eight calls, six steps and 249.5 seconds, then
+died on `TypeError: 'dict' object is not callable`. The contract is fixed and
+the seam is now exercised by a test that reproduces that `TypeError` when
+either half is reverted; what has not happened is a run with a real brief and
+real lore in the payload. A pass with something to read will make more calls
+than eight, so the headroom under 40 steps / 900s is not what that run
+suggests. A pass that does not submit FAILS the generation by design, so the
+cost of the budget being wrong is a failed launch, not a worse town.
+`location_plan` (calls, steps, seconds, stopped, rooms, charters, error) is
+the row to read it from, and it recorded that run correctly.
 
 **c. No reader anywhere for what the Room decided.** `opening_plan`,
 `opening_placements` and now `location_plan` are world rows with no reader in

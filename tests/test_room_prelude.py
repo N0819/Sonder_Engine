@@ -17,7 +17,7 @@ are different claims:
 
 from __future__ import annotations
 
-import json
+import copy
 import time
 
 import pytest
@@ -116,6 +116,55 @@ def test_the_quick_start_routes_the_town_to_the_room_and_not_to_utility():
                    inspect.getsource(prelude_module.begin_story)):
         assert "room_town_planner" in source
         assert "town_planner=" in source
+
+
+def test_the_planner_is_handed_the_towns_payload_and_its_plan_is_used(
+        chat, monkeypatch):
+    """THE WIRING, exercised rather than grepped for.
+
+    The string test above passed while this was broken. `room_town_planner`
+    was a factory over the closure and `_plan_lived_location` called it WITH
+    the closure to get the model call, so the Room ran with `closure_inputs`
+    as its payload -- no brief, no lore, no constraints -- designed fourteen
+    rooms out of nothing over 249 seconds, and handed back a plan that
+    `propose_town` then tried to CALL: `TypeError: 'dict' object is not
+    callable`, live on chat 149, 2026-09-17. Nothing short of running the
+    seam catches that, because every name in it was spelled correctly.
+    """
+    from world import charter_runtime
+
+    seen = {}
+    town = {"name": "Vaunt's Yard", "structure": {"key": "waterfront"},
+            "rooms": {"quay": {"name": "The quay", "purpose": "landing"}},
+            "charters": []}
+
+    def planner(payload, closure=None):
+        seen["payload"] = copy.deepcopy(payload)
+        seen["closure"] = copy.deepcopy(closure)
+        return copy.deepcopy(town)
+
+    monkeypatch.setattr("world.charter_generate.close_plan",
+                        lambda plan, **kwargs: {"charters": {},
+                                                "rooms": plan["rooms"],
+                                                "structure": plan["structure"],
+                                                "name": plan["name"]})
+    row = db.q("SELECT * FROM chats WHERE id=?", (chat,), one=True)
+    artifact = charter_runtime._plan_lived_location(
+        chat,
+        {"lore": ["a tidal river town"], "brief": "a customs house",
+         "generate_history": False, "horizon_hours": 0.0,
+         "population": 12},
+        row, planner)
+
+    # The payload is the TOWN's, the one the one-shot would have been sent.
+    assert seen["payload"]["author_brief"] == "a customs house"
+    assert seen["payload"]["lore"] == ["a tidal river town"]
+    assert seen["payload"]["population"] == 12
+    # And the closure arrives beside it, not in place of it.
+    assert seen["closure"]["population"] == 12
+    assert seen["closure"]["chat_id"] == chat
+    # What it returned is what was planned.
+    assert artifact["town"]["name"] == "Vaunt's Yard"
 
 
 def test_the_shape_has_one_statement():

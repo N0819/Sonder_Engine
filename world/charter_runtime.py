@@ -2104,8 +2104,14 @@ def _plan_lived_location(cid, request, chat, town_planner=None):
     # (measured: three naming-collision tests and the phonology lane, all
     # four failing on a keyword their lambda never asked for).
     if callable(town_planner):
-        plan = propose_town(lore, brief, constraints=constraints or None,
-                            model_call=town_planner(closure_inputs))
+        # `(payload, closure) -> plan`, both at the call. The payload is what
+        # the one-shot would have been sent; the closure is what
+        # `close_plan` will need, so the planner can CHECK a draft against
+        # the closure that will land it. Currying the closure in first is
+        # exactly the mistake chat 149 hit.
+        plan = propose_town(
+            lore, brief, constraints=constraints or None,
+            model_call=lambda payload: town_planner(payload, closure_inputs))
     else:
         plan = (propose_town(lore, brief, constraints=constraints)
                 if constraints else propose_town(lore, brief))

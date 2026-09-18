@@ -30,7 +30,7 @@
 | `agents/perception.py` | 6820 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
 | `agents/runtime.py` | 1698 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 103 | Step and active-variant persistence helpers. | `core.db`, `persist.steps` |
-| `agents/story_planner.py` | 1688 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
+| `agents/story_planner.py` | 1695 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
 | `core/__init__.py` | 6 |  | — |
 | `core/db.py` | 2900 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
 | `core/frames.py` | 275 |  | `core.db` |
@@ -171,7 +171,7 @@
 | `world/charter_promote.py` | 612 |  | `world.charter_commitment`, `world.charter_feel`, `world.charter_politics`, `world.charter_social` |
 | `world/charter_roster.py` | 134 |  | `world.charter_model` |
 | `world/charter_run.py` | 1528 |  | `world`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_enrol`, `world.charter_feel`, `world.charter_figure`, `world.charter_harm`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
-| `world/charter_runtime.py` | 5347 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics`, `world.spatial` |
+| `world/charter_runtime.py` | 5353 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics`, `world.spatial` |
 | `world/charter_social.py` | 865 |  | `world.charter_politics` |
 | `world/charter_space.py` | 213 |  | `world.spatial` |
 | `world/charter_surface.py` | 364 |  | — |
@@ -520,13 +520,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `run_planner()` | 731 | 306 lines |
-| `deliberate()` | 1444 | 91 lines |
+| `deliberate()` | 1451 | 91 lines |
 | `run_location_plan()` | 1268 | 86 lines |
 | `_payload()` | 475 | 78 lines |
 | `_shown_transcript()` | 404 | 69 lines |
 | `run_opening_plan()` | 1115 | 64 lines |
-| `schedule_room_work()` | 1626 | 63 lines |
-| `planner_reply()` | 1370 | 51 lines |
+| `schedule_room_work()` | 1633 | 63 lines |
+| `planner_reply()` | 1377 | 51 lines |
 
 ### `core/db.py`
 
@@ -2094,14 +2094,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `registry_warnings()` | 2483 | 233 lines |
-| `_plan_lived_location()` | 1957 | 218 lines |
-| `advance_snapshot()` | 2939 | 200 lines |
+| `registry_warnings()` | 2489 | 233 lines |
+| `_plan_lived_location()` | 1957 | 224 lines |
+| `advance_snapshot()` | 2945 | 200 lines |
 | `_prepare_cast_histories()` | 1034 | 172 lines |
-| `presence_view()` | 4580 | 160 lines |
-| `_generate_lived_location()` | 2235 | 155 lines |
+| `presence_view()` | 4586 | 160 lines |
+| `_generate_lived_location()` | 2241 | 155 lines |
 | `_remap_generated_town()` | 1689 | 134 lines |
-| `hearing_for_creatures()` | 3141 | 112 lines |
+| `hearing_for_creatures()` | 3147 | 112 lines |
 
 ### `world/charter_social.py`
 

@@ -1353,14 +1353,21 @@ def run_location_plan(cid, frame_id=None, *, payload, closure=None):
         location_design.close_draft(cid)
 
 
-def room_town_planner(cid, frame_id=None, *, closure=None):
-    """`propose_town`'s `model_call`, routed to the Writers' Room.
+def room_town_planner(cid, frame_id=None):
+    """The town planner `generate_lived_location` takes: the Writers' Room.
 
-    The seam is the one `charter_generate.propose_town` already had, so the
-    quick starts change WHO plans and nothing else about how a location is
-    landed."""
+    ONE contract, `(payload, closure) -> plan`, and it takes BOTH of its
+    arguments at the call rather than one of them at construction. It was a
+    factory over `closure` for a few hours on 2026-09-17 and the caller
+    invoked it with the closure to obtain the model call, so the Room ran
+    with `closure_inputs` as its payload -- no brief, no lore, no
+    constraints -- designed fourteen rooms out of nothing over 249 seconds,
+    and handed back a plan that `propose_town` then tried to CALL
+    (`TypeError: 'dict' object is not callable`, chat 149). Two curried
+    arguments of different meanings is what made that mistake available;
+    one call with both is what closes it."""
 
-    def _plan(payload):
+    def _plan(payload, closure=None):
         return run_location_plan(cid, frame_id, payload=payload,
                                  closure=closure)
 
