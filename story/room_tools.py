@@ -1381,6 +1381,38 @@ def _t_retire_package(cid, frame_id, *, uid, note=""):
 # The table
 # ---------------------------------------------------------------------------
 
+# -- the location designer (story/location_design.py) ------------------------
+#
+# THE WRITERS' ROOM DESIGNS THE PLACE, A PIECE AT A TIME (owner, 2026-09-17:
+# "the writers room is meant to design charter locations and maps", and the
+# one-shot it replaces is "wildly inefficient in comparison to the writers
+# room multi tool call planing and execution"). These four are open only
+# while a location pass is running; outside one they say so.
+
+def _t_draft_location(cid, frame_id, *, name=None, structure=None, rooms=None):
+    from story.location_design import set_skeleton
+    return set_skeleton(cid, name=name, structure=structure, rooms=rooms)
+
+
+def _t_draft_charter(cid, frame_id, *, charter=None, remove=None):
+    from story.location_design import drop_charter, set_charter
+    if remove:
+        return drop_charter(cid, remove)
+    if charter is None:
+        raise ValueError("draft_charter takes a charter, or a key to remove")
+    return set_charter(cid, charter)
+
+
+def _t_review_location(cid, frame_id):
+    from story.location_design import check
+    return check(cid)
+
+
+def _t_submit_location(cid, frame_id):
+    from story.location_design import submit
+    return submit(cid)
+
+
 def _schema(properties, required=()):
     return {"type": "object", "properties": properties,
             "required": list(required), "additionalProperties": False}
@@ -1509,6 +1541,21 @@ TOOLS = [
      "description": "Retire a package from any state, with a note. What a landed package placed in the world stays; retiring closes the file.",
      "args": _schema({"uid": _S, "note": _S}, ["uid"]), "handler": _t_retire_package,
      "host_only": True},
+    # -- the location designer: open only during a location pass ----------
+    {"name": "draft_location",
+     "description": "Lay out the place being designed: its name, its structure (the grammar the map is planted under: {key, max_planned, grammar:[{kind,names,purposes}]}), and rooms, an object keyed by room id -> {name, purpose, adjacent:[{to,barrier}], frontier:[]}. Rooms MERGE across calls, so draft the map a handful of rooms at a time and correct one by drafting it again under the same id. Planned rooms carry no prose.",
+     "args": _schema({"name": _S, "structure": _O, "rooms": _O}),
+     "handler": _t_draft_location},
+    {"name": "draft_charter",
+     "description": "Add or replace ONE institution of the place being designed -- its posts, upkeeps, populations, economy, commons, naming law and look law -- or pass `remove` with a key to drop one. A charter drafted under a key that is already there replaces it, so an institution the review refused is fixed by sending it again rather than by starting over.",
+     "args": _schema({"charter": _O, "remove": _S}),
+     "handler": _t_draft_charter},
+    {"name": "review_location",
+     "description": "Ask the engine to close the plan as drafted and report what it said: the same deterministic closure the launch will run, so anything it refuses here would have failed the launch. Returns ok, the errors, the room count, the charters, and how many people the closure minted. Free, and worth running after each institution rather than once at the end.",
+     "args": _schema({}), "handler": _t_review_location},
+    {"name": "submit_location",
+     "description": "Declare the plan finished. Refused unless the review passes at the plan's current contents; drafting anything clears the last review, so submit after a clean one. The engine plants what you submit.",
+     "args": _schema({}), "handler": _t_submit_location},
     # -- research (story/room_research.py): the web, under a `research`
     # mandate, disclosed in the thread, cached per story, usable only as
     # filed lore. Never handed to the Dramaturge (RESEARCH_TOOL_NAMES).

@@ -1839,13 +1839,19 @@ def _lore_character_entries(cid):
         (*book_ids, "character"))]
 
 
-def generate_lived_location(cid, request, *, frame_id=None):
+def generate_lived_location(cid, request, *, frame_id=None,
+                            town_planner=None):
     """Generate and add one lore-grounded, presimulated Charter location.
 
     Existing locations and institutions are preserved.  Only the newly
     generated registry slice is lived through its prehistory, so adding a
     spaceport halfway through a story cannot age the town already in play by
     another month.
+
+    ``town_planner`` replaces the model call that proposes the town. The
+    quick starts pass the Writers' Room
+    (`agents/story_planner.room_town_planner`); see
+    `docs/design/DESIGN_ROOM_PRELUDE.md` § 4.
     """
     from core.db import q, wget_for_frame
     from world.charter_generate import (
@@ -1915,7 +1921,8 @@ def generate_lived_location(cid, request, *, frame_id=None):
                     "error": "", "resumed": bool(artifact)})
     try:
         return _generate_lived_location(
-            cid, request, chat, frame_id, digest, artifact)
+            cid, request, chat, frame_id, digest, artifact,
+            town_planner=town_planner)
     except Exception as exc:
         _fail_job(cid, exc)
         raise
@@ -1947,8 +1954,15 @@ def _plan_naming_laws(plan):
             if isinstance(raw, dict) and isinstance(raw.get("naming"), dict)]
 
 
-def _plan_lived_location(cid, request, chat):
+def _plan_lived_location(cid, request, chat, town_planner=None):
     """The pure prefix: two model calls, a deterministic closure, no writes.
+
+    ``town_planner`` replaces the town proposal's model call. The quick
+    starts pass the Writers' Room (`agents/story_planner.room_town_planner`,
+    owner 2026-09-17: designing a charter location and its map is the Room's
+    work, and a single JSON blob is wildly inefficient beside the Room's
+    multi-tool-call planning). It is given the same payload and held to the
+    same specification; everything below it is unchanged.
 
     Returned whole as the artifact a resume restores. Everything downstream
     needs all seven fields, so restoring only some would carry the town from
@@ -2063,19 +2077,49 @@ def _plan_lived_location(cid, request, chat):
                            ("population", population),
                            ("naming_register", naming_register))
         if value not in (None, "", [])}
-    plan = (propose_town(lore, brief, constraints=constraints)
-            if constraints else propose_town(lore, brief))
+    # THE CLOSURE'S OWN INPUTS, handed to whoever plans so that a plan can
+    # be CHECKED against the closure before it is submitted rather than
+    # after a launch has failed on it. The one-shot could not be told
+    # anything; the Room can be told what it will be judged by.
+    from story.naming import (
+        authored_naming_profile, naming_law_exists, story_identity_reservation)
+    authored = authored_naming_profile(cid)
+    naming_law = authored if naming_law_exists(authored) else None
+    closure_inputs = {
+        "chat_id": int(cid),
+        "featured_residents": requested_residents,
+        "naming_law": naming_law,
+        "population": population,
+    }
+    # The RESERVATION is deliberately not in there. Without an authored law
+    # it is derived from the plan's OWN naming laws, which do not exist
+    # until there is a plan -- so a value computed here would be a different
+    # reservation from the one the closure below applies, and a review that
+    # passed under it could still lose a resident's name at the launch. The
+    # draft's checker derives it from the draft, by the same two lines.
+    # THE DEFAULT CALL IS THE CALL IT ALWAYS WAS. `model_call` is passed only
+    # when there is a planner to pass: sending `model_call=None` would be the
+    # same request with a different signature, and every stub that patches
+    # `propose_town` in a test would have to grow an argument it does not use
+    # (measured: three naming-collision tests and the phonology lane, all
+    # four failing on a keyword their lambda never asked for).
+    if callable(town_planner):
+        plan = propose_town(lore, brief, constraints=constraints or None,
+                            model_call=town_planner(closure_inputs))
+    else:
+        plan = (propose_town(lore, brief, constraints=constraints)
+                if constraints else propose_town(lore, brief))
     history = {}
     wants_history = bool(request.get("generate_history", True)) and horizon > 0
     if wants_history:
         history = propose_history(plan, lore, horizon)
     # The cast is not a naming lane, it is the no-fly list. The planner was
     # handed the same lore the cast came from, so its pools arrive holding
-    # the cast's own name elements unless something subtracts them.
-    from story.naming import (
-        authored_naming_profile, naming_law_exists, story_identity_reservation)
-    authored = authored_naming_profile(cid)
-    naming_law = authored if naming_law_exists(authored) else None
+    # the cast's own name elements unless something subtracts them. The
+    # reservation is computed AGAIN here rather than reused from
+    # `closure_inputs` above: without an authored law it is derived from the
+    # PLAN's own laws (`_plan_naming_laws`), which did not exist before the
+    # plan did.
     laws = [naming_law] if naming_law else _plan_naming_laws(plan)
     town = close_plan(
         plan, history=history,
@@ -2188,7 +2232,8 @@ def _record_phonology(book_id, town):
             continue
 
 
-def _generate_lived_location(cid, request, chat, frame_id, digest, artifact):
+def _generate_lived_location(cid, request, chat, frame_id, digest, artifact,
+                             town_planner=None):
     """The body, with the job's lifecycle owned by the caller."""
     from core.db import q, wget_for_frame
     from world.charter_generate import narrate_actual_history
@@ -2199,7 +2244,7 @@ def _generate_lived_location(cid, request, chat, frame_id, digest, artifact):
     request, cast_histories = _prepare_cast_histories(
         cid, request, frame_id=frame_id)
     if artifact is None:
-        artifact = _plan_lived_location(cid, request, chat)
+        artifact = _plan_lived_location(cid, request, chat, town_planner)
         # THE BOUNDARY. Everything above is pure -- two model calls and no
         # writes -- so it is exactly what is worth not paying for twice, and
         # exactly what is safe to replay. Everything below writes.

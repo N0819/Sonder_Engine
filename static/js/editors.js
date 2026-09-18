@@ -301,6 +301,16 @@ function quickStartModal(character, greetingIndex) {
       + "your name."
   });
   const lived = livedLocationControl({ featuredResidentName: character.name });
+  // THE ROOM BEFORE THE STORY (`docs/design/DESIGN_ROOM_PRELUDE.md`).
+  // Checked, the launch creates the story and stops: the Writers' Room reads
+  // the greeting, asks what you want from it, and builds the ground from
+  // what you answer. Unchecked is exactly the launch that ran before.
+  const preludeCb = el("input", {
+    type: "checkbox",
+    title: "Create the story and pause. The Writers' Room reads the greeting "
+      + "and asks what you want from this one before it builds the place and "
+      + "opens the first beat."
+  });
   modal(`Quick start — ${character.name}`, b => {
     b.append(
       el("div", { class: "small dim" },
@@ -313,6 +323,8 @@ function quickStartModal(character, greetingIndex) {
       el("label", { class: "row small dim", style: "gap:6px;margin-top:10px" },
         knownCb, character.name + " already knows me"),
       lived.node,
+      el("label", { class: "row small dim", style: "gap:6px;margin-top:10px" },
+        preludeCb, "Talk to the Writers' Room first"),
       el("div", { class: "row", style: "margin-top:12px" },
         el("button", {
           class: "primary",
@@ -320,15 +332,20 @@ function quickStartModal(character, greetingIndex) {
             const persona_id = +sel.value;
             const lorebook_id = loreSel.value ? +loreSel.value : null;
             const lived_location = lived.read();
-            backgroundTask("Starting story",
+            const prelude = preludeCb.checked;
+            backgroundTask(prelude ? "Opening the Writers' Room" : "Starting story",
               () => api("POST", `/api/characters/${character.id}/start`,
                 { persona_id, greeting_index: greetingIndex, lorebook_id,
-                  already_known: knownCb.checked, lived_location }),
+                  already_known: knownCb.checked, lived_location, prelude }),
               {
                 onSuccess: async r => {
                   closeAllModals();
                   await boot();
                   await openChat(r.chat_id);
+                  // A prelude opens on the Room: it has just asked a
+                  // question and the answer is the whole of what there is
+                  // to do with the story yet.
+                  if (r.prelude) window.roomOpen?.(true);
                   // The last moment before the card starts BEHAVING.
                   showCardWarnings(r);
                 },

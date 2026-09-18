@@ -780,12 +780,19 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
                 already_known: bool = True,
                 language: str | None = None,
                 lived_location: dict | None = None,
-                resume_chat_id: int | None = None) -> tuple[int, int]:
+                resume_chat_id: int | None = None,
+                prelude: bool = False) -> tuple[int, int | None]:
     """'Start story now': create a chat seeded from a character's greeting.
     The greeting is shown verbatim; its private knowledge routes to the
     character. An optional lorebook is attached before turn 0 runs, so the
     opening establishment can already draw on that world's lore. Returns
     (chat_id, turn_id).
+
+    `prelude` STOPS THE LAUNCH AT THE DOOR (`story/prelude.py`): the chat,
+    the cast, the language and the lorebook are seeded, the pending launch is
+    recorded, the Writers' Room reads the greeting and asks the player what
+    they want, and nothing else runs until `begin_story` says go. It returns
+    `(chat_id, None)` -- there is no turn yet, because there is no story yet.
 
     `already_known` seeds mutual name-recognition between the character and the
     player. It defaults True because greeting cards are typically written TO the
@@ -927,6 +934,40 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
             generation_book_id = (new_lb if lb["chat_id"] is not None
                                   else ensure_chat_canon_book(cid))
 
+        # THE ROOM HAS THE FLOOR (`docs/design/DESIGN_ROOM_PRELUDE.md`).
+        # The cut is HERE, and not one stage earlier or later: everything
+        # above is the story's identity -- who is in it, what language it is
+        # in, which book it draws on -- and is settled by the launch screen;
+        # everything below is the GROUND, which is what the prelude exists
+        # to let the player have a say in. The pending launch is recorded
+        # whole, so `begin_story` needs nothing from the browser, and the
+        # resume path below is what runs when it says go.
+        if prelude:
+            from story.prelude import record_prelude, record_setup
+            record_setup(cid, "greeting", {
+                "char_id": int(char_id), "persona_id": int(persona_id),
+                "greeting_index": int(greeting_index),
+                "lorebook_id": int(lorebook_id) if lorebook_id else None,
+                "already_known": bool(already_known),
+                "language": language or DEFAULT_LANGUAGE,
+                "lived_location": copy.deepcopy(lived_location)
+                if isinstance(lived_location, dict) else None})
+            from agents.story_planner import run_prelude
+            logger.info("quick start: the room has the floor for chat %s", cid)
+            with language_scope(language or DEFAULT_LANGUAGE):
+                asked = run_prelude(
+                    cid, None, passage=prose_final,
+                    location_requested=bool(
+                        isinstance(lived_location, dict)
+                        and lived_location.get("enabled", True)))
+            record_prelude(cid, asked=asked, at=time.time(), began=0.0)
+            # NOT A FAILED SETUP. A story waiting on its own author is the
+            # one state between "created" and "running" that is neither a
+            # failure nor a story, and the library reads this row to tell
+            # them apart.
+            db.wset(cid, QUICK_START_FAILURE_KEY, {})
+            return cid, None
+
         # A selected prehistory must exist before establishment authors turn 0.
         # Running this from the browser after /start returns made the supposedly
         # old residents and institutions arrive one scene late, after the opening
@@ -982,10 +1023,23 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
                     "resuming after it", cid)
             try:
                 if not planted:
+                    # THE WRITERS' ROOM DESIGNS THE PLACE, NOT A UTILITY
+                    # CALL (`docs/design/DESIGN_ROOM_PRELUDE.md` § 4; owner,
+                    # 2026-09-17). What the player typed on the launch
+                    # screen is an ASK; the map, the institutions, their
+                    # posts and economies and naming law are authoring
+                    # work, and the Room is the only thing in the engine
+                    # that can read the lorebook, the cast, the passage and
+                    # the prelude while it does them. Only the PROPOSAL
+                    # moves: the closure, the planting, the presimulation
+                    # and the job's resume and salvage stay exactly where
+                    # they were, below.
+                    from agents.story_planner import room_town_planner
                     logger.info(
-                        "quick start: generating a lived location for chat %s",
-                        cid)
-                    generated_location = generate_lived_location(cid, request)
+                        "quick start: the room is designing a lived location "
+                        "for chat %s", cid)
+                    generated_location = generate_lived_location(
+                        cid, request, town_planner=room_town_planner(cid))
             except Exception as exc:
                 # Logged here because this is the one stage that can say WHERE
                 # in itself it failed; the guard at the end of this function

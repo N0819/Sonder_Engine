@@ -322,6 +322,19 @@ def _json_call(system, payload, *, max_tokens=PLAN_MAX_TOKENS,
     return value
 
 
+def plan_specification():
+    """WHAT A LOCATION PLAN IS, as one string with one definition.
+
+    The Writers' Room designs the plan now (`agents/story_planner.
+    run_location_plan`, owner 2026-09-17) and the one-shot `utility` call is
+    the fallback nothing in the quick starts reaches any more. Both are held
+    to the same shape, and this is it -- handed to the Room in its task the
+    way it is handed to the one-shot as its system prompt. Two copies of a
+    2,800-word specification would drift, and the drift would be a plan the
+    Room wrote correctly and the closure refused."""
+    return _PLAN_SYSTEM
+
+
 def propose_town(lore, brief="", *, constraints=None, model_call=None):
     payload = {"lore": lore, "author_brief": str(brief or "")}
     if isinstance(constraints, dict):

@@ -80,6 +80,12 @@ opening runs as it always did.
    `OPENING_WALL_SECONDS` (150), one pass, no resumption. Nothing validates
    in time: the establish runs as today and `opening_plan.stopped` says why.
 3. **Rooms only at the opening; a charter is an OPTION, never assumed.**
+   (Still true, and unchanged by the prelude: the option is still the
+   player's on the launch screen, and the opening mandate still carries no
+   `request_location`. What changed 2026-09-17 is who DESIGNS the charter
+   once the player has taken that option -- the Room, through its own tools,
+   in place of the one-shot `utility` prompt:
+   [`DESIGN_ROOM_PRELUDE.md`](DESIGN_ROOM_PRELUDE.md) § 4.)
    "The planned rooms being a charter needs to be an option, not something
    the planner immediately assumes." The opening mandate does not permit
    `request_location`; the planner card says so in the OPENING paragraph;
@@ -156,8 +162,14 @@ the plan and the establish call together (chat 130).
 
 ## 6. What is left
 
-- The new-chat screen has no lived-location control; the charter option is
-  explicit only on the greeting screen today.
+- ~~The new-chat screen has no lived-location control~~ -- WRONG when it was
+  written, and corrected 2026-09-17: `renderWizardScenario` (step 3) and
+  `wizardFromScratch` have both carried one (`static/js/app.js`), posting it
+  to `POST /api/chats/{cid}/charters/generate` after the chat exists rather
+  than through `/api/chats`. What was actually missing is what
+  [`DESIGN_ROOM_PRELUDE.md`](DESIGN_ROOM_PRELUDE.md) built: on BOTH screens
+  the location was designed by one `utility` call from a text box, with the
+  Room told about the town afterwards.
 - The fan-out of the opening (`docs/UNBUILT_PIPELINE.md` § 1.163) is still
   the destination: with rooms planned and bodies placed, the establish
   stage's remaining work is row-shaped.

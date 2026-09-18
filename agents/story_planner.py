@@ -98,6 +98,32 @@ TASK_PASSES_CAP = 12
 #: four and the ceiling wants room above it.
 OPENING_STEPS = 24
 OPENING_WALL_SECONDS = 360.0
+#: THE PRELUDE AND THE GROUND (`docs/design/DESIGN_ROOM_PRELUDE.md`), the
+#: two passes that run BEFORE the opening plan and, unlike it, before there
+#: is a story at all.
+#:
+#: The prelude is one short exchange: the Room reads the passage and the
+#: cast and asks the player what they want from this story. It is a
+#: QUESTION, not a plan -- nothing is drafted, nothing is published, no
+#: mandate is minted -- so its budget is the smallest of the three. Six
+#: steps is read-once, ask-once with room for a second read.
+PRELUDE_STEPS = 6
+PRELUDE_WALL_SECONDS = 120.0
+#: THE LOCATION PASS (`story/location_design.py`): the Room designs the
+#: inhabited place itself -- map, institutions, posts, upkeeps, economies, a
+#: naming law and a look law -- in place of the single `utility` JSON call
+#: that used to be asked for all of it at once. The budget is the largest of
+#: the four launch regimes because the work is: reading the lore, laying out
+#: a map a handful of rooms at a time, one institution per call, and a
+#: review after each. A one-shot had one attempt and no way to be told it
+#: was wrong; this has as many as the budget buys, and every one of them is
+#: cheaper than the blob it replaces.
+LOCATION_STEPS = 40
+LOCATION_WALL_SECONDS = 900.0
+#: How much of the selected lore rides in the task. The Room can read more
+#: with `search_lore`/`read_lore`/`scan_lore` -- which is the point -- so
+#: this is a starting slice, not the budget for what it may know.
+LOCATION_LORE_CHARS = 24_000
 #: Output budget per model call -- the FALLBACK, when the host's own ceiling
 #: cannot be read. `story.room_calls.room_max_tokens()` is what callers
 #: use, and it asks the host for its whole ceiling.
@@ -742,8 +768,13 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
     regime = regime or ("task" if task is not None and text is None else "reply")
     wall = (REPLY_WALL_SECONDS if regime == "reply"
             else OPENING_WALL_SECONDS if regime == "opening"
+            else PRELUDE_WALL_SECONDS if regime == "prelude"
+            else LOCATION_WALL_SECONDS if regime == "location"
             else TASK_PASS_SECONDS)
-    steps_cap = OPENING_STEPS if regime == "opening" else PLANNER_STEPS_PER_REPLY
+    steps_cap = (OPENING_STEPS if regime == "opening"
+                 else PRELUDE_STEPS if regime == "prelude"
+                 else LOCATION_STEPS if regime == "location"
+                 else PLANNER_STEPS_PER_REPLY)
     system = system_block(cid, frame_id)
     turn_idx = room.current_turn_idx(cid)
     expire_mandates(cid, frame_id, turn_idx)
@@ -848,9 +879,14 @@ def run_planner(cid, frame_id, *, text=None, task=None, base_turn=None,
             # answer before the first beat, and chat 126's plan waited on
             # one question for the whole story. A question in that regime
             # is kept as a note, never written to the status row.
-            if regime == "opening":
+            # The GROUND pass is the same case: it runs inside a launch,
+            # after the prelude has closed and while the player is watching
+            # a progress line, so a question there is a stall too. The
+            # PRELUDE is the regime that exists to ask one, and it asks it
+            # in its reply.
+            if regime in ("opening", "location"):
                 for q_text in out["questions"]:
-                    notes.append("question not asked at the opening: %s"
+                    notes.append("question not asked before the story: %s"
                                  % str(q_text)[:200])
             else:
                 questions = out["questions"]
@@ -1039,7 +1075,9 @@ def _run_task(cid, frame_id, task, *, base_turn, job=None):
 
 def _opening_task(cid, frame_id, passage):
     """What the opening regime is handed: the passage the story opens on,
-    who is present, and what the launch already planted."""
+    who is present, what the launch already planted, and -- since the
+    prelude (`docs/design/DESIGN_ROOM_PRELUDE.md`) -- whatever the player
+    asked for before the story started."""
     from story.opening_plan import present_bodies
     from story.scene import persona_name, persona_of
     from core.db import q, wget_for_frame
@@ -1052,11 +1090,26 @@ def _opening_task(cid, frame_id, passage):
     present = present_bodies(cid)
     planted = sorted(normalize_structures(
         wget_for_frame(cid, STRUCTURES_KEY, frame_id, {}) or {})["items"])
-    return {"kind": "opening",
+    task = {"kind": "opening",
             "passage": str(passage or "")[:PLANNER_TRANSCRIPT_CHARS],
             "player": player,
             "present": present,
             "planted_structures": planted}
+    # WHAT THE PLAYER ASKED FOR IS READ HERE, NOT PASSED IN
+    # (`docs/design/DESIGN_ROOM_PRELUDE.md`). Both launches reach the
+    # opening plan by their own route -- the greeting quick start calls it
+    # directly, a scenario chat through `web.app._plan_opening` on turn 0 --
+    # and a parameter would have had to be threaded through both and
+    # remembered by the next one. The prelude is on the chat; the task reads
+    # the chat.
+    try:
+        from story.prelude import player_wants
+        said = [str(w)[:2000] for w in player_wants(cid, frame_id)][:20]
+    except Exception:
+        said = []
+    if said:
+        task["player_said"] = said
+    return task
 
 
 def run_opening_plan(cid, frame_id=None, *, passage):
@@ -1123,6 +1176,195 @@ def run_opening_plan(cid, frame_id=None, *, passage):
                 (", stopped: %s" % row["stopped"]) if row["stopped"] else "",
                 tools)
     return row
+
+
+def _cast_brief(cid):
+    """Who the story is about, for a pass that runs before any of them has
+    acted: the name and the one line a card leads with."""
+    from story.room_tools import cast_minds_summary
+    try:
+        rows = cast_minds_summary(cid, None)
+    except Exception:
+        return []
+    out = []
+    for row in rows if isinstance(rows, list) else ():
+        if not isinstance(row, dict):
+            continue
+        out.append({"name": str(row.get("name") or "")[:120]})
+    return [r for r in out if r["name"]][:12]
+
+
+def _prelude_task(cid, frame_id, passage, location_requested):
+    """What the prelude regime is handed. Deliberately the SAME shape the
+    opening gets, minus the plan: the passage, who is present, and the one
+    thing the launch screen already decided -- whether the player asked for
+    a place that was lived in before the story opens."""
+    task = _opening_task(cid, frame_id, passage)
+    task["kind"] = "prelude"
+    task["cast"] = _cast_brief(cid)
+    task["location_requested"] = bool(location_requested)
+    return task
+
+
+def run_prelude(cid, frame_id=None, *, passage, location_requested=False):
+    """Ask the player what they want, before the story starts
+    (`docs/design/DESIGN_ROOM_PRELUDE.md`).
+
+    ONE pass of the planner in the `prelude` regime, over a task carrying
+    the passage the story would open on. It publishes nothing and mints no
+    mandate -- it only reads and asks -- and its reply is written to the
+    room thread as the Room's first line. NEVER RAISES: a launch that the
+    Room could not greet still opens, with the standing question in place
+    of the one it would have written. Returns the line that was posted."""
+    from story import room_conversation as room
+    from story.prelude import PRELUDE_FALLBACK_LINE
+
+    line = ""
+    try:
+        task = _prelude_task(cid, frame_id, passage, location_requested)
+        out = run_planner(cid, frame_id, task=task, regime="prelude",
+                          base_turn=None)
+        line = " ".join(str(out.get("reply") or "").split())
+    except Exception as exc:
+        logger.info("prelude failed for chat %s: %s", cid, exc)
+    line = line or PRELUDE_FALLBACK_LINE
+    try:
+        room.add_message(cid, frame_id, "planner", line, turn_idx=0)
+    except ValueError:
+        pass
+    logger.info("prelude for chat %s: %d characters", cid, len(line))
+    return line
+
+
+def _location_task(cid, frame_id, payload, spec):
+    """What the location regime is handed: the ask, the lore that was
+    selected for it, the constraints the launch is holding the plan to, and
+    the SHAPE the plan must take -- `charter_generate._PLAN_SYSTEM`, the
+    same specification the one-shot call was given, because there must be
+    exactly one statement of what a location plan is."""
+    payload = payload if isinstance(payload, dict) else {}
+    lore = payload.get("lore")
+    lore_text = (lore if isinstance(lore, str)
+                 else json.dumps(lore, ensure_ascii=False, default=str))
+    task = {"kind": "location",
+            "author_brief": str(payload.get("author_brief") or "")[:4000],
+            "lore": lore_text[:LOCATION_LORE_CHARS],
+            "lore_truncated": len(lore_text) > LOCATION_LORE_CHARS,
+            "shape": spec}
+    for key in ("scale", "topology", "required_rooms", "featured_residents",
+                "population", "naming_register"):
+        if payload.get(key) not in (None, "", []):
+            task[key] = payload[key]
+    try:
+        from story.prelude import player_wants
+        said = [str(w)[:2000] for w in player_wants(cid, frame_id)][:20]
+    except Exception:
+        said = []
+    if said:
+        task["player_said"] = said
+    return task
+
+
+def run_location_plan(cid, frame_id=None, *, payload, closure=None):
+    """The Writers' Room designs the inhabited location
+    (`docs/design/DESIGN_ROOM_PRELUDE.md` § 4, `story/location_design.py`).
+
+    Replaces `charter_generate.propose_town`'s single `utility` call. The
+    Room reads the lore with its own tools, drafts the map and the
+    institutions a piece at a time, asks the engine to close what it has,
+    fixes what comes back, and submits. Returns the plan in the shape
+    `propose_town` returned one, so everything downstream is untouched.
+
+    `payload` is what `propose_town` would have been sent. `closure` carries
+    what `close_plan` needs when the draft is reviewed -- the featured
+    residents, the reservation, the naming law, the population -- so that the
+    check the Room runs IS the check the launch will run.
+
+    Raises `ValueError` when the Room produced no usable plan. Deliberately:
+    the caller is a location generation, which already has a failure path
+    that keeps the story and offers a retry, and falling back to the
+    one-shot would be keeping alive the thing this replaces."""
+    from story import location_design
+    from world.charter_generate import plan_specification
+
+    task = _location_task(cid, frame_id, payload, plan_specification())
+    closure = dict(closure or {})
+    closure.setdefault("featured_residents",
+                       (payload or {}).get("featured_residents") or [])
+    closure.setdefault("population", (payload or {}).get("population"))
+    location_design.open_draft(cid, closure)
+    calls = steps = 0
+    stopped = None
+    started = time.time()
+    try:
+        out = run_planner(cid, frame_id, task=task, regime="location",
+                          base_turn=None)
+        calls = int(out.get("calls") or 0)
+        steps = int(out.get("steps") or 0)
+        stopped = out.get("stopped")
+        plan = location_design.submitted_plan(cid)
+        if plan is None:
+            # WHAT IT HAD, said plainly. A pass that ran out one call from
+            # `submit_location` is the failure the opening plan already had
+            # once (chat 127, 2026-09-16), and the only way to know which
+            # one this is, is to say what was on the table when it stopped.
+            row = location_design.draft(cid)
+            drafted = row.get("plan") or {}
+            raise ValueError(
+                "the Writers' Room did not submit a location plan "
+                "(%d calls, %d steps%s); it had %d room(s) and %d "
+                "institution(s) drafted"
+                % (calls, steps, (", stopped: %s" % stopped) if stopped else "",
+                   len(drafted.get("rooms") or {}),
+                   len(drafted.get("charters") or [])))
+        logger.info("location plan for chat %s: %d rooms, %d charters, "
+                    "%d calls, %d steps, %.1fs", cid,
+                    len(plan.get("rooms") or {}),
+                    len(plan.get("charters") or []), calls, steps,
+                    time.time() - started)
+        location_design.record_pass(
+            cid, calls=calls, steps=steps, stopped=stopped,
+            seconds=round(time.time() - started, 1),
+            rooms=len(plan.get("rooms") or {}),
+            charters=[str(c.get("key") or "") for c in
+                      (plan.get("charters") or [])][:40],
+            error="")
+        return plan
+    except Exception as exc:
+        # WHAT THE ROOM WAS DOING, because nothing else records it and the
+        # owner has asked that question of a planner pass before (chat 131,
+        # `DESIGN_OPENING_PLAN.md` § 4a). A generation that failed here
+        # leaves a story in the library with a retry; this is what the
+        # retry's author needs to decide whether to ask for less.
+        row = location_design.draft(cid)
+        drafted = row.get("plan") or {}
+        location_design.record_pass(
+            cid, calls=calls, steps=steps, stopped=stopped,
+            seconds=round(time.time() - started, 1),
+            rooms=len(drafted.get("rooms") or {}),
+            charters=[str(c.get("key") or "") for c in
+                      (drafted.get("charters") or [])][:40],
+            error="%s: %s" % (type(exc).__name__, str(exc)[:400]))
+        raise
+    finally:
+        # Cleared whatever happened: the plan it produced is the job's
+        # artifact now, and a draft left open would be offered to the next
+        # pass as work in progress.
+        location_design.close_draft(cid)
+
+
+def room_town_planner(cid, frame_id=None, *, closure=None):
+    """`propose_town`'s `model_call`, routed to the Writers' Room.
+
+    The seam is the one `charter_generate.propose_town` already had, so the
+    quick starts change WHO plans and nothing else about how a location is
+    landed."""
+
+    def _plan(payload):
+        return run_location_plan(cid, frame_id, payload=payload,
+                                 closure=closure)
+
+    return _plan
 
 
 def planner_reply(cid, frame_id, text, *, on_event=None):

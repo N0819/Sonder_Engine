@@ -1591,6 +1591,72 @@ tried to give: a sheet that holds both retired and surviving duties cannot
 be deleted wholesale, and a red test after a refactor is a question, not
 noise.
 
+<a id="unbuilt-1-165"></a>
+### 1.165 The Room designs the location now, and nobody has watched it do it
+
+`docs/design/DESIGN_ROOM_PRELUDE.md` (2026-09-17) moved the design of an
+inhabited location off the `utility` role's single 2,800-word JSON prompt and
+onto the Writers' Room's tool loop, and gave a launch a pause in which the
+player can say what they want. Five residuals.
+
+**a. The one-shot is still reachable, and it has two siblings.**
+`propose_town` without a `town_planner` still sends `_PLAN_SYSTEM` to
+`utility`, and two callers still take it: mid-story `POST
+/api/chats/{cid}/charters/generate`, and the Room's own `request_location`
+package operation -- which is the Room paying a `utility` model to do the
+Room's job. Beside it, `propose_history` (`_HISTORY_SYSTEM`) and
+`narrate_actual_history` are still one-shot `utility` calls on the same
+launches, immediately after the Room has designed the place. The owner's
+instruction named the town-design prompt and was scoped to the quick starts;
+routing the others is a decision, not an oversight, and the prehistory is the
+weaker case -- the months behind a plan that already exists is a smaller and
+more closed question than designing the plan.
+
+**a2. The review closes without the prehistory.** `propose_history` takes the
+finished plan as its input, so there is nothing to hand `review_location`
+while the plan is still being drafted; it runs `close_plan(history={})` and
+the launch runs `close_plan(history=...)`. A plan that passes review and
+fails the launch is possible on that one difference. Unseen, and named rather
+than papered over.
+
+**b. Nothing has been measured live.** Not the wall clock of a 40-step design
+against one call, not how many `review_location` round-trips a plan takes,
+not whether the Room submits inside the budget at all. The opening plan's
+first five live runs ([1.163](#unbuilt-1-163) § 4a) found three defects in a
+smaller pass; the same measurement is owed here, and `location_plan` (calls,
+steps, seconds, stopped, rooms, charters, error) is the row to read it from.
+A pass that does not submit FAILS the generation by design, so the cost of
+the budget being wrong is a failed launch, not a worse town.
+
+**c. No reader anywhere for what the Room decided.** `opening_plan`,
+`opening_placements` and now `location_plan` are world rows with no reader in
+`static/js/`. After a prelude the player answers a question, presses begin,
+and sees a story -- with no way to see the map that was drafted for it or
+what the review refused on the way. This is the gap
+`DESIGN_OPENING_PLAN.md` § 4a opened after chat 131 ("what is the writers
+room actually doing in those calls, I have no idea"), now one row wider.
+
+**d. The four location tools ride every reply's system block.** The tool
+table is the largest and most cacheable thing the Planner reads (15.6k
+characters, measured 2026-09-04); `draft_location`, `draft_charter`,
+`review_location` and `submit_location` are on it during every ordinary room
+reply, where they can only refuse. `_manifest()` could filter by regime;
+`system_block(cid, frame_id)` does not take one, and the saving is unmeasured.
+
+**e. A prelude is one-way, and the Japanese side of a location pass is
+unchecked in two directions.** There is no re-entering the prelude after
+begin and no taking it on a launch that did not ask for one. The card's
+LOCATION paragraph landed in both packs and the pass runs inside
+`story_language_scope`, but its product is a plan object rather than prose on
+a page, so nothing would notice an English plan on a Japanese story. In the
+other direction, the ten tool REFUSALS the Room reads while drafting are
+English whatever the story's language: `run_tool` returns a raised
+`ValueError` inside the tool result and nothing on that path reads the UI
+catalog, so the ja entries for them are inert and the ledger says so. That is
+true of every Python-side refusal in the engine and is not new here; it is
+newly relevant because the Room now reads ten of them while doing authoring
+work.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-18"></a>

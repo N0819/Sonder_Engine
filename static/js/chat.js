@@ -552,6 +552,27 @@ function renderChat() {
   $("#chatname").textContent = S.chat.chat.name;
   $("#chatname").title = S.chat.chat.name;
 
+  // THE STORY HAS NOT BEGUN AND THE ROOM HAS THE FLOOR
+  // (`docs/design/DESIGN_ROOM_PRELUDE.md`). This is the only state between
+  // "created" and "running", and it renders as itself: the transcript is
+  // empty because there is no beat yet, so the space says what is waiting
+  // and offers the two things there are to do -- answer the Room, or begin.
+  if (S.chat.awaiting_begin) {
+    M.append(el("div", { class: "empty-state", style: "margin:auto;max-width:440px" },
+      el("div", { style: "font-size:15px;margin-bottom:14px" },
+        "The Writers' Room has the floor."),
+      el("div", { class: "small dim", style: "margin-bottom:14px" },
+        "It has read the opening and asked what you want from this story. "
+        + "Answer in the room, or begin and it will work from the page."),
+      el("div", { class: "row", style: "justify-content:center;gap:10px;flex-wrap:wrap" },
+        el("button", { onclick: () => window.roomOpen?.(true) },
+          "Open the Writers' Room"),
+        el("button", { class: "primary", onclick: () => beginStory() },
+          "Begin the story"))));
+    updateChatScopedButtons();
+    return;
+  }
+
   // Frame-filtered: each frame is its own independent thread with its
   // own turn history -- see S.currentFrameId. A frameless chat (the
   // overwhelmingly common case) has every turn's frame_id === null,
@@ -661,6 +682,30 @@ function renderChat() {
     M.scrollTo({ top: M.scrollHeight, behavior: "instant" });
   });
   observeVisibleTurn(M, turnEntries);
+}
+
+// THE PLAYER SAID GO (`docs/design/DESIGN_ROOM_PRELUDE.md`). What this runs
+// is the rest of the launch the prelude was holding open: the Room writes
+// the brief its lived-in place is built from, the place is generated, the
+// opening is planned, and a greeting quick start goes on to run its first
+// beat. It can take a minute, which is why it is a background task with its
+// own line rather than a button that appears to hang.
+function beginStory() {
+  const cid = S.chatId;
+  if (!cid) return;
+  backgroundTask(
+    "Beginning the story",
+    () => api("POST", `/api/chats/${cid}/begin`),
+    {
+      closeModal: false,
+      onSuccess: async () => {
+        await boot();
+        await openChat(cid);
+      },
+      successMessage: "The story has begun.",
+      errorPrefix: "Couldn't begin the story"
+    }
+  );
 }
 
 function branchTurn(tid) {
