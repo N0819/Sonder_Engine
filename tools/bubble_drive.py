@@ -158,18 +158,43 @@ def openrouter_key():
     if env:
         return env
     tree = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    src = os.path.join(tree, "engine.db")
-    if not os.path.exists(src):
-        raise SystemExit("no OPENROUTER_API_KEY and no local engine.db to read one from")
-    con = sqlite3.connect("file:%s?mode=ro" % src, uri=True)
-    con.row_factory = sqlite3.Row
-    row = con.execute(
-        "SELECT api_key FROM providers WHERE kind='openrouter' AND api_key<>'' "
-        "ORDER BY id LIMIT 1").fetchone()
-    con.close()
-    if not row:
-        raise SystemExit("no OpenRouter provider with a key in engine.db")
-    return row["api_key"]
+    # A WORKTREE HAS NO engine.db. The install's database lives beside the
+    # main checkout, and `git rev-parse --git-common-dir` is what names it
+    # from inside any worktree of the same repository.
+    roots = [tree]
+    try:
+        import subprocess
+        common = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"], cwd=tree,
+            capture_output=True, text=True, check=True).stdout.strip()
+        if common:
+            roots.append(os.path.dirname(os.path.abspath(
+                os.path.join(tree, common))))
+    except Exception:
+        pass
+    # THE FIRST ONE THAT ANSWERS, not the first one that exists. An `engine.db`
+    # with no tables in it is the cwd-relative hazard CLAUDE.md names -- any
+    # tool run with `ENGINE_DB` unset mints an empty one beside the process --
+    # and finding that first would report "no such table: providers" about a
+    # file nobody meant to make.
+    for root in roots:
+        src = os.path.join(root, "engine.db")
+        if not os.path.exists(src):
+            continue
+        try:
+            con = sqlite3.connect("file:%s?mode=ro" % src, uri=True)
+            con.row_factory = sqlite3.Row
+            row = con.execute(
+                "SELECT api_key FROM providers WHERE kind='openrouter' "
+                "AND api_key<>'' ORDER BY id LIMIT 1").fetchone()
+            con.close()
+        except sqlite3.Error:
+            continue
+        if row:
+            return row["api_key"]
+    raise SystemExit(
+        "no OPENROUTER_API_KEY, and no engine.db with an OpenRouter key in "
+        + ", ".join(roots))
 
 
 def seed_providers(db, model):
