@@ -1273,6 +1273,19 @@ def _location_task(cid, frame_id, payload, spec, closure=None):
     return task
 
 
+def _location_digest(payload):
+    """What this design is an answer TO. The same fingerprint idea
+    `charter_runtime._request_digest` uses for the generation job, over the
+    fields that decide what the place IS -- so a retry of the same ask
+    adopts the plan and a retry of a changed one does not."""
+    payload = payload if isinstance(payload, dict) else {}
+    keys = ("author_brief", "lore", "scale", "topology", "required_rooms",
+            "featured_residents", "population", "naming_register")
+    body = json.dumps({k: payload.get(k) for k in keys},
+                      sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha1(body.encode("utf-8")).hexdigest()[:16]
+
+
 def run_location_plan(cid, frame_id=None, *, payload, closure=None):
     """The Writers' Room designs the inhabited location
     (`docs/design/DESIGN_ROOM_PRELUDE.md` § 4, `story/location_design.py`).
@@ -1300,6 +1313,21 @@ def run_location_plan(cid, frame_id=None, *, payload, closure=None):
     closure.setdefault("featured_residents",
                        (payload or {}).get("featured_residents") or [])
     closure.setdefault("population", (payload or {}).get("population"))
+    # ALREADY DESIGNED IS ALREADY DONE (owner, chat 150, 2026-09-17: "you've
+    # made it so i have to rerun every single step instead of recovering from
+    # what the writers room sucesfully planned"). A design is 227-250 seconds
+    # and six to nine model calls -- by far the most expensive thing a launch
+    # does -- and every stage after it can raise. A plan submitted for THIS
+    # request is adopted whole; one submitted for a different one is not,
+    # because an author who changed the brief asked a different question.
+    digest = _location_digest(payload)
+    kept = location_design.submitted_for(cid, digest)
+    if kept is not None:
+        logger.info("location plan for chat %s: adopting the plan a previous "
+                    "pass submitted (%d rooms, %d charters)", cid,
+                    len(kept.get("rooms") or {}),
+                    len(kept.get("charters") or []))
+        return kept
     location_design.open_draft(cid, closure)
     calls = steps = 0
     stopped = None
@@ -1325,6 +1353,7 @@ def run_location_plan(cid, frame_id=None, *, payload, closure=None):
                 % (calls, steps, (", stopped: %s" % stopped) if stopped else "",
                    len(drafted.get("rooms") or {}),
                    len(drafted.get("charters") or [])))
+        location_design.keep_submitted(cid, digest, plan)
         logger.info("location plan for chat %s: %d rooms, %d charters, "
                     "%d calls, %d steps, %.1fs", cid,
                     len(plan.get("rooms") or {}),

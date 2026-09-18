@@ -2344,6 +2344,14 @@ def _generate_lived_location(cid, request, chat, frame_id, digest, artifact,
     # Rooms are planted and the registry is saved.
     _save_job(cid, {**(lived_location_job(cid) or {}),
                     "owner": _GEN_OWNER, "stage": "planted"})
+    # THE HELD DESIGN IS SPENT. The registry is the fact from here; a kept
+    # copy of the plan would be offered to the next pass as work in
+    # progress and would plant a second town beside this one.
+    try:
+        from story.location_design import forget_submitted
+        forget_submitted(cid)
+    except Exception:  # never fail a planted town over a housekeeping row
+        pass
     tail_places = list(request.get("tail_places") or list(rooms)[:8])
     # Featured residents must receive recent-resolution life where they
     # actually work and live; otherwise the arbitrary first eight rooms can

@@ -25,6 +25,7 @@ from world.charter_generate import (
     HISTORIAN_SUMMARY_WORDS, HISTORIAN_TOKENS_BASE,
     HISTORIAN_TOKENS_PER_RESIDENT, HISTORIAN_TURNING_POINTS,
     PLAN_MAX_TOKENS, POPULATION_TOLERANCE, _HISTORIAN_SYSTEM,
+    plan_max_tokens,
     _ensure_shift_crews, _head_posts, _post_berths, _post_seats,
     close_plan, historian_budget, narrate_actual_history)
 from world.charter_identity import (
@@ -306,13 +307,19 @@ class TestAFragmentJoinsAtASyllableBoundary:
 class TestTheHistorianBudgetFollowsTheResidents:
 
     def test_the_budget_scales_and_stays_under_the_plan_ceiling(self):
+        """The ceiling is the HOST's since 2026-09-17 (`plan_max_tokens`),
+        not the 16,000 this module used to carry, so the test reads the
+        same function the budget does. What it pins is the SHAPE -- a floor
+        plus a per-resident allowance, trimmed to what the ceiling affords
+        -- which is what the measurement at 108 residents was about."""
+        ceiling = plan_max_tokens()
         tokens, afforded = historian_budget(108)
         assert afforded == min(
-            108, (PLAN_MAX_TOKENS - HISTORIAN_TOKENS_BASE)
+            108, (ceiling - HISTORIAN_TOKENS_BASE)
             // HISTORIAN_TOKENS_PER_RESIDENT)
         assert tokens == HISTORIAN_TOKENS_BASE \
             + afforded * HISTORIAN_TOKENS_PER_RESIDENT
-        assert tokens <= PLAN_MAX_TOKENS
+        assert tokens <= ceiling
         assert tokens > 7000  # the fixed budget that overran at 108
 
     def test_a_resident_is_allowed_what_its_entry_costs(self):
@@ -362,11 +369,13 @@ class TestTheHistorianBudgetFollowsTheResidents:
         assert calls == [1]
 
     def test_residents_are_trimmed_to_what_the_ceiling_affords(self):
+        ceiling = plan_max_tokens()
         tokens, afforded = historian_budget(HISTORIAN_RESIDENT_CAP)
-        assert tokens <= PLAN_MAX_TOKENS
+        assert tokens <= ceiling
         assert afforded <= HISTORIAN_RESIDENT_CAP
-        assert afforded == (PLAN_MAX_TOKENS - HISTORIAN_TOKENS_BASE) \
-            // HISTORIAN_TOKENS_PER_RESIDENT
+        assert afforded == min(
+            HISTORIAN_RESIDENT_CAP,
+            (ceiling - HISTORIAN_TOKENS_BASE) // HISTORIAN_TOKENS_PER_RESIDENT)
 
     def test_the_utility_json_calls_turn_reasoning_off(self, monkeypatch):
         from world import charter_generate

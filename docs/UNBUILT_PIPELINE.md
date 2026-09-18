@@ -1610,6 +1610,20 @@ third and is staying -- it narrates what the presimulation produced rather
 than authoring a place, and it is already guarded, so it cannot fail a
 launch.
 
+**b0. The caps in this family are the host's now, and the resume is
+whole.** Two things chat 150 forced on 2026-09-17, both recorded in
+`DESIGN_ROOM_PRELUDE.md` §§ 4c and 4a. The generation calls carried four
+hand-picked token ceilings while a reasoning model bills its thinking against
+the same budget, and a journey history died four times over on a 6,200-token
+budget it spent entirely on trace; `charter_generate.plan_max_tokens()` now
+applies the owner's own 2026-09-04 room ruling here. And three launch stages
+-- the location design, the journey history, the opening plan -- did not ask
+whether they had already run, so a failure anywhere threw away up to 250
+seconds of design. They ask now. What is NOT covered: a stage that fails
+having half-written its own state, which is the case `registry_rows` and the
+job's `PAST_BOUNDARY_STAGES` already guard for the town and which nothing
+guards for the minds.
+
 **b. The path that WORKS has still not been measured live.** One run
 happened, chat 149 on 2026-09-17, and it ran the Room with the wrong payload
 -- the closure instead of the town's, so no brief, no lore, no constraints --

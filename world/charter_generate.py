@@ -201,6 +201,36 @@ institution entry cites at most %d event_ids.""" % (
 PLAN_MAX_TOKENS = 16000
 
 
+def plan_max_tokens():
+    """THE HOST'S OWN CEILING, for every generation call in this module.
+
+    The owner's 2026-09-04 ruling already said this once, for the Room:
+    every response cap is the same number, the host's, so that no single
+    call is the one that truncates (`story.room_calls.room_max_tokens`, and
+    its docstring is the same failure this is). It was never applied HERE,
+    and this family kept four hand-picked numbers -- 16,000 for a plan,
+    4,000 for a prehistory, 4,000 for the historian's narration, 2,000 plus
+    600 per event for a journey.
+
+    A reasoning model bills its thinking as output, so a hand-picked number
+    is a bet that the model will not think for longer than somebody guessed
+    in 2026-09. Measured on chat 150 (2026-09-17): a journey history spent
+    25,930 characters of trace against a 6,200-token budget and returned an
+    empty answer, four times, and failed a launch the Writers' Room had
+    already planned. Owner, the same day: "The cap is stupid is my
+    determination I've turned of reasoning".
+
+    `providers._clamp_max_tokens` only ever LOWERS, so this is never a way
+    past the host's setting: a host that sets 8,000 gets 8,000. The constant
+    above survives as the FALLBACK for a host that cannot be read.
+    """
+    try:
+        from llm.providers import max_output_tokens
+        return max(int(max_output_tokens()), 1)
+    except Exception:
+        return PLAN_MAX_TOKENS
+
+
 #: The historian's output budget: a floor for the overview, eras and
 #: institutions, plus a per-resident allowance for one summary with its cited
 #: event ids and turning points, capped at the plan budget. Measured
@@ -212,18 +242,23 @@ HISTORIAN_TOKENS_PER_RESIDENT = 220
 
 
 def historian_budget(resident_count):
-    """``(max_tokens, residents_afforded)`` for one historian call."""
-    afforded = max(0, (PLAN_MAX_TOKENS - HISTORIAN_TOKENS_BASE)
+    """``(max_tokens, residents_afforded)`` for one historian call.
+
+    The shape is unchanged -- a floor plus a per-resident allowance, with
+    residents trimmed to what the ceiling affords rather than the call being
+    allowed to outrun it -- but the ceiling is the HOST's now, not a number
+    from 2026-09 (`plan_max_tokens`)."""
+    ceiling = plan_max_tokens()
+    afforded = max(0, (ceiling - HISTORIAN_TOKENS_BASE)
                    // HISTORIAN_TOKENS_PER_RESIDENT)
     residents = min(int(resident_count), afforded)
-    return (min(PLAN_MAX_TOKENS,
+    return (min(ceiling,
                 HISTORIAN_TOKENS_BASE
                 + HISTORIAN_TOKENS_PER_RESIDENT * residents),
             residents)
 
 
-def _json_call(system, payload, *, max_tokens=PLAN_MAX_TOKENS,
-               temperature=0.5):
+def _json_call(system, payload, *, max_tokens=None, temperature=0.5):
     import time as _time
 
     from core.logging_utils import logger
@@ -237,6 +272,9 @@ def _json_call(system, payload, *, max_tokens=PLAN_MAX_TOKENS,
     # settings map). These calls are JSON-shaped and the output IS the
     # budget; the provider layer already turns reasoning off on the retry
     # after that failure, and here it is off on the first attempt.
+    # The host's ceiling unless a caller sized this call itself
+    # (`historian_budget` does, by resident count).
+    max_tokens = int(max_tokens) if max_tokens else plan_max_tokens()
     _started = _time.time()
     # THE ONE FUNNEL, so this family is visible where every other call is
     # (2026-09-08). These three calls -- the town, its history and the
@@ -350,7 +388,7 @@ def propose_history(plan, lore, horizon_hours, *, model_call=None):
     payload = {"town_plan": plan, "lore": lore,
                "horizon_hours": float(horizon_hours)}
     return (model_call or (lambda p: _json_call(
-        _HISTORY_SYSTEM, p, max_tokens=4000, temperature=0.55)))(payload)
+        _HISTORY_SYSTEM, p, temperature=0.55)))(payload)
 
 
 def _rate(span, floor, restoring=False):
@@ -1533,7 +1571,7 @@ def lore_cast_residents(entries, registered, *, model_call=None):
                     for e in entries],
     }
     call = model_call or (lambda system, body: _json_call(
-        system, body, max_tokens=4000, temperature=0.2))
+        system, body, temperature=0.2))
     try:
         out = call(_CAST_SYSTEM, payload)
     except Exception:

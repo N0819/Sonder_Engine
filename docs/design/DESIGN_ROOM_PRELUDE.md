@@ -214,6 +214,48 @@ the planner for a value it had already written.
 `propose_history` stays as the fallback for every caller that passes no
 planner, exactly as `propose_town` does.
 
+## 4c. A resume pays for nothing twice
+
+A location design is the most expensive thing a launch does -- 227 to 250
+seconds and six to nine model calls, measured across chats 149 and 150 -- and
+every stage after it can raise. Owner, chat 150:
+
+> you've made it so i have to rerun every single step instead of recovering
+> from what the writers room sucesfully planned, make sure that the resume is
+> runnable from every step in this possible story setup.
+
+`start_story`'s resume rule (2026-09-08) is that every stage asks the CHAT
+whether its own work is already there, rather than trusting a recorded stage
+name. Three stages were not asking. They are now, and
+`tests/test_room_prelude.py` pins the whole list in one place because it is a
+claim about a long function a later edit can quietly break.
+
+| Stage | What it asks |
+|---|---|
+| language, persona, fiction model, clock | overwritten; idempotent |
+| cast row, lorebook attach | `INSERT OR IGNORE` |
+| the town | `registry_rows(cid)` -- the rows are the fact, a marker is a claim about them |
+| **the location DESIGN** | `location_design.submitted_for(cid, digest)` -- **new** |
+| minds | upserted on `(chat, character, event_key)` |
+| **the journey history** | its own `handoff.complete` -- **new** |
+| **the opening plan** | `opening_plan_record(cid)["published"]` -- **new** |
+| turn 0 | the existing row is reused |
+
+**The design is held against the request it answers.** A submitted plan is
+kept under `location_design.SUBMITTED_KEY` with a digest over the fields that
+decide what the place IS -- the brief, the lore, the scale, the topology, the
+required rooms, the featured residents, the population, the naming register.
+A retry of the same ask adopts it whole and makes no model call; a retry with
+a changed brief is a different question and designs again. It is forgotten
+the moment the town is planted, because after that the registry is the fact
+and a kept copy would be offered to the next pass as work in progress -- and
+would plant a second town beside the first.
+
+**A published opening plan is skipped; a plan that published NOTHING is not.**
+The row exists either way, so skipping on its mere presence would make a
+stalled opening permanent. That is the failure a retry exists to have another
+go at.
+
 ## 4a. What the first live run found (2026-09-17)
 
 One greeting quick start, chat 149, the first time any of this ran against a
@@ -256,12 +298,24 @@ and the Room's 240 seconds of design thrown away with it. That is § 4b's
 reason for existing, and it is the same complaint the owner made about the
 town prompt, arriving on its sibling.
 
-**A plan is still lost if anything after it raises.** The job's artifact is
-saved after the whole pure prefix, so the retry on chat 149 re-ran the entire
-design. With the prehistory now inside the same pass there is no model call
-between the plan and the save, which removes the case that was actually hit;
-`close_plan` raising still costs the pass, and the review makes that much
-less likely than it was.
+**The third run, chat 150, found the rest of it.** Twenty rooms, three
+institutions, nine calls, five steps, 227.4 seconds -- and then the launch
+died two stages later in `compile_journey_history`, four calls each spending
+a 6,200-token budget on a reasoning trace and returning nothing. Two things
+came out of that run, and they are § 4c and the paragraph below.
+
+**Every cap in this family was a guess from 2026-09.** Owner: *"The cap is
+stupid is my determination I've turned of reasoning"*. The generation calls
+carried four hand-picked ceilings -- 16,000 for a plan, 4,000 for a
+prehistory, 4,000 for the historian's narration, `2000 + 600 * count` for a
+journey -- while a reasoning model bills its thinking against the same
+budget. The owner's own 2026-09-04 ruling had already answered this once, for
+the Room (`story.room_calls.room_max_tokens`: every response cap is the same
+number, the host's, so no single call is the one that truncates); it was
+never applied here. `charter_generate.plan_max_tokens()` is that ruling, in
+this family. `providers._clamp_max_tokens` only ever lowers, so a host that
+sets 8,000 still gets 8,000, and `PLAN_MAX_TOKENS` survives as the fallback
+for a host that cannot be read.
 
 **What it costs and what it buys.** The budget is 40 steps / 900 seconds, the
 largest of the four launch regimes, against a one-shot that had one attempt

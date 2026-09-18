@@ -390,6 +390,119 @@ def test_the_four_tools_are_on_the_table():
         assert name in TOOL_INDEX, name
 
 
+# -- a resume pays for nothing twice -----------------------------------------
+#
+# Owner, chat 150, 2026-09-17: "you've made it so i have to rerun every single
+# step instead of recovering from what the writers room sucesfully planned,
+# make sure that the resume is runnable from every step in this possible story
+# setup." A design is 227-250 seconds and six to nine model calls; every stage
+# after it can raise.
+
+def test_a_submitted_plan_survives_a_failure_after_it(chat, monkeypatch):
+    from agents import story_planner
+    from story import location_design
+
+    payload = {"author_brief": "a port", "lore": []}
+    passes = []
+
+    def fake_planner(cid, frame_id, *, task=None, regime=None, **kwargs):
+        passes.append(task)
+        location_design.set_skeleton(cid, name="Yard", structure={"key": "w"},
+                                     rooms={"quay": {"name": "Quay"}})
+        row = location_design.draft(cid)
+        row["checked"] = True
+        location_design.save_draft(cid, row)
+        location_design.submit(cid)
+        return {"reply": "done", "calls": 9, "steps": 5}
+
+    monkeypatch.setattr(story_planner, "run_planner", fake_planner)
+    first = story_planner.run_location_plan(chat, None, payload=payload)
+    assert first["name"] == "Yard"
+    assert len(passes) == 1
+
+    # Everything after the design raised; the launch is retried.
+    second = story_planner.run_location_plan(chat, None, payload=payload)
+    assert second["name"] == "Yard"
+    assert len(passes) == 1, "the design was paid for twice"
+
+
+def test_a_retry_that_changed_the_ask_designs_again(chat, monkeypatch):
+    """The digest is what makes it a RESUME rather than a cache: an author
+    who retries with a different brief is asking a different question."""
+    from agents import story_planner
+    from story import location_design
+
+    passes = []
+
+    def fake_planner(cid, frame_id, *, task=None, regime=None, **kwargs):
+        passes.append(task)
+        location_design.set_skeleton(cid, name="Yard", structure={"key": "w"},
+                                     rooms={"quay": {"name": "Quay"}})
+        row = location_design.draft(cid)
+        row["checked"] = True
+        location_design.save_draft(cid, row)
+        location_design.submit(cid)
+        return {"reply": "done", "calls": 1, "steps": 1}
+
+    monkeypatch.setattr(story_planner, "run_planner", fake_planner)
+    story_planner.run_location_plan(
+        chat, None, payload={"author_brief": "a port", "lore": []})
+    story_planner.run_location_plan(
+        chat, None, payload={"author_brief": "a mountain station", "lore": []})
+    assert len(passes) == 2
+
+
+def test_a_planted_town_forgets_the_plan_it_was_planted_from(chat):
+    """After planting, the registry is the fact; a kept plan would be
+    offered to the next pass and would plant a second town beside it."""
+    import inspect
+
+    from story import location_design
+    from world import charter_runtime
+
+    location_design.keep_submitted(chat, "d1", {"name": "Yard"})
+    assert location_design.submitted_for(chat, "d1") is not None
+    assert location_design.submitted_for(chat, "d2") is None
+    source = inspect.getsource(charter_runtime._generate_lived_location)
+    planted = source.split('"stage": "planted"', 1)
+    assert len(planted) == 2, "the planted marker moved"
+    assert "forget_submitted" in planted[1][:800]
+
+
+def test_every_stage_of_the_launch_asks_whether_it_already_ran():
+    """The claim in one place: no stage of a resumed quick start repeats work
+    the chat already holds. Read off `start_story`'s own source, because it is
+    a claim about a long function that a later edit can quietly break."""
+    import inspect
+
+    from story import greetings
+
+    source = inspect.getsource(greetings.start_story)
+    # The cast row and the lorebook attach are idempotent by SQL.
+    assert "INSERT OR IGNORE INTO chat_chars" in source
+    assert "INSERT OR IGNORE INTO chat_lorebooks" in source
+    # The town asks the registry, not a marker.
+    assert "registry_rows(cid)" in source
+    # The journey asks its own handoff.
+    assert 'done.get("complete")' in source
+    # The opening plan asks whether it published.
+    assert "opening_plan_record(cid)" in source
+    # Turn 0 reuses its row.
+    assert "reusing turn 0" in source
+
+
+def test_the_opening_plan_is_rerun_when_it_published_nothing():
+    """A recorded row that landed NOTHING is the failure a retry exists to
+    have another go at; skipping on the row's mere presence would make a
+    stalled opening permanent."""
+    import inspect
+
+    from story import greetings
+
+    source = inspect.getsource(greetings.start_story)
+    assert 'opening_plan_record(cid) or {}).get("published")' in source
+
+
 # -- the opening plan hears it ----------------------------------------------
 
 def test_the_opening_task_carries_what_the_player_asked_for(chat):

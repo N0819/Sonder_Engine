@@ -775,6 +775,12 @@ def _write_failed_setup(cid, exc, *, char_id, persona_id, greeting_index,
     })
 
 
+class _AlreadyDone(Exception):
+    """A stage this resume is skipping, raised so one `try` can hold both
+    "it ran and failed" and "it ran already" without the second becoming a
+    second copy of the recovery code below it."""
+
+
 def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
                 lorebook_id: int | None = None,
                 already_known: bool = True,
@@ -1072,12 +1078,26 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
                 or (history_route.get("mode") == "auto"
                     and history_route.get("opening_relationship") == "visiting")):
             from story.journey_history import compile_journey_history
+            # ALREADY COMPILED IS ALREADY DONE. Every stage above asks the
+            # CHAT whether its own work is there; this one did not, so a
+            # retry after a later failure paid for the journey again -- and
+            # on chat 150 (2026-09-17) this stage is itself what failed,
+            # four calls deep, after the Room had spent 227 seconds
+            # designing a location that was then thrown away with it.
+            # `handoff.complete` is the chat's own record that it landed.
+            done = ((db.wget(cid, "character_history_routes", {}) or {})
+                    .get(str(char_id), {}).get("handoff", {}))
             journey_lore = []
-            if lb:
+            if done.get("complete"):
+                logger.info("quick start: chat %s already holds a compiled "
+                            "journey history, resuming after it", cid)
+            elif lb:
                 from world.charter_runtime import generation_lore
                 journey_lore, _source = generation_lore(
                     cid, lb["id"], query=f"{c_name} journeys visits history")
             try:
+                if done.get("complete"):
+                    raise _AlreadyDone
                 with language_scope(language or DEFAULT_LANGUAGE):
                     journey_result = compile_journey_history(
                         cid, char_id, sheet, history_route, lore=journey_lore,
@@ -1096,6 +1116,8 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
                     "journey_events": len(journey_result.get("events") or ()),
                 }
                 db.wset(cid, "character_history_routes", routes)
+            except _AlreadyDone:
+                pass
             except Exception as exc:
                 if history_route.get("mode") == "generated_journey":
                     # KEPT, like every other failure after the chat exists:
@@ -1149,9 +1171,19 @@ def start_story(char_id: int, persona_id: int, greeting_index: int = 0,
         # was, with the `opening_plan` row saying why.
         if not db.q("SELECT id FROM turns WHERE chat_id=? LIMIT 1", (cid,), one=True):
             from agents.story_planner import run_opening_plan
-            logger.info("quick start: planning the opening for chat %s", cid)
-            with language_scope(language or DEFAULT_LANGUAGE):
-                run_opening_plan(cid, None, passage=prose_final)
+            from story.opening_plan import opening_plan_record
+            # AND SO DOES THIS ONE. A published opening package is at turn
+            # -1 and turn 0 sees it; running the planner again over the same
+            # opening would draft a second set of rooms beside the first.
+            # A recorded row that published NOTHING is not a reason to skip:
+            # that is the failure a retry exists to have another go at.
+            if (opening_plan_record(cid) or {}).get("published"):
+                logger.info("quick start: chat %s already has a published "
+                            "opening plan, resuming after it", cid)
+            else:
+                logger.info("quick start: planning the opening for chat %s", cid)
+                with language_scope(language or DEFAULT_LANGUAGE):
+                    run_opening_plan(cid, None, passage=prose_final)
         # Turn 0: run establishment (valid, committed), then show the greeting verbatim.
         #
         # THE TURN ROW IS A STAGE LIKE ANY OTHER, AND IT ASKS TOO. Every
