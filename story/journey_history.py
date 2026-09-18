@@ -166,12 +166,21 @@ def _model_value(payload, model_call=None):
         # The first two are what constrained decoding prevents; the third is
         # what the escalation answers, and neither was reachable from here.
         from llm.llm_quality import complete_validated_json
+        from world.charter_generate import plan_max_tokens
 
         value = complete_validated_json(
             role="utility", step_key="prestory_journey", system=_SYSTEM,
             payload=payload,
             temperature=.55 if payload["mode"] == "generated" else .3,
-            max_tokens=min(14000, 2000 + 600 * count))
+            # THE HOST'S CEILING, not a per-event formula. `2000 + 600 *
+            # count` was a guess at how much ANSWER a journey needs, and a
+            # reasoning model bills its thinking against the same budget:
+            # measured on chat 150 (2026-09-17), 25,930 characters of trace
+            # against the 6,200 tokens this computed, four times, an empty
+            # answer each time, and a failed launch. `plan_max_tokens` is
+            # the one number the whole generation family asks for now, and
+            # `providers._clamp_max_tokens` still only ever lowers it.
+            max_tokens=plan_max_tokens())
     else:
         value = model_call(copy.deepcopy(payload))
     from llm.schemas import PrestoryJourneyHistory

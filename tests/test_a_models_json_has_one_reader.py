@@ -234,8 +234,8 @@ def test_a_cut_off_plan_is_asked_for_once_more_with_room(monkeypatch):
     monkeypatch.setattr(providers, "chat_complete", answer)
     value = charter_generate._json_call("system", {"ask": "a town"})
     assert value["name"] == "Tidewatch"
-    assert budgets == [charter_generate.PLAN_MAX_TOKENS,
-                       charter_generate.PLAN_MAX_TOKENS * 2]
+    assert budgets == [charter_generate.plan_max_tokens(),
+                       charter_generate.plan_max_tokens() * 2]
 
 
 def test_the_happy_path_asks_exactly_once(monkeypatch):
@@ -249,7 +249,7 @@ def test_the_happy_path_asks_exactly_once(monkeypatch):
 
     monkeypatch.setattr(providers, "chat_complete", answer)
     assert charter_generate._json_call("system", {"ask": "a town"})["name"] == "Tidewatch"
-    assert budgets == [charter_generate.PLAN_MAX_TOKENS]
+    assert budgets == [charter_generate.plan_max_tokens()]
 
 
 def test_a_malformed_plan_is_not_asked_for_twice(monkeypatch):
@@ -265,7 +265,7 @@ def test_a_malformed_plan_is_not_asked_for_twice(monkeypatch):
     monkeypatch.setattr(providers, "chat_complete", answer)
     with pytest.raises(ValueError):
         charter_generate._json_call("system", {"ask": "a town"})
-    assert budgets == [charter_generate.PLAN_MAX_TOKENS]
+    assert budgets == [charter_generate.plan_max_tokens()]
 
 
 def test_a_plan_still_cut_off_after_the_retry_reports_the_wider_budget(monkeypatch):
@@ -282,4 +282,4 @@ def test_a_plan_still_cut_off_after_the_retry_reports_the_wider_budget(monkeypat
     with pytest.raises(ValueError) as caught:
         charter_generate._json_call("system", {"ask": "a town"})
     assert len(budgets) == 2
-    assert str(charter_generate.PLAN_MAX_TOKENS * 2) in str(caught.value)
+    assert str(charter_generate.plan_max_tokens() * 2) in str(caught.value)

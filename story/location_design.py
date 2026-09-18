@@ -66,6 +66,21 @@ PREHISTORY_KEY = "prehistory"
 #: those calls, I have no idea."
 PASS_KEY = "location_plan"
 
+#: THE PLAN THE ROOM SUBMITTED, KEPT UNTIL IT IS PLANTED. A location design
+#: is the most expensive thing a launch does -- 227 to 250 seconds and six to
+#: nine model calls, measured on chats 149 and 150 -- and until 2026-09-17 a
+#: failure at ANY later stage threw it away: the job's artifact is saved
+#: after the whole pure prefix, so a raise between the design and that save
+#: cost the design, and the retry paid for it again. Owner, chat 150: "you've
+#: made it so i have to rerun every single step instead of recovering from
+#: what the writers room sucesfully planned".
+#:
+#: Keyed by the REQUEST it answers, so a retry that changed what it asked for
+#: gets a fresh design rather than the last one's. Cleared when the plan is
+#: planted, because after that the registry is the fact and this is a stale
+#: copy of it.
+SUBMITTED_KEY = "location_submitted"
+
 
 def record_pass(cid, **fields):
     import time
@@ -351,3 +366,33 @@ def submitted_plan(cid):
     if history.get("eras") or history.get("interventions"):
         out[PREHISTORY_KEY] = copy.deepcopy(history)
     return out
+
+
+def keep_submitted(cid, digest, plan):
+    """Hold the submitted plan against the request it answers, so that
+    nothing after the design can cost the design."""
+    import time
+
+    wset(int(cid), SUBMITTED_KEY,
+         {"digest": str(digest or ""), "plan": copy.deepcopy(plan),
+          "at": time.time()})
+
+
+def submitted_for(cid, digest):
+    """The plan a previous pass submitted for this exact request, or None.
+
+    The digest is what makes this a RESUME rather than a cache: an author
+    who retries with a different brief is asking a different question and
+    gets a fresh design."""
+    row = wget(int(cid), SUBMITTED_KEY, {}) or {}
+    if not isinstance(row, dict) or not isinstance(row.get("plan"), dict):
+        return None
+    if str(row.get("digest") or "") != str(digest or ""):
+        return None
+    return copy.deepcopy(row["plan"])
+
+
+def forget_submitted(cid):
+    """The plan is planted; the registry is the fact now, and this is a
+    stale copy of it."""
+    wset(int(cid), SUBMITTED_KEY, {})
