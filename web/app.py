@@ -51,7 +51,7 @@ from persist.chat_delete import delete_chat_data
 # body held (review 2026-09-07, B23).
 from persist.steps import active_mapping, active_mappings
 from core.frames import create_frame, get_frame, list_frames
-from world import paradox
+from world import paradox, spatial_frames
 from story import greetings
 from agents import (
     run_pipeline, request_abort, begin_pipeline,
@@ -984,6 +984,59 @@ def _remap_fixed_points_frames(world, frame_idmap):
         remapped.append(nfp)
     world["fixed_points"] = remapped
 
+def _remap_couple_frames(world, frame_idmap, char_idmap=None, persona_idmap=None):
+    """A live couple's partition map, rescoped to a branch's or an import's
+    own ids.
+
+    `couple:<frame_id>` is chat-global -- it has to be readable from any frame,
+    including from neither -- so the generic frame-scoped KEY remap above never
+    sees it, and every id it holds is an integer the string-id remap never
+    touches. Left alone, a branch taken mid-call would carry a map naming the
+    SOURCE chat's frames: `close_couple` would then partition a fused scene
+    back into two frames that are not the ones the bodies are in, which is the
+    one way this feature could put somebody somewhere they never went.
+
+    A frame that was not cloned collapses the whole entry rather than
+    dangling: an unpartitionable couple is worse than no couple, because the
+    two parties stay fused with nothing able to separate them again. Dropping
+    the map leaves the couple frame holding the fused scene -- which is the
+    state a call is in, and which the next commit ends by the ordinary route.
+
+    `char_idmap`/`persona_idmap` are absent on a same-install branch, where
+    characters and personas are shared rows and keep their ids; an import into
+    another install re-creates both and supplies them.
+    """
+    for key in [k for k in world if k.startswith(spatial_frames.COUPLE_MAP_PREFIX)]:
+        value = world.pop(key)
+        if not isinstance(value, dict):
+            continue
+        try:
+            old_couple_id = int(key[len(spatial_frames.COUPLE_MAP_PREFIX):])
+        except (TypeError, ValueError):
+            continue
+        new_couple_id = frame_idmap.get(old_couple_id)
+        members = [frame_idmap.get(m) if m is not None else None
+                   for m in (value.get("members") or [])]
+        if new_couple_id is None or len(members) != 2 or any(
+                m is None and old is not None
+                for m, old in zip(members, value.get("members") or [])):
+            continue
+        mapped = dict(value)
+        mapped["members"] = members
+        home = value.get("home")
+        mapped["home"] = frame_idmap.get(home) if home is not None else None
+        mapped["personas"] = {
+            str((persona_idmap or {}).get(int(pid), int(pid))):
+                (frame_idmap.get(station) if station is not None else None)
+            for pid, station in (value.get("personas") or {}).items()
+        }
+        mapped["cast"] = {
+            side: [int((char_idmap or {}).get(int(c), int(c))) for c in ids]
+            for side, ids in (value.get("cast") or {}).items()
+        }
+        world[f"{spatial_frames.COUPLE_MAP_PREFIX}{new_couple_id}"] = mapped
+
+
 def _remap_scheduled_event_frames(rows, frame_idmap):
     """scheduled_events payloads carry an integer frame_id (which frame's
     simulation clock the event is due against -- see commit.py's
@@ -1205,6 +1258,7 @@ def _remap_cp_blob(blob, turn_idmap, bookmap, fallback_canon,
         # first reroll after a branch or import restored SOURCE-chat frame
         # ids into this chat.
         _remap_fixed_points_frames(blob["world"], frame_idmap)
+        _remap_couple_frames(blob["world"], frame_idmap, char_idmap, persona_idmap)
     if isinstance(blob.get("scheduled_events"), list):
         _remap_scheduled_event_frames(blob["scheduled_events"], frame_idmap)
 
@@ -6000,6 +6054,7 @@ _chat_archive_service = ChatArchiveService(
     ArchiveRemappers(
         active_books=_remap_active_books,
         fixed_point_frames=_remap_fixed_points_frames,
+        couple_frames=_remap_couple_frames,
         scheduled_event_frames=_remap_scheduled_event_frames,
         checkpoint_blob=_remap_cp_blob,
         json_id_list=_json_id_list,
@@ -6228,6 +6283,18 @@ def turn_new(cid: int, body: dict = Body(...), detach: int = 0):
         # would let a request operate on another chat's frame.
         if fr is None or fr["chat_id"] != cid:
             raise HTTPException(404, f"Frame {frame_id} not found")
+    # A BEAT SUBMITTED TO A COUPLED FRAME IS PLAYED IN THE COUPLE. While a live
+    # comm channel joins two spatial frames, the beat has to run somewhere both
+    # parties exist -- every reader in `agents/` resolves one scene through one
+    # active frame -- and that somewhere is the couple frame
+    # (`world/spatial_frames.open_couple`). The client keeps naming the member
+    # frame it has always named; the redirect is the engine's, and it lapses on
+    # its own the moment the call ends, because `live_couple_for` then finds
+    # nothing. Before the idle and resolved checks on purpose: the frame those
+    # lock and the frame the turn row carries must be the same one.
+    coupled = spatial_frames.live_couple_for(cid, frame_id)
+    if coupled is not None:
+        frame_id = coupled
     _require_frame_idle(cid, frame_id)
     _require_turn_resolved(cid, frame_id)
     # Claim the pipeline slot (the atomic race-closing gate) BEFORE creating
@@ -6740,6 +6807,7 @@ def turn_branch(tid: int):
         # fixed_points carry integer frame_ids the generic string remap
         # above never touched -- rescope them to the branch's own frames.
         _remap_fixed_points_frames(world, frame_idmap)
+        _remap_couple_frames(world, frame_idmap)
         for k, v in world.items():
             wset(ncid, k, v)
 

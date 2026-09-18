@@ -71,7 +71,30 @@ def _is_body_entity(scene: dict, eid: str, ent: dict) -> bool:
 
     `container: true` is deliberately NOT the test -- it is absent on plenty of
     real vehicles, so it misclassifies them as bodies.
+
+    THE ENGINE'S OWN PERSON RECORD IS ALSO EVIDENCE, and leaving it out made a
+    body's standing depend on its WARDROBE. `agents/common.mint_cast_entities`
+    writes `kind: "person"` for every cast member and the player, from the
+    positions table, under the sheet's own spelling -- "a cast member is a body
+    whether or not the opening wrote one" -- so that row is the engine saying
+    what this is, not a model's free text. Without it an unclothed character
+    scored false on both tests and `resolve_placement_target` classified her as
+    an ANCHOR: a room fixture. Measured live (`google/gemini-3.8-flash`, the
+    Millbrook run, 2026-09-17): a courier was handed a letter and the ferry
+    fare, the Director emitted both transfers correctly, and both landed on the
+    tap-room floor -- "possession: 'letter' reached 'char_lysa_fen''s room, but
+    its exact placement needs a station naming a room anchor." She then spent
+    the night waiting for payment she was holding, and crossed the water
+    without the letter she was sent with. A person can hold a thing in their
+    hand whatever they have on.
+
+    `kind` is read HERE and nowhere else in this function on purpose. The word
+    is free text a model writes, and the risk it carries is the reverse of this
+    one -- a crate called a `person` -- which costs a crate that can hold
+    something, against a person who could not.
     """
+    if str((ent or {}).get("kind") or "").strip().casefold() == "person":
+        return True
     keys = [eid]
     if isinstance(ent, dict):
         keys.append(ent.get("name"))

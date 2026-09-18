@@ -1357,7 +1357,17 @@ def _validated_causal_contact_program(sc, state, contacts, player_name, *,
 
 def director_interpret(ctx, nonce):
     from persist.commit import presence_name_items
+    from agents.offscreen_beat import (is_offscreen_beat,
+                                       offscreen_interpretation)
     chat = ctx.chat
+    # NOBODY DECLARED ANYTHING, so there is nothing to interpret and no call
+    # to make. A bubble's own beat (`agents/offscreen_beat.py`) has no player
+    # in the frame and no input on the turn; asking this stage to read one
+    # would be asking it to invent the one thing the engine forbids anybody
+    # to author. The deterministic payload declares no conduct at all and
+    # names the minds whose beat it is.
+    if is_offscreen_beat(chat["id"], ctx.turn):
+        return offscreen_interpretation(ctx.cast, get_scene(chat["id"], chat))
     sc = get_scene(chat["id"], chat)
     pers = persona_of(chat)
     # The scene before the cache before the resolver -- one ordering for the

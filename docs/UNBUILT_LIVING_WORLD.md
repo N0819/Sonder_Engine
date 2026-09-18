@@ -1704,11 +1704,18 @@ off-screen cognition*, and `dialogue_config` derives the rung: `reactive` off,
 nothing that reads the ladder had to change, including
 `artifacts.schedule_artifact_text` and the two tick schedulers.
 
-**What is still open is the other half of the ruling: the toggle should enable
-the playerless causality bubbles, and those are NOT BUILT.** Today it enables
-the machinery they would replace -- `offscreen.schedule_profile_ticks` and
-`schedule_agent_ticks`. When the bubbles land, the toggle's meaning moves to
-them and that machinery retires; the toggle itself does not change.
+**The other half of the ruling: the toggle should enable the playerless
+causality bubbles. THE BUBBLES LANDED 2026-09-17** (`world/spatial_bubbles.py`
+plus the couple drivers in `world/spatial_frames.py`,
+`docs/design/DESIGN_OFFSCREEN_SUPERSEDED.md` § 3 / § 4.1): a major character
+who walks into a zone with no human in it gets a frame, a live comm channel
+fuses that frame with the player's for as long as the call lasts, and walking
+back ends the separation. **The TOGGLE has not moved and the ladder has not
+retired.** Today it still enables the machinery the bubbles replace --
+`offscreen.schedule_profile_ticks` and `schedule_agent_ticks` -- and a bubble
+fires on the zone rule alone, under no toggle at all, exactly as a party split
+always has. Moving the toggle's meaning is § 4.2-4.4 and § 5 of that note, and
+those wait on a play run: nothing in the corpus has run a bubble yet.
 
 **One behaviour change, stated because it is easy to miss.** A chat that never
 opened the panel used to sit at `stochastic`; it now rides the toggle's default

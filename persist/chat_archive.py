@@ -251,6 +251,7 @@ class ArchiveRemappers:
 
     active_books: Callable[[dict[str, Any], dict[Any, Any]], dict[str, Any]]
     fixed_point_frames: Callable[[dict[str, Any], dict[Any, Any]], None]
+    couple_frames: Callable[..., None]
     scheduled_event_frames: Callable[[list[dict[str, Any]], dict[Any, Any]], None]
     checkpoint_blob: Callable[..., dict[str, Any]]
     json_id_list: Callable[[Any], list[int]]
@@ -1066,6 +1067,8 @@ class ChatArchiveService:
             world = remapped_world
             self._remap.active_books(world, bookmap)
             self._remap.fixed_point_frames(world, frame_idmap)
+            self._remap.couple_frames(world, frame_idmap, old_char_map,
+                                      persona_idmap)
             for key, value in world.items():
                 wset(new_chat_id, key, value)
 

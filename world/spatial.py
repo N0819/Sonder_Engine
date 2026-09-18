@@ -225,8 +225,8 @@ from world.spatial_routing import (
     _DISTANCE_UNIT_METERS, _is_carried_interior, _onward_exits, _ROOM_COST, CORRIDOR_SIGHT_LIMIT, corridor_sightlines, DISTANCE_TIERS,
     contradictory_sight_edges, mutual_one_way_window, sight_direction,
     stamp_sight_direction,
-    nearby_rooms, normalize_edge_distance, passable_neighbors, passable_path,
-    passable_route_exists, passable_route_next_step, rooms_adjacent,
+    attended_rooms, nearby_rooms, normalize_edge_distance, passable_neighbors, passable_path,
+    passable_route_exists, passable_route_next_step, room_locale, rooms_adjacent,
     spatial_rel, SPRINT_BUDGET, sprint_reach, visible_adjacent_rooms,
 )
 

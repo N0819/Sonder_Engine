@@ -35,7 +35,8 @@ import json
 from story.character_schema import (character_name, normalize_persona_data,
                                     normalized_character_from_text,
                                     persona_name)
-from core.db import q, qi, transaction, wget, wget_for_frame, wset, wset_for_frame
+from core.db import (_FRAME_KEY_SEP, FRAME_SCOPED_WORLD_KEYS, q, qi,
+                     transaction, wget, wget_for_frame, wset, wset_for_frame)
 from core.frames import create_frame, get_frame
 from world.paradox import get_paradox
 from story.scene import (CAST_STATUS_ABSENT, active_cast, cast_change_status,
@@ -43,7 +44,8 @@ from story.scene import (CAST_STATUS_ABSENT, active_cast, cast_change_status,
 from world.spatial import (THRESHOLD_CROSSING_BEATS, _SUBJECT_KEYED, _anchor_dir, _hiding_holders,
                      anchor_bearing_of, effective_anchors, has_visual,
                      hear_level, is_alarming, room_of, room_of_record,
-                     rooms_adjacent, sound_path, sound_walk_level, spatial_rel,
+                     rooms_adjacent, room_locale, normalize_scene_comms,
+                     sound_path, sound_walk_level, spatial_rel,
                      travel_bearing, TURNS, turn_bearing, normalize_bearing,
                      opposite_bearing)
 
@@ -1157,16 +1159,53 @@ def merge_frame_scenes(parent_scene, child_scene):
     return merged
 
 
-def perform_split(chat_id, parent_frame_id, turn_idx, away_zone):
+def perform_split(chat_id, parent_frame_id, turn_idx, away_zone=None, *,
+                  bubble=False, away_names=None, away_rooms=None):
     """Creates a new spatial child frame for `away_zone`, seeds its
     frame-scoped world state from the parent, partitions cast/personas,
     and returns the new frame_id. One transaction: a half-completed
     split (personas stationed into a frame whose KV was never seeded)
-    would be far worse than not splitting this turn at all."""
+    would be far worse than not splitting this turn at all.
+
+    `bubble=True` says no human went with them -- a CAUSALITY BUBBLE
+    (`world/spatial_bubbles.py`), where the away party is cast alone. The
+    mechanics are identical and deliberately so: only `detect_split` ever
+    required a persona, and a frame does not care whether the body that
+    walked into it was somebody's. What changes is what it is CALLED, in the
+    label and the log, because "the party has split" is not true of a villain
+    walking out of a room the player is still standing in.
+
+    TWO WAYS TO SAY WHO WENT, because the two detectors know different things.
+    `away_zone` is the party split's: a declared locale, and everything
+    standing in it goes. `away_names`/`away_rooms` is the bubble's, since a
+    range trigger names BODIES rather than a place -- the away side is the
+    bodies that left plus the rooms they are standing in, and the parent keeps
+    every room as it always has. Exactly one of the two is given; a caller
+    that gives neither is asking for a split with no away side at all and gets
+    a refusal rather than an empty frame.
+    """
+    if (away_zone is None) == (away_names is None):
+        raise ValueError(
+            "perform_split needs an away_zone (a declared locale) or "
+            "away_names (the bodies that left), and exactly one of them")
     with transaction():
         scene = wget(chat_id, "scene", {}) or {}
-        away_persona_ids = _extra_personas_in_zone(chat_id, parent_frame_id, scene, away_zone)
-        away_char_ids = _cast_char_ids_in_zone(chat_id, parent_frame_id, scene, away_zone)
+        leaving = {_cf(n) for n in (away_names or [])}
+        if away_names is None:
+            away_persona_ids = _extra_personas_in_zone(
+                chat_id, parent_frame_id, scene, away_zone)
+            away_char_ids = _cast_char_ids_in_zone(
+                chat_id, parent_frame_id, scene, away_zone)
+        else:
+            # A bubble is cast alone by construction -- `bubble_split_decision`
+            # refuses outright when a human is out there too (refusal 5) -- so
+            # there is no persona to station and asking for one would be
+            # asking a question whose answer is always the empty list.
+            away_persona_ids = []
+            away_char_ids = [
+                row["id"] for row in active_cast(chat_id, parent_frame_id)
+                if _cf(character_name(normalized_character_from_text(row["sheet"])))
+                in leaving]
         stay_char_ids = [
             row["id"] for row in active_cast(chat_id, parent_frame_id)
             if row["id"] not in away_char_ids
@@ -1175,7 +1214,9 @@ def perform_split(chat_id, parent_frame_id, turn_idx, away_zone):
         parent = get_frame(parent_frame_id)
         new_frame_id = create_frame(
             chat_id,
-            label=f"Away — {away_zone}",
+            label=(f"Bubble — {', '.join(sorted(away_names))}" if bubble and away_names
+                   else f"Bubble — {away_zone}" if bubble
+                   else f"Away — {away_zone}"),
             ordinal=parent["ordinal"] if parent else 0,
             kind="spatial",
             parent_frame_id=parent_frame_id,
@@ -1187,6 +1228,26 @@ def perform_split(chat_id, parent_frame_id, turn_idx, away_zone):
         # normal, correct behavior for temporal frames), but a spatial
         # split's away party needs to walk away MID-CONTINUITY, not
         # wake up with amnesia.
+        # WHAT DESCRIBES THE PARTY IS PARTITIONED; WHAT DESCRIBES THE WORLD
+        # COMES ALONG. A spatial split is the same era somewhere else -- the
+        # child takes the parent's own `ordinal` -- so the town on the other
+        # side of the hill is the same town, and a party that walks to it has
+        # not left the world, only the room. What is per-PARTY (what they
+        # know, their clock, their intentions, their obligations, their log)
+        # is theirs; what is the WORLD's is copied, because there is one of
+        # it. What is the AUTHOR's -- the Room's mandates, its bible, its
+        # packages -- stays with the story and is deliberately not here.
+        #
+        # THE WORLD HALF WAS MISSING ENTIRELY until 2026-09-17, and it is what
+        # a causality bubble made visible: an away character walked into a
+        # market town with no institutions, no crowd, no rider on the road and
+        # no notice on any wall. Measured: a split dropped `charters`,
+        # `crowds`, `couriers` and `artifacts` on the floor, so the one thing
+        # a bubble exists to show -- what somebody does out there, among
+        # people -- had nobody in it to do it among. Copied rather than shared
+        # because charter is DETERMINISTIC and advances by elapsed time: two
+        # copies from one state over one clock track each other, and diverge
+        # only by what the away party actually does in theirs.
         for key, default in (
             ("known", {}), ("simulation_clock", {}), ("standing_intentions", []),
             ("pending_obligations", []),
@@ -1195,6 +1256,9 @@ def perform_split(chat_id, parent_frame_id, turn_idx, away_zone):
             # (world/regions.py): the away scene keeps every room's `region`,
             # so the registry that names them must come along.
             ("regions", {}),
+            # The world: its institutions and their upkeep, the throng in its
+            # squares, who is on its roads, and what is nailed up in its rooms.
+            ("charters", {}), ("crowds", {}), ("couriers", []), ("artifacts", []),
         ):
             wset_for_frame(chat_id, key, wget_for_frame(chat_id, key, parent_frame_id, default),
                            new_frame_id)
@@ -1204,18 +1268,45 @@ def perform_split(chat_id, parent_frame_id, turn_idx, away_zone):
             if rel is not None:
                 wset_for_frame(chat_id, f"relationships:{row['id']}", rel, new_frame_id)
 
-        away_rooms = {
-            rn: r for rn, r in (scene.get("rooms") or {}).items()
-            if _room_zone(scene, rn) == away_zone or _room_zone(scene, rn) is None
-        }
-        # _effective_zone, not a direct room-zone lookup: an occupant
-        # inside a vehicle's interior (itself deliberately unzoned) must
-        # still be partitioned by where the VEHICLE actually ended up,
-        # not silently left out of both sides.
-        away_positions = {
-            name: room for name, room in (scene.get("positions") or {}).items()
-            if _effective_zone(scene, name) == away_zone
-        }
+        if away_names is None:
+            # _effective_zone, not a direct room-zone lookup: an occupant
+            # inside a vehicle's interior (itself deliberately unzoned) must
+            # still be partitioned by where the VEHICLE actually ended up,
+            # not silently left out of both sides.
+            away_positions = {
+                name: room for name, room in (scene.get("positions") or {}).items()
+                if _effective_zone(scene, name) == away_zone
+            }
+        else:
+            away_positions = {
+                name: room for name, room in (scene.get("positions") or {}).items()
+                if _cf(name) in leaving
+            }
+        # A SPLIT PARTITIONS BODIES, NOT THE MAP. The child used to get a
+        # SUBSET of the rooms -- the away zone's and the unzoned ones, or the
+        # away party's own reach -- while the parent kept every room including
+        # the ones the child took. That asymmetry had no argument behind it
+        # and one large consequence: the away frame could never gain a room.
+        # The player's frame grows as the Director plants places; the child's
+        # map was frozen at the instant of the split, so anywhere the party
+        # was GOING did not exist for them.
+        #
+        # Measured live (Aldermill, `google/gemini-3.8-flash`, 2026-09-17): a
+        # companion split off with two rooms, and on all four of her own beats
+        # she walked east toward a watermill that was not in her world --
+        # "trudges steadily eastward along the packed cart ruts", four times,
+        # `state_diff.positions` null every time, her memory of it "I was in
+        # River Road." The Director was right to refuse; there was nowhere to
+        # put her. The player's frame held sixteen rooms by then and hers
+        # still held two.
+        #
+        # A map is not a perception. Which rooms a scene DESCRIBES says
+        # nothing about what a body in it can see or hear -- that is
+        # `spatial_rel` and the senses, off positions -- and the parent has
+        # always held the whole map without that being a leak. Two rooms in
+        # different declared locales report `remote` and no edge joins them,
+        # so holding a room is not being able to walk to it either.
+        away_rooms = dict(scene.get("rooms") or {})
         # SYMMETRIC PARTITION: each frame carries the subject-keyed rows and
         # the records of the bodies standing in it, and the room-anchored
         # tables whole (the merge resolves those by room). The child used to
@@ -1230,7 +1321,8 @@ def perform_split(chat_id, parent_frame_id, turn_idx, away_zone):
         # Parent keeps everyone/everywhere except what just left.
         parent_positions = {
             name: room for name, room in (scene.get("positions") or {}).items()
-            if _effective_zone(scene, name) != away_zone
+            if (name not in away_positions if away_names is not None
+                else _effective_zone(scene, name) != away_zone)
         }
         scene = {**_partition_scene(scene, parent_positions, set(scene.get("rooms") or {})),
                  "positions": parent_positions}
@@ -1253,7 +1345,10 @@ def perform_split(chat_id, parent_frame_id, turn_idx, away_zone):
                 (new_frame_id, chat_id, *away_persona_ids),
             )
 
-        notice = {"turn": turn_idx, "kind": "spatial_split", "zone": away_zone}
+        notice = {"turn": turn_idx,
+                   "kind": "causality_bubble" if bubble else "spatial_split",
+                   "zone": away_zone,
+                   "characters": sorted(away_names) if away_names else []}
         for fid in (parent_frame_id, new_frame_id):
             log = wget_for_frame(chat_id, "offscreen_log", fid, [])
             log.append(notice)
@@ -1313,7 +1408,81 @@ def detect_merge(chat_id, frame_id):
         return (parent_id, child_id)
     if _parties_share_a_room(chat_id, parent_id, parent_scene, child_id, child_scene):
         return (parent_id, child_id)
+    # A BUBBLE HAS NO HUMAN PARTY, SO NEITHER SIGNAL ABOVE CAN EVER FIRE FOR
+    # ONE. Both read `zone_groups`/`_all_party_names`, which are the primary
+    # player and the personas stationed in a frame -- a causality bubble has
+    # none of either by construction, so its zone set is empty and its party
+    # rooms are empty, and a bubble opened once could never close. The bodies
+    # a bubble answers for are its CAST, and the question is otherwise the
+    # same one: is a body of each side standing in one place.
+    if is_bubble_frame(chat_id, child_id) and _bubble_rejoined(
+            chat_id, parent_id, parent_scene, child_id, child_scene):
+        return (parent_id, child_id)
     return None
+
+
+def is_bubble_frame(chat_id, frame_id):
+    """A live spatial frame no human is playing in.
+
+    DERIVED, never stored. Whether a frame is a bubble is exactly whether any
+    body it answers for is a person somebody is playing, and that is already
+    written down in two places the engine keeps current -- the persona
+    stations and the scene's own positions. A third copy on the frame row
+    would be a fact stored twice, free to disagree with both the moment a
+    player joins an away party or leaves one.
+    """
+    frame = get_frame(frame_id)
+    if (not frame or frame.get("kind") != "spatial"
+            or frame.get("merged_turn_idx") is not None):
+        return False
+    positions = (wget_for_frame(chat_id, "scene", frame_id, {}) or {}).get("positions") or {}
+    placed = {_cf(name) for name in positions}
+    return not any(_cf(name) in placed for name in _all_party_names(chat_id, frame_id))
+
+
+def _bubble_cast_places(chat_id, frame_id, scene):
+    """(rooms, zones) the bubble's cast are standing in, in its own scene."""
+    rooms, zones = set(), set()
+    for row in active_cast(chat_id, frame_id):
+        name = character_name(normalized_character_from_text(row["sheet"]))
+        if not name:
+            continue
+        room = room_of(scene, name)
+        if room:
+            rooms.add(str(room))
+        zone = _effective_zone(scene, name)
+        if zone:
+            zones.add(zone)
+    return rooms, zones
+
+
+def _bubble_rejoined(chat_id, parent_id, parent_scene, child_id, child_scene):
+    """Is a bubble's cast back inside the player's causality bubble.
+
+    THE SAME PREDICATE THE SPLIT USED, ASKED BACKWARDS, and it has to be: a
+    trigger and a release stated in two vocabularies is a body that leaves on
+    one rule and can only return under another. With a zone trigger that was
+    survivable -- a zone is a place, and walking back into it is the same fact
+    read either way. With a RANGE trigger it is not: a body could step out of
+    the beat's reach, get a frame, walk back into the next room, and stay in
+    it forever because nobody had labelled anything.
+
+    So: the bubble ends when one of its bodies is standing in a room the
+    parent's beat attends to. `in_range_rooms` is computed on the PARENT's
+    scene (which keeps every room, so it can name hers) and her position is
+    read from her OWN scene (which is the only place it exists after the
+    split) -- each side asked about the half it actually holds.
+
+    Fails CLOSED for the reason the merge fails closed everywhere: it is
+    one-way, and it restores permanent bidirectional memory visibility.
+    """
+    from world.spatial_bubbles import in_range_rooms
+
+    in_range = in_range_rooms(parent_scene, _all_party_names(chat_id, parent_id))
+    if not in_range:
+        return False
+    cast_rooms, _zones = _bubble_cast_places(chat_id, child_id, child_scene)
+    return bool(cast_rooms & in_range)
 
 
 def _parties_share_a_room(chat_id, parent_id, parent_scene, child_id, child_scene):
@@ -1408,14 +1577,701 @@ def perform_merge(chat_id, parent_frame_id, child_frame_id, turn_idx):
     return warnings
 
 
+# ===================================================================== couples
+#
+# A COUPLE CARRIES A VOICE BETWEEN TWO FRAMES AND MOVES NOTHING ELSE. Not a
+# body, not a room, not a cast list, not one line of anybody's memory ledger.
+# The three ways this feature could destroy the firewall are one mistake
+# wearing different clothes -- treating "they can talk" as "they are together"
+# -- so every rule below is stated in the direction that keeps them apart.
+#
+# WHY A FRAME AND NOT A CROSS-FRAME READ. Every reader in `agents/` resolves
+# one scene through one active frame (`db.active_frame_id`), so a beat where
+# both parties speak has to be played somewhere both parties exist. The couple
+# frame is that somewhere: the fused view MATERIALISED as storage, so
+# `get_scene`, the composer, `spatial_rel` and `comms_link` all work unchanged
+# and do the separation work for free -- two rooms in different locales report
+# `remote`, which is opaque to sight, scent and a shout alike.
+#
+# WHAT IS NOT NEGOTIABLE: `merged_turn_idx` is never touched on either member.
+# It is the whole of what keeps the two sides' ledgers incomparable
+# (`core/frames.is_memory_visible`), there is no un-merge, and a radio must not
+# be able to hand each side the other's entire separation.
+
+#: One live couple's partition map, chat-global (it must be readable from any
+#: frame, including from neither). Deleted by `close_couple`.
+COUPLE_MAP_PREFIX = "couple:"
+
+#: The scene tables a couple partitions back by RECORDED OWNERSHIP rather than
+#: by shape. `_partition_scene` answers by subject and `_touches_rooms` by
+#: room, and both are the right question for a SPLIT -- which starts from one
+#: scene and has to decide where each row goes. A couple starts from two
+#: scenes that already decided, so the answer is simply what each side brought:
+#: recorded at open, restored at close, with only genuinely NEW keys needing a
+#: rule. That is what makes the close total rather than best-effort.
+_COUPLE_DICT_TABLES = ("rooms", "positions") + tuple(
+    k for k in _FRAME_SUBJECT_LEDGERS if k != "positions") + _FRAME_ROOM_TABLES
+
+
+#: "this frame has no row for that key", which is NOT the same answer as "its
+#: row holds null". `wget` returns a stored JSON null verbatim and its default
+#: only when the ROW is missing, so copying a key a frame does not have into
+#: the couple and back would write an explicit null where there had been
+#: nothing -- and every reader that passes a real default (`{}`, `[]`) would
+#: get None from then on, per key, per call, forever.
+_ABSENT = object()
+
+
+def _copy_key(chat_id, key, src_frame, dst_frame):
+    """Copy one frame-scoped key between frames, absence included."""
+    value = wget_for_frame(chat_id, key, src_frame, _ABSENT)
+    if value is not _ABSENT:
+        wset_for_frame(chat_id, key, value, dst_frame)
+
+
+def couple_map_key(couple_frame_id):
+    return f"{COUPLE_MAP_PREFIX}{couple_frame_id}"
+
+
+def couple_map(chat_id, couple_frame_id):
+    """The map recorded when this couple opened, or {} when it is not live."""
+    if couple_frame_id is None:
+        return {}
+    value = wget(chat_id, couple_map_key(couple_frame_id), None)
+    return value if isinstance(value, dict) else {}
+
+
+def live_couple_for(chat_id, frame_id):
+    """The couple frame currently fusing `frame_id` with another, or None.
+
+    Answered off the frames table rather than off a scan of world rows: a
+    couple frame names its home member as `parent_frame_id`, and the map names
+    both. `merged_turn_idx` on the COUPLE's own row is what "the call ended"
+    means -- it says nothing about either member.
+    """
+    for row in q(
+        "SELECT id FROM frames WHERE chat_id=? AND kind='couple' "
+        "AND merged_turn_idx IS NULL",
+        (chat_id,),
+    ):
+        if frame_id in (couple_map(chat_id, row["id"]).get("members") or []):
+            return row["id"]
+    return None
+
+
+def couple_member_frame(chat_id, frame_id, *, char_id=None, name=None):
+    """Which MEMBER frame a mind belongs to while a couple is open.
+
+    `frame_id` unchanged for every frame that is not a live couple, which is
+    almost every call -- an ordinary chat never reaches past the first line.
+
+    This is the function that keeps a coupled beat from having a shared era.
+    A memory formed during a call is stamped with its subject's own member
+    frame, and a mind reading its ledger during a call reads it as a native of
+    that same frame. If a couple frame id ever reached either side of that,
+    the two ledgers would share an era and the incomparability rule would have
+    nothing to bite on.
+
+    Falls back to the HOME member when the subject cannot be placed on either
+    side -- never to the couple frame itself, which is the one answer that
+    could do damage.
+    """
+    themap = couple_map(chat_id, frame_id)
+    if not themap:
+        return frame_id
+    home = themap.get("home")
+    if char_id is not None:
+        for side in ("a", "b"):
+            if int(char_id) in (themap.get("cast") or {}).get(side, []):
+                return (themap.get("members") or [home, home])[0 if side == "a" else 1]
+    if not name:
+        row = q("SELECT sheet FROM characters WHERE id=?", (char_id,), one=True) \
+            if char_id is not None else None
+        if row:
+            name = character_name(normalized_character_from_text(row["sheet"]))
+    if name:
+        owner = (themap.get("bodies") or {}).get(str(name))
+        if owner is not None:
+            return (themap.get("members") or [home, home])[0 if owner == "a" else 1]
+    return home
+
+
+def _side_of_room(themap, room_id):
+    return (themap.get("rooms") or {}).get(str(room_id))
+
+
+def _recorded_side_scene(themap, side):
+    return (themap.get("sides") or {}).get(side) or {}
+
+
+def _stamp_locales(fused, themap):
+    """Say, on the rooms themselves, which locale each one is in.
+
+    A couple fuses two room dicts into one, and `spatial_rel` then reports
+    `separated` for any pair with no edge between them -- which is the right
+    answer for two rooms in one building and the wrong one for two rooms a
+    frame split put in different places, because `hear_level` gives
+    `separated` a shout as a `fragment`. A declared `zone` already says
+    "somewhere else" and is read as a locale; a room the split carried away
+    WITHOUT a zone of its own says nothing, and those are the ones stamped.
+
+    Occupancy decides first, because a shared, unzoned room id exists on both
+    sides by construction (`perform_split` gives the child every unzoned room
+    while the parent keeps all of them) and only one side is standing in it --
+    `couple_decision` refuses outright when both are.
+    """
+    rooms = fused.get("rooms") or {}
+    for room_id, room in rooms.items():
+        if not isinstance(room, dict) or room_locale(room):
+            continue
+        side = _side_of_room(themap, room_id)
+        if side:
+            room["locale"] = f"frame:{side}"
+    return fused
+
+
+def _strip_locales(scene):
+    for room in (scene.get("rooms") or {}).values():
+        if isinstance(room, dict):
+            room.pop("locale", None)
+    return scene
+
+
+def _channel_touches(channel, rooms, positions):
+    """Does this comm channel belong to the side holding `rooms`/`positions`.
+
+    Its own rule rather than `_touches_rooms`, which answers for entities,
+    passages and scents and would drop a handset from BOTH sides: a carried
+    channel names no room at all, which is the one channel shape that is even
+    expressible across a split.
+    """
+    if not isinstance(channel, dict):
+        return False
+    for room_id in (channel.get("rooms") or []):
+        if str(room_id) in rooms:
+            return True
+    for carrier in (channel.get("carriers") or []):
+        if _cf(positions.get(str(carrier))) in {_cf(r) for r in rooms} or \
+                str(carrier) in positions:
+            return True
+    return False
+
+
+def detect_couple(chat_id, frame_id):
+    """`(home_frame_id, away_frame_id)` if a live channel should be joining
+    these two frames right now, else None. Read-only.
+
+    Asked the same way whether or not a couple is already open, which is what
+    makes it usable for both ends of the call: the caller opens on a pair it
+    has no couple for, and closes an open couple the moment this answers None.
+    Liveness is a fact about the world, not a mode the couple latches --
+    somebody keying a handset off must end the fusion on that beat.
+
+    Canonical order is (parent, child): a couple is always between a spatial
+    split and the frame it split from, and the parent is HOME -- the side the
+    primary player stays with by construction (`perform_split` never moves
+    them), and therefore the side everything not about a body belongs to.
+    """
+    from world import spatial_bubbles
+
+    frame = get_frame(frame_id)
+    if frame is None:
+        return None
+
+    if frame.get("kind") == "couple" and frame.get("merged_turn_idx") is None:
+        themap = couple_map(chat_id, frame_id)
+        members = themap.get("members") or []
+        if len(members) != 2:
+            return None
+        if get_paradox(chat_id, members[0]) or get_paradox(chat_id, members[1]):
+            return None
+        scene = wget_for_frame(chat_id, "scene", frame_id, {}) or {}
+        names_a = list((themap.get("names") or {}).get("a") or [])
+        names_b = list((themap.get("names") or {}).get("b") or [])
+        ended = spatial_bubbles.uncouple_decision(scene, names_a, names_b)
+        return None if ended else (members[0], members[1])
+
+    if frame.get("kind") == "spatial" and frame.get("merged_turn_idx") is None:
+        pairs = [(frame.get("parent_frame_id"), frame_id)]
+    else:
+        pairs = [(frame_id, row["id"])
+                 for row in _spatial_children(chat_id, frame_id)]
+
+    for parent_id, child_id in pairs:
+        if live_couple_for(chat_id, child_id):
+            continue
+        if spatial_bubbles.detect_couple_between_frames(chat_id, parent_id, child_id):
+            return (parent_id, child_id)
+    return None
+
+
+def open_couple(chat_id, a_id, b_id, *, turn_idx):
+    """Fuse two spatial frames into a temporary couple frame. Returns its id.
+
+    One transaction: a half-opened couple -- a frame holding a fused scene
+    with no map to partition it back by -- is unrecoverable, where not
+    coupling this beat costs one beat of a conversation.
+
+    WHAT IS RECORDED, and why it is each side's whole scene rather than a
+    clever summary: the close has to be TOTAL. A couple opens and closes
+    repeatedly over one conversation, so anything the round trip drops is
+    dropped again per cycle -- invisible on the first and total by the tenth.
+    Ownership answered from "what each side brought" cannot drop anything,
+    because every key that existed is in exactly one of the two records.
+    """
+    from world import spatial_bubbles
+
+    with transaction():
+        scene_a = wget_for_frame(chat_id, "scene", a_id, {}) or {}
+        scene_b = wget_for_frame(chat_id, "scene", b_id, {}) or {}
+        parent = get_frame(a_id)
+        away = get_frame(b_id)
+
+        couple_id = create_frame(
+            chat_id,
+            label=f"Coupled — {(away or {}).get('label') or 'away'}",
+            ordinal=(parent or {}).get("ordinal", 0),
+            kind="couple",
+            parent_frame_id=a_id,
+            split_turn_idx=turn_idx,
+        )
+
+        rooms_a = {str(r) for r in (scene_a.get("rooms") or {})}
+        rooms_b = {str(r) for r in (scene_b.get("rooms") or {})}
+        occupied_a = {str(r) for r in (scene_a.get("positions") or {}).values() if r}
+        occupied_b = {str(r) for r in (scene_b.get("positions") or {}).values() if r}
+        room_side = {}
+        for room_id in rooms_a | rooms_b:
+            if room_id in occupied_a:
+                room_side[room_id] = "a"
+            elif room_id in occupied_b:
+                room_side[room_id] = "b"
+            elif room_id in rooms_a and room_id not in rooms_b:
+                room_side[room_id] = "a"
+            elif room_id in rooms_b and room_id not in rooms_a:
+                room_side[room_id] = "b"
+            else:
+                room_side[room_id] = "a"
+
+        bodies = {str(n): "a" for n in (scene_a.get("positions") or {})}
+        bodies.update({str(n): "b" for n in (scene_b.get("positions") or {})})
+
+        cast = {
+            "a": [int(r["id"]) for r in active_cast(chat_id, a_id)],
+            "b": [int(r["id"]) for r in active_cast(chat_id, b_id)],
+        }
+        names = {
+            "a": spatial_bubbles.frame_body_names(chat_id, a_id),
+            "b": spatial_bubbles.frame_body_names(chat_id, b_id),
+        }
+        personas = {
+            str(row["persona_id"]): row["frame_id"]
+            for row in q(
+                "SELECT persona_id, frame_id FROM chat_personas "
+                "WHERE chat_id=? AND status='active' AND (frame_id IS ? OR frame_id IS ?)",
+                (chat_id, a_id, b_id),
+            )
+        }
+        clocks = {
+            "a": wget_for_frame(chat_id, "simulation_clock", a_id, {}) or {},
+            "b": wget_for_frame(chat_id, "simulation_clock", b_id, {}) or {},
+        }
+
+        themap = {
+            "members": [a_id, b_id], "home": a_id, "opened_turn": turn_idx,
+            "rooms": room_side, "bodies": bodies, "cast": cast, "names": names,
+            "personas": personas, "clocks": clocks,
+            "sides": {"a": scene_a, "b": scene_b},
+            # What the fuse produced for the keys BOTH sides brought, and only
+            # those: the close compares against it to tell the fuse's own
+            # choice from a change the beat made. Only the overlap, because
+            # only the overlap had a choice to make.
+            "fused_at_open": {},
+        }
+
+        # The fused scene. `merge_frame_scenes` is the reunion's own fuser and
+        # is reused deliberately: the view a couple plays in is exactly the
+        # view a reunion would produce, and one fuser cannot drift from
+        # another. `comms` is the exception -- the channel rule is the
+        # bubbles module's (silence is not refusal, hanging up is, a contested
+        # channel is no channel) and it is the whole predicate this feature
+        # rests on.
+        fused = merge_frame_scenes(scene_a, scene_b)
+        # A REFUSED CHANNEL IS A DEVICE, NOT A NOTHING. `fuse_comms` answers
+        # which channels the two frames can be HELD to -- silence on one side
+        # is not refusal, hanging up is, and a channel whose two copies
+        # disagree has no fact of the matter -- and that is the right question
+        # for the decision. It is the wrong answer for the SCENE: dropping the
+        # ones it refuses would delete a dead intercom in the away frame the
+        # first time anybody made an unrelated phone call, and again per call.
+        # They come through the call as records that are not carrying, which
+        # is what a hung-up handset is, and the close hands each side its own
+        # copy back untouched.
+        carried = spatial_bubbles.fuse_comms(scene_a, scene_b)
+        every = {**((scene_b.get("comms") or {}) if isinstance(
+                       scene_b.get("comms"), dict) else {}),
+                 **((scene_a.get("comms") or {}) if isinstance(
+                       scene_a.get("comms"), dict) else {})}
+        fused["comms"] = {**{cid: {**chan, "live": False}
+                             for cid, chan in every.items() if cid not in carried},
+                          **carried}
+        _stamp_locales(fused, themap)
+        # Rooms have just changed, and `comms_link` does not prune a channel
+        # naming a room nobody can stand in -- `normalize_scene_comms` does,
+        # once rooms have settled. They have settled here.
+        normalize_scene_comms(fused)
+        themap["fused_at_open"] = _overlap_snapshot(fused, scene_a, scene_b)
+        wset_for_frame(chat_id, "scene", fused, couple_id)
+
+        # `known` is keyed by WHO, so fusing it is a union of two disjoint
+        # answers rather than a judgement; the close hands each key back to
+        # the side that brought it.
+        raw_a = wget_for_frame(chat_id, "known", a_id, _ABSENT)
+        raw_b = wget_for_frame(chat_id, "known", b_id, _ABSENT)
+        known_a = raw_a if isinstance(raw_a, dict) else {}
+        known_b = raw_b if isinstance(raw_b, dict) else {}
+        themap["known"] = {"a": sorted(known_a), "b": sorted(known_b),
+                           # Absence again, and `known` is the one fused key
+                           # where it can arise on either side: a story that
+                           # has never learned a name has no row, and a close
+                           # that wrote `{}` back would invent one.
+                           "had": {"a": raw_a is not _ABSENT,
+                                   "b": raw_b is not _ABSENT}}
+        if raw_a is not _ABSENT or raw_b is not _ABSENT:
+            wset_for_frame(chat_id, "known", {**known_a, **known_b}, couple_id)
+
+        # Every other frame-scoped key is the HOME frame's. A couple is the
+        # home frame's beat with a voice from elsewhere in it: a charter, a
+        # crowd, a courier on the road, the room's own mandates are not about
+        # a body and have no second copy to reconcile. The away side's are
+        # untouched for the duration and are still its own when the call ends.
+        for key in sorted(FRAME_SCOPED_WORLD_KEYS):
+            if key in ("scene", "known"):
+                continue
+            _copy_key(chat_id, key, a_id, couple_id)
+        for side, member in (("a", a_id), ("b", b_id)):
+            for char_id in cast[side]:
+                _copy_key(chat_id, f"relationships:{char_id}", member, couple_id)
+
+        # THE COUPLE'S CAST IS THE UNION OF ITS TWO MEMBERS' AND NOTHING ELSE.
+        # `active_cast` falls back to the BASE `chat_chars` row in a frame that
+        # has no override, which is exactly right for a fresh spatial child
+        # walking away mid-continuity and exactly wrong here: a character
+        # `perform_split` made dormant in BOTH frames still reads active off
+        # the base row, so a body nobody's story has on stage would have walked
+        # into the call. Stated explicitly, per character, and deleted whole at
+        # close.
+        in_call = set(cast["a"]) | set(cast["b"])
+        for row in q("SELECT char_id FROM chat_chars WHERE chat_id=? AND status='active'",
+                     (chat_id,)):
+            char_id = int(row["char_id"])
+            set_char_status(chat_id, char_id, "active" if char_id in in_call else "dormant",
+                            frame_id=couple_id)
+
+        if personas:
+            qi(
+                f"UPDATE chat_personas SET frame_id=? WHERE chat_id=? AND persona_id IN "
+                f"({','.join('?' * len(personas))})",
+                (couple_id, chat_id, *[int(p) for p in personas]),
+            )
+
+        wset(chat_id, couple_map_key(couple_id), themap)
+
+        notice = {"turn": turn_idx, "kind": "couple_open",
+                  "frames": [a_id, b_id]}
+        log = wget_for_frame(chat_id, "offscreen_log", couple_id, []) or []
+        log.append(notice)
+        wset_for_frame(chat_id, "offscreen_log", log, couple_id)
+
+        return couple_id
+
+
+def _overlap_snapshot(fused, scene_a, scene_b):
+    """The fused value of every key BOTH sides brought, per table."""
+    out = {}
+    for ledger in ("rooms",) + _FRAME_ROOM_TABLES:
+        table = fused.get(ledger)
+        if not isinstance(table, dict):
+            continue
+        in_a = set(scene_a.get(ledger) or {}) if isinstance(
+            scene_a.get(ledger), dict) else set()
+        in_b = set(scene_b.get(ledger) or {}) if isinstance(
+            scene_b.get(ledger), dict) else set()
+        shared = {k: v for k, v in table.items() if k in in_a and k in in_b}
+        if shared:
+            out[ledger] = shared
+    return out
+
+
+def _own_or_fused(fused_now, own, fused_at_open):
+    """Which copy of a key BOTH sides brought this side gets back.
+
+    The fuse has to pick ONE copy of each shared key to play in -- one scene
+    cannot hold two versions of one room -- and the CLOSE must not let that
+    choice propagate. A split hands the child every unzoned room and every
+    room-anchored table whole while the parent keeps all of them, so the two
+    id spaces overlap by construction and then diverge independently for as
+    long as the parties are apart. Handing the fused copy back to both sides
+    would overwrite the home frame's attic with the away frame's every time
+    somebody picked up a radio, and again per call.
+
+    The test is UNTOUCHED SINCE THE FUSE, compared against what the fuse
+    itself produced rather than against the other side's copy. Two things need
+    the stricter question. A channel `fuse_comms` REFUSED -- hung up on one
+    side, or contested -- is carried into the call as not-live rather than
+    dropped, so it matches neither side's copy and would otherwise come back
+    dead to both; and a beat that edits a shared room to exactly what the
+    other side happened to be holding is a real edit, not the fuse's choice.
+
+    So: untouched since the fuse means this side gets its own copy back.
+    Changed during the call means the beat did that, and both sides get it --
+    somebody did it to the one room both frames answer for.
+    """
+    if own is not _ABSENT and fused_at_open is not _ABSENT \
+            and fused_now == fused_at_open:
+        return own
+    return fused_now
+
+
+def _partition_side(fused, themap, side):
+    """One member's scene, back out of the fused view.
+
+    RECORDED OWNERSHIP FIRST, a rule only for what is new. Everything the side
+    brought is its own again; a room a body walked into comes with the body,
+    because a body must never be positioned in a room its own frame does not
+    hold; and a key neither side brought is assigned by the same touch rules a
+    split uses, falling back to home so that nothing is ever simply dropped.
+    """
+    home_side = "a" if themap.get("home") == (themap.get("members") or [None])[0] else "b"
+    brought = _recorded_side_scene(themap, side)
+    out = {}
+
+    fused_rooms = fused.get("rooms") or {}
+    fused_positions = fused.get("positions") or {}
+
+    rooms = {str(r) for r in (brought.get("rooms") or {}) if str(r) in fused_rooms}
+    positions = {}
+    for name, room in fused_positions.items():
+        owner = (themap.get("bodies") or {}).get(str(name))
+        if owner is None:
+            owner = _side_of_room(themap, room) or home_side
+        if owner == side:
+            positions[str(name)] = room
+            if room:
+                rooms.add(str(room))            # they walked there; it is theirs now
+    for room_id in fused_rooms:
+        if room_id in rooms:
+            continue
+        if _side_of_room(themap, room_id) is None:
+            # Minted during the call. It belongs to whoever is standing in it,
+            # and to home when nobody is.
+            standing = {str(n) for n, r in fused_positions.items() if str(r) == str(room_id)}
+            owner = next((themap.get("bodies", {}).get(n) for n in sorted(standing)
+                          if themap.get("bodies", {}).get(n)), None) or home_side
+            if owner == side:
+                rooms.add(str(room_id))
+
+    at_open = themap.get("fused_at_open") or {}
+    out["rooms"] = {
+        rid: _own_or_fused(fused_rooms[rid],
+                           (brought.get("rooms") or {}).get(rid, _ABSENT),
+                           (at_open.get("rooms") or {}).get(rid, _ABSENT))
+        for rid in sorted(rooms) if rid in fused_rooms
+    }
+    out["positions"] = positions
+
+    subjects = {_cf(n) for n in positions}
+    for ledger in _FRAME_SUBJECT_LEDGERS:
+        if ledger == "positions":
+            continue
+        table = fused.get(ledger)
+        if not isinstance(table, dict):
+            continue
+        out[ledger] = {k: v for k, v in table.items() if _cf(k) in subjects}
+    for ledger in _FRAME_RECORD_LEDGERS:
+        records = fused.get(ledger)
+        if not isinstance(records, list):
+            continue
+        kept = []
+        for record in records:
+            parties = _record_parties(record)
+            if parties & subjects:
+                kept.append(record)
+            elif not parties and side == home_side:
+                kept.append(record)         # names nobody: never simply dropped
+        out[ledger] = kept
+    other_brought = _recorded_side_scene(themap, "b" if side == "a" else "a")
+    for ledger in _FRAME_ROOM_TABLES:
+        table = fused.get(ledger)
+        if not isinstance(table, dict):
+            continue
+        brought_keys = set((brought.get(ledger) or {}) if isinstance(
+            brought.get(ledger), dict) else ())
+        other_keys = set(other_brought.get(ledger) or {}) if isinstance(
+            other_brought.get(ledger), dict) else set()
+        own_table = brought.get(ledger) if isinstance(brought.get(ledger), dict) else {}
+        open_table = at_open.get(ledger) or {}
+        kept = {}
+        for key, value in table.items():
+            if key in brought_keys:
+                kept[key] = _own_or_fused(value,
+                                          own_table.get(key, _ABSENT),
+                                          open_table.get(key, _ABSENT))
+                continue
+            if key in other_keys:
+                continue                       # the other side brought it
+            touches = (_channel_touches(value, rooms, positions) if ledger == "comms"
+                       else _touches_rooms(key, value, rooms, positions))
+            if touches or (side == home_side and not _touches_rooms(
+                    key, value, set(out["rooms"]), positions)):
+                kept[key] = value
+        out[ledger] = kept
+
+    # Everything the scene carries that is not a table either side partitions
+    # -- `location`, `time`, the weather, whatever a later beat adds. The home
+    # side keeps the fused value; the away side keeps what it brought.
+    for key, value in fused.items():
+        if key in out:
+            continue
+        out[key] = value if side == home_side else brought.get(key, value)
+    for key in brought:
+        if key not in out:
+            out[key] = brought[key]
+    return _strip_locales(out)
+
+
+def close_couple(chat_id, couple_frame_id, *, turn_idx):
+    """End a call and partition the couple frame back to its two members.
+
+    Returns a list of deterministic warning strings. One transaction, for
+    `perform_split`'s reason inverted: a half-closed couple would leave two
+    frames whose bodies are in a third.
+
+    `merged_turn_idx` is set on the COUPLE's own row and on neither member's.
+    """
+    warnings = []
+    themap = couple_map(chat_id, couple_frame_id)
+    members = themap.get("members") or []
+    if len(members) != 2:
+        return warnings
+    a_id, b_id = members
+
+    with transaction():
+        fused = wget_for_frame(chat_id, "scene", couple_frame_id, {}) or {}
+        for side, member in (("a", a_id), ("b", b_id)):
+            scene = _partition_side(fused, themap, side)
+            normalize_scene_comms(scene)
+            wset_for_frame(chat_id, "scene", scene, member)
+
+        known = wget_for_frame(chat_id, "known", couple_frame_id, {}) or {}
+        recorded = themap.get("known") or {}
+        home_side = "a"
+        for side, member in (("a", a_id), ("b", b_id)):
+            brought = set(recorded.get(side) or [])
+            other = set(recorded.get("b" if side == "a" else "a") or [])
+            out = {}
+            for who, learned in known.items():
+                if str(who) in brought:
+                    out[who] = learned
+                elif str(who) in other:
+                    continue
+                else:
+                    owner = (themap.get("bodies") or {}).get(str(who)) or home_side
+                    if owner == side:
+                        out[who] = learned
+            if out or ((recorded.get("had") or {}).get(side)):
+                wset_for_frame(chat_id, "known", out, member)
+
+        for key in sorted(FRAME_SCOPED_WORLD_KEYS):
+            if key in ("scene", "known"):
+                continue
+            _copy_key(chat_id, key, couple_frame_id, a_id)
+        for side, member in (("a", a_id), ("b", b_id)):
+            for char_id in (themap.get("cast") or {}).get(side, []):
+                _copy_key(chat_id, f"relationships:{char_id}", couple_frame_id, member)
+
+        # THE AWAY SIDE LIVED THROUGH THE CALL TOO. The home frame's clock is
+        # the one a coupled beat advances, so handing the away frame back its
+        # frozen copy would make every call a silent gap in its own history --
+        # and the next reunion would report the skew the couple invented.
+        opened = themap.get("clocks") or {}
+        home_open = float((opened.get("a") or {}).get("elapsed_seconds") or 0.0)
+        away_open = float((opened.get("b") or {}).get("elapsed_seconds") or 0.0)
+        couple_clock = wget_for_frame(chat_id, "simulation_clock",
+                                      couple_frame_id, {}) or {}
+        elapsed = float(couple_clock.get("elapsed_seconds") or 0.0) - home_open
+        if elapsed:
+            away_clock = dict(couple_clock)
+            away_clock["elapsed_seconds"] = away_open + elapsed
+            wset_for_frame(chat_id, "simulation_clock", away_clock, b_id)
+
+        for persona_id, station in (themap.get("personas") or {}).items():
+            qi("UPDATE chat_personas SET frame_id=? WHERE chat_id=? AND persona_id=?",
+               (station, chat_id, int(persona_id)))
+
+        # The couple frame must hold nothing: a live scene left behind is a
+        # third world that `detect_split`/`detect_merge` would iterate and a
+        # later checkpoint would snapshot.
+        qi("DELETE FROM world WHERE chat_id=? AND key LIKE ?",
+           (chat_id, f"%{_FRAME_KEY_SEP}{couple_frame_id}"))
+        qi("DELETE FROM chat_char_frames WHERE chat_id=? AND frame_id=?",
+           (chat_id, couple_frame_id))
+        qi("DELETE FROM world WHERE chat_id=? AND key=?",
+           (chat_id, couple_map_key(couple_frame_id)))
+        qi("UPDATE frames SET merged_turn_idx=? WHERE id=?",
+           (turn_idx, couple_frame_id))
+
+        notice = {"turn": turn_idx, "kind": "couple_close", "frames": [a_id, b_id]}
+        log = wget_for_frame(chat_id, "offscreen_log", a_id, []) or []
+        log.append(notice)
+        wset_for_frame(chat_id, "offscreen_log", log, a_id)
+
+    return warnings
+
+
 def detect_and_reconcile(ctx, nonce):
     """The commit-time entry point, mirroring paradox.check_and_apply_paradox's
     shape: call once per turn, after scene/entities/cast have committed
     this turn's state_diff, so detection runs against what actually just
-    got committed."""
+    got committed.
+
+    FIVE STRUCTURAL CHANGES, AT MOST ONE PER COMMIT, in the order a beat can
+    produce them. Each returns immediately, matching `detect_split`'s
+    one-split-per-commit shape: a second one is next beat's question, asked
+    against a world that has settled.
+
+      * A COUPLE FRAME asks only whether its call is still up. Nothing else
+        may happen inside one -- an ordinary split or merge in a fused view
+        would partition a world that is about to be partitioned by a map, and
+        the two answers would disagree.
+      * A PARTY MERGE and a PARTY SPLIT, unchanged: two humans reunited, two
+        humans separated.
+      * A COUPLE OPENS when a live channel joins a split to the frame it
+        split from, whether the away party is a player's or a bubble's. The
+        voice needs somewhere both parties exist to be spoken in.
+      * A BUBBLE OPENS for cast who walked into a zone with no human in it
+        and no voice reaching them. Last, because every cheaper answer above
+        is a reason it should not: a channel that still carries makes the
+        bubble's sixth refusal fire, and that refusal lifting by itself on a
+        later beat is the whole of the uncouple driver.
+    """
     chat_id = ctx.chat.id
     frame_id = ctx.turn.frame_id
     turn_idx = ctx.turn.idx
+
+    frame = get_frame(frame_id)
+    if frame and frame.get("kind") == "couple" and frame.get("merged_turn_idx") is None:
+        if detect_couple(chat_id, frame_id):
+            return {"coupled": True, "couple_frame_id": frame_id}
+        themap = couple_map(chat_id, frame_id)
+        warnings = close_couple(chat_id, frame_id, turn_idx=turn_idx)
+        for w in warnings:
+            ctx.add_warning(w)
+        members = themap.get("members") or [None, None]
+        ctx.add_warning("The channel has closed; the two parties are apart again.")
+        return {"uncoupled": True, "couple_frame_id": frame_id,
+                "parent_frame_id": members[0], "child_frame_id": members[1],
+                "warnings": warnings}
 
     merge = detect_merge(chat_id, frame_id)
     if merge:
@@ -1434,5 +2290,22 @@ def detect_and_reconcile(ctx, nonce):
         )
         return {"split": True, "parent_frame_id": frame_id, "child_frame_id": new_frame_id,
                 "zone": away_zone}
+
+    pair = detect_couple(chat_id, frame_id)
+    if pair:
+        parent_id, child_id = pair
+        couple_id = open_couple(chat_id, parent_id, child_id, turn_idx=turn_idx)
+        return {"coupled": True, "couple_frame_id": couple_id,
+                "parent_frame_id": parent_id, "child_frame_id": child_id}
+
+    from world import spatial_bubbles
+    bubble = spatial_bubbles.detect_bubble(chat_id, frame_id, turn_idx)
+    if bubble:
+        new_frame_id = perform_split(
+            chat_id, frame_id, turn_idx, bubble=True,
+            away_names=bubble["characters"], away_rooms=bubble["rooms"])
+        return {"bubble": True, "parent_frame_id": frame_id,
+                "child_frame_id": new_frame_id,
+                "characters": bubble["characters"], "rooms": bubble["rooms"]}
 
     return {"active": False}

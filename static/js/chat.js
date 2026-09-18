@@ -482,7 +482,15 @@ function renderFrameBar() {
   const bar = $("#framebar");
   bar.innerHTML = "";
   if (!S.chat) return;
-  const frames = S.chat.frames || [];
+  // A CLOSED COUPLE IS NOT A PLACE TO GO BACK TO. A couple frame exists for
+  // the length of one comm call between two split parties, and `close_couple`
+  // deletes every row it held -- so a pill for a retired one offers to switch
+  // into an empty world. A LIVE one stays: it is where the call is being
+  // played, and saying so is the honest thing. Every other kind is listed
+  // whether or not it has ended, as before: a merged spatial frame still has
+  // its own turns in the history.
+  const frames = (S.chat.frames || []).filter(
+    f => !(f.kind === "couple" && f.merged_turn_idx !== null));
   if (frames.length <= 1) return; // just the implicit present -- nothing to switch between
 
   for (const f of frames) {
