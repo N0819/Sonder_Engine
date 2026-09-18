@@ -79,6 +79,23 @@ NEED_REASONS = (
     # hull nudging the Murrow jetty at turn 13, and every later page put her
     # in the cabin she had left.
     "transit_destination_unplanned",
+    # A thread being told OFF SCREEN has stopped going anywhere. A body in a
+    # causality bubble (`world/spatial_bubbles.py`) spends a beat of its own
+    # every turn, and `agents/offscreen_beat` files this when several of them
+    # in a row leave it standing in the same room. Measured live (Aldermill,
+    # `google/gemini-3.8-flash`, 2026-09-17): a companion walked east toward a
+    # watermill on four consecutive beats of her own -- "trudges steadily
+    # eastward along the packed cart ruts" -- and never arrived, because the
+    # mill was in the scenario's prose and in no plan anywhere. Her frame held
+    # sixteen rooms and not one of them was it. The Director was right to
+    # refuse to move her; there was nowhere to put her, and NOTHING SAID SO.
+    #
+    # The engine reports the FACT it holds -- this body has not moved in N of
+    # its own beats -- and nothing more. What she is trying to reach is her
+    # own words, carried verbatim in the surface for the Room to read; reading
+    # it here would be the engine parsing prose for a place name, which is the
+    # failure mode AGENTS.md spends a section on.
+    "offscreen_thread_stalled",
 )
 
 NEED_STATUSES = ("open", "filled", "closed")

@@ -1109,3 +1109,106 @@ class TestTheBubbleIsNotACulDeSac:
         after = set((wget_for_frame(chat_id, "scene", None, {})
                      .get("rooms") or {}))
         assert after == before
+
+
+# ======================================= 12. a thread that stops going anywhere
+
+
+class TestAStalledThreadSaysSo:
+    """The failure the town run left with no trace at all.
+
+    Measured live (Aldermill, `google/gemini-3.8-flash`, 2026-09-17): a
+    companion walked east toward a watermill on four consecutive beats of her
+    own -- *"trudges steadily eastward along the packed cart ruts"* -- and
+    never arrived, because the mill was in the scenario's prose and in no plan
+    anywhere. `state_diff.positions` was null every time and the Director was
+    right: there was nowhere to put her. Nothing anywhere noticed.
+
+    The engine reports the FACT it holds -- this body has not moved in three
+    of its own beats -- and carries her own words for the Room to read. It
+    reads none of them itself.
+    """
+
+    def _beats(self, chat_id, bubble, rooms, first=4):
+        from agents.offscreen_beat import note_beat_movement
+
+        out = []
+        for i, room in enumerate(rooms):
+            before = {"Hinami": rooms[i - 1]} if i else {"Hinami": rooms[0]}
+            out.append(note_beat_movement(chat_id, bubble, first + i,
+                                          before, {"Hinami": room}))
+        return out
+
+    def test_standing_still_three_beats_running_is_said_out_loud(self, temp_db):
+        from world.planning_needs import open_planning_needs
+
+        chat_id, _ = _story(temp_db)
+        bubble = _reconcile(chat_id, None, 3)[0]["child_frame_id"]
+
+        said = self._beats(chat_id, bubble, ["market", "market", "market"])
+        assert said[-1] == ["Hinami"]
+
+        needs = open_planning_needs(chat_id, frame_id=bubble, kind="room")
+        stalled = [n for n in needs
+                   if n["reason"] == "offscreen_thread_stalled"]
+        assert len(stalled) == 1
+        assert stalled[0]["surface"]["who"] == "Hinami"
+        assert stalled[0]["surface"]["room"] == "market"
+
+    def test_two_beats_is_not_a_stall(self, temp_db):
+        """Standing still is ordinary -- waiting, working, talking, sleeping
+        are all a beat spent where you are. The threshold is what separates a
+        person at rest from a thread that has stopped."""
+        from world.planning_needs import open_planning_needs
+
+        chat_id, _ = _story(temp_db)
+        bubble = _reconcile(chat_id, None, 3)[0]["child_frame_id"]
+
+        assert self._beats(chat_id, bubble, ["market", "market"]) == [[], []]
+        assert [n for n in open_planning_needs(chat_id, frame_id=bubble)
+                if n["reason"] == "offscreen_thread_stalled"] == []
+
+    def test_a_body_that_is_walking_is_never_stalled(self, temp_db):
+        from world.planning_needs import open_planning_needs
+
+        chat_id, _ = _story(temp_db)
+        bubble = _reconcile(chat_id, None, 3)[0]["child_frame_id"]
+
+        self._beats(chat_id, bubble, ["market", "attic", "market", "attic"])
+        assert [n for n in open_planning_needs(chat_id, frame_id=bubble)
+                if n["reason"] == "offscreen_thread_stalled"] == []
+
+    def test_the_need_carries_her_own_words_unparsed(self, temp_db):
+        """What she is trying to reach is her sentence, handed over whole.
+        Reading it here for a place name would be the engine deciding what a
+        sentence is about, which is the failure AGENTS.md spends a section
+        on -- the Room reads prose and this does not."""
+        from story.scene import set_char_state
+        from world.planning_needs import open_planning_needs
+
+        chat_id, hinami = _story(temp_db)
+        bubble = _reconcile(chat_id, None, 3)[0]["child_frame_id"]
+        # `set_char_state` takes the JSON TEXT, which is what the column holds.
+        set_char_state(chat_id, hinami, json.dumps(
+            {"active_state": {"goal": "settle what she is owed at the mill"}}),
+            frame_id=bubble)
+
+        self._beats(chat_id, bubble, ["market", "market", "market"])
+        need = [n for n in open_planning_needs(chat_id, frame_id=bubble)
+                if n["reason"] == "offscreen_thread_stalled"][0]
+        assert need["surface"]["aim"] == "settle what she is owed at the mill"
+        assert need["subject"] == "settle what she is owed at the mill"
+
+    def test_the_beat_is_recorded_whether_or_not_it_stalled(self, temp_db):
+        """The count is DERIVED from the log rather than kept beside it: a
+        second row holding "how many in a row" would be the same fact stored
+        twice and free to disagree with the first."""
+        chat_id, _ = _story(temp_db)
+        bubble = _reconcile(chat_id, None, 3)[0]["child_frame_id"]
+        self._beats(chat_id, bubble, ["market", "attic"])
+
+        log = wget_for_frame(chat_id, "offscreen_log", bubble, []) or []
+        beats = [e for e in log if e.get("kind") == "offscreen_beat"]
+        assert len(beats) == 2
+        assert beats[-1]["moved"] == ["Hinami"]
+        assert beats[-1]["where"] == {"Hinami": "attic"}

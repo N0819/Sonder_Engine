@@ -27,7 +27,7 @@
 | `agents/loops.py` | 1529 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/mapping.py` | 665 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `mind.memory`, `story.scene`, `world.spatial` |
 | `agents/narration.py` | 2739 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
-| `agents/offscreen_beat.py` | 204 |  | — |
+| `agents/offscreen_beat.py` | 306 |  | — |
 | `agents/perception.py` | 6820 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
 | `agents/runtime.py` | 1735 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 103 | Step and active-variant persistence helpers. | `core.db`, `persist.steps` |
@@ -192,7 +192,7 @@
 | `world/paradox.py` | 655 |  | `core.db`, `core.frames`, `story.character_schema`, `world.spatial` |
 | `world/place_purpose.py` | 554 |  | `mind.theory_of_mind`, `world.comfort`, `world.spatial`, `world.survival` |
 | `world/planned_entities.py` | 370 |  | `core.db` |
-| `world/planning_needs.py` | 391 |  | — |
+| `world/planning_needs.py` | 408 |  | — |
 | `world/region_events.py` | 461 |  | — |
 | `world/regions.py` | 586 |  | `world.spatial` |
 | `world/routines.py` | 257 |  | `world.day_cycle` |
@@ -483,11 +483,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `schedule_offscreen_beats()` | 137 | 38 lines |
-| `offscreen_interpretation()` | 68 | 32 lines |
-| `run_offscreen_beat()` | 177 | 28 lines |
-| `is_offscreen_beat()` | 102 | 21 lines |
-| `live_bubbles()` | 125 | 10 lines |
+| `note_beat_movement()` | 229 | 43 lines |
+| `schedule_offscreen_beats()` | 150 | 38 lines |
+| `run_offscreen_beat()` | 190 | 37 lines |
+| `_file_stalled_needs()` | 274 | 33 lines |
+| `offscreen_interpretation()` | 81 | 32 lines |
+| `is_offscreen_beat()` | 115 | 21 lines |
+| `live_bubbles()` | 138 | 10 lines |
 
 ### `agents/perception.py`
 
@@ -2360,14 +2362,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `normalize_need()` | 127 | 57 lines |
-| `_fold_need()` | 241 | 27 lines |
-| `record_planning_needs()` | 283 | 26 lines |
-| `drain_planning_needs()` | 340 | 25 lines |
-| `schedule_planning_needs()` | 367 | 25 lines |
-| `planning_need()` | 186 | 17 lines |
-| `fill_planning_need()` | 311 | 14 lines |
-| `normalize_planning_needs()` | 205 | 12 lines |
+| `normalize_need()` | 144 | 57 lines |
+| `_fold_need()` | 258 | 27 lines |
+| `record_planning_needs()` | 300 | 26 lines |
+| `drain_planning_needs()` | 357 | 25 lines |
+| `schedule_planning_needs()` | 384 | 25 lines |
+| `planning_need()` | 203 | 17 lines |
+| `fill_planning_need()` | 328 | 14 lines |
+| `normalize_planning_needs()` | 222 | 12 lines |
 
 ### `world/region_events.py`
 

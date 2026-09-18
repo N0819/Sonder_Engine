@@ -64,6 +64,19 @@ OFFSCREEN_BEATS_ARE_UNCAPPED = True
 #: commits is not stacked on top of itself.
 OFFSCREEN_BEAT_JOB_KEY = "offscreen_beat"
 
+#: How many of a bubble's own beats may leave its body in the same room before
+#: the engine says so. Three rather than one because standing still is
+#: ordinary -- waiting, working, talking, sleeping are all a beat spent where
+#: you are -- and a thread that has not moved three times running while
+#: spending a beat each turn is a different thing from a person at rest.
+#:
+#: It files a NOTE, never a change: an open planning need the Writers' Room
+#: may answer and may not. That is deliberately the weakest possible action --
+#: the two deterministic triggers designed on 2026-08-30 both died the moment
+#: they were replayed against the chat that motivated them, and this one has
+#: been replayed against exactly one story.
+STALLED_AFTER_BEATS = 3
+
 
 def offscreen_interpretation(cast_rows, scene):
     """A `director_interpret` payload for a beat nobody declared.
@@ -197,8 +210,97 @@ def run_offscreen_beat(chat_id, frame_id):
             "INSERT INTO turns(chat_id,idx,player_input,created,frame_id) "
             "VALUES(?,?,?,?,?)", (chat_id, idx, "", time.time(), frame_id))
 
+    from core.db import wget_for_frame
+
+    def _rooms():
+        scene = wget_for_frame(chat_id, "scene", frame_id, {}) or {}
+        return dict(scene.get("positions") or {})
+
+    before = _rooms()
     started = time.time()
     for _ in run_pipeline(chat_id, turn_id, frame_id=frame_id):
         pass
+    after = _rooms()
+    stalled = note_beat_movement(chat_id, frame_id, idx, before, after)
     return {"frame_id": frame_id, "turn_id": turn_id, "idx": idx,
-            "seconds": round(time.time() - started, 1)}
+            "seconds": round(time.time() - started, 1), "stalled": stalled}
+
+
+def note_beat_movement(chat_id, frame_id, turn_idx, before, after):
+    """Record what this beat moved, and say so when nothing has for a while.
+
+    WHAT IT WRITES IS AN OBSERVATION, and the count is DERIVED from it rather
+    than kept beside it: the log already has to carry the beat, and a second
+    row holding "how many in a row" would be the same fact stored twice and
+    free to disagree with the first. `offscreen_log` is frame-scoped, so a
+    bubble's run of beats is its own.
+
+    Returns the names the engine has just called stalled, or [].
+    """
+    from core.db import wget_for_frame, wset_for_frame
+
+    moved = sorted(name for name, room in (after or {}).items()
+                   if (before or {}).get(name) != room)
+    log = wget_for_frame(chat_id, "offscreen_log", frame_id, []) or []
+    log.append({"turn": turn_idx, "kind": "offscreen_beat",
+                "where": dict(after or {}), "moved": moved})
+    wset_for_frame(chat_id, "offscreen_log", log, frame_id)
+
+    # The trailing run of this frame's own beats, newest first, stopping at
+    # anything that is not one: a split or a couple in the middle of the run
+    # is a different stretch of life and not evidence about this one.
+    run = []
+    for entry in reversed(log):
+        if not isinstance(entry, dict) or entry.get("kind") != "offscreen_beat":
+            break
+        run.append(entry)
+    if len(run) < STALLED_AFTER_BEATS:
+        return []
+
+    stuck = []
+    for name, room in (after or {}).items():
+        if not room:
+            continue
+        if all(not (e.get("moved") or []) or name not in (e.get("moved") or [])
+               for e in run[:STALLED_AFTER_BEATS]) and all(
+                   (e.get("where") or {}).get(name) == room
+                   for e in run[:STALLED_AFTER_BEATS]):
+            stuck.append(name)
+    if stuck:
+        _file_stalled_needs(chat_id, frame_id, turn_idx, stuck, after)
+    return sorted(stuck)
+
+
+def _file_stalled_needs(chat_id, frame_id, turn_idx, names, where):
+    """One open need per stalled body, carrying its own words untouched."""
+    from story.scene import active_cast, char_state
+    from story.character_schema import (character_name,
+                                        normalized_character_from_text)
+    from world.planning_needs import file_planning_need, planning_need
+
+    aims = {}
+    for row in active_cast(chat_id, frame_id):
+        name = character_name(normalized_character_from_text(row["sheet"]))
+        if name not in names:
+            continue
+        state = char_state(chat_id, row["id"], frame_id=frame_id) or {}
+        active = state.get("active_state") if isinstance(
+            state.get("active_state"), dict) else {}
+        aims[name] = str(active.get("goal") or "").strip()
+
+    for name in sorted(names):
+        aim = aims.get(name, "")
+        try:
+            need = planning_need(
+                "room", "offscreen_thread_stalled",
+                # HER OWN WORDS, verbatim and unparsed. Reading them for a
+                # place name would be the engine deciding what a sentence is
+                # about; the Room reads prose and this does not.
+                subject=aim or name,
+                surface={"who": name, "room": str((where or {}).get(name) or ""),
+                         "beats": STALLED_AFTER_BEATS, "aim": aim},
+                turn_idx=turn_idx, frame_id=frame_id)
+            file_planning_need(chat_id, need, frame_id=frame_id,
+                               turn_idx=turn_idx)
+        except Exception:                       # noqa: BLE001 - a note, never a beat
+            continue
