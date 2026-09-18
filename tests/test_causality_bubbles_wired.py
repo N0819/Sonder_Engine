@@ -865,7 +865,12 @@ class TestThePlayerlessBeat:
         keys = [k for k, _ in build_plan(interp, cast, chat_id=chat_id,
                                          frame_id=bubble, offscreen=True)]
         assert "narrator" not in keys
-        assert not any(k.startswith("background") for k in keys)
+        # THE BACKGROUND STAGE STAYS. It was dropped with the narrator and
+        # that was wrong: `pick_background_reactors` is what merges derived
+        # charter bodies into the presence set, so without it the town she
+        # walks through can be seen and cannot speak. Self-gating and
+        # LLM-free where there is nobody.
+        assert "background_react" in keys
         assert keys[-1] == "commit", (
             "a beat nobody commits is a beat that did not happen")
         assert "perception_outcome" in keys
@@ -1212,3 +1217,34 @@ class TestAStalledThreadSaysSo:
         assert len(beats) == 2
         assert beats[-1]["moved"] == ["Hinami"]
         assert beats[-1]["where"] == {"Hinami": "attic"}
+
+
+def test_a_charter_body_can_speak_in_a_bubble(temp_db):
+    """The town she walks through must be able to answer her.
+
+    `pick_background_reactors` is the gate that decides who gets a voice this
+    beat, and `with_charter_presences` is what puts derived CHARTER bodies --
+    the townspeople an institution stands at its posts -- into the set it
+    picks from. Both live behind the `background_react` stage, so a plan
+    without that stage is a plan in which a charter body can be perceived and
+    can never say anything. Measured: the Director minted "An Old Carter" into
+    an away frame (filed `rendered_unplanned`) on the first bubble beat of the
+    Aldermill run, and nothing could have given him a line.
+    """
+    from agents.runtime import build_plan
+    from agents.offscreen_beat import offscreen_interpretation
+    from persist.commit_background import with_charter_presences
+
+    chat_id, hinami = _story(temp_db)
+    bubble = _reconcile(chat_id, None, 3)[0]["child_frame_id"]
+    cast = active_cast(chat_id, bubble)
+    interp = offscreen_interpretation(
+        cast, wget_for_frame(chat_id, "scene", bubble, {}) or {})
+
+    keys = [k for k, _ in build_plan(interp, cast, chat_id=chat_id,
+                                     frame_id=bubble, offscreen=True)]
+    assert "background_react" in keys, keys
+    # And the overlay it rests on is reachable for that frame -- an empty town
+    # merely returns an empty set rather than raising, which is what makes the
+    # stage free where there is nobody.
+    assert with_charter_presences(chat_id, {}, frame_id=bubble) == {}

@@ -163,9 +163,16 @@ two stages that exist because somebody is watching:
     `offscreen_interpretation` writes the same shape deterministically: every
     player-owned field empty, and `flow.reactors` naming the minds whose beat
     it is.
-  * No narrator, and no background reactors. Narration is the player-facing
-    slice and nobody is reading it; a page describing her beat is a page that
-    could be shown.
+  * No narrator. Narration is the player-facing slice and nobody is reading
+    it; a page describing her beat is a page that could be shown.
+  * **The background stage stays**, and taking it out was wrong. It went with
+    the narrator on the reasoning that the voice tier answers the demand of a
+    beat somebody is in -- and a bubble's beat IS a beat somebody is in.
+    `pick_background_reactors` is what merges derived CHARTER bodies into the
+    presence set, so without it the town an absent character walks through can
+    be seen and cannot speak: the Director minted "An Old Carter" into her
+    frame on the first bubble beat of the Aldermill run and nothing could have
+    given him a line. Corrected 2026-09-17, on the owner's question.
 
 Everything else is hers as it is anybody's -- her perception from her own
 scene, her character step from her private memory, the Director resolving

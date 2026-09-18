@@ -29,7 +29,7 @@
 | `agents/narration.py` | 2739 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
 | `agents/offscreen_beat.py` | 306 |  | — |
 | `agents/perception.py` | 6820 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
-| `agents/runtime.py` | 1735 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
+| `agents/runtime.py` | 1748 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 103 | Step and active-variant persistence helpers. | `core.db`, `persist.steps` |
 | `agents/story_planner.py` | 1732 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
 | `core/__init__.py` | 6 |  | — |
@@ -508,13 +508,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_run_pipeline()` | 1260 | 368 lines |
-| `build_plan()` | 815 | 163 lines |
+| `_run_pipeline()` | 1273 | 368 lines |
+| `build_plan()` | 815 | 176 lines |
 | `_load_extra_players()` | 53 | 101 lines |
 | `resume_key_for_turn()` | 719 | 95 lines |
 | `_stream_one()` | 482 | 68 lines |
 | `_stream_parallel()` | 551 | 60 lines |
-| `run_pipeline()` | 1679 | 57 lines |
+| `run_pipeline()` | 1692 | 57 lines |
 | `_with_engine_notes()` | 422 | 55 lines |
 
 ### `agents/storage.py`

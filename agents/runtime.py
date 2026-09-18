@@ -924,15 +924,28 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
         # dialogue_log while perception_outcome still injected its actions.
 
     if offscreen:
-        # A BUBBLE'S OWN BEAT STOPS AT THE COMMIT. No narrator, because
-        # narration is the player-facing slice and nobody is reading it --
-        # and a page describing her beat is a page that could be shown, which
-        # is the one way this feature could leak. No background reactors
-        # either: the voice tier answers the demand of a beat somebody is in.
-        # What she did reaches the player the way anything off-screen does,
-        # because she remembers it. See `agents/offscreen_beat.py`.
+        # A BUBBLE'S OWN BEAT STOPS AT THE NARRATOR. Narration is the
+        # player-facing slice and nobody is reading it -- and a page
+        # describing her beat is a page that could be shown, which is the one
+        # way this feature could leak. What she did reaches the player the way
+        # anything off-screen does, because she remembers it.
+        #
+        # THE BACKGROUND STAGE STAYS, and taking it out was wrong. It went out
+        # with the narrator on the reasoning that "the voice tier answers the
+        # demand of a beat somebody is in" -- and a bubble's beat IS a beat
+        # somebody is in: she is in it. `pick_background_reactors` is what
+        # merges derived CHARTER bodies into the presence set
+        # (`with_charter_presences`), so without this stage the town she walks
+        # through can be seen and cannot speak: the Director mints a carter
+        # into her frame, perception shows him to her, and no one can give him
+        # a line. An off-screen life among people who cannot answer is the
+        # thing this feature exists to stop being.
+        #
+        # It costs nothing where there is nobody: the gate is a cheap,
+        # LLM-free check that returns [] for the large majority of beats.
         plan += [
             ("director_resolve", step_label("director_resolve")),
+            (_BG_KEY, _background_stage_label(chat_id)),
             ("perception_outcome", step_label("perception_outcome")),
             # THE COMMIT IS NOT OPTIONAL, and leaving it off is how this was
             # first wrong: the beat ran every stage, resolved her conduct, and
