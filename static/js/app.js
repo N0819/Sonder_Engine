@@ -495,6 +495,7 @@ function wizardFromScratch() {
     el("option", { value: "" }, "— no lorebook —"),
     ...books.map(book => el("option", { value: String(book.id) }, book.name)));
   const lived = livedLocationControl();
+  const preludeCb = el("input", { type: "checkbox" });
   modal("Build story from scratch", body => body.append(
     el("label", { class: "small dim" }, "Story name"), name,
     el("label", { class: "small dim", style: "display:block;margin-top:8px" },
@@ -504,6 +505,8 @@ function wizardFromScratch() {
     el("label", { class: "small dim", style: "display:block;margin-top:8px" },
       "Attach a lorebook (optional)"), lore,
     lived.node,
+    el("label", { class: "row small dim", style: "gap:6px;margin-top:10px" },
+      preludeCb, "Talk to the Writers' Room first"),
     el("div", { class: "row", style: "margin-top:12px" },
       el("button", { onclick: () => closeModal() }, "Cancel"),
       el("span", { class: "spacer" }),
@@ -516,8 +519,20 @@ function wizardFromScratch() {
           try {
             const lorebookId = lore.value ? Number(lore.value) : null;
             const request = lived.read();
-            if (request) await generateStoryLocation(chat.id, request, lorebookId);
-            else if (lorebookId) await attachStoryLorebook(chat.id, lorebookId);
+            // A PRELUDE BUILDS NOTHING YET (`docs/design/DESIGN_ROOM_PRELUDE.md`):
+            // the lived-location request is recorded and the Room reads the
+            // scenario and asks. `/begin` is what generates the place, from
+            // a brief the Room writes once it has the answer.
+            if (preludeCb.checked) {
+              if (lorebookId) await attachStoryLorebook(chat.id, lorebookId);
+              await api("POST", `/api/chats/${chat.id}/prelude`,
+                { lived_location: request });
+              chat.prelude = true;
+            } else if (request) {
+              await generateStoryLocation(chat.id, request, lorebookId);
+            } else if (lorebookId) {
+              await attachStoryLorebook(chat.id, lorebookId);
+            }
             return chat;
           } catch (error) {
             await discardFailedStorySetup(chat);
@@ -528,6 +543,7 @@ function wizardFromScratch() {
             closeAllModals();
             await boot();
             await openChat(chat.id);
+            if (chat.prelude) window.roomOpen?.(true);
           },
           successMessage: "Story ready.",
           errorPrefix: "Couldn't set up story"
@@ -701,12 +717,15 @@ function renderWizardScenario(b, state) {
     characterHistories: state.livedLocation?.character_histories || []
   });
   const historyCount = wizardHistoryCharacters(state).length;
+  const preludeCb = el("input", {
+    type: "checkbox", ...(state.prelude ? { checked: "" } : {}) });
   const capture = () => {
     state.name = nameIn.value.trim();
     state.scenario = scenIn.value.trim();
     state.language = language.value || "en";
     state.lorebookId = lore.value ? Number(lore.value) : null;
     state.livedLocation = lived.read();
+    state.prelude = preludeCb.checked;
   };
 
   b.append(
@@ -718,6 +737,8 @@ function renderWizardScenario(b, state) {
       "Attach a lorebook (optional)"),
     lore,
     lived.node,
+    el("label", { class: "row small dim", style: "gap:6px;margin-top:10px" },
+      preludeCb, "Talk to the Writers' Room first"),
     historyCount > 16
       ? el("div", { class: "small dim", style: "margin-top:7px" },
           "A lived-location start can prepare at most 16 full characters at once. "
@@ -785,8 +806,9 @@ async function runWizard(state) {
           already_known_cast: state.castKnowsEachOther
         });
       }
+      let locationRequest = null;
       if (state.livedLocation) {
-        const locationRequest = { ...state.livedLocation };
+        locationRequest = { ...state.livedLocation };
         locationRequest.character_histories = (
           state.livedLocation.character_histories || []).flatMap(row => {
             const charId = historyCharacterIds.get(String(row.key));
@@ -797,8 +819,18 @@ async function runWizard(state) {
               events: row.events
             }] : [];
           });
-        await generateStoryLocation(
-          chat.id, locationRequest, state.lorebookId);
+      }
+      // A PRELUDE BUILDS NOTHING YET (`docs/design/DESIGN_ROOM_PRELUDE.md`).
+      // The lorebook is attached either way -- it is what the Room reads to
+      // answer with -- and the place is generated at `/begin`, from a brief
+      // the Room writes once the player has said what they want.
+      if (state.prelude) {
+        if (state.lorebookId) await attachStoryLorebook(chat.id, state.lorebookId);
+        await api("POST", `/api/chats/${chat.id}/prelude`,
+          { lived_location: locationRequest });
+        chat.prelude = true;
+      } else if (locationRequest) {
+        await generateStoryLocation(chat.id, locationRequest, state.lorebookId);
       } else if (state.lorebookId) {
         await attachStoryLorebook(chat.id, state.lorebookId);
       }
@@ -811,6 +843,7 @@ async function runWizard(state) {
     onSuccess: async chat => {
       await boot();
       await openChat(chat.id);
+      if (chat.prelude) window.roomOpen?.(true);
     },
     successMessage: "Story ready.",
     errorPrefix: "Couldn't set up story"

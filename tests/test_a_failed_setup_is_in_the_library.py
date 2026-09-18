@@ -279,7 +279,13 @@ def test_a_failed_start_refreshes_the_library_that_shows_it():
     editors = (ROOT / "static/js/editors.js").read_text(encoding="utf-8")
 
     start = editors.index("/api/characters/${character.id}/start")
-    block = editors[start:start + 1400]
+    # WIDENED when the prelude put a branch in `onSuccess`
+    # (`docs/design/DESIGN_ROOM_PRELUDE.md`, 2026-09-17). The window is a
+    # character count over source, so anything added ABOVE `onError` pushes
+    # the call this test is about out of view and fails it for a reason that
+    # has nothing to do with what it checks. It stays a window rather than a
+    # parse because what it is pinning is one call's own handlers.
+    block = editors[start:start + 1800]
     assert "onError" in block, "the quick start does not refresh on failure"
     # The comment above it is long on purpose; the call is what matters.
     assert "boot()" in block.split("onError", 1)[1][:1200]

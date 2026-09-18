@@ -53,6 +53,7 @@ from persist.steps import active_mapping, active_mappings
 from core.frames import create_frame, get_frame, list_frames
 from world import paradox
 from story import greetings
+from story.prelude import awaiting_begin
 from agents import (
     run_pipeline, request_abort, begin_pipeline,
     active_content, ABORTS, PipelineBusyError,
@@ -3165,7 +3166,13 @@ def character_start_story(cid: int, body: dict = Body(default={})):
             language=_require_story_language(body.get("language")),
             lived_location=(body.get("lived_location")
                             if isinstance(body.get("lived_location"), dict)
-                            else None))
+                            else None),
+            # THE ROOM FIRST, IF THE PLAYER ASKED FOR IT
+            # (`docs/design/DESIGN_ROOM_PRELUDE.md`): the story is created
+            # and stops at the door with the Writers' Room holding the
+            # floor. `turn_id` is None then, and the client opens the room
+            # panel instead of the first beat.
+            prelude=bool(body.get("prelude")))
     except ValueError as exc:
         # A QUICK START THAT FAILS SAYS SO IN THE LOG, WITH THE LINE THAT
         # RAISED IT. Every `ValueError` out of this call graph used to become
@@ -3214,7 +3221,71 @@ def character_start_story(cid: int, body: dict = Body(default={})):
     row = q("SELECT sheet FROM characters WHERE id=?", (cid,), one=True)
     warnings = character_card_warnings(
         normalize_character_data(json.loads(row["sheet"] or "{}"))) if row else []
-    return {"chat_id": chat_id, "turn_id": turn_id, "warnings": warnings}
+    return {"chat_id": chat_id, "turn_id": turn_id, "warnings": warnings,
+            "prelude": turn_id is None}
+
+
+@app.post("/api/chats/{cid}/prelude")
+def chat_prelude(cid: int, body: dict = Body(default={})):
+    """Hold a scenario chat at the door and give the Writers' Room the floor
+    (`docs/design/DESIGN_ROOM_PRELUDE.md`).
+
+    The greeting quick start takes its prelude inside the launch itself
+    (`prelude` on `/api/characters/{id}/start`), because there the chat does
+    not exist until the launch makes it. A scenario chat already exists by
+    the time its ground is decided, so its prelude is this: record the
+    lived-location request the wizard would have posted straight to
+    `/charters/generate`, and let the Room read the scenario and ask.
+    Nothing is generated until `POST /api/chats/{cid}/begin`."""
+    from story.prelude import record_prelude, record_setup
+
+    chat = q("SELECT * FROM chats WHERE id=?", (cid,), one=True)
+    if not chat:
+        raise HTTPException(404, "Chat not found")
+    if q("SELECT id FROM turns WHERE chat_id=? LIMIT 1", (cid,), one=True):
+        raise HTTPException(409, "this story has already begun")
+    lived = body.get("lived_location")
+    record_setup(cid, "scenario",
+                 {"lived_location": lived if isinstance(lived, dict) else None})
+    from agents.story_planner import run_prelude
+    with story_language_scope(cid):
+        asked = run_prelude(
+            cid, None, passage=str(chat["scenario"] or ""),
+            location_requested=bool(isinstance(lived, dict)
+                                    and lived.get("enabled", True)))
+    record_prelude(cid, asked=asked, at=time.time(), began=0.0)
+    return {"chat_id": cid, "asked": asked}
+
+
+@app.post("/api/chats/{cid}/begin")
+def chat_begin(cid: int):
+    """The player said go: run the launch the prelude was holding open
+    (`story/prelude.begin_story`).
+
+    The same button on both launches. A greeting resumes its quick start
+    through to turn 0 and returns the turn; a scenario chat builds its
+    ground and returns none, because its first beat is the player's to
+    write."""
+    from story.prelude import begin_story
+
+    if not q("SELECT id FROM chats WHERE id=?", (cid,), one=True):
+        raise HTTPException(404, "Chat not found")
+    _require_frame_idle(cid, None)
+    try:
+        return begin_story(cid)
+    except ValueError as exc:
+        _pipeline_logger.exception("begin failed for story %s: %s", cid, exc)
+        raise HTTPException(
+            404 if str(exc).endswith("not found") else 422, str(exc)) from exc
+    except providers.LLMError as exc:
+        _pipeline_logger.exception("begin LLM failure for story %s: %s", cid, exc)
+        raise HTTPException(502, _lived_location_llm_detail(exc)) from exc
+    except RuntimeError as exc:
+        _pipeline_logger.exception("begin failed for story %s: %s", cid, exc)
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:
+        _pipeline_logger.exception("begin failed for story %s: %s", cid, exc)
+        raise
 
 @app.post("/api/characters/{cid}/recover_greetings")
 def char_recover_greetings(cid: int):
@@ -4390,6 +4461,13 @@ def chat_get(cid: int, since_turn_id: int | None = None):
         "lorebooks": books,
         "frames": list_frames(cid),
         "embedding_bank": bank,
+        # THE ROOM HAS THE FLOOR AND THE STORY HAS NOT BEGUN
+        # (`docs/design/DESIGN_ROOM_PRELUDE.md`). Served on every read
+        # rather than on its own route because it governs what the chat
+        # view IS -- a prelude shows the Room and a begin button where a
+        # running story shows the composer -- and a second fetch to decide
+        # that would render the wrong thing first.
+        "awaiting_begin": awaiting_begin(cid),
     }
 
 @app.post("/api/chats/{cid}/characters")
@@ -6230,6 +6308,16 @@ def turn_new(cid: int, body: dict = Body(...), detach: int = 0):
             raise HTTPException(404, f"Frame {frame_id} not found")
     _require_frame_idle(cid, frame_id)
     _require_turn_resolved(cid, frame_id)
+    # A STORY THE ROOM IS STILL HOLDING HAS NO FIRST BEAT YET
+    # (`docs/design/DESIGN_ROOM_PRELUDE.md`). Refused rather than begun
+    # implicitly: begin generates a lived-in place and can take a minute,
+    # and a player who typed a line into the composer asked for a beat, not
+    # for a town. The client hides the composer behind the begin button, so
+    # this is the floor under that, not the path anybody walks.
+    if awaiting_begin(cid):
+        raise HTTPException(
+            409, "this story has not begun yet -- the Writers' Room is "
+                 "waiting on you (POST /api/chats/%d/begin)" % cid)
     # Claim the pipeline slot (the atomic race-closing gate) BEFORE creating
     # the turn row: a 409-losing request must not leave a stepless orphan
     # turn that then blocks the frame. run_pipeline reuses this abort.

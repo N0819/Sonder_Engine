@@ -62,6 +62,11 @@ const ROOM_STORE = {
 // stored English line translates on render. tests/test_room_routes.py holds
 // this spelling and story/room_conversation.UNSEATED_LINE together.
 const ROOM_UNSEATED_LINE = "The Story Planner is not seated yet. Your note is kept for it; nothing has been planned.";
+// The prelude's fallback question (story/prelude.PRELUDE_FALLBACK_LINE),
+// spelled here for the same reason: it is what the Room asks when it could
+// not write its own line, and it is stored in the thread in English.
+// tests/test_room_prelude.py holds this spelling and the module's together.
+const ROOM_PRELUDE_FALLBACK_LINE = "Before we open this one: is there anything in particular you want from this story -- a place, a mood, something you want waiting there? Say so, or just begin and I will work from the page.";
 // The seated Planner's own fixed lines (agents/story_planner.py), spelled
 // here for the same reason: a bounded-out reply, an empty status, the fill
 // job waiting on a grant, and a rewind under the room's work.
