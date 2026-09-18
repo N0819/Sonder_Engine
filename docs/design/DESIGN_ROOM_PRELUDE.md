@@ -194,6 +194,38 @@ in the library, marked, with its retry (2026-09-08) -- and the `location_plan`
 row says what the Room had drafted when it stopped, so the author can decide
 whether to ask for less.
 
+## 4a. What the first live run found (2026-09-17)
+
+One greeting quick start, chat 149, the first time any of this ran against a
+real launch. It found one defect, and it is this note's own:
+
+**The planner was handed the wrong argument, and nothing short of running it
+could have said so.** `room_town_planner(cid)` returned a callable taking a
+PAYLOAD; `_plan_lived_location` called it with `closure_inputs` to obtain the
+model call. So the Room ran with the closure as its payload -- no
+`author_brief`, no lore, no constraints -- designed fourteen rooms and two
+institutions out of nothing over 249 seconds and eight calls, submitted them,
+and handed back a plan that `propose_town` then tried to CALL: `TypeError:
+'dict' object is not callable`. The launch failed, the story was kept and
+marked as the failed-setup path intends, and 249 seconds of authoring was
+thrown away. Two curried arguments of different meanings is what made the
+mistake available; the contract is now `(payload, closure) -> plan`, both at
+the call.
+
+The test that was supposed to cover this checked that the SOURCE contained
+`room_town_planner` and `town_planner=`. It did. Every name in the broken
+wiring was spelled correctly, which is the whole lesson: the seam is now
+exercised (`test_the_planner_is_handed_the_towns_payload_and_its_plan_is_used`),
+and reverting either half of the fix reproduces the exact `TypeError`.
+
+**What the run did say about the budget**, with the caveat that the pass had
+nothing to read: eight calls, six steps, 249.5 seconds, submitted -- against
+40 steps and 900 seconds. Response tokens per call ranged from 320 to 10,708,
+and the two calls that drafted the map and the institutions were 93s and
+101s. A pass with a real brief and lore to read will make more calls than
+this one did, so the headroom is not as large as 8-of-40 suggests, and it has
+still not been measured on the path that works.
+
 **What it costs and what it buys.** The budget is 40 steps / 900 seconds, the
 largest of the four launch regimes, against a one-shot that had one attempt
 and a 16,000-token ceiling it regularly spent on a reasoning trace. Per call
