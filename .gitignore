@@ -51,6 +51,13 @@ scene_chat*.json
 # diagnostics, same class as the trace files above.
 tools/paragraph_bench_last.json
 tools/narrator_package_bench_last.json
+# Run output: a drive's scratch database and whatever prose it rendered --
+# same class again, and the directory a run is told to write to. Ignored
+# rather than kept local by habit, because the harnesses now write here on
+# purpose: a 30-round run's databases, JSON and two rendered stories lived in
+# the session scratchpad and were reaped under memory pressure, which cost
+# ninety minutes and taught the lesson once.
+output/
 
 # Written into the agent worktree by the assistant sync script.
 SYNCED.txt
