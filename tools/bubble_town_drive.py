@@ -147,6 +147,45 @@ def main():
     seed_providers(db, args.model)
     cid, char_id = build_story(db)
 
+    # THE ROOM DESIGNS THE TOWN, which is what `room-plans-the-opening`
+    # rebuilt and what this branch exists to measure. `run_location_plan`
+    # drafts the map, each institution and the prehistory across multiple tool
+    # calls, closes the draft against the real `close_plan`, and submits --
+    # replacing the single `utility` call that produced, on `writers-room`,
+    # one institution with eight posts and zero bodies in 309 seconds.
+    #
+    # It is also §7's owed measurement: nothing here had run against a real
+    # launch, so the wall clock and the round-trip count below are the first
+    # of them.
+    from agents.story_planner import room_town_planner, seat
+    from language_runtime import story_language_scope
+    from story import room_conversation as room
+    from world.charter_runtime import generate_lived_location
+
+    seat()
+    assert room.planner_seated(), "the planner must be seated to answer"
+
+    print("the Room is designing Aldermill...", flush=True)
+    started = time.time()
+    built = None
+    try:
+        with story_language_scope(cid):
+            built = generate_lived_location(
+                cid,
+                {"lore": [SCENARIO],
+                 "brief": "Aldermill itself: the mill, the market square, the "
+                          "smithy, the inn, and the people who keep them",
+                 "scale": "village", "population": 40,
+                 "generate_history": True, "horizon_hours": 72.0},
+                town_planner=room_town_planner(cid))
+    except Exception as exc:                       # noqa: BLE001 - reported
+        print("  the design FAILED: %s: %s" % (type(exc).__name__,
+                                               str(exc)[:200]), flush=True)
+    design_seconds = round(time.time() - started, 1)
+    print("  designed in %.1fs (built=%s)" % (design_seconds, bool(built)),
+          flush=True)
+    print("  town:", json.dumps(charter_view(cid, None))[:900], flush=True)
+
     # THE STORY PLANNER PLANS THE GROUND the story opens on, which is the
     # half of "a town made by the planner" that works today.
     from agents.story_planner import run_opening_plan
@@ -161,55 +200,6 @@ def main():
         len((plan or {}).get("published") or []),
         ((plan or {}).get("error") or "")[:120]), flush=True)
 
-    # WHY THE POPULATION IS NOT THE PLANNER'S, and it was meant to be.
-    #
-    # Measured here, 2026-09-17, three attempts:
-    #   * The OPENING plan cannot make people. `opening_plan.OPENING_CAPABILITIES`
-    #     is ("plan_rooms", "place_at_opening", "director_note") -- the rooms
-    #     the passage needs and where each present body stands, and nothing
-    #     about who else lives here. Eleven planner calls, one package, and a
-    #     town with no institutions, no figures and no crowd.
-    #   * Asked the ordinary way -- the host talking to the Writers' Room, with
-    #     a granted mandate covering `create_people`, `author_prehistory` and
-    #     `presimulate` -- the Room worked for 309 seconds and produced ONE
-    #     institution with EIGHT POSTS AND ZERO BODIES. Jobs, and nobody in
-    #     them.
-    #   * (And before that, 0.0 seconds and an empty reply, because the planner
-    #     is seated by `web/app.py` at import and a harness that never imports
-    #     the app is talking to `unseated_planner`.)
-    #
-    # So the population comes from the engine's own generated world instead
-    # (`tests/charter_worlds.small_town`), which exists for exactly this: "a
-    # dozen rooms a body can be watched walking across... every charter place
-    # IS a room id, so `charter_move` takes its scene branch". The town is
-    # therefore ENGINE-made, not Room-made, and the finding above is the
-    # honest reason. What this run measures is unaffected: the question is what
-    # an absent character does among charter bodies, not who authored them.
-    sys.path.insert(0, os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tests"))
-    from charter_worlds import small_town
-    from world.charter import normalize_charter, seed_needs, seed_roster
-    from world.charter_runtime import save_registry
-
-    town = small_town()
-    state = normalize_charter(json.loads(json.dumps(town)))
-    # `seed_roster`/`seed_needs` take the BODIES, not the charter
-    # (`tests/test_charter_authored_hours` is the working order).
-    state["roster"] = seed_roster(state["bodies"])
-    state["needs"] = seed_needs(state["bodies"])
-    save_registry(cid, {"items": {"aldermill": {"state": state}}})
-    db.wset(cid, "scene", {
-        "location": "Aldermill",
-        "time": "morning",
-        "rooms": json.loads(json.dumps(town["scene"]["rooms"])),
-        # The player in the square, the companion in the market beside it --
-        # one room apart, so she is IN the beat until she walks.
-        "positions": {"Corm": "square", "Sal Weatherby": "market"},
-        "entities": {}, "attire": {}, "overlays": {}, "comms": {},
-        "contacts": [],
-    })
-    print("  populated town:", json.dumps(charter_view(cid, None))[:900], flush=True)
-
     from tools.bubble_drive import play
 
     played = play(db, cid, char_id, BEATS[:args.beats])
@@ -220,6 +210,7 @@ def main():
 
     report = {"model": args.model, "chat_id": cid, "character_id": char_id,
               "town": charter_view(cid, None),
+              "design_seconds": design_seconds,
               "opening_plan": opening,
               "beats": played, "final": observe(db, cid, char_id)}
     if args.out:
