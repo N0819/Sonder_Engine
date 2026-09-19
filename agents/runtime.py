@@ -1338,7 +1338,25 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
         # that stays true of a restore that one day is not.
         drop_body_condition_caches(ctx)
 
-    establishment = (turn_row["idx"] == 0)
+    from agents.offscreen_beat import is_offscreen_beat
+
+    # A BUBBLE'S BEAT IS NEVER AN OPENING. `idx == 0` means the opening
+    # everywhere else, because everywhere else turn 0 is the beat a story
+    # starts on -- but an offscreen beat (`agents/offscreen_beat.py`) can BE
+    # turn 0 in a world that has no player to open on, and the opening plan is
+    # the wrong plan for it in three ways at once: it PLACES THE PLAYER, it
+    # dresses them, and it renders a narrator page for a frame nobody reads.
+    #
+    # Measured (the two-lives run, 2026-09-18): a town stood up with no player
+    # and two characters put straight into bubbles, and the first bubble beat
+    # ran `director_establish`, which wrote `positions: {"Nobody":
+    # "market_square"}` and an attire ledger for them. The persona existed
+    # only because a chat needs a row for one. The other character then
+    # perceived it and dismissed it in his own words -- "someone stood idly
+    # near the stones, unremarkable and inert, watching the empty air" -- which
+    # is a person the story does not have, rendered as one.
+    establishment = (turn_row["idx"] == 0
+                     and not is_offscreen_beat(chat_id, turn_row))
 
     # A checkpoint is a snapshot of the WHOLE chat's world table (every
     # frame's rows) at one moment in play order. Restoring it wipes and
@@ -1545,7 +1563,6 @@ def _run_pipeline(chat_id, turn_id, from_key=None, only_key=None):
             step_label("director_interpret"), 0, ctx,
             variant_count(turn_id, "director_interpret"))
 
-    from agents.offscreen_beat import is_offscreen_beat
     plan = build_plan(ctx["director_interpret"], cast_rows, chat_id=chat_id,
                       frame_id=turn_row["frame_id"],
                       extra_players=ctx.extra_players,

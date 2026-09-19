@@ -1248,3 +1248,57 @@ def test_a_charter_body_can_speak_in_a_bubble(temp_db):
     # merely returns an empty set rather than raising, which is what makes the
     # stage free where there is nobody.
     assert with_charter_presences(chat_id, {}, frame_id=bubble) == {}
+
+
+def test_a_bubble_beat_is_never_an_opening(temp_db):
+    """`idx == 0` means the opening everywhere else, and must not here.
+
+    Everywhere else turn 0 IS the beat a story starts on. An offscreen beat can
+    be turn 0 in a world with no player to open on -- and the opening plan is
+    the wrong plan for it in three ways at once: it places the player, it
+    dresses them, and it renders a narrator page for a frame nobody reads.
+
+    Measured (the two-lives run, 2026-09-18): a town stood up with no player
+    and two characters put straight into bubbles. The first bubble beat ran
+    `director_establish`, which wrote `positions: {"Nobody": "market_square"}`
+    and an attire ledger for a persona that existed only because a chat needs
+    a row for one. The other character then perceived it and dismissed it in
+    his own words -- "someone stood idly near the stones, unremarkable and
+    inert, watching the empty air" -- a person the story does not have,
+    rendered as one.
+    """
+    import inspect
+
+    from agents import runtime
+    from agents.offscreen_beat import is_offscreen_beat
+
+    chat_id, hinami = _story(temp_db)
+    bubble = _reconcile(chat_id, None, 3)[0]["child_frame_id"]
+
+    # Turn 0, in a bubble, with no player input: an offscreen beat by the
+    # derivation, whatever its index says.
+    tid = temp_db.qi(
+        "INSERT INTO turns(chat_id,idx,player_input,created,frame_id) "
+        "VALUES(?,?,?,?,?)", (chat_id, 0, "", time.time(), bubble))
+    row = temp_db.q("SELECT * FROM turns WHERE id=?", (tid,), one=True)
+    assert is_offscreen_beat(chat_id, row) is True
+
+    # The branch reads BOTH, and the order matters: the index alone used to
+    # decide, before anything asked whose beat it was.
+    source = inspect.getsource(runtime._run_pipeline)
+    assert 'establishment = (turn_row["idx"] == 0' in source
+    assert "not is_offscreen_beat(chat_id, turn_row)" in source
+
+
+def test_an_ordinary_turn_zero_is_still_an_opening(temp_db):
+    """The paired case, so a fix that simply stopped establishing cannot pass:
+    a turn 0 somebody typed into is the opening it has always been."""
+    from agents.offscreen_beat import is_offscreen_beat
+
+    chat_id, _ = _story(temp_db)
+    tid = temp_db.qi(
+        "INSERT INTO turns(chat_id,idx,player_input,created,frame_id) "
+        "VALUES(?,?,?,?,?)", (chat_id, 0, "I come up into the square.",
+                              time.time(), None))
+    row = temp_db.q("SELECT * FROM turns WHERE id=?", (tid,), one=True)
+    assert is_offscreen_beat(chat_id, row) is False
