@@ -1,5 +1,122 @@
 # Changelog
 
+## alpha 10.1.0 — A character who walks away gets a life, and the world answers
+
+Twenty commits since 10.0.1, most of them found by launching stories with no
+player in them and reading what the characters actually got.
+
+**A character outside the player's reach gets a frame of their own.** Until
+this, walking away was a pause: her scene was preserved exactly as she left it
+and she stood in it, beat after beat, until somebody played her. Measured
+before it landed (the Millbrook run, 2026-09-17): a courier crossed to the far
+shore and stood on the landing for three player beats, her frame's scene
+byte-identical each time, and formed not one memory. The trigger is RANGE and
+not a declared zone — a cast body the beat does not attend to has left, read
+off the same set the Director is shown so the payload and the range cannot
+drift. Her beat runs the ordinary pipeline minus the two stages that exist
+because a player is watching: no interpret call, because there is no declared
+line to read, and no narrator, because nobody is reading the page and prose no
+eye receives is the one way this could leak. The town can answer her —
+`background_react` belongs to a bubble's beat, since a bubble's beat is a beat
+somebody is in — and a bubble's turn 0 is never treated as an opening, which
+had been placing and dressing a player who did not exist.
+
+**The Writers' Room designs the ground a story opens on.** An inhabited
+location used to be one `utility` call that asked for the whole object at
+once — map, institutions, posts, upkeeps, economy, naming law — with one
+attempt and no way to be told it was wrong; chat 136 spent an entire 16k
+budget on a reasoning trace and returned JSON cut off inside a washroom. It is
+now the Room's work, drafted through tool calls it can be corrected between.
+
+**Claude Code is a provider kind.** A host signed in to Claude Code can play
+under that login with no API key stored in the engine: one call is one
+process, tools and slash commands and MCP off, no session persisted, run in an
+empty scratch directory so no `CLAUDE.md` is discovered. It is a DEVELOPMENT
+backend and the hint and the guide both say so.
+
+### What the world was failing to answer
+
+Four things the engine knew and did not say, each found by reading a beat as
+fiction rather than as a diff.
+
+**A beat now costs what happened in it.** `state_diff.time` belonged to the
+spatial specialist, and a specialist receives the ledger rows selected for it,
+never the beat — so its own sheet asked it for "the sum of its parts" while the
+fan-out handed it a subset of the parts. It declined, which is the correct
+answer to that question. Measured 2026-09-20: the channel was in that hand's
+scope on 38 of 60 playerless beats and 50 of 118 live beats since 2026-09-15
+and was written on 0 of either, while the prose author routed the category 0
+times in 3,000 stored resolve variants. Every beat fell to
+`UNCLAIMED_BEAT_SECONDS = 10.0` — 0.0028 hours against the charter's own "a
+beat is minutes of story" — so after sixty beats the off-screen clock still
+stood at the presim's 72.0 and had never ticked once. The ask moved to the
+agent that cuts the steps: each ledger row carries `seconds`, and code sums
+them. Verified in play: 24 of 24 beats priced, durations 2–15s against a 10s
+floor, and the charter clock advancing for the first time.
+
+**A thing somebody sets down can be seen.** `scene.entities` had no sight path
+to any composed view at all: the furniture reader answers for a room's
+ANCHORS, and perception's only walk over scene entities was the scent loop,
+gated on `entity.scent`. A thing reached a mind only through a channel that
+owned it for some other reason — attire, a pose, a contact, a smell. Measured:
+Sal Weatherby laid a copper coin on a taproom counter, the commit recorded it
+exactly, the coin appeared in **0 of her 24 views**, and two beats later her
+own view named the host's coin pouch and not her coin, so she drew a second
+coin and paid twice. A stationed thing inherits the visibility of the anchor it
+stands at, so the cone, the line, the occluder and the light are already
+decided and nothing new judges what an eye reaches.
+
+**The sky reaches the body under it, and a canopy is cover.**
+`weather_for_room` had already reduced the weather per room and per channel —
+can this body see it, is it landing on them, does the wind reach — on its own
+grounds that "a cellar under a downpour sees nothing, feels nothing and may
+still hear it". No mind read any of it: `composer.py` contained the word
+"weather" zero times. A character in a freezing thundersnow gale was told the
+room was dim and that it was loud. Sight and touch now carry it separately,
+hearing is left to the soundscape that already folds rain in, and exposure is
+asked of the STATION rather than the room — a market square is open, so every
+body in it stood in the rain including the one under the stall canopy.
+
+**A planned thing standing where somebody stands becomes real.** The plan
+tier's handoff was "the Director renders a plan when it comes into view", and
+the causal Director's sheet forbids that row in so many words: "initial
+standing descriptions and unchanged background facts are context". A police box
+on sand is not an event, so a plan was rendered only when a body TOUCHED the
+thing — which nobody does to a thing they cannot see. Measured in the owner's
+own story: a granted mandate, a complete plan with a look and three truths,
+both bodies standing in the room it named, and `scene` holding no TARDIS after
+four beats. It is stood up deterministically now, placed on a cell so a map can
+draw it, and the night it stands in is no longer pitch black — the sky's
+account had no moon in it, so a beach whose own weather read "a clear black
+night sky strewn with stars, the full moon high" composed `dark` in every view.
+
+### Simulation reach is gone
+
+The dialogue panel's off-screen cognition ladder and its four living-world
+approaches are retired. Charter, the Writers' Room and causality bubbles
+superseded every rung; the antagonist ladder went last, as the owner's "lesser
+version of the causality bubbles". What replaces the dial is **max open
+threads** — how many bubbles may EXIST, refused at the opening and never by
+pausing an open one, which is a different cap from the one struck down in
+September ("a character should never freeze unless they've been made dormant").
+Room drift, due consequences and a place's owed history are unconditional now,
+on the argument that retired rumour transport before them: a world whose fires
+do not burn down and whose causes do not land is not coherent at any setting.
+
+The retired config KEYS survive, defaulted and unread. Deleting them was tried
+and measured: 120 readers index `offscreen_life` directly, several inside the
+commit path, and turns rolled back. The readers come out first.
+
+### Known failures
+
+**32 tests fail on this tag; 31 of them also fail on 10.0.1** and are the set
+triaged in 10.0.0. The thirty-second,
+`test_charter_registry_cache::test_frames_cache_separately_and_ambient_follows_the_pipeline`,
+is a flake under the parallel runner rather than a regression: it passes in
+isolation at both tags (measured twice each), it failed in one full parallel run
+here and passed in another the same afternoon, and it did not fail in the
+10.0.1 run measured for this release.
+
 ## alpha 10.0.1 — Keep the beat
 
 Five repairs on the day 10.0.0 shipped, every one of them found by launching
