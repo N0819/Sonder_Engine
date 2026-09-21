@@ -1665,6 +1665,14 @@ def director_interpret(ctx, nonce):
             },
             "contacts": causal_contact_rows(sc, _causal_rooms),
         },
+        # A PARADOX UNFOLDING IN THIS FRAME, or None. Carried since alpha 9
+        # on the one payload the Director read; the redesign kept it on the
+        # full context dict above and left it off this lean model payload,
+        # so the author wrote every beat of a consuming hazard blind to it
+        # (`tests/test_paradox.py`, the frame-scoped visibility case). Per
+        # frame by construction: `paradox_visible_to` is a direct lookup of
+        # THIS frame's slot, so an unrelated frame's wound is None here.
+        "paradox": paradox_visible_to(chat["id"], ctx.turn.frame_id),
         "variant_seed": nonce,
     }
     _interpret_model_payload = _extension_director_payload(
@@ -6401,6 +6409,12 @@ def director_resolve(ctx, nonce, _corrections=None):
             "contacts": causal_contact_rows(
                 resolve_sc, _resolve_causal_rooms),
         },
+        # Same restoration as the interpret's lean payload: the resolve
+        # author sees this frame's paradox, or None. The hands do not -- a
+        # paradox's consequences are applied deterministically at commit
+        # (`world.paradox.check_and_apply_paradox`), so the author's prose is
+        # the one place the beat has to KNOW about it.
+        "paradox": paradox_visible_to(chat["id"], ctx.turn.frame_id),
         "variant_seed": nonce,
     }
     _model_payload = _extension_director_payload(
