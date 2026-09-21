@@ -406,43 +406,80 @@ function quotedRegions(hay) {
 // and leaves the punctuation between them uncoloured. Colouring the region a
 // match FALLS IN fixes both: whole line, marks included, however many logged
 // entries it turns out to contain.
+//
+// A LINE THAT ACCOUNTS FOR THE WHOLE QUOTE OUTRANKS A FRAGMENT FOUND INSIDE
+// IT. People repeat each other: a reply quotes the question it answers, a
+// character echoes a word back before going on. Measured on chat 152 turn
+// 4338: the player asked "How does she move?", the Doctor's reply contained
+// "How does she move -- right. The Time Vortex..." verbatim, and the player's
+// line -- never rendered as a quote of its own, because the prose is second
+// person -- matched INSIDE his. Two speakers in one region read as a dispute
+// and his whole speech went uncoloured. The region's text is the tie-break:
+// the line whose body IS the region (marks and terminal punctuation aside)
+// delivered it, and anything else that matched inside is an echo of it. A
+// dispute is only two FRAGMENTS from different speakers in one region --
+// which is the case the rule was written for, and it still stands.
 function speechSpans(prose, speech) {
   const hay = foldTypography(prose);
   const regions = quotedRegions(hay);
-  const claimed = new Map();   // region index -> speaker, or null if disputed
+  // region index -> {speaker, whole}, or null while disputed between fragments
+  const claimed = new Map();
   const loose = [];            // matches that fell outside every region
+
+  // Does the match at [at, end) account for the whole quoted line? The same
+  // normalisation as the stored quote gets, applied to the region's text.
+  const isWhole = (region, at, end) =>
+    quoteBody(hay.slice(region.start, region.end)) === hay.slice(at, end);
 
   for (const line of speech || []) {
     const body = foldTypography(quoteBody(line && line.quote));
     if (body.length < 2) continue;
     // Two characters can legitimately say "No." in one beat, so each line
-    // takes the first occurrence not already claimed by someone else.
+    // takes the first occurrence not already delivered whole by someone else.
     let from = 0;
     for (;;) {
       const at = hay.indexOf(body, from);
       if (at < 0) break;
       const end = at + body.length;
       const idx = regions.findIndex((r) => r.start <= at && end <= r.end);
-      if (idx >= 0) {
-        const held = claimed.get(idx);
-        if (held === undefined) { claimed.set(idx, line.speaker); break; }
-        // Two speakers matching inside one pair of quotes means the match is
-        // not trustworthy. Uncoloured beats coloured-as-the-wrong-person.
-        if (held !== line.speaker) { claimed.set(idx, null); break; }
-        break;  // same speaker again: already covered by the region
+      if (idx < 0) {
+        if (!loose.some((s) => at < s.end && s.start < end)) {
+          loose.push({ start: at, end, speaker: line.speaker });
+          break;
+        }
+        from = at + 1;
+        continue;
       }
-      if (!loose.some((s) => at < s.end && s.start < end)) {
-        loose.push({ start: at, end, speaker: line.speaker });
+      const whole = isWhole(regions[idx], at, end);
+      const held = claimed.get(idx);
+      if (held === undefined) {
+        claimed.set(idx, { speaker: line.speaker, whole });
         break;
       }
-      from = at + 1;
+      if (held && held.speaker === line.speaker) break;  // already covered
+      if (whole && !(held && held.whole)) {
+        // This line IS the quote; what matched before was a fragment of it.
+        claimed.set(idx, { speaker: line.speaker, whole: true });
+        break;
+      }
+      if (whole || (held && held.whole)) {
+        // Someone else delivered these exact words here (both whole), or
+        // this line is an echo inside theirs (they whole, this a fragment):
+        // either way this line's own quote, if rendered, is elsewhere.
+        from = at + 1;
+        continue;
+      }
+      // Two speakers' fragments inside one pair of quotes means the match is
+      // not trustworthy. Uncoloured beats coloured-as-the-wrong-person.
+      claimed.set(idx, null);
+      break;
     }
   }
 
   const spans = loose.slice();
-  for (const [idx, speaker] of claimed) {
-    if (!speaker) continue;
-    spans.push({ ...regions[idx], speaker });
+  for (const [idx, held] of claimed) {
+    if (!held || !held.speaker) continue;
+    spans.push({ ...regions[idx], speaker: held.speaker });
   }
   return spans.sort((a, b) => a.start - b.start)
     .filter((s, i, all) => i === 0 || s.start >= all[i - 1].end);

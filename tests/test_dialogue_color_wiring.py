@@ -13,6 +13,10 @@ meaning "derive it from the card". That distinction is the whole feature --
 """
 
 import json
+import shutil
+import subprocess
+import tempfile
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -247,7 +251,7 @@ class TestTheTintedUnitIsTheQuotedRegion:
         block = js[js.index("function speechSpans("):]
         block = block[:block.index("\n}\n")]
         assert "claimed.set(idx, null)" in block
-        assert "if (!speaker) continue;" in js
+        assert "if (!held || !held.speaker) continue;" in block
 
     def test_terminal_punctuation_is_stripped_before_matching(self):
         """A dialogue tag changes it mechanically: the logged `Right then.`
@@ -296,3 +300,119 @@ def test_two_unpicked_characters_are_pushed_apart(client):
     assert colors["Bram"] != colors["Wren"]
     gap = abs(_hue_of(colors["Bram"]) - _hue_of(colors["Wren"])) % 360.0
     assert min(gap, 360.0 - gap) >= MIN_HUE_SEPARATION
+
+
+# ---- Executing the matcher, not grepping it -------------------------------
+#
+# The same arrangement as `tests/test_frontend_weather_null_payload.py`: the
+# frontend has no bundler, so the pure functions between `_FOLD_PAIRS` and
+# `paintProse` are sliced out of chat.js and run under node. They touch no
+# DOM. Skips without node.
+
+_MATCHER_START = "const _FOLD_PAIRS"
+_MATCHER_END = "// Fills `host` with the prose"
+_MATCHER_HARNESS = """
+const fs = require("fs");
+const src = fs.readFileSync(process.argv[2], "utf8");
+const cases = JSON.parse(fs.readFileSync(process.argv[3], "utf8"));
+const fn = new Function(src + `
+  return (prose, speech) => {
+    const { text } = splitEmphasis(prose);
+    return speechSpans(text, speech)
+      .map((s) => [s.speaker, text.slice(s.start, s.end)]);
+  };`)();
+process.stdout.write(JSON.stringify(cases.map(([p, s]) => fn(p, s))));
+"""
+
+
+def _speech_spans(*cases):
+    """[(prose, speech), ...] -> [[[speaker, tinted text], ...], ...]."""
+    js = (Path(__file__).resolve().parents[1] / "static" / "js"
+          / "chat.js").read_text(encoding="utf-8")
+    block = js[js.index(_MATCHER_START):js.index(_MATCHER_END)]
+    with tempfile.TemporaryDirectory(prefix="speech-spans-") as tmp:
+        harness = Path(tmp) / "harness.js"
+        subject = Path(tmp) / "subject.js"
+        data = Path(tmp) / "cases.json"
+        harness.write_text(_MATCHER_HARNESS, encoding="utf-8")
+        subject.write_text(block, encoding="utf-8")
+        data.write_text(json.dumps(list(cases)), encoding="utf-8")
+        run = subprocess.run(
+            ["node", str(harness), str(subject), str(data)],
+            capture_output=True, text=True, check=True,
+        )
+    return json.loads(run.stdout)
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+class TestAWholeLineOutranksAnEchoInsideIt:
+    """People repeat each other, and the matcher must not read that as a
+    dispute.
+
+    Measured on chat 152 turn 4338. The player asked "How does she move?";
+    the Doctor's reply ran "...How does she move -- right. The Time Vortex..."
+    verbatim; the prose is second person, so the player's line never appears
+    as a quote of its own and its only match is INSIDE his. Two speakers in one
+    region was the dispute rule, so his whole speech went uncoloured -- the
+    owner's report was exactly that: the Doctor's latest line had no colour.
+
+    The tie-break is the region's own text: the line whose body IS the quoted
+    line delivered it, and anything else found inside is an echo. Two
+    FRAGMENTS from different speakers stay a dispute.
+    """
+
+    def test_the_echoed_question_does_not_uncolour_the_reply(self):
+        prose = ('His head lifts. "You can\'t feel it? How does she move '
+                 '\u2014 right. The Time Vortex. Tonight was very much not '
+                 'mostly."')
+        speech = [{"speaker": "Hinami", "quote": '"How does she move?"'},
+                  {"speaker": "The Doctor",
+                   "quote": '"You can\'t feel it? How does she move \u2014 '
+                            'right. The Time Vortex. Tonight was very much '
+                            'not mostly."'}]
+        [spans] = _speech_spans((prose, speech))
+        assert spans == [["The Doctor", prose[prose.index('"'):]]]
+
+    def test_order_in_the_log_does_not_decide_it(self):
+        """The player's line is logged first because it was said first; the
+        rule must not depend on which match arrives first."""
+        prose = '"How does she move \u2014 right. Rivers."'
+        line_p = {"speaker": "P", "quote": '"How does she move?"'}
+        line_d = {"speaker": "D", "quote": prose}
+        first, second = _speech_spans((prose, [line_p, line_d]),
+                                      (prose, [line_d, line_p]))
+        assert first == second == [["D", prose]]
+
+    def test_an_echo_still_finds_its_own_quote_when_there_is_one(self):
+        prose = ('"How does she move?" you ask. '
+                 '"How does she move \u2014 right. Rivers."')
+        speech = [{"speaker": "P", "quote": '"How does she move?"'},
+                  {"speaker": "D",
+                   "quote": '"How does she move \u2014 right. Rivers."'}]
+        [spans] = _speech_spans((prose, speech))
+        assert spans == [["P", '"How does she move?"'],
+                         ["D", '"How does she move \u2014 right. Rivers."']]
+
+    def test_two_people_saying_the_same_words_each_get_their_own(self):
+        prose = '"No." "No."'
+        speech = [{"speaker": "A", "quote": "No."},
+                  {"speaker": "B", "quote": "No."}]
+        [spans] = _speech_spans((prose, speech))
+        assert spans == [["A", '"No."'], ["B", '"No."']]
+
+    def test_two_speakers_fragments_in_one_region_stay_uncoloured(self):
+        """The dispute rule, still standing for the case it was written for."""
+        prose = '"Go home, and stay there."'
+        speech = [{"speaker": "A", "quote": "Go home"},
+                  {"speaker": "B", "quote": "stay there"}]
+        [spans] = _speech_spans((prose, speech))
+        assert spans == []
+
+    def test_merged_entries_of_one_speaker_tint_the_whole_line(self):
+        """Chat 70 turn 16, unchanged: same speaker twice in one region is
+        one utterance, not a dispute."""
+        prose = '"Right. Stars. After Kyoto."'
+        speech = [{"speaker": "A", "quote": "Right."},
+                  {"speaker": "A", "quote": "Stars. After Kyoto."}]
+        [spans] = _speech_spans((prose, speech))
+        assert spans == [["A", prose]]
