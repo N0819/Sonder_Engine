@@ -4873,6 +4873,19 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
     # adds only the delivery. Measured 2026-09-20: a coin laid on a counter
     # reached its own owner's eyes on 0 of 24 beats, so she paid for one ale
     # twice.
+    # WHAT THE SKY IS DOING, to a body that can tell. `weather_for_room` had
+    # already decided every question -- can this body see it, is it landing on
+    # them, does the wind reach -- and no mind read any of it: a character in a
+    # freezing thundersnow gale was told the room was dim and loud and never
+    # that it was snowing. Asked per BODY, not per room, because a canopy in an
+    # open square is between THIS body and the sky (`weather.exposure_at`).
+    # Hearing is deliberately absent: `spatial_sound_field` already folds rain
+    # and wind into the soundscape, and one fact with two voices can only
+    # disagree with itself.
+    if room:
+        from world.weather import weather_for_room
+        percepts.extend(composer.weather_percepts(
+            weather_for_room(sc, room, name)))
     percepts.extend(composer.room_content_percepts(
         p.get("crowds"), p.get("couriers"), p.get("notices"),
         _visible_things(sc, name, room, sweep=sweep,

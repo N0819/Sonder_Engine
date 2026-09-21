@@ -327,7 +327,14 @@
     "opening_dark": "{opening}の向こうは暗闇だけ。",
     "opening_bare": "{opening}がある。",
     "thing_placed": "{place}に{desc}がある。",
-    "thing_here": "ここに{desc}がある。"
+    "thing_here": "ここに{desc}がある。",
+    "weather_overhead": "{sky}の空から{what}。",
+    "weather_overhead_plain": "{what}。",
+    "weather_beyond": "覆いの向こうで、{what}。",
+    "weather_on_you": "{what}が身体に降りかかっている。",
+    "weather_wind": "{wind}が身体を引っぱる。",
+    "weather_air": "空気は{temperature}。",
+    "weather_falling": "{intensity}の{what}"
   },
   "count_generic": {
     "1": "",

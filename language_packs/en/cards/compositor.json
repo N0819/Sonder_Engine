@@ -410,7 +410,14 @@
     "opening_dark": "Through {opening}, only darkness.",
     "opening_bare": "There is a way out through {opening}.",
     "thing_placed": "There is {desc} at {place}.",
-    "thing_here": "There is {desc} here."
+    "thing_here": "There is {desc} here.",
+    "weather_overhead": "{what} out of the {sky} sky.",
+    "weather_overhead_plain": "{what}.",
+    "weather_beyond": "Beyond your cover, {what}.",
+    "weather_on_you": "{what} is landing on you.",
+    "weather_wind": "The {wind} pulls at you.",
+    "weather_air": "The air is {temperature}.",
+    "weather_falling": "{intensity} {what}"
   },
   "muffle_ellipsis": "...",
   "muffle_join": "... ",

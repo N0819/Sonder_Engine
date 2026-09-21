@@ -789,7 +789,65 @@ def _mapped(scene, room_id):
                for e in (room.get("adjacent") or []))
 
 
-def weather_for_room(scene, room_id):
+def anchor_exposure(anchor):
+    """What an ANCHOR does to the sky over a body standing at it, or "".
+
+    A SHADE STRUCTURE IN AN OPEN SPACE (the owner, 2026-09-20). Exposure was a
+    property of the ROOM alone, so a market square is `open` and every body in
+    it stands in the rain -- including the one under the stall canopy, who is
+    the reason awnings exist. The finer truth the scene already holds is the
+    STATION: a body stands AT an anchor, and some anchors are cover.
+
+    Same two rungs the room uses and in the same order, because a canopy is not
+    a different kind of fact from a portico -- an authored `exposure` on the
+    anchor wins, and beneath it the same `_SHELTERED_WORDS` derivation runs over
+    the anchor's own name and description. No new vocabulary: that table already
+    names the awning, the canopy, the arcade, the portico, the gazebo, the
+    pergola, the marquee and the overhang.
+
+    Returns "" for an anchor that covers nothing, which is most of them, so the
+    room's own answer stands unchanged -- the fail-open every gate here uses.
+    """
+    if not isinstance(anchor, dict):
+        return ""
+    declared = _pick(anchor.get("exposure"), EXPOSURES, "")
+    if declared:
+        return declared
+    haystack = ("%s %s %s" % (anchor.get("name") or "", anchor.get("desc") or "",
+                              anchor.get("kind") or "")).casefold()
+    if any(word in haystack for word in _SHELTERED_WORDS):
+        return "sheltered"
+    return ""
+
+
+def exposure_at(scene, room_id, subject=""):
+    """Exposure for the body `subject` standing where it stands, not for the
+    room as a whole.
+
+    COVER SUBTRACTS AND NEVER ADDS. A structure in a space can only put
+    something between a body and the sky, so this may move `open` to
+    `sheltered` and may do nothing else: it cannot open a cellar, and it cannot
+    take a body that is already under a portico and call it indoors -- a
+    structure standing in a place is shade, not a building, and a thing you can
+    walk INSIDE of is a room with its own exposure. So the one transition is
+    the one the owner asked for and the rest is the room's answer untouched.
+
+    With no subject, no station or no covering anchor this IS `room_exposure`,
+    which is why every existing caller can keep asking the room's question.
+    """
+    room = room_exposure(scene, room_id)
+    if room != "open" or not subject:
+        return room
+    station = ((scene or {}).get("stations") or {}).get(str(subject))
+    at = str((station or {}).get("at") or "") if isinstance(station, dict) else ""
+    if not at:
+        return room
+    anchors = (((scene or {}).get("rooms") or {}).get(room_id) or {}).get("anchors") or {}
+    cover = anchor_exposure(anchors.get(at))
+    return "sheltered" if cover in ("sheltered", "enclosed") else room
+
+
+def weather_for_room(scene, room_id, subject=""):
     """What `room_id` actually gets of the scene's weather, or {}.
 
     The channels are separate because they fail separately: a cellar under a
@@ -800,7 +858,11 @@ def weather_for_room(scene, room_id):
     weather = normalize_weather((scene or {}).get("weather"))
     if not weather:
         return {}
-    exposure = room_exposure(scene, room_id)
+    # Per BODY where one is named: a canopy in an open square is between this
+    # body and the sky and nobody else's (`exposure_at`). Identical to
+    # `room_exposure` with no subject, so every caller that asks the room's
+    # question gets the answer it always did.
+    exposure = exposure_at(scene, room_id, subject)
     falling = is_falling(weather)
     layers = weather_depth(scene, room_id)
     if layers is None and not _mapped(scene, room_id):

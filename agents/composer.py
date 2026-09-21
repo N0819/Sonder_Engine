@@ -2625,6 +2625,100 @@ def scent_percepts(sources):
     return out
 
 
+def weather_percepts(reach):
+    """What the sky is doing, to a body that can tell -- sight and skin.
+
+    `reach` is one `world.weather.weather_for_room(scene, room, subject)`
+    answer, which had ALREADY decided every question this needs and was read by
+    nobody with a mind. Measured 2026-09-20: `composer.py` contained the word
+    "weather" zero times, `perception.py` once in a comment, and
+    `agents/character.py` and `agents/common.py` not at all. The record carries
+    sky, precipitation, intensity, wind and temperature; the Director gets it,
+    `spatial_light` dims a room with it, `spatial_sound_field` adds it to the
+    noise floor and `dressing/ambience` paints it. A character standing in a
+    freezing thundersnow gale was told that the room was dim and that it was
+    loud. Nobody was ever told it was snowing.
+
+    TWO PERCEPTS, BECAUSE THE CHANNELS FAIL SEPARATELY -- the seam's own words:
+    "a cellar under a downpour sees nothing, feels nothing and may still HEAR
+    it". Sight carries what the sky is doing and is bounded by
+    `weather_visible`/`visible_reach`, so from under cover the view says the
+    weather is beyond it rather than on it. Skin carries what is actually
+    touching this body: `falls_on_you` and `wind_reaches`, plus the temperature
+    of the air a body standing in it is breathing. Hearing is NOT here --
+    `spatial_sound_field` already folds rain and wind into the soundscape, and a
+    second voice for one fact could only disagree with the first.
+
+    Names are reproduced, never interpreted: `sky`, `precipitation`, `wind` and
+    `temperature` are authored free text this engine does not own, so they are
+    spliced as written. Nothing numeric reaches the page -- an intensity word, a
+    `visible_reach` fraction and a `gain` are the engine's bookkeeping, and a
+    bystander has no access to any of them.
+    """
+    reach = reach if isinstance(reach, dict) else {}
+    if not reach:
+        return []
+    out = []
+    # WHAT IS FALLING, at the strength the engine holds a word for. `intensity`
+    # is a closed engine vocabulary (light|moderate|heavy) rather than a number,
+    # and the difference between light and heavy snow is the whole of what a body
+    # standing in it has to say about it. Skipped when there is nothing falling
+    # for it to qualify.
+    falling = ""
+    if str(reach.get("precipitation") or "").strip():
+        _fall = str(reach["precipitation"]).strip()
+        _how = str(reach.get("intensity") or "").strip()
+        # MODERATE IS THE UNMARKED CASE AND IS NOT RENDERED. `normalize_weather`
+        # returns `intensity: "moderate"` for a precipitation nobody graded, so
+        # putting the word on the page states a thing no author said -- the same
+        # rule that keeps a derived default out of every other view. Light and
+        # heavy are marked, and both are what a body would actually remark on.
+        falling = _noun_phrase(
+            _en("weather_falling", intensity=_how, what=_fall)
+            if _how in ("light", "heavy") else _fall)
+    sky = str(reach.get("sky") or "").strip()
+    wind = str(reach.get("wind") or "").strip()
+    temperature = str(reach.get("temperature") or "").strip()
+    # --- What the eyes have. Bounded by the seam, never re-decided here.
+    if reach.get("weather_visible"):
+        what = falling or (_noun_phrase(sky) if sky else "")
+        if what:
+            if float(reach.get("visible_reach") or 0.0) < 1.0:
+                desc = _cap(_en("weather_beyond", what=what))
+            elif falling and sky:
+                desc = _cap(_en("weather_overhead", what=what, sky=sky))
+            else:
+                desc = _cap(_en("weather_overhead_plain", what=what))
+            out.append(Percept(
+                kind="ambient", channel="sight", data={"desc": desc},
+                salience=0.4,
+                # The STATE, never the sentence: a sky that holds re-renders as
+                # furniture and a sky that turns is news, which is the rule
+                # `room_content_percepts` states for this whole family.
+                dedupe_key=standing_key(
+                    "weather_sight", ("sky",),
+                    (sky, str(reach.get("precipitation") or ""),
+                     str(reach.get("intensity") or ""),
+                     "%.2f" % float(reach.get("visible_reach") or 0.0))),
+            ))
+    # --- What the skin has. Only what is touching THIS body.
+    clauses = []
+    if reach.get("falls_on_you") and falling:
+        clauses.append(_cap(_en("weather_on_you", what=falling)))
+    if reach.get("wind_reaches") and wind:
+        clauses.append(_en("weather_wind", wind=wind))
+    if temperature and reach.get("exposure") in ("open", "sheltered"):
+        clauses.append(_en("weather_air", temperature=temperature))
+    for clause in clauses:
+        out.append(Percept(
+            kind="sensation", channel="touch", source_label="you",
+            data={"clause": clause, "directed_at_self": True},
+            salience=0.45,
+            dedupe_key=standing_key("weather_touch", ("sky",), (clause,)),
+        ))
+    return out
+
+
 def thing_clause(desc, place=""):
     """One THING standing in the room, as a clause a bystander would say.
 
