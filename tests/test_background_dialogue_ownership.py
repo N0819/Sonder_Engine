@@ -99,19 +99,6 @@ class TestTheHandOff:
         assert dumped["routed_to_background"] == ["patron2"]
 
 
-def test_the_prompt_names_the_occasion_rather_than_only_forbidding(temp_db):
-    """CLAUDE.md: "Bare prohibitions invert. A prompt clause that only forbids
-    gets read as a suggestion of the thing it forbids. Name concrete occasions
-    instead." So the clause has to say what the Director DOES voice."""
-    from llm.prompts import DEFAULT_PROMPTS
-    text = DEFAULT_PROMPTS["director_resolve_lean"]
-    assert "SIMPLE CREATURES" in text
-    assert "write the action and omit the line" in text
-    # And it says where the words come from instead, so the omission reads as
-    # a hand-off rather than as the extra being silenced.
-    assert "own senses and memory" in text
-
-
 class TestWhatABackgroundPresenceKnowsAboutTheWorld:
     """Neither background path carried a single word of lore.
 

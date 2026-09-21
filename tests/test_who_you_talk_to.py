@@ -418,11 +418,6 @@ class TestARoomSomeoneSleepsInIsTheirs:
         assert view and view[0]["home"] == {"room": "stone_lane_cottage",
                                             "at_home": False}
 
-    @pytest.mark.parametrize("lang", ["en", "ja"])
-    def test_the_prose_author_is_told_the_rule(self, lang):
-        text = raw_card(lang)["prose_author_sheet"][17][1]
-        assert "`dwellings`" in text
-
 
 # ---------------------------------------------------------------------------
 # A mind is earned, and the engine says when

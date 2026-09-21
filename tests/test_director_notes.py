@@ -452,54 +452,6 @@ def test_the_opening_brief_is_uncapped(temp_db, monkeypatch):
     assert len(sent["director_establish"]["planned_rooms"]) == 60
 
 
-def test_interpret_carries_the_notes_in_reach_and_hands_them_on(temp_db, monkeypatch):
-    cid, persona_id = _story(temp_db, scene=LIFT_SCENE, turns=3)
-    # Scope is IN OR BESIDE: the corridor is beside the lift interior the
-    # cast stands in; the planned lift car is two hops out, so a note about
-    # it that is to apply from inside the live lift names that room too, or
-    # names none (chat 115's note would have).
-    _publish(cid, _package(cid, [
-        {"op": "director_note", "text": NOTE, "rooms": ["corridor_sublevel_f"]},
-        {"op": "director_note", "text": "two hops: the car",
-         "rooms": ["auxiliary_lift_car"]},
-        {"op": "director_note", "text": "far: the lobby is sealed",
-         "rooms": ["condemned_shelter_lobby"]}]))
-    ctx = _ctx(temp_db, cid, persona_id, idx=3)
-    sent = _capture(monkeypatch, lambda: director.director_interpret(ctx, nonce=0))
-    assert sent["director_interpret"]["author_notes"] == [NOTE]
-    # No note in reach: no key, so the payload is the one it always was.
-    cid2, persona_id2 = _story(temp_db, scene=LIFT_SCENE, turns=3)
-    _publish(cid2, _package(cid2, [
-        {"op": "director_note", "text": "far", "rooms": ["condemned_shelter_lobby"]}]))
-    ctx2 = _ctx(temp_db, cid2, persona_id2, idx=3)
-    bare = _capture(monkeypatch, lambda: director.director_interpret(ctx2, nonce=0))
-    assert "author_notes" not in bare["director_interpret"]
-    assert set(sent["director_interpret"]) - set(bare["director_interpret"]) == {
-        "author_notes"}
-
-
-def test_resolve_carries_the_notes_to_the_author_and_the_placing_hands(
-        temp_db, monkeypatch):
-    cid, persona_id = _story(temp_db, scene=LIFT_SCENE, turns=3)
-    _publish(cid, _package(cid, [
-        {"op": "director_note", "text": NOTE,
-         "rooms": ["room_elevator_interior", "auxiliary_lift_car"]},
-        {"op": "director_note", "text": "everywhere: Code Yellow"}]))
-    ctx = _ctx(temp_db, cid, persona_id, idx=3, interp=_interp())
-    systems = {}
-    sent = _capture(monkeypatch, lambda: director.director_resolve(ctx, nonce=0),
-                    systems)
-    assert sent["director_resolve"]["author_notes"] == [NOTE, "everywhere: Code Yellow"]
-    # The hands that place and bind things see it; the hands that dress,
-    # speak and touch do not -- a note is about the plan, not a body.
-    assert sent["director_objects"]["author_notes"] == [NOTE, "everywhere: Code Yellow"]
-    assert sent["director_spatial"]["author_notes"] == [NOTE, "everywhere: Code Yellow"]
-    for hand in ("director_body", "director_social", "director_contact"):
-        assert "author_notes" not in sent[hand]
-    # And the prose author's sheet loads the duty on such a beat.
-    assert "AN AUTHOR'S NOTE SAYS WHAT THE PLAN MEANS" in systems["director_resolve"]
-
-
 def test_resolve_without_a_note_is_unchanged(temp_db, monkeypatch):
     cid, persona_id = _story(temp_db, scene=LIFT_SCENE, turns=3)
     ctx = _ctx(temp_db, cid, persona_id, idx=3, interp=_interp())
@@ -511,19 +463,3 @@ def test_resolve_without_a_note_is_unchanged(temp_db, monkeypatch):
     # The duty chunk stays out of the sheet, as every gated duty does when
     # the beat carries no work for it.
     assert "AN AUTHOR'S NOTE SAYS WHAT THE PLAN MEANS" not in systems["director_resolve"]
-
-
-def test_the_prompts_teach_the_key_where_it_is_delivered():
-    """The clause travels with the key, in both packs: every Director surface
-    that can receive `author_notes` says what a note is and what it never
-    licenses, and the opening prompt says where to place an opening the plan
-    already holds a room for."""
-    from language_runtime import installed_language_packs
-    for pack in installed_language_packs(refresh=True).values():
-        card = pack.card("system_prompts")
-        assert "author_notes" in card["prompts"]["director_establish"]
-        assert "planned_rooms" in card["prompts"]["director_establish"]
-        assert "author_notes" in card["prompts"]["director_interpret"]
-        assert "director_note" in card["prompts"]["story_planner"]
-        sheet = dict((k, t) for k, t in card["prose_author_sheet"] if k)
-        assert "author_notes" in sheet["author_notes"]

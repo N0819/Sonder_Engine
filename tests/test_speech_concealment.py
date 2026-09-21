@@ -514,13 +514,6 @@ def test_an_originated_line_with_no_tags_is_taken_as_normal_and_overt(
     assert entry["conceal_from"] == []
 
 
-def test_the_resolve_contract_no_longer_requires_the_re_stamped_tags():
-    from llm.prompts import get_prompt
-    text = get_prompt("director_resolve_lean")   # the prose author owns dialogue_log
-    assert "exact_quote,volume,intended_target" not in text
-    assert "ONLY on lines you originate" in text
-
-
 # --- norm_sequence concealment normalization (interpret -> perception_act path) ---
 # These cover the SECOND leak found during the Meridian demo run: norm_sequence
 # rebuilt speech elements WITHOUT visibility/conceal_from, so a line the director

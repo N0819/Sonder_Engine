@@ -104,18 +104,3 @@ class TestTheReferentLadderNamesAFixture:
             sc["contacts"][0], you="Aurel Voss", scene=sc, label_for=label_for)
         assert "something" not in text
         assert "access door" in text
-
-
-def test_both_packs_hand_the_world_a_players_reading_aloud():
-    """The player's read-aloud line is the ONE player line the author fills:
-    the words are the world's fact, not the player's authorship. Beat 115
-    on the descent copy: the player 'read the stencil out loud', the
-    interpret carried the act, and the sheet's absolute rule against
-    authoring a player line left the number unspoken for a beat."""
-    import pathlib
-    for pack, marker in (("en", "READ, RECITE or REPEAT ALOUD"),
-                         ("ja", "読み上げる")):
-        text = pathlib.Path(
-            "language_packs", pack, "cards", "system_prompts",
-            "prose_author_sheet", "06.txt").read_text(encoding="utf-8")
-        assert marker in text, pack

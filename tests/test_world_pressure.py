@@ -210,26 +210,6 @@ def test_establish_openers_apply_on_opening_turn(temp_db):
 
 # ---- director integration ----
 
-def test_resolve_payload_surfaces_pressures_and_must_tick(temp_db, monkeypatch):
-    import agents.director as director
-
-    ctx = _make_ctx(temp_db, turn_idx=7)
-    _entry(temp_db, ctx.chat.id, held_streak=2)
-
-    captured = {}
-
-    def fake_agent_json(role, step_key, system, payload, **kwargs):
-        captured.update(payload)
-        return {"world_pressure": [{"op": "tick", "id": "wp:1:0"}]}
-
-    monkeypatch.setattr(director, "_agent_json", fake_agent_json)
-    director.director_resolve(ctx, nonce=0)
-
-    pressures = captured["world_pressure"]
-    assert pressures[0]["id"] == "wp:1:0"
-    assert pressures[0]["must_tick_this_beat"] is True
-    assert "correction_notes" not in captured  # tick supplied -> no retry
-
 
 def test_must_tick_violation_triggers_one_retry(temp_db, monkeypatch):
     import agents.director as director

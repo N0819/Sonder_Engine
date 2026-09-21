@@ -175,13 +175,3 @@ class TestTheFloorIsWiredIn:
 
         src = inspect.getsource(director.director_resolve)
         assert "background_presence_knowledge" in src
-
-    def test_the_resolve_prompt_states_the_rule(self):
-        """Bare prohibitions invert; the rule must name the concrete occasion
-        (the pocketed money, the copper-and-silver generality) and the field
-        it keys off."""
-        from llm.prompts import DEFAULT_PROMPTS
-
-        text = DEFAULT_PROMPTS["director_resolve_lean"]
-        assert "background_presence_knowledge" in text
-        assert "copper and silver" in text

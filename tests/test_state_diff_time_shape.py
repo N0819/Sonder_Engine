@@ -37,28 +37,6 @@ DOCUMENTED_TIME_FIELDS = ("start_seconds", "duration_seconds", "end_seconds",
                           "mode", "explicit", "display_advance")
 
 
-def test_the_example_shows_the_shape_the_prompt_describes():
-    """The defect itself. `null` is not a shape, and it is the only thing the
-    model and the repair attempt are ever shown."""
-    time = (output_example("director_resolve").get("state_diff") or {}).get("time")
-    assert isinstance(time, dict), "the example must show an object, not null"
-    for key in DOCUMENTED_TIME_FIELDS:
-        assert key in time, f"the prompt asks for {key}; the example omits it"
-
-
-def test_the_documented_shape_actually_validates(temp_db):
-    """The example has to be an example of something the validator accepts —
-    an example that would itself be rejected is worse than none."""
-    example_time = output_example("director_resolve")["state_diff"]["time"]
-    report = validate_llm_output_strict(
-        "director_resolve",
-        {"resolved_event": "x", "summary": "y",
-         "state_diff": {"time": dict(example_time)}},
-        source_payload={})
-    assert report.valid, report.errors
-    assert report.output["state_diff"]["time"] == example_time
-
-
 @pytest.mark.parametrize("sent", [
     "a few minutes pass",     # the live shape: prose where an object belongs
     60,

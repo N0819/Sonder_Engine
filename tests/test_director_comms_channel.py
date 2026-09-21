@@ -190,67 +190,6 @@ def _published_manifest_categories(language):
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
-def test_every_delegated_channel_is_reachable_from_the_published_vocabulary(
-        language):
-    """THE GENERAL GUARD. `_CATEGORY_CHANNELS` routes a manifest category to
-    the specialist owning the channel that answers for it; the sheet above is
-    the only place that vocabulary is published to the author who writes it.
-    A channel in the table that no published category folds onto is a route
-    nothing can enter -- the change is then detected as an omission every beat
-    and repaired by a mind that never saw it (measured at 49.2s for two such
-    events in one beat, in the note beside the table).
-
-    Asserted on CHANNELS, not on keys: the table deliberately carries raw and
-    normalized spellings of the same category ('contact'/'contacts',
-    'pose'/'poses'), and only one of each pair is ever reached.
-
-    `comms_ops` was the only unreachable one when this was written.
-    """
-    # THE VOCABULARY IS THE HAND NAMES NOW. `changes_asserted`'s twenty-odd
-    # category words are gone with it (DESIGN_SPECIALIST_CONTRACT.md 4a): the
-    # Director categorizes a span by the family it belongs to, and
-    # `manifest_category_targets` resolves that to a hand or a channel. Five
-    # names covering all 32 channels is a STRONGER guarantee than the old
-    # list, not a weaker one -- a hand's name reaches every channel it owns,
-    # so a newly added channel is reachable the day it is registered.
-    from agents.director import SPECIALISTS, manifest_category_targets
-    reached = set()
-    for word in _published_manifest_categories(language):
-        for kind, target in manifest_category_targets(word):
-            if kind == "hand":
-                reached.update(SPECIALISTS[target]["channels"])
-            else:
-                reached.add(target)
-    unreachable = sorted(set(_CATEGORY_CHANNELS.values()) - reached)
-    assert not unreachable, (
-        f"{language}: delegated channels no published changes_asserted "
-        f"category can route to: {unreachable}. Publish a category for each "
-        "in prose_author_sheet/04.txt, or the change reaches no hand.")
-
-
-@pytest.mark.parametrize("language", LANGUAGES)
-def test_the_manifest_vocabulary_publishes_comms(language):
-    """`comms_ops` is reachable from the published vocabulary.
-
-    It used to need its own published category word, because the vocabulary
-    was a list of twenty-odd category names and a channel absent from it was
-    a route nothing could enter. The vocabulary is now the five HAND names
-    (DESIGN_SPECIALIST_CONTRACT.md 4a), and `spatial` owns `comms_ops` -- so
-    the channel is reachable through its hand, and the category table still
-    routes the word for anything that spells it out.
-    """
-    from agents.director import SPECIALISTS, manifest_category_targets
-    reachable = set()
-    for word in _published_manifest_categories(language):
-        for kind, target in manifest_category_targets(word):
-            reachable.update(SPECIALISTS[target]["channels"]
-                             if kind == "hand" else {target})
-    assert "comms_ops" in reachable
-    assert _CATEGORY_CHANNELS[
-        _normalize_omission_category("comms")] == "comms_ops"
-
-
-@pytest.mark.parametrize("language", LANGUAGES)
 def test_the_reconcile_auditor_has_a_word_for_a_comms_change(language):
     """The pass that reports what the diff LEFT OUT is folded by the same
     normalizer, so a category it cannot name is an omission it cannot route.

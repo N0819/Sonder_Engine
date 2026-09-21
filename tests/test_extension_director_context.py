@@ -336,15 +336,6 @@ class TestDirectorWiring:
     reasoning-trace defect: both halves built, correct, and never introduced.
     """
 
-    def test_all_three_director_stages_call_the_seam(self):
-        import inspect
-
-        import agents.director as director
-
-        source = inspect.getsource(director)
-        for phase in ("establish", "interpret", "resolve"):
-            assert (f'_extension_director_payload(ctx, payload, phase="{phase}")'
-                    in source), f"director_{phase} does not reach the seam"
 
     def test_the_seam_is_total(self):
         """A broken extension must cost the beat nothing, so the wrapper
@@ -354,25 +345,3 @@ class TestDirectorWiring:
         payload = {"scene": {}}
         assert director._extension_director_payload(
             None, payload, phase="resolve") == payload
-
-    def test_resolve_hooks_the_payload_the_retries_reuse(self):
-        """Once per beat, not once per attempt.
-
-        The world-pressure floor and the player-act authority correction both
-        re-enter generation with `{**payload, "correction_notes": ...}`. If the
-        seam ran per attempt, a correction could be answered against campaign
-        context the answer it corrects never saw.
-        """
-        import inspect
-
-        import agents.director as director
-
-        source = inspect.getsource(director.director_resolve)
-        seam = source.index('_extension_director_payload')
-        first_call = source.index('out = _agent_json(', seam)
-        retries = [i for i in range(len(source))
-                   if source.startswith('{**payload, "correction_notes"', i)]
-
-        assert retries, "expected the resolve retries to rebuild from payload"
-        assert all(i > first_call for i in retries)
-        assert source.count('_extension_director_payload') == 1

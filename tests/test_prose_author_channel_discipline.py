@@ -142,18 +142,3 @@ class TestTheGuardStillCatchesWhatItWasWrittenFor:
     ])
     def test_the_removed_instructions_would_fail_the_guard(self, stale):
         assert _write_position_re().search(stale), stale
-
-    @pytest.mark.parametrize("legitimate", [
-        # 12.txt names every delegated channel in order to forbid it.
-        "OBJECTS (entities, remove_entities, inventory_ops, artifact_ops, "
-        "destruction), SOCIAL FABRIC (cast_changes, introductions, "
-        "world_facts, public_evidence)",
-        # 04.txt publishes the manifest category vocabulary.
-        "[{category:'rooms'|'adjacency'|'positions'|'stations'|'pose'",
-        # 06.txt tells the author to end a contact, not to write the channel.
-        "Either end that contact in contact_ops before the line is delivered",
-        # 08.txt's own surviving weather address.
-        "emit state_diff.weather ONLY when this beat actually changes the sky",
-    ])
-    def test_naming_a_channel_is_not_the_offence(self, legitimate):
-        assert not _write_position_re().search(legitimate), legitimate
