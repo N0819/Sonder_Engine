@@ -27,6 +27,7 @@ makes it a trip-wire for the next middleware rather than a live hole.
 
 from __future__ import annotations
 
+import re
 import os
 import subprocess
 import sys
@@ -88,8 +89,38 @@ class TestStaticFilesAreFoundFromAnyworkingDirectory:
     def test_the_spa_shell_revalidates_its_script_revision(self):
         response = app_module.index()
         assert response.headers["cache-control"] == "no-cache"
-        assert "?v=20260904-world" in Path(response.path).read_text(
+        html = response.body.decode("utf-8")
+        tokens = set(re.findall(r'/static/js/[^"?]+\?v=([^"]+)"', html))
+        # One revision for the whole classic-script bundle, and it is the
+        # bundle's content rather than the date typed into index.html:
+        # measured 2026-09-21, chat.js had changed in eleven commits under an
+        # unmoved token, so a browser holding the old file never refetched.
+        assert len(tokens) == 1, tokens
+        assert "20260904" not in tokens.pop()
+
+    def test_the_script_revision_moves_when_a_script_changes(
+            self, tmp_path, monkeypatch):
+        root = tmp_path / "static"
+        (root / "js").mkdir(parents=True)
+        (root / "index.html").write_text(
+            '<script src="/static/js/a.js?v=old"></script>\n'
+            '<script src="/static/js/b.js?v=old"></script>\n',
             encoding="utf-8")
+        (root / "js" / "a.js").write_text("var a = 1;", encoding="utf-8")
+        (root / "js" / "b.js").write_text("var b = 1;", encoding="utf-8")
+        monkeypatch.setattr(app_module, "STATIC_ROOT", root)
+        monkeypatch.setattr(app_module, "_bundle_revision_cache",
+                            {"key": None, "token": ""})
+        before = set(re.findall(r'\?v=([^"]+)"', app_module.render_shell()))
+        assert len(before) == 1 and "old" not in before
+        # Same bytes, later mtime: the token is content, so it must not move.
+        import os, time
+        later = time.time() + 5
+        os.utime(root / "js" / "b.js", (later, later))
+        assert set(re.findall(r'\?v=([^"]+)"', app_module.render_shell())) == before
+        (root / "js" / "b.js").write_text("var b = 2;", encoding="utf-8")
+        after = set(re.findall(r'\?v=([^"]+)"', app_module.render_shell()))
+        assert len(after) == 1 and after != before
 
 
 class TestCookiesCarrySecureOnlyWhenTheHostSaysSo:

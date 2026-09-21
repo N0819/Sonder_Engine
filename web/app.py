@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager, contextmanager
 from fastapi import FastAPI, Body, HTTPException, Query, Request
 from starlette.datastructures import Headers
 from fastapi.responses import (StreamingResponse, JSONResponse, FileResponse,
-                               Response)
+                               HTMLResponse, Response)
 from fastapi.staticfiles import StaticFiles
 
 from pathlib import Path
@@ -581,15 +581,66 @@ def guest_page():
     # guest only ever being able to reach the two endpoints it needs.
     return FileResponse(STATIC_ROOT / "guest.html")
 
+# THE BUNDLE'S CACHE REVISION IS THE BUNDLE'S CONTENT, NOT A DATE SOMEONE
+# TYPED. index.html carries `?v=<token>` on every classic script so a browser
+# refetches them when the bundle changes -- and the token was hand-bumped,
+# which means it was not bumped: measured 2026-09-21, chat.js had changed in
+# eleven commits since the token last moved, so every one of those changes
+# shipped under the URL of the old file and a browser that already held it
+# never asked again. The owner's report was a fix that "still" did not work
+# after a server restart, because the server was not what held the stale copy.
+#
+# The shell is served with the tokens rewritten to one hash over every script
+# the shell names, in the order it names them. ONE revision for the whole
+# bundle, never one per file: the scripts are classic globals reaching into
+# each other, and a new caller beside a cached old helper is a ReferenceError
+# (`tests/test_frontend_global_namespace.py` pins the same rule on the file).
+# The hash is recomputed only when a named file's mtime or size moves, so a
+# request costs a few stats; the shell itself stays `no-cache` so the browser
+# revalidates it and sees a new token the moment there is one.
+_SHELL_ASSET_RE = re.compile(r'((?:src|href)="/static/[^"?]+)\?v=[^"]*"')
+_bundle_revision_cache = {"key": None, "token": ""}
+
+
+def _shell_asset_paths(html):
+    return [Path(m.group(1).split('="/static/', 1)[1])
+            for m in _SHELL_ASSET_RE.finditer(html)]
+
+
+def _bundle_revision(html):
+    paths = _shell_asset_paths(html)
+    key = []
+    for rel in paths:
+        try:
+            st = (STATIC_ROOT / rel).stat()
+            key.append((str(rel), st.st_mtime_ns, st.st_size))
+        except OSError:
+            key.append((str(rel), None, None))
+    key = tuple(key)
+    if key != _bundle_revision_cache["key"]:
+        digest = hashlib.sha1()
+        for rel in paths:
+            try:
+                digest.update((STATIC_ROOT / rel).read_bytes())
+            except OSError:
+                digest.update(b"missing:" + str(rel).encode())
+        _bundle_revision_cache["key"] = key
+        _bundle_revision_cache["token"] = digest.hexdigest()[:12]
+    return _bundle_revision_cache["token"]
+
+
+def render_shell():
+    """index.html with every `?v=` token replaced by the bundle's revision."""
+    html = (STATIC_ROOT / "index.html").read_text(encoding="utf-8")
+    token = _bundle_revision(html)
+    return _SHELL_ASSET_RE.sub(lambda m: f'{m.group(1)}?v={token}"', html)
+
+
 @app.get("/")
 def index():
-    # The shell coordinates one classic-script bundle through query revisions.
-    # Always revalidate it so a changed revision cannot leave a new caller
-    # beside a stale cached helper from the previous bundle.
-    return FileResponse(
-        STATIC_ROOT / "index.html",
-        headers={"Cache-Control": "no-cache"},
-    )
+    # Always revalidate the shell so a changed revision cannot leave a new
+    # caller beside a stale cached helper from the previous bundle.
+    return HTMLResponse(render_shell(), headers={"Cache-Control": "no-cache"})
 
 @app.get("/login")
 def login_page():
