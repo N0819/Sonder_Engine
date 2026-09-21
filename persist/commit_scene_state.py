@@ -2498,16 +2498,26 @@ def prepare_scene_commit(ctx):
         # derived at read time because a trail IS memory: the whole point is
         # that it outlives the body that left it, which nothing recomputed
         # from the current scene could do (`world/spatial_scent_field.py`).
+        # A BODY IS WHAT BREATHES. The cast and the player, by every spelling
+        # the scene keys them under -- not entities, which are things, and not
+        # every position row, which holds a lift and a lamp. A room with two
+        # people in it smells of two people, which the ledger gets for free by
+        # depositing per body.
+        #
+        # Hoisted out of the scent try-block because it has TWO readers now:
+        # the trail ledger below and the planned-thing materializer after it,
+        # which asks the same question ("where is somebody standing"). Left
+        # inside, a scent failure would leave it undefined and the materializer
+        # would raise into the outer handler and be reported as a planned-ROOM
+        # failure -- a misattribution in the one place a reader would look.
+        _living = {str(_n).casefold() for _n in (
+            [character_name_from_text(c["sheet"]) for c in ctx.cast]
+            + [_player_name_or_none(ctx)]) if _n}
+        _body_rooms = {str(_room) for _who, _room in
+                       (sc.get("positions") or {}).items()
+                       if str(_room) and str(_who).casefold() in _living}
         try:
             from world.spatial import advance_scents, SCENTS_KEY
-            # A BODY IS WHAT BREATHES. The cast and the player, by every
-            # spelling the scene keys them under -- not entities, which are
-            # things, and not every position row, which holds a lift and a
-            # lamp. A room with two people in it smells of two people, which
-            # the ledger gets for free by depositing per body.
-            _living = {str(_n).casefold() for _n in (
-                [character_name_from_text(c["sheet"]) for c in ctx.cast]
-                + [_player_name_or_none(ctx)]) if _n}
             _breathing = [
                 {"room": str(_room), "kind": "breath", "level": "faint"}
                 for _who, _room in (sc.get("positions") or {}).items()
@@ -2516,6 +2526,27 @@ def prepare_scene_commit(ctx):
         except Exception as _scent_exc:   # never a story blocker
             ctx.warnings.append(
                 f"scent ledger not advanced this beat: {_scent_exc}")
+        # AND WHAT THE PLAN PUT WHERE SOMEBODY IS STANDING BECOMES REAL. The
+        # complement of the projection above, and bounded by its own argument:
+        # that pass mints nothing at any distance because "what is heard through
+        # a wall must not become a thing that is seen through one", which is
+        # about a listener BEYOND the room. A body IN the room is the first
+        # glance the plan was filed for, and the Director cannot supply it --
+        # its sheet forbids a row for a standing background fact, so a plan was
+        # rendered only when somebody touched a thing they could not see (chat
+        # 151: a planned TARDIS a few paces up the sand, four beats, never in
+        # the scene). `occupied` is the rooms a LIVING body stands in, by the
+        # same reading the scent ledger just used -- not every position row,
+        # which holds a lift and a lamp.
+        from world.planned_entities import materialize_plans_in_sight
+        sc, _stood_up = materialize_plans_in_sight(
+            cid, sc, ctx.turn.frame_id,
+            occupied=_body_rooms)
+        for _rec in _stood_up:
+            ctx.warnings.append(
+                "planned thing stood up: %s is now in %s (plan %s); the "
+                "Director had not rendered it"
+                % (_rec["name"], _rec["room"], _rec["plan"]))
         for _room, _level in _emitting:
             ctx.warnings.append(
                 f"planned emission audible: {_room} is heard at {_level} "

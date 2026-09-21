@@ -213,3 +213,87 @@ class TestItIsWiredAndSpeaksBothLanguages:
                     "weather_beyond", "weather_on_you", "weather_wind",
                     "weather_air"):
             assert templates[key], (language, key)
+
+
+class TestTheNightSkyHasAMoonInIt:
+    """`spatial_light.room_light` rules that for an `open` room "the sky is that
+    room's whole account" and an authored `light` above it "is simply wrong --
+    the moonlit shore stays dark at night". The rule is right and the account was
+    short. Measured, the owner's chat 151: a beach whose own weather read "a
+    clear black night sky strewn with stars, the full moon high", declaring
+    `light: "dim"`, composed `dark` in every view, and a planned police box
+    standing on the sand was invisible to the two people beside it. The room is
+    called Moonlit Beach.
+    """
+
+    def _beach(self, **weather):
+        return {"rooms": {"beach": {"name": "Moonlit Beach", "light": "dim",
+                                    "exposure": "open", "adjacent": []}},
+                "day_phase": "night", "positions": {}, "entities": {},
+                "weather": dict({"air": "clear", "cloud": "clear"}, **weather)}
+
+    def test_a_full_moon_on_a_clear_night_is_something_to_see_by(self):
+        from world.spatial import effective_light
+        assert effective_light(self._beach(sky="a black sky, the full moon high"),
+                               "beach") == "dim"
+
+    def test_a_night_that_never_mentioned_a_moon_is_still_dark(self):
+        """The whole compatibility claim: no stored scene loses the light it
+        had, because `moon` defaults to `none`."""
+        from world.spatial import effective_light
+        assert effective_light(self._beach(sky="a black sky"), "beach") == "dark"
+        assert effective_light(self._beach(), "beach") == "dark"
+
+    def test_only_ever_brighter_and_only_to_dim(self):
+        """Moonlight is not daylight: a night never reads as a day, so nothing
+        that could see before sees less and nothing reads as noon."""
+        from world.day_cycle import sun_light
+        from world.weather import normalize_weather
+        moon = normalize_weather({"sky": "the full moon", "cloud": "clear"})
+        assert sun_light("night", moon) == "dim"
+        assert sun_light("midday", moon) == "lit"
+        assert sun_light("dawn", moon) == "dim"
+
+    @pytest.mark.parametrize("axis,value", [("cloud", "covered"),
+                                            ("air", "thick")])
+    def test_cloud_and_fog_take_it_back(self, axis, value):
+        """A full moon behind a covered sky lights nothing -- the same axis test
+        that dims a DAY one rung below, asked of the moon."""
+        from world.spatial import effective_light
+        scene = self._beach(sky="the full moon high", **{axis: value})
+        assert effective_light(scene, "beach") == "dark"
+
+    @pytest.mark.parametrize("phase,lit", [("full", True), ("gibbous", True),
+                                           ("half", False), ("crescent", False),
+                                           ("new", False), ("none", False)])
+    def test_the_threshold_is_gibbous(self, phase, lit):
+        """Named rather than buried: the two brightest phases light the ground
+        and the rest do not. A full moon over open ground is enough to cross it
+        by; a half moon lets you tell the sky from the land and little else."""
+        from world.weather import moon_lights, normalize_weather
+        assert moon_lights(normalize_weather({"sky": "x", "moon": phase})) is lit
+
+    def test_a_declared_axis_outranks_the_sky_s_prose(self):
+        from world.weather import normalize_weather
+        assert normalize_weather({"sky": "the full moon high",
+                                  "moon": "new"})["moon"] == "new"
+
+    def test_moonless_is_not_moonlit_sharing_a_stem(self):
+        from world.weather import normalize_weather
+        assert normalize_weather({"sky": "a moonless overcast night"})["moon"] \
+            == "none"
+        assert normalize_weather({"sky": "a new moon over the water"})["moon"] \
+            == "new"
+
+    def test_one_moon_not_two(self):
+        """A story may write the moon as a scene entity so it can carry a
+        `light_source` -- chat 151 holds `The Moon`, `kind: "celestial"`,
+        `state: {"phase": "full"}`, beside a sky naming the same moon. Two
+        records of one fact can only disagree, so the declared phase wins."""
+        from world.spatial import effective_light
+        scene = self._beach(sky="a black sky")          # the sky says nothing
+        scene["entities"]["m"] = {"name": "The Moon", "kind": "celestial",
+                                 "state": {"phase": "full"}}
+        assert effective_light(scene, "beach") == "dim"
+        scene["entities"]["m"]["state"]["phase"] = "new"
+        assert effective_light(scene, "beach") == "dark"

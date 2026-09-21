@@ -100,6 +100,21 @@ def normalize_plan(uid, entry):
             "truths": _text(brief.get("truths"), PLAN_BRIEF_CHARS),
             # Where the world's clock has put it: a room id.
             "where": _text(brief.get("where"), 120),
+            # ...AND WHERE IN THAT ROOM: an anchor id of it, the same
+            # vocabulary `stations`' own `at` uses. `where` named a room and
+            # nothing finer, so a materialized thing stood in the room unplaced
+            # -- named without a distance and needing light like anything else,
+            # because `feature_visibility`'s carve-outs (what a body has its
+            # hands on, and a doorway) cannot apply to a thing that stands
+            # nowhere in particular. Measured, the owner's chat 151: the plan
+            # said in PROSE that the box "stands a few paces up the dry sand
+            # ... above the tideline" and that beach has an anchor called
+            # `tideline_sand`, and reading the anchor out of the sentence is
+            # the word-list failure this repository keeps paying for. So the
+            # Room declares it, which is a declaration and therefore a model's
+            # job, and `materialize_plans_in_sight` stamps the station. Empty
+            # is the ordinary case and keeps exactly the old behaviour.
+            "station": _text(brief.get("station"), 120),
         },
         "source": _text(entry.get("source"), 40) or "authored",
         "filed_turn": entry.get("filed_turn"),
@@ -130,6 +145,15 @@ def normalize_plan(uid, entry):
             "turn": rendered.get("turn"),
             "render": _text(rendered.get("render"), SURFACE_CHARS),
         }
+        # WHO STOOD IT UP. `"engine"` for a plan `materialize_plans_in_sight`
+        # made real because a body was standing in its room and the Director's
+        # contract has no row for a standing fact; absent for the Director's own
+        # render, which is the ordinary case and the one every earlier stored
+        # plan carries. Kept because the two are not the same event to a reader
+        # investigating a beat: one says the author's plan was rendered, the
+        # other says nobody rendered it and the floor delivered the bare fact.
+        if str(rendered.get("by") or "").strip():
+            out["rendered"]["by"] = _text(rendered.get("by"), 32)
     return out
 
 
@@ -200,6 +224,134 @@ def project_planned_emissions(cid, scene, frame_id=None):
         room["sound"] = {"level": level}
         projected.append((where, level))
     return scene, projected
+
+
+def materialize_plans_in_sight(cid, scene, frame_id=None, *, occupied=()):
+    """A planned THING standing where a body stands becomes a real entity.
+
+    THE COMPLEMENT OF `project_planned_emissions`, and licensed by its own
+    reasoning. That pass projects a plan's noise onto the room at any distance
+    and deliberately mints nothing, because "what is heard through a wall must
+    not become a thing that is seen through one". That argument is about a
+    listener BEYOND the room. It says nothing against a body standing IN the
+    room -- and refusing to mint there is what makes a police box invisible
+    from three paces.
+
+    WHY CODE AND NOT THE DIRECTOR. The handoff was "the Director renders a
+    plan when it comes into view", and the Director's own sheet forbids exactly
+    that row: "Initial standing descriptions and unchanged background facts are
+    context." Its contract is to convert event_inputs into ordered event
+    ledgers, and a thing standing on the sand is not an event. So a plan was
+    rendered only when somebody happened to TOUCH it -- which nobody does to a
+    thing they cannot see, because perception reads `scene.entities` and the
+    plan is not one. Measured live: chat 151 (the owner's, 2026-09-20) stood
+    two people on a moonlit beach for four beats with a planned TARDIS "a few
+    paces up the dry sand", filed with a `where`, a `look`, three truths and a
+    dark roof lantern, and `scene` never held it; chat 114's identical plan was
+    rendered at beat 9, when a body finally reached the spot. Planned ROOMS
+    have had a deterministic materializer all along
+    (`structure.materialize_planned_fringe`); planned THINGS did not.
+
+    MINTS THE BARE FACT AND NOTHING ELSE -- `mint_unreferenced_things`' rule:
+    the plan's name, an inert kind, the `look` it was filed with, the room it
+    was filed for, and the `plan_ref` the settle path binds through. What the
+    thing then DOES is the Director's, and what it is for stays the plan's.
+
+    Every gate subtracts:
+
+      * a plan the Director already rendered is left alone;
+      * `kind: "thing"` only. A person is the identity floor's and a promotion's
+        business, and a creature carries a stance and a hunger that a bare mint
+        would be lying about;
+      * the room must be one the scene holds AND one `occupied` names, so this
+        fires where somebody is standing and nowhere else -- the "first glance"
+        the plan is waiting for, never a sweep that stands things up across a
+        map nobody has walked;
+      * a name or alias the scene already holds mints nothing, because a second
+        copy of a thing is worse than one nobody found (the duplicate this
+        engine minted as `copper_coin_2` on 2026-09-20);
+      * no name, no mint.
+
+    Idempotent by construction: the plan is marked rendered in the same call,
+    so a reroll, a rerun-from-stage or a second visit cannot double-mint, and
+    `plans_in_view` stops offering it.
+
+    Returns ``(scene, [{plan, entity_id, name, room}, ...])`` -- the scene
+    mutated in place, and one record per thing stood up, for the caller to
+    report.
+    """
+    rooms = (scene or {}).get("rooms") if isinstance(scene, dict) else None
+    if not isinstance(rooms, dict) or not rooms:
+        return scene, []
+    here = {str(r) for r in (occupied or ()) if str(r or "")}
+    if not here:
+        return scene, []
+    plans = planned_entities(cid, frame_id)
+    if not plans:
+        return scene, []
+    entities = scene.setdefault("entities", {})
+    positions = scene.setdefault("positions", {})
+    # Every spelling the scene already answers to, so a plan the world holds
+    # under another key is a resolution question and not a licence to mint.
+    held = set()
+    for key, record in entities.items():
+        held.add(_fold(key))
+        if isinstance(record, dict):
+            held.add(_fold(record.get("name")))
+            held.update(_fold(a) for a in record.get("aliases") or [])
+    held.update(_fold(key) for key in positions)
+    held.discard("")
+    minted, changed = [], False
+    for uid, plan in sorted(plans.items()):
+        if plan.get("rendered") or str(plan.get("kind") or "") != "thing":
+            continue
+        name = str(plan.get("name") or "").strip()
+        where = str((plan.get("brief") or {}).get("where") or "")
+        if not name or where not in rooms or where not in here:
+            continue
+        forms = {_fold(name)} | {_fold(a) for a in plan.get("aliases") or []}
+        if forms & held:
+            continue
+        key = _entity_key(name, entities)
+        record = {"name": name, "kind": "object",
+                  "plan_ref": {"uid": uid, "kind": "thing"}}
+        look = str(plan.get("look") or "").strip()
+        if look:
+            record["description"] = look
+        aliases = [str(a) for a in plan.get("aliases") or [] if str(a or "")]
+        if aliases:
+            record["aliases"] = aliases
+        entities[key] = record
+        positions[key] = where
+        # Where in the room, when the plan says. Only an anchor the ROOM
+        # actually has -- a station naming nothing is a station nobody can see
+        # it at, and leaving it unplaced is the honest answer.
+        at = str((plan.get("brief") or {}).get("station") or "")
+        if at and at in ((rooms.get(where) or {}).get("anchors") or {}):
+            scene.setdefault("stations", {})[key] = {"at": at, "near": []}
+        held |= forms
+        held.add(_fold(key))
+        plan["rendered"] = {"entity_id": key, "turn": None,
+                            "render": look or name, "by": "engine"}
+        changed = True
+        minted.append({"plan": uid, "entity_id": key, "name": name,
+                       "room": where})
+    if changed:
+        save_planned_entities(cid, plans, frame_id)
+    return scene, minted
+
+
+def _fold(value):
+    return " ".join(str(value or "").split()).casefold()
+
+
+def _entity_key(name, entities):
+    """A scene key for `name` that no entity already uses."""
+    base = re.sub(r"[^a-z0-9]+", "_", _fold(name)).strip("_") or "thing"
+    key, suffix = base, 2
+    while key in entities:
+        key, suffix = "%s_%d" % (base, suffix), suffix + 1
+    return key
 
 
 def planned_entities(cid, frame_id=None):

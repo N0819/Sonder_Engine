@@ -124,7 +124,49 @@ _DEFAULT = {
     "sky": "fair", "air": "clear", "cloud": "clear", "electrical": False,
     "precipitation": "none", "precipitation_kind": "none",
     "intensity": "none", "wind": "still", "temperature": "mild",
+    # WHAT THE NIGHT SKY GIVES. `spatial_light.room_light` rules that for an
+    # `open` room "the sky is that room's whole account", and the account had
+    # no moon in it, so every outdoor night was pitch dark and an authored
+    # `light` above it was overruled -- correctly by that rule, wrongly in
+    # fact. Measured, the owner's chat 151 (2026-09-20): a beach whose own
+    # weather read "a clear black night sky strewn with stars, the full moon
+    # high", declaring `light: "dim"`, composed `dark` in every view, and a
+    # planned police box standing on the sand could not be seen by the two
+    # people beside it. The room is called Moonlit Beach.
+    #
+    # DEFAULTS TO `none`, so every stored scene keeps the light it had: a
+    # record that never said there was a moon still gets a dark night.
+    "moon": "none",
 }
+
+#: The moon's phases, as an author writes them. A closed vocabulary the engine
+#: owns, like every other axis here -- not an attempt to anticipate English.
+MOONS = ("none", "new", "crescent", "half", "gibbous", "full")
+
+#: Which of them light the ground. THE THRESHOLD IS `gibbous`, and it is a
+#: choice worth naming rather than burying: a full moon on a clear night over
+#: open ground is enough to cross it by and to make out a shape at a distance,
+#: and a half moon is not -- you can tell the sky from the land and very little
+#: else. So the two brightest phases lift a night from `dark` to `dim` and the
+#: rest leave it as it was. `dim`, never `lit`: moonlight is not daylight, and
+#: this may only ever BRIGHTEN a night, so no scene loses sight it had.
+MOONLIT = frozenset({"full", "gibbous"})
+
+#: Reading the moon off a sky nobody gave an axis to -- the same migration this
+#: module already does for the five legacy sky words (`_LEGACY_SKY_AXES`), for
+#: the same reason: the fact is in the record, spelled the way the story
+#: happened to write it, and the alternative is a live scene that stays dark
+#: while its own weather names a full moon. Read ONLY when no `moon` axis was
+#: declared, and only off the sky's own text.
+_MOON_IN_PROSE = (
+    ("moonless", "none"), ("no moon", "none"), ("new moon", "new"),
+    ("full moon", "full"), ("gibbous", "gibbous"), ("crescent", "crescent"),
+    ("half moon", "half"), ("quarter moon", "half"),
+    # A story that says only "moonlit" or "moonlight" has said the ground is
+    # lit by it, which is the whole claim the axis carries; it gets the
+    # dimmest phase that makes that true rather than the brightest.
+    ("moonlit", "gibbous"), ("moonlight", "gibbous"), ("the moon", "gibbous"),
+)
 
 # --- reading what is already stored ----------------------------------------
 #
@@ -518,6 +560,13 @@ def normalize_weather(value, base=None):
         "wind": axis("wind", WINDS, _DEFAULT["wind"]),
         "temperature": axis("temperature", TEMPERATURES,
                             _DEFAULT["temperature"]),
+        # WHAT THE NIGHT HAS TO SEE BY. Declared axis first, then the sky's own
+        # text, then what was already there -- the same order every axis here
+        # uses, with the prose read standing in for `_LEGACY_SKY_AXES`' job on
+        # a field no stored scene has. `none` last, so a record that never
+        # mentioned a moon keeps its dark night.
+        "moon": axis("moon", MOONS, "") or _moon_in_prose(sky)
+        or _pick(base.get("moon"), MOONS, _DEFAULT["moon"], "moon"),
     }
     # WHICH DRIFT WINDOW THIS SKY BELONGS TO. Carried from the RECORD and
     # never from the base, because a record written over is a new record: a
@@ -535,6 +584,28 @@ def normalize_weather(value, base=None):
     if stamp is not None:
         out[DRIFT_STEP_KEY] = stamp
     return out
+
+
+def _moon_in_prose(text):
+    """The moon a sky's own words name, or "" -- see `_MOON_IN_PROSE`.
+
+    Longest phrase first, so "new moon" and "full moon" are never read as the
+    bare "the moon" that follows them, and "moonless" is never read as
+    "moonlit" sharing its stem.
+    """
+    haystack = str(text or "").casefold()
+    if not haystack:
+        return ""
+    for phrase, moon in sorted(_MOON_IN_PROSE, key=lambda p: -len(p[0])):
+        if phrase in haystack:
+            return moon
+    return ""
+
+
+def moon_lights(weather):
+    """Does this sky's moon light the ground? (`MOONLIT`.)"""
+    weather = weather if isinstance(weather, dict) else {}
+    return str(weather.get("moon") or "none") in MOONLIT
 
 
 def is_falling(weather):

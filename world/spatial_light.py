@@ -118,7 +118,43 @@ def _sky_light(scene: dict, phase: str) -> str:
     # The whole record, not the sky's NAME: what dims a day is an axis since
     # A88, and normalising here is what recovers those axes for a scene stored
     # before they existed.
-    return sun_light(phase, normalize_weather(weather) or None)
+    record = normalize_weather(weather) or None
+    # ONE MOON, NOT TWO. The sky's `moon` axis is the engine's account of the
+    # night, and a story may ALSO have written the moon as a scene entity so it
+    # can carry a `light_source` -- the owner's chat 151 holds `The Moon`,
+    # `kind: "celestial"`, `state: {"phase": "full"}`, beside a sky whose prose
+    # names the same full moon. Two records of one fact can only disagree, and
+    # the one the story wrote as an object is the more explicit of the two: a
+    # declared `phase` outranks a phase read out of the sky's wording. Where no
+    # celestial entity carries one, the axis stands as it was.
+    if record is not None:
+        phase_word = _celestial_phase(scene)
+        if phase_word:
+            record = dict(record, moon=phase_word)
+    return sun_light(phase, record)
+
+
+def _celestial_phase(scene):
+    """The phase a `celestial` scene entity declares, folded onto the moon axis,
+    or "". First such entity wins; a scene with two moons is a fiction this
+    reader has nothing to say about and leaves to the sky's own axis."""
+    from world.weather import MOONS, _moon_in_prose
+    for record in ((scene or {}).get("entities") or {}).values():
+        if not isinstance(record, dict):
+            continue
+        if str(record.get("kind") or "").strip().casefold() != "celestial":
+            continue
+        state = record.get("state")
+        word = str((state or {}).get("phase") or "").strip().casefold() \
+            if isinstance(state, dict) else ""
+        if word in MOONS:
+            return word
+        # A phase written as a phrase ("waxing gibbous") is read the same way
+        # the sky's own prose is, so one spelling table serves both.
+        folded = _moon_in_prose(word)
+        if folded:
+            return folded
+    return ""
 
 
 def _declaration_is_the_only_account(scene, room_id, room, exposure,

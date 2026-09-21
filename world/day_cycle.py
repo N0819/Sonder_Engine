@@ -198,6 +198,28 @@ def sun_light(phase, sky=None) -> str:
     the dim its `cloud` states, where the word list gave it broad daylight.
     """
     level = SUN_LIGHT.get(str(phase or ""), "lit")
+    if level == "dark":
+        # THE NIGHT SKY HAS A MOON IN IT. `spatial_light.room_light` rules that
+        # for an `open` room "the sky is that room's whole account" and an
+        # authored `light` above it "is simply wrong -- the moonlit shore stays
+        # dark at night". The rule is right; the account was short. Measured,
+        # the owner's chat 151 (2026-09-20): a beach whose own weather read "a
+        # clear black night sky strewn with stars, the full moon high", which
+        # declared `light: "dim"`, composed `dark` in every view -- and a
+        # planned police box standing on the sand was invisible to the two
+        # people beside it, on a beach the story calls Moonlit.
+        #
+        # ONLY EVER BRIGHTER, and only to `dim`: moonlight is not daylight, so
+        # no scene loses sight it had and a night never reads as a day. Cloud
+        # and thick air still take it back -- a full moon behind a covered sky
+        # lights nothing, which is the same axis test that dims a day one rung
+        # below, asked here of the moon instead of the sun.
+        from world.weather import moon_lights
+        if isinstance(sky, dict) and moon_lights(sky) \
+                and str(sky.get("cloud") or "") != "covered" \
+                and str(sky.get("air") or "clear") == "clear":
+            return "dim"
+        return level
     if level != "lit":
         return level
     if isinstance(sky, dict):

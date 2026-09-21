@@ -750,6 +750,22 @@ def _room_known(world, room):
     return room in world["rooms"] or room in world["planned"]
 
 
+def _room_anchor_ids(world, room):
+    """The fixtures a room declares, as ids, or an empty set.
+
+    FAIL-OPEN, and the empty set is the whole of it: a room the scene does not
+    hold yet -- a planned stub whose fixtures live in the plan rather than in
+    `scene.rooms` -- answers nothing, and the caller treats nothing as "cannot
+    say", never as "has no fixtures". Refusing a station against a room whose
+    fixtures this reader cannot see would refuse a correct plan for being early.
+    """
+    room = str(room or "")
+    scene_room = ((world.get("scene") or {}).get("rooms") or {}).get(room)
+    if not isinstance(scene_room, dict):
+        return set()
+    return {str(key) for key in (scene_room.get("anchors") or {}) if str(key)}
+
+
 # -- plan_rooms ---------------------------------------------------------------
 
 def _plan_geometry(raw):
@@ -1166,7 +1182,14 @@ def _shape_plan_entity(op):
         "role": _text(op.get("role"), 120),
         "brief": {"purpose": _text(brief.get("purpose"), 600),
                   "truths": _text(brief.get("truths"), 600),
-                  "where": _text(brief.get("where"), 120)},
+                  "where": _text(brief.get("where"), 120),
+                  # WHERE IN THE ROOM, as an anchor id of it. `where` named a
+                  # room and nothing finer, so a materialized thing stood
+                  # nowhere in particular -- named without a distance and
+                  # needing light like anything else, because the carve-outs
+                  # that keep what a body has its hands on visible cannot reach
+                  # a thing that stands at nothing.
+                  "station": _text(brief.get("station"), 120)},
         "surface": dict(op["surface"]) if isinstance(op.get("surface"), dict) else {},
         "look": _text(op.get("look"), 600),
         "sources": _plan_sources(op),
@@ -1208,6 +1231,26 @@ def _preview_plan_entity(cid, frame_id, op, world):
             "plan_entity files %r with no `brief.where`, so nothing can put "
             "it anywhere: name the room id it is in, or it stays a reserved "
             "identity the story cannot reach" % op["name"])
+    # ...AND WHERE IN IT, the same question one level finer. An anchor the room
+    # does not have is a refusal, because a station naming nothing is a place
+    # nobody can see the thing at; naming none at all is a warning of exactly
+    # the shape `where`'s is above, and for the same measured reason -- chat
+    # 151's TARDIS plan put the box "a few paces up the dry sand ... above the
+    # tideline" in its PURPOSE PROSE, on a beach carrying an anchor called
+    # `tideline_sand`, and the one field that would have placed it was empty.
+    station = op["brief"].get("station") or ""
+    if where and station:
+        anchors = _room_anchor_ids(world, where)
+        if anchors and station not in anchors:
+            errors.append(
+                "plan_entity stands %r at %r, which is not a fixture of %r; "
+                "its fixtures are %s"
+                % (op["name"], station, where, ", ".join(sorted(anchors)) or "none"))
+    elif where and not station:
+        warnings.append(
+            "plan_entity files %r with no `brief.station`, so it stands in %r "
+            "at nothing: name the fixture it is at and a body in the room sees "
+            "it where the fixture is" % (op["name"], where))
     if op["answers_need"] and op["answers_need"] not in world["needs"]:
         errors.append("plan_entity answers need %r, which is not open"
                       % op["answers_need"])

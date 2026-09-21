@@ -4611,6 +4611,27 @@ def _visible_things(sc, name, room, *, sweep=False, bodies=()):
         if str(eid).casefold() in furniture \
                 or label.casefold() in furniture:
             continue                                        # rule 4
+        # RULE 4b: A THING THE VIEW CAN NEITHER PLACE NOR DESCRIBE IS NOT A
+        # THING LYING HERE. Structural, and deliberately not a list of kinds:
+        # the scene keys a room's own character and the sky above it as
+        # entities so they can carry a `sound_source` and a `light_source`
+        # (`room_light`: "a lamp is a light SOURCE and lives on an entity").
+        # Measured, the owner's chat 151: the beach held `The Moon`
+        # (`kind: celestial`) and `The Surf` (`kind: ambient`), both with an
+        # empty description and no station, and this pass said "There is the
+        # Moon here." The moon is not lying on the sand.
+        #
+        # A thing the view has something to SAY about has one of the two: a
+        # description of its own, or a place in the room. The coin had both,
+        # the clay mug had a station and no description, the TARDIS a
+        # description and no station -- and a source-bearing scenery record has
+        # neither, which is exactly what makes it scenery. Its light and its
+        # noise still reach the view through the channels that own them.
+        described = bool(str(entity.get("description") or "").strip())
+        stationed = isinstance(stations.get(str(eid)), dict) \
+            and str((stations.get(str(eid)) or {}).get("at") or "")
+        if not described and not stationed:
+            continue
         at = str(((stations.get(str(eid)) or {}) if isinstance(
             stations.get(str(eid)), dict) else {}).get("at") or "")
         if at:
