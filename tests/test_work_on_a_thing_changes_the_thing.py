@@ -34,8 +34,8 @@ def _sheet():
 
 def test_the_author_is_told_the_consequence_belongs_to_the_thing():
     sheet = _sheet()
-    assert "WORK ON A THING CHANGES THAT THING" in sheet
-    assert "route the thing's own channel beside the contact" in sheet
+    assert "WORK ON A THING CHANGES IT" in sheet
+    assert "route its own channel (entities) beside the contact" in sheet
 
 
 def test_the_boundary_is_the_engine_s_own_test_and_not_a_verb_list():
@@ -53,12 +53,11 @@ def test_the_exception_survives_the_reduction():
     effect for every push that does not give."""
     sheet = _sheet()
     assert "invents no state effect to earn a channel" in sheet
-    assert "An attempt that leaves it as it was" in sheet
+    assert "A span that neither changes nor asks it" in sheet
     assert "keeps its event and observable" in sheet
     assert "categories:[]" in sheet
 
 
 def test_a_body_s_posture_is_not_the_record_of_its_work():
     """The measured failure in one sentence: 118 of 118 tags were the body."""
-    assert ("A body's posture, its grip and where it stands are never the "
-            "record of what it was working on") in _sheet()
+    assert "A body's posture, grip and place are never the record of its work" in _sheet()

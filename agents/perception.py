@@ -455,6 +455,85 @@ def _standing_contacts_for(scene, observer_name):
     return out
 
 
+def _station_anchor_of(scene, name):
+    """The anchor `name` stands at, with `same_subject`'s key tolerance."""
+    stations = (scene or {}).get("stations") or {}
+    if not isinstance(stations, dict):
+        return ""
+    for key, row in stations.items():
+        if isinstance(row, dict) and same_subject(scene, str(key), name):
+            return str(row.get("at") or "")
+    return ""
+
+
+def _things_read_by(sc, name, room, *, bodies=()):
+    """The things whose own record this observer is READING right now, as
+    ``[(entity_id, entity, channel)]`` -- for `composer.thing_reading_percepts`.
+
+    A BODY READS A THING BY HAVING ITS HANDS ON IT OR BY STANDING AT IT. Two
+    admissions, both subtracting from ledgers the engine already keeps, so
+    neither is a new judgment about what a body reaches:
+
+      * TOUCH: a standing contact this observer is the ACTOR of, whose target
+        is a thing in this room. The contact ledger is the record that a hand
+        is on it; what the hand finds is the thing's `state`.
+      * SIGHT: a thing stationed at the SAME anchor the observer stands at,
+        when the room has light to see by. Arm's reach is what a shared
+        station means (`stations.at`), and a display at arm's reach is read
+        without touching it. Across the room it is not: no distance
+        vocabulary is spent here, so nothing is read from afar.
+
+    A body is never a thing (rule 2 of `_visible_things`, the same
+    `same_subject` test), and a thing the observer only WATCHES someone else
+    handle contributes nothing: the bystander gets the act through
+    `act_percept`, never the numbers. That asymmetry is the firewall doing
+    its ordinary work -- the reading crosses to the one body with a channel
+    to it.
+    """
+    entities = (sc or {}).get("entities") or {}
+    if not room or not isinstance(entities, dict):
+        return []
+    known = [str(b) for b in bodies if str(b)]
+
+    def _is_body(eid, entity):
+        label = str(entity.get("name") or "")
+        return any(same_subject(sc, str(eid), body)
+                   or (label and same_subject(sc, label, body))
+                   for body in known)
+
+    def _here(eid):
+        return room_of(sc, str(eid)) == room
+
+    found = {}
+    for contact in _standing_contacts_for(sc, name):
+        if not same_subject(sc, str(contact.get("actor") or ""), name):
+            continue
+        target = str(contact.get("target") or "").strip()
+        if not target or same_subject(sc, target, name):
+            continue
+        for eid, entity in entities.items():
+            if not isinstance(entity, dict) or eid in found:
+                continue
+            if not same_subject(sc, str(eid), target):
+                continue
+            if _is_body(eid, entity) or not _here(eid):
+                continue
+            found[eid] = (entity, "touch")
+    at = _station_anchor_of(sc, name)
+    if at and not _is_dark(effective_light(sc, room)):
+        stations = sc.get("stations") or {}
+        for eid, entity in entities.items():
+            if not isinstance(entity, dict) or eid in found:
+                continue
+            row = stations.get(str(eid)) if isinstance(stations, dict) else None
+            if not isinstance(row, dict) or str(row.get("at") or "") != at:
+                continue
+            if _is_body(eid, entity) or not _here(eid):
+                continue
+            found[eid] = (entity, "sight")
+    return [(eid, entity, channel) for eid, (entity, channel) in found.items()]
+
+
 _BODY_DETAIL_GENERIC = frozenset({
     "above", "bare", "below", "between", "body", "exposed", "full", "inner",
     "outer", "skin", "soft", "their", "there", "these", "they", "thigh",
@@ -5073,6 +5152,20 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
         (record, contact_action_clause(record, observer=name, scene=sc,
                                        label_for=_sensation_label))
         for record in contact_actions_for_observer(sc, name)
+    ]))
+    # WHAT THE THING UNDER THOSE HANDS SAYS ABOUT ITSELF. The contact
+    # percept above is the sensation of touching it; this is its record --
+    # readings, harm, workings -- delivered to the one body reading it
+    # (`_things_read_by`: hands on it, or at its station with light). The
+    # objects hand has been required to write these facts since the detail
+    # clause and no view path read them back (chat 152 t4337-4338: two beats
+    # of "checking the console for damage" answered with nothing).
+    percepts.extend(composer.thing_reading_percepts([
+        (str(entity.get("name") or ""), composer.thing_reading_text(
+            entity.get("state")), str(eid), channel)
+        for eid, entity, channel in _things_read_by(
+            sc, name, room,
+            bodies=[name] + [str(b.get("name") or "") for b in others or []])
     ]))
     region_labels = {name: "you"}
     for body in others:

@@ -76,6 +76,50 @@ def body_plan_uid(charter_key, body_key):
     return "charter:%s/%s" % (str(charter_key or ""), str(body_key or ""))
 
 
+def plan_state(value, *, limit=PLAN_BRIEF_CHARS):
+    """A plan's authored `brief.state`, as the dict the minted thing will
+    carry -- WHAT CHECKING IT WOULD FIND, before anyone has.
+
+    The owner (2026-09-21): the planner can give a vehicle its abilities as a
+    plan item with an initial condition, and the Director takes it from
+    there. `truths` is prose no field reads; this is the field. Keys are the
+    author's, as they are for the objects hand (`composer.thing_reading_text`
+    voices whatever a record holds), so a ship, a winch and a wound in a wall
+    each carry what they have. One level of nesting, text values capped like
+    the rest of the brief, empties dropped. Nothing here decides which keys
+    matter."""
+    if not isinstance(value, dict):
+        return {}
+    out = {}
+    for key, raw in value.items():
+        key = _text(key, 60)
+        if not key:
+            continue
+        if isinstance(raw, dict):
+            inner = {}
+            for k2, v2 in raw.items():
+                k2 = _text(k2, 60)
+                if not k2 or isinstance(v2, (dict, list, tuple)):
+                    continue
+                t = v2 if isinstance(v2, (bool, int, float)) else _text(v2, limit)
+                if t or isinstance(t, (bool, int, float)):
+                    inner[k2] = t
+            if inner:
+                out[key] = inner
+        elif isinstance(raw, (list, tuple)):
+            items = [_text(v, limit) for v in raw if not isinstance(v, (dict, list, tuple))]
+            items = [v for v in items if v]
+            if items:
+                out[key] = items
+        elif isinstance(raw, (bool, int, float)):
+            out[key] = raw
+        else:
+            t = _text(raw, limit)
+            if t:
+                out[key] = t
+    return out
+
+
 def normalize_plan(uid, entry):
     entry = entry if isinstance(entry, dict) else {}
     kind = str(entry.get("kind") or "person").strip().casefold()
@@ -119,6 +163,11 @@ def normalize_plan(uid, entry):
         "source": _text(entry.get("source"), 40) or "authored",
         "filed_turn": entry.get("filed_turn"),
     }
+    # WHAT CHECKING IT WOULD FIND (`plan_state`): absent when the plan says
+    # nothing, so every stored plan reads back byte-identical.
+    state = plan_state(brief.get("state"))
+    if state:
+        out["brief"]["state"] = state
     surface = entry.get("surface")
     if isinstance(surface, dict) and surface:
         out["surface"] = dict(surface)
@@ -321,6 +370,14 @@ def materialize_plans_in_sight(cid, scene, frame_id=None, *, occupied=()):
         aliases = [str(a) for a in plan.get("aliases") or [] if str(a or "")]
         if aliases:
             record["aliases"] = aliases
+        # THE PLAN'S INITIAL CONDITION IS THE THING'S STATE. A vehicle or a
+        # mechanism the Room planned with what checking it would find stands
+        # up carrying it, so the first hand on it is answered from the record
+        # (`perception._things_read_by`); the objects hand owns every later
+        # change, merging onto this by id. A plan with no state mints none.
+        state = plan_state((plan.get("brief") or {}).get("state"))
+        if state:
+            record["state"] = state
         entities[key] = record
         positions[key] = where
         _station_a_thing(scene, key, where,
@@ -479,6 +536,12 @@ def plan_figure(plan):
     if purpose or truths:
         row["brief"] = {k: v for k, v in (("purpose", purpose),
                                           ("truths", truths)) if v}
+    # The Director renders most plans itself; when it does, the authored
+    # initial condition rides along so its `entities` row writes it rather
+    # than minting a thing whose record is silent about what it is.
+    state = plan_state(brief.get("state"))
+    if state:
+        row.setdefault("brief", {})["state"] = state
     return row
 
 

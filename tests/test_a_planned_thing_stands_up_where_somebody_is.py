@@ -93,6 +93,32 @@ class TestTheTardisOnTheBeach:
         assert set(record) <= {"name", "kind", "description", "aliases",
                                "plan_ref"}
 
+    def test_a_plan_s_initial_condition_is_the_thing_s_state(self, cid):
+        """The owner (2026-09-21): the planner gives a vehicle its abilities
+        and initial condition; the Director takes it from there. `brief.state`
+        is that field, and the thing stands up carrying it, so the first hand
+        on it is answered from the record (`perception._things_read_by`).
+        Values are text-capped and one level deep; empties are dropped."""
+        _plan(cid, brief={
+            "where": "moonlit_beach",
+            "state": {"time_rotor": "stuttering", "power": {"reserve": "a third",
+                                                            "": "dropped"},
+                      "alarms": ["cloister bell tolled"], "sealed": True,
+                      "blank": "", "nested_too_deep": {"a": {"b": "c"}}}})
+        scene, minted = materialize_plans_in_sight(
+            cid, _beach(), occupied={"moonlit_beach"})
+        record = scene["entities"][minted[0]["entity_id"]]
+        assert record["state"] == {
+            "time_rotor": "stuttering", "power": {"reserve": "a third"},
+            "alarms": ["cloister bell tolled"], "sealed": True}
+
+    def test_the_director_s_own_render_is_handed_the_state(self, cid):
+        from world.planned_entities import plans_in_view
+        _plan(cid, brief={"where": "moonlit_beach",
+                          "state": {"time_rotor": "stuttering"}})
+        [row] = plans_in_view(cid, ["moonlit_beach"])
+        assert row["brief"]["state"] == {"time_rotor": "stuttering"}
+
     def test_the_plan_is_settled_so_nothing_mints_it_twice(self, cid):
         """`plans_in_view` must stop offering it, or the next beat is invited
         to stand a second police box beside the first -- the defect

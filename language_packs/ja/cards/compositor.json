@@ -330,6 +330,8 @@
     "opening_bare": "{opening}がある。",
     "thing_placed": "{place}に{desc}がある。",
     "thing_here": "ここに{desc}がある。",
+    "thing_reads_touch": "手の下の{label}：{readings}。",
+    "thing_reads_sight": "{label}の表示：{readings}。",
     "weather_overhead": "{sky}の空から{what}。",
     "weather_overhead_plain": "{what}。",
     "weather_beyond": "覆いの向こうで、{what}。",

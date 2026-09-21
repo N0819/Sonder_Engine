@@ -1172,6 +1172,7 @@ def _plan_sources(op):
 
 
 def _shape_plan_entity(op):
+    from world.planned_entities import plan_state
     if not _text(op.get("name"), 120):
         raise ValueError("plan_entity names the entity")
     brief = op.get("brief") if isinstance(op.get("brief"), dict) else {}
@@ -1189,7 +1190,13 @@ def _shape_plan_entity(op):
                   # needing light like anything else, because the carve-outs
                   # that keep what a body has its hands on visible cannot reach
                   # a thing that stands at nothing.
-                  "station": _text(brief.get("station"), 120)},
+                  "station": _text(brief.get("station"), 120),
+                  # WHAT CHECKING IT WOULD FIND: the initial condition and
+                  # abilities of a thing with workings of its own, in the
+                  # author's own keys (`world.planned_entities.plan_state`).
+                  # It stands up as the thing's `state`, which is what a body
+                  # with its hands on it is answered from.
+                  "state": plan_state(brief.get("state"))},
         "surface": dict(op["surface"]) if isinstance(op.get("surface"), dict) else {},
         "look": _text(op.get("look"), 600),
         "sources": _plan_sources(op),
@@ -2704,13 +2711,21 @@ OPERATION_FIELDS = {
     "plan_entity": {
         "name": "the entity's name", "kind": "person | thing | creature",
         "role?": "what they are for, in a word or two", "aliases?": "[names]",
-        "brief": "{purpose, truths, where} -- `where` is the ROOM ID this "
-                 "thing is in, and it is the only field that puts it "
-                 "anywhere: a plan with no `where` is a reserved identity "
-                 "the story can never reach, however fully the rest is "
-                 "written, and naming the room in `purpose` prose does not "
+        "brief": "{purpose, truths, where, station?, state?} -- `where` is the "
+                 "ROOM ID this thing is in, and it is the only field that "
+                 "puts it anywhere: a plan with no `where` is a reserved "
+                 "identity the story can never reach, however fully the rest "
+                 "is written, and naming the room in `purpose` prose does not "
                  "place it. Leave it out only to reserve a name before the "
-                 "world has a room for it.",
+                 "world has a room for it. `state` is what CHECKING the thing "
+                 "would find, in your own keys ({<what is read>: <what it "
+                 "shows>}, one level of nesting): a thing with workings of "
+                 "its own -- a vehicle, a mechanism, an instrument -- gets its "
+                 "abilities and its condition here, given where it stands and "
+                 "what has happened to it before the story opens. It stands "
+                 "up as the thing's `state`, the record a hand on it is "
+                 "answered from and the Director keeps thereafter; a condition "
+                 "written into `truths` prose reaches no hand.",
         "look?": "how they read at a glance",
         "light_source?": "how much light this thing PUTS OUT (%s) -- a thing "
                          "that gives light says so in this field; prose about "

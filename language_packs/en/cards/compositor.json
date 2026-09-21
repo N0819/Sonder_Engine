@@ -413,6 +413,8 @@
     "opening_bare": "There is a way out through {opening}.",
     "thing_placed": "There is {desc} at {place}.",
     "thing_here": "There is {desc} here.",
+    "thing_reads_touch": "Under your hands, {label}: {readings}.",
+    "thing_reads_sight": "{label} shows: {readings}.",
     "weather_overhead": "{what} out of the {sky} sky.",
     "weather_overhead_plain": "{what}.",
     "weather_beyond": "Beyond your cover, {what}.",

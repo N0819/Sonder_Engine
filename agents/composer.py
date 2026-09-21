@@ -2755,6 +2755,100 @@ def thing_clause(desc, place=""):
             else _en("thing_here", desc=desc))
 
 
+#: State keys another renderer already voices, or that are structure rather
+#: than a fact a body can read off a thing. `transit`/`hatch` and their
+#: fields render through the doorway the engine derives from them
+#: (`common` "the open doors" / "still-sealed hatch"); `posture`, `activity`
+#: and `held_items` are a BODY's and `body_state_percept` owns them; the
+#: rest are bookkeeping the objects hand writes for the engine, not for an
+#: eye. Kept as the complement of what is readable rather than a list of
+#: what is: anything the hand writes that is not one of these is a fact the
+#: thing shows, whatever the thing turns out to be.
+_UNREADABLE_STATE_KEYS = frozenset({
+    "transit", "link", "phase", "hatch", "destination_room", "route_room",
+    "eta_seconds", "posture", "activity", "held_items", "zone", "description",
+    "proximity", "target", "targets", "kind", "name", "lit", "running",
+    "pointed_at",
+})
+
+
+def _reading_value(value):
+    if isinstance(value, dict):
+        parts = [f"{_reading_label(k)} {_reading_value(v)}"
+                 for k, v in value.items() if _reading_value(v)]
+        return ", ".join(parts)
+    if isinstance(value, (list, tuple)):
+        return ", ".join(s for s in (_reading_value(v) for v in value) if s)
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    return " ".join(str(value if value is not None else "").split())
+
+
+def _reading_label(key):
+    return " ".join(str(key or "").replace("_", " ").split())
+
+
+def thing_reading_text(state):
+    """What a thing's own record says about it, as one clinical clause list.
+
+    A THING EXAMINED TELLS YOU WHAT IT IS LIKE. The objects hand writes a
+    thing's readings, its harm and its workings into `state` -- the prompt
+    has required it since the detail clause, and nothing on the view path
+    ever read the dict back: `_visible_things` renders a thing by its
+    description and uses `state` only as a placement key. Measured, chat
+    152 turns 4337-4338: the Doctor ran his hands over the console for two
+    beats "checking what the scar cost her" and was told nothing, because
+    the console had no record and, had it one, no renderer would have
+    voiced it. The owner's 2026-09-19 ruling names this class -- an
+    unanswered read is a bug, and the acceptance bar is that a thing
+    examined closely tells you what it is like.
+
+    Free-form on purpose. The keys are the hand's, so a console, a hull, a
+    winch and a wound in a wall each carry whatever they have; this layer
+    humanises a key, flattens a nested value and joins with semicolons, and
+    never decides which keys matter. Empty when the record is silent.
+    """
+    if not isinstance(state, dict):
+        return ""
+    clauses = []
+    for key, value in state.items():
+        label = _reading_label(key)
+        if not label or str(key) in _UNREADABLE_STATE_KEYS:
+            continue
+        text = _reading_value(value)
+        if not text:
+            continue
+        clauses.append(f"{label}: {text}")
+    return "; ".join(clauses)
+
+
+def thing_reading_percepts(rows):
+    """Standing readings off things this observer is reading, as
+    ``[(label, readings, uid, channel)]`` -- admission already decided by
+    `perception._things_read_by` (hands on it, or standing at its own
+    station with light to see by), so a non-reader contributes nothing
+    here by construction.
+
+    `ambient`, like the rest of `room_content_percepts`' family: a standing
+    fact of the room, re-rendered when it CHANGES and furniture when it does
+    not -- the dedupe key is the reading itself, never the sentence."""
+    out = []
+    for label, readings, uid, channel in rows or []:
+        readings = str(readings or "").strip()
+        label = _noun_phrase(label)
+        if not readings or not label:
+            continue
+        template = ("thing_reads_touch" if channel == "touch"
+                    else "thing_reads_sight")
+        out.append(Percept(
+            kind="ambient", channel=channel,
+            data={"desc": _cap(_t(template, label=label, readings=readings))},
+            salience=0.5,
+            dedupe_key=standing_key("reading", (uid,), (readings,)),
+        ))
+    return out
+
+
 def room_content_percepts(*groups):
     """Standing things in the observer's room that are not bodies: a crowd, a
     courier waiting by a door, a notice nailed to a post.
