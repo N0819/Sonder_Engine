@@ -311,6 +311,128 @@ def _entity_exterior_room(scene: dict, eid: str, entity: dict, *,
     this for every entity in the scene."""
     return room_of_record(scene, eid, entity, index=index)
 
+def evict_self_contained_entities(scene: dict) -> list:
+    """Nothing is inside itself. Returns the evictions, as (entity, from, to).
+
+    A thing with an interior can be CARRIED, and a carried thing's position is
+    derived from its holder (`derive_contained_positions`) -- so a holder who
+    walks into that thing's own interior takes it in with them, and the record
+    left behind says the ship is parked in its own console room. Measured in the
+    owner's own story (chat 151, 2026-09-20): "The tardis followed them into the
+    tardis." A police box was recorded `held` by a body (the binding defect
+    `causal_program.bind_items` carried until the same day), that body stepped
+    through its doors, and `positions.the_tardis` became
+    `tardis_console_room` -- a room whose `parent_entity` is `the_tardis`.
+
+    IT IS A PARADOX AND NOT A PREFERENCE, which is why this evicts rather than
+    reports and waits: every reader downstream is entitled to assume the
+    containment graph is acyclic. `_hiding_holders` is cycle-safe because a
+    cycle there was already known to be possible; the POSITION graph had no
+    equivalent, so `apply_transit_dock_edges` would go on deriving a doorway
+    from an exterior room that is the interior it leads out of, and
+    `containment_chain` would walk forever but for its own guard.
+
+    WHERE IT GOES IS ITS OWN DOORWAY'S ANSWER. The dock room's exterior edge is
+    the way out of the thing, so it is also where the thing is: a box whose door
+    opens onto the beach is on the beach. That is a derivation, not a guess, and
+    it is the same answer the dock pass already computed for the door. With no
+    exterior edge to read -- an interior nothing has docked -- the position is
+    DROPPED rather than invented, which leaves the thing unplaced and is the
+    honest floor: unplaced is recoverable and a wrong room is not.
+
+    Transitive, because the one-level test is the easy half: a car on a ferry's
+    vehicle deck inside the car is the same error one hop out.
+    """
+    rooms = scene.get("rooms") if isinstance(scene, dict) else None
+    positions = scene.get("positions") if isinstance(scene, dict) else None
+    if not isinstance(rooms, dict) or not isinstance(positions, dict):
+        return []
+    entities = scene.get("entities") or {}
+    index = PositionsIndex(positions)
+    evicted = []
+    # A ROOM IS NOT ADJACENT TO ITSELF, and this is where that gets cleaned up
+    # because it is the same corruption one step on: with a thing inside its own
+    # interior, `apply_transit_dock_edges` derives the doorway FROM that
+    # interior, so the door comes to lead into the room it leads out of.
+    # Measured in the owner's scene: `tardis_console_room.adjacent` read
+    # `[{to: "tardis_console_room", barrier: "open_door"}]`, which is a way out
+    # that arrives where it started. Dropped rather than repaired, because
+    # nothing in the record says where it USED to point and a guess would be a
+    # room nobody chose.
+    for rid, room in rooms.items():
+        if not isinstance(room, dict):
+            continue
+        adjacency = room.get("adjacent")
+        if not isinstance(adjacency, list):
+            continue
+        kept = [e for e in adjacency
+                if not (isinstance(e, dict) and str(e.get("to") or "") == str(rid))]
+        if len(kept) != len(adjacency):
+            room["adjacent"] = kept
+    for eid, ent in list(entities.items()):
+        if not isinstance(ent, dict):
+            continue
+        here = _entity_exterior_room(scene, str(eid), ent, index=index)
+        if not here or here not in rooms:
+            continue
+        if not _encloses(scene, str(eid), here, rooms, entities, index):
+            continue
+        # The way out of the room it is wrongly inside of. It only has to be a
+        # room this entity does NOT enclose -- any OTHER thing's interior is an
+        # ordinary place to be, which is what makes the nested case work: a car
+        # evicted from its own cabin belongs on the ferry's vehicle deck, and an
+        # earlier version of this refused every room carrying a `parent_entity`
+        # and stranded it.
+        out = ""
+        for edge in ((rooms.get(here) or {}).get("adjacent") or []):
+            if not isinstance(edge, dict):
+                continue
+            to = str(edge.get("to") or "")
+            if to and to in rooms and not _encloses(
+                    scene, str(eid), to, rooms, entities, index):
+                out = to
+                break
+        for key in [k for k, v in positions.items()
+                    if str(v) == here and _same_entity(scene, str(k), str(eid))]:
+            if out:
+                positions[key] = out
+            else:
+                positions.pop(key, None)
+            evicted.append((str(key), here, out))
+    return evicted
+
+
+def _encloses(scene, eid, room_id, rooms, entities, index) -> bool:
+    """Is `room_id` inside `eid` -- directly, or through any chain of holders?
+
+    Walks outward from the room through each enclosure's own exterior room, so
+    the answer covers a nested mover. Cycle-guarded by the visited set, because
+    the thing this function exists to find IS a cycle.
+    """
+    seen = set()
+    while room_id and room_id in rooms and room_id not in seen:
+        seen.add(room_id)
+        holder = str((rooms.get(room_id) or {}).get("parent_entity") or "")
+        if not holder:
+            return False
+        if _same_entity(scene, holder, eid):
+            return True
+        room_id = _entity_exterior_room(
+            scene, holder, entities.get(holder) or {}, index=index)
+    return False
+
+
+def _same_entity(scene, a, b) -> bool:
+    """Two spellings of one entity, by the scene's own subject identity."""
+    if str(a) == str(b):
+        return True
+    try:
+        from world.spatial_identity import same_subject
+        return bool(same_subject(scene, str(a), str(b)))
+    except Exception:
+        return False
+
+
 def apply_transit_dock_edges(scene: dict) -> bool:
     """Rewrite every parent_entity room's exterior adjacency to match
     f(entity position, entity.state.transit), and every state.link entity's

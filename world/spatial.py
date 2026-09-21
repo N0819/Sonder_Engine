@@ -102,8 +102,8 @@ from world.spatial_transit import (
     _interior_rooms_of, _is_body_entity,
     _link_state, _open_enclosure_barrier, _TRANSIT_CLOSED_PHASES,
     _transit_state, ambient_scope, apply_transit_dock_edges,
-    CONTAINER_ENCLOSURES, containment_chain, infer_body_enclosures,
-    sync_entity_interior_rooms,
+    CONTAINER_ENCLOSURES, containment_chain, evict_self_contained_entities,
+    infer_body_enclosures, sync_entity_interior_rooms,
 )
 
 

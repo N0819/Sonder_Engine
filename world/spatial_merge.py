@@ -58,6 +58,7 @@ from world.spatial_senses import apply_comms_ops, normalize_scene_comms
 from world.spatial_substance import apply_substance_ops, apply_contact_action_ops
 from world.spatial_routing import stamp_sight_direction
 from world.spatial_transit import (apply_transit_dock_edges,
+                                  evict_self_contained_entities,
                                   infer_body_enclosures,
                                   sync_entity_interior_rooms)
 
@@ -1934,6 +1935,20 @@ def merge_scene_with_diff(
     # nothing but each other. Runs BEFORE the dock rewrite, which owns
     # interiors and is left to derive those on its own.
     connect_orphan_new_rooms(merged, scene)
+
+    # NOTHING IS INSIDE ITSELF, and this runs BEFORE the dock rewrite because
+    # that pass derives a doorway from the thing's exterior room -- and a thing
+    # standing in its own interior has that room as its "exterior", so the door
+    # would be derived out of the room it leads into. A carried thing follows
+    # its holder (`derive_contained_positions`), so a holder who walks into it
+    # takes it in with them: measured in the owner's story as "the tardis
+    # followed them into the tardis".
+    # Return value deliberately unread, exactly as `repair_entity_positions`'
+    # is at the tail of this function: a derivation that repairs an impossible
+    # record is hygiene, and this merge has typed report channels for the
+    # things only the Director can answer, not for arithmetic it can do itself.
+    # The evictions are returned for a caller that wants them.
+    evict_self_contained_entities(merged)
 
     apply_transit_dock_edges(merged)
 

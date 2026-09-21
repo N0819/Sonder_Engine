@@ -211,7 +211,7 @@
 | `world/spatial_light.py` | 508 |  | `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity` |
 | `world/spatial_light_field.py` | 1246 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_lint.py` | 444 |  | `world.spatial_barriers`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_orientation` |
-| `world/spatial_merge.py` | 2582 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_orientation`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
+| `world/spatial_merge.py` | 2597 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_orientation`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
 | `world/spatial_orientation.py` | 398 | Bearing math and reciprocal spatial-edge normalization. | — |
 | `world/spatial_prose.py` | 404 |  | `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light` |
 | `world/spatial_routing.py` | 1200 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_light`, `world.spatial_orientation` |
@@ -219,7 +219,7 @@
 | `world/spatial_senses.py` | 1868 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation`, `world.spatial_routing` |
 | `world/spatial_sound_field.py` | 3057 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light_field`, `world.spatial_senses` |
 | `world/spatial_substance.py` | 1128 |  | `world.spatial_contacts`, `world.spatial_identity` |
-| `world/spatial_transit.py` | 548 |  | `world.spatial_barriers`, `world.spatial_identity` |
+| `world/spatial_transit.py` | 670 |  | `world.spatial_barriers`, `world.spatial_identity` |
 | `world/spatial_walk.py` | 411 |  | `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_routing` |
 | `world/stimulation.py` | 239 |  | `story`, `world.spatial` |
 | `world/structure.py` | 1720 |  | `world.charter_model`, `world.regions`, `world.spatial` |
@@ -2588,14 +2588,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `merge_scene_with_diff()` | 1557 | 768 lines |
-| `_expire_transient_entity_state()` | 597 | 116 lines |
-| `_shield_standing_bearings()` | 879 | 107 lines |
-| `_merge_room()` | 185 | 99 lines |
-| `_shield_minted_edges()` | 1121 | 95 lines |
-| `beat_movement_cuts()` | 2453 | 94 lines |
-| `sync_scene_passages()` | 1383 | 90 lines |
-| `apply_following_ops()` | 1304 | 77 lines |
+| `merge_scene_with_diff()` | 1558 | 782 lines |
+| `_expire_transient_entity_state()` | 598 | 116 lines |
+| `_shield_standing_bearings()` | 880 | 107 lines |
+| `_merge_room()` | 186 | 99 lines |
+| `_shield_minted_edges()` | 1122 | 95 lines |
+| `beat_movement_cuts()` | 2468 | 94 lines |
+| `sync_scene_passages()` | 1384 | 90 lines |
+| `apply_following_ops()` | 1305 | 77 lines |
 
 ### `world/spatial_orientation.py`
 
@@ -2688,14 +2688,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_transit_dock_edges()` | 314 | 172 lines |
+| `apply_transit_dock_edges()` | 436 | 172 lines |
+| `evict_self_contained_entities()` | 314 | 89 lines |
 | `sync_entity_interior_rooms()` | 131 | 65 lines |
 | `_is_body_entity()` | 62 | 49 lines |
-| `ambient_scope()` | 520 | 29 lines |
+| `ambient_scope()` | 642 | 29 lines |
 | `infer_body_enclosures()` | 225 | 27 lines |
 | `_interior_entry_room()` | 198 | 25 lines |
-| `containment_chain()` | 500 | 19 lines |
-| `_interior_rooms_of()` | 113 | 16 lines |
+| `containment_chain()` | 622 | 19 lines |
 
 ### `world/spatial_walk.py`
 
