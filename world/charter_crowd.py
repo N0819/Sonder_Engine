@@ -179,6 +179,13 @@ def _plural(noun):
     noun = str(noun or "").strip()
     if not noun or noun.endswith("s"):
         return noun
+    # -man is the one English inflection a bare "+s" gets audibly wrong, and
+    # it lands on exactly the post ids a working institution mints:
+    # "journeymans and masters" stood in a forge's own description of itself
+    # (two_lives v5, 2026-09-19). A suffix rule, not a word list -- it holds
+    # for every compound ending that way and needs no vocabulary.
+    if noun.endswith("man"):
+        return noun[:-3] + "men"
     return noun + "s"
 
 
@@ -269,7 +276,38 @@ def mood_of(members, feel):
     return _MOOD_WORST
 
 
-def crowd_for(chat_id, charter, place, members=None):
+def crowd_face(charter, members, feel=None):
+    """The ONE member a crowd fronts -- whoever in it has attention to spare
+    -- or "" for an empty membership.
+
+    A crowd is a cheaper presentation of people, not a deletion of them.
+    Six smiths at a forge are legitimately "a handful of journeymen" to look
+    at; nobody reads six names off a room. But a body you can SEE working is
+    a body you can SPEAK to, and a room whose every person is carried by a
+    band offers an observer nobody at all. Measured (two_lives v5, 2026-09-19,
+    30 beats): Sal Weatherby stood in a forge holding six charter smiths,
+    her own pose watching two of them at the anvil, and her view named them
+    "a handful of journeymans and apprentices" with `company` empty -- not
+    one person in that town spoke for thirty beats. The inversion is the
+    tell: the BUSIER a place was, the less of it could answer.
+
+    Lowest strain, ties by the stable key order. Strain is the engine's own
+    quantity for how loaded a body is (`charter_feel.strain_of`, the reader
+    `mood_of` bands), and the member with attention to spare is the one who
+    looks up when somebody walks in. The tie-break is by key and not by
+    anything felt, so the face is the SAME person beat after beat -- which
+    is what lets an observer address them twice and get the same somebody.
+    """
+    from .charter_feel import strain_of
+
+    members = [str(key) for key in (members or ()) if str(key or "")]
+    if not members:
+        return ""
+    strains = strain_of(feel or {})
+    return min(sorted(members), key=lambda key: float(strains.get(key, 0.0)))
+
+
+def crowd_for(chat_id, charter, place, members=None, *, fronted=None):
     """One derived crowd for this charter in this room, or None.
 
     None below `CHARTER_CROWD_FLOOR`: two unvoiced bodies are two figures
@@ -289,13 +327,22 @@ def crowd_for(chat_id, charter, place, members=None):
     members = members_of(charter, place) if members is None else list(members)
     if len(members) < CHARTER_CROWD_FLOOR:
         return None
+    # ``fronted`` is `crowd_face`'s answer when the caller has fronted one
+    # member as a figure. The FLOOR is tested on the whole membership above
+    # -- the room holds enough people to be a crowd whether or not one of
+    # them turned around -- while the band, composition and mood describe
+    # only the bodies this row still carries, because a body is presented
+    # once per view and the fronted one is presented as itself.
+    carried = [key for key in members if str(key) != str(fronted or "")]
+    if not carried:
+        return None
     key = str(charter.get("key") or "")
     return {
         "uid": charter_crowd_uid(chat_id, key, place),
         "room_uid": str(place or ""),
-        "band": count_band(len(members)),
-        "composition": composition_of(members, charter),
-        "mood": mood_of(members, charter.get("feel") or {}),
+        "band": count_band(len(carried)),
+        "composition": composition_of(carried, charter),
+        "mood": mood_of(carried, charter.get("feel") or {}),
         "heading": None,
         "charter_key": key,
         "derived": True,

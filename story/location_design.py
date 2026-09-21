@@ -173,9 +173,23 @@ def set_skeleton(cid, *, name=None, structure=None, rooms=None):
         raise ValueError("this plan is larger than the engine will plant")
     row["checked"] = False
     save_draft(cid, row)
-    return {"name": plan["name"], "rooms": sorted(plan["rooms"]),
-            "charters": [c.get("key") for c in plan["charters"]],
-            "structure": bool(plan["structure"])}
+    out = {"name": plan["name"], "rooms": sorted(plan["rooms"]),
+           "charters": [c.get("key") for c in plan["charters"]],
+           "structure": bool(plan["structure"])}
+    # WHICH ROOMS STILL HOLD NOTHING A HAND COULD TOUCH, said in the ANSWER to
+    # the call that drafted them. `check()` says the same thing, and saying it
+    # only there was the mistake: `review_location` is advisory, and a pass
+    # that drafts its whole map in a few calls and submits may never ask.
+    # Measured twice (2026-09-19/20): the `draft_location` contract was taught
+    # the field and a design came back 0 of 19 furnished; the review was taught
+    # to report it and the next design came back 0 of 12. This is the one
+    # channel the Room cannot skip -- it is the tool result it already reads to
+    # see what it has drafted.
+    bare = sorted(rid for rid, room in plan["rooms"].items()
+                  if not (isinstance(room, dict) and room.get("anchors")))
+    if bare:
+        out["rooms_with_no_fixtures"] = bare
+    return out
 
 
 def set_charter(cid, charter):
@@ -297,9 +311,36 @@ def check(cid):
             errors.append(
                 "the naming law did not produce a usable name for every "
                 "resident: " + ", ".join(unnamed[:8]))
+    # UNFURNISHED ROOMS, reported and never refused. A room with no anchors
+    # is a room a body cannot touch anything in: `spatial_contacts` resolves
+    # a contact target against the room's fixtures, so a hand laid on a thing
+    # the room never declared is a contact the engine drops. Measured
+    # (two_lives v5 and v7, 2026-09-19): `mill_race`, planned as "the sluice
+    # channel and wet timber shroud housing the great undershot waterwheel",
+    # was planted with no fixtures at all, and a millwright's work on the
+    # apron timber and the wheel shroud was refused across beat after beat --
+    # "Targets 'shroud' and 'apron timber' do not exist as established world
+    # keys or fixtures/anchors in the mill_race payload".
+    #
+    # A NOTE RATHER THAN AN ERROR, because some rooms honestly hold nothing a
+    # hand would find -- an open field, a passage -- and which those are is
+    # the Room's judgment, not this function's. But it is reported HERE
+    # because this is the reader the Room believes: the same draft, drafted
+    # after the `draft_location` contract was taught the field, came back
+    # with 0 of 19 rooms furnished (the design probe, 2026-09-19), so prose
+    # in a tool description is not what carries this.
+    bare = sorted(rid for rid, room in (plan.get("rooms") or {}).items()
+                  if not (isinstance(room, dict) and room.get("anchors")))
+    notes = []
+    if bare:
+        notes.append(
+            "%d room(s) name no fixtures, so nothing in them can be touched, "
+            "stood at or taken cover behind: %s. Give each the features it is "
+            "made of (`anchors`), or leave bare the ones that honestly hold "
+            "nothing." % (len(bare), ", ".join(bare[:12])))
     row["checked"] = not errors
     save_draft(cid, row)
-    return {"ok": not errors, "errors": errors[:12],
+    return {"ok": not errors, "errors": errors[:12], "notes": notes,
             "rooms": len(plan.get("rooms") or {}),
             "charters": [c.get("key") for c in (plan.get("charters") or [])],
             "people": sum(len(state.get("bodies") or {})

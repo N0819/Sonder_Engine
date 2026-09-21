@@ -141,9 +141,18 @@ SPECIALISTS = {
     "spatial": {
         "step_key": "director_spatial",
         "role": "director_spatial",
+        # No `time`: a hand receives the rows selected for it, never the
+        # beat, so the sum its sheet asked for ("a beat that holds several
+        # things in sequence spans all of them") was over terms it could not
+        # see. Measured 2026-09-20: in scope on 38 of 60 playerless beats and
+        # 50 of 118 live beats since 2026-09-15, written on 0 of either, and
+        # the author routed the category 0 times in 3,000 resolve variants,
+        # so no time work item ever reached it. The beat's span is now
+        # engine arithmetic over the author's per-row `seconds`
+        # (`world.mechanics.beat_time_from_spans`).
         "channels": ("positions", "rooms", "remove_rooms",
                      "remove_adjacent", "stations", "poses", "comms_ops",
-                     "following_ops", "location", "time", "weather"),
+                     "following_ops", "location", "weather"),
     },
 }
 
@@ -388,7 +397,6 @@ _CHANNEL_GATES = {
     "comms_ops": lambda f: f["physical_beat"] or f["speech_present"],
     "following_ops": lambda f: f["physical_beat"],
     "location": lambda f: f["physical_beat"],
-    "time": lambda _f: True,
     "weather": lambda _f: True,
     # The world's traffic: gated on its subjects EXISTING, which is what
     # makes this family cold in practice (0 fires in 2,243 beats) while

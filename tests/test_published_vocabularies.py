@@ -481,7 +481,7 @@ def delegated_channels() -> list[str]:
 
 
 class TestEveryDelegatedChannelIsNamedAsDelegated:
-    def test_the_engine_owns_thirty_nine(self):
+    def test_the_engine_owns_thirty_eight(self):
         """Bounds the tests below: a specialist that gains a channel moves
         this count, and the sheet has to move in the same commit. 31 until
         2026-09-04, when `offscreen_plan_ops` left the Director's diff with
@@ -493,8 +493,17 @@ class TestEveryDelegatedChannelIsNamedAsDelegated:
         errand through a package and the Director, which owns objective
         causality and had just narrated the order, could not (PB13).
         39 on 2026-09-15: obligations moved to the social specialist so
-        causal requests, promises and explicit discharges reach commit."""
-        assert len(delegated_channels()) == 39
+        causal requests, promises and explicit discharges reach commit.
+        38 on 2026-09-20: `time` left the spatial hand for NO hand at all. A
+        specialist receives the rows selected for it, never the beat, so the
+        sum its chunk asked for was over terms it could not see; it declined
+        on all 38 of 60 playerless beats and all 50 of 118 live beats where
+        the channel was in its scope, and the author routed the category 0
+        times in 3,000 resolve variants. The beat's span is now engine
+        arithmetic over the author's per-row `seconds`
+        (`world.mechanics.beat_time_from_spans`) -- the one channel here with
+        no model owner, and the count says so."""
+        assert len(delegated_channels()) == 38
 
     @pytest.mark.parametrize("stage", sorted(DELEGATIONS))
     @pytest.mark.parametrize("language", LANGUAGES)

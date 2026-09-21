@@ -636,6 +636,7 @@ from .common import (
     CROWDS_KEY,
     crowds_for_room,
     artifacts_for_room,
+    attending_this_room,
     chatter_for_room,
     chatter_inputs,
     couriers_for_room,
@@ -2566,7 +2567,9 @@ def perception_establish(ctx, nonce):
         "room_notes": _room_notes_for_view(p_rdata, p_room, ctx, sc),
         "ambient_location": _ambient_location_for(sc, p_room),
         "crowds": crowds_for_room(ctx.chat.id, sc, p_room, chatter),
-        "chatter": chatter_for_room(ctx.chat.id, sc, p_room, chatter),
+        "chatter": chatter_for_room(
+            ctx.chat.id, sc, p_room, chatter,
+            attending=attending_this_room(sc, p_name, p_room)),
         "couriers": couriers_for_room(ctx.chat.id, sc, p_room, chatter),
         "notices": artifacts_for_room(ctx.chat.id, sc, p_room, chatter),
         "visible_rooms": _visible_rooms_for(sc, p_name, p_room),
@@ -2600,7 +2603,9 @@ def perception_establish(ctx, nonce):
             "room_notes": _room_notes_for_view(rdata, r, ctx, sc),
             "ambient_location": _ambient_location_for(sc, r),
             "crowds": crowds_for_room(ctx.chat.id, sc, r, chatter),
-            "chatter": chatter_for_room(ctx.chat.id, sc, r, chatter),
+            "chatter": chatter_for_room(
+                ctx.chat.id, sc, r, chatter,
+                attending=attending_this_room(sc, character_name(sh), r)),
             "couriers": couriers_for_room(ctx.chat.id, sc, r, chatter),
             "notices": artifacts_for_room(ctx.chat.id, sc, r, chatter),
             "visible_rooms": _visible_rooms_for(sc, character_name(sh), r),
@@ -2815,7 +2820,9 @@ def perception_act(ctx, nonce):
             "room_notes": _room_notes_for_view(rdata, r, ctx, sc),
             "ambient_location": _ambient_location_for(sc, r),
             "crowds": crowds_for_room(ctx.chat.id, sc, r, chatter),
-            "chatter": chatter_for_room(ctx.chat.id, sc, r, chatter),
+            "chatter": chatter_for_room(
+                ctx.chat.id, sc, r, chatter,
+                attending=attending_this_room(sc, character_name(sh), r)),
             "couriers": couriers_for_room(ctx.chat.id, sc, r, chatter),
             "notices": artifacts_for_room(ctx.chat.id, sc, r, chatter),
             "visible_rooms": _visible_rooms_for(sc, character_name(sh), r),
@@ -3325,7 +3332,9 @@ def perception_outcome(ctx, nonce):
         "room_notes": _room_notes_for_view(p_rdata, p_room, ctx, sc),
         "ambient_location": _ambient_location_for(sc, p_room),
         "crowds": crowds_for_room(ctx.chat.id, sc, p_room, chatter),
-        "chatter": chatter_for_room(ctx.chat.id, sc, p_room, chatter),
+        "chatter": chatter_for_room(
+            ctx.chat.id, sc, p_room, chatter,
+            attending=attending_this_room(sc, p_name, p_room)),
         "couriers": couriers_for_room(ctx.chat.id, sc, p_room, chatter),
         "notices": artifacts_for_room(ctx.chat.id, sc, p_room, chatter),
         "visible_rooms": _visible_rooms_for(sc, p_name, p_room),
@@ -3352,7 +3361,9 @@ def perception_outcome(ctx, nonce):
             "room_notes": _room_notes_for_view(e_rdata, e_room, ctx, sc),
             "ambient_location": _ambient_location_for(sc, e_room),
             "crowds": crowds_for_room(ctx.chat.id, sc, e_room, chatter),
-            "chatter": chatter_for_room(ctx.chat.id, sc, e_room, chatter),
+            "chatter": chatter_for_room(
+                ctx.chat.id, sc, e_room, chatter,
+                attending=attending_this_room(sc, e_name, e_room)),
             "couriers": couriers_for_room(ctx.chat.id, sc, e_room, chatter),
             "notices": artifacts_for_room(ctx.chat.id, sc, e_room, chatter),
             "visible_rooms": _visible_rooms_for(sc, e_name, e_room),
@@ -3383,7 +3394,9 @@ def perception_outcome(ctx, nonce):
             "room_notes": _room_notes_for_view(rdata, r, ctx, sc),
             "ambient_location": _ambient_location_for(sc, r),
             "crowds": crowds_for_room(ctx.chat.id, sc, r, chatter),
-            "chatter": chatter_for_room(ctx.chat.id, sc, r, chatter),
+            "chatter": chatter_for_room(
+                ctx.chat.id, sc, r, chatter,
+                attending=attending_this_room(sc, character_name(sh), r)),
             "couriers": couriers_for_room(ctx.chat.id, sc, r, chatter),
             "notices": artifacts_for_room(ctx.chat.id, sc, r, chatter),
             "visible_rooms": _visible_rooms_for(sc, character_name(sh), r),
@@ -4519,6 +4532,102 @@ def _visible_features(sc, name, room, *, sweep=False):
     ]
 
 
+def _visible_things(sc, name, room, *, sweep=False, bodies=()):
+    """The THINGS standing in this room, as this observer's eyes have them.
+
+    Rows of `{what, uid, state}` for `composer.room_content_percepts`, whose
+    own docstring names a crowd, a courier and a posted notice and forgot the
+    fourth: a thing somebody set down. Until this existed there was no sight
+    path from `scene.entities` to any view -- `feature_visibility` answers for
+    the room's ANCHORS, and the only walk over scene entities on the view path
+    is the scent loop, gated on `entity.scent` -- so a thing reached a mind
+    only through a channel that owned it for another reason (attire, a pose, a
+    contact, a smell, authored furniture). Measured 2026-09-20: a coin laid on
+    a counter appeared in 0 of its own owner's 24 views and she paid twice.
+
+    EVERY RULE HERE SUBTRACTS, and the first one is why this is small: a
+    stationed thing INHERITS THE VISIBILITY OF THE ANCHOR IT STANDS AT. The
+    cone, the sight line, the occluder and the light have already been decided
+    for that anchor by `feature_visibility`; a coin on a counter is seen
+    exactly when the counter is. So this adds no new judgment about what an
+    eye reaches, and it cannot become a second, disagreeing answer to one the
+    engine already has.
+
+      1. No room, or a thing the scene does not place in it -> nothing.
+      2. A BODY is not a thing. Presence and pose own every body, and the
+         subject-identity test is the engine's own (`same_subject`), because a
+         registered person can also stand in `entities` under another key.
+      3. CONCEALED IS CONCEALED. A thing any holder hides -- pocketed, shut
+         inside something, worn -- is read through `hiding_holders_of`, never
+         off `scene['contained']`, so containment keeps its one owner.
+      4. A thing that is also authored FURNITURE of this room is the features
+         sentence's, not this one's. Two representations of one object can
+         only disagree, and the observer would be told twice.
+      5. Placed at an anchor -> admitted only when that anchor is visible.
+         Placed nowhere -> admitted with NO distance claimed, and only where
+         there is light to see by: the anchor carve-outs in
+         `feature_visibility` are for a thing a body has its hands on and for
+         a doorway, and an unplaced object is neither.
+      6. No name -> nothing, the same silence `_feature_items` keeps for a
+         row with no description.
+
+    `state` is the thing's own placement, so a thing that MOVES re-renders as
+    news and a thing that sits is furniture a delta view omits -- the dedupe
+    contract `room_content_percepts` already states, keyed on state and never
+    on the sentence composed from it.
+    """
+    if not room:
+        return []
+    entities = (sc or {}).get("entities") or {}
+    if not entities:
+        return []
+    stations = (sc or {}).get("stations") or {}
+    known = [str(b) for b in bodies if str(b)]
+    # Rule 5's evidence, read once: which anchors this observer's eyes reach,
+    # and what each is called.
+    seen_anchors = {}
+    for row in (feature_visibility(sc, name, sweep=bool(sweep)) or ()):
+        if row.get("visible"):
+            seen_anchors[str(row.get("anchor") or "")] = str(row.get("desc") or "")
+    # Rule 4: the room's own authored furniture, by anchor id and by name.
+    furniture = {str(key).casefold() for key in
+                 (((sc.get("rooms") or {}).get(room) or {}).get("anchors") or {})}
+    furniture |= {str(desc).casefold() for desc in seen_anchors.values() if desc}
+    lit = not _is_dark(effective_light(sc, room))
+    rows = []
+    for eid, entity in entities.items():
+        if not isinstance(entity, dict):
+            continue
+        label = str(entity.get("name") or "").strip()
+        if not label:
+            continue                                        # rule 6
+        if room_of(sc, str(eid)) != room:
+            continue                                        # rule 1
+        if any(same_subject(sc, str(eid), body)
+               or same_subject(sc, label, body) for body in known):
+            continue                                        # rule 2
+        if hiding_holders_of(sc, str(eid)):
+            continue                                        # rule 3
+        if str(eid).casefold() in furniture \
+                or label.casefold() in furniture:
+            continue                                        # rule 4
+        at = str(((stations.get(str(eid)) or {}) if isinstance(
+            stations.get(str(eid)), dict) else {}).get("at") or "")
+        if at:
+            if at not in seen_anchors:
+                continue                                    # rule 5, placed
+            place = seen_anchors[at]
+        elif not lit:
+            continue                                        # rule 5, unplaced
+        else:
+            place = ""
+        what = composer.thing_clause(label, place)
+        if not what:
+            continue
+        rows.append({"what": what, "uid": str(eid), "state": [at or room]})
+    return rows
+
+
 #: Barriers sight crosses. Kept as a local read of the one definition in
 #: `world.spatial_barriers` rather than a second list -- a bearing-less
 #: doorway must still admit sight, and only the barrier decides that.
@@ -4757,8 +4866,18 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
     # the builders that produced them (`common.crowds_for_room` and its two
     # twins), so this adds no admission decision -- it adds the delivery the
     # decisions were being made for.
+    # ...and the fourth member of that family, which the three above were
+    # always beside: A THING SOMEBODY SET DOWN. Same story exactly -- the
+    # admission is decided before the delivery (`_visible_things`, whose every
+    # rule subtracts and whose sight judgment is the anchor's own) and this
+    # adds only the delivery. Measured 2026-09-20: a coin laid on a counter
+    # reached its own owner's eyes on 0 of 24 beats, so she paid for one ale
+    # twice.
     percepts.extend(composer.room_content_percepts(
-        p.get("crowds"), p.get("couriers"), p.get("notices")))
+        p.get("crowds"), p.get("couriers"), p.get("notices"),
+        _visible_things(sc, name, room, sweep=sweep,
+                        bodies=[name] + [str(b.get("name") or "")
+                                         for b in others or []])))
     recognized = set(known.get(name) or [])
     # The room's talk, as ground plus at most one figure — same admission
     # story as the three seams above: `common.chatter_for_room` already

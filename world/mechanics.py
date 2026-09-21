@@ -308,6 +308,63 @@ def read_time_diff(prev_elapsed, time_diff):
 UNCLAIMED_BEAT_SECONDS = 10.0
 
 
+def beat_time_from_spans(spans):
+    """The beat's own span, summed from what the prose author priced each
+    causal step at. A `state_diff.time` block, or None when no row named one.
+
+    THE SUM IS CODE'S BECAUSE THE PARTS ARE THE AUTHOR'S. `state_diff.time`
+    was the spatial specialist's channel, and a specialist is handed
+    `_specialist_span_slice` -- the rows selected for it, not the beat. Its
+    sheet asked it for the whole ("a beat that holds several things in
+    sequence spans all of them: the time is the sum of its parts") while the
+    fan-out handed it some of the parts, so it was being asked for a total it
+    could not see the terms of. It answered by declining, which is the right
+    answer to that question and left every beat on
+    `UNCLAIMED_BEAT_SECONDS`: measured 2026-09-20, the channel was in the
+    hand's scope on 38 of 60 playerless beats and 50 of 118 live beats since
+    2026-09-15 and carried a claim on 0 of either, and across 3,000 resolve
+    variants the author routed the `time` category 0 times, so the hand was
+    never given a time work item in the first place.
+
+    The prose author is the one agent that sees the beat whole -- it cuts the
+    spans -- so it prices each span it cut, and the beat's total is
+    arithmetic. A row that names no number contributes nothing rather than a
+    guess, on `time_diff_duration`'s doctrine one screen below: under-ageing
+    a body is recoverable, over-ageing it is not. A beat where NO row named
+    one returns None and is charged the floor exactly as before.
+
+    Negative and unreadable spans are dropped, not clamped to the beat: a
+    number this reader cannot act on is silence, the same answer
+    `time_diff_claims` gives for one.
+    """
+    total = 0.0
+    priced = False
+    for span in spans or ():
+        if not isinstance(span, dict) or "seconds" not in span:
+            continue
+        value = span.get("seconds")
+        if value is None or isinstance(value, bool):
+            continue
+        try:
+            seconds = float(value)
+        except (TypeError, ValueError):
+            continue
+        if seconds != seconds or seconds in (float("inf"), float("-inf")) \
+                or seconds < 0:
+            continue
+        total += seconds
+        priced = True
+    if not priced:
+        return None
+    # DURATION ALONE, deliberately. A span survives a translation a position
+    # does not (`read_time_diff`), the engine owns where the clock stands,
+    # and this reader holds no clock. `mode` stays unwritten: the narrator
+    # reads it to tell a span it should summarise from a scene it should
+    # play (agents/narration.py), and separating those by a cutoff on this
+    # number would be a threshold nobody chose.
+    return {"duration_seconds": total}
+
+
 def time_diff_claims(time_diff) -> bool:
     """Did this time block make a claim `read_time_diff` could ACT on?
 

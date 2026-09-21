@@ -58,7 +58,8 @@ _PLAN_SYSTEM = """You design one inhabited location from supplied lore.
 Return one JSON object and no prose outside it. Do not invent an institution
 unless the lore or author brief implies one. Output: {name, structure:{key,
 max_planned, grammar:[{kind,names,purposes}]}, rooms:{id:{name,purpose,
-adjacent:[{to,barrier:"open_door"}],frontier:[]}}, charters:[{key,name,naming,
+adjacent:[{to,barrier:"open_door"}],frontier:[],
+anchors:{anchor_id:{desc}}}}, charters:[{key,name,naming,
 priority,commons,upkeeps:{id:{place,floor,level,fails_untended,one_body_restores_in,
 requires,depends_on}},posts:{id:{place,serves,requires,reports_to,authority}},
 populations:[{post,count,competence,berth,rank}],economy:{goods,stocks,targets,
@@ -68,6 +69,12 @@ in this location PRODUCES a good this one consumes and must be named otherwise,
 health has no derivation and needs naming),
 decisions:{policies}}]}. Use qualitative timescales only; never
 write drift_per_hour or service_per_hour. Planned rooms contain no prose.
+A room's `anchors` are its FIXTURES: the fixed features of the place a body
+can stand at, work at, set something down on, take cover behind or lay a hand
+against. Give a room the ones it is MADE of rather than every object in it --
+a fixture is what stays when everybody leaves, and a hand can only touch what
+is there, so a room that is about its wheel and its sluice needs both of them
+as anchors. A post's `anchor` names an id from its own room's map.
 Match the naming STYLE of the setting; never copy a name the lore gives to an
 individual. Keep authority/actions genre neutral. IDs are stable machine keys; names retain canonical spelling.
 charter.commons is a list of rooms ids: the places this institution's people go
@@ -926,6 +933,15 @@ def close_plan(plan, *, history=None, featured_residents=None,
             "adjacent": [dict(e) for e in raw.get("adjacent") or ()
                          if isinstance(e, dict) and e.get("to")],
             "frontier": [str(x) for x in raw.get("frontier") or () if str(x)],
+            # A PLAN THAT NAMED ITS FIXTURES KEEPS THEM. This rebuild is an
+            # allowlist and it dropped `anchors` the same way `plant_structure`
+            # did, so even a furnished plan arrived bare.
+            **({"anchors": {str(aid): dict(a)
+                            for aid, a in (raw.get("anchors") or {}).items()
+                            if str(aid).strip() and isinstance(a, dict)}}
+               if isinstance(raw.get("anchors"), dict)
+               and any(isinstance(a, dict) for a in raw["anchors"].values())
+               else {}),
         }
     room_ids = set(rooms)
     default_place = next(iter(rooms), "")
@@ -1214,6 +1230,37 @@ def close_plan(plan, *, history=None, featured_residents=None,
                 f"population closed to {closed_total} against a requested "
                 f"{target} (planner wrote {population_record['authored']}; "
                 f"tolerance {POPULATION_TOLERANCE:.0%})")
+    # A POST STANDS AT A FIXTURE, AND THAT FIXTURE IS THEREFORE IN THE ROOM.
+    #
+    # The charter contract already tells the planner a post may carry
+    # `anchor`: "the id of one of its place's fixtures -- where in the room
+    # the duty is stood, as one of that room's anchors". It has been obeying
+    # that for as long as anyone has looked: measured on a fresh Aldermill
+    # (2026-09-20), 13 of 13 posts across four institutions named one --
+    # `millstones`, `sluice_gate`, `oak_bar`, `baking_hearth`, `bellows_lever`,
+    # `reeve_bench`, `shoeing_stall`. Not one existed as a room anchor, because
+    # the contract references a set nothing asks anybody to CREATE and nothing
+    # reads back.
+    #
+    # That is why three separate attempts to ask the Room for `anchors`
+    # returned 0 of 19, 0 of 12 and 0 of 19 rooms furnished: it had already
+    # named them in the other field and had no reason to say them twice.
+    #
+    # So the fixture is created from the duty that stands at it. `desc` is left
+    # to `spatial_geometry.effective_anchors`, which reads an id as words when
+    # nothing describes it -- inventing prose for a fixture the planner
+    # described elsewhere would be this function guessing at the fiction. An
+    # anchor a room already carries is never overwritten: an explicit
+    # description outranks a derived key.
+    for state in charters.values():
+        for post in (state.get("posts") or {}).values():
+            if not isinstance(post, dict):
+                continue
+            aid = str(post.get("anchor") or "").strip()
+            place = str(post.get("place") or "").strip()
+            if not aid or place not in rooms:
+                continue
+            rooms[place].setdefault("anchors", {}).setdefault(aid, {})
     return {"version": GENERATION_VERSION,
             "name": str(plan.get("name") or structure["key"]),
             "structure": structure, "rooms": rooms, "charters": charters,

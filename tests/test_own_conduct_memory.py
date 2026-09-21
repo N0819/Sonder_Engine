@@ -182,25 +182,36 @@ def test_the_pair_reads_as_one_beat_not_two_events(temp_db, monkeypatch):
 
 
 def test_the_bound_holds(temp_db, monkeypatch):
-    """Storage is bounded by the mind's own appraisal: every spoken beat is
-    durable regardless of salience, a silent act only at salience >= 0.7.
-    An idle silent motion keeps its 12-turn `_recent_self_moves` window and
-    the episode of its consequences, not a durable row per fidget."""
+    """Storage is bounded by CONDUCT: a mind remembers what it said and what
+    it did, and a beat it did nothing in leaves no self row.
+
+    The bound used to be the mind's own `salience` self-report reaching 0.7,
+    and that number is not a bound -- it arrives in the character prompt only
+    as the literal 0.5 inside the required JSON shape, with nothing saying
+    what it means, and `KERNEL_FILL_QUIETLY` fills an absent one with the
+    same 0.5 in silence. Measured, two_lives v5 (2026-09-19): across 60 beats
+    of two autonomous characters, ONE self row -- the single beat anybody
+    spoke -- while a millwright spent twenty of them diagnosing a rotten
+    bearing and remembered only the crouch he did it in.
+
+    The fidget that bound was written against is answered by the tier built
+    for it (`schedule_memory_consolidation`): a row a consolidator can
+    summarise is recoverable, and a beat never written down is not."""
     chat_id, char_id, cast = _story(temp_db)
     captured = _capture_batch(monkeypatch)
 
-    # Silent act below the floor: no self row.
+    # A beat with no conduct in it: no self row, whatever it rates itself.
     ctx = _ctx(chat_id, char_id, cast, {
-        "salience": 0.69,
-        "sequence": [{"type": "action", "attempt": "shift my weight"}],
+        "salience": 0.9,
+        "sequence": [{"type": "action", "attempt": "   "}],
         "active_state": {"mood": "idle"},
     }, view="Dust drifts in the light.", idx=3)
     prepare_memory_commit(ctx)
     assert not _self_rows(captured)
 
-    # The same silent act at the floor: durable.
+    # A silent act, rated low by the mind that took it: durable.
     ctx = _ctx(chat_id, char_id, cast, {
-        "salience": 0.7,
+        "salience": 0.0,
         "sequence": [{"type": "action", "attempt": "shift my weight"}],
         "active_state": {"mood": "idle"},
     }, view="Dust drifts in the light.", idx=4)

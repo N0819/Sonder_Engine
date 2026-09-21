@@ -323,7 +323,6 @@
         "comms_ops",
         "following_ops",
         "location",
-        "time",
         "weather"
       ],
       "chunks": {
@@ -353,9 +352,6 @@
         },
         "location": {
           "$text": "specialists/spatial/chunks/location.txt"
-        },
-        "time": {
-          "$text": "specialists/spatial/chunks/time.txt"
         },
         "weather": {
           "$text": "specialists/spatial/chunks/weather.txt"

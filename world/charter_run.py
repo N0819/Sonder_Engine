@@ -53,8 +53,8 @@ from .charter_politics import (
     attribute_blame, normalize_politics, regard_map, regard_pair,
     spend_reluctance)
 from .charter_roster import decay_roster, observe
-from .charter_space import (commons_places, frequented_places, reach_map,
-                           refresh_reach)
+from .charter_space import (commons_places, frequented_places,
+                           people_neighbors, reach_map, refresh_reach)
 from .charter_feel import STRAIN_REST_TOLL, advance_feel, strain_of
 from .charter_mark import (BY_MARKS, DISGRACE_RELUCTANCE, advance_marks,
                            held_marks)
@@ -496,7 +496,8 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
         # made a simulated week 8.9s where the work itself is a fraction of
         # that. Bodies that do not move have the same reach every window.
         reach = reach_map(scene, frequented_places(charter),
-                          charter["bodies"])
+                          charter["bodies"],
+                          neighbors=people_neighbors(scene))
 
     politics = normalize_politics(charter.get("politics"))
     # PRESSURE RIDES THE SAME AXIS AS STANDING. A body whose needs are unmet
@@ -633,8 +634,7 @@ def step(charter, hours=4.0, seed=0, reach=None, conduct=None, paths=None,
     # plans on the same graph, so the check only ever differs from the plan
     # when the scene changed between them -- which is the case it exists for.
     if neighbors is None and scene:
-        from .spatial import passable_neighbors
-        neighbors = passable_neighbors(scene)
+        neighbors = people_neighbors(scene)
     routes = {} if routes is None else routes
     # Bodies caught in the street at the last window's end walk on FIRST,
     # before the watch bill can post them anywhere new. A bound body's walk
@@ -1489,15 +1489,17 @@ def run(charter, hours, window=4.0, seed=0, trace=False, simulate_bound=False,
     # rooms never changes, so once a population circulates (`errands`) the
     # per-window cost of movement is dict lookups, not graph walks.
     paths = {}
-    reach = reach_map(scene, places, charter["bodies"], cache=paths) \
-        if scene else None
-    # The walk's own two caches, for the same reason `paths` is one: the
-    # passable graph and the route between two rooms are properties of a
-    # fixed scene, so a run derives each once and every window looks up.
-    neighbors = None
-    if scene:
-        from .spatial import passable_neighbors
-        neighbors = passable_neighbors(scene)
+    # ONE GRAPH FOR THE PLAN AND THE WALK. `people_neighbors` is the passable
+    # graph plus the doors a person can open, and both the reach the watch is
+    # planned on and the route the body then walks are taken over it -- the
+    # `walk_route` docstring's whole argument: a body whose own graph is wider
+    # than the planner's decides to go somewhere the plan will not plan to,
+    # the move is dropped, and nothing says why. Before this the plan was on
+    # `passable_neighbors` and a post one shut door away reported
+    # `out_of_reach` forever (Aldermill, 2026-09-19).
+    neighbors = people_neighbors(scene) if scene else None
+    reach = reach_map(scene, places, charter["bodies"], cache=paths,
+                      neighbors=neighbors) if scene else None
     routes = {}
     where = {k: b["place"] for k, b in charter["bodies"].items()}
     while remaining > 0.0:
@@ -1506,7 +1508,7 @@ def run(charter, hours, window=4.0, seed=0, trace=False, simulate_bound=False,
         if scene and now != where:
             moved = {k for k, place in now.items() if where.get(k) != place}
             reach = refresh_reach(reach, scene, places, charter["bodies"],
-                                  moved, cache=paths)
+                                  moved, cache=paths, neighbors=neighbors)
             where = now
         # The seed advances with the window so successive windows are not
         # identical draws, while the whole run stays a pure function of the

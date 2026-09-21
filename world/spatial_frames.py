@@ -42,7 +42,8 @@ from world.paradox import get_paradox
 from story.scene import (CAST_STATUS_ABSENT, active_cast, cast_change_status,
                          persona_of, set_char_state, set_char_status)
 from world.spatial import (THRESHOLD_CROSSING_BEATS, _SUBJECT_KEYED, _anchor_dir, _hiding_holders,
-                     anchor_bearing_of, effective_anchors, has_visual,
+                     anchor_bearing_of, effective_adjacent,
+                     effective_anchors, has_visual,
                      hear_level, is_alarming, room_of, room_of_record,
                      rooms_adjacent, room_locale, normalize_scene_comms,
                      sound_path, sound_walk_level, spatial_rel,
@@ -505,7 +506,50 @@ def infer_threshold_crossings(chat_id, frame_id, prev_scene, new_scene,
     return changed
 
 
-def infer_focus(chat_id, frame_id, prev_scene, new_scene, dr_output, cast_names):
+def _thing_forms(text):
+    """A label as it is compared: casefolded, collapsed, bare of a leading
+    article -- the same normalisation `director._thing_forms` makes, because
+    a look names a thing the way the view named it."""
+    form = " ".join(str(text or "").split()).casefold()
+    for article in ("the ", "a ", "an "):
+        if form.startswith(article) and len(form) > len(article):
+            return form[len(article):].strip()
+    return form
+
+
+def _room_presences_named(chat_id, frame_id, scene, room):
+    """``{label or name: name}`` for the background presences standing in
+    this room -- what a body in it may have been SHOWN and what to call them.
+
+    Late import and fail-soft: this module is the scene's, and a presence
+    ledger it cannot read is a look that does not resolve rather than a beat
+    that does not commit.
+    """
+    try:
+        from agents.background import _room_presences_in
+    except Exception:
+        return {}
+
+    class _Ctx:
+        pass
+
+    ctx = _Ctx()
+    ctx.chat = type("_Chat", (), {"id": chat_id})()
+    ctx.turn = type("_Turn", (), {"frame_id": frame_id, "idx": None})()
+    out = {}
+    try:
+        for name, label in _room_presences_in(ctx, scene, room) or ():
+            if name:
+                out[str(name)] = str(name)
+                if label:
+                    out[str(label)] = str(name)
+    except Exception:
+        return {}
+    return out
+
+
+def infer_focus(chat_id, frame_id, prev_scene, new_scene, dr_output,
+                cast_names, looks=None):
     """Deterministic end-of-beat attention `focus` per character (FOV spec
     rules A/D). Focus is what a character is attending at the END of the beat;
     egocentric_frame renders it 'ahead', and perception gives a focused source
@@ -520,8 +564,10 @@ def infer_focus(chat_id, frame_id, prev_scene, new_scene, dr_output, cast_names)
       - moving without addressing anyone -> focus clears (locomotion resets gaze;
         egocentric_frame's pass-through inference still supplies 'ahead');
       - being addressed by someone -> focus the speaker;
+      - a DECLARED LOOK -> focus what it names (see look_focus_for; ranks
+        under the salience-snap, over the pose anchor);
       - a POSE declared relative to a room anchor -> focus that anchor (see
-        anchor_focus_for; ranks under the salience-snap, over persistence);
+        anchor_focus_for; ranks under a declared look, over persistence);
       - otherwise focus PERSISTS unchanged (no time decay), except a focused
         target who is no longer co-located is garbage-collected to None.
 
@@ -629,6 +675,58 @@ def infer_focus(chat_id, frame_id, prev_scene, new_scene, dr_output, cast_names)
             return {"kind": "anchor", "ref": ref}
         return None
 
+    def look_focus_for(name):
+        """The focus a body's own DECLARED LOOK claims this beat, or None.
+
+        A POSE SAYS WHERE A BODY IS BRACED; A LOOK SAYS WHERE IT IS AIMED,
+        and until 2026-09-19 only the first reached focus. `_declared_looks`
+        already reads `ActionElement.look` off the beat for `infer_facing`,
+        so the fact was on the table and the ladder had no rung for it.
+
+        Measured (Aldermill, third run, 30 beats): Sal Weatherby sat on a
+        bench to watch a kitchen doorway and the staff going through it --
+        "absorbing the low hum of conversation, picking up on the nuances of
+        what the seniors and house hands are discussing", every beat -- and
+        the scene held `focus {"kind": "anchor", "ref": "bench"}`, because
+        her pose was relative to the bench she was sitting on. Perception
+        grades detail by focus, so the one thing she was deliberately
+        reading was the one thing she was not attending to.
+
+        Resolved against what the room actually holds, in the order the
+        sheet offers them ("a body, fixture or exit id"): a co-located body,
+        then an anchor of her own room, then an adjacent room. A word that
+        names none of those -- including the bare turns `left|right|back|
+        around`, which turn a body and name nothing to attend to -- claims
+        no focus and falls through to the pose rung.
+        """
+        want = str((looks or {}).get(name) or "").strip()
+        room = positions.get(name)
+        if not want or not room:
+            return None
+        if colocated(name, want):
+            return {"kind": "target", "ref": want}
+        if want in (effective_anchors(new_scene, room) or {}):
+            return {"kind": "anchor", "ref": want}
+        for edge in effective_adjacent(new_scene, room) or ():
+            if isinstance(edge, dict) and str(edge.get("to") or "") == want:
+                return {"kind": "edge", "ref": want}
+        # ...AND A PERSON WHO HAS NO CHARACTER SHEET IS STILL A PERSON. A
+        # background presence is not in `positions`, is not an anchor and is
+        # not a room, so every look at one fell through all three -- the same
+        # fact that kept presences out of `present_others`.
+        #
+        # Measured (Aldermill, fifth run, 2026-09-19): Sal Weatherby, whose
+        # drive is to learn who really decides things, declared six looks in
+        # eleven rounds and four were at the reeve's deputies, named by the
+        # appearance labels she had been shown. Her focus read `null`
+        # throughout. She was watching the people she came to watch.
+        for label, who in (_room_presences_named(
+                chat_id, frame_id, new_scene, room) or {}).items():
+            if _thing_forms(label) == _thing_forms(want) \
+                    or _thing_forms(who) == _thing_forms(want):
+                return {"kind": "target", "ref": who}
+        return None
+
     def address_focus(name, other):
         """The focus speaking to `other` claims -- yielding, when `other` is
         in ANOTHER ROOM, to a pose this beat declared against a fixture.
@@ -681,6 +779,8 @@ def infer_focus(chat_id, frame_id, prev_scene, new_scene, dr_output, cast_names)
                 name, addressed_by[name]) or rec.get("focus")
         else:
             new_focus = alarm_focus_for(name)     # G2 salience-snap
+            if new_focus is None:
+                new_focus = look_focus_for(name)   # what they said they watch
             if new_focus is None:
                 new_focus = anchor_focus_for(name)
             if new_focus is None:
@@ -1259,6 +1359,10 @@ def perform_split(chat_id, parent_frame_id, turn_idx, away_zone=None, *,
             # The world: its institutions and their upkeep, the throng in its
             # squares, who is on its roads, and what is nailed up in its rooms.
             ("charters", {}), ("crowds", {}), ("couriers", []), ("artifacts", []),
+            # ...and where the charter's bodies stood at the split. Without
+            # it the child's first beat diffs an empty snapshot and reports
+            # the whole population as having just moved.
+            ("charter_last_places", {}),
         ):
             wset_for_frame(chat_id, key, wget_for_frame(chat_id, key, parent_frame_id, default),
                            new_frame_id)

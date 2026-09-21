@@ -355,16 +355,30 @@ def test_the_percepts_ride_the_standing_state_and_round_trip_to_observations():
     rendered = composer.render_view(percepts, mode="character",
                                     full_render=True, language="en")
     assert Q_LIGHT in rendered.text and Q_SOUND in rendered.text
-    spans = dict((p.kind if p.kind != "ambient" else "soundscape", s)
-                 for p, s in rendered.spans)
+    # BY THE PERCEPT, NOT BY ITS KIND. `ambient` is a whole family -- a
+    # soundscape, a crowd, a courier, a posted notice, and since 2026-09-20 a
+    # thing standing in the room -- so a dict keyed on `kind` keeps whichever
+    # one happens to render last. This hall has a lamp on the table and a
+    # generator on the shelf, and both are now seen, which is the point: the
+    # room was described as lit by a lamp no observer could see.
+    spans = {p.kind: s for p, s in rendered.spans if p.kind != "ambient"}
+    soundscape = next(s for p, s in rendered.spans
+                      if p.kind == "ambient" and p.data.get("soundscape"))
     assert spans["environment"].endswith(Q_LIGHT)
-    assert spans["soundscape"] == Q_SOUND
+    assert soundscape == Q_SOUND
     # The observations are the rendered spans, no more: the same text, the
     # channel known from the IR, and nothing the view did not say.
     obs = composer.observations_from_render("Q", rendered)
-    texts = {o["channel"]: o["observed"]["text"] for o in obs}
-    assert texts["sight"].endswith(Q_LIGHT)
-    assert texts["hearing"] == Q_SOUND
+    # ONE CHANNEL, SEVERAL OBSERVATIONS. `sight` carries the room, the bodies
+    # in it and the things standing in it, so a dict keyed on channel keeps
+    # only the last and this read "the view lost its light sentence" the first
+    # time a thing on a shelf was rendered beside it. The claim is that the
+    # light sentence survives the round trip, not that sight said one thing.
+    texts = {}
+    for o in obs:
+        texts.setdefault(o["channel"], []).append(o["observed"]["text"])
+    assert any(text.endswith(Q_LIGHT) for text in texts["sight"])
+    assert texts["hearing"] == [Q_SOUND]
     assert "".join(o["observed"]["text"] for o in obs).count("You are in half-light.") == 1
     # The shape is part of the CONTENT: the lamp going out is a room that
     # changed for this observer, not the same fact said again.
@@ -413,7 +427,12 @@ def test_the_sight_digest_carries_each_bodys_own_sentences():
     assert digest["light"] == {"Q": Q_LIGHT}
     assert digest["sound"] == {"Q": Q_SOUND}
     # The digest's sentence IS the view's sentence, span for span.
-    spans = {p.kind: s for p, s in view(sc, "Q").spans}
+    _rendered = view(sc, "Q")
+    spans = {p.kind: s for p, s in _rendered.spans if p.kind != "ambient"}
+    # See the note above: the `ambient` family has several members now, so the
+    # soundscape is selected by what it carries rather than by its kind.
+    spans["ambient"] = next(s for p, s in _rendered.spans
+                            if p.kind == "ambient" and p.data.get("soundscape"))
     assert spans["environment"].endswith(digest["light"]["Q"])
     assert spans["ambient"] == digest["sound"]["Q"]
     ctx = types.SimpleNamespace(cast=[], language="ja")

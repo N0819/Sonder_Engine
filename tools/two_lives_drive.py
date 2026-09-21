@@ -82,6 +82,69 @@ CAST = {
 }
 
 
+def _author(db, name, spec):
+    """One card, GENERATED and then pinned to this experiment's spec.
+
+    NEVER HAND-BUILT. The owner's ruling, 2026-09-19: the LLM generator fills
+    every field and is reliable, which is why nothing in
+    `story/character_schema.py` is marked required -- the schema never needed
+    a notion of a critical field, because the authoring path always produced a
+    whole sheet. Hand-building is the path nobody defended.
+
+    This harness did hand-build, and not by omission: it ASSIGNED subtrees --
+    `sheet["psychology"] = {drive, values, traits}`,
+    `sheet["embodiment"] = {"visible": ...}` -- which deletes every sibling
+    key. Three 60-beat runs were driven by cards carrying
+    `psychology.stress_profile: null` and no `coping`, `self_model`,
+    `learning`, `capacity`, `senses` or `interoception` at all. `stress.load`
+    then read 0.0 on every beat of every run and was written up as an ENGINE
+    failure to accumulate stress. It was this function.
+
+    So: generate from a brief, then overlay only what the experiment must fix
+    (the drive, the values, the goal, the look), with `update` and never
+    assignment. Reading the result back and diffing it against
+    `default_character_data` is how a missing subtree is caught next time.
+    """
+    from story.importers import generate_character
+    from story.character_schema import (character_name,
+                                        normalized_character_from_text)
+
+    brief = (
+        "%s. %s Appearance: %s. They live in Aldermill, a river market town: "
+        "a mill that grinds for six villages, a market square, a smithy, the "
+        "Wheel and Bushel inn, and a reeve who keeps the peace badly."
+        % (name, spec["drive"]["essence"].capitalize() + ".", spec["look"]))
+    # `generate_character` returns (id, sheet) -- it writes the row itself.
+    char_id, generated = generate_character(brief)
+    sheet = normalized_character_from_text(json.dumps(generated))
+    sheet.setdefault("identity", {})["uid"] = \
+        name.lower().replace(" ", "_") + "_uid"
+    sheet["identity"]["name"] = name
+    # UPDATE, NEVER ASSIGN: the generated siblings are the whole point.
+    sheet.setdefault("psychology", {}).update(
+        {"drive": spec["drive"], "values": spec["values"],
+         "traits": spec["traits"]})
+    sheet.setdefault("initial_state", {})["goals"] = [spec["goal"]]
+    sheet.setdefault("simulation", {})["tier"] = "major"
+    sheet.setdefault("embodiment", {}).setdefault("visible", {})["summary"] = \
+        spec["look"]
+    sheet["initial_outfit"] = spec["outfit"]
+
+    missing = [k for k in ("stress_profile", "coping", "self_model",
+                           "learning", "capacity")
+               if not (sheet.get("psychology") or {}).get(k)]
+    if missing:
+        print("  WARNING %s: psychology missing %s" % (name, ", ".join(missing)),
+              flush=True)
+    with db.transaction():
+        db.q("UPDATE characters SET name=?, sheet=? WHERE id=?",
+             (name, json.dumps(sheet, ensure_ascii=False), char_id))
+    print("  authored %-16s psychology=%d embodiment=%d keys" % (
+        name, len(sheet.get("psychology") or {}),
+        len(sheet.get("embodiment") or {})), flush=True)
+    return char_id
+
+
 def build_story(db):
     """The chat, the two lives, and a persona who never stands anywhere.
 
@@ -90,8 +153,6 @@ def build_story(db):
     they are placed nowhere, `in_range_rooms` answers None for the present
     frame and no bubble could open by itself even if something asked.
     """
-    from story.character_schema import default_character_data
-
     persona_id = db.qi(
         "INSERT INTO personas(name,sheet,source) VALUES(?,?,?)",
         ("Nobody", json.dumps({
@@ -104,17 +165,7 @@ def build_story(db):
 
     ids = {}
     for name, spec in CAST.items():
-        sheet = default_character_data(name)
-        sheet["identity"]["uid"] = name.lower().replace(" ", "_") + "_uid"
-        sheet["psychology"] = {"drive": spec["drive"], "values": spec["values"],
-                               "traits": spec["traits"]}
-        sheet["initial_state"] = {"goals": [spec["goal"]]}
-        sheet["simulation"] = {"tier": "major"}
-        sheet["embodiment"] = {"visible": {"summary": spec["look"]}}
-        sheet["initial_outfit"] = spec["outfit"]
-        char_id = db.qi(
-            "INSERT INTO characters(name,sheet,source,created) VALUES(?,?,?,?)",
-            (name, json.dumps(sheet), "{}", time.time()))
+        char_id = _author(db, name, spec)
         db.qi("INSERT INTO chat_chars(chat_id,char_id,status,state,sheet) "
               "VALUES(?,?,'active','{}',NULL)", (cid, char_id))
         ids[name] = char_id
@@ -122,8 +173,44 @@ def build_story(db):
     return cid, ids
 
 
-def design_town(cid):
-    """The Writers' Room builds Aldermill (`DESIGN_ROOM_PRELUDE.md` § 4)."""
+def design_town(cid, attempts=3):
+    """The Writers' Room builds Aldermill (`DESIGN_ROOM_PRELUDE.md` § 4).
+
+    RETRIED, BECAUSE THE ENGINE RAISES SO THAT A CALLER CAN. `run_location_plan`
+    ends with `ValueError: the Writers' Room did not submit a location plan`
+    and says why in its own docstring -- "the caller is a location generation,
+    which already has a failure path that keeps the story and offers a retry,
+    and falling back to the one-shot would be keeping alive the thing this
+    replaces". The app honours that. THIS FILE DID NOT, and it is mine: two
+    launches died on 2026-09-20 with 11 rooms/3 institutions and 13 rooms/1
+    institution already drafted, each throwing away a ~250s design over a
+    Room that stopped one call short of submitting.
+
+    Only that failure is retried. A provider error is not: an HTTP 402 for
+    credit, or a rate limit, will not be cured by asking again and retrying it
+    spends the little that is left.
+    """
+    from agents.story_planner import room_town_planner, seat
+    from language_runtime import story_language_scope
+    from world.charter_runtime import generate_lived_location
+
+    seat()
+    started = time.time()
+    last = None
+    for attempt in range(1, max(1, int(attempts)) + 1):
+        try:
+            return _design_once(cid)
+        except ValueError as exc:
+            if "did not submit" not in str(exc):
+                raise
+            last = exc
+            print("  the Room did not submit (attempt %d/%d): %s"
+                  % (attempt, attempts, str(exc)[:110]), flush=True)
+    raise last
+
+
+def _design_once(cid):
+    """One design pass, timed. Separated so the retry above reads as a retry."""
     from agents.story_planner import room_town_planner, seat
     from language_runtime import story_language_scope
     from world.charter_runtime import generate_lived_location
@@ -166,6 +253,16 @@ def seed_scene(cid, ids):
             "desc": planned.get("purpose") or "",
             "adjacent": [e for e in (planned.get("adjacent") or [])
                          if isinstance(e, dict)],
+            # THE FIXTURES THE PLAN FURNISHED THE ROOM WITH. A fourth
+            # allowlist on one rail: `close_plan` seeds a room anchor from
+            # every post that stands at one, `plant_structure` stores them
+            # and `skeleton_rooms` reads them back -- and this dict, the last
+            # hop before anybody stands anywhere, quietly dropped them.
+            # Measured (v10, 2026-09-20): 13 of 15 planned rooms carried
+            # anchors in the registry and 0 of 15 did in the scene.
+            **({"anchors": dict(planned["anchors"])}
+               if isinstance(planned.get("anchors"), dict) and planned["anchors"]
+               else {}),
         }
     if not rooms:
         raise SystemExit("the Room planted no rooms; nothing to stand in")

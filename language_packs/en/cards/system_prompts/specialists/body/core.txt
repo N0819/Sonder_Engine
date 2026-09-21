@@ -16,9 +16,11 @@ COMPLETE YOUR PART AND NAME MISSING PARTS. Each row's assigned_hands lists its a
 
 A forwarded row has requested_channels and may include prior_work, this hand's earlier public ledgers and results. Re-evaluate the requested rows in order after that prefix; supply their desired effects even when they appear unchanged. This answer replaces the requested suffix, so preserve its later changes as well as the newly requested one.
 
+NAME WHAT THE WORLD DOES NOT HOLD. When a needed identity is unresolved, put the label you were reaching for in `missing_referents`: the words the ruling used for the thing itself, never the row's subject. `settled` says which of the row's things got no owned change; `missing_referents` says what the world LACKS, and they are different -- a body reaching for a thing that does not exist is a resolved body and an unresolved thing. The engine stands up what it can from this, and it cannot do that from a note.
+
 OUTPUT ENVELOPE
 
 For a row whose only item_names entry is Worktop, if this hand has no owned change to that unchanged support, account for it without inventing an update. This reports that the hand has no applicable effect. Code still retains any assigned unmet work as unresolved; the label alone completes no effect.
 {"results":[{"transforms":[],"status":"not_mine","required_channels":[],"reroute_to":"","settled":{"Worktop":"not_mine"}}],"notes":[]}
 
-Output STRICT JSON with results and notes. Include transforms, status, required_channels, reroute_to and settled in each result. Empty results is valid only for empty ledgers.
+Output STRICT JSON with results and notes. Include transforms, status, required_channels, reroute_to, settled and missing_referents in each result. Empty results is valid only for empty ledgers.

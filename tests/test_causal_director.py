@@ -21,7 +21,52 @@ def test_both_director_invocations_share_one_minimal_contract():
     # The contract explains the job and includes a complete four-row
     # worked example. Bound its size without forcing causal instructions
     # back into the ambiguous shorthand exposed by live prose stress.
-    assert len(shared) < 12_000
+    #
+    # RAISED 12,000 -> 12,400 on 2026-09-19, and the 400 bought one clause.
+    # The sheet stood at 11,985 -- fifteen characters of headroom -- so the
+    # bound had stopped being a budget and become a freeze: no measured
+    # defect could be answered without displacing an unrelated rule.
+    #
+    # What it bought: across 60 beats of two playerless runs the author filed
+    # 118 category tags using six words and every one named a BODY
+    # (`contacts` 41, `poses` 38, `attention` 32, `stations` 9, `body` 7,
+    # `positions` 2); `objects`, `entities`, `substance_ops` and
+    # `world_facts` never appeared, and `state_diff.entities` was written
+    # zero times. A man hooked packed grit out of a sluice runner for
+    # twenty-three consecutive beats and the runner was never recorded as
+    # different. The clause states the boundary with the engine's own test
+    # -- would the thing be different next beat if nothing else happened --
+    # and keeps the no-record-change exception as that test's complement.
+    #
+    # The sheet is shared by interpret and resolve, so a beat pays this
+    # twice: ~200 output-equivalent tokens against a measured 4,355 tokens
+    # of author output per beat. The bound is discipline, not cost, and it
+    # stays a bound -- the next clause displaces something or argues here.
+    #
+    # RAISED 12,400 -> 12,600 on 2026-09-20, and the 200 bought the `seconds`
+    # clause: the row's own span, which is what makes the story clock move at
+    # all. `state_diff.time` was the spatial hand's channel, and a hand
+    # receives `_specialist_span_slice` -- the rows selected for it, never the
+    # beat -- so the sum its chunk asked for was over terms it could not see.
+    # It declined on every measured beat: in scope on 38 of 60 playerless
+    # beats and 50 of 118 live beats since 2026-09-15, written on 0 of either,
+    # with the category routed 0 times in 3,000 stored resolve variants. Every
+    # beat fell to `UNCLAIMED_BEAT_SECONDS = 10.0`, which is 0.0028 hours --
+    # against the charter's own "a beat is minutes of story" -- so the
+    # off-screen world had never ticked once: `clock_hours` stood at the
+    # presim's 72.0 and `last_epoch_id` at "presim" after sixty beats.
+    #
+    # Argued rather than displaced, which this comment invites, because there
+    # is nothing here to displace: every other line routes a channel, and this
+    # one is the only thing in the sheet that a clock reads. It was also
+    # REDUCED first -- 856 characters to 330 -- by dropping the floor's
+    # arithmetic and two of three illustrations and keeping the three earned
+    # clauses: this step and not the beat (else code double-counts a total the
+    # author restated), the scale the account gives it (else a night is
+    # charged as seconds), and that nothing has to announce a span for one to
+    # exist (which is EVERY beat where no player declares anything -- the
+    # whole playerless case the charter runs in).
+    assert len(shared) < 12_600
 
 
 def test_a_body_is_not_a_room_until_the_world_has_made_it_one():

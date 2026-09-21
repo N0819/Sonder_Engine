@@ -117,7 +117,7 @@
                 0
               ]
             ],
-            "desc": "the doorway",
+            "desc": "the shut door",
             "implicit": true
           },
           "door:hallway": {
@@ -693,7 +693,7 @@
                 0
               ]
             ],
-            "desc": "the doorway",
+            "desc": "the shut door",
             "implicit": true
           }
         },

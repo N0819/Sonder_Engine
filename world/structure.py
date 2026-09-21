@@ -76,6 +76,50 @@ GEOMETRY_FIELDS = ("extent", "shape", "exposure", "sound",
                    "level", "over", "floor", "surface", "quiet")
 
 
+def planned_anchors(planned):
+    """``{"anchors": {id: {...}}}`` for a planned room that names its
+    fixtures, and ``{}`` for one that does not.
+
+    A ROOM'S DESCRIPTION PROMISES THINGS; THIS IS WHERE IT KEEPS THEM. A
+    room record carries an optional `anchors` map -- the named features a
+    body can stand at, take cover behind, put something on or lay a hand
+    against -- and it is what `spatial_contacts` resolves a contact target
+    against, what a post's `anchor` names, and what `spatial_fov`,
+    `comfort`, `place_purpose` and the light field all read. Until now the
+    only anchors any story ever had were ones the Director authored
+    mid-beat, because nothing asked a PLAN for them and this normalizer's
+    allowlist dropped them if a plan sent them anyway.
+
+    Measured (two_lives v7, 2026-09-19, turns 5/7/9): `mill_race` was
+    planned as "The sluice channel and wet timber shroud housing the great
+    undershot waterwheel" and planted as `{name, desc, adjacent, region}`.
+    Emory Vane pressed a hand to the apron timber and reached for the wheel
+    shroud, and the contact hand refused all of it -- "Targets 'shroud' and
+    'apron timber' do not exist as established world keys or fixtures/
+    anchors in the mill_race payload" -- correctly, because they did not.
+    The room's furniture was stored twice, as English in `desc` and as
+    structure nowhere, and a body could not touch the thing the room said
+    it was made of.
+
+    Same shape and same reason as `planned_geometry` beside it, which exists
+    because this allowlist had already dropped the plan's MEASUREMENTS once
+    (F47). An id whose value is not an object is dropped rather than
+    guessed at: an anchor is a record, and a bare string is a description
+    with nowhere to put it.
+    """
+    planned = planned if isinstance(planned, dict) else {}
+    raw = planned.get("anchors")
+    if not isinstance(raw, dict):
+        return {}
+    anchors = {}
+    for aid, anchor in raw.items():
+        key = str(aid or "").strip()
+        if not key or not isinstance(anchor, dict):
+            continue
+        anchors[key] = copy.deepcopy(anchor)
+    return {"anchors": anchors} if anchors else {}
+
+
 def planned_geometry(planned):
     """The geometry a planned room carries, omitting what it does not."""
     planned = planned if isinstance(planned, dict) else {}
@@ -233,6 +277,8 @@ def skeleton_rooms(cid, structure_key, frame_id=None):
             "region": normalize_region_id(structure_key),
             # And what the plan MEASURED, beside what the room is FOR.
             **planned_geometry(planned),
+            # And what it is MADE OF: the fixtures a body can reach.
+            **planned_anchors(planned),
         }
     return {"rooms": rooms}
 
@@ -488,6 +534,9 @@ def plant_structure(cid, structure, rooms, *, owning_book_id=None,
             # reached the registry sizeless and survived only as prose in
             # `purpose` (F47, measured 2026-09-05 in all five play runs).
             **planned_geometry(raw),
+            # And the FIXTURES it named, which is what a hand resolves a
+            # contact target against (`planned_anchors`).
+            **planned_anchors(raw),
         }
     if len(normalized) > structure["max_planned"]:
         raise ValueError("planned rooms exceed structure.max_planned")
@@ -675,6 +724,7 @@ def materialize_planned_fringe(cid, scene):
             # opening, and a measurement the plan stated is not the
             # Director's to invent a second time.
             **planned_geometry(spec),
+            **planned_anchors(spec),
         }
         if spec.get("structure"):
             rooms[uid]["region"] = normalize_region_id(spec["structure"])
@@ -700,6 +750,13 @@ def materialize_planned_fringe(cid, scene):
         if str(spec.get("purpose") or ""):
             room["purpose"] = str(spec["purpose"])
         room.update(planned_geometry(spec))
+        # A ROOM'S ANCHORS ARE ADDED TO, NOT REPLACED (`spatial_merge.
+        # _merge_anchor_fields`, one layer out). A stub the plan furnished
+        # may already have had a fixture written onto it by a beat, and
+        # re-echoing the plan's map over the top would take that fixture
+        # and every station hanging off it.
+        for _aid, _anchor in planned_anchors(spec).get("anchors", {}).items():
+            room.setdefault("anchors", {}).setdefault(_aid, _anchor)
     # THE SCENE ONLY EVER HOLDS AN EDGE INTO A ROOM THE SCENE HOLDS, and the
     # membership test runs after every stub of this pass exists, so two
     # planned rooms minted together keep the doorway between them.
@@ -1651,6 +1708,7 @@ def structure_warnings(structure, rooms, known=()):
 
 __all__ = [
     "FRONTIER_NAME_WORDS", "GEOMETRY_FIELDS", "STRUCTURES_KEY",
+    "planned_anchors",
     "apply_frontier_mutations", "claim_frontier_spaces",
     "composed_scene", "frontier_refusal", "frontier_spaces",
     "planned_geometry",

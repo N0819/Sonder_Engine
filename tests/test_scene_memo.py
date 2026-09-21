@@ -336,7 +336,7 @@ def test_a_passage_flip_inside_a_pass_is_reported(caplog):
     assert any("changed inside a read pass" in r.message
                for r in caplog.records)
     # and the flip is a real one: outside a pass it changes the answer.
-    assert effective_anchors(sc, "a")["door:b"]["desc"] == "the doorway"
+    assert effective_anchors(sc, "a")["door:b"]["desc"] == "the shut door"
 
 
 # ---- the derivations answer the same, pass or no pass ---------------------

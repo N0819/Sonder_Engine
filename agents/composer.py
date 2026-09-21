@@ -2625,6 +2625,42 @@ def scent_percepts(sources):
     return out
 
 
+def thing_clause(desc, place=""):
+    """One THING standing in the room, as a clause a bystander would say.
+
+    The fourth member of `room_content_percepts`' family and the one its own
+    docstring forgot: a crowd, a courier, a posted notice -- and a thing
+    somebody set down. Measured 2026-09-20 (two_lives v13, chat frame 2): Sal
+    Weatherby laid a copper coin on the taproom counter on beat 8, the commit
+    recorded it correctly (`stations: {copper_coin: {at: oak_bar_counter}}`,
+    `contained` empty), and the coin appeared in 0 of her 24 composed views.
+    On beat 10 her own view named the HOST's coin pouch and not her coin, so
+    she drew a second coin from her pocket and paid again. Nothing was wrong
+    with the world's record and nothing was wrong with her; she was never told.
+
+    There was no sight path from `scene.entities` to any view at all:
+    `feature_visibility` answers for "every ANCHOR of the observer's room",
+    and perception's only walk over scene entities on the view path is the
+    SCENT loop, gated on `entity.scent`. A thing reached a mind only through
+    a channel that owned it for some other reason -- attire, a pose, a
+    contact, a smell, or being authored furniture. Nothing said "that is
+    lying there".
+
+    `place` is the authored description of the anchor it stands at, already
+    admitted by the caller; empty for a thing the room holds without placing,
+    which names the thing and CLAIMS NO DISTANCE -- the same subtraction
+    `_feature_items(placed=False)` makes for furniture seen through a doorway,
+    for the same reason: the distance vocabulary is measured within one room
+    and spending it where nothing measured states a distance nobody has.
+    """
+    desc = _noun_phrase(desc)
+    if not desc:
+        return ""
+    place = _noun_phrase(place)
+    return (_en("thing_placed", desc=desc, place=place) if place
+            else _en("thing_here", desc=desc))
+
+
 def room_content_percepts(*groups):
     """Standing things in the observer's room that are not bodies: a crowd, a
     courier waiting by a door, a notice nailed to a post.

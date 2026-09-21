@@ -30,15 +30,16 @@ resolution_notes は各手順の直後の結果を記し、必要な解放、保
 - targets：作用した、または呼びかけた身体・物・部屋の正確な world/identity key、または読める参照名。item_ids の番号と行の source 自身は使いません。
 - visibility、conceal_from、volume：関連する知覚条件。volume は whisper|mutter|normal|loud|shout、または対象にだけ届く音量の pitched。
 - look：向く・見る span の対象となる身体、備品、出口の ID。left|right|back は身体の向きを変え、around は室内を見回します。この行は attention を指定します。
+- seconds：この手順が物語の時計上で要した秒数。出来事が語る尺度どおりに——一晩の眠りは一晩、移動はそれにかかる分数です。切り出したその手順だけを見積もり、beat 全体を書かないでください。各行はエンジンが合算します。span が存在するのに誰かが宣言する必要はありません。誰も時間を宣言しなかった手順も、その中でなされた仕事によって計られます。ゼロはこの手順に時間を要しないことを述べます。
 - movement：身体が部屋を変える場合だけ {to_room,why,mover,arrives}、それ以外は null。to_room は移動が終わる部屋（途中の経路はエンジンが処理）、arrives はこのビートに到着するか。to_anchor は目的地の world_index feature、走る場合は pace:run。身体を室外へ運ぶ行為は positions 行です。
 - 新たに見える内部は、その entity を対象とし、入らなくても rooms を指定します。
-- 明示された時間経過は time、音源の音量変化は entities に送ります。
+- 音源の音量変化は entities に送ります。
 - ability と difficulty は contestable な出来事が必要とする場合だけです。
 - resolution_notes：上記のとおり、この手順の直後の因果的結果。
 - categories：下記の振り分け名をゼロ個以上。台帳を変えない出来事は []。表面の外見は body、その他の変更は正確な channel 名を指定します。発話は必ず speech を指定し、発話内容の主張を world_facts にしません。実際の社会的行為は担当 channel に送ります。
 
 動詞でなく効果を担当へ送る
-変更が必要な記録に応じて channel を選びます。contact_ops は物の差し込みや引き抜きも含め、物理的接触の開始・変更・終了です。contact_action_ops は持続する振動、吸引、圧力の脈動など、接触を通して続く触覚効果だけを表します。触れる行為全般の分類ではありません。差し込み、引き抜き、回そうとして失敗したことだけでは、その追加の持続効果は成立しません。記録の変更がない可視の試みも event と observable に残し、categories:[] とします。channel を付けるために状態変化を創作しません。
+変更が必要な記録に応じて channel を選びます。contact_ops は物の差し込みや引き抜きも含め、物理的接触の開始・変更・終了です。contact_action_ops は持続する振動、吸引、圧力の脈動など、接触を通して続く触覚効果だけを表します。触れる行為全般の分類ではありません。差し込み、引き抜き、回そうとして失敗したことだけでは、その追加の持続効果は成立しません。物に対する働きかけは、その物を変えます——他に何も起こらなくても次の beat でその物が違っているなら、接触と並べてその物自身の channel にも送ってください。そのままに残った試みは event と observable を保ち、categories:[] を取り、channel を得るための状態変化を創作しません。body の姿勢、握り、立ち位置は、働きかけていた物の記録では決してありません。
 
 entities は物の状態です。容器の蓋・ハッチは内部の部屋があっても entities の state.hatch（open|closed）を変更します。rooms は topology で、部屋間の扉の開閉は edge の barrier を変えます。positions は身体の部屋です。物を運ぶ・置く・投げる行為は inventory_ops、正確な備品・cell の位置も変えるなら stations を指定します。放す・置く行為は、握りがこの ledger batch の前の行で始まる場合も必ず contact_ops に送ります。同じ span を三つ全てへ送れます。containment は独立した囲い込みや運ばれる身体の関係で、携帯物の移転を二重に記すものではありません。衣服の脱着には attire が必要で、新しい保持者や置き先も指定されるなら inventory_ops も必要です。stations は室内の位置、poses は身体の姿勢と四肢の配置（座る、立つ、両手を上げる）です。椅子の station だけでは着座になりません。姿勢は body group でなく poses に送ります。
 
@@ -48,7 +49,7 @@ body: body (表面の外見), attire, conditions, vitals
 contact: contact_ops, contact_action_ops, substance_ops, containment, scales
 objects: entities, remove_entities, inventory_ops, artifact_ops, destruction, sensory_events
 social: cast_changes, introductions, world_facts, public_evidence, crowd_ops, courier_ops, telling_ops, charter_ops, ratified_claims, contradicted_claims, claim_dispositions, consequences, obligations
-spatial: positions, rooms, remove_rooms, remove_adjacent, stations, poses, comms_ops, following_ops, location, time, weather
+spatial: positions, rooms, remove_rooms, remove_adjacent, stations, poses, comms_ops, following_ops, location, weather
 engine: speech, attention
 
 具体例
@@ -56,4 +57,4 @@ identity index は character:11 を Mara に対応させます。その入力に
 二つの缶の番号は全手順で 1 と 2 のままです。Mara の発話には番号 3 を割り当てます。ベンチと Ivo は必要な行の読める targets です。持ち上げは一行で二つの item を変え、置く行為は一行で三つの channel を必要とします。発話された命令で缶を開閉しません。この名前は説明用です。実際には与えられた identity と文章を使います。
 
 上記の振り分け名を使い、表面の外見には body を指定します。Output STRICT JSON のみ、次の envelope を使います：
-{"ledgers":[{"chrono_id":1,"item_ids":[1,2],"item_names":["red tin","blue tin"],"source_entity_id":"character:11","source_event_id":"scene:1","event":"Mara lifts the red tin and the blue tin together.","observable":"lifts both tins","commitment":"asserted","targets":["red tin","blue tin"],"resolution_notes":"Mara holds both tins, clear of their previous support.","categories":["inventory_ops","contact_ops"]},{"chrono_id":2,"item_ids":[3],"item_names":["Mara"],"source_entity_id":"character:11","source_event_id":"scene:1","event":"Keep them shut,","observable":"","commitment":"asserted","targets":["Ivo"],"volume":"normal","resolution_notes":"Mara speaks these words to Ivo; no tin changes state.","categories":["speech"]},{"chrono_id":3,"item_ids":[1],"item_names":["red tin"],"source_entity_id":"character:11","source_event_id":"scene:1","event":"Mara sets the red tin on the bench.","observable":"sets the red tin on the bench","commitment":"asserted","targets":["red tin","bench"],"resolution_notes":"The bench supports the red tin; Mara releases its bearing grip.","categories":["inventory_ops","contact_ops","stations"]},{"chrono_id":4,"item_ids":[2],"item_names":["blue tin"],"source_entity_id":"character:11","source_event_id":"scene:1","event":"Mara hands the blue tin to Ivo.","observable":"hands the blue tin to Ivo","commitment":"asserted","targets":["blue tin","Ivo"],"resolution_notes":"Ivo holds the blue tin; Mara releases it.","categories":["inventory_ops","contact_ops"]}]}
+{"ledgers":[{"chrono_id":1,"seconds":4,"item_ids":[1,2],"item_names":["red tin","blue tin"],"source_entity_id":"character:11","source_event_id":"scene:1","event":"Mara lifts the red tin and the blue tin together.","observable":"lifts both tins","commitment":"asserted","targets":["red tin","blue tin"],"resolution_notes":"Mara holds both tins, clear of their previous support.","categories":["inventory_ops","contact_ops"]},{"chrono_id":2,"seconds":2,"item_ids":[3],"item_names":["Mara"],"source_entity_id":"character:11","source_event_id":"scene:1","event":"Keep them shut,","observable":"","commitment":"asserted","targets":["Ivo"],"volume":"normal","resolution_notes":"Mara speaks these words to Ivo; no tin changes state.","categories":["speech"]},{"chrono_id":3,"seconds":3,"item_ids":[1],"item_names":["red tin"],"source_entity_id":"character:11","source_event_id":"scene:1","event":"Mara sets the red tin on the bench.","observable":"sets the red tin on the bench","commitment":"asserted","targets":["red tin","bench"],"resolution_notes":"The bench supports the red tin; Mara releases its bearing grip.","categories":["inventory_ops","contact_ops","stations"]},{"chrono_id":4,"seconds":3,"item_ids":[2],"item_names":["blue tin"],"source_entity_id":"character:11","source_event_id":"scene:1","event":"Mara hands the blue tin to Ivo.","observable":"hands the blue tin to Ivo","commitment":"asserted","targets":["blue tin","Ivo"],"resolution_notes":"Ivo holds the blue tin; Mara releases it.","categories":["inventory_ops","contact_ops"]}]}

@@ -1588,7 +1588,14 @@ class TestNoCharterIsByteIdentical:
         the ring of cells against the walls (`spatial_fov.DEFAULT_LANE`,
         owner ruling), so every fixture in the capture moved onto its wall
         and the doorway cells with them. The charter question this test
-        exists to ask is unchanged; only the cells underneath it are."""
+        exists to ask is unchanged; only the cells underneath it are.
+
+        RE-FROZEN AGAIN, on 2026-09-19, for the same kind of reason one
+        field over: `_BARRIER_ANCHOR_DESC` called a `closed_door` "the
+        doorway", which is an opening's noun with an adjective removed, so
+        a shut door was the one thing in a view that never said it was
+        shut. It is "the shut door" now, and two anchor descs in this
+        capture moved with it. Still not a charter question."""
         cid = story["chat_id"]
         _lay_out(temp_db, cid)
         views = _frozen_views(client, cid)

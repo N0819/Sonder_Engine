@@ -524,6 +524,71 @@ def check_prompt_schema_ops(errors: list[str]) -> None:
 
 
 
+#: A prompt's printed output shape, which is the contract a model actually
+#: follows when the prose and the shape disagree.
+_STRICT_SHAPE = re.compile(r"Output STRICT JSON\s*(\{.*)$", re.S)
+#: A field named in prose. Backticked only, deliberately: it keeps this to
+#: names the prompt is POINTING AT and holds the false-positive count at zero.
+_PROSE_FIELD = re.compile(r"`([a-z][a-z0-9_]{2,})`")
+
+
+def check_prompt_shape_covers_prose(errors: list[str]) -> None:
+    """A field a prompt teaches in prose must also be in the shape it prints.
+
+    `check_prompt_schema_ops` above states the rule and scopes it to `_ops`
+    names, "because they are the fields a prompt has to name in prose AND
+    print in a shape, which is two chances to drift". The reasoning is not
+    about the suffix. Measured (two_lives v7, 2026-09-19): the background
+    prompt taught `hands_over` and `still_owes` in full -- "a promise kept
+    only in a line is a promise nobody can collect on" -- and printed
+    `{reacts, dialogue_log_entry, action, charter_act, goes_to}`. Both fields
+    were on `BackgroundReactOutput` and neither was in the shape, so the model
+    followed the shape and never sent one. An innkeeper told a traveller "aye,
+    in good time" about an ale on beat 6; the debt was never recorded, the
+    gate had nothing to re-fire on, and the traveller stood against a post
+    waiting for it for the next 31 beats -- the whole of the story she had
+    left.
+
+    Narrow in the two ways that keep it silent otherwise: only prompts that
+    PRINT a shape (ten of them), and only names the prose BACKTICKS which are
+    really fields on that stage's model. Verified against the defect: with the
+    pre-fix shape line it reports `background_react MISSING ['hands_over',
+    'still_owes']`, and against the tree as it stands it reports nothing.
+    """
+    sys.path.insert(0, str(ROOT))
+    try:
+        from llm import prompts
+        from llm import schemas
+    except Exception as exc:  # pragma: no cover - import failure is its own error
+        errors.append(f"could not check prompt shape coverage: {exc}")
+        return
+
+    for pid, model in sorted(schemas.SCHEMA_MAP.items()):
+        text = prompts.DEFAULT_PROMPTS.get(pid)
+        if model is None or not isinstance(text, str):
+            continue
+        shape = _STRICT_SHAPE.search(text)
+        if not shape:
+            continue
+        printed = shape.group(1)
+        # TOP-LEVEL fields only. `_field_names` recurses into nested models
+        # on purpose, and a printed shape elides its nested objects
+        # (`state_diff:{...}`), so a nested name can never be found in it:
+        # against the whole set this reported a room's `desc` inside
+        # `resolve_repair`'s `state_diff`, which the shape does print, one
+        # level down. The claim is about the object the prompt prints.
+        top = set(getattr(model, "model_fields", None)
+                  or getattr(model, "__fields__", {}) or {})
+        named = set(_PROSE_FIELD.findall(text)) & top
+        missing = sorted(name for name in named if name not in printed)
+        for name in missing:
+            errors.append(
+                f"the {pid!r} prompt teaches {name!r} in prose and leaves it "
+                f"out of the shape it prints, so a model following the shape "
+                f"will never send one"
+            )
+
+
 _TIME_SHAPE_LINE = re.compile(r"time:\s*\{([^}]*)\}")
 _TIME_PROSE_LINE = re.compile(r"state_diff\.time with ([^.。]*)")
 _TIME_TOKEN = re.compile(r"[a-z_]+")
@@ -2547,6 +2612,12 @@ BACKGROUND_SAFE_CONTEXTVARS = {
     "read_timeout_override":
         "a knob a caller sets around its own call and resets after; it names "
         "no turn, holds no sink, and cancels nothing",
+    "silence_limit_override":
+        "read_timeout_override's twin for the activity watchdog, and safe for "
+        "the same reasons: a knob `patient_stream` sets around its own block "
+        "and resets in `finally`, naming no turn, holding no sink and "
+        "cancelling nothing. Inheriting it would only make a background call "
+        "wait longer before giving up on a silent provider",
 }
 
 _TURN_SCOPED_CONTEXTVAR_MODULES = ("llm/providers.py", "core/pipeline_context.py")
@@ -3370,6 +3441,7 @@ def main() -> int:
     check_empty_tests(errors)
     check_cross_file_duplicate_definitions(errors)
     check_prompt_schema_ops(errors)
+    check_prompt_shape_covers_prose(errors)
     check_time_channel_vocabulary(errors)
     check_prompt_card_parts(errors)
     check_specialist_prompt_chunks(errors)

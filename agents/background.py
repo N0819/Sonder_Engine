@@ -62,6 +62,7 @@ from persist.commit import (
     pick_voice_demand,
     _background_name_mentioned,
     _character_address_of,
+    _room_address_of,
     _fold_duplicate_presences,
     _known_name_roster,
     overt_declaration,
@@ -73,6 +74,7 @@ from persist.commit import (
     _registered_name_roster,
     _room_of,
     spoken_volumes,
+    _valid_pending_act,
     _valid_pending_reply,
     with_charter_presences,
 )
@@ -966,6 +968,11 @@ def _demanded_presences(ctx, dr, managed, ceiling):
             name, player_input, shared=shared_words)
         place_hit = bool(room) and str(room) in aimed_rooms
         owed = bool(_valid_pending_reply(rec, turn_idx))
+        # A BODY THAT STARTED SOMETHING IS ASKED TO FINISH IT. Every other
+        # trigger here is reactive, so a figure who said "drawing one now"
+        # and reached for a mug was never picked again and the ale was never
+        # poured (Aldermill, 2026-09-19). A promise is a demand on its maker.
+        owes_act = bool(_valid_pending_act(rec, turn_idx))
         acting = (turn_idx - 1) in (rec.get("engaged_turns") or ())
         emerged_hit = name in emerged
         # The demand gate's channel test, in the same words
@@ -994,14 +1001,15 @@ def _demanded_presences(ctx, dr, managed, ceiling):
                 mentioned = place_hit = False
                 precise = bool(aimed)
         addressed_any = precise or mentioned or place_hit
-        if not (addressed_any or owed or acting or emerged_hit):
+        if not (addressed_any or owed or owes_act or acting or emerged_hit):
             continue
         why = [w for w, hit in (
             ("flow_addressed", flow_hit), ("named_exactly", named_exactly),
             ("character_address", aimed),
             ("mentioned", mentioned and not named_exactly),
             ("place_addressed:%s" % room, place_hit),
-            ("owed", owed), ("acting", acting), ("emerged", emerged_hit),
+            ("owed", owed), ("owes_act", owes_act),
+            ("acting", acting), ("emerged", emerged_hit),
         ) if hit]
         if exempt:
             why.append("channel:exempt")
@@ -1576,7 +1584,77 @@ def _present_others(ctx, sc, here, recognized=None):
             cname if _recognizes(cname, recognized)
             else _unknown_actor_label(cname, character_appearance(sh),
                                       character_scene_keys(sh)[1:]))
+    # ...AND THE OTHER PRESENCES STANDING HERE. A presence is a mind like any
+    # other and can see whoever shares its room; this list was built from the
+    # player and the registered cast alone, so a body was told about the one
+    # attached character in front of it and about none of its colleagues.
+    #
+    # Measured (Aldermill, fourth run, 2026-09-19, idx 15): asked for an ale,
+    # an ostler answered "I mind the horses, mistress. You'll want the tapster
+    # for ale" -- right kind of person, right reason -- and then "jerks a
+    # muck-spattered thumb toward the kitchen passage", pointing at a door for
+    # a tapster standing in the same room. His payload read
+    # `present_others: ["the weathered woman"]`. He did not point wrongly; he
+    # pointed with what he was given.
+    #
+    # Same gates, because they are the same question: the ROOM admits, and
+    # what it may CALL them is its own recognition -- an unmet colleague is
+    # an appearance label, never a name.
+    for other, label in _room_presences_in(ctx, sc, room):
+        if not label:
+            continue
+        present_others.append(
+            other if _recognizes(other, recognized) else label)
     return present_others
+
+
+def _room_presences_in(ctx, sc, room):
+    """``[(name, appearance label)]`` for the tracked presences standing in
+    this room -- the ledger overlaid with the charter's derived bodies, which
+    is the same read `pick_voice_demand` gates on, so who a presence can SEE
+    and who it can be picked to answer cannot disagree.
+
+    A body with no appearance to offer is skipped rather than named: a label
+    is how an unmet person is referred to, and a bare name would assert an
+    acquaintance nobody has.
+    """
+    from persist.commit import presence_room, with_charter_presences
+
+    room = str(room or "").strip()
+    if not room:
+        return []
+    try:
+        ledger = wget(ctx.chat.id, "background_presences", {}) or {}
+        merged = with_charter_presences(
+            ctx.chat.id, ledger, sc,
+            frame_id=getattr(ctx.turn, "frame_id", None),
+            turn_idx=getattr(ctx.turn, "idx", None))
+    except Exception:
+        return []
+    out = []
+    for record in (merged or {}).values():
+        if not isinstance(record, dict):
+            continue
+        name = str(record.get("name") or "").strip()
+        if not name or presence_room(sc, name, record) != room:
+            continue
+        sketch = record.get("sketch") or {}
+        # THE SAME SHORT LABEL THE CAST HALF USES. `appearance` is the
+        # FULL-SIGHT summary -- "grizzled rotund plump-armed sweat-shining
+        # waddling host, with oily black, ale stains on waistcoat, wearing
+        # wool doublet, iron key ring" -- which is right on first mention and
+        # is not what anybody perceives glancing across a taproom. It went
+        # into this list verbatim on the day it was added.
+        # `_unknown_actor_label` is the canonical short form (its own comment:
+        # "deliberately a short label for repeat/inline reference, not a
+        # substitute for the full appearance description"), and using it here
+        # keeps one implementation for both halves of one list.
+        label = _unknown_actor_label(
+            name, str(sketch.get("appearance") or ""),
+            role=str(sketch.get("role_hint") or ""),
+            surface=sketch.get("surface"))
+        out.append((name, " ".join(str(label or "").split())))
+    return sorted(out)
 
 
 def _presence_label_fn(ctx, *presence_names):
@@ -1897,6 +1975,24 @@ def _react_one(ctx, dr, name, present_others, roster, sc, rec, nonce,
         if quote:
             addressed_by = {"speaker": persona_name(persona_of(ctx.chat)),
                             "exact_quote": quote, "tone": "", "beats_ago": 0}
+    if addressed_by is None:
+        # AND THE SAME FINDING FOR A LINE A CHARACTER SPOKE. The clause above
+        # repairs exactly this for the player and reaches no further, so a
+        # body picked because a CHARACTER called into its room was still
+        # handed no words. `_room_address_of` is `_character_address_of`'s
+        # complement -- every channel rule copied, only the demand that the
+        # line NAME its listener dropped.
+        #
+        # Measured (Aldermill, fourth run, 2026-09-19, idx 15): Sal Weatherby
+        # said "Small ale, when you've a moment" in a taproom holding an
+        # innkeeper, a tapster, a cook and an ostler. The gate picked a body
+        # and `_react_one` returned None, because it had been given an
+        # unremarkable woman and silence to answer.
+        unaimed = _room_address_of(dr, name, roster, sc, here)
+        if unaimed:
+            addressed_by = {"speaker": unaimed.get("speaker"),
+                            "exact_quote": unaimed.get("exact_quote", ""),
+                            "tone": unaimed.get("tone", ""), "beats_ago": 0}
     if addressed_by and addressed_by.get("speaker"):
         # A NAME travels only where recognition earned it -- the player's
         # and every cast member's alike; an unacquainted presence gets the

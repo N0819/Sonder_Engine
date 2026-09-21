@@ -1306,6 +1306,7 @@ def run_location_plan(cid, frame_id=None, *, payload, closure=None):
     that keeps the story and offers a retry, and falling back to the
     one-shot would be keeping alive the thing this replaces."""
     from story import location_design
+    from llm import providers
     from world.charter_generate import plan_specification
 
     closure = dict(closure or {})
@@ -1333,8 +1334,22 @@ def run_location_plan(cid, frame_id=None, *, payload, closure=None):
     stopped = None
     started = time.time()
     try:
-        out = run_planner(cid, frame_id, task=task, regime="location",
-                          base_turn=None)
+        # A DESIGN IS ALLOWED TO THINK. The stream watchdog
+        # (`PROVIDER_SILENCE_SECONDS`, 10s) was measured against pipeline
+        # SPECIALISTS, "where the role's usual cost is 3-7 s" -- the right
+        # threshold for a stage a player is waiting on, and the wrong one for
+        # the most expensive call this engine makes. A location pass is
+        # 227-250 seconds over six to nine calls, planning a whole inhabited
+        # place, and a reasoning model pauses longer than ten seconds inside
+        # one. Measured 2026-09-19/20: four consecutive town designs died on
+        # that watchdog, the last after 2,032 characters of reasoning and no
+        # content -- a model that was working, killed for not being finished.
+        # Raised HERE, by the caller that knows what it is doing, exactly as
+        # `request_timeout` is raised for a long authoring read; every
+        # pipeline stage keeps the 10s it was tuned for.
+        with providers.patient_stream(180):
+            out = run_planner(cid, frame_id, task=task, regime="location",
+                              base_turn=None)
         calls = int(out.get("calls") or 0)
         steps = int(out.get("steps") or 0)
         stopped = out.get("stopped")

@@ -2159,10 +2159,16 @@ def compose_beat_scene(ctx):
     # position field changes.
     infer_threshold_crossings(cid, ctx.turn.frame_id, prev_scene, sc,
                               _carry_names)
+    # ONE READ OF WHAT THE BEAT SAID IT WAS LOOKING AT, for both inferences.
+    # Focus decides what perception grades in DETAIL and facing decides which
+    # way the body is turned; a look is evidence for both, and it reached
+    # only the second until 2026-09-19 -- so a woman who sat on a bench to
+    # watch a kitchen doorway was recorded as attending to the bench.
+    _looks = _declared_looks(ctx, res)
     infer_focus(cid, ctx.turn.frame_id, prev_scene, sc,
-                ctx.get("director_resolve") or {}, _carry_names)
+                ctx.get("director_resolve") or {}, _carry_names, looks=_looks)
     infer_facing(cid, ctx.turn.frame_id, prev_scene, sc, _carry_names,
-                 looks=_declared_looks(ctx, res), turn_idx=ctx.turn.idx)
+                 looks=_looks, turn_idx=ctx.turn.idx)
 
     # THE BEAT'S EVENTS, ONTO THE SCENE (`world/beat_ledger.py`).
     #

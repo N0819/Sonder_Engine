@@ -36,6 +36,17 @@ FRAME_SCOPED_WORLD_KEYS = {
     # Institution/upkeep simulation. Definitions are author-owned elsewhere;
     # this is the clocked state they produce in one era.
     "charters",
+    # ...and the snapshot its movement is MEASURED against
+    # (`charter_runtime.charter_moves_since`, read by `agents/mapping.py` to
+    # tell the Director what the world did since last beat). Per-era for
+    # exactly the reason `charters` is, and it was missing while its one
+    # reader already asked for it through `wget_for_frame` -- a request the
+    # scoping is not decided by. Measured (Aldermill, two causality bubbles,
+    # 2026-09-19): one unscoped row beside `charters<RS>fr1` and
+    # `charters<RS>fr2`, so each bubble's "what moved" was a delta against
+    # the other bubble's last beat, and the two frames' forty-body place maps
+    # were byte-identical on all sixty beats.
+    "charter_last_places",
     "standing_intentions",
     # Crowd blobs. Per-era like the scene they stand in: a branch that never
     # went to the market must not inherit the market's throng.

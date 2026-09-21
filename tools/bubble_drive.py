@@ -208,6 +208,21 @@ def seed_providers(db, model):
     models = {role: {"provider": pid, "model": model} for role in ROLES}
     models["embeddings"] = {"provider": pid, "model": EMBEDDING_MODEL}
     db.set_setting("agent_models", json.dumps(models))
+    # A REASONING MODEL BILLS ITS THINKING AS OUTPUT, and a scratch database
+    # has no configured ceiling -- so `providers.max_output_tokens()` returns
+    # its own 20,000 default, which is the exact number
+    # `room_calls.room_max_tokens` was written to escape ("all four were asking
+    # for 20,000 against a host ceiling of 40,000. So the Room thought its way
+    # through the problem and had no budget left to say what it had decided").
+    # Its 40,000 fallback only fires when the read RAISES, never when the read
+    # succeeds with the default, so a fresh db reproduces the fixed defect.
+    #
+    # Measured 2026-09-20: two consecutive launches lost to "the Writers' Room
+    # did not submit a location plan", with the planner's own calls returning
+    # 19,993 and 19,996 tokens -- truncated a hair under the cap, mid tool
+    # call, reported as a Room that chose to stop. The owner's real engine.db
+    # carries 50,000; only the scratch harness was starved.
+    db.set_setting("max_output_tokens", "50000")
     return models
 
 

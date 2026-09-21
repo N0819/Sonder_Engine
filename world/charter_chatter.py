@@ -424,16 +424,48 @@ def relabel_fragment(fragment, *, recognizes, display_for=None):
     return out
 
 
-def subject_label(key, *, bodies=None, figures=None, naming=None):
+def subject_label(key, *, bodies=None, figures=None, naming=None,
+                  attending=False):
     """What the talk was ABOUT, named even when the observer has never met
     them — the asymmetry that makes rumour work: the name was said aloud,
-    and overhearing a stranger's name is how a name first reaches you. A
-    subject that is not a person (a news key) yields empty: what a bystander
-    catches of that is that something happened, which is the phrase's
-    no-subject shape."""
+    and overhearing a stranger's name is how a name first reaches you.
+
+    A subject that is not a person (a news key) yields empty for a BYSTANDER:
+    what they catch of that is that something happened, which is the phrase's
+    no-subject shape. `attending` is the other case, and the word in that
+    sentence is why it exists — the rule was written about a bystander and
+    applied to everyone, because nothing told this seam whether the observer
+    was listening on purpose.
+
+    Measured (Aldermill, 2026-09-19): the charter's `window_acts` carried
+    `news:stock_surplus:charcoal` and `news:stock_restored:horseshoes_and_nails`
+    while Sal Weatherby — "asks the people nobody asks" — sat in the taproom
+    deliberately listening for twenty-one beats and heard "asking someone
+    something" every one of them.
+
+    THE TOPIC, NOT THE PROPOSITION. An attending listener catches what the
+    talk is ABOUT, never what was concluded: "about charcoal", never "charcoal
+    is in surplus at the smithy". The key's own subject token is exactly that
+    much, which is why this reads the token rather than resolving the claim
+    behind it — resolving it would hand a listener the finding, and finding
+    out is the story's job.
+
+    Attention never widens a CHANNEL. Every gate that decides whether this
+    observer catches the act at all — hearing, density, the crush that admits
+    nothing — has already run before this is asked.
+    """
     key = str(key or "")
-    if not key or key.startswith("news:"):
+    if not key:
         return ""
+    if key.startswith("news:"):
+        if not attending:
+            return ""
+        # `news:<kind>:<subject>@<hours>` (`charter_news.news_key`). The
+        # middle field is the topic and is empty for the events that name no
+        # subject; an absent topic stays absent rather than being invented.
+        body = key[len("news:"):].rsplit("@", 1)[0]
+        topic = body.split(":", 1)[1] if ":" in body else ""
+        return " ".join(topic.replace("_", " ").split())
     if key in (figures or {}):
         return key
     body = (bodies or {}).get(key)

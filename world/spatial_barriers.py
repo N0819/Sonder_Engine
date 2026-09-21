@@ -185,8 +185,27 @@ _BARRIER_CLOSED_FORM = {
     "bars": "bars", "separated": "separated", "unknown": "unknown",
 }
 _BARRIER_OPEN_QUALIFIERS = ("open", "unlocked", "ajar", "propped", "unbarred")
-_BARRIER_CLOSED_QUALIFIERS = ("closed", "shut", "locked", "jammed", "stuck",
-                              "padlocked", "blocked")
+#: SHUT, AND THAT IS ALL IT IS: a door in its ordinary closed state, which
+#: anyone with hands opens by opening it.
+_BARRIER_SHUT_QUALIFIERS = ("closed", "shut")
+#: SHUT AND FASTENED against an ordinary hand -- a key, a tool, a shoulder or
+#: somebody else's permission stands between the body and the far side. Still
+#: a DOOR and not a wall (`_BARRIER_CLOSED_FORM` is unchanged, and the
+#: vocabulary's ruling that locked is a state of a door stands); the split is
+#: only so that a reader who needs to know CAN, because the two differ for
+#: exactly one question -- whether a body with hands gets through within a
+#: window (`charter_space.people_neighbors`).
+#:
+#: It was one tuple until 2026-09-19, and the word was parsed and thrown away.
+#: Measured, both halves of the same run: an inn's whole watch bill reported
+#: `out_of_reach` because an ordinary shut bedroom door was read as a wall,
+#: and a millwright spent thirty beats hauling on a swollen race door with
+#: nothing anywhere able to record that it was stuck -- `stuck_door` and
+#: `closed_door` normalise to one value, so saying so was a no-op write.
+_BARRIER_FAST_QUALIFIERS = ("locked", "padlocked", "jammed", "stuck",
+                            "blocked")
+_BARRIER_CLOSED_QUALIFIERS = (_BARRIER_SHUT_QUALIFIERS
+                              + _BARRIER_FAST_QUALIFIERS)
 # Stronger than closed: the existing table already read `sealed_door` and
 # `bolted_door` as walls, and a qualifier must not quietly promote one back to
 # a door it can be opened through. `barred` is deliberately absent -- it is a
@@ -391,6 +410,44 @@ def normalize_barrier(value: str | None, *, unresolved: set | None = None) -> st
     return "wall"
 
 
+def barrier_fastening(value) -> str:
+    """The word this barrier was written with that says it will not simply
+    open -- ``"locked"``, ``"stuck"``, ... -- or ``""``.
+
+    `normalize_barrier` PARSES this word and then discards it: `stuck_door`,
+    `locked_door` and `closed_door` all normalise to `closed_door`, which is
+    correct (locked is a state of a door, not a kind of wall) and lossy. This
+    reads the same tokens the same way and returns what was thrown away, so
+    the engine can answer "will this open to a hand" without a second table
+    or a second spelling of the vocabulary.
+
+    Empty for everything that is not a fastened door: an open way, a wall, a
+    window, and an ORDINARY shut door -- which is the common case and the
+    right default, because a door with nothing said about it is a door.
+    """
+    if normalize_barrier(value) != "closed_door":
+        return ""
+    key = re.sub(r"[^a-z0-9]+", "_",
+                 str(value or "").strip().casefold()).strip("_")
+    tokens = key.split("_") if key else []
+    for qualifier in _BARRIER_FAST_QUALIFIERS:
+        if qualifier in tokens:
+            return qualifier
+    return ""
+
+
+def barrier_opens_to_a_hand(value) -> bool:
+    """Is this edge one an ordinary body gets through by working the door?
+
+    True for every passable barrier and for a plain shut door; False for a
+    wall, a window, bars, and a door the story has FASTENED. The one question
+    `people_neighbors` asks, named here so the answer lives beside the
+    vocabulary rather than in the caller.
+    """
+    return (normalize_barrier(value) in _ROUTE_MEMORY_BARRIERS
+            and not barrier_fastening(value))
+
+
 def unresolved_barrier_words(rooms) -> list:
     """Every barrier word in these rooms that nothing in the vocabulary reads.
 
@@ -521,7 +578,7 @@ _AMBIENT_BARRIERS = {"open", "open_door", "bars"}
 
 
 def neighbor_map(scene: dict, barriers=None, *, known_rooms_only=False,
-                 directional=False) -> dict:
+                 directional=False, crossable=None) -> dict:
     """{room_id: {rooms one step away}}, undirected, over the edges a caller
     is willing to cross.
 
@@ -542,6 +599,14 @@ def neighbor_map(scene: dict, barriers=None, *, known_rooms_only=False,
     room record for. Only `ambient_scope` asks for that, because its answer is
     a connected component it then reads `parent_entity` off; the walks that
     only need ids tolerate a dangling edge.
+
+    `crossable` is a per-EDGE veto, asked after `barriers` and after
+    `resolve_edge`, for the caller whose question the normalized barrier name
+    cannot answer. `barriers` compares a folded value, and folding is lossy by
+    design -- `locked_door`, `stuck_door` and `closed_door` are one name -- so
+    a walk that must open a plain door and be held by a fastened one has to
+    see the edge itself (`charter_space.people_neighbors`). It receives the
+    resolved edge dict and returns whether to keep it.
 
     `directional` honours an edge's `passage_from` field, and the result is
     then a DIRECTED map: the walk that carries a body must refuse a chute
@@ -570,6 +635,8 @@ def neighbor_map(scene: dict, barriers=None, *, known_rooms_only=False,
             edge = resolve_edge(scene, edge)
             if barriers is not None \
                     and normalize_barrier(edge.get("barrier")) not in barriers:
+                continue
+            if crossable is not None and not crossable(edge):
                 continue
             if directional:
                 # The directed map is the one BODIES walk, and an overlook

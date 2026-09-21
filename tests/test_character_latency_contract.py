@@ -99,7 +99,27 @@ def test_runtime_character_prompt_has_a_small_operational_ceiling():
 
     # This was 65,440 authored characters and roughly 48 KB even after gates.
     # The ceiling includes the universal language/schema policy.
-    assert len(prompt) < 18_000
+    #
+    # RAISED 18,000 -> 18,500 on 2026-09-19, and the cost basis, because a
+    # ceiling nobody can account for gets raised again next week. The prompt
+    # stood at 17,997 -- three characters of headroom -- and the waiting ledger
+    # (`self.still_waiting_for` plus `waiting_ops`) needs 411 of instruction
+    # after being cut twice. What that buys and what it costs:
+    #
+    #   * COST: ~100 tokens of prefill on a call that is decode-bound and
+    #     never cached (~22.5s per character, measured), so the wall-clock
+    #     change is inside the noise of one beat.
+    #   * THE ALTERNATIVE IS THE MEASURED FAILURE, not a saving. A field the
+    #     model is never taught is a field it never sends: `salience` reaches
+    #     this same prompt only as a literal 0.5 in the shape, with nothing
+    #     saying what it means, and the self-memory gate that read it was an
+    #     OFF SWITCH for every character in every story -- 1 self row in 60
+    #     beats (two_lives v5). An untaught field is not cheaper; it is
+    #     silent.
+    #
+    # It went up by 500 rather than by 411 so the next paragraph is a
+    # deliberate decision and not an emergency.
+    assert len(prompt) < 18_500
 
 
 def test_compact_character_wire_is_experimental_and_complete():

@@ -1165,6 +1165,11 @@ _MERGE_UNION_FIELDS = (
     "memory_effects",
     "contact_ops",
     "material_effects",
+    # Giving up on a promise is a decision, and the same reason `project_ops`
+    # is here: one round declaring it and the next not restating it must not
+    # un-declare it. Each row names its own debt, so two rounds abandoning two
+    # different things both land.
+    "waiting_ops",
 )
 
 #: Preserved when the later declaration is SILENT about them; a later explicit
@@ -2099,12 +2104,25 @@ def charter_ground_for_room(cid, sc, room_id, inputs=None, *, turn_idx=None):
     for charter in inputs.get("charters") or []:
         key = str(charter.get("key") or "")
         members = charter_crowd.members_of(charter, room)
-        crowd = charter_crowd.crowd_for(cid, charter, room, members)
+        # A CROWD STILL HAS A FACE. One member per co-located institution is
+        # fronted out of the band and falls through to
+        # `presence_figures_for_room` as an individual figure, which is what
+        # gives an observer standing in a busy room somebody to address and
+        # the voice gate somebody to answer with. The subtraction stays ONE
+        # subtraction -- `carried` is the band's membership and the figures
+        # are its complement, exactly as before; the face has simply moved
+        # from the first set to the second, and `crowd_for` is told so it
+        # describes the bodies it actually carries.
+        face = charter_crowd.crowd_face(charter, members,
+                                        charter.get("feel") or {})
+        crowd = charter_crowd.crowd_for(cid, charter, room, members,
+                                        fronted=face)
         if crowd is None:
             continue
         rows.append(crowd)
-        carried.update((key, member) for member in members)
-        names.update(_charter_body_display_names(charter, members))
+        held = [member for member in members if str(member) != str(face)]
+        carried.update((key, member) for member in held)
+        names.update(_charter_body_display_names(charter, held))
     ground = {"crowds": rows[:charter_crowd.CO_LOCATED_CAP],
               "carried": carried, "names": names}
     memo[room] = ground
@@ -2194,11 +2212,14 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
       standing there (chat 82 t1, where one rendered as "the unfamiliar
       person" in the room's own description);
     * every charter body derived at this place whose institution holds too
-      few here to be a crowd. At or above `CHARTER_CROWD_FLOOR` the crowd IS
-      the presentation and the body must not arrive twice -- including when
-      `charter_crowds_for_room`'s `CO_LOCATED_CAP` drops that crowd from the
-      view, because the cap decides how many crowds a room shows, never
-      whether an institution's people are ground.
+      few here to be a crowd, PLUS the one body each crowd fronts
+      (`charter_crowd.crowd_face`). At or above `CHARTER_CROWD_FLOOR` the
+      crowd is the presentation of the REST and no body arrives twice --
+      including when `charter_crowds_for_room`'s `CO_LOCATED_CAP` drops that
+      crowd from the view, because the cap decides how many crowds a room
+      shows, never whether an institution's people are ground. The face is
+      there because a room full of people that presents none of them cannot
+      be spoken to, and the busier it was the worse that got.
 
     The bound is the room and nothing else: at most
     ``CHARTER_CROWD_FLOOR - 1`` bodies per co-located institution (two, with
@@ -2683,7 +2704,55 @@ def dwellings_in_reach(cid, rooms, frame_id=None):
         return []
 
 
-def chatter_for_room(cid, sc, room_id, inputs=None):
+def attending_this_room(sc, observer, room_id):
+    """Is this observer's attention ON this room rather than out of it.
+
+    THE DISTINCTION `subject_label` WAS ALWAYS MAKING AND COULD NOT READ: a
+    bystander catches that something happened; somebody listening on purpose
+    catches what about. `orientation[name].focus` is the engine's own record
+    of attention (`spatial_frames.infer_focus`), so this asks it rather than
+    inventing a second notion of attending.
+
+    Attention is ON the room when its focus names something IN the room -- a
+    body standing here, one of the room's own fixtures, or, for an `edge`,
+    the room on the far side of the doorway being watched.
+
+    AN EDGE FOCUS ATTENDS WHAT IT POINTS INTO. The first cut read one as the
+    bystander case -- "a body watching the street is not listening to the
+    bar" -- which is true about the bar and wrong about the street, and the
+    street is the half somebody watching a doorway is there for. Measured
+    (Aldermill, fourth run, 2026-09-19): Sal Weatherby sat in the taproom with
+    `focus {"kind": "edge", "ref": "wheel_bushel_kitchen"}` -- watching the
+    kitchen, which is the whole of what she went in to do -- and took the
+    bystander grade for both rooms. Topics overheard across 39 beats: zero.
+
+    The invariant is untouched either way: perception asks this only for
+    rooms the observer's hearing already reaches, so the grade decides how
+    much of an audible fragment is legible and never which rooms are audible.
+
+    Absent focus is absent attention, which keeps every story that never
+    wrote an orientation record exactly where it was.
+    """
+    if not observer or not room_id:
+        return False
+    sc = sc if isinstance(sc, dict) else {}
+    focus = ((sc.get("orientation") or {}).get(str(observer)) or {}).get("focus")
+    if not isinstance(focus, dict):
+        return False
+    ref, kind = str(focus.get("ref") or ""), str(focus.get("kind") or "")
+    if not ref:
+        return False
+    if kind == "target":
+        return str((sc.get("positions") or {}).get(ref) or "") == str(room_id)
+    if kind == "anchor":
+        from world.spatial import effective_anchors
+        return ref in (effective_anchors(sc, str(room_id)) or {})
+    if kind == "edge":
+        return ref == str(room_id)
+    return False
+
+
+def chatter_for_room(cid, sc, room_id, inputs=None, *, attending=False):
     """What an observer in this room hears of the crowd's talk: a hum band
     as ground, and at most one overheard fragment as figure.
 
@@ -2705,9 +2774,14 @@ def chatter_for_room(cid, sc, room_id, inputs=None):
         return []
     inputs = inputs if isinstance(inputs, dict) else chatter_inputs(cid, sc)
     memo = inputs.setdefault("memo", {})
+    # KEYED BY THE GRADE TOO. The murmur is a property of the room; how much
+    # of its topic is legible is a property of the observer, so two bodies in
+    # one room with different attention get different answers and must not
+    # share a cached one.
     room = str(room_id)
-    if room in memo:
-        return [dict(e) for e in memo[room]]
+    memo_key = (room, bool(attending))
+    if memo_key in memo:
+        return [dict(e) for e in memo[memo_key]]
 
     size = effective_room_size(sc or {}, room)
     crowds = crowds_model.crowds_in_room(wget(cid, CROWDS_KEY, []) or [],
@@ -2789,7 +2863,8 @@ def chatter_for_room(cid, sc, room_id, inputs=None):
             known_bodies=charter["known_bodies"])
         subject = charter_chatter.subject_label(
             picked.get("subject"), bodies=charter["bodies"],
-            figures=charter["figures"], naming=charter["naming"])
+            figures=charter["figures"], naming=charter["naming"],
+            attending=bool(attending))
         fragment = {"speaker_label": speaker["anon"], "act": picked.get("act"),
                     "other_label": other["anon"], "subject_label": subject,
                     "speaker_name": speaker["name"],
@@ -2799,7 +2874,7 @@ def chatter_for_room(cid, sc, room_id, inputs=None):
                     "uid": charter_chatter.fragment_key(picked),
                     "what": charter_chatter.fragment_phrase(fragment),
                     **fragment})
-    memo[room] = out
+    memo[memo_key] = out
     return [dict(e) for e in out]
 
 
@@ -10834,7 +10909,19 @@ def _resolve_player_room(sc, pers, interp, cast, player_input=None):
         candidates = [v for _, v in placed]
     if len(candidates) == 1:
         return candidates[0]
-    if sc.get("positions"):
+    # ASK ONLY WHERE THERE IS SOMETHING TO CHOOSE BETWEEN. The gate was "does
+    # the scene place anything at all", which is true of every scene, so a
+    # frame standing nothing but its own cast -- every beat of a causality
+    # bubble, and every playerless story -- bought a model call per perception
+    # stage to look for a body that is not in it (Aldermill 2026-09-19: 120
+    # calls, 274s, 185,618 input tokens over 60 beats, every answer empty).
+    #
+    # Not only waste. `_llm_resolve_player_room` offers the scene's BODIES as
+    # the keys, and a cast body is a body, so the one thing between the
+    # question and the answer "Emory Vane" was the model declining to pick.
+    # An empty candidate list is not an ambiguity for a model to settle; it
+    # is the scene saying the player is not standing here.
+    if candidates:
         llm_room = _llm_resolve_player_room(sc, pers, cast, interp, player_input)
         if llm_room:
             return llm_room

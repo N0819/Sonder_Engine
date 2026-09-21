@@ -310,10 +310,22 @@ def door_anchor_id(neighbor_room_id) -> str:
     return f"{_DOOR_ANCHOR_PREFIX}{neighbor_room_id}"
 
 
+#: What a boundary is CALLED in a view, when the edge itself carries no
+#: authored name. The `closed_door` row said "the doorway" until 2026-09-19,
+#: which is the same noun an opening gets with one adjective removed, so the
+#: only thing a view ever said about a shut door was what sight fails to
+#: deliver through it ("Nothing shows through the doorway") -- an absence
+#: standing in for an obstacle. Measured: that sentence is the middle line of
+#: Emory Vane's view on all thirty beats of the Aldermill run, and the door it
+#: does not name is the one his whole story is about.
+#:
+#: Sight and sight only. Whether a shut door is locked, jammed or swollen is
+#: found out by trying it, so every fastening (`barrier_fastening`) looks the
+#: same from across the room and is deliberately not read here.
 _BARRIER_ANCHOR_DESC = {
     "open": "the opening",
     "open_door": "the open doorway",
-    "closed_door": "the doorway",
+    "closed_door": "the shut door",
     "window": "the window",
     "bars": "the bars",
     "membrane": "the curtained way",

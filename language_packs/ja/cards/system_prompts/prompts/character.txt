@@ -38,6 +38,8 @@
 
 追跡中：`self.following`は自発的な追従の現在状態であり、速度、瞬間移動、知識を与えません。開始または停止するときだけ`follow` effectを出し、省略すれば維持します。
 
+まだ待っているもの：`self.still_waiting_for`は、誰かが約束してまだ持ってきていないものです——何を、誰が負い、頼んでからどれだけ経ったか。指示ではなく事実で、どうするかはあなたが選びます。諦めるのは決定であり、述べるものです：`waiting_ops`で`{op:'abandon',from,what,why}`、自分のものだけ。理由が要点です——期待するのをやめたものは、忘れたものではありません。
+
 プロジェクト：`self.projects`はドライブと意図の中間にある最大二つの継続的コミットメントです。境界でのみ`updates.projects`へ`{op:'adopt|displace|satisfy',id?,project?,about?,satisfied_when?,why}`を出します。一度の実行やこの場面の完了で終わるものはprojectではなくintentionです。空欄を埋めません。
 
 self.project_review が現れるのは本物の境界に達した一ビートだけです。今ここで奉仕、達成、または意識的な置換を検討してください。フラグ自体は結論を選びません。
@@ -130,5 +132,5 @@ self.project_review が現れるのは本物の境界に達した一ビートだ
 
 出力：`state.appraisal`は判断への圧力、`state.active`は今持つ感情、欲求、ストレスへの対処、快楽的解放、懸念の提案です。`state.decision`は一時欲求IDを選択し、短い決め手と不確実性を保ちます。`sequence`は行為、`manifest`は外への漏れ、`updates`は持続学習、`effects`は完了した物理結果、`interaction`は会話上の制御です。
 
-供給されたschemaに厳密に一致するJSONを、七つの最上位fieldすべてと共に返します：{"state":{},"sequence":[],"manifest":{},"updates":{},"effects":[],"interaction":{},"salience":0.5}。
+供給されたschemaに厳密に一致するJSONを、七つの最上位fieldすべてと共に返します：{"state":{},"sequence":[],"manifest":{},"updates":{},"effects":[],"interaction":{},"salience":0.5}。諦めるときだけ "waiting_ops":[] を加えてください。
 必須の入れ子形：{"state":{"appraisal":{"goal_relevance":"","expectation":"","emotion":"","uncertainty":"","novelty":0.0,"controllability":0.5,"coping_potential":0.5,"norm_compatibility":0.0,"self_congruence":0.0,"intrinsic_pleasantness":0.0,"present_evidence":[],"memory_modulation":{"evidence":[],"familiarity":0.0,"expectation":"","anticipatory_emotion":"","coping_effect":0.0,"somatic_echo":0.0,"threat_bias":0.0,"why":""},"somatic_impact":{"pain":0.0,"pleasure":0.0,"why":"","evidence":[]},"goal_impacts":[]},"active":{"affect":{"surface":{"label":"","valence":0.0,"arousal":0.0},"undercurrent":null},"wants":[],"stress":{"coping_mode":""},"hedonic":{"released":false},"active_concerns":[]},"decision":{"enact":"","suppress":"","hinge":"","uncertainty":""}},"sequence":[],"manifest":{"surface_demeanor":"","tells":[]},"updates":{"intentions":[],"projects":[],"drive":null,"beliefs":[],"associations":[],"people":[],"relationships":[],"memory":{"keep":[],"reinterpret":[],"effects":[]}},"effects":[],"interaction":{"addresses":[],"expects_response":false,"yields_floor":true,"urgency":0.0,"conversation_complete_for_me":false},"salience":0.5}。

@@ -343,6 +343,49 @@ def clamp_read_timeout(seconds):
     return max(READ_TIMEOUT_MIN, min(value, READ_TIMEOUT_MAX))
 
 
+#: How long a stream may say NOTHING before a caller that knows it is doing long
+#: work gives up on it. None means `PROVIDER_SILENCE_SECONDS`.
+silence_limit_override = contextvars.ContextVar(
+    "silence_limit_override", default=None)
+
+
+@contextmanager
+def patient_stream(seconds):
+    """Raise the SILENCE watchdog for model requests made inside this block.
+
+    `request_timeout` above is the socket's deadline; this is the activity
+    clock's, and they are different questions -- a provider can hold a socket
+    open for a minute while emitting nothing but keepalives.
+
+    `PROVIDER_SILENCE_SECONDS` is 10, and its note explains why: it was
+    measured against SPECIALIST calls "where the role's usual cost is 3-7 s",
+    to catch two that took 1,324 s. That is the right threshold for a pipeline
+    stage a player is waiting on. It is the wrong one for a long AUTHORING
+    call: the Writers' Room plans a whole inhabited location in one tool loop,
+    and a reasoning model legitimately thinks for more than ten seconds
+    between emissions. Measured 2026-09-19/20: four consecutive town designs
+    died here, the last after 2,032 characters of reasoning and no content --
+    a model working, killed for not having finished.
+
+    Same shape and same reasoning as `request_timeout`: the caller that knows
+    it is doing long work raises it for itself rather than everyone paying for
+    it, and it is reset in `finally` so a contextvar cannot leak the patience
+    into whatever runs next on this thread.
+    """
+    try:
+        value = float(seconds)
+    except (TypeError, ValueError):
+        value = 0.0
+    if value <= 0:
+        yield
+        return
+    token = silence_limit_override.set(value)
+    try:
+        yield
+    finally:
+        silence_limit_override.reset(token)
+
+
 @contextmanager
 def request_timeout(seconds):
     """Raise the read timeout for model requests made inside this block.
@@ -2292,6 +2335,41 @@ def _json_mode_recovery_stages(body, prov, model, *, stalled=False):
     stage_two = _strip_extended(dict(body))
     stage_two.pop("response_format", None)
     yield stage_two, []
+    # A STRIP THAT MADE IT WORSE IS NOT A RECOVERY. `_strip_extended` drops the
+    # reasoning controls because a provider whose model refuses the requested
+    # EFFORT hard-400s rather than ignoring it ("Supported values are: high,
+    # max" on nanogpt's GLM). The opposite provider exists: OpenRouter's
+    # google/gemini-3.8-flash answers a request with reasoning removed with
+    # `HTTP 400: "Reasoning is mandatory for this endpoint and cannot be
+    # disabled."` -- so the last rung, whose job is to be the one that always
+    # works, is categorically invalid there and the call dies on an error that
+    # has nothing to do with what it was recovering from. Measured live
+    # 2026-09-20: it killed a story run outright.
+    #
+    # Put them back and try once more, rather than reading the provider's
+    # prose to decide which kind of provider this is. Both directions are then
+    # covered by the ORDER: a provider that hates the effort value succeeds on
+    # stage two and never reaches this; one that requires reasoning fails stage
+    # two and is caught here. Nothing is learned, nothing is matched, and the
+    # rung costs a request only on a call that was already failing.
+    # ONLY WHERE RESTORING COULD HELP. The rung exists for a provider that
+    # REQUIRES reasoning, and "reasoning: disabled" is exactly what such a
+    # provider refuses -- so putting `reasoning_effort: "none"` (or
+    # `reasoning: {enabled: False}`, the OpenRouter spelling of the same
+    # thing, `_apply_reasoning_effort`) back can never turn a 400 into a 200.
+    # It would only spend a request on a call that is already failing, which
+    # is the whole cost of this rung and is worth not paying twice.
+    restored = {key: body[key] for key in ("reasoning_effort", "reasoning")
+                if key in body}
+    if str(restored.get("reasoning_effort") or "").casefold() == "none":
+        restored.pop("reasoning_effort", None)
+    _r = restored.get("reasoning")
+    if isinstance(_r, dict) and _r.get("enabled") is False:
+        restored.pop("reasoning", None)
+    if restored:
+        stage_three = dict(stage_two)
+        stage_three.update(restored)
+        yield stage_three, []
 
 
 def _is_reasoning_key(key):
@@ -2507,7 +2585,7 @@ def _sse_openai(url, headers, body, sink, role=None, model=None):
                          timeout=_request_timeout()) as r, _abortable(r):
         if r.status_code >= 400:
             raise LLMError(f"HTTP {r.status_code}: {r.text[:300]}", r.status_code, r.status_code in DEFAULT_RETRY.retryable_status)
-        clock = _ActivityClock()
+        clock = _ActivityClock(limit=silence_limit_override.get())
         for raw in r.iter_lines():
             _check_cancel()
             clock.tick()

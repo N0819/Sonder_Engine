@@ -2637,12 +2637,24 @@ def test_a_view_with_a_band_line_does_not_also_name_the_bodies_it_covers(
     """Caravanserai turn 3: the composed view carried the band line "a
     handful serving hands and wardens" AND eleven individual figure labels
     of the same institution's people. The crowd is the carried set and the
-    figures are its complement, so a name cannot be in both."""
+    figures are its complement, so a name cannot be in both.
+
+    Since `charter_crowd.crowd_face` the complement is not empty: each band
+    fronts exactly one of its people as a figure, because a room that
+    presents nobody cannot be spoken to. The invariant this test exists for
+    is the one that matters and is unchanged -- the fronted body is a figure
+    and NOT ground, and the other six are ground and not figures."""
+    from agents.common import charter_ground_for_room, chatter_inputs
     cid = _qesh_chat(temp_db)
     _qesh_registry(temp_db, cid, 7)
-    crowds, figures = _presented_names(cid, _qesh_scene(), "courtyard")
+    sc = _qesh_scene()
+    crowds, figures = _presented_names(cid, sc, "courtyard")
     assert len(crowds) == 1, "seven bodies at one place are a crowd"
-    assert figures == [], (
+    assert len(figures) == len(crowds), (
+        "one band, one face -- the view named these instead: %r" % figures)
+    ground = charter_ground_for_room(
+        cid, sc, "courtyard", chatter_inputs(cid, sc, turn_idx=4))
+    assert not [f for f in figures if f.casefold() in ground["names"]], (
         "the band covers these bodies and the view named them too: %r"
         % figures)
 
@@ -2667,18 +2679,26 @@ def test_a_record_that_lost_its_charter_link_is_still_ground(temp_db):
 def test_every_body_in_the_room_reaches_the_view_as_one_or_the_other(temp_db):
     """Caravanserai turn 12, the other direction: seven bodies in the
     courtyard reached the player as a band and as nobody. Below the crowd
-    floor every body is a figure; at or above it every body is ground; the
-    union is the institution's people standing there either way."""
+    floor every body is a figure; at or above it the band carries all but
+    the one it fronts (`charter_crowd.crowd_face`); the union is the
+    institution's people standing there either way, each arriving once.
+
+    Both halves were once "all or nothing", and both halves were a way to
+    empty a room: the band covering everybody is the same deletion as the
+    band covering nobody, one turn later in the story."""
     from world.charter_crowd import CHARTER_CROWD_FLOOR
     for count in (CHARTER_CROWD_FLOOR - 1, CHARTER_CROWD_FLOOR + 2):
         cid = _qesh_chat(temp_db)
         _qesh_registry(temp_db, cid, count)
         crowds, figures = _presented_names(cid, _qesh_scene(), "courtyard")
-        carried = count if crowds else 0
+        carried = (count - len(figures)) if crowds else 0
         assert carried + len(figures) == count, (
             "%d bodies stand there and %d reached the view"
             % (count, carried + len(figures)))
-        assert bool(crowds) != bool(figures)
+        if count < CHARTER_CROWD_FLOOR:
+            assert not crowds and len(figures) == count
+        else:
+            assert len(crowds) == 1 and len(figures) == 1
 
 
 def test_a_scene_with_no_charter_composes_exactly_as_it_did(temp_db):

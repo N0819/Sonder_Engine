@@ -931,7 +931,22 @@ def _clean_contact(raw, scene=None):
     if not actor or not target:
         return None
     if actor.casefold() == target.casefold():
-        return None  # a body is always in contact with itself; not a fact
+        # A BODY IS ALWAYS IN CONTACT WITH ITSELF -- ITS PARTS ARE NOT.
+        # Whole-body against whole-body is the tautology this refusal was
+        # written for and it still goes. Two distinct places on one body are
+        # a fact that changes: a hand over a mouth, a palm pressed to a
+        # wound, fingers feeling their own pulse, a thumb rolling grit
+        # against a forefinger to find out whether it shears. Measured
+        # (two_lives v5, 2026-09-19): that last one was the whole of a
+        # millwright's diagnosis -- twenty beats of work turned on it -- and
+        # the op was dropped here without a line in the report, so the
+        # specialist reasoned, correctly, that the engine has no way to say
+        # it. The same-place case is `same_owned_region`'s question, asked
+        # rather than restated.
+        a_part = str(raw.get("actor_part") or "").strip()
+        t_part = str(raw.get("target_part") or "").strip()
+        if not a_part or not t_part or _same_region(a_part, t_part):
+            return None
     if not (_is_anatomical_part(raw.get("actor_part"))
             and _is_anatomical_part(raw.get("target_part"))):
         # A part slot holding matter, a sound, or a state is wrong where it is

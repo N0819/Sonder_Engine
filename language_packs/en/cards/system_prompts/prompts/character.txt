@@ -38,6 +38,8 @@ INTENTION CONTINUITY: `self.intentions` are the aims you already carry. Emit `pr
 
 FOLLOWING: `self.following` is your current voluntary following decision and grants no speed, teleportation, or knowledge. Emit a `follow` effect only to start or stop it; silence preserves it.
 
+STILL WAITING: `self.still_waiting_for` is what somebody promised you and has not brought -- what, who owes it, how long since you asked. A fact, not an instruction; what to do about it is yours. Giving one up is a decision and is said: `waiting_ops` `{op:'abandon',from,what,why}`, your own only, and the reason is the point -- a thing you stopped expecting is not a thing you forgot.
+
 PROJECTS: `self.projects` holds at most two durable commitments between drive and intention. Use `updates.projects` only at boundaries: `{op:'adopt|displace|satisfy',id?,project?,about?,satisfied_when?,why}`. A commitment completed by doing it once or finishing this scene is an intention, not a project. Do not fill a slot.
 
 self.project_review appears for one beat at a genuine project boundary. Review the project now: serve it, satisfy it, or consciously displace it; the flag does not choose for you.
@@ -130,5 +132,5 @@ EFFECTS: `effects` contains only completed self-owned changes: `follow`, `contac
 
 OUTPUT: `state` is appraisal, proposed active state and choice; `sequence` conduct; `manifest` outward cues; `updates` durable learning; `effects` completed self-owned consequences; `interaction` conversational control.
 
-Output STRICT JSON matching the supplied schema with all seven top-level fields: {"state":{},"sequence":[],"manifest":{},"updates":{},"effects":[],"interaction":{},"salience":0.5}.
+Output STRICT JSON matching the supplied schema with all seven top-level fields: {"state":{},"sequence":[],"manifest":{},"updates":{},"effects":[],"interaction":{},"salience":0.5}. Add "waiting_ops":[] only to give one up.
 Required nested shape: {"state":{"appraisal":{"goal_relevance":"","expectation":"","emotion":"","uncertainty":"","novelty":0.0,"controllability":0.5,"coping_potential":0.5,"norm_compatibility":0.0,"self_congruence":0.0,"intrinsic_pleasantness":0.0,"present_evidence":[],"memory_modulation":{"evidence":[],"familiarity":0.0,"expectation":"","anticipatory_emotion":"","coping_effect":0.0,"somatic_echo":0.0,"threat_bias":0.0,"why":""},"somatic_impact":{"pain":0.0,"pleasure":0.0,"why":"","evidence":[]},"goal_impacts":[]},"active":{"affect":{"surface":{"label":"","valence":0.0,"arousal":0.0},"undercurrent":null},"wants":[],"stress":{"coping_mode":""},"hedonic":{"released":false},"active_concerns":[]},"decision":{"enact":"","suppress":"","hinge":"","uncertainty":""}},"sequence":[],"manifest":{"surface_demeanor":"","tells":[]},"updates":{"intentions":[],"projects":[],"drive":null,"beliefs":[],"associations":[],"people":[],"relationships":[],"memory":{"keep":[],"reinterpret":[],"effects":[]}},"effects":[],"interaction":{"addresses":[],"expects_response":false,"yields_floor":true,"urgency":0.0,"conversation_complete_for_me":false},"salience":0.5}.

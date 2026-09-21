@@ -61,6 +61,7 @@ from story.scene import (
     style_guide,
 )
 from llm.providers import Aborted, generation_event_sink, token_sink
+from world.mechanics import beat_time_from_spans, time_diff_claims
 from llm import schemas
 from llm.schemas import validate_llm_output
 from world.survival import survival_enabled, vitals_of
@@ -5242,6 +5243,209 @@ def _settled_forms(sc, key):
     return forms
 
 
+#: How many words a minted thing's NAME may run to. A hand explaining itself
+#: -- "the packed grit and small stones wedged hard into the submerged runner
+#: groove beneath the waterline" -- has described something rather than named
+#: it, and a description cannot be stood in a room or referred to again next
+#: beat. Six because the live names that needed minting run one to four
+#: ("sluice gate", "submerged oak runner", "packed grit and small stones",
+#: "timber frame of the sluice gate") and the first thing longer than that was
+#: already a sentence. `commit_mapping.NEED_SUBJECT_WORDS` is 12 for the same
+#: judgement about a PLANNING subject, which may legitimately be a phrase.
+MINTED_THING_NAME_WORDS = 6
+
+
+def _beat_room(out, scene, identity_index=None):
+    """The one room this beat's acting bodies stand in, or "".
+
+    A minted thing has to be SOMEWHERE, and the only honest answer is where
+    the beat that reached for it happened. Read from the beat's own ledger
+    rather than from the player, because a bubble's beat has no player and
+    the body acting is the only body there.
+
+    TWO READINGS, IN ORDER, BECAUSE THE FIRST ONE ANSWERS ITSELF. A ledger's
+    things place the beat when the world already holds them -- but the beat
+    that needs a mint is exactly the beat whose thing it does NOT hold, so
+    on the only case this function exists for, the things resolve to
+    nothing. Measured (two_lives v5, 2026-09-19, turn 17): the ledger's one
+    object was "brass collar seam", the world had no such record and so no
+    position for it, no room could be derived, and the mint that would have
+    created it refused for want of the room it was being created in. The
+    ACTOR always has a position: `source_entity_id` is the acting body's
+    handle and `identity_index` is the same id->display map every hand is
+    handed.
+
+    REFUSES TO GUESS when the beat's bodies stand in more than one room. A
+    thing stood in the wrong room is worse than a thing nobody minted: it is
+    perceivable by the wrong people, and the firewall's whole floor is that
+    presence and channel are two readings of one world.
+    """
+    positions = (scene or {}).get("positions") or {}
+    ledgers = [row for row in ((out or {}).get("ledgers") or [])
+               if isinstance(row, dict)]
+    rooms = set()
+    for ledger in ledgers:
+        for name in ([ledger.get("object_name")]
+                     + list(ledger.get("item_names") or [])):
+            room = positions.get(str(name or "").strip())
+            if room:
+                rooms.add(str(room))
+    if rooms:
+        return rooms.pop() if len(rooms) == 1 else ""
+    index = {str(k): str(v) for k, v in (identity_index or {}).items()}
+    for ledger in ledgers:
+        handle = str(ledger.get("source_entity_id") or "").strip()
+        room = positions.get(index.get(handle) or handle)
+        if room:
+            rooms.add(str(room))
+    return rooms.pop() if len(rooms) == 1 else ""
+
+
+def mint_unreferenced_things(out, scene, diff, room):
+    """Stand up the things this beat acted on that the world does not hold.
+
+    THE HAND ALREADY SAID SO. The contact sheet tells it to resolve a target
+    against `entity_names` "or request the channel that owns its record;
+    otherwise mark the unresolved item no_referent and explain the missing
+    referent" -- and it does, in `settled`, which is a typed field. Nothing
+    answered the "otherwise", so every transform on such a row was dropped.
+
+    Measured (Aldermill, two causality bubbles, 2026-09-19): 29 of 93
+    specialist results came back `no_referent`. Emory Vane worked a sluice
+    gate for twenty-three consecutive beats -- ran a hand along its timber
+    frame, pressed into the runner groove, hooked packed grit out of it -- and
+    `scene.entities` in his frame held one record, himself. Nothing could
+    record that he was touching anything, so nothing changed, so his next
+    appraisal had no evidence, so he did it again. Two runs of sixty beats
+    changed the world three times between them.
+
+    THE PERSON HALF OF THIS ALREADY EXISTS.
+    `commit_background.track_background_presences` takes a person the Director
+    wrote into a beat who has no record and mints bookkeeping for them from
+    structured fields only, never NER over prose; `planning_needs.NEED_KINDS`
+    already carries "thing" beside "person" and "room". A person the world did
+    not plan got a record and a thing did not. This reads the same kind of
+    field and obeys the same rule.
+
+    MINTS THE BARE FACT AND NOTHING ELSE: a name, an inert kind and the room
+    the beat happened in. What the thing IS, what it looks like and what state
+    it is in are the objects hand's to write and the Writers' Room's to plan
+    -- this only ensures there is something for them to write ABOUT.
+
+    NO PLANNING NEED IS FILED HERE, and the attempt is recorded so it is not
+    made again. `commit_mapping._drop_needs_the_beat_answers` rules that "a
+    need is what nobody has planned, and what the beat was holding is
+    planned", reading the scene the beat committed -- and this mint puts the
+    thing in that scene on the same beat, so a need filed behind it is
+    dropped every time, correctly. The trigger that WOULD survive is not
+    "the beat minted it" but "a mind attended to it and it had nothing to
+    say", which is a question the read path asks and this function cannot.
+
+    Four refusals, each because minting would be worse than the gap:
+
+    * anything but `no_referent`. `not_mine` means another hand owns the
+      record, not that the world lacks one;
+    * a name the world already holds under any spelling, alias or position
+      key -- that is a resolution failure, and a second copy of a thing is
+      worse than one nobody found;
+    * a PERSON. `settled` named "Emory Vane" `no_referent` on two live beats;
+      a hand failing to resolve a body is a different fault, and answering it
+      by standing furniture in the room wearing their name is not a repair;
+    * a name longer than `MINTED_THING_NAME_WORDS`, which is a description.
+    """
+    specialists = ((out or {}).get("orchestration") or {}).get("specialists")
+    room = str(room or "").strip()
+    if not isinstance(specialists, dict) or not room:
+        return []
+
+    scene = scene if isinstance(scene, dict) else {}
+    held, bodies = set(), set()
+    for channel in ("entities", "rooms"):
+        for key, record in (scene.get(channel) or {}).items():
+            forms = {_thing_forms(key)}
+            if isinstance(record, dict):
+                forms.add(_thing_forms(record.get("name")))
+                forms.update(_thing_forms(alias)
+                             for alias in record.get("aliases") or [])
+            held |= forms
+            if channel == "entities" and isinstance(record, dict) \
+                    and str(record.get("kind") or "").strip().casefold() == "person":
+                bodies |= forms
+    held |= {_thing_forms(key) for key in (scene.get("positions") or {})}
+    # ...AND WHAT THIS BEAT HAS ALREADY STOOD UP. The refusal above -- "a name
+    # the world already holds under any spelling, alias or position key" -- was
+    # right and its evidence was one beat short: it read the SCENE, which is
+    # the world before this beat, while the hand that owns a thing's record
+    # mints it into THIS diff. So a thing the objects hand established a
+    # moment ago was unknown here, and a sibling hand reporting the same thing
+    # missing got a second copy of it. Measured (two_lives v13, 2026-09-20,
+    # turn 8): the objects hand minted `copper_coin` with a kind, a
+    # description, an alias and `portable`, this function minted `copper_coin`
+    # again from a `missing_referents` line, the key-collision guard below
+    # renamed the duplicate `copper_coin_2`, and the taproom held two coins
+    # for one. Invisible until things in a room became visible at all, and
+    # then the view said "There is the copper coin here" twice.
+    for channel in ("entities", "rooms"):
+        for key, record in ((diff or {}).get(channel) or {}).items():
+            held.add(_thing_forms(key))
+            if isinstance(record, dict):
+                held.add(_thing_forms(record.get("name")))
+                held.update(_thing_forms(alias)
+                            for alias in record.get("aliases") or [])
+    held |= {_thing_forms(key) for key in ((diff or {}).get("positions") or {})}
+    held.discard("")
+    bodies.discard("")
+
+    wanted = []
+    for spec in specialists.values():
+        if not isinstance(spec, dict):
+            continue
+        for result in spec.get("results") or []:
+            if not isinstance(result, dict):
+                continue
+            # TWO PLACES A HAND CAN NAME WHAT IS MISSING, and they answer
+            # different questions. `settled` is keyed per thing ON THE ROW, and
+            # a row's thing is usually the acting body -- so a hand that cannot
+            # find a target says `no_referent` about the PERSON. Measured
+            # (two_lives v5, 2026-09-19): 9 of 10 `no_referent` verdicts named
+            # a character while the notes beside them named "apron timber" and
+            # "wheel shroud", and this function refused every one of them,
+            # correctly, and minted nothing all run. `missing_referents` is the
+            # hand saying what the WORLD lacks, which is the question this
+            # function was always asking.
+            labels = [str(x) for x in (result.get("missing_referents") or [])
+                      if str(x or "").strip()]
+            labels += [name for name, verdict
+                       in (result.get("settled") or {}).items()
+                       if str(verdict or "") == "no_referent"]
+            for name in labels:
+                label = " ".join(str(name or "").split())
+                form = _thing_forms(label)
+                if not form or form in held or form in bodies:
+                    continue
+                if len(form.split()) > MINTED_THING_NAME_WORDS:
+                    continue
+                if form not in {_thing_forms(w) for w in wanted}:
+                    wanted.append(label)
+    if not wanted:
+        return []
+
+    entities = diff.setdefault("entities", {})
+    positions = diff.setdefault("positions", {})
+    taken = set(held) | {_thing_forms(k) for k in entities}
+    minted = []
+    for label in wanted:
+        base = re.sub(r"[^a-z0-9]+", "_", _thing_forms(label)).strip("_")
+        key, suffix = base or "thing", 2
+        while key in entities or key in (scene.get("entities") or {}):
+            key, suffix = "%s_%d" % (base, suffix), suffix + 1
+        entities[key] = {"name": label, "kind": "fixture"}
+        positions[key] = room
+        taken.add(_thing_forms(label))
+        minted.append(key)
+    return minted
+
+
 def _account_for_every_thing(ledger, row, raw_transforms, chrono_id, status,
                              verdicts, unaccounted, notes, index, sc=None):
     """Every thing on a granted row is either changed or accounted for.
@@ -6642,6 +6846,44 @@ def director_resolve(ctx, nonce, _corrections=None):
     sd["following_ops"] = list(sd.get("following_ops") or []) + \
         _collect_following_ops(ctx, sc, interp, p_name)
 
+    # HOW LONG THE BEAT TOOK, summed from what the author priced its own
+    # steps at. Engine-owned for the same reason `following_ops` above is:
+    # no model is in a position to author it. The `time` channel was the
+    # spatial hand's, and a hand is handed a SLICE of the beat
+    # (`_specialist_span_slice`), so the sum its sheet asked for was over
+    # terms it never saw -- it declined on every measured beat and the world
+    # stood still at `UNCLAIMED_BEAT_SECONDS`. The prose author is the one
+    # agent that sees the beat whole, because it cut the steps; it prices
+    # each step and this adds them up.
+    #
+    # BOTH LEDGERS, because the beat is both of them. Each stage's author
+    # numbers its chronology from 1 and they are offset rather than
+    # interleaved -- the player spoke, then the world answered, then the cast
+    # did -- so a beat's steps are the interpret rows plus the resolve rows,
+    # and summing resolve alone would silently drop the span of every act the
+    # player declared. A declared sleep is the whole point of the field, and
+    # it lands on an interpret row.
+    #
+    # Disjoint by construction, not by hope: `_causal_event_inputs` withholds
+    # already-asserted human conduct from resolve on purpose ("sending them
+    # through resolve would ask a model to decide them twice"), and passes
+    # CONTESTABLE declarations through. So a contestable interpret row is
+    # re-cut by the resolve author and is the one row whose span must not be
+    # counted here -- its duration is whatever the outcome turns out to be,
+    # which is the resolve row's to price. Keyed on the engine's own
+    # distinction rather than on matching two spellings of one event.
+    #
+    # `setdefault`, not assignment: a saved variant or a legacy monolith
+    # output that already carries a readable block keeps it, and a beat whose
+    # rows named no number is left to the floor exactly as before.
+    _beat_time = beat_time_from_spans(
+        [row for row in (interp.get("causal_ledger") or [])
+         if isinstance(row, dict)
+         and str(row.get("commitment") or "").casefold() != "contestable"]
+        + list(out.get("causal_ledger") or []))
+    if _beat_time and not time_diff_claims(sd.get("time")):
+        sd["time"] = dict(sd.get("time") or {}, **_beat_time)
+
     # WHAT WAS SAID, COMPILED LIKE EVERYTHING ELSE THAT HAPPENED.
     #
     # Speech is the one channel no specialist owns, and deliberately: a hand
@@ -6714,6 +6956,20 @@ def director_resolve(ctx, nonce, _corrections=None):
         ))
     out["state_diff"] = sd
     out["dice"] = dice if isinstance(dice, list) else []
+
+    # A THING THIS BEAT ACTED ON AND THE WORLD DOES NOT HOLD BECOMES ONE.
+    # The hands report it themselves (`settled: {<name>: "no_referent"}`) and
+    # nothing answered them, so every transform on such a row was dropped and
+    # a body could work an object for twenty-three beats without the world
+    # recording that it had been touched. See `mint_unreferenced_things`.
+    _minted_things = mint_unreferenced_things(
+        out, sc, sd, _beat_room(out, sc, _identity_index))
+    for _key in _minted_things:
+        ctx.add_warning(
+            "minted %r: the beat acted on it and the world held no record"
+            % sd["entities"][_key].get("name"))
+    if _minted_things:
+        out["minted_things"] = list(_minted_things)
 
     # A walk the player declared once and this beat did not mention carries
     # on. Written HERE, before every movement backstop, so a continued leg

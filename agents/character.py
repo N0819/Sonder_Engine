@@ -4131,6 +4131,35 @@ def character_step(ctx, cid, nonce):
     _underway = _en_route(stored_state, char_room, _goal_destination)
     if _underway:
         _self["en_route"] = _underway
+    # WHAT THIS MIND IS STILL WAITING FOR, and for how long. Every row is a
+    # service somebody in this story PROMISED it and has not delivered
+    # (`commit_background.owed_to` over the one `pending_act` row the figure
+    # that owes it carries -- derived, never a second copy, because a debt
+    # written twice is two debts free to disagree about whether it was kept).
+    #
+    # Nothing here is a channel this mind did not already have: it asked, out
+    # loud, and it can see that its hands are empty. And nothing here decides
+    # anything -- ask again, catch an eye, complain, shrug, or walk out is the
+    # character's to choose, which is the whole reason the row carries an AGE
+    # instead of a verdict.
+    #
+    # Measured (two_lives v7, 2026-09-19): Sal Weatherby asked an innkeeper
+    # for a small ale on beat 6, was told "Aye, in good time", and stood
+    # braced against a timber post for the remaining 31 beats -- fourteen
+    # consecutive self-memories of shifting her weight and moving her gaze.
+    # Her one intention went dormant at beat 31. Nothing had told her that a
+    # half-hour of story time had passed with an ale unpoured.
+    try:
+        from persist.commit import owed_to
+        _owed = owed_to(
+            character_name(sh),
+            wget(chat.id, "background_presences", {}) or {},
+            turn_idx=ctx.turn.idx,
+            now_seconds=(_sim_clock or {}).get("elapsed_seconds"))
+    except Exception:
+        _owed = []
+    if _owed:
+        _self["still_waiting_for"] = _owed
     # A boundary passed at last commit (arrival where a project points, a
     # task closing, the scene or frame changing -- affect.project_boundary).
     # Shown for the one beat after it fired: the moment to re-ask what each

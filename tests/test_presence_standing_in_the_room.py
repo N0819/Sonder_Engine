@@ -42,7 +42,8 @@ from __future__ import annotations
 import json
 import time
 
-from agents.common import chatter_inputs, crowds_for_room
+from agents.common import (charter_ground_for_room, chatter_inputs,
+                          crowds_for_room)
 from agents.perception import perception_outcome
 from core.pipeline_context import ChatData, PipelineContext, TurnData
 from story.character_schema import default_character_data
@@ -209,17 +210,28 @@ def test_below_the_crowd_floor_the_bodies_are_individual_figures(temp_db):
     assert sorted(seen) == sorted(derived)
 
 
-def test_at_the_crowd_floor_the_crowd_is_the_presentation(temp_db):
+def test_at_the_crowd_floor_the_crowd_presents_all_but_its_face(temp_db):
     """The complement, and the reason the addition cannot be unconditional:
     a body the derived crowd carries must NOT also arrive as an individual
-    figure, or one institution stands in the room twice."""
+    figure, or one institution stands in the room twice.
+
+    "Not twice" is not "not at all", and reading it that way emptied rooms a
+    second way (`charter_crowd.crowd_face`): five crew in the lounge became a
+    band and nobody, so an observer in the busiest room in the story had
+    no one to speak to. One member is fronted OUT of the band as a figure,
+    and the invariant this test exists for is unchanged -- the fronted body
+    is a figure and not ground, never both."""
     ctx = _ctx(temp_db)
     derived = _with_charter(temp_db, ctx.chat.id, {CELL: 5})
     assert len(derived) == 5
     sc = temp_db.wget(ctx.chat.id, "scene", {})
-    assert crowds_for_room(ctx.chat.id, sc, CELL,
-                           chatter_inputs(ctx.chat.id, sc, turn_idx=1))
-    assert _company(perception_outcome(ctx, "n0")) == []
+    inputs = chatter_inputs(ctx.chat.id, sc, turn_idx=1)
+    assert crowds_for_room(ctx.chat.id, sc, CELL, inputs)
+    company = _company(perception_outcome(ctx, "n0"))
+    assert len(company) == 1, "a room of five presents its face, and one"
+    ground = charter_ground_for_room(ctx.chat.id, sc, CELL, inputs)
+    assert company[0].casefold() not in ground["names"], \
+        "the face is a figure, so the band must not carry it too"
 
 
 def test_a_lapsed_record_goes_back_to_the_crowd_and_not_to_both(temp_db):
@@ -240,9 +252,14 @@ def test_a_lapsed_record_goes_back_to_the_crowd_and_not_to_both(temp_db):
         for i, (name, rec) in enumerate(sorted(derived.items()))
     })
     sc = temp_db.wget(ctx.chat.id, "scene", {})
-    assert crowds_for_room(ctx.chat.id, sc, CELL,
-                           chatter_inputs(ctx.chat.id, sc, turn_idx=40))
-    assert _company(perception_outcome(ctx, "n0")) == []
+    inputs = chatter_inputs(ctx.chat.id, sc, turn_idx=40)
+    assert crowds_for_room(ctx.chat.id, sc, CELL, inputs)
+    # Lapsed back to ground, so the band carries four of the five and fronts
+    # the fifth -- the point being that no record puts a body in both.
+    company = _company(perception_outcome(ctx, "n0"))
+    assert len(company) == 1
+    ground = charter_ground_for_room(ctx.chat.id, sc, CELL, inputs)
+    assert company[0].casefold() not in ground["names"]
 
 
 def test_a_figure_is_described_by_what_the_crowd_would_have_called_it(temp_db):

@@ -1404,6 +1404,34 @@ class CausalLedgerEntry(LenientModel):
     item_ids: list[StrictInt] = Field(default_factory=list)
     item_names: list[str] = Field(default_factory=list)
     look: str = ""
+    # HOW LONG THIS STEP TOOK, in seconds. None when the row named no number.
+    #
+    # THE ONLY AGENT THAT SEES THE WHOLE BEAT IS THE ONE THAT CUT IT. The
+    # `time` channel belonged to the spatial specialist, and a specialist
+    # receives `_specialist_span_slice` -- the rows selected for it, never
+    # the beat. Its own chunk asked for the sum ("a beat that holds several
+    # things in sequence spans all of them") from a hand holding a subset of
+    # the parts, which is a quantity it structurally cannot compute. It
+    # declined, correctly, and the world stood still: measured 2026-09-20,
+    # `time` was in the spatial hand's scope on 38 of 60 playerless beats
+    # (two_lives v11) and 50 of 118 live beats since 2026-09-15, and was
+    # written on 0 of either, while the author routed the category 0 times in
+    # 3,000 resolve variants. Every beat therefore fell to
+    # `mechanics.UNCLAIMED_BEAT_SECONDS`, which handed the charter 0.0028
+    # hours per beat and froze the off-screen world (see
+    # `world/charter_runtime.py`).
+    #
+    # So the ask moved to the row, and the row is the author's: it already
+    # decides where one causal step ends and the next begins, so "how long
+    # did THIS part take" is a question about a thing it just made. Code
+    # sums them (`world.mechanics.beat_time_from_spans`) -- time is
+    # arithmetic, and the beat's total is the one number no single hand was
+    # in a position to hold.
+    #
+    # Optional, and stays optional: a row that names no number contributes
+    # nothing, and a beat where no row named one is charged the floor
+    # exactly as it is today.
+    seconds: Optional[float] = None
     ability: str = ""
     difficulty: str = ""
     resolution_notes: str = ""
@@ -2274,6 +2302,12 @@ class CharterConduct(LenientModel):
     other: str
 
 
+class PresenceHandover(LenientModel):
+    """One thing a background figure puts into somebody's hands."""
+    what: str = ""
+    to: str = ""
+
+
 class BackgroundReactOutput(LenientModel):
     reacts: bool = False
     dialogue_log_entry: Optional[DialogueLogEntry] = None
@@ -2289,6 +2323,24 @@ class BackgroundReactOutput(LenientModel):
     # 2026-09-14, chat 9 turn 11: "Excuse me for a few moments, gentlemen",
     # rising from the card table, and four beats later still seated there).
     goes_to: str = ""
+    # What this figure HANDS OVER as part of the reaction: {what, to}. A
+    # background reaction could speak, walk and perform a social act, and
+    # could not put anything in anybody's hand -- so an inn could answer an
+    # order for a drink and never serve one (Aldermill, 2026-09-19: a tapster
+    # said "Right away for you", reached down a clean earthenware mug, and
+    # nothing left the shelf). Typed for the reason `goes_to` is: an act
+    # written only into `action` is prose nobody reads. Applied
+    # deterministically at commit with a code floor
+    # (`apply_presence_handovers`), never trusted as written.
+    hands_over: Optional[PresenceHandover] = None
+    # What this figure STILL OWES when the beat ends: {what, to}. A service
+    # rarely finishes in the instant it is asked for -- a tapster says
+    # "drawing one now" and reaches for a mug -- and the gate is purely
+    # reactive, so nothing ever asked him again and the ale was never poured
+    # (Aldermill, 2026-09-19). Symmetric with `pending_reply`, which is the
+    # same idea for an owed ANSWER: a debt the engine records and the gate
+    # discharges, expiring so a forgotten promise does not haunt a room.
+    still_owes: Optional[PresenceHandover] = None
 
 class SceneLifeEntry(LenientModel):
     """One managed presence's conduct for this beat, attributed by name so the
@@ -2951,6 +3003,24 @@ class LedgerTransformResult(LenientModel):
     required_channels: list[str] = Field(default_factory=list)
     reroute_to: str = ""
     settled: dict[str, str] = Field(default_factory=dict)
+    # WHAT THE BEAT REACHED FOR AND THE WORLD DOES NOT HOLD, by name.
+    #
+    # `settled` is keyed per THING on the ROW -- the owner's "the verdict
+    # follows the thing" -- and the row's thing is usually the acting body.
+    # So a hand that cannot resolve a target says `no_referent` ABOUT THE
+    # PERSON and puts the missing target's name in a note, which is prose.
+    # Measured (two_lives v5, 2026-09-19): 9 of 10 `no_referent` verdicts in
+    # a run named "Emory Vane" or "Sal Weatherby" while the notes beside them
+    # named "apron timber", "wheel shroud" and "brass collar seam".
+    # `director.mint_unreferenced_things` exists to stand those up and fired
+    # ZERO times, because the only name it could read was a person's and it
+    # refuses to build furniture wearing somebody's name.
+    #
+    # The sheet already asks for this -- "mark the unresolved item
+    # no_referent and explain the missing referent" -- and nothing answered
+    # the second half. This is that half, as a field rather than a sentence,
+    # because a mint may never be built out of prose.
+    missing_referents: list[str] = Field(default_factory=list)
 
 
 class CausalSpecialistOutput(LenientModel):
@@ -3064,7 +3134,9 @@ class DirectorSpatialSpecialist(LenientModel):
     comms_ops: list[CommsOp] = Field(default_factory=list)
     following_ops: list[dict] = Field(default_factory=list)
     location: str = ""
-    time: Optional[dict] = None
+    # No `time`: the beat's span is engine arithmetic over the prose author's
+    # per-row `seconds` (CausalLedgerEntry.seconds), because a hand is handed
+    # a slice of the beat and cannot total one it never sees whole.
     weather: Optional[dict] = None
     results: list[LedgerTransformResult] = Field(default_factory=list)
     transforms: list[CausalTransform] = Field(default_factory=list)
@@ -4046,6 +4118,16 @@ class CharacterOutput(LenientModel):
     # banks have ever held a project" -- did not move, because the gate was
     # never the only thing shut.
     project_ops: list[dict] = Field(default_factory=list)
+    # GIVING UP ON SOMETHING SOMEBODY PROMISED YOU, which is a decision and
+    # not a decay. `self.still_waiting_for` tells this mind what it has been
+    # promised and how long ago (`commit_background.owed_to`); this is the
+    # only way a row leaves that list other than the thing actually arriving.
+    # `{op:'abandon', from, what, why}` -- the figure that owes it, what it
+    # was, and the reason, because a ledger nobody can clear is a nag and
+    # because giving something up without saying why is indistinguishable
+    # from forgetting. Rows naming a debt this character is not the one
+    # waiting for are dropped at commit: you may only abandon your own.
+    waiting_ops: list[dict] = Field(default_factory=list)
     # A voluntary decision by this character to begin or cease following a
     # target. Omit to preserve the current relation.
     follow_op: Optional[dict] = None
@@ -4655,7 +4737,7 @@ SPECIALIST_CHANNELS = {
                          "artifact_ops", "destruction", "sensory_events"),
     "director_spatial": ("positions", "rooms", "remove_rooms",
                          "remove_adjacent", "stations", "poses", "comms_ops",
-                         "following_ops", "location", "time", "weather"),
+                         "following_ops", "location", "weather"),
 }
 
 # Read compatibility for retired Director categories. These remain valid

@@ -325,7 +325,9 @@
     "opening_features": "その奥に{items}が見える。",
     "opening_closed": "{opening}の向こうは何も見えない。",
     "opening_dark": "{opening}の向こうは暗闇だけ。",
-    "opening_bare": "{opening}がある。"
+    "opening_bare": "{opening}がある。",
+    "thing_placed": "{place}に{desc}がある。",
+    "thing_here": "ここに{desc}がある。"
   },
   "count_generic": {
     "1": "",

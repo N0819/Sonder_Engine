@@ -678,6 +678,11 @@ def commit_mapping(ctx, nonce, *, prepared=None):
     # (`charter_runtime.charter_moves_since`): what this beat saw of where
     # every charter body stood and which window acts it had reported.
     if isinstance(world.get("charter_places_seen"), dict):
+        # Frame-scoped, like `charters` itself and like the read in
+        # `agents/mapping.py` that compares against it. `wset_if_changed` is
+        # `wset`-backed and so is scoped by the ambient frame the commit runs
+        # under; the key had to be registered in `db.FRAME_SCOPED_WORLD_KEYS`
+        # for either side to mean anything, and until 2026-09-19 it was not.
         wset_if_changed(cid, "charter_last_places",
                         world["charter_places_seen"])
     if prepared.get("skipped"):

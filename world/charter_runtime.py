@@ -4845,6 +4845,41 @@ def charter_place_ids(cid, frame_id=None) -> set:
     return out
 
 
+def _readable_role(naming, roles, charter_key):
+    """What a stranger is TAKEN FOR, in words -- never a post id.
+
+    `role_hint` reaches a perceived label (`_unknown_actor_label(role=...)`),
+    and this joined the raw watch-post keys and fell back to
+    "member of <charter_key>", so engine spellings walked into what a body
+    sees across a room. Measured (Aldermill, fourth run, 2026-09-19): an
+    ostler was shown "the salt-and-pepper stout inn_cook with heat rash along
+    forearms" and "the salt-and-pepper spry member of wheel_and_bushel".
+
+    The readable forms already exist and are read rather than reinvented: the
+    charter's authored `naming.titles.posts` first (`title_for`'s table --
+    "Miller" for `miller_journeyman`), then `charter_crowd._role_noun`, whose
+    own rule about ids applies unchanged here -- a trailing one-character or
+    numeric segment distinguishes a SLOT (`patrol_a`, `tapster_2`) and is
+    never a kind of person.
+
+    Same class as the crowd noun that rendered "a handful of journeymans": a
+    key is a key, and nobody perceives one.
+    """
+    from .charter_crowd import _role_noun
+
+    titles = ((naming or {}).get("titles") or {}).get("posts") or {}
+    words = []
+    for role in roles or ():
+        key = str(role or "").strip()
+        if not key:
+            continue
+        words.append(str(titles.get(key) or "").strip() or _role_noun(key))
+    words = [w for w in words if w]
+    if words:
+        return ", ".join(words)
+    return "member of %s" % _role_noun(charter_key)
+
+
 def background_presence_records(cid, *, places=None, names=None,
                                 frame_id=None):
     """Unpromoted Charter bodies as ordinary background-presence records.
@@ -4888,9 +4923,9 @@ def background_presence_records(cid, *, places=None, names=None,
     for charter_key, body_key, display, place, roles in candidates:
         if counts.get(display.casefold(), 0) != 1:
             continue
-        role = (", ".join(roles) if roles else f"member of {charter_key}")
-        sketch = {"role_hint": role, "station_room": place}
         state = registry["items"][charter_key]["state"]
+        role = _readable_role(state.get("naming"), roles, charter_key)
+        sketch = {"role_hint": role, "station_room": place}
         body = state["bodies"].get(body_key) or {}
         # What this body LOOKS like, dealt from its population's law
         # (`charter_surface`), carried on the sketch so every reader of the

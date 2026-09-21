@@ -292,6 +292,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.155 — A fixture is two records with two owners and no link, so the player was not told what his own hands had just done](UNBUILT_WORLD.md#unbuilt-1-155)
 - [§1.157 — A room in a chat with no lorebook is never registered, and the escape route died of it](UNBUILT_WORLD.md#unbuilt-1-157)
 - [§1.162 — The doorway cone reads no cell, so a body a pace from the door is a shape through it](UNBUILT_WORLD.md#unbuilt-1-162)
+- [§1.166 — `state_diff.time.mode` has two readers and no writer](UNBUILT_WORLD.md#unbuilt-1-166)
 
 **2. Roadmap**
 

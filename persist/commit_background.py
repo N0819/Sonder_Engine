@@ -1199,6 +1199,95 @@ def _character_address_of(dr_output, presence_name, roster, scene=None,
     return found
 
 
+def _at_own_station(record, room):
+    """Is this body standing at the place it is POSTED to, rather than merely
+    passing through it?
+
+    The asymmetry the arrival trigger needs. Somebody who walks into the
+    place you keep is your business -- a smith looks up, a tapster asks what
+    you want, a gate warden asks your errand -- and somebody who walks past
+    you on a road is not. `sketch.station_room` is the engine's own record of
+    where a presence is posted (`presence_room` reads it as the last resort
+    for WHERE), so a body whose room IS its station is at its post and a body
+    on an errand is not, with no vocabulary of occupations anywhere.
+    """
+    station = str(((record or {}).get("sketch") or {}).get("station_room") or "")
+    return bool(station) and bool(room) and station == str(room)
+
+
+def _authored_arrival_rooms(before, after, roster):
+    """Rooms an authored mind walked INTO this beat: ``{room, ...}``.
+
+    An arrival is an event with a natural bound -- it happens on one beat and
+    then stops -- which is what makes it safe to read as a demand where a
+    standing body is not. ``before`` is the scene the beat opened with and
+    ``after`` the scene it leaves (`beat_scene`), so the answer comes from the
+    same two reads every other movement question here is asked of, and a mind
+    that stayed put raises nothing.
+    """
+    out = set()
+    before_at = (before or {}).get("positions") or {}
+    for name, room in ((after or {}).get("positions") or {}).items():
+        if not room or not name_in_roster(name, roster):
+            continue
+        if str(room) != str(before_at.get(name) or ""):
+            out.add(str(room))
+    return out
+
+
+def _room_address_of(dr_output, presence_name, roster, scene=None,
+                     station_room=None):
+    """The last hearable line an authored mind spoke INTO this body's room
+    without naming anybody, or None.
+
+    `_character_address_of`'s complement, and the reason it has to exist: that
+    one triggers on a PRECISE `intended_target`, so a line aimed at nobody in
+    particular matches nothing and a presence the gate picked on the
+    place-addressed trigger reaches `_react_one` with `addressed_by: null` and
+    no words. It then stays silent, correctly -- silence is the right answer
+    to a payload carrying an unremarkable stranger and nothing said.
+
+    Measured (Aldermill, fourth run, 2026-09-19, idx 15): Sal Weatherby said
+    "Small ale, when you've a moment" in a taproom with an innkeeper, a
+    tapster, a cook and an ostler in it. The gate picked a body and handed it
+    no order to fill.
+
+    The player half of this was repaired once already
+    (`_filtered_player_declaration`, and the cord-seller who was gripped by
+    the sleeve, asked twice, and declined). This is the same repair for a
+    line a CHARACTER spoke.
+
+    EVERY CHANNEL RULE IS COPIED FROM ITS SIBLING, not relaxed: the speaker
+    must be an authored mind on the roster, concealment fails closed both
+    ways, and where rooms are known the line must be FULLY hearable, because
+    a fragment cannot be coherently replied to. The only dropped requirement
+    is that the line name its listener -- which is the whole point, since
+    "small ale" names nobody and is still an order.
+    """
+    found = None
+    for d in (dr_output.get("dialogue_log") or []):
+        speaker = str(d.get("speaker") or "").strip()
+        if not speaker or speaker.casefold() not in roster:
+            continue
+        if _presence_addressed_match(presence_name, speaker):
+            continue            # a body does not answer itself
+        if str(d.get("intended_target") or "").strip():
+            continue            # aimed: `_character_address_of` owns it
+        if str(d.get("visibility") or "").casefold() == "concealed":
+            continue
+        if any(_background_name_mentioned(presence_name, str(c))
+               for c in (d.get("conceal_from") or [])):
+            continue
+        if station_room and scene:
+            sp_room = _room_of(scene, speaker)
+            if sp_room:
+                rel = spatial_rel(scene, sp_room, station_room)
+                if hear_level(rel, d.get("volume") or "normal") != "full":
+                    continue
+        found = d               # last hearable line wins
+    return found
+
+
 def authored_mind_rooms(scene, roster):
     """Where the authored minds are standing, for the channel test below.
 
@@ -1430,6 +1519,219 @@ def address_reaches(scene, listener, listener_room, speaker, speaker_rooms,
     # A voice on a handset is not crossing this room's air, so the rooms say
     # nothing about it; the channel does.
     return _a_live_channel_joins(scene, listener_room, rooms)
+
+
+#: How many beats a promised act stays owed. Three rather than
+#: `pending_reply`'s two because an act takes longer than an answer -- a drink
+#: is drawn, a tool is fetched from another room -- and because the debt is
+#: discharged by DOING it, which may need a walk. Long enough for an errand,
+#: short enough that a forgotten promise stops haunting the room.
+PENDING_ACT_BEATS = 3
+
+
+def _owed_clock_seconds(cid, res):
+    """The fiction clock this beat leaves, for stamping a debt's age.
+
+    The same monotonic read `commit_memory` stamps affect and strain with
+    (`_monotonic_elapsed` over the stored `simulation_clock` and the beat's
+    own `state_diff.time`), so a debt ages on the clock everything else in
+    this engine ages on. Fails to 0.0 rather than raising: an unstamped debt
+    still counts beats, and a promise that cannot be timed is better than a
+    commit that rolls back.
+    """
+    try:
+        from persist.commit_common import _monotonic_elapsed
+        clock = wget(cid, "simulation_clock",
+                     {"elapsed_seconds": 0.0, "display": "now"}) or {}
+        diff = ((res or {}).get("state_diff") or {}).get("time")
+        seconds, _ = _monotonic_elapsed(clock, diff, floor=True)
+        return float(seconds or 0.0)
+    except Exception:
+        return 0.0
+
+
+def owed_service(record, turn_idx=None, now_seconds=None):
+    """What this figure still owes, WITH ITS AGE, whether or not the voice
+    gate would still re-ask about it -- or None if it owes nothing.
+
+    `_valid_pending_act`'s complement, and the distinction is the whole point.
+    That reader answers "should this figure be asked again THIS beat", so it
+    goes quiet after `PENDING_ACT_BEATS` -- correctly: nagging a tapster
+    forever is not what a tapster is. This one answers "is anybody still
+    waiting", which no expiry makes false. An unkept promise does not stop
+    existing when the engine stops nagging; it becomes the more interesting
+    fact, and the person waiting is the one who still holds it.
+
+    Measured (two_lives v7, 2026-09-19): Sal Weatherby asked an innkeeper for
+    a small ale on beat 6 and was told "Aye, in good time". The debt lapsed
+    three beats later and she stood braced against a timber post for the
+    remaining thirty-one beats of the story -- fourteen consecutive memories
+    of shifting her weight and moving her gaze -- because nothing anywhere
+    could tell her how long she had been waiting.
+
+    ``{what, to, to_ref, turn, beats, seconds, kept: False, lapsed: bool}``.
+    `lapsed` is the gate's own verdict carried rather than restated, so the
+    two readers cannot disagree about when nagging stops.
+    """
+    pa = (record or {}).get("pending_act")
+    if not isinstance(pa, dict) or not str(pa.get("what") or "").strip():
+        return None
+    out = {
+        "what": str(pa.get("what") or ""),
+        "to": str(pa.get("to") or ""),
+        "to_ref": str(pa.get("to_ref") or ""),
+        "turn": pa.get("turn"),
+        "kept": False,
+        "lapsed": bool(turn_idx is not None
+                       and _valid_pending_act(record, turn_idx) is None),
+    }
+    if turn_idx is not None and isinstance(pa.get("turn"), int):
+        out["beats"] = max(0, int(turn_idx) - int(pa["turn"]))
+    if now_seconds is not None and pa.get("seconds") is not None:
+        try:
+            out["seconds"] = max(0.0, float(now_seconds) - float(pa["seconds"]))
+        except (TypeError, ValueError):
+            pass
+    return out
+
+
+def owed_to(name, presences, turn_idx=None, now_seconds=None):
+    """Everything one named mind is still waiting for: ``[row, ...]``, each
+    `owed_service`'s shape plus ``from`` (the figure that owes it).
+
+    DERIVED, NEVER STORED A SECOND TIME. The debt is one row on the figure
+    that owes it, and this is the other side of that row read back -- because
+    a debt written down twice is two debts, free to disagree about whether it
+    was kept. Matched on `to_ref`, the canonical name resolved at the moment
+    the promise was made, not on `to`, which is the label that figure happens
+    to know the asker by.
+
+    Uncapped deliberately: a person can be owed several things at once, and
+    `hands_over` closing each row is what drains this. The owner's call
+    (2026-09-19) was to let the clock and the hand-over drain it rather than
+    pick a ceiling for how many promises a life may hold.
+    """
+    want = str(name or "").strip().casefold()
+    if not want:
+        return []
+    rows = []
+    for record in (presences or {}).values():
+        if not isinstance(record, dict):
+            continue
+        owed = owed_service(record, turn_idx, now_seconds)
+        if not owed or owed["to_ref"].casefold() != want:
+            continue
+        owed["from"] = str(record.get("name") or "")
+        rows.append(owed)
+    rows.sort(key=lambda r: (r.get("turn") if isinstance(r.get("turn"), int)
+                             else 0))
+    return rows
+
+
+def abandoned_debts(ctx):
+    """``{(figure casefolded, what casefolded or ""): (asker, why)}`` -- the
+    promises this beat's characters declared they are done waiting for.
+
+    Read from `waiting_ops` on each character's own result, through the same
+    `_merge_character_results` every other domain reads a character by, so a
+    reaction-loop answer counts exactly as a main-loop one does.
+
+    THE ASKER IS THE ONLY ONE WHO MAY CLOSE IT. A row whose `to_ref` is not
+    this character is not theirs to abandon -- somebody else is waiting for
+    that -- which is checked where the row is (`apply_abandoned_debts`), not
+    here, because only the ledger knows who is owed.
+    """
+    from agents.common import _merge_character_results
+    from story.scene import character_name, normalized_character_from_text
+
+    out = {}
+    for row in (getattr(ctx, "cast", None) or ()):
+        ccid = row.get("id") if isinstance(row, dict) else None
+        if ccid is None:
+            continue
+        own = _merge_character_results(
+            (getattr(ctx, "reaction_results", None) or {}).get(ccid),
+            (getattr(ctx, "character_results", None) or {}).get(ccid)) or {}
+        ops = own.get("waiting_ops")
+        if not isinstance(ops, list) or not ops:
+            continue
+        try:
+            asker = character_name(normalized_character_from_text(row["sheet"]))
+        except Exception:
+            continue
+        for op in ops:
+            if not isinstance(op, dict):
+                continue
+            if str(op.get("op") or "abandon").strip().casefold() != "abandon":
+                continue
+            who = " ".join(str(op.get("from") or "").split()).casefold()
+            what = " ".join(str(op.get("what") or "").split()).casefold()
+            why = " ".join(str(op.get("why") or "").split())
+            if not who or not why:
+                # A REASON IS THE DECISION. Without one this is
+                # indistinguishable from forgetting, which is what the row
+                # already records by ageing; the engine has nothing to add.
+                continue
+            out[(who, what)] = (asker, why)
+    return out
+
+
+def apply_abandoned_debts(presences, abandoned, warn=None):
+    """Clear each `pending_act` its own asker declared done with. Returns the
+    rows cleared, as ``[(figure, what, asker, why)]``.
+
+    The debt is ONE row and this is the one place it is cleared by a decision
+    rather than by delivery, so both halves stay the same fact: the figure
+    stops owing it at the moment the person waiting stops waiting for it. An
+    abandoned order IS void -- a customer who walks out has not left a tapster
+    holding a debt, which is what the fiction would mean if this only hid the
+    row from the asker.
+    """
+    cleared = []
+    for record in (presences or {}).values():
+        if not isinstance(record, dict):
+            continue
+        pa = record.get("pending_act")
+        if not isinstance(pa, dict):
+            continue
+        figure = str(record.get("name") or "").strip().casefold()
+        what = str(pa.get("what") or "").strip().casefold()
+        hit = abandoned.get((figure, what))
+        if hit is None:
+            hit = abandoned.get((figure, ""))
+        if hit is None:
+            continue
+        asker, why = hit
+        if str(pa.get("to_ref") or "").strip().casefold() \
+                != str(asker or "").strip().casefold():
+            if warn:
+                warn("%s tried to abandon a promise made to %r, not to them"
+                     % (asker, pa.get("to_ref") or ""))
+            continue
+        record.pop("pending_act", None)
+        cleared.append((record.get("name") or "", pa.get("what") or "",
+                        asker, why))
+    return cleared
+
+
+def _valid_pending_act(record, turn_idx):
+    """The service this presence still owes if it has not expired, else None.
+
+    `_valid_pending_reply`'s sibling, and the reason it exists: the voice gate
+    is purely REACTIVE -- addressed, owed a reply, acted toward, emerged,
+    routed, place-addressed -- so a body that STARTED something and did not
+    finish was never asked again. Measured (Aldermill, 2026-09-19): asked for
+    a small ale, a tapster answered "Drawing one now", reached for an
+    earthenware mug, and on the next beat nobody was picked at all. He is
+    still holding the mug.
+    """
+    pa = record.get("pending_act")
+    if not isinstance(pa, dict):
+        return None
+    if turn_idx > (pa.get("expires_turn")
+                   if pa.get("expires_turn") is not None else -1):
+        return None
+    return pa
 
 
 def _valid_pending_reply(record, turn_idx):
@@ -2168,6 +2470,21 @@ def track_background_presences(ctx, nonce, *, prepared=None):
     except Exception as exc:
         ctx.add_warning(f"presence departures skipped: {exc}")
 
+    # ...AND WHAT A PRESENCE PUT IN SOMEBODY'S HANDS. Same seam, same beat,
+    # same reason the departure applier exists: an act written only into
+    # `action` is prose nobody reads, so an inn could answer an order for a
+    # drink and never serve one.
+    try:
+        handed = apply_presence_handovers(
+            live_scene, _background_fired_reactions_any(br), presences,
+            warn=ctx.add_warning)
+        if handed:
+            wset(cid, "scene", live_scene)
+            for giver, what, _key in handed:
+                ctx.add_warning("%s handed over %s" % (giver, what))
+    except Exception as exc:
+        ctx.add_warning(f"presence handovers skipped: {exc}")
+
     # Lore a background presence asserted this beat enters as a CLAIM, never as
     # fact -- the Director ratifies it, contradicts it, or lets it expire
     # (background_claims.py). Same treatment the Player Authority Contract
@@ -2285,6 +2602,46 @@ def track_background_presences(ctx, nonce, *, prepared=None):
         if isinstance(pr, dict) and turn_idx > (pr.get("expires_turn")
                                                 if pr.get("expires_turn") is not None else -1):
             record.pop("pending_reply", None)
+        # A PROMISE IS A DEBT, AND DOING IT IS WHAT DISCHARGES IT. Written
+        # from the figure's own typed `still_owes`, cleared the beat its
+        # `hands_over` lands -- never from prose, which cannot tell "drawing
+        # one now" from "I don't serve ale".
+        _mine = next((r for r in (_background_fired_reactions_any(br) or ())
+                      if isinstance(r, dict)
+                      and str(r.get("name") or "").casefold() == name.casefold()),
+                     None)
+        if _mine is not None:
+            if _mine.get("hands_over"):
+                record.pop("pending_act", None)
+            owes = _mine.get("still_owes")
+            if isinstance(owes, dict) and str(owes.get("what") or "").strip():
+                # WHO IS WAITING, resolved once and here. `still_owes.to` is
+                # the label this figure knows the asker by, and a label is not
+                # an identity -- matching one back to a body later would be a
+                # SECOND derivation of `_present_others`' recognition, free to
+                # disagree with the first. `_character_address_of` is the
+                # resolver already standing at this site (it writes
+                # `pending_reply`'s `from` four lines down) and it answers the
+                # same question: which registered mind spoke to this figure
+                # this beat. That mind is the one waiting.
+                _asker = _character_address_of(
+                    res, name, roster, sc,
+                    (record.get("sketch") or {}).get("station_room"))
+                record["pending_act"] = {
+                    "what": " ".join(str(owes.get("what")).split()),
+                    "to": " ".join(str(owes.get("to") or "").split()),
+                    "turn": turn_idx,
+                    # THE FICTION CLOCK, not the beat count. "You asked for
+                    # that a quarter of an hour ago" is a fact a mind can act
+                    # on; "fourteen beats ago" is bookkeeping, and a beat is
+                    # not a unit of waiting -- two beats of a mill inspection
+                    # and two beats of a conversation are not the same wait.
+                    "seconds": _owed_clock_seconds(cid, res),
+                    "expires_turn": turn_idx + PENDING_ACT_BEATS,
+                }
+                if _asker and str(_asker.get("speaker") or "").strip():
+                    record["pending_act"]["to_ref"] = str(
+                        _asker["speaker"]).strip()
         if name.casefold() in answered_names:
             record.pop("pending_reply", None)  # answered, by word or by act
         else:
@@ -2468,6 +2825,18 @@ def track_background_presences(ctx, nonce, *, prepared=None):
                 "pending_reply")):
             _earned[key] = record
     presences = _earned
+    # A PROMISE THE PERSON WAITING HAS GIVEN UP ON IS OVER. Applied after the
+    # beat's own `still_owes` writes, so a figure that both promised and was
+    # released this beat ends the beat released -- a decision outranks a
+    # re-echo, the same order `apply_contact_ops` gives an explicit removal.
+    try:
+        _given_up = apply_abandoned_debts(
+            presences, abandoned_debts(ctx), warn=ctx.add_warning)
+        for _who, _what, _asker, _why in _given_up:
+            ctx.add_warning("%s is no longer waiting on %s for %r: %s"
+                            % (_asker, _who, _what, _why))
+    except Exception as exc:
+        ctx.add_warning("abandoned promises not applied: %s" % exc)
     proposed = _propose_promotions(ctx, presences, sc)
     wset(cid, "background_presences", presences)
     return {"tracked": len(presences),
@@ -2593,6 +2962,94 @@ def _background_fired_reactions_any(br):
         return [r for r in reactions if isinstance(r, dict)
                 and (r.get("dialogue_log_entry") or r.get("action"))]
     return _background_fired_reactions(br)
+
+def apply_presence_handovers(scene, reactions, presences, warn=None):
+    """A presence that served somebody put a thing in their hands.
+
+    `apply_presence_departures` states this class for MOVEMENT -- "a
+    background reaction is stateless, and until now nothing it said could
+    change where its figure stands ... `action` is prose nobody reads" -- and
+    fixes it with a typed field and a deterministic applier. A reaction could
+    still not change one PHYSICAL fact, so a figure could describe serving
+    somebody and serve nobody.
+
+    Measured (Aldermill, fourth run, 2026-09-19): asked for a small ale, a
+    tapster said "Right away for you" and "reaches down a clean earthenware
+    mug from the shelf". `inventory_ops` empty, `entities` unchanged, and the
+    most ordinary transaction a tavern has happened only in a sentence.
+
+    Reuses the object machinery rather than restating it: the op is fed
+    through `mint_transferred_objects` (which stands the thing up when the
+    world has never heard of it) and `derive_inventory_placements` (which
+    puts it where its new holder is), so a handed-over mug obeys exactly the
+    rules a Director-resolved one does.
+
+    THE FLOOR IS CODE'S, NEVER THE MODEL'S, as it is for a departure: the
+    recipient must be a body the scene places in the room the figure reacted
+    in, and a thing with no name is not a thing. Returns
+    ``[(giver, what, entity_key)]`` and mutates `scene`.
+    """
+    from world.spatial import (derive_inventory_placements,
+                               mint_transferred_objects, normalize_room_id)
+
+    handed = []
+    positions = (scene or {}).get("positions") or {}
+
+    def _body_here(ref, room):
+        want = str(ref or "").strip().casefold()
+        if not want:
+            return ""
+        for key, where in positions.items():
+            if str(where or "") != room:
+                continue
+            if str(key).strip().casefold() == want:
+                return str(key)
+        for key, record in ((scene or {}).get("entities") or {}).items():
+            if not isinstance(record, dict):
+                continue
+            if str(record.get("name") or "").strip().casefold() != want:
+                continue
+            for pkey, where in positions.items():
+                if str(where or "") == room and str(pkey) in (key, record.get("name")):
+                    return str(pkey)
+        return ""
+
+    for reaction in reactions or ():
+        if not isinstance(reaction, dict):
+            continue
+        gift = reaction.get("hands_over")
+        if not isinstance(gift, dict):
+            continue
+        what = " ".join(str(gift.get("what") or "").split())
+        giver = str(reaction.get("name") or "").strip()
+        if not what or not giver:
+            continue
+        _key, record = presence_record_for(presences or {}, giver, scene)
+        room = str(reaction.get("room") or "").strip() \
+            or presence_room(scene, giver, record or {}) or ""
+        taker = _body_here(gift.get("to"), room)
+        if not taker:
+            if warn:
+                warn("%s tried to hand %r to %r, who is not standing in %s; "
+                     "nothing changed hands"
+                     % (giver, what, gift.get("to"), room or "that room"))
+            continue
+        key = normalize_room_id(what) or "handed_thing"
+        entities = (scene or {}).get("entities") or {}
+        base, suffix = key, 2
+        while key in entities:
+            key, suffix = "%s_%d" % (base, suffix), suffix + 1
+        op = {"op": "transfer", "object_id": key, "from_id": giver,
+              "to_id": taker, "relation": "held",
+              "details": {"name": what}}
+        mint_transferred_objects(scene, [op])
+        entity = (scene.setdefault("entities", {})
+                  .setdefault(key, {"name": what, "kind": "object"}))
+        entity.setdefault("name", what)
+        derive_inventory_placements(scene, [op])
+        handed.append((giver, what, key))
+    return handed
+
 
 def apply_presence_departures(scene, reactions, presences, warn=None,
                               paces=None, turn_idx=None):
@@ -3326,21 +3783,53 @@ def addressed_rooms(ctx, dr_output, sc, player_room):
         return str(room_of(after, t) or "")
 
     chat = ctx.chat
-    targets, spoke = [], False
-    for d in ((dr_output or {}).get("dialogue_log") or []):
-        if not isinstance(d, dict):
+    # WHO SPOKE DOES NOT DECIDE WHETHER A ROOM WAS SPOKEN TO. This read the
+    # player's lines alone, so a CHARACTER calling into a room reached nobody
+    # -- and the firewall does not care whose voice it is: the bodies standing
+    # there hear it either way. Each speaker is now carried with its line, so
+    # an unaimed one can address the room its own speaker stands in.
+    targets, spoke, unaimed_rooms = [], False, set()
+    said = [(str(d.get("speaker") or ""), d.get("intended_target"))
+            for d in ((dr_output or {}).get("dialogue_log") or [])
+            if isinstance(d, dict)]
+    said += [(str(r.get("actor") or ""), r.get("target"))
+             for r in ((dr_output or {}).get("public_evidence") or [])
+             if isinstance(r, dict) and r.get("kind") == "speech"]
+    # WHOSE UNAIMED LINE COUNTS: an AUTHORED mind's. A background presence
+    # answering another background presence is padding -- the tavern's Mira
+    # says "The lamb stew, if you're wise" to nobody in particular and must
+    # not conjure a second voice to take it up (`test_tavern_six_turn_story`).
+    # The same membership test `_room_address_of` makes on its own side.
+    minds = {str(n).casefold() for n in _registered_name_roster(chat, ctx.cast)}
+    for speaker, target in said:
+        player = is_player_speaker(speaker, chat)
+        spoke = spoke or player
+        # AN AIMED LINE STAYS THE PLAYER'S AFFORDANCE. Calling through a door
+        # at a room by name is how a player reaches a house they have not
+        # entered, and the gate's precise-address trigger already covers a
+        # character aiming at a NAMED body -- so letting any speaker's aimed
+        # line mark a room would make every cross-room exchange a general
+        # summons (`test_the_players_own_room_and_other_speakers_are_never_aimed`).
+        if player:
+            targets.append(target)
+        if target:
             continue
-        if not is_player_speaker(str(d.get("speaker") or ""), chat):
+        # A LINE NOBODY WAS NAMED FOR IS ADDRESSED TO THE ROOM IT WAS SPOKEN
+        # IN. Measured (Aldermill 2026-09-19, idx 15): Sal Weatherby raised
+        # two fingers at an inn's floor staff and said "Small ale, when
+        # you've a moment", `intended_target` null, five presences resolving
+        # into that taproom -- an innkeeper and a tapster among them -- and
+        # the gate had no name to route to, so nothing answered an order for
+        # a drink. The room's own occupants are the people an unaimed line is
+        # for. It is a CANDIDATE signal: `place_addressed` ranks below a
+        # precise address and never forces the slot, so a room is still
+        # answered by one person.
+        if not player and str(speaker or "").casefold() not in minds:
             continue
-        spoke = True
-        targets.append(d.get("intended_target"))
-    for row in ((dr_output or {}).get("public_evidence") or []):
-        if not isinstance(row, dict) or row.get("kind") != "speech":
-            continue
-        if not is_player_speaker(str(row.get("actor") or ""), chat):
-            continue
-        spoke = True
-        targets.append(row.get("target"))
+        room = str(player_room or "") if player \
+            else str(room_of(after, speaker) or "")
+        if room:
+            unaimed_rooms.add(room)
     here = str(player_room or "")
     out, resolved_any = set(), False
     for target in targets:
@@ -3352,6 +3841,8 @@ def addressed_rooms(ctx, dr_output, sc, player_room):
             resolved_any = True
             if room != here:
                 out.add(room)
+    if not resolved_any:
+        out |= unaimed_rooms
     if spoke and not resolved_any:
         mv = ctx.declared_movement() if hasattr(ctx, "declared_movement") \
             else ((ctx.get("director_interpret") or {}).get("movement"))
@@ -3420,7 +3911,8 @@ def pick_voice_demand(ctx, dr_output, cap=1):
     # THIS BEAT'S ROOMS, not the ones it opened with (`beat_scene`). Every
     # question below -- who stands where, what reaches them, which bodies a
     # description could be about -- is asked of the scene the beat leaves.
-    sc = beat_scene(wget(cid, "scene", {}) or {}, dr_output)
+    scene_before = wget(cid, "scene", {}) or {}
+    sc = beat_scene(scene_before, dr_output)
     # The volumes the beat's own lines were spoken at, for the address
     # channel test on each candidate.
     volumes = spoken_volumes(ctx, dr_output)
@@ -3511,6 +4003,9 @@ def pick_voice_demand(ctx, dr_output, cap=1):
     # each candidate below. Computed once: `positions` does not move inside
     # this loop.
     authored_rooms = authored_mind_rooms(sc, roster)
+    # Where an authored mind ARRIVED this beat, for the arrival trigger
+    # below. Once: `positions` does not move inside the loop.
+    arrival_rooms = _authored_arrival_rooms(scene_before, sc, roster)
     # The words this story's tracked names hold in common -- its title
     # vocabulary, derived rather than listed (`_shared_name_words`).
     shared_words = _shared_name_words(
@@ -3582,6 +4077,18 @@ def pick_voice_demand(ctx, dr_output, cap=1):
         # whoever is inside. Ranks below a precise address and above a
         # loose mention; never forces the slot.
         place_addressed = bool(here) and str(here) in aimed_rooms
+        # ARRIVED: an authored mind walked into the room this body is POSTED
+        # in, this beat. The only demand trigger that is not downstream of
+        # somebody having already spoken -- which is why the world could
+        # stand mute in a crowded room for as long as nobody addressed it.
+        # Measured (two_lives v5, 2026-09-19): Sal Weatherby walked into
+        # Aldermill Forge past six working smiths and stood there nine
+        # beats; every trigger above needs words first, so not one of them
+        # ever fired and the town said nothing for thirty beats. A person
+        # who comes into the place you keep is your business, and asking
+        # them so is the most ordinary speech there is.
+        arrived = (bool(here) and str(here) in arrival_rooms
+                   and _at_own_station(record, here))
         # THE CHANNEL TEST. A trigger says a demand was RAISED; it does not
         # say the demand arrived.
         #
@@ -3624,7 +4131,7 @@ def pick_voice_demand(ctx, dr_output, cap=1):
                                  or char_addr)
         addressed_any = bool(addressed_precise or addressed
                              or place_addressed)
-        if not (addressed_any or owed or acting or emerged):
+        if not (addressed_any or owed or acting or emerged or arrived):
             continue
         # THE WORKING, for the step's audit: which triggers qualified this
         # candidate, then (below) the channel that carried the demand.
@@ -3635,6 +4142,7 @@ def pick_voice_demand(ctx, dr_output, cap=1):
             ("mentioned", addressed and not addressed_exact),
             ("place_addressed:%s" % here, place_addressed),
             ("owed", bool(owed)), ("acting", acting), ("emerged", emerged),
+            ("arrived:%s" % here, arrived),
         ) if hit]
         # What is left claims something reached this person without ever
         # testing that it could: the two carried debts. Filtering them here
@@ -3648,6 +4156,8 @@ def pick_voice_demand(ctx, dr_output, cap=1):
             why.append("channel:hearing")
         else:
             _aimed = bool(acting)
+            # An arrival is SEEN, in the room it lands in, so it is judged on
+            # the ordinary same-room bar and never widened by `aimed`.
             if not demand_reaches(sc, here, authored_rooms, aimed=_aimed):
                 continue
             why.append("channel:%s" % (
@@ -3679,7 +4189,8 @@ def pick_voice_demand(ctx, dr_output, cap=1):
             # addressee this stage has anything to hand it, and the correct
             # count of answers to a line nobody heard is zero.
             forced += 1
-        # Overflow order (§C3): addressed > owed > acting > emerged, then
+        # Overflow order (§C3): addressed > owed > acting > emerged >
+        # arrived, then
         # the B3 entanglement digest (patched in below, once, for charter
         # bodies only), then stably. Precise addresses outrank loose ones,
         # or a cap of one could hand the beat to a shared-word cousin of
@@ -3692,8 +4203,9 @@ def pick_voice_demand(ctx, dr_output, cap=1):
         # reached. Measured, Harrowmere turn 33: the reeve the player had
         # handed a letter to and the reeve who had never been spoken to
         # tied on every trigger bit and the string sort chose between
-        # them. Sits below the four demand triggers (a debt or an act is a
-        # stronger claim on the beat than familiarity) and above the
+        # them. Sits below the demand triggers (a debt, an act or someone
+        # walking in is a stronger claim on the beat than familiarity) and
+        # above the
         # charter entanglement digest and recency of record.
         familiar = max(
             [int(t) for t in (record.get("dialogue_turns") or ())
@@ -3701,7 +4213,7 @@ def pick_voice_demand(ctx, dr_output, cap=1):
         priority = [3 if addressed_precise
                     else (2 if place_addressed else (1 if addressed_any else 0)),
                     bool(owed), bool(acting),
-                    bool(emerged), familiar, 0.0,
+                    bool(emerged), bool(arrived), familiar, 0.0,
                     record.get("last_turn") or -1]
         candidates.append(
             {"priority": priority, "name": name, "record": record,
@@ -3713,7 +4225,8 @@ def pick_voice_demand(ctx, dr_output, cap=1):
              # rule below.
              "loose_only": bool(addressed and not addressed_precise
                                 and not place_addressed
-                                and not (owed or acting or emerged)),
+                                and not (owed or acting or emerged
+                                         or arrived)),
              # The PLAYER's own precise address specifically (a flow ref --
              # description bindings included -- or their exact name in the
              # declaration), so the stage downstream can hand the presence

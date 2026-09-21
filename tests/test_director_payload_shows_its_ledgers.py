@@ -179,7 +179,15 @@ LEDGERS = {
     "contradicted_claims": (None, "background claims; delivered as "
                                   "`unratified_claims`"),
     # --- scene-wide spatial state and non-scene channels ------------------
-    "time": ("time_of_day", "zoldawn"),
+    # `time` HAS NO MODEL OWNER (2026-09-20). The beat's span is engine
+    # arithmetic over the prose author's per-row `seconds`
+    # (`world.mechanics.beat_time_from_spans`), so there is no hand to show a
+    # ledger to -- and the ledger this row named was the wrong one anyway:
+    # `scene.time_of_day` is the standing label establish writes, not the
+    # clock a duration is measured against. The author gets the clock, under
+    # `simulation_clock`, which the pair of tests below already covers.
+    "time": (None, "engine-authored from the ledger's own `seconds`; the "
+                   "author is shown the clock as `simulation_clock`"),
     "weather": ("weather", "thundersnow"),
     "location": ("location", "Zolmirath"),
     "following_ops": ("following", "Zolquill"),

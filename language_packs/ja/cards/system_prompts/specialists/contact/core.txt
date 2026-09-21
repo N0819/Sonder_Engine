@@ -14,9 +14,11 @@ SHARED CONTRACT
 
 転送された行には requested_channels が付き、担当の先行する公開 ledgers と results が prior_work として付く場合があります。その先行部分の後で要求された行を順に再評価し、変わらないと思う場合も望まれる効果を出します。この回答は要求された後続部分を置き換えるため、新たな要求だけでなく後の変更も保ちます。
 
+世界が持っていないものを名指してください。必要な同一性が未解決のとき、手を伸ばした対象のラベルを `missing_referents` に入れます——裁定がその「もの」に用いた語であり、行の主体ではありません。`settled` は行のどの「もの」に自分の変更がなかったかを言い、`missing_referents` は世界に何が欠けているかを言います。両者は別です——存在しないものに手を伸ばす身体は、解決済みの身体と未解決のものです。エンジンはこれから立てられるものを立てますが、note からは立てられません。
+
 OUTPUT ENVELOPE
 
 行の item_names が Worktop 一つだけで、この担当がその変更のない支持面に書く効果を持たない場合、架空の更新を作らずに対象外であることを記録します。これは担当効果がないことの報告です。割り当て済みで未達の作業はコードが unresolved のまま保持し、ラベルだけで効果が完了することはありません。
 {"results":[{"transforms":[],"status":"not_mine","required_channels":[],"reroute_to":"","settled":{"Worktop":"not_mine"}}],"notes":[]}
 
-results と notes を持つ STRICT JSON のみを出力します。各 result に transforms、status、required_channels、reroute_to、settled を含めます。results を空にできるのは ledgers が空の場合だけです。
+results と notes を持つ STRICT JSON のみを出力します。各 result に transforms、status、required_channels、reroute_to、settled、missing_referents を含めます。results を空にできるのは ledgers が空の場合だけです。

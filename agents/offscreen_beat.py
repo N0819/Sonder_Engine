@@ -214,7 +214,7 @@ def run_offscreen_beat(chat_id, frame_id):
 
     def _rooms():
         scene = wget_for_frame(chat_id, "scene", frame_id, {}) or {}
-        return dict(scene.get("positions") or {})
+        return stalling_bodies(scene)
 
     before = _rooms()
     started = time.time()
@@ -224,6 +224,33 @@ def run_offscreen_beat(chat_id, frame_id):
     stalled = note_beat_movement(chat_id, frame_id, idx, before, after)
     return {"frame_id": frame_id, "turn_id": turn_id, "idx": idx,
             "seconds": round(time.time() - started, 1), "stalled": stalled}
+
+
+def stalling_bodies(scene):
+    """``{name: room}`` for the bodies in this scene a thread can stall for.
+
+    POSITIONS IS NOT A BODY ROSTER. The class is CLAUDE.md's, from review
+    2026-09-07 A56, which found three sites reading `scene.positions` as if
+    every key in it were somebody; `director.mint_unreferenced_things` made a
+    fourth the day it landed, because a thing a beat reached for has to stand
+    somewhere for a contact to attach to it.
+
+    Measured the same afternoon (Aldermill, third run, turn 16): a winch's
+    `crank_handle` was minted into the mill yard, sat there for three beats
+    exactly as a crank handle does, and the engine filed an open planning need
+    asking the Writers' Room to unstick its narrative thread.
+
+    `scene_names_body` is the same predicate the player-room resolver uses, so
+    the two cannot drift about what counts as somebody. A scene that never
+    wrote an entity record for its cast still answers yes for them, which is
+    what keeps a story from losing its own people to this.
+    """
+    from agents.common import scene_names_body
+
+    scene = scene if isinstance(scene, dict) else {}
+    return {str(name): str(room)
+            for name, room in (scene.get("positions") or {}).items()
+            if room and scene_names_body(scene, name)}
 
 
 def note_beat_movement(chat_id, frame_id, turn_idx, before, after):

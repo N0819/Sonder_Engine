@@ -387,7 +387,11 @@ def test_charter_bodies_are_derived_background_people_with_stable_refs(temp_db):
                            "surface", "appearance"}
     assert {k: sketch[k] for k in ("role_hint", "station_room",
                                    "home_room")} == {
-        "role_hint": "fail_post", "station_room": "room_b",
+        # A ROLE HINT IS WORDS, NOT A KEY (,
+        # 2026-09-19): the hint reaches a perceived label, and `inn_cook`
+        # walked into what a body saw across a room. This test pins stable
+        # REFS; the role spelling is incidental to it.
+        "role_hint": "fail post", "station_room": "room_b",
         "home_room": state["bodies"]["bob"]["berth"]}
     assert sketch["appearance"] and sketch["surface"]["law"] == "default"
 

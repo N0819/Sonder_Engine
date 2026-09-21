@@ -92,13 +92,53 @@ def life(cid, char_id, name, frame_id):
     }
 
 
+def _story_from(text):
+    """``(story, truncated)`` out of one generator reply.
+
+    The envelope is `{"story": "..."}`, and a reply the token budget cut ends
+    inside that string -- so `json.loads` raises and the old `except` wrote the
+    RAW JSON into the .md file, braces and literal \\n and all (v7's
+    sal_weatherby.md). Salvage the prose that did arrive and SAY it was cut,
+    because a story that stops mid-sentence is a failed render either way and
+    the one thing worse than a short story is a short story nobody noticed.
+    """
+    text = text or ""
+    if not text.strip().startswith("{"):
+        return text, False
+    try:
+        body = json.loads(text)
+        if isinstance(body, dict):
+            return str(body.get("story") or ""), False
+    except Exception:
+        pass
+    # Unterminated envelope: take everything after the opening quote of
+    # "story" and read the escapes the JSON decoder would have.
+    marker = '"story"'
+    at = text.find(marker)
+    if at < 0:
+        return text, True
+    at = text.find('"', at + len(marker) + 1)
+    if at < 0:
+        return text, True
+    salvaged = text[at + 1:]
+    try:
+        salvaged = json.loads('"%s"' % salvaged.replace('"', '\\"'))
+    except Exception:
+        salvaged = salvaged.replace("\\n", "\n").replace('\\"', '"')
+    return salvaged, True
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--chat", type=int, default=1)
     ap.add_argument("--model", default=MODEL)
     ap.add_argument("--timeout", type=float, default=300.0)
-    ap.add_argument("--max-tokens", type=int, default=6000)
+    # REASONING SPENDS THIS BUDGET TOO, and on these models it spends most of
+    # it (90-97% of a Director specialist's output is reasoning trace). At
+    # 6000 the v7 render came back with 19 words for a life of 61 memories and
+    # 193 for one of 44, both cut mid-sentence: the prose was what was left.
+    ap.add_argument("--max-tokens", type=int, default=24000)
     ap.add_argument("--out", default="")
     args = ap.parse_args()
 
@@ -129,18 +169,17 @@ def main():
         text, elapsed, usage, error = _post(
             prov, args.model, "narrator", SYSTEM, payload, None,
             args.timeout, args.max_tokens)
-        story = ""
+        story, cut = "", False
         if not error:
-            try:
-                body = json.loads(text) if text.strip().startswith("{") else None
-                story = (body or {}).get("story") if isinstance(body, dict) else text
-            except Exception:
-                story = text
+            story, cut = _story_from(text)
         out[name] = {"frame": frame_id, "char_id": char_id,
                      "memories": len(payload["memories"]),
                      "seconds": round(elapsed, 1), "error": error or "",
                      "record": payload, "story": story or ""}
-        print("   %.0fs %s" % (elapsed, error[:80] if error else "ok"), flush=True)
+        out[name]["truncated"] = cut
+        print("   %.0fs %s%s" % (elapsed, error[:80] if error else "ok",
+                                 "  TRUNCATED (raise --max-tokens)" if cut
+                                 else ""), flush=True)
 
     if args.out:
         os.makedirs(args.out, exist_ok=True)

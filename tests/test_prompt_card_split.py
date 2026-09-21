@@ -49,7 +49,12 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 99    # +1 (2026-09-16): `room_vocabulary`, the place rules the
+PART_COUNT = 98    # -1 (2026-09-20): the spatial hand's `time` chunk. The
+                   # channel left the hand -- a hand is handed a slice of the
+                   # beat and cannot total one it never sees whole -- and the
+                   # instructions went with the grant; the beat's span is now
+                   # summed from the author's per-row `seconds`.
+                   # +1 (2026-09-16): `room_vocabulary`, the place rules the
                    # spatial hand's rooms chunk and `director_establish`
                    # now share by reference instead of drifting apart.
                    # +1 (2026-09-15): social obligation lifecycle owner

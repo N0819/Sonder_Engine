@@ -408,7 +408,9 @@
     "opening_features": "Beyond, you can see {items}.",
     "opening_closed": "Nothing shows through {opening}.",
     "opening_dark": "Through {opening}, only darkness.",
-    "opening_bare": "There is a way out through {opening}."
+    "opening_bare": "There is a way out through {opening}.",
+    "thing_placed": "There is {desc} at {place}.",
+    "thing_here": "There is {desc} here."
   },
   "muffle_ellipsis": "...",
   "muffle_join": "... ",

@@ -473,3 +473,74 @@ def test_a_body_routes_on_the_graph_it_decided_on():
                          neighbors=opens_doors)
     assert moved["x"]["place"] == "hall", (
         "a body that can open doors was still refused its own route")
+
+
+def test_a_person_has_hands_and_an_ordinary_door_is_not_out_of_reach():
+    """A shut door between a body and its post must not unfill the post.
+
+    THE CLASS: whether a body can BE somewhere within a four-hour window is
+    not the question of whether a step crosses that edge this instant. The
+    engine already says so for a wolf -- `charter_creature.creature_neighbors`
+    is "the passable one, plus shut doors when it can open them" -- and said
+    nothing about a person, who has hands. So the institution planned its
+    watch on `passable_neighbors`, a shut door was a wall, and a post one
+    door away from its holder came back `out_of_reach`.
+
+    Measured live (Aldermill, two-bubble run 2026-09-19, 60 beats): the inn's
+    whole bill read
+    `post_unfilled {"tapster": "out_of_reach", "innkeeper": "out_of_reach",
+    "cook": "out_of_reach"}` for every window of the run. The staff stood in
+    `inn_chambers`, one `closed_door` from the taproom they are posted to;
+    the reeve's seven officers sat behind the market square's shut door the
+    same way. Sal Weatherby walked into a market square, a taproom, a kitchen
+    and a cellar over thirty beats and met nobody, and `company` was empty on
+    all sixty beats of both frames.
+
+    `_ROUTE_MEMORY_BARRIERS` is the engine's existing name for exactly this
+    set, and the vocabulary has already ruled on its edges: `normalize_barrier`
+    folds locked, jammed and stuck onto `closed_door` (a state of a door) and
+    sealed, bolted, welded and bricked onto `wall` (a kind of wall). So this
+    walks doors and refuses walls without a table of its own.
+    """
+    from world.charter_space import people_neighbors, reach_map, travel_rooms
+
+    scene = {"rooms": {
+        "berth": {"name": "berth", "adjacent": [
+            {"to": "taproom", "barrier": "closed_door"}]},
+        "taproom": {"name": "taproom", "adjacent": [
+            {"to": "berth", "barrier": "closed_door"},
+            {"to": "cellar", "barrier": "wall"}]},
+        "cellar": {"name": "cellar", "adjacent": [
+            {"to": "taproom", "barrier": "wall"}]}}}
+    bodies = {"innkeeper:0001": {"place": "berth"}}
+
+    # The ordinary graph still refuses a shut door -- that invariant stands.
+    assert travel_rooms(scene, "berth", "taproom") is None
+
+    people = people_neighbors(scene)
+    assert travel_rooms(scene, "berth", "taproom", neighbors=people) == 1, (
+        "a person one shut door from the taproom can be there within the "
+        "window")
+    # A WALL IS STILL A WALL. The widening is doors, not obstacles.
+    assert travel_rooms(scene, "taproom", "cellar", neighbors=people) is None
+
+    reach = reach_map(scene, ["taproom", "cellar"], bodies, neighbors=people)
+    assert ("innkeeper:0001", "taproom") in reach, (
+        "the post one door away must be reachable, or plan_watch reports it "
+        "unfilled with out_of_reach and the taproom stands empty forever")
+    assert ("innkeeper:0001", "cellar") not in reach
+
+    # AND A FASTENED DOOR STILL HOLDS. `normalize_barrier` folds locked,
+    # padlocked, jammed, stuck and blocked onto `closed_door`, so the
+    # normalized name cannot tell a shut door from a fastened one and this
+    # graph asks the edge itself (`barrier_fastening`). Without that second
+    # filter the widening walks an institution through its own locks, which
+    # `test_a_shut_door_holds_the_body_where_it_stands` catches directly.
+    locked = copy.deepcopy(scene)
+    for edge in locked["rooms"]["berth"]["adjacent"]:
+        edge["barrier"] = "locked_door"
+    for edge in locked["rooms"]["taproom"]["adjacent"]:
+        if edge["to"] == "berth":
+            edge["barrier"] = "locked_door"
+    assert travel_rooms(locked, "berth", "taproom",
+                        neighbors=people_neighbors(locked)) is None

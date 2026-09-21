@@ -344,6 +344,24 @@ def _salience_of(text):
     return round(min(s, 0.95), 3)
 
 
+def _continues_a_clause(text):
+    """Text written as its own sentence, folded into the middle of one.
+
+    A declared `attempt` is written standalone and arrives capitalised, so
+    "I tried to" + it reads "I tried to Crouch beside the wheel shroud" --
+    inside a row the character reads back later. Lowercase the first letter
+    only, and only when the first word is not itself an all-caps token, which
+    is the one shape whose capitals are the word rather than a sentence start.
+    """
+    text = str(text or "")
+    if not text:
+        return text
+    first = text.split(" ", 1)[0]
+    if first.isupper() and len(first) > 1:
+        return text
+    return text[0].lower() + text[1:]
+
+
 def _own_sequence_memory(seq):
     """Render a character's own conduct as grammatical, chronological first
     person: ``I said 'X.' Then I tried to Y.``
@@ -379,7 +397,9 @@ def _own_sequence_memory(seq):
             clauses.append(
                 f"I {past} {str(event['content']).strip().rstrip('.')}.")
         elif event.get("type") == "action" and str(event.get("attempt") or "").strip():
-            clauses.append(f"I tried to {str(event['attempt']).strip().rstrip('.')}.")
+            clauses.append(
+                "I tried to %s." % _continues_a_clause(
+                    str(event["attempt"]).strip().rstrip(".")))
     if not clauses:
         return "", ""
     content = " Then ".join(clauses)
@@ -1140,18 +1160,45 @@ def prepare_memory_commit(ctx, *, scene=None):
                 st["last_ponder_turn"] = turn.idx
             seq = own_result.get("sequence") or []
             own_salience = float(own_result.get("salience", 0.0))
-            # The bound: everything a mind SAID is durable (conversation
-            # continuity is what measurably dies without it), a silent act is
-            # durable only when the mind's own appraisal reached 0.7 -- idle
-            # motion below that keeps its 12-turn `_recent_self_moves` window
-            # and the episode of its consequences, not a row per fidget. This
-            # is at most one extra row per speaking/salient character per
-            # beat, beside the episode row every character already gets.
-            should_store_own_acts = bool(seq) and (
-                own_salience >= 0.7
-                or any(isinstance(event, dict)
-                       and event.get("type") in ("speech", "communication")
-                       for event in seq)
+            # The bound: A MIND REMEMBERS WHAT IT DID. Everything it said is
+            # durable (conversation continuity is what measurably dies
+            # without it), and so is every act it actually took -- an
+            # `attempt` it declared, a thing it communicated. What is left
+            # out is an empty sequence: a beat with no conduct in it.
+            #
+            # This was a self-appraisal threshold (`own_salience >= 0.7`),
+            # and the threshold was an OFF SWITCH. `salience` reaches the
+            # character prompt only as the literal 0.5 inside the required
+            # JSON shape, with nothing anywhere saying what it means or when
+            # to raise it, and it sits in `KERNEL_FILL_QUIETLY` so an absent
+            # one is filled with the same 0.5 and reported nowhere. Measured,
+            # two_lives v5 (2026-09-19), 60 beats of two characters with no
+            # player in the story: ONE self row, on the one beat somebody
+            # spoke. Emory Vane spent twenty beats diagnosing a rotten
+            # bearing in a mill sluice -- sighting the shaft, sounding the
+            # grain with a knuckle, rolling the wet grit between his fingers
+            # to feel whether it sheared -- and the forty-three memories
+            # those sixty beats left behind are postures and rooms: "I was in
+            # a deep crouch", "I feel the sluice framing against my right
+            # palm". Not one records what he did or what he found. The
+            # witnessed episode cannot carry it (the composer excludes a
+            # mind's own conduct from its own view -- that is the firewall
+            # working), so this row is the only place it could ever have
+            # lived.
+            #
+            # The fidget the old bound was written against is real and is
+            # answered by the tier built for it: `schedule_memory_
+            # consolidation` compresses a morning of inspection into what a
+            # morning of inspection is worth. A row per beat that a
+            # consolidator can summarise is recoverable; a beat that was
+            # never written down is not. `own_salience` keeps its other job
+            # below -- it weights the row for retrieval, it no longer
+            # decides whether the row exists.
+            should_store_own_acts = any(
+                isinstance(event, dict)
+                and (event.get("type") in ("speech", "communication")
+                     or str(event.get("attempt") or "").strip())
+                for event in seq
             )
             # ALWAYS beside the episode, never instead of it. d290ca4 gated
             # this on `not episode_content`, reasoning that the view was

@@ -1548,7 +1548,7 @@ TOOLS = [
      "host_only": True},
     # -- the location designer: open only during a location pass ----------
     {"name": "draft_location",
-     "description": "Lay out the place being designed: its name, its structure (the grammar the map is planted under: {key, max_planned, grammar:[{kind,names,purposes}]}), and rooms, an object keyed by room id -> {name, purpose, adjacent:[{to,barrier}], frontier:[]}. Rooms MERGE across calls, so draft the map a handful of rooms at a time and correct one by drafting it again under the same id. Planned rooms carry no prose.",
+     "description": "Lay out the place being designed: its name, its structure (the grammar the map is planted under: {key, max_planned, grammar:[{kind,names,purposes}]}), and rooms, an object keyed by room id -> {name, purpose, adjacent:[{to,barrier}], frontier:[], anchors:{anchor_id:{desc}}}. `anchors` are the room's FIXTURES: the fixed features of that place a body can stand at, work at, put something down on, take cover behind or lay a hand against. Name the ones the room is made of rather than every object in it -- a fixture is what stays when everybody leaves, and a hand can only touch what is there, so a room that is about its wheel and its sluice needs both of them as anchors. A post can be stood at one (`anchor` on the charter's post names an id from its room's map). Rooms MERGE across calls, so draft the map a handful of rooms at a time and correct one by drafting it again under the same id. Planned rooms carry no prose. The answer lists `rooms_with_no_fixtures` while any room still names none; a room that honestly holds nothing a hand would find may stay there.",
      "args": _schema({"name": _S, "structure": _O, "rooms": _O}),
      "handler": _t_draft_location},
     {"name": "draft_charter",
@@ -1561,7 +1561,7 @@ TOOLS = [
                       "interventions": {"type": "array"}}),
      "handler": _t_draft_history},
     {"name": "review_location",
-     "description": "Ask the engine to close the plan as drafted and report what it said: the same deterministic closure the launch will run, so anything it refuses here would have failed the launch. Returns ok, the errors, the room count, the charters, and how many people the closure minted. Free, and worth running after each institution rather than once at the end.",
+     "description": "Ask the engine to close the plan as drafted and report what it said: the same deterministic closure the launch will run, so anything it refuses here would have failed the launch. Returns ok, the errors, `notes` (what would land but is thin -- rooms naming no fixtures, so nothing in them could be touched), the room count, the charters, and how many people the closure minted. Free, and worth running after each institution rather than once at the end.",
      "args": _schema({}), "handler": _t_review_location},
     {"name": "submit_location",
      "description": "Declare the plan finished. Refused unless the review passes at the plan's current contents; drafting anything clears the last review, so submit after a clean one. The engine plants what you submit.",

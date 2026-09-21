@@ -241,21 +241,46 @@ class TestAFixtureMayBeReMet:
         assert "_at_post_within_earshot" not in body
         assert not hasattr(commit, "_at_post_within_earshot")
 
-    def test_the_demand_gate_qualifies_on_exactly_four_triggers(self):
-        """addressed / owed / acting / emerged, nothing else -- mentioned
-        (prose salience) and dialogue_turns (tenure) are gone with at-post."""
+    def test_the_demand_gate_qualifies_on_five_triggers_and_no_co_presence(self):
+        """addressed / owed / acting / emerged / arrived, nothing else --
+        mentioned (prose salience) and dialogue_turns (tenure) stay gone,
+        and so does at-post.
+
+        AN ARRIVAL IS AN EVENT; A POST IS A STATE. That distinction is the
+        whole of why `arrived` is allowed where `at_post` is not, and this
+        test is the place it has to be said, because a trigger that reads
+        `station_room` looks exactly like the one that was removed.
+        `at_post` qualified a body for STANDING somewhere: measured, 29 of
+        one run's 51 voice calls went to bodies qualifying on co-presence for
+        up to 14 consecutive beats and produced not one line, and quiet beats
+        now spend zero (`docs/UNBUILT_LIVING_WORLD.md`). `arrived` qualifies
+        a body for one beat, when an authored mind CROSSES INTO the room it
+        is posted in -- so it cannot repeat while nothing happens, which is
+        the failure at-post was removed for. Measured (two_lives v5,
+        2026-09-19): 3 arrivals in 60 beats, against at-post's every-beat;
+        and the first one it ever fired on produced a line -- an innkeeper
+        answering a stranger who walked in -- where at-post's 29 produced
+        none.
+        """
         import inspect
 
         from persist import commit
         body = inspect.getsource(commit.pick_voice_demand)
         gate = body[body.index("if not (addressed_any"):].split("continue")[0]
-        assert "or owed or acting or emerged)" in gate
+        assert "or owed or acting or emerged or arrived)" in gate
         assert "mentioned" not in gate
         assert "dialogue_turns" not in gate
         assert "at_post" not in body
+        # The event half, which is what keeps this from being at-post under
+        # another name: the trigger is conjoined with the rooms an authored
+        # mind moved INTO this beat, never with co-presence alone.
+        arrived = body[body.index("arrived = ("):body.index("# THE CHANNEL TEST")]
+        assert "arrival_rooms" in arrived
+        assert "_at_own_station" in arrived
 
     def test_an_addressee_sorts_first_in_the_overflow_order(self):
-        """§C3: addressed > owed > acting > emerged. A crowd member with a
+        """§C3: addressed > owed > acting > emerged > arrived. A crowd
+        member with a
         grievance (entanglement tie-break) must not outrank someone the
         player just spoke to."""
         import inspect
@@ -266,7 +291,7 @@ class TestAFixtureMayBeReMet:
         # The address term is graded (2 precise / 1 loose / 0), not a bool:
         # fuzzy shared-word matches must rank below the person actually named.
         order = ["addressed_precise", "bool(owed)", "bool(acting)",
-                 "bool(emerged)"]
+                 "bool(emerged)", "bool(arrived)"]
         positions = [priority.index(term) for term in order]
         assert positions == sorted(positions)
 

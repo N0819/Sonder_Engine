@@ -652,6 +652,12 @@ def _specialist_ledger(item):
     # disagrees with the Director about whether something happened is the one
     # thing the fan-out has no way to reconcile.
     visible.pop("authority_mode", None)
+    # THE BEAT'S SPAN IS NOT A HAND'S BUSINESS, and this is the reason the
+    # `time` channel stopped being one: a hand receives the rows selected for
+    # it, so what it could do with a duration is re-derive a total it cannot
+    # see the terms of. The author prices each row it cut and
+    # `world.mechanics.beat_time_from_spans` sums them.
+    visible.pop("seconds", None)
     return visible
 
 

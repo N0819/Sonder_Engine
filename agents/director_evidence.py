@@ -2612,6 +2612,25 @@ def restore_declared_quotes(out, raw_input, warn=None):
     return out
 
 
+def _span_seconds(value):
+    """One row's `seconds` as a number, or None when it named none.
+
+    Normalizes here rather than at the sum so the persisted ledger says what
+    the author actually priced: a row whose number cannot be read carries
+    None, not the string it wrote.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return None
+    if seconds != seconds or seconds in (float("inf"), float("-inf")) \
+            or seconds < 0:
+        return None
+    return seconds
+
+
 def normalize_causal_ledger(out, authority=None, identity_index=None, *,
                             known_targets=()):
     """Make the Director's ledgers authoritative for legacy sequence readers.
@@ -2775,6 +2794,14 @@ def normalize_causal_ledger(out, authority=None, identity_index=None, *,
             "movement": (dict(entry["movement"])
                          if isinstance(entry.get("movement"), dict) else None),
             "look": str(entry.get("look") or "").strip(),
+            # HOW LONG THIS STEP TOOK. Carried verbatim -- including the
+            # absence -- because this dict is built from a fixed key list and
+            # a field the list forgets is dropped without a word, which is the
+            # class that has already cost `entry_ops`, `offscreen_plan_ops`
+            # and `project_ops` a measurement each. Read by
+            # `world.mechanics.beat_time_from_spans`, which is the only place
+            # the beat's total is computed.
+            "seconds": _span_seconds(entry.get("seconds")),
             "ability": str(entry.get("ability") or ""),
             "difficulty": str(entry.get("difficulty") or ""),
             "resolution_notes": note,

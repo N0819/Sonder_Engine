@@ -1233,7 +1233,7 @@ def test_a_charter_body_can_speak_in_a_bubble(temp_db):
     """
     from agents.runtime import build_plan
     from agents.offscreen_beat import offscreen_interpretation
-    from persist.commit_background import with_charter_presences
+    from persist.commit import with_charter_presences
 
     chat_id, hinami = _story(temp_db)
     bubble = _reconcile(chat_id, None, 3)[0]["child_frame_id"]

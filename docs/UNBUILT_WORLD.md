@@ -2235,3 +2235,44 @@ Also open from the same run: direct-object and instrument pronouns
 (`kisses her`, `takes Alice's hand with her left hand`) are solved by the
 compatibility anaphora repair rather than by typed referents, which exist but
 are not yet emitted on every action surface.
+
+<a id="unbuilt-1-166"></a>
+
+### 1.166 `state_diff.time.mode` has two readers and no writer
+
+**Found:** 2026-09-20, moving the beat's span from the spatial hand to the
+prose author's rows.
+
+`time` left the spatial specialist's grant because a hand is handed
+`_specialist_span_slice` -- the rows selected for it, never the beat -- so the
+sum its chunk asked for ("the time is the sum of its parts") was over terms it
+could not see. The beat's span is now `world.mechanics.beat_time_from_spans`
+over each ledger row's own `seconds`, which is arithmetic and needs no model.
+
+`mode` is not arithmetic. It says whether the beat is a SPAN TO SUMMARISE or a
+SCENE TO PLAY, and two readers want it: `agents/narration.py` passes it to the
+narrator as `beat_time.mode` (D9, review 2026-09-07 -- four consecutive beats
+of one bare corridor were written at full scene length because the page had no
+idea how long the beat it was writing covered), and
+`world.charter_runtime.CHARTER_BUDGET_SECONDS` keys the off-screen wall-clock
+budget on it (`beat` 10.0s, `time_skip` 60.0s).
+
+It has never had a writer on the causal contract: measured across 3,000 stored
+`director_resolve` variants, 0 carry a `time` block written by a current hand
+at all, so both readers have been reading an absent field for as long as the
+fan-out has existed. Nothing REGRESSED here -- the engine now supplies the
+duration those readers wanted beside it, which is strictly more than they had.
+
+**Not closed, because the obvious closure is a threshold nobody chose.** The
+engine could call a beat a skip past some number of seconds, and that number
+would be a cutoff invented to satisfy a field rather than a fact anyone
+measured. The author knows the answer -- it wrote the prose and cut the spans
+-- so the repair is one more thing asked of the row, not a rule in code. That
+is an owner's call on the author's contract, and the sheet is under a stated
+size bound (`tests/test_causal_director.py`), so it is an argument to have and
+not a line to slip in.
+
+Until then: the narrator receives `duration_seconds` without `mode`, and a
+genuine time skip is budgeted as a beat (10.0s) rather than as a skip (60.0s)
+-- which is what happens today, so the effect is a bound that has never been
+lifted rather than one that was lowered.
