@@ -163,6 +163,7 @@
   "templates": {
     "act": "{label}は{action}",
     "act_shapes": "{label}が動いているが、それ以上は見て取れない。",
+    "act_shapes_placed": "{where}{label}が動いているが、それ以上は見て取れない。",
     "act_heard": "背後で何かが動く気配がする。",
     "act_heard_placed": "{where}で何かが動く気配がする。",
     "activity": "あなたは{value}。",
@@ -197,6 +198,7 @@
     "environment_nearby": "近くに{label}が見える。",
     "episode_act": "{label}が{action}のを見た",
     "episode_act_shapes": "{label}が動いていたが、それ以上は見て取れなかった。",
+    "episode_act_shapes_placed": "{where}{label}が動いていたが、それ以上は見て取れなかった。",
     "episode_activity": "私は{value}いた。",
     "episode_appearance": "{description}が見えた。",
     "episode_arrived": "{label}が入ってきた。",

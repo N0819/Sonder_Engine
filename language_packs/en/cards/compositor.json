@@ -259,6 +259,7 @@
   },
   "templates": {
     "act_shapes": "{label} moves, too little of it to make out.",
+    "act_shapes_placed": "{label} moves {where}, too little of it to make out.",
     "act_heard": "Something moves behind you.",
     "act_heard_placed": "Something moves {where}.",
     "activity": "You are {value}.",
@@ -289,6 +290,7 @@
     "environment_nearby": "You can see {label} nearby.",
     "episode_act": "I saw {label} {action}{ending}",
     "episode_act_shapes": "{label} moved, too little of it to make out.",
+    "episode_act_shapes_placed": "{label} moved {where}, too little of it to make out.",
     "episode_activity": "I was {value}.",
     "episode_appearance": "I saw {description}.",
     "episode_arrived": "{label} came in.",

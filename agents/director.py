@@ -5301,7 +5301,7 @@ def _beat_room(out, scene, identity_index=None):
     return rooms.pop() if len(rooms) == 1 else ""
 
 
-def mint_unreferenced_things(out, scene, diff, room):
+def mint_unreferenced_things(out, scene, diff, room, figures=()):
     """Stand up the things this beat acted on that the world does not hold.
 
     THE HAND ALREADY SAID SO. The contact sheet tells it to resolve a target
@@ -5348,9 +5348,14 @@ def mint_unreferenced_things(out, scene, diff, room):
     * a name the world already holds under any spelling, alias or position
       key -- that is a resolution failure, and a second copy of a thing is
       worse than one nobody found;
-    * a PERSON. `settled` named "Emory Vane" `no_referent` on two live beats;
-      a hand failing to resolve a body is a different fault, and answering it
-      by standing furniture in the room wearing their name is not a repair;
+    * a PERSON -- one the world holds as `kind: person`, OR one this beat is
+      already simulating as a charter figure or an authored plan. `settled`
+      named "Emory Vane" `no_referent` on two live beats; a hand failing to
+      resolve a body is a different fault, and answering it by standing
+      furniture in the room wearing their name is not a repair. The scene
+      half of that test cannot fire for a body the world does not hold yet,
+      which is exactly the case a hand reports `no_referent` for, so the
+      figures this beat was shown are read beside it;
     * a name longer than `MINTED_THING_NAME_WORDS`, which is a description.
     """
     specialists = ((out or {}).get("orchestration") or {}).get("specialists")
@@ -5393,6 +5398,27 @@ def mint_unreferenced_things(out, scene, diff, room):
                 held.update(_thing_forms(alias)
                             for alias in record.get("aliases") or [])
     held |= {_thing_forms(key) for key in ((diff or {}).get("positions") or {})}
+    # ...AND WHOEVER THIS BEAT IS ALREADY SIMULATING. The refusal above reads
+    # `kind == "person"` off the SCENE, so it can only recognise a body the
+    # world already HOLDS -- and a hand reports `no_referent` precisely
+    # because no record exists. For a villager the beat has only just named,
+    # the person-refusal was therefore structurally unable to fire, and the
+    # name was stood up as furniture instead. Measured (chat 151 turn 8,
+    # 2026-09-21): `gushiga_toriki` minted as
+    # `{"name": "Gushiga Toriki", "kind": "fixture"}` beside the charter
+    # figure of that name who spoke and acted in the same beat, and
+    # `_bind_minted_entities_to_present_figures` then declined to bind the
+    # two because an inert kind is a thing -- leaving one villager as two
+    # records, the simulated one and the furniture wearing his name.
+    # A name this beat is simulating as a figure is a BODY, whatever the
+    # world holds yet.
+    for fig in figures or ():
+        if not isinstance(fig, dict):
+            continue
+        bodies.add(_thing_forms(fig.get("name")))
+        bodies.update(_thing_forms(alias)
+                      for alias in fig.get("aliases") or [])
+
     held.discard("")
     bodies.discard("")
 
@@ -6967,7 +6993,8 @@ def director_resolve(ctx, nonce, _corrections=None):
     # a body could work an object for twenty-three beats without the world
     # recording that it had been touched. See `mint_unreferenced_things`.
     _minted_things = mint_unreferenced_things(
-        out, sc, sd, _beat_room(out, sc, _identity_index))
+        out, sc, sd, _beat_room(out, sc, _identity_index),
+        figures=list(_present_figures) + list(_reserved_figures))
     for _key in _minted_things:
         ctx.add_warning(
             "minted %r: the beat acted on it and the world held no record"

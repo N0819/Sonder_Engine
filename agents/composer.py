@@ -3278,11 +3278,28 @@ def act_percept(scene, event, observer_name, actor_name, rel, *,
         # A body moving, and nothing about what it is doing. The label is
         # whatever identity the caller already earned -- who this is was
         # decided upstream and is not this grade's question.
+        #
+        # WHERE it moves is the observer's to have when the body stands in a
+        # DIFFERENT room. The unseen sibling above already carries its
+        # bearing; this branch carried nothing, so a figure seen through an
+        # open doorway arrived as a placeless "moves, too little of it to
+        # make out" and the narrator put it in the observer's own room.
+        # Measured (chat 151 turns 9-10, 2026-09-21): Gushiga Toriki standing
+        # on the Moonlit Beach, rendered as "whatever else is in here with
+        # you" inside the TARDIS console room. Naming the room opens no
+        # channel -- it is the room the observer is already looking into, and
+        # `_visible_room_label` is this module's existing answer for a body
+        # seen from another one.
         note_step_decision("act_percept", _who, "delivered",
                            "shapes only -- motion without conduct")
+        _act_room = ("" if room_of(scene, actor_name)
+                     == room_of(scene, observer_name)
+                     else _visible_room_label(scene, actor_name))
         return Percept(
             kind="act", channel="sight", source_label=display,
-            fidelity="shapes", data={"motion": True},
+            fidelity="shapes",
+            data={"motion": True,
+                  **({"room": _act_room} if _act_room else {})},
             salience=0.5, suddenness=0.2, order_key=order_key,
             dedupe_key="act-shapes:" + _short_hash(
                 event.get("event_id") or "", actor_name))
@@ -4262,6 +4279,10 @@ def _render_event(p):
             return (_en("act_heard_placed", where=bearing) if bearing
                     else _en("act_heard"))
         if p.fidelity == "shapes":
+            room = str(p.data.get("room") or "")
+            if room:
+                return _en("act_shapes_placed", label=_cap(p.source_label),
+                           where=_en("presence_in_room", room=room))
             return _en("act_shapes", label=_cap(p.source_label))
         return _observable_predicate(
             p.source_label, p.data.get("surface")) or ""
@@ -4637,6 +4658,11 @@ def _episode_sentence(p):
         return _en("episode_speech", label=p.source_label, body=body)
     if p.kind == "act":
         if p.fidelity == "shapes":
+            room = str(p.data.get("room") or "")
+            if room:
+                return _en("episode_act_shapes_placed",
+                           label=_cap(p.source_label),
+                           where=_en("presence_in_room", room=room))
             return _en("episode_act_shapes", label=_cap(p.source_label))
         surface = _first_person(str(p.data.get("surface") or "").strip())
         words = surface.split()

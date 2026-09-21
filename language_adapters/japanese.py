@@ -440,6 +440,13 @@ class JapaneseRenderer:
             # manor run spent a shape as full sight), and the same sentence
             # is what a silhouette of a spoken act comes to.
             if p.fidelity == "shapes":
+                # The room a body seen from ANOTHER one stands in, carried
+                # by the percept rather than inferred here (`act_percept`).
+                room = str(data.get("room") or "")
+                if room:
+                    return self._text(
+                        prefix + "act_shapes_placed", label=label,
+                        where=self._text("presence_in_room", room=room))
                 return self._text(prefix + "act_shapes", label=label)
             surface = str(data.get("surface") or "").strip()
             if not surface:
