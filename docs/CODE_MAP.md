@@ -135,7 +135,7 @@
 | `world/background_claims.py` | 598 |  | `core.db` |
 | `world/beat_ledger.py` | 184 |  | — |
 | `world/causal_completion.py` | 151 |  | — |
-| `world/causal_program.py` | 339 |  | — |
+| `world/causal_program.py` | 387 |  | — |
 | `world/causal_verification.py` | 705 |  | — |
 | `world/causality.py` | 425 |  | `world.spatial` |
 | `world/charter.py` | 524 |  | `world.charter_author`, `world.charter_chatter`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_feel`, `world.charter_figure`, `world.charter_identity`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_place`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_promote`, `world.charter_roster`, `world.charter_run`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_temper`, `world.charter_trigger` |
@@ -1662,14 +1662,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `bind_items()` | 61 | 116 lines |
-| `program_steps()` | 255 | 54 lines |
+| `bind_items()` | 61 | 164 lines |
+| `program_steps()` | 303 | 54 lines |
 | `_rewrite_patch()` | 31 | 28 lines |
-| `event_worlds()` | 190 | 28 lines |
-| `program_from_history()` | 220 | 23 lines |
-| `prune_program()` | 321 | 19 lines |
-| `fold_steps()` | 179 | 9 lines |
-| `_content()` | 245 | 8 lines |
+| `event_worlds()` | 238 | 28 lines |
+| `program_from_history()` | 268 | 23 lines |
+| `prune_program()` | 369 | 19 lines |
+| `fold_steps()` | 227 | 9 lines |
+| `_content()` | 293 | 8 lines |
 
 ### `world/causal_verification.py`
 

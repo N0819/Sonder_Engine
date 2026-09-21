@@ -92,6 +92,12 @@ def bind_items(transforms, scene=None):
                 return [key for key, record in standing.items()
                         if isinstance(record, dict) and folded in _forms(key, record)]
             candidates = []
+            # Which candidates the item's own NAME vouches for, and which are
+            # only the singleton fallback's guess. An item may legitimately
+            # touch two things -- turning a key in a lock patches the lock --
+            # so a sibling transform's unnamed record must never decide what
+            # the item IS. See the filter below.
+            named_candidates, guessed = set(), set()
             for row in changes:
                 records = (row.get("patch") or {}).get(channel) or {}
                 records = records if isinstance(records, dict) else {}
@@ -108,6 +114,10 @@ def bind_items(transforms, scene=None):
                     if matches or fallback:
                         if key not in candidates:
                             candidates.append(key)
+                        if matches:
+                            named_candidates.add(key)
+                        else:
+                            guessed.add(key)
                 if kind == "entity":
                     operations = (row.get("patch") or {}).get("inventory_ops") or []
                     for op in operations if isinstance(operations, list) else []:
@@ -132,6 +142,44 @@ def bind_items(transforms, scene=None):
                                     candidates.append(key)
                 if not candidates:
                     continue
+            # A NAMED CANDIDATE BEATS A GUESSED ONE, and this is the whole of
+            # the repair. Measured live (the owner's chat 151, 2026-09-20): the
+            # author gave a beat two handles -- 2 "key", 3 "The TARDIS" -- and
+            # item 2 carried two rows, one MINTING the key ("fishes the key from
+            # his coat pocket") and one PATCHING the lock ("turns the key in the
+            # TARDIS lock"). The mint's record was vouched for by name; the
+            # lock's was a bare `{"state": ...}` admitted only by `fallback`.
+            # With no standing `key` to anchor it, `held` below then preferred
+            # the candidate that was already a world record -- the ship -- and
+            # aliased the freshly minted key onto it. The Doctor ended up
+            # holding the TARDIS, the ship wore the key's description, and
+            # nobody could walk into a thing somebody was carrying.
+            #
+            # ONE ITEM IS ONE RECORD; one item's ROWS may act on several. The
+            # fallback exists for an item whose record nothing names, and it
+            # keeps that job: this only stops it outvoting a record the item's
+            # own name vouches for.
+            if named_candidates and guessed:
+                # ...AND ONLY WHERE THE GUESS IS ALREADY A WORLD RECORD. That
+                # is the whole of the harm: `held` below prefers a candidate the
+                # world already holds, so a standing record admitted by the
+                # fallback CAPTURES the item and the named mint is aliased onto
+                # it. A guess that names nothing standing cannot capture
+                # anything, and it is the ordinary continuation -- "Mara opens
+                # the box" then "Mara shuts the box", the second transform
+                # written tersely with no name (`test_causal_program`'s
+                # partial-entity case, which this broke when the rule was
+                # written without this clause).
+                dropped = [key for key in candidates if key in guessed
+                           and key not in named_candidates
+                           and standing_keys(key)]
+                if dropped:
+                    notes.append({
+                        "item_id": item, "kind": kind,
+                        "reason": "a sibling transform's unnamed record does "
+                                  "not decide what this item is",
+                        "keys": dropped})
+                    candidates = [key for key in candidates if key not in dropped]
             if named_standing:
                 # A transfer filed under its actor touches a different object;
                 # it does not rename that object to the actor or vice versa.
