@@ -1,5 +1,95 @@
 # Changelog
 
+## alpha 10.1.1 — A thing examined tells you what it is like
+
+Six commits since 10.1.0, all found on one story: the owner's Doctor and
+Hinami on the moonlit beach (chat 152), turns 4337–4338, 2026-09-21.
+
+**A body that checks a thing is answered from the thing's record.** The Doctor
+stood at the TARDIS console with both hands on a panel "checking what the scar
+and the landing cost her" for two beats and was told nothing. Read against each
+other, the stages showed three gaps and none in the stage the symptom appeared
+in: the console was a room anchor with a description and no record; both
+console rows were categorised `contacts, attention`, so the objects hand never
+received a work item and `entities` wrote `{}` twice; and nothing on the view
+path rendered a thing's `state` at all — `_visible_things` used it only as a
+placement key. Now a body READS a thing by having its hands on it or by
+standing at its station with light to see by (`perception._things_read_by`,
+both admissions subtracting from the contact and station ledgers), and is told
+the thing's own `state`, rendered clinically in both packs
+(`composer.thing_reading_text`, `thing_reads_touch` / `thing_reads_sight`). A
+bystander gets the act, never the readings. Verified on a copy: recomposing
+turn 4338 put the console's readings in the Doctor's view under his hands and
+none of them in Hinami's. The owner: "not so much a bug but a missing feature."
+
+**The sheets ask for the record.** The interpret sheet's three sibling clauses
+about work on a thing were reduced to one that also covers a read — the one
+attempt that leaves a thing as it was and still routes `entities` — under the
+sheet's hard length budget; the reduction dropped the boundary's counterfactual
+("if nothing else happened") on the first pass and a guard caught it, which is
+the reduction rule working. The objects sheet writes harm short of
+`destruction` into `state` in the beat that inflicts it and authors a reading
+from three things only: what the thing is and can do, where it is and has
+been, and what its record already holds. A thing whose record holds no harm
+reads as sound. The establish sheet mints a vehicle or mechanism WITH a state.
+
+**The plan tier carries an initial condition.** A thing's plan item takes
+`brief.state` (`plan_entity`), which `materialize_plans_in_sight` copies onto
+the thing when it stands it up and `plans_in_view` hands to the Director's own
+render. A later change to what a thing can do — a sensor welded on and wired to
+a readout — is an ordinary `entities` redeclaration, and `_merge_entity`
+merges `state` key-wise, so a new key joins the record without erasing it.
+
+**The Director sees this frame's paradox again.** Since alpha 9 the Director
+read one payload and `paradox` rode on it. The split kept the key on the full
+context dicts of both stages and built a separate lean payload for the model
+afterward, and neither lean payload carried it — so the interpret author and
+the resolve author wrote every beat of an unfolding paradox blind to it while
+the commit-side consequences kept applying. Alpha 9.10.2 never mentioned
+paradox in any prompt, so the key alone is the contract; it is restored on
+both lean payloads. The owner's ruling the same day: detection stays code, the
+consequence belongs to the Writers' Room as a plot package, and a package that
+lands a turn after the violation is fine.
+
+**A logged line echoed inside another speaker's quote is not a dispute.**
+Hinami asked "How does she move?"; the Doctor's reply contained the words
+verbatim; the prose is second person, so her line had no quote of its own and
+its only match was inside his. Two speakers in one region read as a dispute and
+his whole speech went uncoloured. The region's own text is the tie-break: the
+line whose body IS the quoted line delivered it, and anything else that matched
+inside is an echo. Two fragments from different speakers stay a dispute, and
+two people saying the same short line in two regions now each get their own,
+which the old code's comment promised and did not do. Six node-executed tests;
+three fail on the old matcher.
+
+**The shell's cache revision is the bundle's content.** `index.html`'s
+`?v=` token was hand-bumped, which means it was not bumped: `chat.js` had
+changed in eleven commits since the token last moved, so a browser that held
+the old file never asked again, and a fix "still" did not work after a server
+restart because the server was not what held the stale copy. The shell is now
+served with one hash over every script it names, recomputed only when a named
+file's mtime or size moves.
+
+**Thirty guards the Director split superseded are retired.** Every one of the
+31 failures carried since 10.0.0 asserted against the monolithic Director:
+phrase checks on sheets whose clauses moved into specialist chunks (the eight
+TIME-clause tests, mouth engagement, the sleeper's room, the background-dialogue
+occasion, the presence-knowledge rule, the re-stamped tags, the comms
+vocabulary, the weather discipline guard), payload keys the split moved
+(`author_notes`, `world_pressure`, `director_interpret`, the null `state_diff`
+example), the extension seam calls, the crowd example, and a deleted
+prose-author leaf. The thirty-first was paradox, which was a real gap and is
+fixed above rather than removed. `tests/test_time_advances_with_fiction.py`
+goes entirely.
+
+### Known failures
+
+**1 test fails on this tag**,
+`test_charter_registry_cache::test_frames_cache_separately_and_ambient_follows_the_pipeline`,
+the same parallel-runner flake recorded at 10.1.0: it passes in isolation and
+on the 10.1.0 tree, and failed in two of four full parallel runs measured for
+this release. 16,090 pass.
+
 ## alpha 10.1.0 — A character who walks away gets a life, and the world answers
 
 Twenty commits since 10.0.1, most of them found by launching stories with no
