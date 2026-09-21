@@ -235,18 +235,66 @@ class TestAPlanCanSayWhereInTheRoom:
         said = " ".join(r["what"] for r in rows)
         assert "TARDIS" in said and "tideline" in said, said
 
-    def test_a_station_the_room_does_not_have_places_nothing(self, cid):
-        """A station naming nothing is a place nobody can see it at, and
-        standing it unplaced is the honest answer rather than inventing a
-        fixture. The package validator refuses it at draft time; this is the
-        floor under that."""
+    def test_a_station_the_room_does_not_have_falls_back_to_a_cell(self, cid):
+        """A station naming nothing is a place nobody can see it at, so the
+        named fixture is refused -- but the thing is still PUT somewhere, because
+        the alternative is the defect below. The package validator refuses the
+        bad name at draft time; this is the floor under that."""
         _plan(cid, brief={"where": "moonlit_beach", "station": "hibiscus_wall"})
         scene, minted = materialize_plans_in_sight(
             cid, self._beach_with_fixtures(), occupied={"moonlit_beach"})
-        assert minted and minted[0]["entity_id"] not in (scene.get("stations") or {})
+        station = (scene.get("stations") or {})[minted[0]["entity_id"]]
+        assert station["at"] == "" and station["cell"]
 
-    def test_no_station_keeps_exactly_the_old_behaviour(self, cid):
+    def test_a_thing_with_no_declared_station_is_still_somewhere(self, cid):
+        """THE DEFECT THE OWNER FOUND: "where is the tardis in my latest scene.
+        It's in the things list but it shows nowhere on the map." A thing with a
+        room and no station is "in here, nowhere in particular", and the map
+        draws a thing by its station's anchor or its cell, so it had nothing to
+        be drawn at.
+
+        The fallback is the engine's OWN answer for a body that stands nowhere in
+        particular -- `standing_cell`'s room centre, stepped off by
+        `free_cell_near` to a cell no furniture and no body holds -- so it is a
+        default rather than an invention, and the thing ends up somewhere a body
+        could stand beside."""
         _plan(cid)
         scene, minted = materialize_plans_in_sight(
             cid, self._beach_with_fixtures(), occupied={"moonlit_beach"})
-        assert minted and not (scene.get("stations") or {})
+        station = (scene.get("stations") or {})[minted[0]["entity_id"]]
+        assert len(station["cell"]) == 2
+        assert all(isinstance(n, int) for n in station["cell"])
+
+    def test_a_room_that_declares_no_geometry_still_places_it(self, cid):
+        """There is no such thing as a room without a floor: `room_grid` answers
+        a default 6x6 centred at (3, 3) for a room that declares no size and no
+        cells, so a thing is placeable in any room the scene holds. Written down
+        because the first version of this guarded an unplaceable case that does
+        not exist."""
+        _plan(cid)
+        scene, minted = materialize_plans_in_sight(
+            cid, _beach(), occupied={"moonlit_beach"})
+        station = (scene.get("stations") or {})[minted[0]["entity_id"]]
+        assert station["cell"] == [3, 3]
+
+    def test_a_thing_stood_up_before_this_existed_is_placed_on_a_later_beat(
+            self, cid):
+        """Self-healing rather than a migration: the owner's TARDIS was already
+        committed unplaced, and this pass runs on every commit, so the story
+        repairs itself on its next beat instead of having its scene rewritten
+        underneath it."""
+        _plan(cid)
+        scene = self._beach_with_fixtures()
+        scene, first = materialize_plans_in_sight(
+            cid, scene, occupied={"moonlit_beach"})
+        key = first[0]["entity_id"]
+        # Put it back the way it landed before the placement existed.
+        scene["stations"].pop(key)
+        scene, healed = materialize_plans_in_sight(
+            cid, scene, occupied={"moonlit_beach"})
+        assert [h["placed_late"] for h in healed] == [True]
+        assert (scene.get("stations") or {})[key]["cell"]
+        # ...and once placed, it is left alone.
+        scene, again = materialize_plans_in_sight(
+            cid, scene, occupied={"moonlit_beach"})
+        assert again == []

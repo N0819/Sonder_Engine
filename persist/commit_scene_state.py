@@ -2544,8 +2544,11 @@ def prepare_scene_commit(ctx):
             occupied=_body_rooms)
         for _rec in _stood_up:
             ctx.warnings.append(
-                "planned thing stood up: %s is now in %s (plan %s); the "
-                "Director had not rendered it"
+                ("planned thing placed: %s was standing in %s at nothing, so "
+                 "no map could draw it; it now has a cell (plan %s)"
+                 if _rec.get("placed_late") else
+                 "planned thing stood up: %s is now in %s (plan %s); the "
+                 "Director had not rendered it")
                 % (_rec["name"], _rec["room"], _rec["plan"]))
         for _room, _level in _emitting:
             ctx.warnings.append(

@@ -89,7 +89,7 @@
 | `persist/commit_memory_write.py` | 354 | The durable memory write and its out-of-band consolidation twin. | `core.db`, `mind.memory`, `persist.commit_memory`, `story.character_schema`, `story.scene` |
 | `persist/commit_place_graph.py` | 336 | Per-mind durable place graph and per-beat spatial experience. | `world.spatial` |
 | `persist/commit_room_registry.py` | 581 | Room identity across frames: registry projection, mint dedup, renames, retirement, exit pruning. | `core.db`, `persist.commit_common`, `story.character_schema`, `world.spatial` |
-| `persist/commit_scene_state.py` | 2840 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `core.pipeline_context`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.beat_ledger`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.weather` |
+| `persist/commit_scene_state.py` | 2843 | The prepared post-turn scene: pre-lock build, scene commit domain, book anchoring, ground advance. | `core.db`, `core.pipeline_context`, `mind.memory`, `persist.commit_attire`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_room_registry`, `story.character_schema`, `story.provenance_text`, `world.beat_ledger`, `world.mechanics`, `world.spatial`, `world.spatial_frames`, `world.weather` |
 | `persist/llm_capture.py` | 455 |  | `core.db` |
 | `persist/pipeline_trace.py` | 635 | Privacy-conscious export, validation, and offline replay of persisted pipeline history. | `core.db` |
 | `persist/steps.py` | 150 |  | `core.db` |
@@ -191,7 +191,7 @@
 | `world/offscreen.py` | 2305 |  | `core`, `core.logging_utils`, `llm.prompts` |
 | `world/paradox.py` | 655 |  | `core.db`, `core.frames`, `story.character_schema`, `world.spatial` |
 | `world/place_purpose.py` | 554 |  | `mind.theory_of_mind`, `world.comfort`, `world.spatial`, `world.survival` |
-| `world/planned_entities.py` | 522 |  | `core.db` |
+| `world/planned_entities.py` | 584 |  | `core.db` |
 | `world/planning_needs.py` | 408 |  | — |
 | `world/region_events.py` | 461 |  | — |
 | `world/regions.py` | 586 |  | `world.spatial` |
@@ -1140,7 +1140,7 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `compose_beat_scene()` | 1511 | 714 lines |
-| `prepare_scene_commit()` | 2227 | 493 lines |
+| `prepare_scene_commit()` | 2227 | 496 lines |
 | `derive_borne_containment()` | 920 | 120 lines |
 | `_fold_duplicate_mints()` | 767 | 118 lines |
 | `_advance_day_cycle()` | 70 | 111 lines |
@@ -2350,14 +2350,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `materialize_plans_in_sight()` | 229 | 113 lines |
+| `materialize_plans_in_sight()` | 229 | 133 lines |
 | `normalize_plan()` | 79 | 79 lines |
 | `project_planned_emissions()` | 166 | 61 lines |
-| `settle_rendered_plans()` | 460 | 41 lines |
-| `plan_figure()` | 384 | 37 lines |
-| `_contradicted_axis()` | 503 | 20 lines |
-| `plans_in_view()` | 423 | 17 lines |
-| `add_planned_entity()` | 366 | 16 lines |
+| `settle_rendered_plans()` | 522 | 41 lines |
+| `_station_a_thing()` | 364 | 40 lines |
+| `plan_figure()` | 446 | 37 lines |
+| `_contradicted_axis()` | 565 | 20 lines |
+| `plans_in_view()` | 485 | 17 lines |
 
 ### `world/planning_needs.py`
 

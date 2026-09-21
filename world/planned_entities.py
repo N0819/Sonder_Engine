@@ -323,12 +323,8 @@ def materialize_plans_in_sight(cid, scene, frame_id=None, *, occupied=()):
             record["aliases"] = aliases
         entities[key] = record
         positions[key] = where
-        # Where in the room, when the plan says. Only an anchor the ROOM
-        # actually has -- a station naming nothing is a station nobody can see
-        # it at, and leaving it unplaced is the honest answer.
-        at = str((plan.get("brief") or {}).get("station") or "")
-        if at and at in ((rooms.get(where) or {}).get("anchors") or {}):
-            scene.setdefault("stations", {})[key] = {"at": at, "near": []}
+        _station_a_thing(scene, key, where,
+                         str((plan.get("brief") or {}).get("station") or ""))
         held |= forms
         held.add(_fold(key))
         plan["rendered"] = {"entity_id": key, "turn": None,
@@ -336,9 +332,75 @@ def materialize_plans_in_sight(cid, scene, frame_id=None, *, occupied=()):
         changed = True
         minted.append({"plan": uid, "entity_id": key, "name": name,
                        "room": where})
+    # A THING THIS PASS ALREADY STOOD UP, BEFORE IT LEARNED TO PLACE ONE.
+    # Between landing and this, an engine-minted thing got a room and no station
+    # -- which reads as "in the room, nowhere in particular", and the map draws a
+    # thing by its station's anchor or its cell (`world_browser.wbStationText`),
+    # so it appeared in the things list and on no map at all. The owner found
+    # their TARDIS that way. Healed here rather than by a migration: this pass
+    # already runs on every commit and the plan names the entity it minted, so a
+    # story repairs itself on its next beat instead of needing its scene
+    # rewritten underneath it.
+    for uid, plan in sorted(plans.items()):
+        rendered = plan.get("rendered")
+        if not isinstance(rendered, dict) or rendered.get("by") != "engine":
+            continue
+        key = str(rendered.get("entity_id") or "")
+        if not key or key not in entities:
+            continue
+        room = str(positions.get(key) or "")
+        if room not in rooms or (scene.get("stations") or {}).get(key):
+            continue
+        if _station_a_thing(scene, key, room,
+                            str((plan.get("brief") or {}).get("station") or "")):
+            minted.append({"plan": uid, "entity_id": key,
+                           "name": str(plan.get("name") or ""), "room": room,
+                           "placed_late": True})
     if changed:
         save_planned_entities(cid, plans, frame_id)
     return scene, minted
+
+
+def _station_a_thing(scene, key, room, declared=""):
+    """Put a thing somewhere IN its room, so the map can draw it. True if it did.
+
+    A thing with a room and no station is "in here, nowhere in particular", and
+    nothing can draw it, walk to it or reach for it: the map places a thing by
+    its station's anchor or its cell, and it had neither. The owner's TARDIS
+    stood up correctly in `scene.entities`, appeared in the things list, and was
+    on no map at all.
+
+    THE DECLARED FIXTURE FIRST, and only one the room actually has -- a station
+    naming nothing is a place nobody can see it at. Otherwise the ENGINE'S OWN
+    answer for "somewhere in this room and nothing said", which it already gives
+    for a body: `standing_cell` reads the room's centre, and `free_cell_near`
+    steps off it to the nearest cell no furniture and no body holds ("nobody
+    lands in a shed"). That is a default rather than an invention, and it is the
+    same one the walk uses, so a thing the plan placed vaguely ends up somewhere
+    a body could actually stand beside.
+
+    EVERY ROOM THE SCENE HOLDS HAS A GRID, so a thing always lands on a cell:
+    `room_grid` answers a default 6x6 centred at (3, 3) for a room that declares
+    no size or cells at all, which is why this has no "unplaceable" branch. The
+    try/except below is for a malformed scene raising, not for a room without a
+    floor.
+    """
+    rooms = (scene or {}).get("rooms") or {}
+    if room not in rooms:
+        return False
+    if declared and declared in ((rooms.get(room) or {}).get("anchors") or {}):
+        scene.setdefault("stations", {})[key] = {"at": declared, "near": []}
+        return True
+    try:
+        from world.spatial import free_cell_near, room_grid
+        cell = free_cell_near(scene, room, room_grid(scene, room).centre())
+    except Exception:
+        return False
+    if not cell:
+        return False
+    scene.setdefault("stations", {})[key] = {
+        "at": "", "near": [], "cell": [int(cell[0]), int(cell[1])]}
+    return True
 
 
 def _fold(value):
