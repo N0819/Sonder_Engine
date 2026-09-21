@@ -54,74 +54,6 @@ SCENE = {"rooms": {"tavern_main": {"name": "The Brass Tankard tavern",
          "positions": {}}
 
 
-class TestTheLadder:
-    """The declared/built split is the engine's own statement, not a menu's
-    memory — the OFFSCREEN_LIFE_BUILT idiom, extended to world approaches."""
-
-    def test_every_approach_is_declared_priced_and_marked(self):
-        """A rung with three rich fields and one empty reads as complete
-        and is not (the persona_warnings lesson): every approach must carry
-        a label, both depth descriptions, and a cost, or the settings UI
-        renders a feature nobody can evaluate."""
-        for approach in LIVING_WORLD_APPROACHES:
-            desc = LIVING_WORLD_DESCRIPTIONS[approach]
-            for field in ("label", "floor", "ceiling", "cost"):
-                assert str(desc.get(field) or "").strip(), (approach, field)
-            assert LIVING_WORLD_BUILT[approach] <= set(LIVING_WORLD_DEPTHS)
-            assert "off" not in LIVING_WORLD_BUILT[approach]
-
-    def test_es_built_depths_stay_honest(self):
-        """E's model-assisted tier is built; the others expose only floors."""
-        assert LIVING_WORLD_BUILT["antagonist_ladder"] == frozenset(
-            {"floor", "ceiling"})
-        for approach in ("routine_residue", "scheduled_consequence",
-                         "place_obligations"):
-            assert LIVING_WORLD_BUILT[approach] == frozenset({"floor"})
-
-    def test_the_default_is_off_for_everything(self):
-        """The engine never did any of this before the setting existed; a
-        merge must not silently change a running story (the inversion of
-        the reasoning that made 'stochastic' the offscreen default)."""
-        assert normalize_living_world({}) == {
-            a: "off" for a in LIVING_WORLD_APPROACHES}
-
-    def test_unknown_values_fall_to_off_not_to_a_guess(self):
-        cfg = normalize_living_world(
-            {"routine_residue": "MAXIMUM", "telepathy": "floor",
-             "scheduled_consequence": None})
-        assert cfg["routine_residue"] == "off"
-        assert cfg["scheduled_consequence"] == "off"
-        assert "telepathy" not in cfg
-
-    def test_an_unbuilt_ceiling_runs_as_the_floor(self):
-        """The character_agent convention: setting an unbuilt tier marks
-        the story as wanting it and behaves as the highest built tier
-        below, so landing the ceiling later is opt-in on a chat that
-        already asked rather than a surprise."""
-        cfg = {"scheduled_consequence": "ceiling"}
-        assert effective_depth(cfg, "scheduled_consequence") == "floor"
-        assert effective_depth({"antagonist_ladder": "ceiling"},
-                               "antagonist_ladder") == "floor"
-
-    def test_allows_is_ordered_and_fails_closed(self):
-        cfg = {"routine_residue": "floor"}
-        assert living_world_allows(cfg, "routine_residue", "floor")
-        assert not living_world_allows(cfg, "routine_residue", "ceiling")
-        assert not living_world_allows({}, "routine_residue", "floor")
-        assert not living_world_allows(cfg, "weather_control", "floor")
-        assert not living_world_allows(cfg, "routine_residue", "maximum")
-
-    def test_levels_serve_what_is_on_what_it_costs_what_is_declared(self):
-        levels = living_world_levels({"place_obligations": "ceiling"})
-        by_key = {row["approach"]: row for row in levels}
-        assert set(by_key) == set(LIVING_WORLD_APPROACHES)
-        row = by_key["place_obligations"]
-        assert row["value"] == "ceiling" and row["effective"] == "floor"
-        assert row["cost"]
-        built_flags = {d["value"]: d["built"] for d in row["depths"]}
-        assert built_flags == {"floor": True, "ceiling": False}
-
-
 class TestTheFuseMint:
     """Approach B's write path. Minting is deterministic validation of an
     adjudicated declaration; what it refuses is as load-bearing as what it
@@ -408,10 +340,13 @@ class TestArrivalIsTheEarningEvent:
         mapping_src = (agents_dir / "mapping.py").read_text(encoding="utf-8")
         assert "owed_history" in mapping_src
 
-    def test_the_surface_is_gated_by_the_setting(self, temp_db):
-        """Truth accumulates regardless (record_obligations is ungated);
-        the SURFACE is what the setting owns. Off means the mapping payload
-        carries no debt, not that the debt stopped existing."""
+    def test_the_surface_is_no_longer_a_setting(self, temp_db):
+        """Truth always accumulated (`record_obligations` is ungated) and the
+        SURFACE used to be a switch. It is not one any more (2026-09-20): a
+        place you have never been owes what happened there whether or not a menu
+        says so, and the switch only ever decided whether anybody was told --
+        the same shape of thing the `scheduled_consequence` surface gate was.
+        So the debt is annotated whatever the config says, including none."""
         from world.living_world import attach_owed_history
 
         cid = _make_chat(temp_db)
@@ -419,11 +354,10 @@ class TestArrivalIsTheEarningEvent:
                                            where_kind="place")])
         hits = [{"entry_uid": "entry_cd34", "category": "location",
                  "content": "x"}]
-        off = attach_owed_history(cid, hits, config={})
-        assert "owed_history" not in off[0]
-        on = attach_owed_history(
-            cid, hits, config={"place_obligations": "floor"})
-        assert on[0]["owed_history"][0]["what"] == "the patrol is doubled"
+        for config in ({}, None, {"place_obligations": "off"}):
+            out = attach_owed_history(cid, hits, config=config)
+            assert out[0]["owed_history"][0]["what"] == "the patrol is doubled", \
+                config
 
     def test_a_place_without_debt_is_not_annotated(self, temp_db):
         from world.living_world import attach_owed_history
@@ -460,154 +394,42 @@ class TestTheRoute:
     def chat_id(self, temp_db):
         return _make_chat(temp_db)
 
-    def test_get_serves_the_ladder_with_built_flags(self, client, chat_id):
+    def test_the_route_survives_an_empty_ladder(self, client, chat_id):
+        """The ladder has no approaches left (2026-09-20): Charter, the Writers'
+        Room and causality bubbles superseded the whole of it. The ROUTE stays,
+        because an extension may still call it and must get a shape rather than
+        a 500 -- it now serves nothing to set."""
         out = client.get(f"/api/chats/{chat_id}/living_world").json()
-        assert out["living_world"] == {
-            a: "off" for a in LIVING_WORLD_APPROACHES}
-        by_key = {row["approach"]: row for row in out["approaches"]}
-        assert "rumor_ledger" not in by_key
-        assert by_key["routine_residue"]["depths"][0]["built"] is True
-        assert by_key["routine_residue"]["cost"]
+        assert out["living_world"] == {}
+        assert out["approaches"] == []
 
-    def test_put_normalizes_and_returns_what_stuck(self, client, chat_id):
+    def test_a_put_of_a_retired_approach_sticks_to_nothing(self, client,
+                                                          chat_id):
+        """A story configured before the retirement, or an extension still
+        publishing against the old contract, is answered rather than obeyed:
+        the name is dropped and nothing is stored under it, so no retired rung
+        can come back and gate a mechanism that is now unconditional."""
         out = client.put(
             f"/api/chats/{chat_id}/living_world",
             json={"living_world": {"routine_residue": "floor",
+                                   "antagonist_ladder": "ceiling",
                                    "rumor_ledger": "warp speed"}}).json()
-        assert out["living_world"]["routine_residue"] == "floor"
-        assert "rumor_ledger" not in out["living_world"]
+        assert out["living_world"] == {}
         again = client.get(f"/api/chats/{chat_id}/living_world").json()
-        assert again["living_world"]["routine_residue"] == "floor"
+        assert again["living_world"] == {}
 
-
-class TestOneAuthorityCeiling:
-    """scene.py's off-screen ladder and this module's mechanisms were two
-    dropdowns on one question, composed nowhere: a user could set approach
-    E to ceiling under a ladder at `deterministic` and nothing said which
-    governed — and B's built floor minted fuses that genuinely fired while
-    the ladder said `inert`, "nothing happens off screen". The ladder is
-    now the single authority ceiling (``LIVING_WORLD_REQUIRES``), composed
-    at read time; these tests pin the rule, the fold, the purity of the
-    stored config, and the merged settings surface."""
-
-    def test_the_ceiling_caps_what_a_mechanism_may_run(self):
-        """What broke: ``living_world_allows`` answered from its own axis
-        only, so a story at `inert` still minted scheduled consequences —
-        off-screen work with real authority under a setting that promised
-        none. The effective depth must honour the ceiling, falling the
-        same visible way an unbuilt tier falls, never silently running."""
-        cfg = {"scheduled_consequence": "floor", "offscreen_life": "inert"}
-        assert effective_depth(cfg, "scheduled_consequence") == "off"
-        assert not living_world_allows(cfg, "scheduled_consequence", "floor")
-        cfg["offscreen_life"] = "deterministic"
-        assert effective_depth(cfg, "scheduled_consequence") == "floor"
-        assert living_world_allows(cfg, "scheduled_consequence", "floor")
-
-    def test_a_config_without_a_ceiling_reads_as_the_ladder_default(self):
-        """No running story may change behaviour on merge: every stored
-        ceiling in the live database was absent or `stochastic` (the
-        ladder default), and one live chat plays with the A, B and D
-        floors on at that default — so an absent ceiling must read as the
-        default, under which every built floor and every
-        unbuilt-ceiling-as-floor runs exactly as before composition
-        existed. And every depth of every approach must name a real rung,
-        or a mechanism would be ungoverned the moment it is built."""
-        from story import scene
-        from world.living_world import LIVING_WORLD_REQUIRES
-
-        for approach in ("routine_residue", "scheduled_consequence",
-                         "place_obligations"):
-            assert effective_depth({approach: "floor"}, approach) == "floor"
-            assert effective_depth({approach: "ceiling"}, approach) == "floor"
-        assert set(LIVING_WORLD_REQUIRES) == set(LIVING_WORLD_APPROACHES)
-        for approach, depths in LIVING_WORLD_REQUIRES.items():
-            assert set(depths) == {"floor", "ceiling"}
-            for rung in depths.values():
-                assert rung in scene.OFFSCREEN_LIFE_LADDER
-
-    def test_e_uses_the_two_plan_rungs_by_name(self):
-        """The design doc names E's rungs `reactive` and `character_agent`
-        outright — E is that rung wearing the mechanism vocabulary. Gating
-        it lower would let a plan advance under a ladder that never
-        granted plans; and the DEFAULT ladder level must not include it,
-        so E landing built stays opt-in twice: the mechanism switched on,
-        the ceiling deliberately raised."""
-        from story.scene import OFFSCREEN_LIFE_DEFAULT, offscreen_life_allows
-        from world.living_world import LIVING_WORLD_REQUIRES
-
-        assert LIVING_WORLD_REQUIRES["antagonist_ladder"] == {
-            "floor": "reactive", "ceiling": "character_agent"}
-        assert offscreen_life_allows(OFFSCREEN_LIFE_DEFAULT, "reactive")
-        assert not offscreen_life_allows(OFFSCREEN_LIFE_DEFAULT,
-                                         "character_agent")
-
-    def test_the_ceiling_folds_in_on_the_way_in(self, temp_db):
-        """A composition helper every gate must remember to call would be
-        forgotten (the canonical_url rule): the config the gates already
-        fetch must carry the chat's own ceiling, so commit's mint gate and
-        the Director's residue gate compose both axes without changing."""
-        from world.living_world import living_world_config
-
-        cid = _make_chat(temp_db)
-        temp_db.wset(cid, "living_world", {"scheduled_consequence": "floor"})
-        temp_db.wset(cid, "dialogue_config", {"offscreen_life": "inert"})
-        cfg = living_world_config(cid)
-        assert cfg["offscreen_life"] == "inert"
-        assert not living_world_allows(cfg, "scheduled_consequence", "floor")
-        temp_db.wset(cid, "dialogue_config",
-                     {"offscreen_life": "stochastic"})
-        assert living_world_allows(living_world_config(cid),
-                                   "scheduled_consequence", "floor")
-
-    def test_the_stored_config_never_gains_the_ceiling(self, temp_db):
-        """Two durable spellings of one ceiling is the five-defect
-        identity failure waiting: a stale copy under the living_world key
-        would shadow the live dialogue_config. The write path must strip
-        it however it arrives."""
-        from web import app
-        from world.living_world import OFFSCREEN_CEILING_KEY
-
-        cid = _make_chat(temp_db)
-        app.living_world_put(cid, {"living_world": {
-            "scheduled_consequence": "floor",
-            OFFSCREEN_CEILING_KEY: "inert"}})
-        stored = temp_db.wget(cid, "living_world", {})
-        assert OFFSCREEN_CEILING_KEY not in stored
-        assert stored["scheduled_consequence"] == "floor"
-
-    def test_levels_name_the_clamp_they_will_apply(self):
-        """A mechanism set above the ceiling must display as clamped, not
-        silently ignored: the payload carries each depth's required rung
-        and whether the current ceiling permits it, so the menu renders
-        the engine's clamp rather than a copy that drifts."""
-        levels = living_world_levels({"scheduled_consequence": "ceiling",
-                                      "offscreen_life": "deterministic"})
-        row = {r["approach"]: r for r in levels}["scheduled_consequence"]
-        assert row["effective"] == "floor"
-        depths = {d["value"]: d for d in row["depths"]}
-        assert depths["floor"]["requires"] == "deterministic"
-        assert depths["floor"]["permitted"] is True
-        assert depths["ceiling"]["requires"] == "stochastic"
-        assert depths["ceiling"]["permitted"] is False
-        levels = living_world_levels({"scheduled_consequence": "floor",
-                                      "offscreen_life": "inert"})
-        row = {r["approach"]: r for r in levels}["scheduled_consequence"]
-        assert row["effective"] == "off"
-        assert all(not d["permitted"] for d in row["depths"])
-
-    def test_the_ui_is_one_card_with_the_ceiling_first(self):
-        """Two cards carried the two axes with the composition left to the
-        reader. One card now shows the ceiling once, first, and each
-        mechanism's clamp live (the ``requires`` rung mirrored
-        client-side), so a depth past the ceiling reads as capped the
-        moment either dropdown moves."""
-        from pathlib import Path
-
-        js = (Path(__file__).resolve().parents[1]
-              / "static/js/settings.js").read_text(encoding="utf-8")
-        assert '"Simulation reach"' in js
-        assert '"Living world"' not in js  # the second card is gone
-        block = js[js.index('"Simulation reach"'):
-                   js.index('"Background life"')]
-        assert block.index("offCog") < block.index("lwRows")
-        assert "d.requires" in js and "refreshLw" in js
+# TestTheLadder and TestOneAuthorityCeiling were removed on 2026-09-20 with the
+# thing they pinned. The four-approach ladder and the off-screen cognition
+# CEILING over it are retired: `routine_residue` and `scheduled_consequence`
+# are unconditional (a world whose fires do not burn down and whose causes do
+# not land is not coherent at any setting -- the argument that retired rumour
+# transport before them), `place_obligations` had no live reader at all, and the
+# cognition ladder is superseded by Charter and the Writers' Room
+# (`docs/design/DESIGN_OFFSCREEN_SUPERSEDED.md`). What a story now says about
+# how much runs beside it is `max_bubbles`
+# (`tests/test_a_story_says_how_many_threads_it_carries.py`).
+#
+# `antagonist_ladder` KEPT its rung and its coverage below: retiring it was
+# tried the same day and measured -- reactive plans fire off plans it authors,
+# so cutting it silently ended the race-you-can-lose mechanism, which is what
+# §4.3 of that doc warned about.

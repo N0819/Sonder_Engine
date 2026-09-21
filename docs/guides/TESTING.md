@@ -424,7 +424,7 @@ Three faults, and only the first is the one usually noticed.
   comments, spelling and formatting.
 
 **Converted so far**: `test_style_guide.py` (three assertions, driven through
-the payload), `test_offscreen_reactive.py`, `test_offscreen_resolution.py`'s
+the payload), `test_offscreen_resolution.py`'s
 seeded draw (both sealed and driven), `test_perception_has_no_model.py`,
 `test_story_view.py`'s layering rule and
 `test_offscreen_agent_context.py`'s fail-closed allowlist (all four to AST).
@@ -536,7 +536,7 @@ kinds remain:
   all. These should be left alone.
 - **Merely easier**, and still open: the 34 Python ones, chiefly
   `test_crowds.py` (5), `test_offscreen_resolution.py` (6),
-  `test_offscreen_life.py` (3), `test_launcher_python_range.py` (3),
+  `test_launcher_python_range.py` (3),
   `test_body_position.py` (2), `test_pipeline_audit_leak_gaps.py` (2),
   `test_living_world.py` (2). Each needs its own judgement about what the
   property IS, which is why this is a row rather than a sweep — and a sweep is

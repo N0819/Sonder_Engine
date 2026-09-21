@@ -527,90 +527,15 @@ class TestTheProducer:
         log = wget(cid, "offscreen_log", [])
         assert len(log) == 1 and log[0]["rung"] == "profile"
 
-    def test_the_producer_thread_keeps_the_scheduling_turns_frame(
-            self, temp_db, monkeypatch):
-        """threading.Thread starts with a FRESH contextvars context, so the
-        producer's frame-scoped wget/wset (append_offscreen_log's
-        read-modify-write above all) resolved `active_frame_id` to its
-        default -- the present frame -- and a tick scheduled from a nested
-        frame's turn landed in the wrong era's log. The frame the turn was
-        scheduled FROM must ride into the job."""
-        import threading
-        import types
-
-        from core import jobs
-        from world import offscreen
-        from core.db import wget, wget_for_frame, wset_for_frame
-
-        cid = temp_db.qi(
-            "INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
-            ("Test", "", time.time()))
-        temp_db.qi(
-            "INSERT INTO turns(chat_id,idx,player_input,created) VALUES(?,?,?,?)",
-            (cid, 3, "", time.time()))
-        wset_for_frame(cid, "scene", {
-            "rooms": {"hall": {"adjacent": []}},
-            "positions": {"The Stranger": "hall"},
-        }, 7)
-        wset_for_frame(cid, "offscreen_epoch", {
-            "epoch_id": "epoch_frame_7", "turn": 3,
-        }, 7)
-        monkeypatch.setattr(offscreen, "profile_candidates", lambda *a, **k: [
-            {"id": "guinan_7f3a", "display": "Guinan", "sheet": {}},
-            {"id": "mora_11ab", "display": "Mora", "sheet": {}},
-        ])
-        monkeypatch.setattr(
-            offscreen, "profile_summary_record",
-            lambda *a, **k: {
-                "disposition": "provisional",
-                "subject": a[2],
-                "basis": "deterministic",
-                # State, not prose: the profile rung emits fields and the
-                # stored `tick` is composed from them by code. Only the
-                # record shape this fixture stands in for moved -- the frame
-                # assertions below are byte-for-byte unchanged.
-                "state": {"doing": "kept the bar in order",
-                          "at": "hall", "manner": "unhurried"},
-                "producer": "offscreen.profile_summary_record",
-            })
-        captured = {}
-
-        def _capture(chat_id, key, fn, base_turn=None):
-            captured["fn"] = fn
-            captured["job"] = types.SimpleNamespace(
-                cancelled=threading.Event())
-            return captured["job"]
-
-        monkeypatch.setattr(jobs, "submit", _capture)
-
-        class _Chat(dict):
-            @property
-            def id(self):
-                return self["id"]
-
-        ctx = types.SimpleNamespace(
-            chat=_Chat({"id": cid, "persona_id": None}),
-            turn=types.SimpleNamespace(idx=3, id=1, frame_id=7))
-        assert offscreen.schedule_profile_ticks(ctx, {
-            "opportunity": True, "epoch_id": "epoch_frame_7",
-        }) is captured["job"]
-
-        # Run the producer exactly as jobs._run would: on a bare thread
-        # whose context never saw the turn's frame.
-        worker = threading.Thread(target=captured["fn"],
-                                  args=(captured["job"],))
-        worker.start()
-        worker.join(10)
-        assert not worker.is_alive()
-        framed_log = wget_for_frame(cid, "offscreen_log", 7, [])
-        assert framed_log, \
-            "the tick must land in the frame it was scheduled from"
-        assert len(framed_log[0]["events"]) == 2, \
-            "every selected subject belongs to the one epoch batch"
-        assert wget(cid, "offscreen_log", []) == [], \
-            "the present frame's log took a nested frame's tick"
-
-
+    # `test_the_producer_thread_keeps_the_scheduling_turns_frame` went on
+    # 2026-09-20 with the tier it exercised: the stochastic tick producer was a
+    # rung of the off-screen ladder, which Charter, the Writers' Room and
+    # causality bubbles superseded. The LESSON it recorded is not lost, because
+    # it was never only about this producer -- `threading.Thread` starts with a
+    # fresh contextvars context, so any frame-scoped read inside a worker
+    # resolves `active_frame_id` to the present frame unless the parent's
+    # context is carried in. `agents/director._run_specialists` states the same
+    # law at length for the specialist fan-out and is covered there.
 class TestTheProfileRung:
     """Step 3a: one call, no psychology run, no adjudication, structurally
     unable to emit a consequence. This is the rung most characters will

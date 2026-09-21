@@ -72,12 +72,55 @@ LIVING_WORLD_DEPTHS = ("off", "floor", "ceiling")
 #: physics owned by Charter people and the shared physical carrier rail; a
 #: setting that can disable witnessing, speech or letters makes the world
 #: incoherent. The remaining keys are author-selectable generation policies.
-LIVING_WORLD_APPROACHES = (
-    "routine_residue",        # A: the world's default motion
-    "scheduled_consequence",  # B: the world as a delay line
-    "place_obligations",      # D: the lorebook edge owes a history
-    "antagonist_ladder",      # E: plans that advance unwatched
-)
+#: RETIRED 2026-09-20, and the reason is the one that retired rumour transport
+#: one paragraph above: a world whose fires do not burn down, whose causes do
+#: not land and whose unvisited places owe nothing is not coherent at any
+#: setting. These were never information rules -- the panel said so itself --
+#: and a generation policy the world needs is not a policy, it is the world.
+#:
+#:   * `routine_residue` and `scheduled_consequence` are now UNCONDITIONAL.
+#:     Their gates are gone from `agents/director.py`, `world/routines.py` and
+#:     `world/mechanics.py`; what they gated always ran for a story that had
+#:     them on and was simply missing for one that did not.
+#:   * `antagonist_ladder` is superseded by causality bubbles: a character who
+#:     walks away gets their own frame and their own beats
+#:     (`docs/design/DESIGN_OFFSCREEN_SUPERSEDED.md`), which is the thing the
+#:     ladder was an approximation of. `max_bubbles` is the dial that replaced
+#:     its ceiling, and it caps how many threads EXIST rather than how many
+#:     advance -- see `agents/offscreen_beat.OFFSCREEN_BEATS_ARE_UNCAPPED` for
+#:     why those are not the same cap.
+#:
+#: NOTHING SURVIVES, and the last one out was the ANTAGONIST LADDER (the owner,
+#: 2026-09-20: "Antagonist ladder is the lesser version of the causality
+#: bubbles. It is a redundancy."). The ladder gave a named few authored plans
+#: that advanced on a schedule, acting only on what had reached them. A
+#: causality bubble gives an absent character a frame of their own, their own
+#: perception composed from their own scene, a real character call from their
+#: own private state, and a Director that resolves what they attempt -- which is
+#: the same claim with nothing approximated. Two mechanisms for "what an absent
+#: character is doing" could only disagree, and the weaker one was the one with
+#: a switch.
+#:
+#: Its machinery goes with it: `offscreen_plan_ops`, `advance_reactive_plans`
+#: and the `character_agent` tick tier are the ladder, not neighbours of it --
+#: reactive plans fire off plans the ladder authors, so they have no subject
+#: once it is gone. `docs/design/DESIGN_OFFSCREEN_SUPERSEDED.md` §4.3 asked for
+#: them to be given a home first; a bubble IS that home.
+#:
+#: The other three were not holdovers and did not need a switch either:
+#:
+#:   * `routine_residue` and `scheduled_consequence` are UNCONDITIONAL. A world
+#:     whose fires do not burn down while nobody watches, and whose causes do
+#:     not land on the day they were set for, is not coherent at any setting --
+#:     the argument that retired rumour transport one paragraph above.
+#:   * `place_obligations` is unconditional for the same reason: a place you
+#:     have never been owes what happened there whether or not a menu says so,
+#:     and the Writers' Room now plans that history directly (`draft_history`,
+#:     `wants_history`, `horizon_hours`).
+#:
+#: The tuple stays, empty, so every reader that walks it keeps working and the
+#: settings surface renders nothing rather than erroring.
+LIVING_WORLD_APPROACHES = ()
 
 #: Which depths actually DO something today. Kept beside the ladder, like
 #: ``scene.OFFSCREEN_LIFE_BUILT``, so an unbuilt tier cannot quietly start
@@ -89,12 +132,7 @@ LIVING_WORLD_APPROACHES = (
 #: (``offscreen.schedule_agent_ticks``): an opted-in dormant mind with a
 #: private reason gets one reduced turn — fail-closed private context, one
 #: character call, one Director adjudication, one atomic landing.
-LIVING_WORLD_BUILT = {
-    "routine_residue": frozenset({"floor"}),
-    "scheduled_consequence": frozenset({"floor"}),
-    "place_obligations": frozenset({"floor"}),
-    "antagonist_ladder": frozenset({"floor", "ceiling"}),
-}
+LIVING_WORLD_BUILT = {}
 
 #: What each approach and depth buys, and what it costs — served to the UI
 #: with the config so the menu renders the engine's own ladder rather than
@@ -581,9 +619,14 @@ def attach_owed_history(cid, lore_hits, config=None):
     until the ledger row is superseded; the mapping prompt scopes them to
     the generation moment.
     """
-    config = config if config is not None else living_world_config(cid)
-    if not living_world_allows(config, "place_obligations", "floor"):
-        return [dict(h) for h in (lore_hits or [])]
+    # UNCONDITIONAL since 2026-09-20. A place you have never been owes what
+    # happened there whether or not a menu says so, and the debt was always
+    # recorded either way (`record_obligations` is ungated) -- the switch only
+    # decided whether anybody was TOLD, which is the same shape of thing the
+    # `scheduled_consequence` surface gate turned out to be. `config` is kept in
+    # the signature because callers pass it and because the parameter is how the
+    # test suite reaches this without a chat.
+    _ = config
     out = []
     for hit in lore_hits or []:
         hit = dict(hit)

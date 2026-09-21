@@ -487,14 +487,17 @@ def schedule_artifact_wording(ctx):
     """
     from core import jobs
     from core.db import wget
-    from story.scene import dialogue_config, offscreen_life_allows
-
     cid = ctx.chat.id
     frame_id = ctx.turn.frame_id
     turn_idx = int(ctx.turn.idx)
-    if not offscreen_life_allows(
-            dialogue_config(cid).get("offscreen_life"), "stochastic"):
-        return None
+    # UNGATED 2026-09-20. This read the off-screen cognition ceiling, retired
+    # with the rest of that ladder -- and it was ON by default
+    # (`OFFSCREEN_LIFE_DEFAULT` is `stochastic`), so for every story that never
+    # touched the menu nothing changes here. A posted notice with no words on it
+    # is a physical object the world says nothing about; the wording is what
+    # makes it readable, and it was never an off-screen COGNITION question.
+    # The spend is still bounded by `_WORDING_ATTEMPT_CAP` below and still runs
+    # off the turn path.
     pending = [
         dict(a) for a in wget(cid, ARTIFACTS_WORLD_KEY, []) or []
         if isinstance(a, dict) and a.get("status") == POSTED

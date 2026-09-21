@@ -2337,12 +2337,29 @@ DEFAULT_INTERACTION_CONFIG = {
     # into a full character. 0 means never, and is the default: acquiring cast
     # is not something a story should do without being asked.
     "promote_after_addressed": 0,
-    # How much life the cast is permitted OFF screen. See OFFSCREEN_LIFE_LADDER
-    # for the mechanism and COGNITION_OFF_RUNG for the one question a host is
-    # actually asked; `dialogue_config` keeps the two in step.
-    "offscreen_life": OFFSCREEN_LIFE_DEFAULT,
-    "offscreen_cognition": OFFSCREEN_COGNITION_DEFAULT,
-    "max_offscreen_actors": 3,
+    # HOW MANY CAUSALITY BUBBLES MAY BE OPEN AT ONCE (the owner, 2026-09-20).
+    #
+    # The dial this replaces was `max_offscreen_actors`, which rationed a tier
+    # that no longer exists: `docs/design/DESIGN_OFFSCREEN_SUPERSEDED.md` is the
+    # argument and Charter plus the Writers' Room are what superseded it. What
+    # actually costs now is a bubble -- one character call and one Director
+    # resolve per live bubble per committed beat, forever
+    # (`agents/offscreen_beat.py`).
+    #
+    # A CAP ON HOW MANY EXIST IS NOT THE CAP THAT WAS REFUSED. The ruling of
+    # 2026-09-17 -- "I don't think a character should ever freeze unless they've
+    # been made dormant" -- struck down a cap on how many open bubbles ADVANCE
+    # per beat, because that stands a live thread still while its neighbours
+    # live and nothing in the fiction explains which. This one refuses to OPEN
+    # the next one, which is a different act: every bubble that exists runs
+    # every beat, and a character who does not get one is in exactly the
+    # position every absent character was in before bubbles existed. The owner
+    # drew that distinction: a max bubble count is not a max beat count.
+    #
+    # THREE, carried over from the dial it replaces rather than invented, and
+    # 0 means none -- the "off" the old cognition toggle spelled as a ladder
+    # rung. A refusal is always reported, never silent.
+    "max_bubbles": 3,
 }
 
 def offscreen_life_allows(level, rung):
@@ -2404,23 +2421,35 @@ def dialogue_config(chat_id):
     # contract it is published under, and neither may be overwritten by a
     # default. Otherwise the toggle decides and the rung follows it, so the
     # two never disagree about a story nobody has configured.
-    if "offscreen_cognition" in stored:
-        config["offscreen_cognition"] = normalize_offscreen_cognition(
-            stored["offscreen_cognition"])
-        config["offscreen_life"] = cognition_rung(config["offscreen_cognition"])
-    elif "offscreen_life" in stored:
-        config["offscreen_life"] = normalize_offscreen_life(
-            stored["offscreen_life"])
-        config["offscreen_cognition"] = cognition_from_rung(
-            config["offscreen_life"])
-    else:
-        config["offscreen_cognition"] = OFFSCREEN_COGNITION_DEFAULT
-        config["offscreen_life"] = cognition_rung(OFFSCREEN_COGNITION_DEFAULT)
+    # HOW MANY BUBBLES MAY BE OPEN. A stored `max_offscreen_actors` is read as
+    # this, because it is the dial this one replaces and a story configured
+    # before 2026-09-20 asked the same question about the same cost: how many
+    # absent threads am I paying for. The retired ladder keys
+    # (`offscreen_life`, `offscreen_cognition`) are not read at all -- they
+    # rationed a tier Charter and the Writers' Room superseded, and a stored
+    # value for one is a holdover, not a setting.
     try:
-        config["max_offscreen_actors"] = max(
-            0, min(12, int(config.get("max_offscreen_actors", 3))))
+        # STORED first, either spelling, then the default. Reading `config`
+        # here would always find the default this dict was seeded with, so the
+        # carry-over from the old dial could never fire.
+        raw = stored.get("max_bubbles", stored.get("max_offscreen_actors", 3))
+        config["max_bubbles"] = max(0, min(12, int(raw)))
     except (TypeError, ValueError):
-        config["max_offscreen_actors"] = 3
+        config["max_bubbles"] = 3
+    # THE RETIRED LADDER KEYS STAY IN THE DICT AND GATE NOTHING. Measured
+    # 2026-09-20 when they were deleted outright: 120 readers index
+    # `offscreen_life` directly, several inside the commit path, so the turn
+    # rolled back with `offscreen_plans: 'offscreen_life'`. They are not an
+    # inert holdover -- the IDEAS are superseded (Charter and the Writers'
+    # Room, `docs/design/DESIGN_OFFSCREEN_SUPERSEDED.md`) and the plumbing is
+    # woven through the engine and the published extension contract
+    # (`provision_story(offscreen_life=...)`). That doc's §4 says the readers
+    # come out first and the keys after; doing it the other way round is what
+    # the measurement above is. Until then the keys are present, defaulted and
+    # unread, and `max_bubbles` is the only dial anybody sets.
+    config["offscreen_life"] = OFFSCREEN_LIFE_DEFAULT
+    config["offscreen_cognition"] = OFFSCREEN_COGNITION_DEFAULT
+    config["max_offscreen_actors"] = 0
     return config
 
 def reaction_config(chat_id):

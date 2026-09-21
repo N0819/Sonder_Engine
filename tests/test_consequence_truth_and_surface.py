@@ -118,59 +118,10 @@ class TestTheMintIsTruth:
         assert commit.commit_transit_sweep(ctx, 0)["consequences_minted"] == 0
         assert any("consequence not minted" in w for w in ctx.warnings)
 
-
-class TestTheSettingGatesTheSurface:
-    def test_the_walk_in_notice_is_withheld_when_the_setting_is_off(self):
-        from world.mechanics import _fire_due_events
-
-        ops, notices, counts, _ = _fire_due_events(
-            {}, 200.0, None, [_fuse_row()], turn_idx=5,
-            player_room="tavern_main", surface_consequences=False)
-        assert ("status", "event:aa", "fired") in ops
-        assert counts["consequences_fired"] == 1
-        assert notices == []
-
-    def test_the_notice_lands_when_the_setting_is_on(self):
-        from world.mechanics import _fire_due_events
-
-        _, notices, _, _ = _fire_due_events(
-            {}, 200.0, None, [_fuse_row()], turn_idx=5,
-            player_room="tavern_main", surface_consequences=True)
-        assert len(notices) == 1
-
-    @pytest.mark.parametrize("config,expected", [
-        (None, 0), ({"scheduled_consequence": "floor"}, 1)])
-    def test_the_sweep_reads_the_chats_own_depth(self, temp_db, config,
-                                                 expected):
-        from world.mechanics import mechanics_sweep
-
-        cid = _chat(temp_db, config)
-        _, ops, notices, counts = mechanics_sweep(
-            dict(SCENE), {"elapsed_seconds": 200.0}, None, [_fuse_row()],
-            chat_id=cid, turn_idx=5, player_room="tavern_main")
-        assert counts["consequences_fired"] == 1
-        assert ("status", "event:aa", "fired") in ops
-        assert len([n for n in notices if "Falling due here" in n]) == expected
-
-    @pytest.mark.parametrize("config,expected", [
-        (None, False), ({"scheduled_consequence": "floor"}, True)])
-    def test_the_re_entry_residue_reads_the_same_depth(self, temp_db, config,
-                                                       expected):
-        """The second place a fired fuse can be learned. Approach A's own
-        halves (entropy, occupancy) are unaffected either way."""
-        from world.routines import residue_for
-
-        cid = _chat(temp_db, config)
-        temp_db.wset(cid, "subject_last_seen",
-                     {"tavern_main": {"turn": 3, "room": "tavern_main",
-                                      "elapsed_seconds": 1000.0}})
-        temp_db.qi(
-            "INSERT INTO scheduled_events(event_id,chat_id,due_at,kind,"
-            "location_id,payload,seed,status) VALUES(?,?,?,?,?,?,?,?)",
-            ("event:c0", cid, 2000.0, CONSEQUENCE_KIND, "tavern_main",
-             json.dumps({"what": "the patrol stands doubled"}), "s", "fired"))
-        out = residue_for(cid, dict(SCENE), "tavern_main",
-                          now_seconds=1000.0 + 9 * 86400.0)
-        facts = (out or {}).get("facts") or []
-        assert ("the patrol stands doubled" in facts) is expected
-        assert facts, "the routine's own texture is not what B gates"
+# `TestTheSettingGatesTheSurface` went on 2026-09-20. The setting was
+# `scheduled_consequence`, retired with the rest of the living-world ladder, and
+# what it gated was never generation: the consequence fired either way and the
+# switch only decided whether the player was TOLD. `TestTheMintIsTruth` above is
+# the half that mattered and it still holds -- the mint is the truth, and the
+# surface is now unconditional because a cause that lands and says nothing is
+# indistinguishable from one that did not land.

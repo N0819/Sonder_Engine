@@ -241,10 +241,9 @@ def residue_for(cid, scene, room_id, frame_id=None, now_seconds=None):
     day_seconds = day_length_hours(style_guide(cid)) * 3600.0
 
     facts = []
-    if living_world_allows(living_world_config(cid),
-                           "scheduled_consequence", "floor"):
-        facts.extend(fired_consequences_at(cid, str(room_id),
-                                           then_seconds, now))
+    # UNCONDITIONAL since 2026-09-20 (the living-world ladder's retirement): a
+    # cause that was set for a day and does not land on it is not a cause.
+    facts.extend(fired_consequences_at(cid, str(room_id), then_seconds, now))
     facts.extend(entropy_facts(room_name, gap, day_seconds))
     shift = occupancy_fact(room_name, f"room:{cid}:{room_id}",
                            then_seconds, now, day_seconds)

@@ -1236,16 +1236,13 @@ def mechanics_sweep(scene, clock, frame_id, pending, *,
     # fixture) surfaces, exactly as it did before the gate existed, and so
     # does a config that will not read: a knowledge surface must fail toward
     # telling the player about their own world.
+    # ALWAYS SURFACED since 2026-09-20. This read the `scheduled_consequence`
+    # switch, which the settings panel described as a GENERATION policy -- "what
+    # happens, not who gets to know it" -- while what it actually gated was
+    # whether the player was told. The event fired either way, so the switch
+    # could only ever hide a fact the world had already committed. The ladder is
+    # retired; the telling is not a setting.
     surface_consequences = True
-    if chat_id is not None:
-        try:
-            from world.living_world import (living_world_allows,
-                                            living_world_config)
-            surface_consequences = living_world_allows(
-                living_world_config(chat_id), "scheduled_consequence",
-                "floor")
-        except Exception:
-            surface_consequences = True
     event_ops, notices, counts, pending_entity_ids = _fire_due_events(
         scene, elapsed, frame_id, pending or [],
         turn_idx=turn_idx, player_room=player_room,

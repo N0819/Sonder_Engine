@@ -246,22 +246,22 @@ def test_the_archive_carries_the_wall(temp_db):
     assert any("artifacts" in key for key in (blob.get("world") or {}))
 
 
-def test_the_floor_is_whole_with_no_model_and_no_ceiling_setting(temp_db):
-    """The ceiling is dress, never information: with no model configured
-    and the ceiling off, `text` stays empty, nothing schedules, and every
-    verb above still worked -- which is what 'build the floor first' means.
-    """
-    from story.artifacts import schedule_artifact_wording
+def test_the_floor_is_whole_with_no_model(temp_db):
+    """The wording is dress, never information: with no model configured the
+    `text` stays empty and every verb above still worked -- which is what
+    'build the floor first' means.
 
+    THE CEILING SETTING IS GONE (2026-09-20). This used to prove the floor held
+    with the off-screen cognition rung turned down; that ladder is retired, and
+    the wording was never an off-screen cognition question anyway -- it was ON
+    by default for every story that never opened the menu. What still bounds the
+    spend is `_WORDING_ATTEMPT_CAP` and the job staying off the turn path, which
+    the two tests below pin.
+    """
     cid, chars, scene, ctx = _world(temp_db)
     _run(ctx, scene, [_post()])
     artifact = _standing(temp_db, cid)[0]
     assert artifact["text"] == ""
-
-    # Physical information remains whole below the model-spending rung.
-    temp_db.wset(cid, "dialogue_config", {
-        "offscreen_life": "deterministic"})
-    assert schedule_artifact_wording(ctx) is None
 
 
 def test_the_ceiling_schedules_a_job_and_stops_paying_after_failures(temp_db):

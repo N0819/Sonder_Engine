@@ -5865,8 +5865,12 @@ def director_resolve(ctx, nonce, _corrections=None):
         ctx.add_warning(f"living world config skipped: {exc}")
     if _mv_target:
         try:
-            if living_world_allows(_living_cfg,
-                                   "routine_residue", "floor"):
+            # UNCONDITIONAL since 2026-09-20. A room that does not drift while
+            # nobody is looking is not a room, and the switch that used to gate
+            # this was retired with the rest of the living-world ladder for the
+            # reason that retired rumour transport before it: a world where
+            # fires do not burn down is not coherent at any setting.
+            if True:
                 from world.routines import residue_for
                 _destination_residue = residue_for(
                     chat["id"], sc, _mv_target,

@@ -2405,6 +2405,31 @@ def detect_and_reconcile(ctx, nonce):
     from world import spatial_bubbles
     bubble = spatial_bubbles.detect_bubble(chat_id, frame_id, turn_idx)
     if bubble:
+        # HOW MANY THREADS THIS STORY IS PAYING FOR (`dialogue_config
+        # ["max_bubbles"]`, the owner's dial of 2026-09-20). A live bubble costs
+        # a character call and a Director resolve every committed beat, forever,
+        # so the one honest place to say "no more" is BEFORE a seventh thread
+        # starts -- not by standing an open one still, which is the cap the
+        # owner struck down on 2026-09-17 ("a character should never freeze
+        # unless they've been made dormant"). Every bubble that exists runs
+        # every beat; a character refused one is where every absent character
+        # was before bubbles existed, and Charter still moves them.
+        #
+        # SAID OUT LOUD, because a silent refusal is how a feature comes to
+        # look broken: the next beat asks again, so the refusal lifts by itself
+        # the moment a bubble merges.
+        from agents.offscreen_beat import live_bubbles
+        from story.scene import dialogue_config
+        _cap = int((dialogue_config(chat_id) or {}).get("max_bubbles", 3))
+        _open = len(live_bubbles(chat_id, frame_id))
+        if _open >= _cap:
+            ctx.add_warning(
+                "%s walked out of reach and no bubble opened: this story "
+                "carries %d of %d at once. They are off screen as anyone was "
+                "before bubbles, and the next beat asks again."
+                % (", ".join(bubble["characters"]) or "somebody", _open, _cap))
+            return {"active": False, "bubble_refused": "max_bubbles",
+                    "open_bubbles": _open, "max_bubbles": _cap}
         new_frame_id = perform_split(
             chat_id, frame_id, turn_idx, bubble=True,
             away_names=bubble["characters"], away_rooms=bubble["rooms"])

@@ -242,7 +242,6 @@ $("#b-dlg").onclick = async () => {
   if (S.chatId !== chatId) return;
   const bg = await api("GET", `/api/chats/${chatId}/background_config`);
   if (S.chatId !== chatId) return;
-  const lw = await api("GET", `/api/chats/${chatId}/living_world`);
   if (S.chatId !== chatId) return;
   let ch = { charters: { items: {} }, warnings: [] };
   try { ch = await api("GET", `/api/chats/${chatId}/charters`); }
@@ -282,39 +281,14 @@ $("#b-dlg").onclick = async () => {
   // all and nothing on screen to say it might.
   const promoteAfter = el("input", { type: "number", min: "0", max: "99",
                                      value: c.promote_after_addressed ?? 0 });
-  // ONE QUESTION (scene.COGNITION_OFF_RUNG). The five-rung ladder is still the
-  // mechanism underneath -- the living-world approaches are written against
-  // its rungs and `provision_story` publishes it -- but a host answers whether
-  // a mind nobody is watching may think and act. `offLifeRung` is what the
-  // toggle means on the ladder, computed here so the clamp lines below keep
-  // reading the engine's own vocabulary rather than a second one.
-  const offCog = el("input", { type: "checkbox",
-                               ...(c.offscreen_cognition === false ? {} : { checked: "" }) });
-  const offLifeRung = () => offCog.checked ? "character_agent" : "reactive";
-  const maxOffscreen = el("input", { type: "number", min: "0", max: "12",
-                                     value: c.max_offscreen_actors ?? 3 });
-  // Living world mechanisms (docs/design/DESIGN_LIVING_WORLD.md), same convention —
-  // and the clamp shown is the engine's own: each depth's `requires` rung
-  // arrives computed, and refreshLw mirrors living_world.effective_depth
-  // (the highest depth at or below the request that is built AND within
-  // the ceiling), so moving either dropdown updates what every mechanism
-  // will actually run as. One ceiling, many mechanisms; a mechanism above
-  // the ceiling is clamped visibly, never silently run or ignored.
-  const ladder = (c.offscreen_life_levels || []).map(l => l.value);
-  const permits = d => ladder.indexOf(offLifeRung()) >= ladder.indexOf(d.requires);
-  const lwSelects = {}, lwStatus = {};
-  const refreshLw = () => (lw.approaches || []).forEach(a => {
-    const value = lwSelects[a.approach].value;
-    let eff = "off", d = null;
-    for (const x of a.depths || []) {
-      if (x.built && permits(x)) eff = x.value;
-      if (x.value === value) { d = x; break; }
-    }
-    lwStatus[a.approach].textContent = !d || eff === value ? "" :
-      `runs as ${eff} — ` + [d.built ? "" : "that tier is unbuilt",
-        permits(d) ? "" : "off-screen cognition is off, and this needs it"]
-        .filter(Boolean).join("; ");
-  });
+  // HOW MANY ABSENT THREADS THIS STORY CARRIES (`max_bubbles`, 2026-09-20).
+  // One number replaces the whole off-screen cognition ladder: Charter and the
+  // Writers' Room superseded that tier
+  // (docs/design/DESIGN_OFFSCREEN_SUPERSEDED.md), and what costs now is a live
+  // causality bubble -- a character call and a Director resolve per thread per
+  // turn. The cap refuses to OPEN the next thread and never pauses an open one.
+  const maxBubbles = el("input", { type: "number", min: "0", max: "12",
+                                   value: c.max_bubbles ?? 3 });
   // Institutions (docs/design/DESIGN_INSTITUTIONS_AND_UPKEEP.md). There is now
   // exactly ONE way a defined institution can be inert, and it is not a
   // setting: `charter_runtime.schedule_charter_ticks` is ungated, so a story
@@ -389,19 +363,6 @@ $("#b-dlg").onclick = async () => {
       title: "Generate a lived-in location from story lore"
     });
   } }, "Generate a lived-in location from lore");
-  offCog.onchange = () => { refreshLw(); refreshCharter(); };
-  const lwRows = (lw.approaches || []).map(a => {
-    const sel = el("select", { onchange: refreshLw },
-      [el("option", { value: "off", ...(a.value === "off" ? { selected: "" } : {}) }, "off")]
-        .concat((a.depths || []).map(d => el("option",
-          { value: d.value, ...(d.value === a.value ? { selected: "" } : {}) },
-          d.built ? d.value : `${d.value} — not built yet`))));
-    const status = el("div", { class: "small dim" });
-    lwSelects[a.approach] = sel;
-    lwStatus[a.approach] = status;
-    return el("tr", {}, el("td", {}, a.label), el("td", {}, sel, status));
-  });
-  refreshLw();
   refreshCharter();
 
   modal("Dialogue config", b => b.append(
@@ -429,67 +390,39 @@ $("#b-dlg").onclick = async () => {
         el("div", {}, "Stop on question to player — same pause, triggered specifically by an NPC asking you something."),
         el("div", {}, "Silence ends exchange — if nobody has anything to say or do, the scene stops rather than manufacturing more dialogue to fill the turn."))),
     el("div", { class: "card", style: "margin-top:10px" },
-      el("div", { class: "section-title", style: "margin-top:0" }, "Simulation reach"),
+      el("div", { class: "section-title", style: "margin-top:0" }, "Absent threads"),
       el("div", { class: "small dim" },
-        "What the world and cast may do while you are not watching. The world "
-        + "moves either way: institutions keep themselves running, things "
-        + "already on a clock still land, and a stage a character declared "
-        + "while present still fires. One question is yours."),
+        "What happens to a character who walks out of your reach. They get a "
+        + "life rather than a pause: their own frame, their own beats, their "
+        + "own memories, and they rejoin carrying what they did. Institutions "
+        + "run themselves the whole time, things already on a clock still "
+        + "land, and word still travels by whoever carried it."),
       el("table", { class: "grid", style: "margin-top:6px" },
-        el("tr", {}, el("td", {}, "allow off-screen cognition"), el("td", {}, offCog)),
-        el("tr", {}, el("td", {}, "max off-screen actors"), el("td", {}, maxOffscreen))),
+        el("tr", {}, el("td", {}, "max open threads"), el("td", {}, maxBubbles))),
       el("div", { class: "small dim", style: "margin-top:6px" },
-        el("div", {}, el("b", {}, "Off"), " — nothing thinks while you are away. "
-          + "A dormant character is exactly where you left them, doing nothing "
-          + "you were not told about. Everything deterministic still runs: an "
-          + "institution keeps itself going, someone arrives when they said "
-          + "they would, food spoils, a consequence lands on the day it was set "
-          + "for, and a bounded stage a character declared out loud still "
-          + "fires on its trigger. No model call is ever spent off the turn."),
-        el("div", {}, el("b", {}, "On"), " — dormant characters get a sentence of "
-          + "what they have been up to at meaningful world changes, kept in a "
-          + "log; posted notices get their real written text; and a character "
-          + "you have explicitly opted in on their card advances their own "
-          + "plans, so a villain with a clock can beat you to something. Each "
-          + "of those is a small call made off the turn path, and the last one "
-          + "also needs the antagonist ladder's ceiling under Living world."),
+        el("div", {}, el("b", {}, "Max open threads"), " — how many absent "
+          + "characters may be living a thread of their own at once. Each one "
+          + "costs a little thinking every turn you take, off your turn, so "
+          + "this is the dial for how much story is running beside yours. "
+          + "0 means none."),
         el("div", { style: "margin-top:4px" },
-          el("b", {}, "Max off-screen actors"), " — how many characters may be ticked "
-          + "in one beat. 0 means none, whatever the level says."),
+          "At the limit, the next character to walk away simply does not get a "
+          + "thread — they are off screen the way everyone was before threads "
+          + "existed, and the next turn asks again, so the moment one of them "
+          + "rejoins you the next is free to start. Nobody who HAS a thread is "
+          + "ever paused to make room."),
         el("div", { style: "margin-top:4px" },
-          "Whatever the level, an off-screen character acts on what ",
+          "A character living their own thread acts on what ",
           el("i", {}, "they"),
           " know — never on where you are or what you just did. Someone who has "
           + "not been told cannot react to it.")),
-      el("div", { class: "section-title" }, "World clocks and aftermath"),
-      el("div", { class: "small dim" },
-        "These controls are only for place-level clocks — rooms drifting while unwatched, "
-        + "consequences landing, and unvisited places accruing aftermath. "
-        + "People, rumors, reporting lines, promises, markets, caravans and local reputation "
-        + "belong to Charter below and no longer have separate simulation switches. "
-        + "These are generation policies, not information rules: what happens, "
-        + "not who gets to know it. Each runs only up to the ceiling above; one "
-        + "set past it says what it actually runs as. All off by default; "
-        + "turning one on changes nothing already written."),
-      // (2) Witnessing/telling/carrying used to be a sixth row in this table
-      // ("Rumor ledger") and could be switched off. `living_world` dropped the
-      // approach and `carriers.advance_carriers` dropped its gate, so it is now
-      // unconditional -- which left the most consequential epistemic machinery
-      // in the engine with no representation in the only menu that discusses
-      // off-screen life.
       el("div", { class: "small dim", style: "margin-top:6px" },
-        el("b", {}, "Not a setting"), " — witnessing, telling, carrying. A "
-        + "public event is picked up only by whoever was physically standing "
-        + "there, travels because they travel, and loses detail with every "
-        + "mouth it passes through. This was once a mechanism you could switch "
-        + "off; it is now simply how the world works, because a world where "
-        + "word cannot move is not coherent at any setting."),
-      el("table", { class: "grid", style: "margin-top:6px" }, lwRows),
-      el("div", { class: "small dim", style: "margin-top:6px" },
-        (lw.approaches || []).map(a => el("div", { style: "margin-top:4px" },
-          el("div", {}, el("b", {}, a.label), " — ",
-            ((a.depths || [])[0] || {}).description || ""),
-          el("div", {}, "Cost — ", a.cost)))),
+        el("b", {}, "Not settings"), " — witnessing, telling and carrying; "
+        + "rooms drifting while unwatched; a consequence landing on the day it "
+        + "was set for; somewhere you have never been owing a history. These "
+        + "were once switches. They are now simply how the world works, "
+        + "because a world where word cannot move, fires do not burn down and "
+        + "causes do not land is not coherent at any setting."),
       el("div", { class: "section-title" }, "Institutions"),
       historyRoutePanel,
       el("div", { class: "small dim" },
@@ -560,16 +493,11 @@ $("#b-dlg").onclick = async () => {
           autonomy: +auto.value, allow_npc_initiative: npcInit.checked, allow_npc_to_npc_dialogue: npcNpc.checked,
           stop_on_player_address: stopAddr.checked, stop_on_question_to_player: stopQ.checked, silence_ends_exchange: silence.checked,
           promote_after_addressed: +promoteAfter.value,
-          offscreen_cognition: offCog.checked,
-          max_offscreen_actors: +maxOffscreen.value
+          max_bubbles: +maxBubbles.value
         });
         await api("PUT", `/api/chats/${chatId}/background_config`, {
           scene_life: sceneLife.value, max_managed: +maxManaged.value,
           max_reactors: +maxReactors.value
-        });
-        await api("PUT", `/api/chats/${chatId}/living_world`, {
-          living_world: Object.fromEntries(
-            Object.entries(lwSelects).map(([k, s]) => [k, s.value]))
         });
         closeModal(); toast("Dialogue config saved.", "ok");
       } }, "Save"))));

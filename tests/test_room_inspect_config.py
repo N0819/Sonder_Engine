@@ -79,14 +79,17 @@ class TestWhatItReturns:
         assert out["style"]["avoid"] == "no on-page harm to children"
         assert "genre" not in out["style"]
 
-    def test_it_reports_the_one_offscreen_question_not_five_rungs(self, temp_db):
+    def test_it_reports_how_many_threads_run_beside_the_player(self, temp_db):
+        """The five-rung cognition ladder is retired (2026-09-20) and so is the
+        toggle that collapsed it. What a plan can still ask is how many absent
+        threads this story carries, because a thread is what costs -- and a plan
+        that wants to send somebody away should know whether there is room."""
         cid = _chat(temp_db)
-        temp_db.wset(cid, "dialogue_config", {"offscreen_cognition": False})
+        temp_db.wset(cid, "dialogue_config", {"max_bubbles": 1})
 
         out = run_tool(cid, "inspect_config", {})
 
-        assert out["offscreen"]["cognition"] is False
-        assert out["offscreen"]["rung"] == "reactive"
+        assert out["offscreen"] == {"max_bubbles": 1}
 
     def test_it_reports_the_counts_a_plan_has_to_live_within(self, temp_db):
         cid = _chat(temp_db)

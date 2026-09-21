@@ -746,13 +746,14 @@ def _t_inspect_config(cid, frame_id):
             "promotion_dialogue": promotion.get("dialogue"),
             "promotion_mention": promotion.get("mention"),
         },
+        # WHAT RUNS BESIDE THE PLAYER. The off-screen cognition ladder is
+        # retired (2026-09-20): Charter, the Writers' Room and causality bubbles
+        # superseded every rung of it, and the one question a plan can still ask
+        # is how many absent threads this story is carrying -- because a thread
+        # is what costs, and a plan that wants to send somebody away should know
+        # whether there is room for them.
         "offscreen": {
-            # ONE QUESTION (scene.COGNITION_OFF_RUNG). The rung rides along
-            # because the living-world approaches are still written against
-            # it, so a plan that leans on one can check what it will run as.
-            "cognition": dialogue.get("offscreen_cognition"),
-            "rung": dialogue.get("offscreen_life"),
-            "max_offscreen_actors": dialogue.get("max_offscreen_actors"),
+            "max_bubbles": dialogue.get("max_bubbles"),
         },
     }
 
