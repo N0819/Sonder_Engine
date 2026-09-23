@@ -5882,6 +5882,31 @@ def director_resolve(ctx, nonce, _corrections=None):
         ctx.add_warning(
             f"charter figures not laid into the resolve scene: {exc}")
     if _figure_rows:
+        # WHOM A LINE IS FOR decides who answers it. A character addresses
+        # a stranger by the words its own view gave it ("the middle-aged
+        # broad-shouldered master miller ...") in `interaction.addresses`,
+        # and its speech rows carry `targets: []`; the voices below rank the
+        # addressed body first but read only `targets`, so the man spoken to
+        # at arm's length never counted as addressed and the cap went to
+        # whoever sorted first by name. Measured on the playerless Aldermill
+        # run (2026-09-23): the miller silent beside Emory for eleven beats
+        # while two carriers in other rooms answered for him. Resolved here
+        # with the same reader the speech log uses (`_bodies_addressed_as`),
+        # now that the figures stand in the scene it reads.
+        for _decl in decls or ():
+            _inter = _decl.get("interaction") if isinstance(_decl, dict) else None
+            _adds = (_inter or {}).get("addresses") if isinstance(_inter, dict) else None
+            if not _adds:
+                continue
+            _addressed = None
+            for _el in _decl.get("sequence") or ():
+                if (isinstance(_el, dict) and _el.get("type") == "speech"
+                        and not _el.get("targets")):
+                    if _addressed is None:
+                        _addressed = _bodies_addressed_as(
+                            ctx, resolve_sc, _decl.get("name"), _adds)
+                    if _addressed:
+                        _el["targets"] = list(_addressed)
         try:
             from .background import declare_charter_figures
             _figure_declarations = declare_charter_figures(

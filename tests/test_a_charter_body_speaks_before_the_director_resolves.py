@@ -252,3 +252,31 @@ class TestTheCapAsksTheCreature:
         background.declare_charter_figures(_ctx(cid), dict(
             TestTheDeclaredBeatIsWhatTheVoiceHears.INTERP), sc, rows, [], 0)
         assert "Well Thing" in asked and len(asked) == background.CHARTER_VOICES_PER_BEAT
+
+
+class TestAVoiceIsForSomeoneTheBeatReaches:
+    """Playerless Aldermill (2026-09-23): the cap filled with figures a room
+    or two off, and 24 of their lines reached no view."""
+
+    def _asked(self, monkeypatch, temp_db, volume):
+        cid = _chat(temp_db)
+        sc = {**SC, "positions": {"Iris Vale": "scullery"}}
+        asked = []
+        monkeypatch.setattr(background, "_react_one",
+                            lambda ctx, dr, name, *a, **k: asked.append(name) or None)
+        monkeypatch.setattr(background, "_player_room", lambda ctx, sc_: "scullery")
+        import copy
+        interp = copy.deepcopy(TestTheDeclaredBeatIsWhatTheVoiceHears.INTERP)
+        for row in interp["ledgers"]:
+            if "speech" in (row.get("categories") or []):
+                row["volume"] = volume
+                row["targets"] = []
+        rows = [{"name": "Ada", "room": "scullery"}, {"name": "Bran", "room": "yard"}]
+        background.declare_charter_figures(_ctx(cid), interp, sc, rows, [], 0)
+        return asked
+
+    def test_a_murmur_is_answered_in_its_own_room_only(self, monkeypatch, temp_db):
+        assert self._asked(monkeypatch, temp_db, "normal") == ["Ada"]
+
+    def test_a_shout_reaches_the_next_room(self, monkeypatch, temp_db):
+        assert sorted(self._asked(monkeypatch, temp_db, "shout")) == ["Ada", "Bran"]

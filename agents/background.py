@@ -1791,7 +1791,16 @@ def declare_charter_figures(ctx, interp, sc, figure_rows, decls, nonce):
     addressed |= {str(r).strip().casefold()
                   for r in (beat["flow"].get("addressed_to_refs") or [])
                   if isinstance(r, str) and not r.strip().isdigit()}
-    p_room = _player_room(ctx, sc)
+    # THE ROOMS THE BEAT'S PEOPLE STAND IN, not the player's alone: a
+    # causality bubble's scene places no player, and ranking by the absent
+    # player's room sent the cap to whoever sorted first by name
+    # (`common._aperture_centers`, the aperture's own answer to who the
+    # beat is about).
+    from agents.common import _aperture_centers
+    try:
+        own_rooms = set(_aperture_centers(ctx, sc, _player_room(ctx, sc)))
+    except Exception:
+        own_rooms = {_player_room(ctx, sc)}
     roster = {n.casefold() for n in _registered_name_roster(ctx.chat, ctx.cast)}
     roster |= {(e.get("name") or "").casefold()
                for e in (ctx.extra_players or [])}
@@ -1812,8 +1821,19 @@ def declare_charter_figures(ctx, interp, sc, figure_rows, decls, nonce):
         # own room, then names.
         return (0 if name.casefold() in addressed else 1,
                 0 if name in creatures else 1,
-                0 if rooms.get(name) == p_room else 1, name.casefold())
+                0 if rooms.get(name) in own_rooms else 1, name.casefold())
 
+    # A VOICE IS FOR SOMEONE THE BEAT REACHES. Outside the rooms the beat's
+    # people stand in, a figure speaks up only when it was addressed or a
+    # voice was raised -- earshot is what a shout reaches, not what a
+    # murmur does. The cap otherwise filled with figures a room or two off,
+    # and 24 of their lines "reached no view" in one 24-beat run (playerless
+    # Aldermill, 2026-09-23).
+    raised = any(str(d.get("volume") or "").casefold() in ("loud", "shout")
+                 for d in beat["dialogue_log"])
+    names = [n for n in names
+             if n.casefold() in addressed or n in creatures
+             or rooms.get(n) in own_rooms or raised]
     refs_of = {str(r.get("name") or ""): (str(r.get("charter") or ""),
                                           str(r.get("body") or ""))
                for r in figure_rows if isinstance(r, dict)

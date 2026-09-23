@@ -11188,7 +11188,9 @@ def _aperture_centers(ctx, sc, player_room):
         room = room_of(sc, name) if name else None
         if room and str(room) not in rooms:
             rooms.append(str(room))
-    if not rooms and player_room and not positions:
+    # Overridden only by the scene's OWN cast: with none of them placed there
+    # is nobody else the beat could be about, and the player's room stands.
+    if not rooms and player_room:
         rooms = [str(player_room)]
     return sorted(rooms)
 
