@@ -8,9 +8,9 @@
 |---|---:|---|---|
 | `agents/__init__.py` | 100 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
 | `agents/background.py` | 2198 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
-| `agents/character.py` | 4684 | Private character decision agent. | `agents.character_kernel`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
+| `agents/character.py` | 4714 | Private character decision agent. | `agents.character_kernel`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/character_kernel.py` | 496 |  | — |
-| `agents/common.py` | 11630 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
+| `agents/common.py` | 11640 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 5162 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 8411 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 477 |  | `story.character_schema`, `world.spatial` |
@@ -30,7 +30,7 @@
 | `agents/mapping.py` | 665 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `mind.memory`, `story.scene`, `world.spatial` |
 | `agents/narration.py` | 2739 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
 | `agents/offscreen_beat.py` | 356 |  | — |
-| `agents/perception.py` | 7257 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
+| `agents/perception.py` | 7269 | Opening, action-onset, and outcome observer views. | `agents`, `agents.common`, `core.db`, `core.pipeline_context`, `mind`, `story`, `story.character_schema`, `story.scene`, `world.beat_ledger`, `world.scene_memo`, `world.spatial` |
 | `agents/runtime.py` | 1768 | Pipeline plans, dispatch, streaming, cancellation, resume, and reruns. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.storage`, `core.db`, `core.pipeline_context`, `llm.providers`, `persist.checkpoints`, `persist.commit`, `story.character_schema`, `story.scene` |
 | `agents/storage.py` | 103 | Step and active-variant persistence helpers. | `core.db`, `persist.steps` |
 | `agents/story_planner.py` | 1747 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
@@ -204,7 +204,7 @@
 | `world/spatial_barriers.py` | 931 |  | `world.spatial_orientation` |
 | `world/spatial_bubbles.py` | 592 |  | `world.spatial`, `world.spatial_frames` |
 | `world/spatial_contact_migration.py` | 332 |  | `story.character_schema`, `world.spatial_contacts`, `world.spatial_identity` |
-| `world/spatial_contacts.py` | 1948 |  | `world.spatial_containment`, `world.spatial_identity`, `world.spatial_transit` |
+| `world/spatial_contacts.py` | 1957 |  | `world.spatial_containment`, `world.spatial_identity`, `world.spatial_transit` |
 | `world/spatial_containment.py` | 3280 |  | `world.spatial_barriers`, `world.spatial_identity`, `world.spatial_transit` |
 | `world/spatial_fov.py` | 1757 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_frames.py` | 2640 |  | `core.db`, `core.frames`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial` |
@@ -249,14 +249,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_step()` | 3449 | 1236 lines |
-| `_annotate_known_exits()` | 2693 | 469 lines |
-| `_ground_observation_citations()` | 1662 | 328 lines |
-| `_unanswered_question_note()` | 561 | 237 lines |
-| `_destination_from_goals()` | 2259 | 109 lines |
-| `_recent_self_moves()` | 279 | 98 lines |
-| `sprint_offers()` | 3197 | 97 lines |
-| `_impossible_knowledge()` | 900 | 89 lines |
+| `character_step()` | 3478 | 1237 lines |
+| `_annotate_known_exits()` | 2695 | 469 lines |
+| `_ground_observation_citations()` | 1664 | 328 lines |
+| `_unanswered_question_note()` | 563 | 237 lines |
+| `_destination_from_goals()` | 2261 | 109 lines |
+| `_recent_self_moves()` | 281 | 98 lines |
+| `sprint_offers()` | 3199 | 97 lines |
+| `_impossible_knowledge()` | 902 | 89 lines |
 
 ### `agents/character_kernel.py`
 
@@ -277,12 +277,12 @@
 |---|---:|---:|
 | `norm_sequence()` | 4378 | 294 lines |
 | `presence_figures_for_room()` | 2206 | 253 lines |
-| `_check_narrator_fidelity()` | 10805 | 252 lines |
+| `_check_narrator_fidelity()` | 10815 | 252 lines |
+| `_scrub_unknown_identities()` | 5704 | 187 lines |
 | `_unknown_actor_label()` | 5296 | 185 lines |
-| `_scrub_unknown_identities()` | 5704 | 177 lines |
-| `_scrub_invented_dialogue()` | 9318 | 151 lines |
+| `_scrub_invented_dialogue()` | 9328 | 151 lines |
 | `observer_body_regions()` | 1724 | 140 lines |
-| `_check_quote_attribution()` | 10368 | 139 lines |
+| `_check_quote_attribution()` | 10378 | 139 lines |
 
 ### `agents/composer.py`
 
@@ -525,14 +525,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_composer_outcome_views()` | 6371 | 887 lines |
-| `_composer_act_views()` | 5668 | 447 lines |
-| `_composer_standing_percepts()` | 5009 | 321 lines |
-| `perception_outcome()` | 3297 | 319 lines |
-| `perception_act()` | 2805 | 222 lines |
+| `_composer_outcome_views()` | 6383 | 887 lines |
+| `_composer_act_views()` | 5680 | 447 lines |
+| `_composer_standing_percepts()` | 5021 | 321 lines |
+| `perception_outcome()` | 3309 | 319 lines |
+| `perception_act()` | 2817 | 222 lines |
 | `_outcome_event_stream()` | 850 | 199 lines |
 | `_source_channels()` | 1428 | 142 lines |
-| `_scent_sources_for()` | 4546 | 130 lines |
+| `_scent_sources_for()` | 4558 | 130 lines |
 
 ### `agents/runtime.py`
 
@@ -2499,7 +2499,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_contact_ops()` | 1347 | 422 lines |
+| `apply_contact_ops()` | 1347 | 431 lines |
 | `_clean_contact()` | 925 | 168 lines |
 | `normalize_scene_contacts()` | 1243 | 76 lines |
 | `contacts_across_enclosure()` | 1135 | 68 lines |

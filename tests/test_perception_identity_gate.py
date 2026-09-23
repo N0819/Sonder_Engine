@@ -650,6 +650,29 @@ def test_a_fragment_of_a_hyphenated_title_is_not_a_name():
     assert leaked == ["Flume-tender Hobwaldold Wheatwatersack"]
 
 
+def test_a_role_worn_in_a_name_is_not_a_name():
+    """Playerless Aldermill round 8 (2026-09-23), idx 15-23: the reeve's post
+    title "Reeve" was scrubbed as a part of "Reeve Cuthon Hurster", and Sal's
+    views read "Through the second open doorway is the unfamiliar person's
+    Hall", with nine false tripwires. The role the roster carries for the
+    body is exempt, as `_unknown_actor_label` already exempts it."""
+    from agents.common import _scrub_unknown_identities
+    from agents.perception import _identity_roster
+    roster = _identity_roster(
+        "Nobody", "", [], bodies=[{"name": "Reeve Cuthon Hurster",
+                                   "appearance": "a gaunt official",
+                                   "role": "reeve"}])
+    src = [s for s in roster if s["name"] == "Reeve Cuthon Hurster"]
+    assert src and src[0]["role"] == "reeve"
+    text, leaked = _scrub_unknown_identities(
+        "Through the second open doorway is Reeve's Hall. Cuthon waits there.",
+        allowed_forms=["Sal Weatherby"], unknown_sources=src,
+        labels={"Reeve Cuthon Hurster": "the gaunt official"})
+    assert text.startswith("Through the second open doorway is Reeve's Hall.")
+    assert "Cuthon" not in text and "the gaunt official" in text
+    assert leaked == ["Reeve Cuthon Hurster"]
+
+
 def test_a_bubble_has_no_player_to_look_for(temp_db, monkeypatch):
     """Playerless Aldermill round 7 (2026-09-23): once Emory carried a tub and
     a paddle, the two props were two candidate rooms for the absent player

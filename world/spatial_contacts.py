@@ -1758,13 +1758,22 @@ def apply_contact_ops(scene: dict, ops, *, _age=True, report=None) -> dict:
     # Out of band, never onto the scene: the saved document carries world
     # state and nothing else, and a `_`-prefixed scratch key is exactly what
     # `test_nothing_is_stashed_in_the_saved_scene` exists to refuse.
+    # A SENTENCE, like every other line this report carries. These were
+    # (was, now) pairs, the shape the one consumer stopped unpacking; it
+    # stringified them, and the Director's notices read "('Sal Weatherby's
+    # feet on market_cross's sandstone steps', 'Sal Weatherby's feet on
+    # market_cross's sandstone steps')" -- a hold re-described in the same
+    # words, which is no news at all (playerless Aldermill round 8,
+    # 2026-09-23). Only a hold that really moved is told.
     if report is not None:
-        report.extend(
-            (f"{a['actor']}'s {a['actor_part']} on {a['target']}'s "
-             f"{a['target_part']}",
-             f"{b['actor']}'s {b['actor_part']} on {b['target']}'s "
-             f"{b['target_part']}")
-            for a, b in displaced)
+        for a, b in displaced:
+            was = (f"{a['actor']}'s {a['actor_part']} on {a['target']}'s "
+                   f"{a['target_part']}")
+            now = (f"{b['actor']}'s {b['actor_part']} on {b['target']}'s "
+                   f"{b['target_part']}")
+            if " ".join(was.split()).casefold() != " ".join(now.split()).casefold():
+                report.append(f"contact moved: {was} is now {now}; the old "
+                              "spot is released")
     return scene
 
 

@@ -1355,6 +1355,21 @@ def test_every_contact_report_is_a_sentence():
     assert "report.append((" not in source
 
 
+def test_a_moved_hold_is_told_in_a_sentence():
+    """The source check above missed a GENERATOR of pairs handed to
+    `report.extend`, and the Director's notices read "('Sal Weatherby's feet
+    on market_cross's sandstone steps', 'Sal Weatherby's feet on ...')"
+    (playerless Aldermill round 8, 2026-09-23). Asked of the output instead:
+    every line is a sentence, and a hold that moved says where it went."""
+    scene = _scene()
+    apply_contact_ops(scene, [{"op": "add", **_hold()}])
+    report = []
+    apply_contact_ops(scene, [{"op": "add", **_hold(target_part="side")}],
+                      report=report)
+    assert report and all(isinstance(line, str) for line in report)
+    assert any("waist" in line and "side" in line for line in report)
+
+
 class TestPlacementIsNotContact:
     """Where a body has come to be relative to another is a position.
 

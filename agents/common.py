@@ -5783,6 +5783,16 @@ def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources,
         # tables are language DATA the pack already owns for naming.
         _generic = set(_ling("_NAME_TITLE_TOKENS")) | set(
             _ling("_GENERIC_LABEL_HEADS"))
+        # AND A ROLE WORN IN THE NAME IS NOT IDENTITY -- `_unknown_actor_label`'s
+        # rule, for the same bodies: an institution puts its post in front of
+        # the personal name ("Reeve Cuthon Hurster"), and the language's own
+        # title table cannot know every post a town invents. Scrubbed as a
+        # part, "Reeve" turned the room "Reeve's Hall" into "the unfamiliar
+        # person's Hall" in Sal's views on five beats, with nine false
+        # tripwires (playerless Aldermill round 8, 2026-09-23). The full name
+        # and the personal parts are still scrubbed.
+        _generic |= {tok.casefold() for key in ("role", "noun")
+                     for tok in re.findall(r"[\w-]+", str(src.get(key) or ""))}
         # A HYPHENATED COMPOUND IS ONE WORD, the rule the label check below
         # already keeps: its fragments are not spellings of the body. Split
         # on every non-word character, the post "Flume-tender" gave a part

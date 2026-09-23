@@ -1810,7 +1810,8 @@ def _identity_roster(p_name, p_appearance, cast, scene=None, bodies=()):
             listed.add(name.casefold())
             roster.append({
                 "name": name, "appearance": ent.get("appearance"),
-                "aliases": [a for a in (ent.get("aliases") or []) if a]})
+                "aliases": [a for a in (ent.get("aliases") or []) if a],
+                **_worn_role(name, bodies)})
     # AND EVERY BODY THIS BEAT LAID IN VIEW. A charter body the scene does
     # not stand is laid for the stage alone, so it is in no ledger the lines
     # above read -- and a given name the encoder wrote into the observer's
@@ -1823,8 +1824,19 @@ def _identity_roster(p_name, p_appearance, cast, scene=None, bodies=()):
         listed.add(name.casefold())
         roster.append({
             "name": name, "appearance": body.get("appearance"),
-            "aliases": [a for a in (body.get("aliases") or []) if a]})
+            "aliases": [a for a in (body.get("aliases") or []) if a],
+            **_worn_role(name, bodies)})
     return roster
+
+
+def _worn_role(name, bodies):
+    """`{role, noun}` of the laid body called `name`, for the scrub: a role
+    worn in a name is not identity (`_scrub_unknown_identities`)."""
+    for body in bodies or ():
+        if str((body or {}).get("name") or "").strip().casefold() == name.casefold():
+            return {k: str(body.get(k) or "") for k in ("role", "noun")
+                    if str(body.get(k) or "").strip()}
+    return {}
 
 #: How much of the text on either side of an offending fragment a diagnostic
 #: carries. A GUARD'S MESSAGE HAS TO LOCATE ITS CAUSE. The self-narration

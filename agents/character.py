@@ -100,6 +100,8 @@ from .common import (
     observer_label_fn,
     observer_name_scrub,
     scrub_names_deep,
+    _recognizes,
+    _unknown_actor_label,
     _char_known_tags,
     _dict,
     _list,
@@ -3366,6 +3368,33 @@ def _extension_character_payload(ctx, cid, payload, sheet=None):
         return payload
 
 
+def tellers_as_known(chat, observer, cast, scene, reports):
+    """`reports` with each teller said as THIS mind knows them.
+
+    WHO TOLD YOU IS SAID AS YOU KNOW THEM. The telling path records the
+    teller's canonical name, and it reached the mind verbatim: Sal carried
+    "told_by: Hostler Gidoton Barrelfielder" into ten character calls, a name
+    no channel ever gave her (playerless Aldermill round 8, 2026-09-23). The
+    same floor every other named field passes: a teller this mind has met
+    keeps the name; anyone else is the label the scene gives them -- or, for
+    a teller the scene no longer places, the stranger no appearance
+    describes. Copies; the stored reports keep the engine's record."""
+    if not reports:
+        return reports
+    known = set((wget(chat["id"], "known", {}) or {}).get(observer) or [])
+    label = observer_label_fn(chat, observer, cast, scene=scene)
+    out = []
+    for report in reports:
+        report = dict(report)
+        teller = str(report.get("told_by") or "").strip()
+        if teller and not _recognizes(teller, known):
+            shown = str(label(teller) or "").strip()
+            report["told_by"] = (shown if shown and shown != teller
+                                 else _unknown_actor_label(teller))
+        out.append(report)
+    return out
+
+
 def _character_perception(ctx, cid, nonce):
     """Select a view and its matching evidence, including resumed micro-rounds."""
     base = ctx.get("perception_act", {}) or {}
@@ -4389,7 +4418,8 @@ def character_step(ctx, cid, nonce):
         ctx.add_warning(
             f"character {character_name(sh)}: carried reports unavailable: {exc}")
     if _carried_reports:
-        payload["carried_reports"] = _carried_reports
+        payload["carried_reports"] = tellers_as_known(
+            chat, character_name(sh), ctx.cast, sc, _carried_reports)
 
     # The lazy gap rung (proposal section 1.2 step 2, the reader): a
     # character acting again after an absence gets the deterministic record
