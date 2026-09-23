@@ -833,6 +833,20 @@ def _causal_outcome_sequences(ctx, interp, res, player_name, sequences, cast_nam
     return result
 
 
+def _line_words(text):
+    """A spoken line's identity: its words, in order, case folded.
+
+    The author quotes a line with the punctuation its speech tag wants --
+    `"Aye. Keep your eyes open down there," he said` -- and the dialogue log
+    stores the line as spoken, ending "." Compared as text, the two were two
+    lines: none of four bound on the playerless Aldermill run (round 7,
+    2026-09-23, idx 9), so each was appended after the beat's own stream,
+    past the listener's walk out of the square, and graded from the room she
+    ended in. A line split around its tag and joined by the encoder differs
+    in its middle punctuation the same way."""
+    return " ".join(re.findall(r"\w+", _quote_body(str(text or "")).casefold()))
+
+
 def _outcome_event_stream(ctx, scene, interp, res, player_name,
                           dialogue, background_beats):
     """One causally ordered speech/action stream for outcome perception.
@@ -967,13 +981,12 @@ def _outcome_event_stream(ctx, scene, interp, res, player_name,
             # not an identity the world could ever name.
             declared_id = str(event.get("_ledger_citation", event.get("event_id")) or "").strip()
             if event.get("type") == "speech" and event.get("text"):
-                wanted = _quote_body(str(event.get("text") or "")).strip()
+                wanted = _line_words(event.get("text"))
                 match = next((
                     index for index, entry in enumerate(dialogue)
                     if index not in used_dialogue
                     and _same_speaker(entry.get("speaker"), actor, is_player)
-                    and _quote_body(str(entry.get("exact_quote") or "")).strip()
-                    == wanted
+                    and _line_words(entry.get("exact_quote")) == wanted
                 ), None)
                 if match is not None:
                     used_dialogue.add(match)

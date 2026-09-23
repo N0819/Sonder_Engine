@@ -44,7 +44,7 @@ from world.spatial_fov import (
     height_rank,
     room_grid,
 )
-from world.spatial_geometry import normalize_cell
+from world.spatial_geometry import door_anchor_id, effective_station, normalize_cell
 from world.spatial_identity import room_of, scene_names_body
 from world.spatial_routing import passable_path
 
@@ -311,6 +311,18 @@ def walk(scene: dict, name: str, to_room, to_cell=None, *, paces,
                 # side from wherever the body stands, and the body stays
                 # where it stood until the budget covers that.
                 needed = max(1, room_grid(scene, room_id).side // 2)
+                # ...UNLESS THE BODY IS STANDING AT IT. A station `at` this
+                # very doorway is the body in it -- on the ladder, in the
+                # hatch -- and it costs nothing to reach. Emory stood "on"
+                # the hatch to the wheelhouse (`at: door:mill_wheelhouse`),
+                # a vertical edge with no wall to place it on, and the walk
+                # charged him nine paces from the middle of the floor and
+                # left him there (playerless Aldermill round 7, 2026-09-23,
+                # idx 10).
+                if (room_id == here and not crossed and from_cell is None
+                        and str(effective_station(scene, name).get("at") or "")
+                        == door_anchor_id(legs[0])):
+                    needed = 0
                 if budget < needed:
                     return {"room": room_id, "cell": cell, "arrived": False,
                             "crossed": crossed, "paces": walked + budget}

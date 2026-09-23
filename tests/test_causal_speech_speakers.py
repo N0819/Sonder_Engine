@@ -86,3 +86,23 @@ def test_same_line_before_and_after_movement_keeps_both_occurrences(temp_db, mon
               [(1, "bay"), (2, "bay"), (3, "corridor")]]
     assert event_worlds(worlds, stream)[0] == {"room": "bay"}
     assert event_worlds(worlds, stream)[2] == {"room": "corridor"}
+
+
+def test_a_line_quoted_with_its_tags_comma_keeps_its_slot(temp_db, monkeypatch):
+    """Playerless Aldermill round 7 (2026-09-23) idx 9: the author quoted
+    "Aye. Keep your eyes open down there," before its tag and the dialogue
+    log held it ending "."; compared as text the line bound to nothing, was
+    appended after the listener's walk out of the square, and was heard from
+    the room she ended in."""
+    ctx, _ids, scene = _ctx(temp_db)
+    first = dict(ctx.director_interpret["sequence"][0], text="Ready,")
+    move = {"type": "action", "observable": "walks to the corridor",
+            "actor": first["actor"], "chrono_id": 2, "event_id": "move",
+            "from_declaration": first["from_declaration"]}
+    ctx.director_interpret["sequence"] = [first, move]
+    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {"ledgers": []})
+    out = director.director_resolve(ctx, "n0")
+    spoken = [dict(d, exact_quote='"Ready."') for d in out["dialogue_log"]]
+    stream = perception._outcome_event_stream(
+        ctx, scene, ctx.director_interpret, out, "Nia", spoken, [])
+    assert [e["kind"] for e in stream] == ["speech", "action"]

@@ -239,7 +239,7 @@ It works to the engine's own division of labour:
 - Caps are `MAX_ROOM_STEPS = 8` and `MAX_ROOM_SECONDS = 150` (named).
 
 
-## Playerless bubbles (2026-09-23, `tools/two_lives_drive.py`, rounds 2–6)
+## Playerless bubbles (2026-09-23, `tools/two_lives_drive.py`, rounds 2–8)
 
 Two characters, Emory Vane and Sal Weatherby, each live in their own
 causality bubble in the mill town of Aldermill, which is simulated by a
@@ -326,17 +326,61 @@ each round turned up, and the class it was fixed as:
     calibration: a normal line at arm's reach three paces from the engine is
     now heard whole.
 
+**Round 7** (median beat 42 s, mean 45 s, 1,084 s for 24 beats; round 6
+took 1,579 s). The firewall held on every surface: no townsperson's given or
+family name reached either character.
+- **Where round 6's 97 s went.** Not townspeople asked again on later beats,
+  as first reported: a voice declining to react answers with empty strings,
+  and the placeholder-skeleton check counted an all-empty object as a "..."
+  skeleton and re-sent it without JSON mode. 21, 28 and 7 extra calls in
+  rounds 5-7, about 100 s a run. Found by replaying one beat with every
+  stream printed. The owner-approved re-ask rule is held: its premise was
+  this guard.
+- Voices of one beat now run at once; the provider silence rule is split
+  (30 s before the first token, 10 s between, the socket narrowed to match).
+- **One town's events.** Stamped with the era, fired where somebody stands
+  to meet them, else recorded in the era's own frame; `engine_notices` per
+  frame; a place's generated past is history and never comes due (the
+  owner's stories fired 179-373 presim rows at their opening commit).
+- A regression of round 6's own (conduct refused 5 of 5 when named by the
+  body), a phantom absent player costing 11 model calls, a hyphenated
+  title's fragment scrubbed out of a room name, a line split around its tag
+  delivered twice ("addeds"), and a body still "on the wharf deck" in the
+  market square.
+- **Sibling bubbles merge** when their people come within each other's
+  reach (`perform_sibling_merge`), each side's state carried whole.
+- A name carries a trade, not the watch's duty this hour (183 title changes
+  in ~100 s of town time); a held thing is the holder's, not "lying here"; a
+  doorway's name is mirrored like its barrier; the router is shown what is
+  already owed.
+
 **Open:**
-- **Sibling bubbles never merge** when their characters meet; only a parent
-  and its child do.
-- **Town events** fire in the bubble whose tick produced them. Pre-story
-  history stamped to the present never fires in a bubble.
-- **Jev grants that come back empty.** In round 5 these were: overlays 17 of
-  18, substance_ops 14 of 17, contact_action_ops 7 of 8. The encoder's
-  system prompt grew from 14K to 22K tokens with them. Several of the empty
-  grants were for real marks (a "grit-streaked" hand), so whether Jev
-  over-asks or the encoder under-encodes is not settled. Tuning either would
-  be blind.
-- **Provider stalls.** A 10 s first-token silence limit with a single
-  provider cost roughly 320 s of retries in round 5, and two turns failed
-  outright.
+- **The author is not shown standing state.** Its payload is identity and
+  place (`world_index`), standing positions and contacts, and what already
+  happened -- never what a thing's record says. A state the prose asserts and
+  the world does not hold is therefore re-invented each beat: the river at
+  the wharf stood "four fingers below the weed mark", "four inches", "dropped
+  considerably" and "within two feet of the stringers" in four of Sal's
+  beats, and `entities` (0.13-0.31) and `world_facts` (0.07-0.14) were never
+  granted. A standing-state slice for the author and a reason for Jev to
+  record a first-stated state is a change to the contract's own payload, so
+  it is the owner's call.
+- **Leased and never voiced.** Three deputies stood motionless at the market
+  cross for fourteen beats while Sal was one room away: in the aperture, so
+  leased and out of the charter's hands; not in her room, so never voiced.
+- **Jev grants that come back empty** stay unsettled. On Sal's river beats
+  `overlays` scored 0.53-0.66 every beat and nothing was written, which reads
+  as the router over-asking rather than the encoder dropping a change.
+- **An act is labelled from where the observer ENDED the beat.** Sal faced
+  three deputies at the market cross, then walked to the wharf; all six of
+  their acts and lines reached her as "the unfamiliar person" (round 7 idx 9;
+  round 5 idx 4 the same). The acts were graded at their moment and
+  delivered in full -- only the naming failed: the outcome roster and
+  display map are built once, from the end-of-beat rooms, and a neighbour
+  room with no `dir` is not in them. The fix, traced but not built: roster
+  the start rooms of anyone who moved, label each event from its own moment
+  (`_as_of`), one descriptor per (observer, body) per beat. Its sibling --
+  lines that lost their slot because the tag's comma made them a different
+  text -- is fixed.
+- A continuing machine noise is sourced to the body that set it going (the
+  encoder core's own rule).
