@@ -372,6 +372,50 @@ def _voice_call(ctx, step_key, who, call):
         return None
 
 
+def _voices_at_once(calls):
+    """Run independent voice calls at once; the answers come back in the
+    order they were asked.
+
+    Each voice answers the beat from its own presence's view, and the prompt
+    forbids one referencing another, so nothing one says can reach another in
+    the same beat -- running them one after another bought nothing but time.
+    Measured on the playerless Aldermill runs (2026-09-23): up to three calls
+    in series on every beat, 30 s of a 51 s resolve at round 6 idx 3.
+
+    One call runs as it always did. Two or more each run in a COPY of this
+    thread's context made here, in the parent -- a worker inherits no
+    contextvars (`director._run_specialists`) -- with the streaming sinks
+    cleared, because interleaved JSON is no stream. Cancellation propagates;
+    any other failure is raised as the first one in ask order, where the
+    loop this replaces would have raised it."""
+    if len(calls) < 2:
+        return [call() for call in calls]
+    import contextvars
+    from concurrent.futures import ThreadPoolExecutor
+    from llm.providers import Aborted, generation_event_sink, token_sink
+
+    def isolated(call):
+        token_sink.set(None)
+        generation_event_sink.set(None)
+        return call()
+
+    with ThreadPoolExecutor(max_workers=len(calls)) as pool:
+        futures = [pool.submit(contextvars.copy_context().run, isolated, call)
+                   for call in calls]
+    answers, failure = [], None
+    for future in futures:
+        try:
+            answers.append(future.result())
+        except Aborted:
+            raise
+        except Exception as exc:
+            failure = failure or exc
+            answers.append(None)
+    if failure is not None:
+        raise failure
+    return answers
+
+
 def _one_answer_per_line(ctx, result):
     """A LINE AIMED AT ONE PERSON IS ANSWERED BY ONE PERSON.
 
@@ -593,8 +637,8 @@ def _background_react(ctx, nonce):
     # single batched call is N calls for possibly-similar reactions, cheaper to
     # reason about than micro-perceiving between them (which would rebuild
     # interaction_loop for minds that lack the state that loop exists to guard).
-    reactions = []
     _meta = demand.get("meta") or {}
+    asks = []
     for name in names:
         # The gate hands back NAMES; the ledger keys on minted uids. The
         # resolver seam connects them (aka spellings included), and a name
@@ -606,12 +650,13 @@ def _background_react(ctx, nonce):
         present_others = _present_others(
             ctx, sc, presence_room(sc, name, rec),
             _presence_recognizes(ctx, name))
-        entry = _react_one(ctx, dr, name, present_others, roster, sc,
-                           rec, nonce,
-                           player_addressed=bool(
-                               (_meta.get(name) or {}).get("player_addressed")))
-        if entry:
-            reactions.append(entry)
+        asks.append((name, rec, present_others))
+    reactions = [entry for entry in _voices_at_once([
+        (lambda name=name, rec=rec, others=others: _react_one(
+            ctx, dr, name, others, roster, sc, rec, nonce,
+            player_addressed=bool(
+                (_meta.get(name) or {}).get("player_addressed"))))
+        for name, rec, others in asks]) if entry]
     agent_calls = ["background_react"] * len(reactions)
     if chorus is not None:
         # Deterministic, model-free: the beat SAYS the address was to a
@@ -1838,9 +1883,8 @@ def declare_charter_figures(ctx, interp, sc, figure_rows, decls, nonce):
                                           str(r.get("body") or ""))
                for r in figure_rows if isinstance(r, dict)
                and r.get("charter") and r.get("body")}
-    out = []
-    for index, name in enumerate(
-            sorted(names, key=rank)[:CHARTER_VOICES_PER_BEAT]):
+    asks = []
+    for name in sorted(names, key=rank)[:CHARTER_VOICES_PER_BEAT]:
         # THE RECORD BY ITS PERMANENT IDENTITY FIRST. A ledger record minted
         # under another spelling (the opening Director's name for the body,
         # chat 5 turns 0-2) is the same body; found by name alone the voice
@@ -1855,8 +1899,14 @@ def declare_charter_figures(ctx, interp, sc, figure_rows, decls, nonce):
         present_others = _present_others(
             ctx, sc, presence_room(sc, name, rec),
             _presence_recognizes(ctx, name))
-        entry = _react_one(ctx, beat, name, present_others, roster, sc, rec,
-                           nonce, player_addressed=name.casefold() in addressed)
+        asks.append((name, rec, present_others))
+    entries = _voices_at_once([
+        (lambda name=name, rec=rec, others=others: _react_one(
+            ctx, beat, name, others, roster, sc, rec, nonce,
+            player_addressed=name.casefold() in addressed))
+        for name, rec, others in asks])
+    out = []
+    for index, ((_name, rec, _others), entry) in enumerate(zip(asks, entries)):
         if not entry:
             continue
         sequence = []

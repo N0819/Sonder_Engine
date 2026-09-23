@@ -241,3 +241,33 @@ def _no_learned_rate_limit_between_tests():
     providers._EMBED_PACE.update({"interval": 0.0, "next_at": 0.0})
     for queued in memory._REPAIR_PENDING.values():
         queued.clear()
+
+
+@pytest.fixture(autouse=True)
+def _fresh_provider_context():
+    """Every provider ContextVar starts each test unset, and is put back after.
+
+    A ContextVar set on a test's thread outlives the test: pytest runs every
+    test of a worker on the same thread, in the same context. The provider's
+    are records of the LAST call (`last_reasoning`, `last_finish_reason`,
+    `last_request_shape`) and the per-call sinks and overrides, so one test
+    asserting a stream's trace left it standing for whichever test the
+    scheduler put next. Measured 2026-09-23: `test_claude_cli_provider`
+    leaves `last_reasoning == "private"`, and
+    `test_parallel_group::test_each_worker_carries_its_own_reasoning_trace_out`
+    failed whenever xdist ran it after that file on one worker -- adding two
+    unrelated test files was enough to deal them together. Every one of these
+    defaults to None, which is what "unset" reads as.
+    """
+    import contextvars
+    from llm import providers
+    tokens = [(var, var.set(None)) for var in vars(providers).values()
+              if isinstance(var, contextvars.ContextVar)]
+    yield
+    for var, token in reversed(tokens):
+        try:
+            var.reset(token)
+        except ValueError:
+            # Created in another context (a test that ran its body through
+            # `Context.run`): nothing of ours to put back there.
+            pass

@@ -256,7 +256,9 @@ def test_a_gemini_model_never_gets_a_grammar():
 
 def test_a_provider_that_says_nothing_for_ten_seconds_is_unresponsive():
     """Owner's rule 2026-09-14: silence, not elapsed time, is the signal. A
-    reasoning fragment is activity; a keepalive line is not."""
+    reasoning fragment is activity; a keepalive line is not. Split 2026-09-23:
+    before the first token the allowance is thirty seconds, not ten
+    (`test_a_first_token_may_take_thirty_seconds`)."""
     from llm import providers
     now = [0.0]
     clock = providers._ActivityClock(limit=10.0, now=lambda: now[0])
@@ -270,5 +272,7 @@ def test_a_provider_that_says_nothing_for_ten_seconds_is_unresponsive():
     assert caught.value.retryable
     fresh = providers._ActivityClock(limit=10.0, now=lambda: now[0])
     now[0] = 40.0
+    fresh.tick()                    # 17.5s in: still reading the prompt
+    now[0] = 53.0
     with pytest.raises(providers.ProviderSilent, match="before any token"):
         fresh.tick()

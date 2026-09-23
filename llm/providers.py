@@ -279,7 +279,21 @@ def _capture_reasoning(message):
 #: is not activity. Measured the same day: two specialist calls on one beat
 #: took 1,324 s and 1,319 s where the role's usual cost is 3-7 s.
 PROVIDER_SILENCE_SECONDS = 10.0
-REQUEST_TIMEOUT = (30, PROVIDER_SILENCE_SECONDS)
+#: HOW LONG A PROVIDER MAY SAY NOTHING BEFORE ITS FIRST TOKEN. The rule above
+#: was one number for two silences: before the first token a model is reading
+#: its prompt, and a large prompt on a reasoning model takes a little over ten
+#: seconds; after it, a stream that stops has stopped. Measured on the
+#: playerless Aldermill runs (2026-09-23): round 6's whole-call failures were
+#: both first-token silences, and the cut-and-retry cycles before them cost
+#: about 370 s of a run with nothing in any log. The owner's split, the same
+#: day: thirty seconds before the first token, ten between.
+PROVIDER_FIRST_TOKEN_SECONDS = 30.0
+# The socket's read deadline is the FIRST-token one: it was the same 10, so a
+# clock alone could never have let a slow first token through. Once the first
+# token arrives `_sse_openai` narrows the socket back to the clock's limit
+# (`_narrow_read_deadline`), so a stream gone completely quiet -- not even a
+# keepalive for the clock to count -- still dies in ten.
+REQUEST_TIMEOUT = (30, PROVIDER_FIRST_TOKEN_SECONDS)
 
 # Independent pipeline stages (mapping+perception_act, narrator+
 # narrator_extra, narrator_extra's own per-persona loop) now run
@@ -438,6 +452,45 @@ def _request_timeout(streaming=True):
     if not streaming:
         return (REQUEST_TIMEOUT[0], BLOCKING_READ_TIMEOUT)
     return REQUEST_TIMEOUT
+
+
+def _between_tokens_limit():
+    """How long a stream that has BEGUN may go quiet: the watchdog's limit,
+    or longer where the caller asked for patience (`patient_stream`) or a
+    longer read (`request_timeout`) -- never shorter than either."""
+    patience = silence_limit_override.get()
+    limit = PROVIDER_SILENCE_SECONDS if patience is None else float(patience)
+    override = read_timeout_override.get()
+    return limit if override is None else max(limit, override)
+
+
+def _narrow_read_deadline(response, seconds):
+    """Shorten a live streamed response's socket read deadline, once its
+    stream has begun (`PROVIDER_FIRST_TOKEN_SECONDS`).
+
+    The activity clock ticks on LINES, so a stream that stops sending
+    entirely -- not even a keepalive -- is noticed only by the socket, whose
+    deadline is the longer first-token one. Best-effort by design: this
+    reaches through `requests` into the connection urllib3 holds for a
+    streamed response, and a transport without one keeps the longer
+    deadline rather than failing the call. True when the deadline was set.
+
+    The socket the response READS from comes first: http.client's file over
+    it. The connection urllib3 holds is the fallback, because when a server
+    asks to close, http.client hands the socket to the response and the
+    connection's `sock` is None (measured on urllib3 2.7)."""
+    raw = getattr(response, "raw", None)
+    reader = getattr(getattr(raw, "_fp", None), "fp", None)
+    for sock in (getattr(getattr(reader, "raw", None), "_sock", None),
+                 getattr(getattr(raw, "connection", None), "sock", None)):
+        if sock is None:
+            continue
+        try:
+            sock.settimeout(float(seconds))
+        except (OSError, TypeError, ValueError, AttributeError):
+            continue
+        return True
+    return False
 
 
 def _httpx_timeout():
@@ -1930,11 +1983,23 @@ def _headers(prov):
     return h
 
 def _is_placeholder_json(text):
-    """A JSON object whose string leaves are all the placeholder '...' (or
-    empty) -- the skeleton some models emit under response_format=json_object
-    instead of real content. True only when there is at least one string leaf
-    and EVERY string leaf is a placeholder, so genuine prose is never mistaken
-    for one."""
+    """A JSON object whose string leaves are all the placeholder '...' -- the
+    skeleton some models emit under response_format=json_object instead of
+    real content. True only when at least one string leaf IS an elision mark
+    and every other is an elision mark or empty, so genuine prose is never
+    mistaken for one.
+
+    AN EMPTY VALUE IS AN ANSWER, NOT A PLACEHOLDER. This counted an object
+    whose strings were all empty as a skeleton too, and a skeleton is re-sent
+    whole without JSON mode. The commonest all-empty object is a decline:
+    a townsperson's voice that does not react answers `{"reacts": false,
+    "action": "", "goes_to": "", ...}`, and every one of them was sent twice.
+    Measured on the playerless Aldermill runs (2026-09-23): 21, 28 and 7
+    extra `character_bg` calls in rounds 5-7, about 100 s of a 24-beat run,
+    each re-stream answering the same "no" (replayed, round 6 idx 3). The
+    measured skeleton (nemotron:thinking) writes "..." -- the mark is the
+    tell, and an empty field is what `complete_validated_json`'s standing
+    rule already says it is: an answer that says nothing, taken as it came."""
     try:
         data = json.loads(str(text or "").strip())
     except (TypeError, ValueError):
@@ -1952,9 +2017,8 @@ def _is_placeholder_json(text):
                 walk(x)
 
     walk(data)
-    if not strings:
-        return False
-    return all(s.strip().strip(".") == "" for s in strings)
+    marks = [s for s in strings if s.strip()]
+    return bool(marks) and all(s.strip().strip(".…") == "" for s in marks)
 
 
 def _strip_extended(body):
@@ -2589,7 +2653,8 @@ def _classify_error(e: Exception) -> LLMError:
     return LLMError(str(e), 0, False)
 
 class ProviderSilent(LLMError):
-    """A stream that stopped saying anything for `PROVIDER_SILENCE_SECONDS`.
+    """A stream that said nothing for `PROVIDER_FIRST_TOKEN_SECONDS` before
+    its first token, or for `PROVIDER_SILENCE_SECONDS` after it.
 
     Retryable, and distinct from a socket timeout because a provider may keep
     the socket alive with comment lines while producing nothing; the clock
@@ -2597,14 +2662,24 @@ class ProviderSilent(LLMError):
 
 
 class _ActivityClock:
-    """Raises `ProviderSilent` when no activity arrived within the limit."""
+    """Raises `ProviderSilent` when no activity arrived within the limit.
 
-    def __init__(self, limit=None, now=None):
+    Two limits: `first` until the stream has begun (the provider is reading
+    the prompt, `PROVIDER_FIRST_TOKEN_SECONDS`), `limit` after it. A patient
+    caller's limit is never cut by the first one: `first` is the larger."""
+
+    def __init__(self, limit=None, now=None, first=None):
         self.limit = PROVIDER_SILENCE_SECONDS if limit is None else float(limit)
+        self.first = max(self.limit, PROVIDER_FIRST_TOKEN_SECONDS
+                         if first is None else float(first))
         self._now = now or time.monotonic
         self.last = self._now()
         self.reasoning_chars = 0
         self.content_chars = 0
+
+    @property
+    def begun(self):
+        return bool(self.reasoning_chars or self.content_chars)
 
     def tick(self, reasoning="", content=""):
         if reasoning or content:
@@ -2613,11 +2688,10 @@ class _ActivityClock:
             self.last = self._now()
             return
         idle = self._now() - self.last
-        if idle > self.limit:
+        if idle > (self.limit if self.begun else self.first):
             seen = ("after %d chars of reasoning and %d of content"
                     % (self.reasoning_chars, self.content_chars)
-                    if (self.reasoning_chars or self.content_chars)
-                    else "before any token")
+                    if self.begun else "before any token")
             raise ProviderSilent(
                 "provider silent for %.0fs (%s)" % (idle, seen), 0, True)
 
@@ -2645,6 +2719,9 @@ def _sse_openai(url, headers, body, sink, role=None, model=None):
         if r.status_code >= 400:
             raise LLMError(f"HTTP {r.status_code}: {r.text[:300]}", r.status_code, r.status_code in DEFAULT_RETRY.retryable_status)
         clock = _ActivityClock(limit=silence_limit_override.get())
+        # The socket waits the first-token allowance; once the stream has
+        # begun it waits no longer than the clock would (see REQUEST_TIMEOUT).
+        between = min(_request_timeout()[1], _between_tokens_limit())
         for raw in r.iter_lines():
             _check_cancel()
             clock.tick()
@@ -2704,6 +2781,9 @@ def _sse_openai(url, headers, body, sink, role=None, model=None):
                 text += d
                 sink(d)
             clock.tick(reasoning=_r, content=d or "")
+            if between is not None and clock.begun:
+                _narrow_read_deadline(r, between)
+                between = None
     if role:
         _log_usage(role, model, t0, usage, served=served,
                    kind="stream")
@@ -2729,6 +2809,9 @@ def _sse_anthropic(base, headers, body, sink, role=None, model=None):
             _abortable(r):
         if r.status_code >= 400:
             raise LLMError(f"HTTP {r.status_code}: {r.text[:300]}", r.status_code, r.status_code in DEFAULT_RETRY.retryable_status)
+        # No activity clock on this reader: the socket is its only watchdog,
+        # so it takes the same first-token / between-token split.
+        between = min(_request_timeout()[1], _between_tokens_limit())
         for raw in r.iter_lines():
             _check_cancel()
             if not raw:
@@ -2740,6 +2823,9 @@ def _sse_anthropic(base, headers, body, sink, role=None, model=None):
                 j = json.loads(line)
             except Exception:
                 continue
+            if between is not None and j.get("type") == "content_block_delta":
+                _narrow_read_deadline(r, between)
+                between = None
             # Anthropic's documented mid-stream error event (overloaded_error,
             # etc.) -- surface as retryable rather than silently truncating.
             if j.get("type") == "error":
@@ -2945,10 +3031,14 @@ def _claude_cli_complete(prov, model, system, user, sink, role=None,
         "max_tokens": None,
     })
     _think_sink = reasoning_sink.get()
-    # The same deadline a streamed HTTP read gets between chunks, override
-    # included: the CLI emits a line per event and nothing else, so silence
-    # here is the same silence.
+    # The same deadlines a streamed HTTP read gets, overrides included: the
+    # CLI emits a line per event and nothing else, so silence here is the
+    # same silence. The first-token one holds until the first content delta
+    # -- the init and message_start events arrive before the model has read
+    # its prompt -- and the between-token one after it.
     deadline = _request_timeout()[1]
+    between = min(deadline, _between_tokens_limit())
+    begun = False
     text, json_text, reasoning = "", "", ""
     usage, served, result = None, "", None
     noise = []
@@ -2963,13 +3053,14 @@ def _claude_cli_complete(prov, model, system, user, sink, role=None,
         with _abortable(child):
             while True:
                 _check_cancel()
+                wait = between if begun else deadline
                 try:
-                    raw = child.readline(deadline)
+                    raw = child.readline(wait)
                 except queue.Empty:
                     child.close()
                     raise ProviderSilent(
                         "claude CLI silent for %.0fs (%s)" % (
-                            deadline,
+                            wait,
                             "after %d events" % events if events
                             else "before any event"),
                         0, True)
@@ -3004,6 +3095,7 @@ def _claude_cli_complete(prov, model, system, user, sink, role=None,
                     if stop:
                         _capture_finish_reason(stop)
                 elif ev.get("type") == "content_block_delta":
+                    begun = True
                     delta = ev.get("delta") or {}
                     piece = delta.get("text")
                     if piece:

@@ -7,7 +7,7 @@
 | Module | Lines | Purpose | Local dependencies |
 |---|---:|---|---|
 | `agents/__init__.py` | 100 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
-| `agents/background.py` | 2148 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
+| `agents/background.py` | 2198 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
 | `agents/character.py` | 4684 | Private character decision agent. | `agents.character_kernel`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/character_kernel.py` | 496 |  | — |
 | `agents/common.py` | 11593 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
@@ -51,7 +51,7 @@
 | `llm/llm_quality.py` | 1281 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 666 | Default system prompts and prompt preset access. | `core.db` |
-| `llm/providers.py` | 4771 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
+| `llm/providers.py` | 4863 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
 | `llm/schemas.py` | 7705 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
@@ -236,14 +236,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_react_one()` | 1944 | 205 lines |
-| `_background_react()` | 448 | 182 lines |
-| `scene_life()` | 1113 | 157 lines |
-| `_demanded_presences()` | 900 | 144 lines |
-| `declare_charter_figures()` | 1765 | 122 lines |
-| `_present_others()` | 1506 | 103 lines |
+| `_react_one()` | 1994 | 205 lines |
+| `_background_react()` | 492 | 183 lines |
+| `scene_life()` | 1158 | 157 lines |
+| `_demanded_presences()` | 945 | 144 lines |
+| `declare_charter_figures()` | 1810 | 127 lines |
+| `_present_others()` | 1551 | 103 lines |
 | `_beat_for_presence()` | 194 | 84 lines |
-| `managed_presences()` | 755 | 78 lines |
+| `managed_presences()` | 800 | 78 lines |
 
 ### `agents/character.py`
 
@@ -724,14 +724,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_chat_complete_once()` | 3346 | 311 lines |
-| `chat_complete()` | 3059 | 139 lines |
-| `async _chat_complete_async_once()` | 3868 | 126 lines |
-| `_claude_cli_complete()` | 2933 | 124 lines |
-| `_sse_openai()` | 2625 | 90 lines |
-| `async chat_complete_async()` | 3777 | 90 lines |
-| `_json_mode_recovery_stages()` | 2349 | 83 lines |
-| `async _sse_openai_async()` | 3995 | 71 lines |
+| `_chat_complete_once()` | 3438 | 311 lines |
+| `chat_complete()` | 3151 | 139 lines |
+| `_claude_cli_complete()` | 3019 | 130 lines |
+| `async _chat_complete_async_once()` | 3960 | 126 lines |
+| `_sse_openai()` | 2699 | 96 lines |
+| `async chat_complete_async()` | 3869 | 90 lines |
+| `_json_mode_recovery_stages()` | 2413 | 83 lines |
+| `async _sse_openai_async()` | 4087 | 71 lines |
 
 ### `llm/research_providers.py`
 
