@@ -156,6 +156,26 @@ def test_a_missing_tool_buys_one_widened_call_that_replaces_the_first(
     assert "positions" in encoder["widened_to"]
 
 
+def test_a_thinner_widened_answer_never_replaces_the_first(temp_db, monkeypatch,
+                                                          prose_contract):
+    """Chat 153 turn 23: re-asked for one added tool, the encoder returned
+    only the events that tool touched. The re-ask now sees its first answer,
+    and a replacement with fewer events than the first loses."""
+    first = dict(_walk_events(), missing_tools=["sensory_events"])
+    thin = {"events": _walk_events()["events"][:1]}
+    answers = iter([first, thin])
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_prose": {"prose": "Mara climbs into the lamp room."},
+        "director_specialist": lambda payload: next(answers),
+    }))
+    ctx = _make_ctx(temp_db, interp=_action_interp())
+    out = director.director_resolve(ctx, nonce=0)
+    assert calls[2]["payload"]["previous_events"] == first["events"]
+    assert [row["chrono_id"] for row in out["ledgers"]] == [1, 2]
+    assert "widen_rejected" in out["orchestration"]["prose_contract"]["encoder"]
+
+
 def test_events_become_rows_with_one_handle_per_thing():
     rows, transforms = director_prose.ledger_from_events([
         {"source_entity_id": "character:1", "event": "Mara lifts the tin.",

@@ -320,16 +320,34 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
     if missing:
         record["missing_tools"] = missing
         if _widen_allowed():
+            first = answer
             channels = list(channels) + [tool for tool in dict.fromkeys(missing)]
             payload = encoder_payload(ctx, sc, prose, model_payload, view,
                                       extras, channels)
+            # THE RE-ASK SEES ITS OWN FIRST ANSWER and returns the WHOLE beat.
+            # Measured on chat 153 turn 23: asked again with only the new
+            # tool, the encoder returned the two events that tool touched,
+            # and the replacement dropped every later step of the beat.
+            payload["previous_events"] = list(first.get("events") or [])
             t1 = time.time()
             answer = _call_encoder(ctx, channels, payload)
             record["widened_to"] = list(channels)
             record["widen_seconds"] = round(time.time() - t1, 3)
+            # A replacement, never a merge -- so a thinner replacement must
+            # not win. Fewer events than the first answer means the beat was
+            # not re-encoded whole; keep the first and report the tool.
+            if len(answer.get("events") or []) < len(first.get("events") or []):
+                record["widen_rejected"] = (
+                    f"{len(answer.get('events') or [])} events against the "
+                    f"first answer's {len(first.get('events') or [])}")
+                ctx.add_warning(f"{stage}: widened encoder answer was thinner "
+                                f"than the first; kept the first, {missing} "
+                                "unencoded")
+                answer = first
+                channels = [tool for tool in channels if tool not in missing]
             still = [str(tool) for tool in (answer.get("missing_tools") or [])
                      if str(tool) in known and str(tool) not in channels]
-            if still:
+            if still and "widen_rejected" not in record:
                 record["unmet_tools"] = still
                 ctx.add_warning(f"{stage}: encoder still lacked {still} after "
                                 "widening; those changes are unencoded")

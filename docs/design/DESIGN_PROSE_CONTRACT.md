@@ -100,6 +100,71 @@ and the raw events.
   converted rows, which carry the same fields. That path is untested under
   this contract.
 
-## Measurements
+## Measurements (2026-09-22, chat 153 turns 23/25/26, copies of `engine.db`)
 
-See the section below, filled in from the first A/B on chat 153.
+Each stage was rerolled alone (`run_pipeline(only_key=)`) on its own
+database copy, so both contracts read identical inputs. The models were the
+owner's configured stack (Fireworks GLM-5.2 on every Director role, default
+reasoning effort `high`), with Jev on OpenRouter. The harness lives in the job's
+scratch directory; `orchestration.prose_contract` on each variant holds the raw
+record.
+
+**Wall clock per stage, final configuration** (threshold 0.5, sharpened
+questions, record pre-filter, `already_happened`, widening fix, encoder
+`reasoning_effort=off`):
+
+| | turn 23 | turn 25 | turn 26 |
+|---|---|---|---|
+| interpret, causal | 59.7 s | 13.1 s | 64.8 s |
+| interpret, prose | **12.6 s** | **10.2 s** | **11.9 s** |
+| resolve, causal | 43.4 s | 13.6 s | 32.0 s |
+| resolve, prose | **34.5 s** | 19.6 s | **30.6 s** |
+
+**Where the time goes.** The prose Director's call is shorter than the causal
+Director's: 5.7–8.2 s against 5.6–19.8 s at resolve, and 0.7–1.3 s against
+5.1–18.3 s at interpret. Jev takes 0.21–0.44 s and costs about $0.00002 for
+the whole 38-question battery. The encoder is the rest.
+
+**The encoder's cost was reasoning trace, not the single call.** At the
+default `high` effort it wrote 12–20k output tokens per beat, one run hitting
+the 50k ceiling, against a real answer of about 1.5k tokens. Resolve took
+102–198 s. `low` barely moved GLM (46–60 s). With `off` it writes 1–2.4k
+tokens in 3–11 s. **Set `director_specialist` to `off` under this
+contract**, in Settings → reasoning effort. The encoder transcribes a decided
+account; the thinking happened in the Director.
+
+**Jev routing.** With the first question wording and threshold 0.3, it granted
+13–18 channels per resolve beat. The questions matched words, not record
+classes: `public_evidence` scored 0.76–0.85 on every beat with dialogue, and
+`contact_action_ops` 0.84–0.94 because the prose described room-wide vibration.
+Three changes brought it to 3–9 channels:
+- each question now states its class and its complement ("Answer no when…");
+- channels that can only act on a standing record are asked only when that
+  record exists (`_RECORD_FACTS`);
+- the threshold is 0.5.
+
+Replayed against six stored beats, the 0.5 selection still covered every
+channel the encoder went on to write, except on one beat where the causal
+contract wrote nothing either. Live, widening fired on 2 of 3 resolves and
+cost about 10 s each.
+
+**Fidelity.**
+- Interpret wrote the same channels as causal on all three turns.
+- Resolve wrote a superset of causal's channels on turns 23 and 25, and on
+  turn 26 every causal channel except `poses`.
+- Two defects were found live and fixed before the final round:
+  - the Director wrote past a player-asserted landing (`already_happened`);
+  - a widened re-ask returned only the events its new tool touched, and the
+    replacement dropped the rest of the beat (`previous_events`, plus a
+    thinner answer never replaces the first).
+
+**Authorship, read as fiction.** The prose is concrete and consequential. The
+Director reconciles a character's declared line with the world rather than
+editing it: *"'…she's in flight.' But even as he said it, the console room
+shuddered underfoot…"*. With the latitude this contract gives, it also runs
+ahead. On turn 25 it landed the ship, one beat before the player wrote that
+the ship "begins to land". Whether to pace it is an owner decision; nothing
+here clamps it.
+
+**Not measured yet:** more beats, other stories, the narrator's page
+downstream of each contract, and repair and correction rates over a long run.
