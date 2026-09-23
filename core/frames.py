@@ -77,7 +77,7 @@ from __future__ import annotations
 import json
 import time
 
-from core.db import q, qi
+from core.db import forget_frame_eras, q, qi
 
 PRESENT_ORDINAL = 0
 
@@ -172,7 +172,7 @@ def create_frame(chat_id, *, label, ordinal, kind="other", travelers=None, nonex
         raise ValueError(
             f"a {kind} frame requires split_turn_idx (the play-order position "
             "of the split)")
-    return qi(
+    frame_id = qi(
         "INSERT INTO frames(chat_id,label,ordinal,kind,travelers,nonexistent_cast,created,"
         "parent_frame_id,split_turn_idx) VALUES(?,?,?,?,?,?,?,?,?)",
         (
@@ -182,6 +182,10 @@ def create_frame(chat_id, *, label, ordinal, kind="other", travelers=None, nonex
             time.time(), parent_frame_id, split_turn_idx,
         ),
     )
+    # An id SQLite reused after a delete must not answer with the era its
+    # predecessor belonged to (`db.era_of_frame`).
+    forget_frame_eras()
+    return frame_id
 
 
 def frame_ordinal(frame_id, index=None):

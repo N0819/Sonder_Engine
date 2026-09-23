@@ -268,9 +268,13 @@ def normalize_body(key, entry):
     # a model beat by beat and moved by the Director; the window runtime
     # must not walk it while the lease stands (`charter_move.walk`). Set
     # and cleared by the commit (`charter_place.lease_scene_bodies`);
-    # absent for every body the scene is not standing.
+    # absent for every body the scene is not standing. It names the scene
+    # that holds it (`charter_place.lease_holder`), because one town serves
+    # every frame of an era and no other scene may move the body; a lease
+    # from before holders were named stays a plain True.
     if entry.get("leased"):
-        body["leased"] = True
+        body["leased"] = (str(entry["leased"])
+                          if isinstance(entry["leased"], str) else True)
     if body["condition"] in GONE:
         body["available"] = False
         body["stood_down"] = False

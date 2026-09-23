@@ -3613,7 +3613,14 @@ def schedule_charter_ticks(ctx, epoch=None):
                     or epoch.get("elapsed_seconds") or 0.0)
     context = str(epoch.get("beat_context") or "beat")
     budget = CHARTER_BUDGET_SECONDS.get(context, CHARTER_BUDGET_SECONDS["beat"])
-    key = "charter:%s" % (frame_id if frame_id is not None else "present")
+    # ONE TICK PER TOWN. Sibling bubbles share their era's registry
+    # (`db.ERA_WORLD_KEYS`), so the job is keyed by the era: two bubbles
+    # committing close together queue one advance, not two racing over one
+    # registry. Each institution advances only past its own last time, so
+    # the town runs at the latest of its bubbles' clocks.
+    from core.db import era_of_frame
+    _era = era_of_frame(frame_id)
+    key = "charter:%s" % (_era if _era is not None else "present")
 
     def _produce(job):
         registry = registry_for_update(cid, frame_id)
@@ -4533,6 +4540,24 @@ def _relabel(value, mapping):
     return value
 
 
+def live_lease_holders(cid):
+    """Every lease holder of this chat still standing: the present, and each
+    frame that has not merged back (`charter_place.lease_holder`). A lease
+    held by any other name -- a merged bubble, a closed call, a frame of the
+    chat a branch was copied from -- is no claim on a body."""
+    from core.db import q
+    from world.charter_place import lease_holder
+
+    live = {lease_holder(None)}
+    try:
+        for row in q("SELECT id FROM frames WHERE chat_id=? "
+                     "AND merged_turn_idx IS NULL", (int(cid),)):
+            live.add(lease_holder(row["id"]))
+    except Exception:
+        return None
+    return live
+
+
 def route_scene_placements(cid, diff, scene, frame_id=None):
     """Which of this beat's Director ``positions``/``stations`` entries name
     a charter body (`charter_place.resolve_scene_placements`), STRIPPED from
@@ -4543,12 +4568,14 @@ def route_scene_placements(cid, diff, scene, frame_id=None):
     Called from `persist.commit_scene_state.prepare_scene_commit` before
     `merge_scene_with_diff`, on the commit's own deep copy of the diff.
     """
-    from world.charter_place import resolve_scene_placements
+    from world.charter_place import lease_holder, resolve_scene_placements
 
     registry = registry_for(cid, frame_id)
     if not registry.get("items"):
-        return {"moves": [], "stations": [], "names": []}
-    routing = resolve_scene_placements(registry, diff, scene)
+        return {"moves": [], "stations": [], "names": [], "refused": []}
+    routing = resolve_scene_placements(
+        registry, diff, scene, holder=lease_holder(frame_id),
+        live=live_lease_holders(cid))
     for name in routing["names"]:
         for channel in ("positions", "stations"):
             table = (diff or {}).get(channel)

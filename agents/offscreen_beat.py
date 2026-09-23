@@ -136,15 +136,31 @@ def is_offscreen_beat(chat_id, turn_row):
 
 
 def live_bubbles(chat_id, parent_frame_id):
-    """Every live bubble frame split from this one, oldest first."""
-    from core.db import q
+    """Every live bubble frame split from this one, the one furthest behind
+    in its own time first (the oldest first among equals).
+
+    LEAST CLOCK FIRST because the bubbles share one town
+    (`db.ERA_WORLD_KEYS`), which runs at the latest of their clocks: the
+    bubble that is furthest behind acts next, so no bubble reads the town
+    further ahead of its own time than one beat."""
+    from core.db import q, wget_for_frame
+    from world.mechanics import clock_elapsed
     from world.spatial_frames import is_bubble_frame
 
-    return [row["id"] for row in q(
+    ids = [row["id"] for row in q(
         "SELECT id FROM frames WHERE chat_id=? AND parent_frame_id IS ? "
         "AND kind='spatial' AND merged_turn_idx IS NULL ORDER BY id",
         (chat_id, parent_frame_id))
         if is_bubble_frame(chat_id, row["id"])]
+
+    def _clock(frame_id):
+        try:
+            return clock_elapsed(
+                wget_for_frame(chat_id, "simulation_clock", frame_id, {}) or {})
+        except Exception:
+            return 0.0
+
+    return sorted(ids, key=lambda frame_id: (_clock(frame_id), frame_id))
 
 
 def schedule_offscreen_beats(ctx):

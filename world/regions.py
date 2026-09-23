@@ -58,8 +58,9 @@ from world.spatial import normalize_room_id, room_of
 
 #: The registry of what the regions are, ``{"version", "items": {region_id:
 #: {"name", "brief"}}}``. Frame-scoped like the scene whose rooms it
-#: describes (`core.db.FRAME_SCOPED_WORLD_KEYS`); a spatial split seeds the
-#: away frame's copy from the parent's (`world/spatial_frames.py`).
+#: describes (`core.db.FRAME_SCOPED_WORLD_KEYS`), and one row per ERA
+#: (`core.db.ERA_WORLD_KEYS`): a spatial split reads its era's registry
+#: rather than a copy of it.
 REGIONS_KEY = "regions"
 REGIONS_VERSION = 1
 

@@ -616,12 +616,13 @@ def place_body(registry, charter_key, body_key, room, leased=None):
         body.pop("station", None)
     body.pop("walk", None)
     body.pop("errand", None)
-    # THE LEASE. ``leased`` True: the scene is standing this body beat by
-    # beat and the runtime keeps its hands off it; False: the scene has
-    # released it here and the runtime resumes; None: not this write's
+    # THE LEASE. ``leased`` a holder's name (`charter_place.lease_holder`),
+    # or True from a caller that names none: the scene is standing this body
+    # beat by beat and the runtime keeps its hands off it; False: the scene
+    # has released it here and the runtime resumes; None: not this write's
     # business (a plain routed move says nothing about the lease).
-    if leased is True:
-        body["leased"] = True
+    if leased is True or (isinstance(leased, str) and leased):
+        body["leased"] = leased
     elif leased is False:
         body.pop("leased", None)
     return registry

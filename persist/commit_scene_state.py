@@ -1780,6 +1780,10 @@ def compose_beat_scene(ctx):
         _charter_placements = route_scene_placements(
             cid, diff, prev_scene,
             frame_id=getattr(getattr(ctx, "turn", None), "frame_id", None))
+        for _name in _charter_placements.get("refused") or ():
+            ctx.add_warning(
+                "charter body %r is held by another scene of this era; this "
+                "beat's move of it is not landed" % _name)
     except Exception as exc:  # the scene must commit without the town
         ctx.add_warning("charter placements not routed: %s" % exc)
     # AN ORDER THE BEAT GAVE IS THE INSTITUTION'S TO LAND, NOT THE SCENE'S.
@@ -1868,10 +1872,11 @@ def compose_beat_scene(ctx):
     # and the registry mirrors the room under a lease; outside it the room
     # is returned to the charter and the scene's rows are released.
     try:
-        from world.charter_place import heal_unbound_twins, lease_scene_bodies
-        from world.charter_runtime import registry_for
-        _registry = registry_for(cid, getattr(getattr(ctx, "turn", None),
-                                              "frame_id", None))
+        from world.charter_place import (heal_unbound_twins, lease_holder,
+                                         lease_scene_bodies)
+        from world.charter_runtime import live_lease_holders, registry_for
+        _frame = getattr(getattr(ctx, "turn", None), "frame_id", None)
+        _registry = registry_for(cid, _frame)
         # One entity per charter body: a body the scene holds under a second,
         # unbound record is bound to it first, so the lease below governs it.
         for _heal in heal_unbound_twins(_registry, sc):
@@ -1879,7 +1884,13 @@ def compose_beat_scene(ctx):
                             "bound to its body" % (_heal["name"], _heal["entity_id"]))
         _aperture = (ctx.get("compile_world_context") or {}).get("rooms_in_view")
         if _aperture:
-            _lease = lease_scene_bodies(_registry, sc, _aperture)
+            _lease = lease_scene_bodies(_registry, sc, _aperture,
+                                        holder=lease_holder(_frame),
+                                        live=live_lease_holders(cid))
+            for _eid in _lease.get("yielded") or ():
+                ctx.add_warning(
+                    "charter body %r is held by another scene of this era; "
+                    "this scene's rows for it are released" % _eid)
             if _lease["moves"]:
                 _charter_placements.setdefault("moves", []).extend(
                     _lease["moves"])

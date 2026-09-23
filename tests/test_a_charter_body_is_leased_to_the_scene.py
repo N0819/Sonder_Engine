@@ -45,7 +45,7 @@ class TestTheLeaseDecision:
         assert out == {"moves": [{"charter": "inn", "body": "tam",
                                   "name": "inn_keeper", "room": "yard",
                                   "leased": True}],
-                       "released": []}
+                       "released": [], "yielded": []}
 
     def test_outside_it_the_body_goes_back_to_the_charter(self):
         out = lease_scene_bodies(_registry(), _scene("lane"), {"taproom", "yard"})
@@ -58,13 +58,13 @@ class TestTheLeaseDecision:
         sc = _scene("yard")
         sc["positions"].pop("inn_keeper")
         assert lease_scene_bodies(_registry(), sc, {"taproom"}) == {
-            "moves": [], "released": []}
+            "moves": [], "released": [], "yielded": []}
 
     def test_a_body_the_registry_no_longer_holds_is_left_alone(self):
         reg = _registry()
         reg["items"]["inn"]["state"]["bodies"] = {}
         assert lease_scene_bodies(reg, _scene("lane"), {"taproom"}) == {
-            "moves": [], "released": []}
+            "moves": [], "released": [], "yielded": []}
 
 
 class TestTheRuntimeHonoursTheLease:

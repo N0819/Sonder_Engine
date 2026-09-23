@@ -384,8 +384,18 @@ def main():
     print("  frames: %s" % json.dumps(frames), flush=True)
 
     log = []
+
+    def _clock(frame_id):
+        # The two lives share one town (`db.ERA_WORLD_KEYS`), which runs at
+        # the later of their clocks, so the one furthest behind goes first --
+        # the order `offscreen_beat.live_bubbles` gives the engine's own.
+        from core.db import wget_for_frame
+        from world.mechanics import clock_elapsed
+        return clock_elapsed(
+            wget_for_frame(cid, "simulation_clock", frame_id, {}) or {})
+
     for rnd in range(args.rounds):
-        for name in sorted(frames):
+        for name in sorted(frames, key=lambda n: (_clock(frames[n]), n)):
             started = time.time()
             error = ""
             try:

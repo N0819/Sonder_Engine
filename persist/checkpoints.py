@@ -1,5 +1,6 @@
 import json, time, re, hashlib, threading, logging
-from core.db import active_frame_id, q, qi, transaction, wget, wset
+from core.db import (active_frame_id, forget_frame_eras, q, qi, transaction,
+                     wget, wset)
 logger = logging.getLogger(__name__)
 
 from mind.memory import (
@@ -596,6 +597,9 @@ def _restore_frames(chat_id, snap_frames):
     # Children before parents, for the same FK reason.
     for fid in sorted(existing - snap_ids, reverse=True):
         qi("DELETE FROM frames WHERE id=? AND chat_id=?", (fid, chat_id))
+    # The rows above may have changed a frame's kind or parent, which is
+    # its era (`db.era_of_frame`).
+    forget_frame_eras()
 
 def _restore_chat_personas(chat_id, personas):
     # Delete-and-reinsert with same-chat ids, mirroring the

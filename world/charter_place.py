@@ -426,7 +426,30 @@ def heal_unbound_twins(registry, scene):
     return healed
 
 
-def lease_scene_bodies(registry, scene, aperture):
+def lease_holder(frame_id):
+    """The name a lease is held under: the frame whose scene stands the
+    body. One town serves every frame of an era (`db.ERA_WORLD_KEYS`), so a
+    lease says WHICH scene holds a body, and no other scene may move it."""
+    return "present" if frame_id is None else "frame:%s" % frame_id
+
+
+def held_elsewhere(body, holder, live=None):
+    """Whether another scene holds this body under a live lease.
+
+    A lease written before holders were named (plain True), one held by a
+    frame that has since merged or closed, or one naming a frame of another
+    chat (a branch copies the registry, not the frames) is no claim: `live`
+    is the set of holders still standing, and a holder outside it is free.
+    """
+    held_by = (body or {}).get("leased") if isinstance(body, dict) else None
+    if not isinstance(held_by, str) or not held_by or holder is None:
+        return False
+    if held_by == holder:
+        return False
+    return live is None or held_by in live
+
+
+def lease_scene_bodies(registry, scene, aperture, holder=None, live=None):
     """A charter body the SCENE stands (a Director-minted entity bound to it,
     `charter_ref` on the entity record) is on loan to the scene while it is
     in the player's aperture, and returned to the charter when it is not.
@@ -444,16 +467,23 @@ def lease_scene_bodies(registry, scene, aperture):
     registry when it next comes into view.
 
     Pure. Returns ``{"moves": [{charter, body, name, room, leased}],
-    "released": [entity_id, ...]}`` -- the moves in the shape
-    `charter_runtime.apply_scene_placements` lands, the released ids for
-    the caller to strip from the scene's positions, stations, orientation
-    and poses. A body the registry no longer holds, or an entity placed in
-    no room, is left alone.
+    "released": [entity_id, ...], "yielded": [entity_id, ...]}`` -- the moves
+    in the shape `charter_runtime.apply_scene_placements` lands, the released
+    ids for the caller to strip from the scene's positions, stations,
+    orientation and poses. A body the registry no longer holds, or an entity
+    placed in no room, is left alone.
+
+    ONE BODY, ONE SCENE. The town is one per era (`db.ERA_WORLD_KEYS`), so a
+    lease is held under a name (`holder`, see `lease_holder`) and ``leased``
+    carries it. A body another live scene holds (`held_elsewhere`) is not
+    written from this one at all: it is standing where that scene has it, so
+    this scene's rows for it are released and reported as ``yielded`` -- the
+    alternative was two scenes writing two places for one person every beat.
     """
     scene = scene if isinstance(scene, dict) else {}
     rooms = {str(r) for r in (aperture or ()) if str(r or "")}
     items = ((registry or {}).get("items") or {})
-    moves, released = [], []
+    moves, released, yielded = [], [], []
     for eid, ent in sorted((scene.get("entities") or {}).items()):
         ref = (ent or {}).get("charter_ref") if isinstance(ent, dict) else None
         if not isinstance(ref, dict):
@@ -462,20 +492,26 @@ def lease_scene_bodies(registry, scene, aperture):
         if not charter or not body:
             continue
         state = ((items.get(charter) or {}).get("state") or {})
-        if body not in (state.get("bodies") or {}):
+        record = (state.get("bodies") or {}).get(body)
+        if record is None:
             continue
         room = str((scene.get("positions") or {}).get(str(eid)) or "")
         if not room:
             continue
+        if held_elsewhere(record, holder, live):
+            released.append(str(eid))
+            yielded.append(str(eid))
+            continue
         leased = room in rooms
         moves.append({"charter": charter, "body": body, "name": str(eid),
-                      "room": room, "leased": leased})
+                      "room": room,
+                      "leased": (holder or True) if leased else False})
         if not leased:
             released.append(str(eid))
-    return {"moves": moves, "released": released}
+    return {"moves": moves, "released": released, "yielded": yielded}
 
 
-def resolve_scene_placements(registry, diff, scene):
+def resolve_scene_placements(registry, diff, scene, holder=None, live=None):
     """Which of a Director diff's ``positions`` and ``stations`` entries name
     a charter body the scene does not stand, and what each one means for the
     registry. Pure; returns ``{"moves": [{charter, body, name, room}],
@@ -497,19 +533,29 @@ def resolve_scene_placements(registry, diff, scene):
 
     A destination that is no room of the scene or of this beat's diff is not
     routed either: the merge and the movement floor own that refusal.
+
+    A body another live scene holds (`held_elsewhere`) is not this scene's to
+    move: its entry is stripped like a routed one and landed nowhere, and
+    reported in ``refused``. It is standing where that scene has it.
     """
     positions = (diff or {}).get("positions")
     stations = (diff or {}).get("stations")
     positions = positions if isinstance(positions, dict) else {}
     stations = stations if isinstance(stations, dict) else {}
     if not positions and not stations:
-        return {"moves": [], "stations": [], "names": []}
+        return {"moves": [], "stations": [], "names": [], "refused": []}
     rooms = set((scene or {}).get("rooms") or {}) | set(
         (diff or {}).get("rooms") or {})
     table = _spelling_table(registry, rooms)
     if not table:
-        return {"moves": [], "stations": [], "names": []}
-    moves, routed_stations, names = [], [], []
+        return {"moves": [], "stations": [], "names": [], "refused": []}
+    moves, routed_stations, names, refused = [], [], [], []
+    items = (registry or {}).get("items") or {}
+
+    def _held(ref):
+        record = (((items.get(ref[0]) or {}).get("state") or {})
+                  .get("bodies") or {}).get(ref[1])
+        return held_elsewhere(record, holder, live)
 
     # A body this very diff stands -- an entity record carrying its
     # `charter_ref` -- is the scene's from this beat on, so its row is the
@@ -533,6 +579,10 @@ def resolve_scene_placements(registry, diff, scene):
         ref = _ref(name)
         if ref is None:
             continue
+        if _held(ref):
+            names.append(str(name))
+            refused.append(str(name))
+            continue
         dest = str(dest or "").strip()
         if not dest or dest not in rooms:
             continue
@@ -542,6 +592,12 @@ def resolve_scene_placements(registry, diff, scene):
     for name, station in sorted(stations.items()):
         ref = _ref(name)
         if ref is None:
+            continue
+        if _held(ref):
+            if str(name) not in names:
+                names.append(str(name))
+            if str(name) not in refused:
+                refused.append(str(name))
             continue
         if isinstance(station, str):
             station = {"at": station}
@@ -553,11 +609,12 @@ def resolve_scene_placements(registry, diff, scene):
                                 "name": str(name), "station": dict(station)})
         if str(name) not in names:
             names.append(str(name))
-    return {"moves": moves, "stations": routed_stations, "names": names}
+    return {"moves": moves, "stations": routed_stations, "names": names,
+            "refused": refused}
 
 
 __all__ = [
-    "SOURCES", "charter_placements", "lay_charter_bodies", "placement_uid",
-    "placements_from_slices", "resolve_scene_placements", "rooms_in_frame",
-    "scene_with_charter_bodies",
+    "SOURCES", "charter_placements", "held_elsewhere", "lay_charter_bodies",
+    "lease_holder", "placement_uid", "placements_from_slices",
+    "resolve_scene_placements", "rooms_in_frame", "scene_with_charter_bodies",
 ]

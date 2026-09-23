@@ -27,7 +27,7 @@ STATIC_ROOT = Path(INSTALL_ROOT) / "static"
 from core import db
 from core.db import (q, qi, qtx, transaction, wget, wset, get_setting, set_setting,
                 parse_scoped_world_key, data_version)
-from core.db import _FRAME_KEY_SEP
+from core.db import _FRAME_KEY_SEP, forget_frame_eras
 from llm import providers
 from llm.providers import (
     list_models, list_image_models, image_model, provider,
@@ -6640,6 +6640,8 @@ def turn_branch(tid: int):
                     "UPDATE frames SET parent_frame_id=? WHERE id=?",
                     (frame_idmap[f["parent_frame_id"]], frame_idmap[f["id"]]),
                 )
+        # The clone's eras are its frames' parentage, set only just now.
+        forget_frame_eras()
 
         # Copy chat characters. dialogue_color rides along with sheet for the
         # same reason: a branch inherits how the story was CONFIGURED, and a

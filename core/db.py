@@ -128,6 +128,76 @@ FRAME_SCOPED_WORLD_PREFIXES = ("relationships:", "extf:")
 
 _FRAME_KEY_SEP = "\x1efr"  # unlikely-to-collide separator; not valid in ordinary key text
 
+#: THE KEYS THAT DESCRIBE AN ERA'S WORLD, not one party in it. Frame-scoped
+#: like the rest -- a flashback's town is not the present's -- but resolved to
+#: the ERA a frame belongs to rather than to the frame: a causality bubble
+#: (`kind='spatial'`) and a couple frame are the same era somewhere else, so
+#: they read and write their era's row. The town is one.
+#:
+#: Each of these was copied into every bubble at the split
+#: (`spatial_frames.perform_split`) on the argument that two copies of a
+#: deterministic simulation over one clock track each other. They did not:
+#: each bubble runs its own clock and seeds its own ticks, and a lease writes
+#: only the copy of the bubble that holds it. Measured on the playerless
+#: Aldermill run (2026-09-23): the same mill hand leased at the weir beside one
+#: bubble's character and walked around the forecourt by the other bubble's
+#: copy, four of forty bodies in two places at once, and a base copy frozen at
+#: the split. The Writers' Room's keys are here for the same reason from the
+#: other side -- the split said they "stay with the story", and frame-scoping
+#: made a bubble read them blank.
+ERA_WORLD_KEYS = frozenset({
+    # the town: its institutions and their bodies, the throng in its squares,
+    # who is on its roads, what is nailed up in its rooms, and what its
+    # parts of the map are
+    "charters", "crowds", "couriers", "artifacts", "regions",
+    # the author's: what the story's Writers' Room holds for this era
+    "planning_needs", "room_mandates", "room_status", "room_frontier",
+    "room_bible", "room_proposals", "plot_packages",
+})
+
+#: Frame kinds that are the same era as their parent (`core/frames.py`).
+_SAME_ERA_KINDS = ("spatial", "couple")
+
+#: (database, frame_id) -> the frame id of its era (None: the present).
+#: A frame's kind and parent never change after creation, so this is only
+#: forgotten when the database is swapped or restored (`bump_world_epoch`)
+#: or a frame is created (`forget_frame_eras`) -- an id SQLite reused after a
+#: delete must not answer with its predecessor's era.
+_ERA_OF_FRAME = {}
+
+
+def forget_frame_eras():
+    """Drop every remembered frame -> era answer."""
+    _ERA_OF_FRAME.clear()
+
+
+def era_of_frame(frame_id):
+    """The frame whose ERA `frame_id` belongs to: itself for the present,
+    a past/future/other frame, or an id no frame row holds; its nearest
+    ancestor that is not a same-era frame otherwise (None = the present).
+    Memoized; see `_ERA_OF_FRAME`."""
+    if frame_id is None:
+        return None
+    memo_key = (DB, frame_id)
+    if memo_key in _ERA_OF_FRAME:
+        return _ERA_OF_FRAME[memo_key]
+    era, current, seen = frame_id, frame_id, set()
+    try:
+        while current is not None and current not in seen:
+            seen.add(current)
+            row = conn().execute(
+                "SELECT kind, parent_frame_id FROM frames WHERE id=?",
+                (current,)).fetchone()
+            if row is None or row["kind"] not in _SAME_ERA_KINDS:
+                era = current
+                break
+            current = row["parent_frame_id"]
+            era = current
+    except sqlite3.Error:
+        era = frame_id
+    _ERA_OF_FRAME[memo_key] = era
+    return era
+
 
 def _is_frame_scoped_world_key(key):
     return key in FRAME_SCOPED_WORLD_KEYS or any(
@@ -140,10 +210,17 @@ def _scoped_world_key(key):
     a pipeline run has an active frame set. Present (frame_id None) and
     non-scoped keys are untouched -- this is what makes frameless chats
     behave with zero change: the active_frame_id contextvar defaults to
-    None everywhere outside a pipeline run that explicitly set it."""
+    None everywhere outside a pipeline run that explicitly set it.
+
+    An era key (`ERA_WORLD_KEYS`) names its ERA's row: a sibling bubble of
+    the present reads and writes the present's town."""
     frame_id = active_frame_id.get()
     if frame_id is None or not _is_frame_scoped_world_key(key):
         return key
+    if key in ERA_WORLD_KEYS:
+        frame_id = era_of_frame(frame_id)
+        if frame_id is None:
+            return key
     return f"{key}{_FRAME_KEY_SEP}{frame_id}"
 
 
@@ -2787,6 +2864,9 @@ def bump_world_epoch():
     global _world_epoch
     _world_epoch += 1
     _world_write_gen.clear()
+    # A swapped or restored database may hold different frames under the
+    # same ids, so the era each id resolved to is forgotten with the rows.
+    forget_frame_eras()
 
 def world_read_token(chat_id, key):
     """``(storage_key, token)`` for caching a parsed world row.

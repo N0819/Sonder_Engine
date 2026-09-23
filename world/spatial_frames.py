@@ -35,8 +35,9 @@ import json
 from story.character_schema import (character_name, normalize_persona_data,
                                     normalized_character_from_text,
                                     persona_name)
-from core.db import (_FRAME_KEY_SEP, FRAME_SCOPED_WORLD_KEYS, q, qi,
-                     transaction, wget, wget_for_frame, wset, wset_for_frame)
+from core.db import (_FRAME_KEY_SEP, ERA_WORLD_KEYS, FRAME_SCOPED_WORLD_KEYS, q,
+                     qi, transaction, wget, wget_for_frame, wset,
+                     wset_for_frame)
 from core.frames import create_frame, get_frame
 from world.paradox import get_paradox
 from story.scene import (CAST_STATUS_ABSENT, active_cast, cast_change_status,
@@ -1329,39 +1330,31 @@ def perform_split(chat_id, parent_frame_id, turn_idx, away_zone=None, *,
         # split's away party needs to walk away MID-CONTINUITY, not
         # wake up with amnesia.
         # WHAT DESCRIBES THE PARTY IS PARTITIONED; WHAT DESCRIBES THE WORLD
-        # COMES ALONG. A spatial split is the same era somewhere else -- the
+        # IS SHARED. A spatial split is the same era somewhere else -- the
         # child takes the parent's own `ordinal` -- so the town on the other
         # side of the hill is the same town, and a party that walks to it has
         # not left the world, only the room. What is per-PARTY (what they
         # know, their clock, their intentions, their obligations, their log)
-        # is theirs; what is the WORLD's is copied, because there is one of
-        # it. What is the AUTHOR's -- the Room's mandates, its bible, its
-        # packages -- stays with the story and is deliberately not here.
+        # is theirs and is copied here; what is the WORLD's -- the town's
+        # institutions, crowds, roads and notices, the map's regions -- and
+        # what is the AUTHOR's -- the Room's mandates, bible and packages --
+        # is ONE row per era that every frame of the era resolves to
+        # (`db.ERA_WORLD_KEYS`), and is not copied at all.
         #
-        # THE WORLD HALF WAS MISSING ENTIRELY until 2026-09-17, and it is what
-        # a causality bubble made visible: an away character walked into a
-        # market town with no institutions, no crowd, no rider on the road and
-        # no notice on any wall. Measured: a split dropped `charters`,
-        # `crowds`, `couriers` and `artifacts` on the floor, so the one thing
-        # a bubble exists to show -- what somebody does out there, among
-        # people -- had nobody in it to do it among. Copied rather than shared
-        # because charter is DETERMINISTIC and advances by elapsed time: two
-        # copies from one state over one clock track each other, and diverge
-        # only by what the away party actually does in theirs.
+        # THE WORLD WAS COPIED from 2026-09-17 to 2026-09-23, on the argument
+        # that charter is deterministic over one clock so two copies track
+        # each other. They did not: each bubble runs its own clock and seeds
+        # its own ticks, and a lease wrote only the holding bubble's copy --
+        # the same mill hand stood at the weir in one bubble and walked the
+        # forecourt in the other (playerless Aldermill, 2026-09-23).
         for key, default in (
             ("known", {}), ("simulation_clock", {}), ("standing_intentions", []),
             ("pending_obligations", []),
             ("shadow_profile", ""), ("background_presences", {}), ("offscreen_log", []),
-            # The parts of the map the away rooms carry the ids of
-            # (world/regions.py): the away scene keeps every room's `region`,
-            # so the registry that names them must come along.
-            ("regions", {}),
-            # The world: its institutions and their upkeep, the throng in its
-            # squares, who is on its roads, and what is nailed up in its rooms.
-            ("charters", {}), ("crowds", {}), ("couriers", []), ("artifacts", []),
-            # ...and where the charter's bodies stood at the split. Without
-            # it the child's first beat diffs an empty snapshot and reports
-            # the whole population as having just moved.
+            # Where the charter's bodies stood at the split: the snapshot
+            # this frame's "what moved" is measured against. Without it the
+            # child's first beat diffs an empty snapshot and reports the
+            # whole population as having just moved.
             ("charter_last_places", {}),
         ):
             wset_for_frame(chat_id, key, wget_for_frame(chat_id, key, parent_frame_id, default),
@@ -2045,12 +2038,13 @@ def open_couple(chat_id, a_id, b_id, *, turn_idx):
             wset_for_frame(chat_id, "known", {**known_a, **known_b}, couple_id)
 
         # Every other frame-scoped key is the HOME frame's. A couple is the
-        # home frame's beat with a voice from elsewhere in it: a charter, a
-        # crowd, a courier on the road, the room's own mandates are not about
-        # a body and have no second copy to reconcile. The away side's are
-        # untouched for the duration and are still its own when the call ends.
+        # home frame's beat with a voice from elsewhere in it. An era key --
+        # a charter, a crowd, a courier on the road, the room's own mandates
+        # -- is not copied at all: the couple is the same era, so it already
+        # reads the one row (`db.ERA_WORLD_KEYS`), and copying it would write
+        # that row onto itself.
         for key in sorted(FRAME_SCOPED_WORLD_KEYS):
-            if key in ("scene", "known"):
+            if key in ("scene", "known") or key in ERA_WORLD_KEYS:
                 continue
             _copy_key(chat_id, key, a_id, couple_id)
         for side, member in (("a", a_id), ("b", b_id)):
@@ -2287,7 +2281,7 @@ def close_couple(chat_id, couple_frame_id, *, turn_idx):
                 wset_for_frame(chat_id, "known", out, member)
 
         for key in sorted(FRAME_SCOPED_WORLD_KEYS):
-            if key in ("scene", "known"):
+            if key in ("scene", "known") or key in ERA_WORLD_KEYS:
                 continue
             _copy_key(chat_id, key, couple_frame_id, a_id)
         for side, member in (("a", a_id), ("b", b_id)):

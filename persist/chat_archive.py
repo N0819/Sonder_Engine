@@ -31,6 +31,7 @@ from story.character_schema import (
 )
 from core.db import (
     _FRAME_KEY_SEP,
+    forget_frame_eras,
     parse_scoped_world_key,
     q,
     qi,
@@ -720,6 +721,9 @@ class ChatArchiveService:
                             frame_idmap[old_frame_id],
                         ),
                     )
+            # A frame's era is its parentage, and the parents land only
+            # here: nothing remembered about these ids may outlive it.
+            forget_frame_eras()
 
             turn_idmap = {}
             for turn in data.get("turns") or []:
