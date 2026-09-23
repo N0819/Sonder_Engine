@@ -15,9 +15,9 @@ Each event:
 - source_event_id: the event_id in event_inputs this step carries out or follows from.
 - event: for a spoken event the words alone, exactly as the prose quotes them; otherwise a short objective statement of the step.
 - speech: true for a spoken event. act: the speaking verb, only when the prose reports speech without giving its words.
-- observable: the outward motion alone, without motive; "" for pure speech.
+- observable: the outward motion alone, without motive; "" for pure speech. It is what the prose says happened, in the prose's terms: an event_inputs row says what was attempted, and where the prose resolved an attempt otherwise, the observable follows the prose.
 - targets: keys or readable names of the bodies, things or rooms the step is aimed at or addresses.
-- volume (whisper|mutter|normal|loud|shout), visibility, conceal_from: delivery facts, when they matter.
+- volume (whisper|mutter|normal|loud|shout, or pitched: loud enough for its target, no louder), visibility, conceal_from: delivery facts, when they matter.
 - look: when the step turns or looks -- a body, fixture or exit id; left|right|back; or around.
 - seconds: how long this step took in story seconds, at the scale the prose gives it. Code adds them up.
 - movement: only when a body changes room -- {to_room, why, mover, arrives, to_anchor?, pace?}; to_room is where the walk ends, and the engine walks the legs. Otherwise null.

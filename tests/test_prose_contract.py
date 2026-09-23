@@ -696,3 +696,94 @@ def test_a_declared_target_in_the_declarers_words_names_its_body(monkeypatch):
     assert first["target_bodies"] == ["Kenoreth Bramterwell"]
     assert first["targets"] == ["the elderly miller journeyman", "the stones"]
     assert "target_bodies" not in second
+
+
+def test_a_missing_referent_buys_the_tools_that_make_it(temp_db, monkeypatch,
+                                                        prose_contract):
+    """Playerless Aldermill round 4 (2026-09-23) t21: the encoder reported
+    'corner post' as missing and nothing followed -- the palm on it was
+    dropped at the merge. A referent is made with `entities` and stood with
+    `positions`, so the one widening pass is granted both."""
+    monkeypatch.setattr(decisions, "OVERRIDE", lambda state, questions: {
+        key: {"type": "noul", "noul": 0.9 if key == "poses" else 0.0}
+        for key in questions})
+    first = dict(_walk_events(), missing_referents=["corner post"])
+    first["events"][0]["transforms"] = []
+    second = _walk_events()
+    answers = iter([first, second])
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_prose": {"prose": "Mara sets her palm on the corner post."},
+        "director_specialist": lambda payload: next(answers),
+    }))
+    ctx = _make_ctx(temp_db, interp=_action_interp())
+    out = director.director_resolve(ctx, nonce=0)
+    specialist = [c for c in calls if c["step_key"] == "director_specialist"]
+    assert len(specialist) == 2
+    granted = specialist[1]["payload"]["granted_tools"]
+    assert "entities" in granted and "positions" in granted
+    assert specialist[1]["payload"]["previous_events"] == first["events"]
+    encoder = out["orchestration"]["prose_contract"]["encoder"]
+    assert encoder["missing_referents"] == ["corner post"]
+
+
+def test_a_quoted_line_is_a_line_and_a_reported_one_keeps_its_verb():
+    """Round 5 (2026-09-23) idx 18/22: a quoted line carrying `act` rendered
+    as "sayss Aye, I've got an eye on the apron,." beside the line itself."""
+    prose = ('Robkinet leans over the rail. "Aye, I\'ve got an eye on the '
+             'apron," he says. Sal asks him what happened at the weir.')
+    events = [
+        {"speech": True, "act": "says", "event": "Aye, I've got an eye on the apron,"},
+        {"speech": True, "act": "ask", "event": "what happened at the weir"},
+    ]
+    out = director_prose.quoted_lines_keep_their_words(events, prose)
+    assert "act" not in out[0]
+    assert out[1]["act"] == "ask"
+    assert "act" in events[0]          # copied, never mutated
+
+
+def test_an_inflected_act_is_conjugated_once():
+    from agents.common import communication_act, communication_awaits_reply, communication_verb
+    assert communication_verb({"act": "says"}) == "says"
+    assert communication_verb({"act": "said"}) == "says"
+    assert communication_verb({"act": "answers"}) == "answers"
+    assert communication_verb({"act": "mutters"}) == "mutters"
+    assert communication_verb({"act": "mutter"}) == "mutters"
+    assert communication_act({"act": "asks"}) == "ask"
+    assert communication_awaits_reply({"act": "asks"})
+
+
+def test_the_encoder_is_told_the_observable_follows_the_prose():
+    """Round 5 (2026-09-23) idx 14: three rows' `observable` fields were the
+    charter voices' declared acts verbatim -- "kicks the iron dog free" --
+    where the prose had resolved them otherwise, and the declared attempt,
+    not the resolution, reached the page."""
+    from llm import prompts
+    core = prompts.unified_specialist_prompt(["poses"])
+    assert "where the prose resolved an attempt otherwise, the observable follows the prose" in core
+
+
+def test_the_places_row_is_the_worlds_not_the_first_speakers():
+    """Round 5 (2026-09-23) idx 10: the synthetic places row borrowed the
+    first event's source and credited a mill hand with the river."""
+    events = [{"source_entity_id": "Miller Robkinet Flourbrooks",
+               "source_event_id": "turn:10:figure:0:0:action", "event": "x"}]
+    row = director_prose.room_event({"rooms": {"river_alder": {"name": "River Alder"}}},
+                                    events)
+    assert row["source_entity_id"] == director_prose.ROOM_EVENT_SOURCE
+    assert row["source_event_id"] == ""
+
+
+def test_a_voice_aims_its_line_at_the_body_its_words_name(monkeypatch):
+    """Round 5 (2026-09-23): charter voices aimed lines at "the short" --
+    sixteen epithet warnings, and every debt they opened owed to no one."""
+    named = {"the short": ["Emory Vane"], "the crowd": ["A", "B"]}
+    monkeypatch.setattr(director, "_bodies_addressed_as",
+                        lambda ctx, sc, speaker, forms: named.get(forms[0], []))
+    decl = {"name": "Kenend Anvilforder",
+            "dialogue_log_entry": {"exact_quote": "Aye.", "intended_target": "the short"},
+            "sequence": [{"type": "speech", "text": "Aye.",
+                          "targets": ["the short", "the crowd", "the anvil"]}]}
+    director._name_voice_targets(None, {}, decl)
+    assert decl["dialogue_log_entry"]["intended_target"] == "Emory Vane"
+    assert decl["sequence"][0]["targets"] == ["Emory Vane", "the crowd", "the anvil"]

@@ -37,6 +37,15 @@ def test_a_debtor_with_no_view_or_a_row_that_is_no_line_is_left_alone():
                                   {"categories": ["poses"], "event": ROW["event"]})
 
 
+def test_the_beats_own_row_carries_its_line_as_a_note():
+    """Round 5 (2026-09-23) idx 11: the commit pairs an op with the beat's
+    SEQUENCE row, whose line is its `note`; read as `event` it was empty and
+    every demand was exempted. Sal heard "...Keep..." and owed the whole."""
+    row = {"categories": ["obligations", "speech"], "note": "Aye. Keep it dry,"}
+    view = "The grizzled striker says something you cannot make out: ...Keep..."
+    assert _demand_unheard_by(_Ctx(view), "Sal Weatherby", row)
+
+
 def test_rows_pair_with_current_ops_only():
     ops = [({"op": "open"}, False), ({"op": "open"}, True)]
     assert _zip_rows(ops, [{"event": "x"}]) == [

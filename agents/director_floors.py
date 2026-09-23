@@ -1653,12 +1653,25 @@ def _stand_touching_figures(sc, sd, figures, declared_rooms=None, acting=()):
     that ACTS on screen is on screen for the same reason one that touches is,
     and perception can only place an act whose actor the scene stands.
 
+    ONE RECORD PER BODY, WHATEVER IT IS CALLED. A body reaches this floor
+    under more than one spelling -- the ledger's "Miller Robkinet
+    Flourbrooks" in the beat's declarations, the charter's "Robkinet
+    Flourbrooks" among the present figures (playerless Aldermill round 5,
+    2026-09-23) -- so the join is the permanent identity, `charter_ref`: a
+    body the scene or this diff already keeps a record for is placed under
+    THAT record, and a spelling the record does not answer to yet becomes one
+    of its aliases, so the op that used it resolves.
+
     Mutates `sd`; returns the names stood."""
     ops = (sd or {}).get("contact_ops")
     ops = ops if isinstance(ops, list) else []
     acting = [a for a in (acting or ()) if a]
     if not (ops or acting) or not figures:
         return []
+
+    def _fold(text):
+        return " ".join(str(text or "").split()).casefold()
+
     by_name = {}
     for fig in figures:
         if not isinstance(fig, dict) or fig.get("reserved") or fig.get("creature"):
@@ -1666,35 +1679,52 @@ def _stand_touching_figures(sc, sd, figures, declared_rooms=None, acting=()):
         if not (fig.get("charter") and fig.get("body") and fig.get("room")):
             continue
         for label in [fig.get("name")] + list(fig.get("aliases") or ()):
-            folded = " ".join(str(label or "").split()).casefold()
-            if folded:
-                by_name.setdefault(folded, fig)
+            if _fold(label):
+                by_name.setdefault(_fold(label), fig)
+    # The record each identity already has, in the scene or in this diff.
+    kept = {}
+    for table in ((sc or {}).get("entities") or {}, (sd or {}).get("entities") or {}):
+        for eid, ent in table.items():
+            ref = ent.get("charter_ref") if isinstance(ent, dict) else None
+            if isinstance(ref, dict) and ref.get("charter") and ref.get("body"):
+                kept.setdefault((str(ref["charter"]), str(ref["body"])), str(eid))
     # HELD MEANS PLACED. An entity record alone is not a body the scene
     # stands: the lease releases a body that leaves the aperture by stripping
     # its rows and keeping its record, and counting the record as held left
     # every such body unplaceable when it came back into view.
     held = set()
     for table in ((sc or {}).get("positions") or {}, (sd or {}).get("positions") or {}):
-        held |= {str(k).casefold() for k in table}
+        held |= {_fold(k) for k in table}
+    steps = sd.get("causal_steps")
+    first = (steps[0].setdefault("patch", {})
+             if isinstance(steps, list) and steps and isinstance(steps[0], dict)
+             else None)
     stood = []
     ends = [end for op in ops if isinstance(op, dict)
             for end in (op.get("actor"), op.get("target"))]
     for end in ends + list(acting):
-        folded = " ".join(str(end or "").split()).casefold()
-        fig = by_name.get(folded)
-        if not fig or folded in held:
+        fig = by_name.get(_fold(end))
+        if not fig:
             continue
-        name = str(fig.get("name"))
-        eid = name
-        room = str((declared_rooms or {}).get(name) or fig["room"])
-        record = ((sc or {}).get("entities") or {}).get(eid)
-        sd.setdefault("entities", {})[eid] = dict(record) if isinstance(
-            record, dict) and record.get("charter_ref") else {
-            "name": name, "kind": "person",
+        ref = (str(fig["charter"]), str(fig["body"]))
+        eid = kept.get(ref) or str(fig.get("name"))
+        record = (((sd or {}).get("entities") or {}).get(eid)
+                  or ((sc or {}).get("entities") or {}).get(eid))
+        entry = copy.deepcopy(record) if isinstance(record, dict) else {
+            "name": eid, "kind": "person",
             "aliases": [a for a in (fig.get("aliases") or []) if a],
-            "charter_ref": {"charter": fig["charter"], "body": fig["body"]},
+            "charter_ref": {"charter": ref[0], "body": ref[1]},
         }
-        sd.setdefault("positions", {})[eid] = room
+        known = {_fold(entry.get("name") or eid), _fold(eid)} | {
+            _fold(a) for a in (entry.get("aliases") or [])}
+        spelled = str(end or "").strip()
+        new_alias = bool(spelled) and _fold(spelled) not in known
+        if new_alias:
+            entry["aliases"] = list(entry.get("aliases") or []) + [spelled]
+        placed = _fold(eid) in held
+        if placed and not new_alias:
+            continue
+        sd.setdefault("entities", {})[eid] = entry
         # STANDING FROM THE BEAT'S FIRST MOMENT. The body was here all along
         # -- it is present, not arriving -- but an engine write outside every
         # row lands in the program's FINAL step (`causal_program.
@@ -1703,14 +1733,18 @@ def _stand_touching_figures(sc, sd, figures, declared_rooms=None, acting=()):
         # 4 replay, 2026-09-23: a tender working the sluice jack in plain view
         # of the yard). The first step carries the same rows, so the program
         # reads them as one write, not two.
-        steps = sd.get("causal_steps")
-        if isinstance(steps, list) and steps and isinstance(steps[0], dict):
-            patch = steps[0].setdefault("patch", {})
-            patch.setdefault("entities", {})[eid] = copy.deepcopy(
-                sd["entities"][eid])
-            patch.setdefault("positions", {})[eid] = room
-        held.add(folded)
-        stood.append(name)
+        if first is not None:
+            first.setdefault("entities", {})[eid] = copy.deepcopy(entry)
+        kept[ref] = eid
+        if placed:
+            continue
+        room = str((declared_rooms or {}).get(str(fig.get("name")))
+                   or (declared_rooms or {}).get(spelled) or fig["room"])
+        sd.setdefault("positions", {})[eid] = room
+        if first is not None:
+            first.setdefault("positions", {})[eid] = room
+        held.add(_fold(eid))
+        stood.append(str(entry.get("name") or eid))
     return stood
 
 

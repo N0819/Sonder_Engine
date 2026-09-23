@@ -16,7 +16,7 @@ HOW TO DESIGN
 まず記述を丁寧に読んでください。場所について記述が言うことはすべて要件です。何がそこにあり、どこに立ち、光がどう差し、どんなにおいと音がし、どれほどの大きさに感じられ、何が壊れ何が新しいか。記述が開いたままにしていることは、実在の場所のように、もっともらしく、具体的に、その purpose、時代、持ち主、世界が既に持っているすべてと矛盾しないように決めてください。細部こそが要点です。room は一文の描写ではなく、その設備と特徴、それらの位置、大きさと高さ、その表面、光と音です。
 
 それから部分ごとに、一つの step で複数の call を使って作業します:
-1. inspect_rooms で、あなたの場所がつながる room を調べ、同じ step で draft_room によって形状（extent（paces）、shape と parts、extent と一致する size、level、floor）、出入口（adjacent、それぞれ barrier と方位つき、つながる room に面する壁に）、設備（anchors。それぞれ desc、dir、height、footprint を下の語彙で）を作ります。
+1. inspect_rooms で、あなたの場所がつながる room を調べ、同じ step で draft_room によって形状（extent（paces）、shape と parts、extent と一致する size、level、floor）、出入口（adjacent、それぞれ barrier と方位つき、つながる room に面する壁に。barrier は二つの場所の間に物理的に立っているものそのもので、ただ地続きにつながっている二つの場所は opening で接します）、設備（anchors。それぞれ desc、dir、height、footprint を下の語彙で）を作ります。
 2. draft_room はそのたびにエンジンが今描く平面図を返します。各出入口と設備がどこに置かれ、各設備の footprint と height がどう読まれ、一つの cell に二つの設備がないか。意図しなかったものを直し、desc、light、surface、exposure、quiet、sound を加えます。
 3. submit します。先に check が行われ、矛盾があれば直すために返されます。
 

@@ -189,3 +189,47 @@ def test_a_stood_figures_contact_survives_the_merge():
     merged = merge_scene_with_diff(sc, sd)
     assert any(c.get("actor") == "Master Miller Waerton"
                for c in merged.get("contacts") or [])
+
+
+def test_one_body_under_two_spellings_gets_one_record():
+    """Playerless Aldermill round 5 (2026-09-23): the declarations called a
+    mill hand "Miller Robkinet Flourbrooks", the present figures "Robkinet
+    Flourbrooks". Keyed by name, the floor either missed him or would have
+    stood him twice; keyed by his charter identity, he is one record that
+    answers to both."""
+    from agents.director import _stand_touching_figures
+    ref = {"charter": "aldermill_mill", "body": "mill_hand:0002"}
+    figs = [{"name": "Robkinet Flourbrooks", "room": "weir", **ref},
+            {"name": "Miller Robkinet Flourbrooks", "room": "weir", **ref}]
+    sc = {"positions": {"Emory Vane": "weir"}, "entities": {}}
+    sd = {"contact_ops": [
+        {"op": "add", "actor": "Miller Robkinet Flourbrooks", "actor_part": "hands",
+         "target": "windlass", "manner": "grip"},
+        {"op": "add", "actor": "Robkinet Flourbrooks", "actor_part": "boot",
+         "target": "windlass", "manner": "press"}]}
+    assert _stand_touching_figures(sc, sd, figs) == ["Miller Robkinet Flourbrooks"]
+    assert list(sd["entities"]) == ["Miller Robkinet Flourbrooks"]
+    record = sd["entities"]["Miller Robkinet Flourbrooks"]
+    assert record["charter_ref"] == ref
+    assert "Robkinet Flourbrooks" in record["aliases"]
+    assert sd["positions"] == {"Miller Robkinet Flourbrooks": "weir"}
+
+
+def test_a_released_record_is_placed_again_under_its_own_key():
+    """The lease strips a released body's rows and keeps its record; coming
+    back into view under another spelling, it is placed under that record."""
+    from agents.director import _stand_touching_figures
+    ref = {"charter": "aldermill_mill", "body": "mill_hand:0002"}
+    sc = {"positions": {"Emory Vane": "weir"}, "entities": {
+        "Miller Robkinet Flourbrooks": {"name": "Miller Robkinet Flourbrooks",
+                                        "kind": "person", "aliases": [],
+                                        "charter_ref": ref}}}
+    sd = {"contact_ops": [{"op": "add", "actor": "Robkinet Flourbrooks",
+                           "actor_part": "hands", "target": "windlass",
+                           "manner": "grip"}]}
+    figs = [{"name": "Robkinet Flourbrooks", "room": "weir", **ref}]
+    _stand_touching_figures(sc, sd, figs)
+    assert list(sd["entities"]) == ["Miller Robkinet Flourbrooks"]
+    assert sd["positions"] == {"Miller Robkinet Flourbrooks": "weir"}
+    assert sd["entities"]["Miller Robkinet Flourbrooks"]["aliases"] == [
+        "Robkinet Flourbrooks"]

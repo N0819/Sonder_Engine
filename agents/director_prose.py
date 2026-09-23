@@ -47,6 +47,7 @@ the one widening pass), and `llm.decisions`' own `jev_model`/`jev_provider`.
 from __future__ import annotations
 
 import contextvars
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -689,6 +690,9 @@ def reconcile_rooms(ctx, rooms_answer, events, prose, scene=None):
     return dict(rooms_answer, rooms=rooms), record
 
 
+ROOM_EVENT_SOURCE = "engine:places"
+
+
 def room_event(rooms_answer, events):
     """The places the author made, as the beat's FIRST event: a place exists
     before any body walks into it. None when the author made nothing."""
@@ -698,7 +702,6 @@ def room_event(rooms_answer, events):
     severed = [r for r in (rooms_answer or {}).get("remove_adjacent") or [] if r]
     if not (rooms or removed or severed):
         return None
-    first = next((e for e in events or [] if isinstance(e, dict)), {})
     transforms = [{"item": str((room or {}).get("name") or rid),
                    "patch": {"rooms": {rid: room}}}
                   for rid, room in rooms.items() if isinstance(room, dict)]
@@ -709,9 +712,14 @@ def room_event(rooms_answer, events):
         if severed:
             patch["remove_adjacent"] = severed
         transforms.append({"item": "places", "patch": patch})
+    # THE PLACES ARE THE WORLD'S, not the first event's. Borrowing the first
+    # row's source credited a mill hand with the river (playerless Aldermill
+    # round 5, 2026-09-23, idx 10) and tied the places to his declaration --
+    # so a blocked or concealed declaration would have taken the rooms with
+    # it. An engine key, like the engine's other rows (`engine:dice:N`).
     return {
-        "source_entity_id": first.get("source_entity_id") or "",
-        "source_event_id": first.get("source_event_id") or "",
+        "source_entity_id": ROOM_EVENT_SOURCE,
+        "source_event_id": "",
         "event": "The places this beat establishes.",
         "observable": "", "commitment": "asserted", "seconds": 0,
         "item_names": [t["item"] for t in transforms],
@@ -758,6 +766,19 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
     for tool in implied_tools(answer.get("events") or [], sc):
         if tool in known and tool not in channels and tool not in missing:
             missing.append(tool)
+    # A THING THE PROSE NEEDS AND THE WORLD LACKS IS MADE WITH `entities`,
+    # and stood with `positions`. The encoder reports it as a missing
+    # referent exactly when no tool it held could make it; the record used
+    # to end there, and whatever the prose did to it -- a palm on a corner
+    # post -- was dropped at the merge for want of an endpoint (playerless
+    # Aldermill round 4, 2026-09-23, t21). Granted here, the widening pass
+    # below makes it; already held, a re-ask would change nothing.
+    referents = [str(r) for r in (answer.get("missing_referents") or []) if str(r).strip()]
+    if referents:
+        record["missing_referents"] = referents
+        for tool in ("entities", "positions"):
+            if tool in known and tool not in channels and tool not in missing:
+                missing.append(tool)
     if missing:
         record["missing_tools"] = missing
         if _widen_allowed():
@@ -800,6 +821,37 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
 
 
 # ---- 4. code converts ------------------------------------------------------
+
+_QUOTED = re.compile(r'"([^"]+)"|“([^”]+)”')
+
+
+def _fold_line(text):
+    return " ".join(str(text or "").split()).casefold().strip(" .,;:!?-—")
+
+
+def quoted_lines_keep_their_words(events, prose):
+    """A spoken event whose words the prose QUOTES is a line, not a report.
+
+    `act` is the speaking verb for speech the prose reports without its
+    words ("she asks what happened"); a row carrying it is rendered as
+    indirect speech with its `event` as the proposition. The encoder sometimes
+    set it on a quoted line as well, and the line reached every view as
+    "sayss Aye, I've got an eye on the apron,." -- once as speech and once as
+    a garbled report (playerless Aldermill round 5, 2026-09-23). Whether the
+    prose quotes the words is a fact about the prose, so code reads it: the
+    words inside a quotation there keep them, and the act goes. Events are
+    copied, never mutated."""
+    spans = [_fold_line(a or b) for a, b in _QUOTED.findall(str(prose or ""))]
+    if not spans:
+        return list(events or [])
+    out = []
+    for event in events or []:
+        if (isinstance(event, dict) and event.get("speech") and event.get("act")
+                and _fold_line(event.get("event"))
+                and any(_fold_line(event.get("event")) in span for span in spans)):
+            event = {k: v for k, v in event.items() if k != "act"}
+        out.append(event)
+    return out
 
 _ROW_FIELDS = ("source_entity_id", "source_event_id", "event", "act",
                "observable", "commitment", "targets", "visibility",
@@ -991,6 +1043,7 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     channels = list(encoder_channels) + [
         c for c in ROOM_AUTHOR_CHANNELS
         if rooms_elsewhere and rooms_answer and (rooms_answer.get(c) or None)]
+    events = quoted_lines_keep_their_words(events, prose)
     rows, transforms = ledger_from_events(events)
     record = {
         "stage": stage,

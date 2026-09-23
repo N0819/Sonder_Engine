@@ -448,6 +448,23 @@ def test_the_dropped_line_says_so(temp_db):
         ctx.warnings)
 
 
+def test_a_line_nobody_stood_to_hear_is_recorded_not_alarmed(temp_db, monkeypatch):
+    """Playerless Aldermill (2026-09-23): eleven "reached no view" warnings
+    were a character's own lines with no one else in the frame -- nothing
+    refused them and nothing was at fault. With the listener unplaced, the
+    line had no audience, and that is a decision, not a warning."""
+    import agents.common as common
+    ctx = _beat(temp_db)
+    scene = json.loads(json.dumps(BEFORE))
+    scene["positions"].pop("Hinami")
+    scene["stations"].pop("Hinami")
+    temp_db.wset(ctx.chat.id, "scene", scene)
+    monkeypatch.setattr(common, "_resolve_player_room", lambda *a, **k: None)
+    perception_outcome(ctx, "n0")
+    assert not [w for w in (ctx.warnings or []) if "reached no view" in w], (
+        ctx.warnings)
+
+
 def test_a_gesture_made_after_she_left_the_room_is_not_seen_through_the_door(temp_db):
     """Sight is graded at the event's moment too. Scratch play 2026-09-14,
     chat 4 turn 2: the nurse walked from the sickroom to the scullery; the

@@ -608,3 +608,25 @@ def test_an_act_that_opens_with_its_actors_own_name_takes_the_observers_label():
     assert _peel_own_name("Master Godidric plants", name) == "plants"
     assert _peel_own_name("Godidric's hands grip it", name) == "Godidric's hands grip it"
     assert _peel_own_name("The lever groans", name) == "The lever groans"
+
+
+def test_a_laid_bodys_given_name_is_scrubbed_to_the_observers_own_label():
+    """Playerless Aldermill round 5 (2026-09-23) idx 23: "watching Kenricer's
+    back" reached Sal's view and memory -- a laid charter body was on no
+    roster the last scrub read, and repairs that did fire wrote "the
+    unfamiliar person" beside the descriptor the same view used."""
+    from types import SimpleNamespace
+    from agents.perception import _composer_tripwires, _identity_roster
+    roster = _identity_roster(
+        "Nobody", "", [], bodies=[{"name": "Kenricer Forgetonman",
+                                   "appearance": "a soot-streaked smith"}])
+    ctx = SimpleNamespace(warnings=[])
+    label = "the soot-streaked smith"
+    view = "You stand braced by the forge, watching Kenricer's back."
+    out = _composer_tripwires(ctx, "perception_outcome", "2", "Sal Weatherby",
+                              view, {"Sal Weatherby": []},
+                              roster + [{"name": "Sal Weatherby", "appearance": "",
+                                         "aliases": []}],
+                              labels={"Kenricer Forgetonman": label})
+    assert "Kenricer" not in out
+    assert label in out

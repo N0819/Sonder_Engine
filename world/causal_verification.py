@@ -14,6 +14,23 @@ _META = frozenset({"from_event", "source_event_id", "unasserted", "phase_sources
 _MISSING = object()
 _AMBIGUOUS = object()
 
+#: Channels whose writes ARE events: a noise, an action riding a contact.
+#: They leave no standing state by construction, so there is no postcondition
+#: to find -- which is different from a physical channel whose verifier has
+#: simply not been built (`unsupported_channel`, which still holds an act
+#: back until something can vouch for it). The owner's ruling, 2026-09-16:
+#: expression is an action and renders no matter how temporary.
+TRANSIENT_CHANNELS = frozenset({"sensory_events", "contact_action_ops"})
+TRANSIENT_EVENT = "transient_event"
+
+
+def _momentary(raw):
+    from world.spatial import contact_is_momentary
+    try:
+        return bool(contact_is_momentary(raw))
+    except Exception:
+        return False
+
 
 def _without_metadata(value):
     if isinstance(value, dict):
@@ -487,6 +504,19 @@ def _contact_receipts(before, after, changes):
                         for side in ("actor", "target"))
             check = lambda world: not any(_contact_matches(world, raw, c)
                                          for c in world.get("contacts") or [])
+        elif operation in {"add", "cross"} and _momentary(raw):
+            # A STRIKE IS AN EVENT, NOT A STANDING CONTACT. The engine keeps
+            # it out of the contact topology on purpose
+            # (`director_contact._drop_momentary_contact_adds`), so the
+            # postcondition this branch would check can never hold -- and
+            # reading its absence as the world refusing the act un-saw every
+            # kick and knock (playerless Aldermill round 5, 2026-09-23, idx 14
+            # and 16). Recorded as an event for the audit; never a refusal.
+            out.append(_unresolved("contact_ops", target, TRANSIENT_EVENT,
+                                   "A momentary contact is an event; it leaves "
+                                   "no standing contact to verify.",
+                                   operation=index))
+            continue
         elif operation in {"add", "cross"}:
             desired = {k: v for k, v in raw.items()
                        if k not in _META | {"op", "crossed_target_part"}}
@@ -687,6 +717,10 @@ def verify_patch(before, after, patch, *, item_id=None, chrono_id=None, speciali
             receipts.extend(_attire_receipts(before, after, changes))
         elif channel == "overlays":
             receipts.extend(_overlay_receipts(before, after, changes))
+        elif channel in TRANSIENT_CHANNELS:
+            receipts.append(_unresolved(channel, "", TRANSIENT_EVENT,
+                                        "This channel records an event; it "
+                                        "leaves no standing state to verify."))
         else:
             receipts.append(_unresolved(channel, "", "unsupported_channel",
                                         "This channel has no scene postcondition verifier."))

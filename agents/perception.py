@@ -1764,7 +1764,7 @@ def _ambient_location_for(sc, room_id):
     return (f"inside {label} (sealed interior -- the outer location's "
             "ambience does not reach here)")
 
-def _identity_roster(p_name, p_appearance, cast, scene=None):
+def _identity_roster(p_name, p_appearance, cast, scene=None, bodies=()):
     """Every identity in play this beat, with the forms (name + uid/aliases)
     and appearance the identity scrub needs: the player plus each cast
     member, and -- given the scene -- every other BODY it stands as an
@@ -1784,9 +1784,9 @@ def _identity_roster(p_name, p_appearance, cast, scene=None):
             "appearance": character_appearance(sh),
             "aliases": keys[1:],
         })
+    listed = {str(r["name"] or "").casefold() for r in roster}
     if isinstance(scene, dict):
         from world.spatial import _is_body_entity
-        listed = {str(r["name"] or "").casefold() for r in roster}
         for eid, ent in sorted((scene.get("entities") or {}).items()):
             if not isinstance(ent, dict) or not _is_body_entity(scene, eid, ent):
                 continue
@@ -1797,6 +1797,19 @@ def _identity_roster(p_name, p_appearance, cast, scene=None):
             roster.append({
                 "name": name, "appearance": ent.get("appearance"),
                 "aliases": [a for a in (ent.get("aliases") or []) if a]})
+    # AND EVERY BODY THIS BEAT LAID IN VIEW. A charter body the scene does
+    # not stand is laid for the stage alone, so it is in no ledger the lines
+    # above read -- and a given name the encoder wrote into the observer's
+    # own pose ("watching Kenricer's back") reached her view and her memory
+    # (playerless Aldermill round 5, 2026-09-23, idx 23).
+    for body in bodies or ():
+        name = str((body or {}).get("name") or "").strip()
+        if not name or name.casefold() in listed:
+            continue
+        listed.add(name.casefold())
+        roster.append({
+            "name": name, "appearance": body.get("appearance"),
+            "aliases": [a for a in (body.get("aliases") or []) if a]})
     return roster
 
 #: How much of the text on either side of an offending fragment a diagnostic
@@ -2146,6 +2159,28 @@ def _presence_bodies(ctx, sc, rooms, chatter):
     if placements:
         lay_charter_bodies(sc, placements, keys=keys)
     return rows
+
+
+def _charter_place_before(ctx, scene, name):
+    """The room the charter held `name` in before this beat's commit, or None.
+
+    For a body the scene stands with a `charter_ref`: the registry is still
+    the pre-beat one while perception runs (the lease writes it back at
+    commit), so its `place` is where the body stood when the beat began."""
+    from world.spatial import _unique_entity_keyed
+    _, ent = _unique_entity_keyed(scene or {}, name)
+    ref = (ent or {}).get("charter_ref") if isinstance(ent, dict) else None
+    if not isinstance(ref, dict) or not ref.get("charter") or not ref.get("body"):
+        return None
+    try:
+        from world.charter_runtime import registry_for
+        registry = registry_for(ctx.chat.id, getattr(ctx.turn, "frame_id", None))
+    except Exception:
+        return None
+    body = (((((registry or {}).get("items") or {}).get(str(ref["charter"])) or {})
+             .get("state") or {}).get("bodies") or {}).get(str(ref["body"]))
+    place = str((body or {}).get("place") or "").strip() if isinstance(body, dict) else ""
+    return place or None
 
 
 def _co_present_company(scene, observer_name, bodies, known):
@@ -4283,7 +4318,7 @@ def _composer_authored_prose(ctx, stage, text, name, recognized,
 
 
 def _composer_tripwires(ctx, stage, pid, name, view, known, roster,
-                        spoken_lines=None):
+                        spoken_lines=None, labels=None):
     """The retired scrub passes, kept armed as tripwires over composed views.
 
     Firing means a COMPOSER DEFECT -- Layer A admitted something it should
@@ -4320,8 +4355,13 @@ def _composer_tripwires(ctx, stage, pid, name, view, known, roster,
         return view
     recognized, unknown = _composer_unknown_sources(name, known, roster)
     if unknown:
+        # WITH THIS OBSERVER'S OWN LABELS: one label per (observer, body) per
+        # beat. Without them a repaired name read "the unfamiliar person"
+        # beside the descriptor the same view had used for the same body
+        # (eight repairs on the playerless Aldermill run, round 5).
         view, leaked = _scrub_unknown_identities(
-            view, allowed_forms=[name, *recognized], unknown_sources=unknown)
+            view, allowed_forms=[name, *recognized], unknown_sources=unknown,
+            labels=labels)
         if leaked:
             ctx.warnings.append(
                 f"{stage}: COMPOSER TRIPWIRE -- unearned identity {leaked} "
@@ -5273,7 +5313,8 @@ def _composer_company(others, display_map, percepts):
     return out
 
 
-def _repaired_observations(observations, view, name, known, roster):
+def _repaired_observations(observations, view, name, known, roster,
+                           labels=None):
     """Carry the composed view's REPAIRS into the structured observations.
 
     `composer.observations_from_render` projects from `rendered`, the view
@@ -5325,14 +5366,14 @@ def _repaired_observations(observations, view, name, known, roster):
         if unknown:
             text, _leaked = _scrub_unknown_identities(
                 text, allowed_forms=[name, *recognized],
-                unknown_sources=unknown)
+                unknown_sources=unknown, labels=labels)
         if re.sub(r"\s+", " ", text).strip() not in haystack:
             continue
         repaired = {**obs, "observed": {**observed, "text": text}}
         if unknown and repaired.get("actor"):
             repaired["actor"], _leaked = _scrub_unknown_identities(
                 str(repaired["actor"]), allowed_forms=[name, *recognized],
-                unknown_sources=unknown)
+                unknown_sources=unknown, labels=labels)
         out.append(repaired)
     return out
 
@@ -5372,14 +5413,14 @@ def _scrub_episode_identities(ctx, stage, name, content, gist, known, roster):
 def _composer_finish_observer(ctx, stage, pid, name, rendered, known, roster,
                               clean_views, observations, ledger, *,
                               spoken_lines=None, seen=None, prev_meta=None,
-                              track_standing_meta=False):
+                              track_standing_meta=False, labels=None):
     view = _composer_tripwires(
         ctx, stage, pid, name, rendered.text, known, roster,
-        spoken_lines=spoken_lines)
+        spoken_lines=spoken_lines, labels=labels)
     clean_views[pid] = view or None
     observations[pid] = _repaired_observations(
         composer.observations_from_render(pid, rendered), view,
-        name, known, roster)
+        name, known, roster, labels=labels)
     ledger[pid] = {
         "standing": sorted(rendered.standing_keys),
         "described": sorted(rendered.described),
@@ -5474,7 +5515,8 @@ def _composer_establish_views(ctx, sc, perceivers, known, p_name,
     bodies.extend(presence_bodies or ())
     bodies_by_name = {b["name"]: b for b in bodies if b.get("name")}
     joint_labels = _joint_stranger_labels(bodies)
-    roster = _identity_roster(p_name, p_appearance, ctx.cast, scene=sc)
+    roster = _identity_roster(p_name, p_appearance, ctx.cast, scene=sc,
+                              bodies=bodies)
     identity_space = _composer_identity_space(ctx, p_name, p_appearance)
     cast_parts = _composer_extra_parts(ctx, p_name)
     body_scents = _body_scents(ctx)
@@ -5485,6 +5527,7 @@ def _composer_establish_views(ctx, sc, perceivers, known, p_name,
         name = p["name"]
         # See the note in the act stage: empty is a record, not a gap.
         seen_bodies = set()
+        display_map = {}
         if p.get("awareness") in NON_AWAKE_GATED:
             percepts = composer.residue_percepts(p["awareness"])
             company[pid] = []       # an unconscious observer sees nobody
@@ -5552,6 +5595,7 @@ def _composer_establish_views(ctx, sc, perceivers, known, p_name,
         _composer_finish_observer(
             ctx, "perception_establish", pid, name, rendered, known, roster,
             clean_views, observations, ledger, seen=seen_bodies,
+            labels=display_map,
             # The opening beat is where the standing record STARTS: a full
             # render for every mind, so every sentence in it is a delivery
             # this observer can be referred back to (D7).
@@ -5662,7 +5706,8 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
     onset_loud = any(str(e.get("volume", "")).lower() in ("loud", "shout")
                      for e in speech_elems)
     spoken = player_speech_lines(interp)
-    roster = _identity_roster(p_name, p_visible, ctx.cast, scene=sc)
+    roster = _identity_roster(p_name, p_visible, ctx.cast, scene=sc,
+                              bodies=co_present)
     identity_space = _composer_identity_space(ctx, p_name, p_visible)
     cast_parts = _composer_extra_parts(ctx, p_name)
     body_scents = _body_scents(ctx)
@@ -5718,6 +5763,7 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
         # BOOLEAN further down, and shadowing it made `sorted(seen)` fail
         # on five movement and resume tests at once.
         seen_bodies = set()
+        display_map = {}
         prev_standing, prev_described = _composer_prev_state(prev_ledger, pid)
         if p.get("awareness") in NON_AWAKE_GATED:
             name_cf = name.casefold()
@@ -6005,7 +6051,7 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
         _composer_finish_observer(
             ctx, "perception_act", pid, name, rendered, known, roster,
             clean_views, observations, ledger, spoken_lines=spoken,
-            seen=seen_bodies)
+            seen=seen_bodies, labels=display_map)
     merged = dict(prev_ledger)
     merged.update(ledger)
     ctx["_composer_turn_ledger"] = merged
@@ -6503,6 +6549,12 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
         if s.get("name") and all(r["name"] != s["name"] for r in ident_roster):
             ident_roster.append(
                 {"name": s["name"], "appearance": None, "aliases": []})
+    # Every body the beat laid in view, acting or not (`_identity_roster`).
+    for b in bodies:
+        if b.get("name") and all(r["name"] != b["name"] for r in ident_roster):
+            ident_roster.append(
+                {"name": b["name"], "appearance": b.get("appearance"),
+                 "aliases": [a for a in (b.get("aliases") or []) if a]})
 
     # The stage roster is who ACTED this beat; the identity space is who
     # this chat could name. Authored prose is gated against the second.
@@ -6520,7 +6572,14 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
     moves = []
     for mover, new_room in ((diff.get("positions") or {}).items()
                             if isinstance(diff, dict) else ()):
-        prev_room = room_of(prev_scene, str(mover))
+        # A charter body the stored scene never stood was still somewhere:
+        # where its charter placed it. Read as "nowhere", every body the
+        # resolve stood this beat rendered as walking in on the people it had
+        # been standing beside -- nine of nine stands on the playerless
+        # Aldermill run, round 5 (2026-09-23), each filed to memory as an
+        # arrival.
+        prev_room = room_of(prev_scene, str(mover)) or _charter_place_before(
+            ctx, sc, str(mover))
         if not new_room or prev_room == str(new_room):
             continue
         if not _mover_is_a_body(sc, str(mover)):
@@ -6575,6 +6634,8 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                 str(d.get("exact_quote") or ""))
                for d in enriched_dlog
                if str(d.get("exact_quote") or "").strip()}
+    # Which of them some placed listener other than the speaker was offered.
+    offered = set()
     clean_views, observations, ledger, company = {}, {}, {}, {}
     episodes, episode_meta = {}, {}
     for p in perceivers:
@@ -6583,6 +6644,7 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
         is_player_view = _is_player_view(pid)
         # See the note in the act stage: empty is a record, not a gap.
         seen_bodies = set()
+        display_map = {}
         prev_standing, prev_described = _composer_prev_state(base_ledger, pid)
         if p.get("awareness") in NON_AWAKE_GATED:
             name_cf = name.casefold()
@@ -6791,6 +6853,13 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                             and is_player_speaker(speaker, chat)):
                         order += 1
                         continue
+                    # An AUDIENCE is a listener the scene stands somewhere.
+                    # A line offered to none -- a woman thinking aloud alone
+                    # in a playerless bubble -- had nobody to reach, which is
+                    # neither a refusal nor a fault (see `offered` below).
+                    if p.get("room"):
+                        offered.add((str(speaker or "").strip(),
+                                     str(d.get("exact_quote") or "")))
                     rel, _prox = _channel_as_of(speaker, at_index)
                     if rel is None:
                         if str(speaker).strip().casefold() in _ubiq:
@@ -7082,7 +7151,7 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
         _composer_finish_observer(
             ctx, "perception_outcome", pid, name, rendered, known,
             ident_roster, clean_views, observations, ledger,
-            spoken_lines=spoken_lines, seen=seen_bodies,
+            spoken_lines=spoken_lines, seen=seen_bodies, labels=display_map,
             # Rolled forward from the PREVIOUS TURN's stored ledger rather
             # than from `base_ledger` (D7): this turn's `perception_act` entry
             # for the same observer is a character-mode render that computes
@@ -7110,6 +7179,14 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
     # folds every fired reaction into the persisted event), so the record of
     # who spoke keeps it; what this adds is that the silence is legible.
     for (speaker, quote) in sorted(unheard):
+        if (speaker, quote) not in offered:
+            # Nobody stood anywhere to be reached: recorded, not alarmed.
+            # Eleven of these on one playerless run (2026-09-23) were a
+            # character's own lines with no one else in the frame.
+            note_step_decision(
+                "speech", speaker, "no_audience",
+                "no placed listener besides the speaker (%r)" % quote[:80])
+            continue
         ctx.add_warning(
             "perception_outcome: %s answered and the line reached no view; "
             "no channel in this beat carried it (%r)"

@@ -293,7 +293,22 @@ def communication_act(elem):
     """
     if not isinstance(elem, dict):
         return ""
-    return " ".join(str(elem.get("act") or "").split()).casefold()
+    act = " ".join(str(elem.get("act") or "").split()).casefold()
+    # AN INFLECTED FORM OF A KNOWN ACT IS THAT ACT. A model writing "asks" or
+    # "said" means the act the table spells "ask" or "say"; read raw, the
+    # renderer conjugated it again ("sayss", "saids", "answerss" on the
+    # playerless Aldermill run, 2026-09-23) and a question written "asks" was
+    # never one that awaits a reply.
+    return _COMMUNICATION_FORMS.get(act, act)
+
+
+#: Each inflected form in `COMMUNICATION_ACT_VERBS`, back to its act. The
+#: first act that claims a form keeps it ("asks" is `ask`, not `question`).
+_COMMUNICATION_FORMS = {}
+for _act, _forms in COMMUNICATION_ACT_VERBS.items():
+    for _form in _forms:
+        _COMMUNICATION_FORMS.setdefault(_form, _act)
+del _act, _forms, _form
 
 
 def communication_awaits_reply(elem):
@@ -322,7 +337,10 @@ def communication_verb(elem, tense="present", fallback=None):
         return fallback
     if not act:
         return "said" if tense == "past" else "says"
-    return act if tense == "past" else act + "s"
+    if tense == "past":
+        return act
+    # Already third person ("mutters"): conjugated once is conjugated.
+    return act if _base_from_third_person_s(act.split()[0]) else act + "s"
 
 
 def communication_surface(elem):
@@ -2344,12 +2362,33 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
                 return placed
         return None
 
+    def _charter_place(refs):
+        """Where the charter holds this body now, or ""."""
+        for charter_key, body_key in sorted(refs):
+            body = ((by_key.get(charter_key) or {}).get("bodies") or {}).get(body_key)
+            place = str((body or {}).get("place") or "") if isinstance(body, dict) else ""
+            if place:
+                return place
+        return ""
+
     rows, seen, seen_refs = [], set(), set()
     for name, rec in presence_name_items(ledger):
         name = str(name or "").strip()
         if not name or name.casefold() in seen:
             continue
-        if presence_room(sc, name, rec) != room:
+        # A RECORD BACKED BY A CHARTER BODY STANDS WHERE THE CHARTER HOLDS IT
+        # unless the scene stands it. `presence_room`'s last rung is the room
+        # the record was introduced in -- right for a presence nobody
+        # simulates, and a frozen copy of a fact the charter owns for one it
+        # does. Read that way, a mill hand the charter had walked to the
+        # forecourt stayed at the weir in every view, was voiced there, acted
+        # there, and could not be stood because the charter placed him
+        # nowhere near it: one body in two rooms for nine beats (playerless
+        # Aldermill round 5, 2026-09-23).
+        where = presence_room(sc, name, dict(rec or {}, sketch={}))
+        if not where:
+            where = _charter_place(_refs_of(rec)) or presence_room(sc, name, rec)
+        if where != room:
             continue
         if not presence_has_an_identity(sc, name, rec):
             continue
@@ -11004,8 +11043,23 @@ def _resolve_player_room(sc, pers, interp, cast, player_input=None):
     # The two that remain are the ones the resolver exists for -- chat 117 and
     # 122 really do stand bodies in two and three rooms -- so this narrows the
     # question rather than answering it.
+    # NOR IS A BODY WHOSE IDENTITY THE SCENE ALREADY RECORDS. A charter body
+    # the scene stands carries its `charter_ref` -- it is a townsperson, known
+    # by the charter that simulates it, and never the player. Counting it put
+    # a playerless frame's absent persona wherever the one townsperson on
+    # screen stood, and with two of them in two rooms bought a model call on
+    # both perception stages to choose (playerless Aldermill round 5,
+    # 2026-09-23: 35 calls, 196s, none of them in the round before the scene
+    # began standing charter bodies).
+    charter_bound = set()
+    for eid, ent in (sc.get("entities") or {}).items():
+        if isinstance(ent, dict) and isinstance(ent.get("charter_ref"), dict):
+            charter_bound.add(str(eid).lower().strip())
+            if ent.get("name"):
+                charter_bound.add(str(ent["name"]).lower().strip())
     placed = [(k, v) for k, v in (sc.get("positions") or {}).items()
-              if k.lower().strip() not in char_names]
+              if k.lower().strip() not in char_names
+              and k.lower().strip() not in charter_bound]
     candidates = [v for k, v in placed if scene_names_body(sc, k)]
     # Never ADD a call: a scene that stands no non-cast body anywhere has not
     # placed the player either, and the unfiltered list is the guess this has

@@ -371,6 +371,25 @@ def _chat(db):
     return cid
 
 
+def test_a_ledger_record_of_a_charter_body_stands_where_the_charter_holds_it(temp_db):
+    """Playerless Aldermill round 5 (2026-09-23): a mill hand's presence
+    record kept the room he was introduced in after the charter walked him
+    away, so he stood at the weir in every view, was voiced and acted there,
+    and could never be stood -- one body in two rooms for nine beats."""
+    from agents.common import presence_figures_for_room
+    cid = _chat(temp_db)
+    temp_db.wset(cid, "background_presences", {"p_oren": {
+        "uid": "p_oren", "name": "Porter Oren",
+        "charter_refs": [{"charter": "inn", "body": "porter"}],
+        "sketch": {"station_room": "hall", "role_hint": "porter"},
+        "first_turn": 0, "last_turn": 0}})
+    scene = _scene()
+    hall = [r["name"] for r in presence_figures_for_room(cid, scene, "hall")]
+    road = [r["name"] for r in presence_figures_for_room(cid, scene, "road")]
+    assert "Porter Oren" not in hall and "Oren" not in hall
+    assert road.count("Porter Oren") + road.count("Oren") == 1
+
+
 class TestTheRoundTrip:
     """Beat N the Director moves the innkeeper to the door anchor; beat N+1
     the placement returns the door anchor, not the dealt cell; beat N+2 she

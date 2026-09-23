@@ -15,9 +15,9 @@ event を起きた順に書いてください。一つの event は一つの因�
 - source_event_id: この段階が実行する、またはそこから続いて起きる event_inputs の event_id。
 - event: 話された event なら、記述が引用するとおりの言葉だけ。それ以外は段階の短い客観的な記述。
 - speech: 話された event なら true。act: 記述が言葉を示さずに発話を報告しているときだけ、その発話の動詞。
-- observable: 動機を含まない外から見える動きだけ。純粋な発話なら ""。
+- observable: 動機を含まない外から見える動きだけ。純粋な発話なら ""。これは prose が起きたと言っていることを、prose の言葉で書いたものです。event_inputs の行は試みられたことを示すだけで、prose がその試みを別の形で解決したなら、observable は prose に従います。
 - targets: その段階が向けられている、または話しかけている身体、もの、部屋の key または読める名前。
-- volume (whisper|mutter|normal|loud|shout), visibility, conceal_from: 重要なときの伝達上の事実。
+- volume (whisper|mutter|normal|loud|shout、または pitched: 相手に届くだけの大きさで、それ以上ではない), visibility, conceal_from: 重要なときの伝達上の事実。
 - look: 段階が向きを変える、または見るとき。身体、設備、出口の id、left|right|back、または around。
 - seconds: この段階にかかった物語上の秒数。記述が与える尺度で。合計はコードが出します。
 - movement: 身体が部屋を移るときだけ {to_room, why, mover, arrives, to_anchor?, pace?}。to_room は歩みの終点で、経路はエンジンが歩きます。それ以外は null。

@@ -769,6 +769,14 @@ def cached_registry(cid):
     with _REGISTRY_CACHE_LOCK:
         entry = _REGISTRY_CACHE.get(cache_key)
         if entry is not None and entry[0] == token:
+            # MOST RECENTLY USED GOES LAST, so eviction takes the coldest --
+            # which is what "a second chat polled mid-turn cannot thrash the
+            # hot chat's entry" promises. Eviction by insertion order broke
+            # it: an entry refreshed in place keeps its old slot, so the hot
+            # chat's registry could be the one a single other read evicted.
+            # Measured as a test-order flake (2026-09-23): the frame-7 read
+            # evicted the present frame's entry it had just refreshed.
+            _REGISTRY_CACHE[cache_key] = _REGISTRY_CACHE.pop(cache_key)
             return entry[1]
     # Parse outside the lock: a second thread racing here recomputes the
     # same value, which costs seconds once and corrupts nothing. The token
@@ -776,8 +784,8 @@ def cached_registry(cid):
     # this entry already-stale rather than wrongly-fresh.
     registry = normalize_registry(wget(cid, CHARTERS_KEY, {}) or {})
     with _REGISTRY_CACHE_LOCK:
-        if cache_key not in _REGISTRY_CACHE \
-                and len(_REGISTRY_CACHE) >= _REGISTRY_CACHE_CAP:
+        _REGISTRY_CACHE.pop(cache_key, None)
+        while _REGISTRY_CACHE and len(_REGISTRY_CACHE) >= _REGISTRY_CACHE_CAP:
             _REGISTRY_CACHE.pop(next(iter(_REGISTRY_CACHE)))
         _REGISTRY_CACHE[cache_key] = (token, registry)
     return registry

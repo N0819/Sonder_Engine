@@ -208,3 +208,20 @@ class TestTheSixCallTurnBracket:
         act.setdefault("ground_memo", {})["hall"] = [{"stale": True}]
         assert "hall" not in outcome["memo"]
         assert "hall" not in outcome.get("ground_memo", {})
+
+
+class TestTheColdestEntryIsEvicted:
+    def test_the_entry_just_read_survives_the_next_insert(self, temp_db, monkeypatch):
+        """Test-order flake (2026-09-23): the cache evicted by insertion
+        order, so an entry read (or refreshed in place) kept its old slot and
+        the next insert could evict the registry every reader had just been
+        handed -- the opposite of what a hot chat's entry is kept for."""
+        monkeypatch.setattr(cr, "_REGISTRY_CACHE", {})
+        cid = _chat(temp_db)
+        _seed_registry(temp_db, cid)
+        other = _chat(temp_db)
+        present = cr.registry_for(cid)          # [present]
+        cr.registry_for(cid, 7)                 # [present, era]
+        assert cr.registry_for(cid) is present  # hit: present is now newest
+        cr.registry_for(other)                  # evicts the coldest: era
+        assert cr.registry_for(cid) is present

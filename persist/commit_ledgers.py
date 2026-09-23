@@ -205,7 +205,10 @@ def _demand_unheard_by(ctx, who, row):
     line whose words the view does carry, all leave the debt to open."""
     if not isinstance(row, dict) or "speech" not in (row.get("categories") or []):
         return False
-    words = _fold_words(row.get("event"))
+    # The beat's sequence row carries the line as its `note`; a ledger row as
+    # its `event`. Reading one field alone read an empty line on every beat
+    # of round 5 and exempted all of them as too short to judge.
+    words = _fold_words(row.get("event") or row.get("note") or row.get("text"))
     if len(words) < 8:
         return False
     views = (ctx.get("perception_outcome") or {}).get("views") or {}

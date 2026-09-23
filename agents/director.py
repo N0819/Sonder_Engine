@@ -4542,6 +4542,37 @@ def _causal_event_inputs(ctx, interp, declarations, dice, pressures):
     return groups
 
 
+def _name_voice_targets(ctx, scene, declaration):
+    """A charter voice's lines aimed at the body its own words name.
+
+    A voice addresses whom it sees in the words its view gave it -- "the
+    short" -- and wrote that into `intended_target` and each line's
+    `targets`. Matched against names, a line so aimed was aimed at nobody:
+    sixteen observer-epithet warnings on one playerless run, and every debt
+    those lines opened owed to no one (Aldermill round 5, 2026-09-23).
+    Resolved the way an address is (`_bodies_addressed_as`); a label that
+    names no single body is left as written. Mutates `declaration`."""
+    if not isinstance(declaration, dict):
+        return
+    speaker = str(declaration.get("name") or "")
+    if not speaker:
+        return
+
+    def _named(target):
+        target = str(target or "").strip()
+        if not target:
+            return target
+        bodies = _bodies_addressed_as(ctx, scene, speaker, [target])
+        return bodies[0] if len(bodies) == 1 else target
+
+    entry = declaration.get("dialogue_log_entry")
+    if isinstance(entry, dict) and entry.get("intended_target"):
+        entry["intended_target"] = _named(entry["intended_target"])
+    for element in declaration.get("sequence") or ():
+        if isinstance(element, dict) and element.get("targets"):
+            element["targets"] = [_named(t) for t in element["targets"]]
+
+
 def _name_declared_targets(ctx, scene, groups, identity_index):
     """Say which body each declared target IS, where the declarer's words for
     it name exactly one.
@@ -5945,6 +5976,7 @@ def director_resolve(ctx, nonce, _corrections=None):
                  for e in lines if e.get("text")}
         _said |= {_fold_line(t) for t in _player_lines_this_beat(interp)}
         for _fd in _figure_declarations:
+            _name_voice_targets(ctx, resolve_sc, _fd)
             _fd, _echoed = _own_words_only(_fd, _said)
             if _echoed:
                 ctx.add_warning(
@@ -7639,8 +7671,20 @@ def director_resolve(ctx, nonce, _corrections=None):
         out["identity_bindings"] = _bound
     # A present charter body that touches or is touched stands in the scene,
     # so its contact survives the merge and the lease governs it.
+    # The bodies the beat LAID are candidates too, under the spelling the
+    # declarations used: a figure is on screen because it was laid and
+    # voiced here, whatever the present-figure list calls it. A creature is
+    # the charter's to stand, laid or not.
+    from .common import _creature_stance
+    _creature_refs = {(str(_f.get("charter")), str(_f.get("body")))
+                      for _f in _present_figures if _f.get("creature")}
+    _laid_figures = [
+        dict(_r) for _r in (_figure_rows or [])
+        if isinstance(_r, dict) and _r.get("charter") and _r.get("body")
+        and (str(_r["charter"]), str(_r["body"])) not in _creature_refs
+        and not _creature_stance(chat["id"], _r["charter"], ctx.turn.frame_id)]
     for _stood in _stand_touching_figures(
-            sc, sd, list(_present_figures),
+            sc, sd, list(_present_figures) + _laid_figures,
             declared_rooms={str(_fd.get("name")): str(_fd.get("room"))
                             for _fd in _figure_declarations
                             if _fd.get("name") and _fd.get("room")},

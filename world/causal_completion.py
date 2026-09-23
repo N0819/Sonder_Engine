@@ -6,6 +6,8 @@ can actually be certified. Unsupported commit domains remain pending.
 """
 from copy import deepcopy
 
+from world.causal_verification import TRANSIENT_EVENT
+
 
 # These commit-side records describe knowledge, recognition, evidence, or
 # obligations. Their pending persistence does not undo an observed gesture.
@@ -70,7 +72,8 @@ def execution_receipt(before, after, step):
                   if effect.get("status") == "unresolved"]
     # No verifier is a limitation, never a successful no-op or a failed act.
     pending = [effect for effect in unresolved
-               if effect.get("code") in {"unsupported_channel", "pending_commit_domain"}]
+               if effect.get("code") in {"unsupported_channel", "pending_commit_domain",
+                                         TRANSIENT_EVENT}]
     status = ("unresolved" if len(unresolved) > len(pending) else
               "pending" if pending else
               "applied" if any(e.get("status") == "applied" for e in effects) else
@@ -99,7 +102,7 @@ def execution_receipt(before, after, step):
     # as it was -- the test's own title, "failed requested effects remain
     # auditable without becoming observed successes", is what this keeps.
     action_unresolved = [effect for effect in unresolved
-                         if not (effect.get("code") == "missing_effect"
+                         if not (effect.get("code") in ("missing_effect", TRANSIENT_EVENT)
                                  or (effect.get("code") == "unsupported_channel"
                                      and effect.get("channel") in DEFERRED_NONPHYSICAL_CHANNELS)
                                  or (effect.get("code") == "pending_commit_domain"

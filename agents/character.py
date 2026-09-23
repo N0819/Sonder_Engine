@@ -1746,6 +1746,12 @@ def _ground_observation_citations(out, observations, memory_context,
                 continue
             item = dict(ref)
             eid = str(item.get("event_id") or "").strip()
+            if not eid:
+                # An empty id cites nothing, so there is nothing to ground
+                # and nothing to report: it was eleven of the warnings on one
+                # playerless run (2026-09-23), all appraisal lanes, burying
+                # the ungrounded citations that do name something.
+                continue
             if eid == "current" and current and namespace != "past":
                 item["event_id"] = next(iter(current))
                 grounded.append(item)
