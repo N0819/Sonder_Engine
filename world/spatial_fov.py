@@ -911,7 +911,17 @@ def _line(a: tuple, b: tuple) -> list:
     segment never touched. Within a room that only ever over-blocked; at a
     doorway, one open cell in a wall, it put the wall into almost every
     off-axis line (2026-09-04, the cellar-and-stove case).
+
+    The flat form of `_line_steps`, which says which cells came as a pair.
     """
+    return [cell for step in _line_steps(a, b) for cell in step]
+
+
+def _line_steps(a: tuple, b: tuple) -> list:
+    """`_line`'s cells in order, grouped: a one-cell tuple for a cell the
+    segment runs through, a two-cell tuple for the pair it only touches, at
+    the corner it passes exactly through. A corner cell is shared with the
+    one beside it, which is what `_occluders_on` needs to know."""
     x0, y0 = a
     x1, y1 = b
     dx, dy = abs(x1 - x0), abs(y1 - y0)
@@ -922,6 +932,7 @@ def _line(a: tuple, b: tuple) -> list:
     x, y = x0, y0
     i = j = 0                 # boundaries crossed on each axis so far
     out = []
+    seen = set()
     while (x, y) != (x1, y1):
         # next x-crossing at (2i+1)/(2dx), next y-crossing at (2j+1)/(2dy);
         # cross-multiplied so the tie is exact.
@@ -934,15 +945,18 @@ def _line(a: tuple, b: tuple) -> list:
             y += sy
             j += 1
         else:
-            for corner in ((x + sx, y), (x, y + sy)):
-                if corner not in (a, b) and corner not in out:
-                    out.append(corner)
+            pair = tuple(corner for corner in ((x + sx, y), (x, y + sy))
+                         if corner not in (a, b) and corner not in seen)
+            if pair:
+                out.append(pair)
+                seen.update(pair)
             x += sx
             y += sy
             i += 1
             j += 1
         if (x, y) != (x1, y1):
-            out.append((x, y))
+            out.append(((x, y),))
+            seen.add((x, y))
     return out
 
 
@@ -1351,6 +1365,31 @@ def _wall_verdict(field, origin, target) -> bool:
     return True
 
 
+def _cell_on_line(field, cell, origin, target, eye, top, ignore):
+    """What one cell of a line does to it: ("wall", None), ("block", id),
+    or ("pass", (height rank, id) or None)."""
+    if cell not in field.inside:
+        if _on_wall_line(field, cell):
+            return "pass", None             # the wall itself, judged above
+        return "wall", None
+    h = field.height.get(cell)
+    held = getattr(field, "held", {}).get(cell)
+    if held is not None and cell not in (origin, target) \
+            and (h is None or held[0] > h):
+        # A BODY IN A DOORWAY IS THE DOOR: a line through the aperture
+        # meets the body standing in it at the body's own height.
+        if _blocks(held[0], eye, top):
+            return "block", held[1]
+        return "pass", (held[0], held[1])
+    if h is None:
+        return "pass", None
+    if ignore and field.occluder.get(cell) in ignore:
+        return "pass", None
+    if _blocks(h, eye, top):
+        return "block", field.occluder.get(cell)
+    return "pass", (h, field.occluder.get(cell))
+
+
 def _occluders_on(field, origin, target, eye, top, ignore=()):
     """(blocking anchor id or None, tallest non-blocking anchor height rank)
     along the straight line between two cells. `__wall__` names a wall,
@@ -1369,30 +1408,29 @@ def _occluders_on(field, origin, target, eye, top, ignore=()):
     if max(abs(origin[0] - target[0]), abs(origin[1] - target[1])) <= 1 \
             and field.inside.get(origin) == field.inside.get(target):
         return None, tallest, tallest_id
-    for cell in _line(origin, target):
-        if cell not in field.inside:
-            if _on_wall_line(field, cell):
-                continue                    # the wall itself, judged above
+    for step in _line_steps(origin, target):
+        verdicts = [_cell_on_line(field, cell, origin, target, eye, top, ignore)
+                    for cell in step]
+        if any(kind == "wall" for kind, _ in verdicts):
             return "__wall__", tallest, tallest_id
-        h = field.height.get(cell)
-        held = getattr(field, "held", {}).get(cell)
-        if held is not None and cell not in (origin, target) \
-                and (h is None or held[0] > h):
-            # A BODY IN A DOORWAY IS THE DOOR: a line through the aperture
-            # meets the body standing in it at the body's own height.
-            if _blocks(held[0], eye, top):
-                return held[1], tallest, tallest_id
-            if held[0] > tallest:
-                tallest, tallest_id = held[0], held[1]
-            continue
-        if h is None:
-            continue
-        if ignore and field.occluder.get(cell) in ignore:
-            continue
-        if _blocks(h, eye, top):
-            return field.occluder.get(cell), tallest, tallest_id
-        if h > tallest:
-            tallest, tallest_id = h, field.occluder.get(cell)
+        # THROUGH A CORNER, ONE FIXTURE IS NOT A WALL. The pair a line only
+        # touches at their shared corner stops it when BOTH hold something
+        # that blocks -- two occluders meeting at a corner leave no gap, which
+        # is what the supercover's corner rule is for -- and never when one
+        # does: that line passes the fixture's corner, it does not enter it.
+        # The arm's-reach rule above was this, for one step. Measured on the
+        # playerless Aldermill round 9 (2026-09-23): a man stationed beside a
+        # head-high crown-wheel housing and a woman four paces off, both in
+        # the grind floor, the line between them touching the housing's
+        # corner and nothing else -- the shadowcast had them in view, this
+        # walk refused it, and for three beats each was "the unfamiliar
+        # person" to the other.
+        blocking = [info for kind, info in verdicts if kind == "block"]
+        if blocking and len(blocking) == len(verdicts):
+            return blocking[0], tallest, tallest_id
+        for kind, info in verdicts:
+            if kind == "pass" and info is not None and info[0] > tallest:
+                tallest, tallest_id = info
     return None, tallest, tallest_id
 
 

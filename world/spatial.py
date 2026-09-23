@@ -266,7 +266,7 @@ from world.spatial_fov import (
     DEFAULT_FOOTPRINT, DEFAULT_HEIGHT, DEFAULT_OPACITY, DEFAULT_SHAPE,
     FOOTPRINTS,
     GRID_SIDE, HEIGHTS, OPACITIES, ROOM_CORNERS, RoomGrid, SHAPES,
-    _EYE_RANK, _PART_SHAPES, _door_cells, _line, _occluders_on,
+    _EYE_RANK, _PART_SHAPES, _door_cells, _line, _line_steps, _occluders_on,
     _sight_neighbours, _unlit_cells,
     _wall_verdict, anchor_cells, anchor_geometry,
     bearing_between, body_cell, body_cell_source, body_visibility,

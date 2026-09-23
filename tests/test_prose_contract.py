@@ -874,3 +874,17 @@ def test_a_place_the_world_holds_is_already_designed():
     assert "submit at once with nothing drafted" in en
     assert "それは既に設計されており" in ja
     assert "何も draft せずにすぐ submit してください" in ja
+
+
+def test_a_places_text_never_describes_who_is_in_it():
+    """Chat 153 replay (2026-09-23) idx 23: the designer's redraft of the
+    console room wrote "Hinami stands here, six golden tails flared" into the
+    doorway's anchor -- her own view then narrated her -- and "Gushiga
+    Toriki's cuff garment and trousers" into the console's, carrying a
+    storekeeper's name to a man who never learned it. Both tripped the
+    composer; both are text that is wrong the moment anyone moves."""
+    from llm import prompts
+    en = prompts.room_author_prompt()
+    ja = prompts.room_author_prompt("ja")
+    assert "a place's text describe a person, what one is doing, or whose anything is" in en
+    assert "場所の文も、人物や、その人がしていること、何かが誰のものかを描いてはいけません" in ja

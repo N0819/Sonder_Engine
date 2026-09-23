@@ -1317,6 +1317,19 @@ def interaction_loop(ctx, nonce):
                     and bool(interaction.get("conversation_complete_for_me")))
 
         if all(_closed(r) for _, r, _, _ in spoke):
+            # ...and the people the beat summoned still have their turn, the
+            # same deferral the two exits above make. Measured on the
+            # playerless Aldermill round 9 (2026-09-23): two lives in one
+            # frame, both listed as reactors, and on 4 of 8 joint beats the
+            # first called closed his own exchange and the beat ended with
+            # the second never asked -- her life simply stopped for a beat.
+            drained = _defer_to_unrun_reactor(
+                queue_ids, initial_set, already_spoke, calls, max_calls)
+            if drained is not None:
+                queue_ids = drained
+                pending_exit_reason = (pending_exit_reason
+                                       or "speaker completed exchange")
+                continue
             stop_reason = (
                 "speaker completed exchange"
             )
@@ -1452,7 +1465,7 @@ def interaction_loop(ctx, nonce):
         "stop_reason": (pending_exit_reason
                         if pending_exit_reason and stop_reason in (
                             "budget exhausted", "no eligible respondent",
-                            "natural silence")
+                            "natural silence", "speaker completed exchange")
                         else stop_reason),
         "calls": calls,
     }

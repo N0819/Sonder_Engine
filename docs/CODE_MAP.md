@@ -26,7 +26,7 @@
 | `agents/director_views.py` | 706 |  | `agents.common`, `story.character_schema`, `story.scene`, `world.background_claims` |
 | `agents/dramaturge.py` | 348 |  | `core.db`, `core.logging_utils` |
 | `agents/impossible_knowledge.py` | 232 |  | `agents.common`, `core.db`, `story.character_schema` |
-| `agents/loops.py` | 1535 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
+| `agents/loops.py` | 1548 | Reaction loops, interaction rounds, and deterministic micro-perception. | `agents.character`, `agents.common`, `core.db`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `agents/mapping.py` | 665 | Lore routing, cached recall, and retrieval staging. | `agents.common`, `core.db`, `mind.memory`, `story.scene`, `world.spatial` |
 | `agents/narration.py` | 2739 | Player-facing narration agent. | `agents`, `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `story`, `story.character_schema`, `story.scene`, `world.spatial`, `world.weather` |
 | `agents/offscreen_beat.py` | 356 |  | — |
@@ -206,7 +206,7 @@
 | `world/spatial_contact_migration.py` | 332 |  | `story.character_schema`, `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_contacts.py` | 1957 |  | `world.spatial_containment`, `world.spatial_identity`, `world.spatial_transit` |
 | `world/spatial_containment.py` | 3280 |  | `world.spatial_barriers`, `world.spatial_identity`, `world.spatial_transit` |
-| `world/spatial_fov.py` | 1757 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
+| `world/spatial_fov.py` | 1795 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_frames.py` | 2640 |  | `core.db`, `core.frames`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial` |
 | `world/spatial_geometry.py` | 2209 |  | `story.character_schema`, `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_identity.py` | 887 |  | — |
@@ -473,10 +473,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `interaction_loop()` | 774 | 685 lines |
+| `interaction_loop()` | 774 | 698 lines |
 | `deterministic_micro_perception()` | 319 | 181 lines |
 | `rehydrate_loop_views()` | 97 | 82 lines |
-| `reaction_loop()` | 1460 | 76 lines |
+| `reaction_loop()` | 1473 | 76 lines |
 | `self_micro_view()` | 224 | 54 lines |
 | `_drop_absent()` | 515 | 45 lines |
 | `_isolated_wave()` | 731 | 41 lines |
@@ -2526,13 +2526,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `_place_anchors()` | 544 | 125 lines |
-| `feature_visibility()` | 1416 | 111 lines |
+| `feature_visibility()` | 1454 | 111 lines |
 | `body_cell()` | 784 | 76 lines |
-| `body_visibility()` | 1631 | 75 lines |
-| `neighbour_feature_visibility()` | 1560 | 69 lines |
-| `room_field()` | 1165 | 62 lines |
-| `_line()` | 895 | 52 lines |
-| `_placed_neighbours()` | 1104 | 49 lines |
+| `body_visibility()` | 1669 | 75 lines |
+| `neighbour_feature_visibility()` | 1598 | 69 lines |
+| `room_field()` | 1179 | 62 lines |
+| `_placed_neighbours()` | 1118 | 49 lines |
+| `shadowcast()` | 963 | 47 lines |
 
 ### `world/spatial_frames.py`
 
