@@ -630,3 +630,62 @@ def test_a_laid_bodys_given_name_is_scrubbed_to_the_observers_own_label():
                               labels={"Kenricer Forgetonman": label})
     assert "Kenricer" not in out
     assert label in out
+
+
+def test_a_fragment_of_a_hyphenated_title_is_not_a_name():
+    """Playerless Aldermill round 7 (2026-09-23), idx 14-22: the post
+    "Flume-tender" gave the name part "Flume", and Emory's views read "You
+    are in Wheelhouse and the hard-bitten barrel-chested hand ...", with
+    eight false tripwires. The given and family names are still his."""
+    from agents.common import _scrub_unknown_identities
+    label = "the hard-bitten barrel-chested hand"
+    src = [{"name": "Flume-tender Hobwaldold Wheatwatersack", "aliases": [],
+            "appearance": "a hard-bitten barrel-chested hand"}]
+    text, leaked = _scrub_unknown_identities(
+        "You are in Wheelhouse and Flume. Hobwaldold greases the axle.",
+        allowed_forms=["Emory Vane"], unknown_sources=src,
+        labels={"Flume-tender Hobwaldold Wheatwatersack": label})
+    assert text.startswith("You are in Wheelhouse and Flume.")
+    assert "Hobwaldold" not in text and label in text
+    assert leaked == ["Flume-tender Hobwaldold Wheatwatersack"]
+
+
+def test_a_bubble_has_no_player_to_look_for(temp_db, monkeypatch):
+    """Playerless Aldermill round 7 (2026-09-23): once Emory carried a tub and
+    a paddle, the two props were two candidate rooms for the absent player
+    and a model was offered every body -- eleven calls, and the player stood
+    beside the miller for nine beats."""
+    import time
+    from types import SimpleNamespace
+    from agents import common
+    from core.frames import create_frame
+    cid = temp_db.qi("INSERT INTO chats(name,scenario,created) VALUES(?,?,?)",
+                     ("Aldermill", "", time.time()))
+    bubble = create_frame(cid, label="Emory", ordinal=0, kind="spatial",
+                          split_turn_idx=1)
+    scene = {"rooms": {"wheelhouse": {}, "mill_floor": {}},
+             "positions": {"Emory Vane": "wheelhouse", "tallow tub": "wheelhouse",
+                           "horn paddle": "wheelhouse"},
+             "entities": {}}
+    temp_db.wset_for_frame(cid, "scene", scene, bubble)
+    asked = []
+    monkeypatch.setattr(common, "_llm_resolve_player_room",
+                        lambda *a, **k: asked.append(a) or "mill_floor")
+
+    class _Ctx(dict):
+        pass
+    ctx = _Ctx()
+    ctx.chat = SimpleNamespace(id=cid, persona="{}", persona_id=None)
+    ctx.turn = SimpleNamespace(frame_id=bubble)
+    ctx.cast = []
+    assert common.player_room_in(scene, ctx, pers={"name": "Nobody"}) is None
+    assert asked == []
+
+
+def test_one_room_named_twice_is_one_answer(monkeypatch):
+    from agents import common
+    monkeypatch.setattr(common, "_llm_resolve_player_room",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("asked")))
+    scene = {"positions": {"tallow tub": "wheelhouse", "horn paddle": "wheelhouse"},
+             "entities": {}}
+    assert common._resolve_player_room(scene, {"name": "Nobody"}, {}, []) == "wheelhouse"

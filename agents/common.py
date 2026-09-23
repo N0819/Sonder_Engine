@@ -339,8 +339,14 @@ def communication_verb(elem, tense="present", fallback=None):
         return "said" if tense == "past" else "says"
     if tense == "past":
         return act
-    # Already third person ("mutters"): conjugated once is conjugated.
-    return act if _base_from_third_person_s(act.split()[0]) else act + "s"
+    # Already finite -- third person ("mutters") or past ("added") -- is
+    # conjugated once: "addeds" reached Sal's view (playerless Aldermill
+    # round 7, 2026-09-23). A past form reads as a tense slip in a present
+    # view; re-conjugated it read as nothing. `-eed` is a base ("heed").
+    head = act.split()[0]
+    finite = _base_from_third_person_s(head) or (
+        head.endswith("ed") and not head.endswith("eed") and len(head) > 3)
+    return act if finite else act + "s"
 
 
 def communication_surface(elem):
@@ -5777,8 +5783,15 @@ def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources,
         # tables are language DATA the pack already owns for naming.
         _generic = set(_ling("_NAME_TITLE_TOKENS")) | set(
             _ling("_GENERIC_LABEL_HEADS"))
-        parts = [tok for tok in re.split(r"[^\w]+", name)
-                 if tok and tok.casefold() not in _generic] \
+        # A HYPHENATED COMPOUND IS ONE WORD, the rule the label check below
+        # already keeps: its fragments are not spellings of the body. Split
+        # on every non-word character, the post "Flume-tender" gave a part
+        # "Flume", and the room "Wheelhouse and Flume" read "Wheelhouse and
+        # the hard-bitten barrel-chested hand ..." in Emory's views, with
+        # eight false tripwires (playerless Aldermill round 7, 2026-09-23).
+        parts = [tok.strip("-") for tok in re.split(r"[^\w-]+", name)
+                 if tok.strip("-")
+                 and tok.strip("-").casefold() not in _generic] \
             if len(name.split()) > 1 else []
         authored = {name.casefold()} | {
             str(a or "").strip().casefold() for a in (src.get("aliases") or [])}
@@ -11143,6 +11156,10 @@ def _resolve_player_room(sc, pers, interp, cast, player_input=None):
     # always made there.
     if not candidates:
         candidates = [v for _, v in placed]
+    # ONE ROOM NAMED TWICE IS ONE ANSWER, not a choice: two things standing
+    # in the same room were two candidates, and the tie bought a model call
+    # (a tub and a paddle, playerless Aldermill round 7, 2026-09-23).
+    candidates = list(dict.fromkeys(candidates))
     if len(candidates) == 1:
         return candidates[0]
     # ASK ONLY WHERE THERE IS SOMETHING TO CHOOSE BETWEEN. The gate was "does
@@ -11162,6 +11179,17 @@ def _resolve_player_room(sc, pers, interp, cast, player_input=None):
         if llm_room:
             return llm_room
     return None
+
+
+def _frame_has_no_player(ctx):
+    """Is this beat played in a frame no human plays in (a causality
+    bubble)? False wherever it cannot tell, so a story keeps its resolver."""
+    try:
+        from world.spatial_frames import is_bubble_frame
+        frame_id = getattr(ctx.turn, "frame_id", None)
+        return frame_id is not None and is_bubble_frame(ctx.chat.id, frame_id)
+    except Exception:
+        return False
 
 
 def player_room_in(sc, ctx, pers=None, interp=None, player_name=None,
@@ -11216,6 +11244,15 @@ def player_room_in(sc, ctx, pers=None, interp=None, player_name=None,
     room = room_of(sc, name) if name else None
     if not room:
         room = ctx.get("_player_room")
+    if not room and resolve and _frame_has_no_player(ctx):
+        # A CAUSALITY BUBBLE HAS NO PLAYER TO FIND. It is the frame no human
+        # plays in (`spatial_frames.is_bubble_frame`), so the scene placing
+        # no player is the scene saying so, not a gap for a model to fill.
+        # Resolved anyway, the two props Emory carried were two candidate
+        # rooms and the model was offered every body: eleven calls, 48.8 s,
+        # the absent player stood beside the miller for nine beats
+        # (playerless Aldermill round 7, 2026-09-23).
+        return None
     if not room and resolve:
         room = _resolve_player_room(sc, pers, interp, ctx.cast,
                                     ctx.get("input"))

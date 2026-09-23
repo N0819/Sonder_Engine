@@ -5335,21 +5335,28 @@ def apply_presence_conduct(cid, name, conduct, *, record=None, frame_id=None,
     act, other = str(conduct.get("act") or ""), str(conduct.get("other") or "")
     if not act or not other:
         return None
-    permitted = {(str(row.get("act") or ""), str(row.get("other") or ""))
-                 for row in (allowed or ()) if isinstance(row, dict)}
-    if (act, other) not in permitted:
+    # AN OFFER IS NAMED BY ITS LABEL OR BY ITS KEY. The model echoes the
+    # label it was shown; the resolve stage then names the body those words
+    # mean (`director._name_voice_targets`), which is the offer row's own
+    # canonical `key`. Matched on the label alone, every act so named was
+    # refused: 5 of 5 conducts toward Sal on the playerless Aldermill run,
+    # round 7 (2026-09-23), where round 6 matched 4 of 4. The key is the one
+    # string the mind was never told, so accepting it widens nothing a voice
+    # can author.
+    offered = [row for row in (allowed or ()) if isinstance(row, dict)
+               and str(row.get("act") or "") == act
+               and other in (str(row.get("other") or ""),
+                             str(row.get("key") or ""))]
+    if not offered:
         return {"actor": str(name), "act": act, "other": other,
                 "refused": "not_offered_to_scene_life"}
-    # The model echoed the rendered label; the offer row that licensed it
-    # carries the canonical key (`presence_view`), which is what the mind
-    # keys the encounter by. Without this the greet path minted a second
-    # subject under the label beside the one sighting and evidence keep.
-    shown = other
-    other = next((str(row.get("key")) for row in (allowed or ())
-                  if isinstance(row, dict) and row.get("key")
-                  and (str(row.get("act") or ""),
-                       str(row.get("other") or "")) == (act, shown)),
-                 other)
+    # The offer row that licensed it carries the canonical key
+    # (`presence_view`), which is what the mind keys the encounter by, and
+    # the label it was shown under. Without the key the greet path minted a
+    # second subject under the label beside the one sighting and evidence
+    # keep.
+    shown = str(offered[0].get("other") or "") or other
+    other = str(offered[0].get("key") or "") or other
     registry = registry_for_update(cid, frame_id)
     refs = (record or {}).get("charter_refs") or ()
     matches = _body_refs(registry, name=name, refs=refs)

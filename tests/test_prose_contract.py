@@ -742,6 +742,28 @@ def test_a_quoted_line_is_a_line_and_a_reported_one_keeps_its_verb():
     assert "act" in events[0]          # copied, never mutated
 
 
+def test_a_line_split_around_its_tag_is_still_a_line():
+    """Round 7 (2026-09-23) idx 6: the prose quoted the deputy's words in two
+    spans around "he added"; the encoder joined them, the act survived, and
+    Sal's view read "addeds Still crossing for now ..." beside the line."""
+    prose = ('"Still crossing for now," he added, gruff and practical. '
+             '"Long as the drift gets kept off the timbers."')
+    events = [{"speech": True, "act": "added", "event":
+               "Still crossing for now. Long as the drift gets kept off the timbers."},
+              {"speech": True, "act": "added", "event":
+               "Still crossing for now, and the bar stays up."}]
+    out = director_prose.quoted_lines_keep_their_words(events, prose)
+    assert "act" not in out[0]
+    assert out[1]["act"] == "added"    # words the prose never quoted stay a report
+
+
+def test_a_past_act_is_not_conjugated_again():
+    from agents.common import communication_verb
+    assert communication_verb({"act": "added"}) == "added"
+    assert communication_verb({"act": "heed"}) == "heeds"
+    assert communication_verb({"act": "add"}) == "adds"
+
+
 def test_an_inflected_act_is_conjugated_once():
     from agents.common import communication_act, communication_awaits_reply, communication_verb
     assert communication_verb({"act": "says"}) == "says"

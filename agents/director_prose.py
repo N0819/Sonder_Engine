@@ -847,11 +847,30 @@ def quoted_lines_keep_their_words(events, prose):
     out = []
     for event in events or []:
         if (isinstance(event, dict) and event.get("speech") and event.get("act")
-                and _fold_line(event.get("event"))
-                and any(_fold_line(event.get("event")) in span for span in spans)):
+                and _quoted_whole(event.get("event"), spans)):
             event = {k: v for k, v in event.items() if k != "act"}
         out.append(event)
     return out
+
+
+def _quoted_whole(words, spans):
+    """Do the prose's quotations hold every word of `words`?
+
+    A LINE SPLIT AROUND ITS TAG IS STILL QUOTED: `"Still crossing for now,"
+    he added. "Long as the drift gets kept off the timbers."` is two spans,
+    and the encoder wrote the line as one event. Read as a single span it
+    kept its act and reached the view twice -- "addeds Still crossing for
+    now ..." and the quoted line (playerless Aldermill round 7, 2026-09-23,
+    idx 6; Sal's own split line the same beat)."""
+    rest = _fold_line(words)
+    if not rest:
+        return False
+    if any(rest in span for span in spans):
+        return True
+    for span in sorted(spans, key=len, reverse=True):
+        if span:
+            rest = rest.replace(span, " ")
+    return not re.sub(r"[\W_]+", "", rest)
 
 _ROW_FIELDS = ("source_entity_id", "source_event_id", "event", "act",
                "observable", "commitment", "targets", "visibility",

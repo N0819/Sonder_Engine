@@ -205,6 +205,7 @@ from world.spatial_geometry import (
     invalidate_moved_body_place_details,
     invalidate_moved_body_pose_details,
     invalidate_transferred_pose_details,
+    release_moved_body_supports,
     normalize_cell, normalize_scene_anchor_cells,
     poses_broken_by_scale_change,
     measured_proximity_rel, normalize_scene_poses,

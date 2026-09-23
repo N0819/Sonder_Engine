@@ -336,6 +336,32 @@ class TestTheSliceSaysMetBeforeAndNeverTheName:
         assert held[PLAYER]["surface"]["label"] == _label()
         assert _label() not in held
 
+    def test_a_greet_named_by_the_body_its_words_mean_lands_too(self, temp_db):
+        """The resolve stage names the body a voice's words mean
+        (`director._name_voice_targets`) -- the offer row's own key. Matched
+        on the label alone, every act so named was refused: 5 of 5 toward
+        Sal on the playerless Aldermill run, round 7 (2026-09-23)."""
+        ctx, scene = _ctx(temp_db)
+        charter_runtime.save_registry(ctx.chat.id, {"town": _town()})
+        view = charter_runtime.presence_view(
+            ctx.chat.id, "hall", "Reeve Ysra",
+            figures=[{"key": PLAYER, "label": _label()}])[0]
+        offers = view["action_instances"]
+        record = {"charter_refs": [{"charter": "town", "body": "reeve"}]}
+
+        landed = charter_runtime.apply_presence_conduct(
+            ctx.chat.id, "Reeve Ysra", {"act": "greet", "other": PLAYER},
+            record=record, allowed=offers, place="hall")
+
+        assert not landed.get("refused"), landed
+        held = _minds(ctx.chat.id)["reeve"]
+        assert held[PLAYER]["surface"]["label"] == _label()
+        assert _label() not in held
+        refused = charter_runtime.apply_presence_conduct(
+            ctx.chat.id, "Reeve Ysra", {"act": "no such act", "other": PLAYER},
+            record=record, allowed=offers, place="hall")
+        assert refused["refused"] == "not_offered_to_scene_life"
+
 
 # ---------------------------------------------------------------------------
 # News reaches a voice through a channel, stamped on the body's own clock.

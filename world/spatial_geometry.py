@@ -1649,6 +1649,58 @@ def invalidate_moved_body_place_details(scene: dict, previous_positions,
     return dropped
 
 
+def release_moved_body_supports(scene: dict, previous_positions,
+                                stated=()) -> list:
+    """Release a body's pose `support` when the body has changed room and
+    what it stood on did not come with it.
+
+    THE SAME CLASS AS ITS TWIN ABOVE, ONE FIELD FURTHER. A body that walks
+    out of a room keeps its posture and leaves behind what it was standing
+    on: Sal walked from the wharf into the market square and her view read
+    "You are in Aldermill Market Square ... You are standing on the wharf
+    deck.", and her memory of the beat contradicted itself (playerless
+    Aldermill round 7, 2026-09-23, idx 23). Stated without a vocabulary, as
+    the twin is: a support KEEPS only if it names something the scene now
+    stands in the room the body entered -- the cart, the horse, the litter
+    that carried it -- and is otherwise released; the posture stays, and the
+    next pose the Director writes names the new ground.
+
+    Left alone: a support THIS beat's diff wrote (`stated`), for the reason
+    the twin exempts a stated detail.
+
+    Returns [(subject, support, room_left)] for the caller's report; mutates.
+    """
+    poses = (scene or {}).get("poses")
+    positions = (scene or {}).get("positions")
+    if not isinstance(poses, dict) or not poses:
+        return []
+    if not isinstance(positions, dict) or not isinstance(previous_positions, dict):
+        return []
+    spoken = {str(name).strip().casefold() for name in (stated or ())
+              if str(name or "").strip()}
+
+    def stands_in(thing, room):
+        return any(str(where) == str(room) and same_subject(scene, key, thing)
+                   for key, where in positions.items())
+
+    released = []
+    for subject, room in positions.items():
+        was = previous_positions.get(subject)
+        if not was or not room or str(was) == str(room):
+            continue
+        for holder, pose in poses.items():
+            if not isinstance(pose, dict) or not same_subject(scene, holder, subject):
+                continue
+            support = str(pose.get("support") or "").strip()
+            if (support and str(holder).strip().casefold() not in spoken
+                    and str(subject).strip().casefold() not in spoken
+                    and not stands_in(support, room)):
+                pose["support"] = ""
+                released.append((holder, support, was))
+            break
+    return released
+
+
 def _moved_subject_is_body(scene, subject) -> bool:
     """Is this mover a body, for the purpose of retiring a carriage clause?
 

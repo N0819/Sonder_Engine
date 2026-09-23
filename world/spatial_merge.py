@@ -49,7 +49,8 @@ from world.spatial_geometry import (apply_pose_diff, derive_scene_stations,
                               invalidate_moved_body_pose_details,
                               invalidate_transferred_pose_details,
                               normalize_scene_anchor_cells,
-                              normalize_scene_poses, normalize_scene_stations)
+                              normalize_scene_poses, normalize_scene_stations,
+                              release_moved_body_supports)
 from world.spatial_identity import (_ci_get, _entity_named, room_of,
                               ROOM_NAME_DERIVED,
                               derived_room_name, is_derived_room_name,
@@ -2132,8 +2133,20 @@ def merge_scene_with_diff(
                     and str(entry.get("detail") or "").strip()]):
         if inventory_report is not None:
             _note = ("position: %s left %s this beat, so the pose detail "
-                     "naming a place there was dropped. Their posture and "
-                     "support are untouched." % (_subject, _left))
+                     "naming a place there was dropped. Their posture is "
+                     "untouched." % (_subject, _left))
+            if _note not in inventory_report:
+                inventory_report.append(_note)
+    # ...AND WHAT IT STOOD ON STAYED THERE (`release_moved_body_supports`).
+    for _subject, _support, _left in release_moved_body_supports(
+            merged, _positions_before,
+            stated=[name for name, entry in (incoming_poses or {}).items()
+                    if isinstance(entry, dict)
+                    and str(entry.get("support") or "").strip()]):
+        if inventory_report is not None:
+            _note = ("position: %s left %s this beat and %r did not come "
+                     "with them, so the pose's support was released. Their "
+                     "posture is untouched." % (_subject, _left, _support))
             if _note not in inventory_report:
                 inventory_report.append(_note)
     for _subject, _thing in invalidate_transferred_pose_details(
