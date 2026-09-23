@@ -27,6 +27,7 @@ from world.spatial import (hear_level, proximity_rel, room_of, sense_adjusted,
 from .character import _unanswered_question_note, character_step
 from .common import (
     player_speech_lines,
+    widen_reactors_to_enclosure,
     widen_reactors_to_engaged,
     widen_reactors_to_hearers,
     _act_surface_admission,
@@ -796,6 +797,11 @@ def interaction_loop(ctx, nonce):
         int(cid) for cid in widen_reactors_to_engaged(
             ctx.chat.id, ctx.cast, list(initial_reactors), ctx.turn.idx,
             ctx.turn.frame_id)]))
+    # ...and the body the player is inside, or holds inside them
+    # (`common.widen_reactors_to_enclosure`).
+    initial_reactors = _drop_absent(ctx, _drop_non_awake(ctx, [
+        int(cid) for cid in widen_reactors_to_enclosure(
+            ctx.chat.id, ctx.cast, list(initial_reactors))]))
 
     # WHO THE BEAT LANDED ON GOES FIRST, and the beat says who that is in two
     # places: who was spoken to, and who was acted upon. Order is causality

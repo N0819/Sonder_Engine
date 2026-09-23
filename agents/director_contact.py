@@ -22,6 +22,7 @@ from world.spatial import (
     contact_motion,
     contacts_of,
     contact_relation,
+    enclosure_joins_rooms,
     resolve_substance_ops,
     room_of,
     same_subject,
@@ -105,7 +106,18 @@ def _validated_player_contact_assertions(
             actor_room = _anchor_room_of(sc, actor, prefer=target_room)
         elif target_room is None and actor_room is not None:
             target_room = _anchor_room_of(sc, target, prefer=actor_room)
-        if actor_room is None or actor_room != target_room:
+        # A BODY INSIDE ANOTHER IS AS CLOSE AS BODIES GET, though the inside
+        # is a room of its own. `normalize_scene_contacts` keeps that pair
+        # through `enclosure_joins_rooms`; this site kept the room-equality
+        # test and threw it away at the source. Measured on the chat 137
+        # replay (2026-09-23): every beat a swallowed player pressed her
+        # hands to the walls of the throat she was in, the encoder wrote the
+        # interior contact, and it was discarded here as "non-co-located" --
+        # so the body she was inside never felt a thing, for seven beats.
+        if actor_room is None or (
+                actor_room != target_room
+                and not enclosure_joins_rooms(sc, actor_room, target_room,
+                                              actor, target)):
             if report:
                 report("discarded a contact assertion between non-co-located bodies")
             continue

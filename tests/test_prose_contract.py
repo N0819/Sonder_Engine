@@ -835,3 +835,42 @@ def test_a_voice_aims_its_line_at_the_body_its_words_name(monkeypatch):
     assert decl["dialogue_log_entry"]["intended_target"] == "Emory Vane"
     assert decl["sequence"][0]["targets"] == ["Emory Vane", "the crowd", "the anvil"]
     assert decl["charter_act"]["other"] == "Emory Vane"
+
+
+def test_an_act_no_tool_records_is_still_an_event():
+    """Chat 126 replay (2026-09-23) idx 5: the player's blush was folded into
+    the speech event as a `conditions` transform ("awareness: dazed") that
+    alignment dropped, and no row carried it -- the woman beside her could
+    not see it. The overlays chunk said a brief reaction rides the row's
+    observable; the encoder, never granted overlays, never read it."""
+    from llm import prompts
+    en = prompts.unified_specialist_prompt(["poses"])
+    ja = prompts.unified_specialist_prompt(["poses"], "ja")
+    assert "whether or not a tool records it -- minds perceive events, never transforms" in en
+    assert "心が知覚するのは event であって transform ではありません" in ja
+
+
+def test_volume_is_the_speakers_and_muffling_is_the_worlds():
+    """Chat 137 replay (2026-09-23) idx 46: "her voice muffled by the
+    surrounding flesh" was encoded as the player's volume `mutter`; the line
+    then reached nobody, and the body she was inside was never asked."""
+    from llm import prompts
+    en = prompts.unified_specialist_prompt(["poses"])
+    ja = prompts.unified_specialist_prompt(["poses"], "ja")
+    assert "whatever muffles or carries it afterward is the world's" in en
+    assert "その後で音をくぐもらせたり運んだりするものは世界の側のもの" in ja
+
+
+def test_a_place_the_world_holds_is_already_designed():
+    """Chat 153 and 137 replays (2026-09-23): the designer redrafted rooms the
+    world already held whenever the router granted `rooms` -- the TARDIS
+    console room at both stages (40.5 s + 50.6 s) and Mirelle's throat on four
+    beats, one rewrite setting it `quiet: dead` and deafening her to the body
+    inside it."""
+    from llm import prompts
+    en = prompts.room_author_prompt()
+    ja = prompts.room_author_prompt("ja")
+    assert "It is already designed, and the prose describing it" in en
+    assert "submit at once with nothing drafted" in en
+    assert "それは既に設計されており" in ja
+    assert "何も draft せずにすぐ submit してください" in ja

@@ -37,8 +37,8 @@ from story.scene import (
 from .background import background_react
 from .character import character_step
 from .common import (_assert_plan_materialized, _dict, _present_cast_bodies,
-                     player_speech_lines, widen_reactors_to_engaged,
-                     widen_reactors_to_hearers)
+                     player_speech_lines, widen_reactors_to_enclosure,
+                     widen_reactors_to_engaged, widen_reactors_to_hearers)
 from .director import director_establish, director_interpret, director_resolve
 from .loops import interaction_loop, reaction_loop, rehydrate_loop_views
 from .mapping import compile_world_context
@@ -895,6 +895,10 @@ def build_plan(interp, cast_rows, chat_id=None, frame_id=None, *, extra_players=
     if chat_id is not None and turn_idx is not None:
         reactors = widen_reactors_to_engaged(chat_id, cast_rows, reactors, turn_idx,
                                              frame_id)
+    # ...and the body the player is inside, or holds inside them: its inside
+    # is a room of its own, and it is the walls (`widen_reactors_to_enclosure`).
+    if chat_id is not None:
+        reactors = widen_reactors_to_enclosure(chat_id, cast_rows, reactors)
 
     autonomy = 0
     if chat_id is not None:

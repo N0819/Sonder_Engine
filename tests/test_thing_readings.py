@@ -150,6 +150,15 @@ class TestWhatIsTold:
         assert text == ("cloister bell: silent since landing; artron reserve: 0.4; "
                         "scanner: last image a scar in the vortex; sealed: yes")
 
+    def test_a_shed_garment_does_not_read_out_its_record(self):
+        """The engine's shed-garment keys are bookkeeping, and whose it was
+        is not written on the cloth (chat 137 replay, 2026-09-23)."""
+        record = {"clothing": True, "worn_by": "Hinami", "shed": True,
+                  "garment": "fitted tank top"}
+        assert composer.thing_reading_text(record) == ""
+        assert composer.thing_reading_text(dict(record, torn="at the hem")) == (
+            "torn: at the hem")
+
     def test_a_changed_reading_is_a_different_percept(self):
         before = composer.thing_reading_percepts(
             [("panel", "power: full", "p1", "sight")])[0]

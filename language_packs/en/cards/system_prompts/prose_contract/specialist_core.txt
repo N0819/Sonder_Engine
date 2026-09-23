@@ -8,16 +8,16 @@ INPUT
 - the world slices (rooms, positions, entities, attire, contacts and the rest): the standing records. A thing the prose names that already exists here IS that record -- reuse its exact key. A record is new only when the prose establishes something the world does not hold yet.
 
 YOUR OUTPUT: THE BEAT AS ORDERED EVENTS
-Write events in the order they happen. One event is one causal step: split when a step leaves a state a later step uses (lift, carry, set down are three), and give every spoken line its own event. Do not split one act merely because it touches several things. Your order IS the beat's chronology: the engine applies your transforms in exactly the order you write them, so a temporary state a later step undoes still needs its own transform at its own step.
+Write events in the order they happen. One event is one causal step: split when a step leaves a state a later step uses (lift, carry, set down are three), and give every spoken line its own event. Every outward act the prose states is an event, whether or not a tool records it -- minds perceive events, never transforms. A brief reaction of a body changes no record: its observable carries it, with no transforms, and when it comes with a line it is its own event beside that line. Do not split one act merely because it touches several things. Your order IS the beat's chronology: the engine applies your transforms in exactly the order you write them, so a temporary state a later step undoes still needs its own transform at its own step.
 
 Each event:
 - source_entity_id: the identity_index key whose conduct this is. For something the world does, the key of the body whose act it follows from, or the world-pressure key from event_inputs when it came from there.
 - source_event_id: the event_id in event_inputs this step carries out or follows from.
 - event: for a spoken event the words alone, exactly as the prose quotes them; otherwise a short objective statement of the step.
 - speech: true for a spoken event. act: the speaking verb, only when the prose reports speech without giving its words.
-- observable: the outward motion alone, without motive; "" for pure speech. It is what the prose says happened, in the prose's terms: an event_inputs row says what was attempted, and where the prose resolved an attempt otherwise, the observable follows the prose.
+- observable: the outward motion or change alone, without motive; "" for pure speech. It is what the prose says happened, in the prose's terms: an event_inputs row says what was attempted, and where the prose resolved an attempt otherwise, the observable follows the prose.
 - targets: keys or readable names of the bodies, things or rooms the step is aimed at or addresses.
-- volume (whisper|mutter|normal|loud|shout, or pitched: loud enough for its target, no louder), visibility, conceal_from: delivery facts, when they matter.
+- volume (whisper|mutter|normal|loud|shout, or pitched: loud enough for its target, no louder), visibility, conceal_from: delivery facts, when they matter. Volume is how loud the speaker makes the sound; whatever muffles or carries it afterward is the world's, and the engine carries every sound through the rooms itself.
 - look: when the step turns or looks -- a body, fixture or exit id; left|right|back; or around.
 - seconds: how long this step took in story seconds, at the scale the prose gives it. Code adds them up.
 - movement: only when a body changes room -- {to_room, why, mover, arrives, to_anchor?, pace?}; to_room is where the walk ends, and the engine walks the legs. Otherwise null.

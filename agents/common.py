@@ -6726,6 +6726,47 @@ def widen_reactors_to_hearers(chat_id, cast_rows, interp, reactors):
     return widened
 
 
+def widen_reactors_to_enclosure(chat_id, cast_rows, reactors):
+    """`reactors` plus every present cast body the player is INSIDE, or that
+    is inside the player.
+
+    A BODY'S INSIDE IS PART OF IT. The place form gives an interior a room of
+    its own, so a player swallowed into a throat stands in one room and the
+    body whose throat it is stands in another -- and every other reactor
+    rule reads rooms: the Director paces the player's room, and
+    `widen_reactors_to_hearers` asks what carries across a wall. Neither
+    sees that the holder IS the walls. Measured on the chat 137 replay
+    (2026-09-23): a player inside Mirelle's throat squirmed, felt along the
+    walls and spoke to her by name for six beats, and the body she was
+    inside was not once asked what it did. Joined exactly as
+    `enclosure_joins_rooms` joins the pair for contact -- strictly the pair,
+    never a third body standing in the holder's room.
+    """
+    from story.character_schema import persona_name
+    from world.spatial import enclosure_joins_rooms, room_of
+    try:
+        scene = get_scene(chat_id)
+        chat = q("SELECT * FROM chats WHERE id=?", (chat_id,), one=True)
+        p_name = persona_name(persona_of(dict(chat))) if chat else ""
+    except Exception:
+        return reactors
+    here = room_of(scene, p_name) if p_name else None
+    if not here:
+        return reactors
+    widened = list(reactors)
+    for body in _present_cast_bodies(scene, cast_rows):
+        if body["id"] in widened or body.get("room") == here:
+            continue
+        try:
+            joined = enclosure_joins_rooms(scene, here, body.get("room"),
+                                           p_name, body["name"])
+        except Exception:
+            continue
+        if joined:
+            widened.append(body["id"])
+    return widened
+
+
 def widen_reactors_to_engaged(chat_id, cast_rows, reactors, turn_idx,
                               frame_id=None):
     """`reactors` plus every present cast body OUTSIDE the player's room

@@ -8,16 +8,16 @@ INPUT
 - world の各 slice（rooms, positions, entities, attire, contacts など）: 現在の記録です。記述が名指すもので、ここに既に存在するものは、その記録そのものです。正確な key を再利用してください。記録が新しくなるのは、世界がまだ持っていないものを記述が確立したときだけです。
 
 YOUR OUTPUT: 順序付きの EVENTS としての BEAT
-event を起きた順に書いてください。一つの event は一つの因果の段階です。ある段階が、後の段階の使う状態を残すなら分割します（持ち上げる、運ぶ、置くは三つ）。話された台詞はそれぞれ独立した event にします。一つの行為がいくつものものに触れるというだけで分割はしません。あなたの順序がこの beat の時系列です。エンジンはあなたの transform を書かれた順序どおりに適用するので、後の段階で元に戻る一時的な状態にも、その段階での transform が必要です。
+event を起きた順に書いてください。一つの event は一つの因果の段階です。ある段階が、後の段階の使う状態を残すなら分割します（持ち上げる、運ぶ、置くは三つ）。話された台詞はそれぞれ独立した event にします。記述が述べる外から見える行為は、どの tool も記録しないものであっても、すべて event です。心が知覚するのは event であって transform ではありません。身体の一時的な反応はどの記録も変えないので、その observable が運び、transform は空です。台詞に伴うときは、その台詞とは別の独立した event にします。一つの行為がいくつものものに触れるというだけで分割はしません。あなたの順序がこの beat の時系列です。エンジンはあなたの transform を書かれた順序どおりに適用するので、後の段階で元に戻る一時的な状態にも、その段階での transform が必要です。
 
 各 event:
 - source_entity_id: これが誰の行為かを示す identity_index の key。世界が起こすことには、それが続いて起きた行為の主である身体の key、または event_inputs 由来のときはその world-pressure key。
 - source_event_id: この段階が実行する、またはそこから続いて起きる event_inputs の event_id。
 - event: 話された event なら、記述が引用するとおりの言葉だけ。それ以外は段階の短い客観的な記述。
 - speech: 話された event なら true。act: 記述が言葉を示さずに発話を報告しているときだけ、その発話の動詞。
-- observable: 動機を含まない外から見える動きだけ。純粋な発話なら ""。これは prose が起きたと言っていることを、prose の言葉で書いたものです。event_inputs の行は試みられたことを示すだけで、prose がその試みを別の形で解決したなら、observable は prose に従います。
+- observable: 動機を含まない外から見える動きや変化だけ。純粋な発話なら ""。これは prose が起きたと言っていることを、prose の言葉で書いたものです。event_inputs の行は試みられたことを示すだけで、prose がその試みを別の形で解決したなら、observable は prose に従います。
 - targets: その段階が向けられている、または話しかけている身体、もの、部屋の key または読める名前。
-- volume (whisper|mutter|normal|loud|shout、または pitched: 相手に届くだけの大きさで、それ以上ではない), visibility, conceal_from: 重要なときの伝達上の事実。
+- volume (whisper|mutter|normal|loud|shout、または pitched: 相手に届くだけの大きさで、それ以上ではない), visibility, conceal_from: 重要なときの伝達上の事実。volume は話し手がどれだけの大きさで音を出すかです。その後で音をくぐもらせたり運んだりするものは世界の側のもので、音を部屋から部屋へ運ぶのはエンジン自身です。
 - look: 段階が向きを変える、または見るとき。身体、設備、出口の id、left|right|back、または around。
 - seconds: この段階にかかった物語上の秒数。記述が与える尺度で。合計はコードが出します。
 - movement: 身体が部屋を移るときだけ {to_room, why, mover, arrives, to_anchor?, pace?}。to_room は歩みの終点で、経路はエンジンが歩きます。それ以外は null。

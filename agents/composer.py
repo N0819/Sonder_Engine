@@ -2790,12 +2790,18 @@ def thing_in_hand_clause(desc, mode=""):
 #: rest are bookkeeping the objects hand writes for the engine, not for an
 #: eye. Kept as the complement of what is readable rather than a list of
 #: what is: anything the hand writes that is not one of these is a fact the
-#: thing shows, whatever the thing turns out to be.
+#: thing shows, whatever the thing turns out to be. `clothing`, `worn_by`,
+#: `shed` and `garment` are the engine's own shed-garment record
+#: (`commit_attire`, `spatial_containment`): the garment is already its label,
+#: and whose it was is not written on it -- rendered, a body reading a shed
+#: tank top was told "clothing: yes; worn by: Hinami; shed: yes; garment:
+#: fitted tank top" (chat 137 replay, 2026-09-23), and a stranger would learn
+#: the owner's name off the cloth.
 _UNREADABLE_STATE_KEYS = frozenset({
     "transit", "link", "phase", "hatch", "destination_room", "route_room",
     "eta_seconds", "posture", "activity", "held_items", "zone", "description",
     "proximity", "target", "targets", "kind", "name", "lit", "running",
-    "pointed_at",
+    "pointed_at", "clothing", "worn_by", "shed", "garment",
 })
 
 
