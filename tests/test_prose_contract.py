@@ -605,6 +605,31 @@ def test_the_encoder_defaults_to_reasoning_off_and_a_setting_wins(temp_db):
     assert providers.reasoning_effort_for("director_specialist") == "low"
 
 
+def test_the_director_is_handed_each_persons_pronouns(temp_db, monkeypatch,
+                                                      prose_contract):
+    """A Director that writes prose writes pronouns. The playerless Aldermill
+    run (2026-09-23) wrote Sal Weatherby, she/her on her card, as "he" on
+    every beat: the payload carried names alone."""
+    import json
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_prose": {"prose": "Mara climbs into the lamp room."},
+        "director_specialist": _walk_events(),
+    }))
+    ctx = _make_ctx(temp_db, interp=_action_interp())
+    row = dict(ctx.cast[0])
+    sheet = json.loads(row["sheet"])
+    sheet.setdefault("identity", {})["pronouns"] = {
+        "subject": "she", "object": "her", "possessive": "her"}
+    row["sheet"] = json.dumps(sheet)
+    ctx.cast = [row]
+    director.director_resolve(ctx, nonce=0)
+    author, encoder = calls[0]["payload"], calls[1]["payload"]
+    assert author["pronouns"]["Mara"]["subject"] == "she"
+    assert encoder["pronouns"] == author["pronouns"]
+    assert "pronouns" in calls[0]["system"]
+
+
 def test_the_causal_contract_stays_the_default(temp_db, monkeypatch):
     calls = []
     monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {

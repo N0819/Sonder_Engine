@@ -3,7 +3,7 @@
 INPUT
 - prose: この beat についての Director の客観的な記述で、起きた順に書かれています。これが権威です。記述が述べていること、または明らかに含意していることを encode してください。結果を変えたり、記述にない行為を加えたりしてはいけません。
 - event_inputs: 各 identity が宣言したこと、その event_id と authority。各 event の帰属に使います。
-- identity_index: 安定した identity key と、それぞれの呼び名。
+- identity_index: 安定した identity key と、それぞれの呼び名。pronouns: 各人物の指し方。
 - already_happened（ある場合）: この beat でのプレイヤー側の入力で、既に世界にあり、下の slice にも既に反映されています。もう一度 encode せず、それを覆す transform を決して書かないでください。
 - world の各 slice（rooms, positions, entities, attire, contacts など）: 現在の記録です。記述が名指すもので、ここに既に存在するものは、その記録そのものです。正確な key を再利用してください。記録が新しくなるのは、世界がまだ持っていないものを記述が確立したときだけです。
 

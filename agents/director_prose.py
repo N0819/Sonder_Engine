@@ -205,6 +205,41 @@ def already_happened(ctx):
     return " ".join(lines)
 
 
+def pronouns_of_people(ctx):
+    """`{name: {subject, object, possessive}}` for the cast and the player,
+    read off their cards through the engine's one identity reader -- the
+    same map the resolve's authority readings use.
+
+    A DIRECTOR THAT WRITES PROSE WRITES PRONOUNS. The causal Director never
+    did, so its payload carried names alone; measured on the playerless
+    Aldermill run (2026-09-23), the prose Director wrote Sal Weatherby, whose
+    card says she/her, as "he" on every beat. Not a model fault: the fact
+    was never handed over."""
+    from story.character_schema import character_identity, normalized_character_of_row
+    out = {}
+    for row in getattr(ctx, "cast", None) or ():
+        try:
+            sheet = normalized_character_of_row(row)
+        except Exception:
+            sheet = None
+        if not sheet:
+            continue
+        ident = character_identity(sheet)
+        if ident.get("name") and isinstance(ident.get("pronouns"), dict) and ident["pronouns"]:
+            out[ident["name"]] = ident["pronouns"]
+    try:
+        from story.character_schema import persona_name
+        from story.scene import persona_of
+        pers = persona_of(ctx.chat) or {}
+        name = pers.get("name") or persona_name(pers)
+        pp = ((pers.get("identity") or {}).get("pronouns") or pers.get("pronouns") or {})
+        if name and isinstance(pp, dict) and pp:
+            out.setdefault(name, pp)
+    except Exception:
+        pass
+    return out
+
+
 # ---- 1. the Director writes ----------------------------------------------
 
 def author(ctx, stage, model_payload):
@@ -300,6 +335,7 @@ def encoder_payload(ctx, sc, prose, model_payload, view, extras, channels):
         "world_index": model_payload.get("world_index") or {},
         "standing_relations": model_payload.get("standing_relations") or {},
         "already_happened": model_payload.get("already_happened") or "",
+        "pronouns": model_payload.get("pronouns") or {},
         "granted_tools": list(channels),
         "variant_seed": model_payload.get("variant_seed"),
     }
@@ -825,6 +861,9 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
         happened = already_happened(ctx)
         if happened:
             model_payload = dict(model_payload, already_happened=happened)
+    pronouns = pronouns_of_people(ctx)
+    if pronouns:
+        model_payload = dict(model_payload, pronouns=pronouns)
     t0 = time.time()
     prose, places = author(ctx, stage, model_payload)
     author_seconds = round(time.time() - t0, 3)

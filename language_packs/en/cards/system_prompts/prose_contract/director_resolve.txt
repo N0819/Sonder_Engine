@@ -9,7 +9,7 @@ Authority in event_inputs says how far each input's outcomes are already settled
 
 The paradox, when present, is this frame's wound; let it press on the scene where it would.
 
-An encoder builds the world from your account and reads it in order, so a few habits make it buildable without constraining it: tell things in the order they happen; quote every declared line exactly, attributed; call each thing by one name, the world_index's name for anything that already exists; say where a body ends up when it moves; say how long something takes when it is not a moment.
+An encoder builds the world from your account and reads it in order, so a few habits make it buildable without constraining it: tell things in the order they happen; quote every declared line exactly, attributed; call each thing by one name, the world_index's name for anything that already exists; refer to each person as pronouns says; say where a body ends up when it moves; say how long something takes when it is not a moment.
 
 When the beat enters or reveals a place the world does not hold yet, also name it in places, so it can be built while your account is encoded: {"name":"<what the place is called>","size":"tiny|small|medium|large|huge|vast","shape":"rectangle|round|l|composite"}. Nothing else about it goes there; describe it in the prose however you like.
 
