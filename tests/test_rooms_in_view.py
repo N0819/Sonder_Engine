@@ -277,3 +277,23 @@ class TestTheCompilerRecordsTheApertureOnItsStep:
         out = mapping.compile_world_context(ctx, nonce=0)
         assert out["rooms_in_view"] == ["room_29"]
         assert "charter:hall" in {r["source"] for r in out["rulebook"]}
+
+
+def test_a_bubble_beat_centres_on_the_people_its_scene_holds(temp_db):
+    """A causality bubble's scene places only its own characters; the player
+    is nowhere in it. The aperture centres on them, never on a room guessed
+    for the absent player (the playerless Aldermill runs, 2026-09-23: empty
+    in one arm, a wrong-room chorus in the other)."""
+    from agents.common import rooms_in_view
+    from tests.test_director_orchestration import _make_ctx
+    ctx = _make_ctx(temp_db)
+    sc = {"rooms": {
+        "yard": {"name": "Yard", "adjacent": [{"to": "taproom", "barrier": "open"}]},
+        "taproom": {"name": "Taproom", "adjacent": [
+            {"to": "yard", "barrier": "open"}, {"to": "cellar", "barrier": "wall"}]},
+        "cellar": {"name": "Cellar", "adjacent": []},
+        "far_hall": {"name": "Far hall", "adjacent": []}},
+        "positions": {"Mara": "taproom"}}
+    rooms = rooms_in_view(ctx, sc, "far_hall")
+    assert "taproom" in rooms and "yard" in rooms
+    assert "far_hall" not in rooms and "cellar" not in rooms

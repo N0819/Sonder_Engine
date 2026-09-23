@@ -11119,15 +11119,26 @@ def rooms_in_view(ctx, sc, player_room, destination=None):
     answer memoised from the opening scene would be the wrong world under a
     key that could not tell.
     """
+    # WHO THE BEAT IS ABOUT. The player, where the player stands in THIS
+    # scene; otherwise the people the scene does hold. A causality bubble's
+    # beat runs in a frame whose scene places only its own characters, and
+    # the player is nowhere in it -- so an aperture keyed on the player was
+    # EMPTY there (nobody laid, nobody voiced: a character listening in a
+    # taproom for five beats heard nothing), or keyed on whatever room a
+    # resolver guessed for the absent player (a chorus of stable-yard
+    # ostlers answering her through the taproom door). Measured on the
+    # playerless Aldermill runs, 2026-09-23, both contracts.
+    centers = tuple(_aperture_centers(ctx, sc, player_room))
     key = (str(player_room or ""), str(destination or ""))
     cached = ctx.get("_rooms_in_view_cache")
-    if isinstance(cached, tuple) and cached and cached[0] == key:
+    if (isinstance(cached, tuple) and cached and cached[0] == key
+            and (len(cached) < 3 or cached[2] == centers)):
         return set(cached[1])
     rooms = set()
-    if player_room:
-        rooms.add(str(player_room))
-        # THE PLAYER'S PERCEPTUAL REACH, never a connectivity closure (the
-        # owner, 2026-09-23: sight plus earshot). This was the whole
+    for center in centers:
+        rooms.add(str(center))
+        # THE PERCEPTUAL REACH, never a connectivity closure (the owner,
+        # 2026-09-23: sight plus earshot). This was the whole
         # `ambient_scope` component, which in an open-plan settlement is the
         # map: measured on chat 153 turn 20, 23 rooms from inside a TARDIS
         # whose doors opened on a beach -- the harbour pier three hops off,
@@ -11142,18 +11153,44 @@ def rooms_in_view(ctx, sc, player_room, destination=None):
         # the partition.
         try:
             rooms.update(str(v.get("room_id")) for v in
-                         visible_adjacent_rooms(sc, str(player_room)) or ()
+                         visible_adjacent_rooms(sc, str(center)) or ()
                          if isinstance(v, dict) and v.get("room_id"))
         except Exception:
             pass
         try:
-            rooms.update(str(r) for r in earshot_rooms(sc, str(player_room)) if r)
+            rooms.update(str(r) for r in earshot_rooms(sc, str(center)) if r)
         except Exception:
             pass
     if destination:
         rooms.add(str(destination))
-    ctx["_rooms_in_view_cache"] = (key, frozenset(rooms))
+    ctx["_rooms_in_view_cache"] = (key, frozenset(rooms), centers)
     return set(rooms)
+
+
+def _aperture_centers(ctx, sc, player_room):
+    """The rooms the beat is about: the player's, when the player stands in
+    this scene; otherwise every room a cast member stands in. A room a
+    resolver GUESSED for a player the scene does not place is never one."""
+    positions = (sc or {}).get("positions") or {}
+    try:
+        pers = persona_of(ctx.chat) or {}
+        p_name = pers.get("name") or persona_name(pers)
+    except Exception:
+        p_name = ""
+    if player_room and (not p_name or room_of(sc, p_name)):
+        return [str(player_room)]
+    rooms = []
+    for row in getattr(ctx, "cast", None) or ():
+        try:
+            name = character_name_from_text(row["sheet"])
+        except Exception:
+            continue
+        room = room_of(sc, name) if name else None
+        if room and str(room) not in rooms:
+            rooms.append(str(room))
+    if not rooms and player_room and not positions:
+        rooms = [str(player_room)]
+    return sorted(rooms)
 
 
 def figures_in_view(ctx, sc, rooms, frame_id=None):
