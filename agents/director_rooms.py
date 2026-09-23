@@ -127,6 +127,7 @@ def render_room(scene, room_id):
         return {"refused": f"no room {room_id!r} in the draft or the world"}
     grid = room_grid(scene, room_id)
     marks, legend = {}, []
+    held = {}   # (cell, height) -> the fixture already there
     letters = iter("ABCEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
     for aid, placed in (anchor_cells(scene, room_id) or {}).items():
         cells = [tuple(c) for c in (placed.get("cells") or [])]
@@ -142,8 +143,18 @@ def render_room(scene, room_id):
                 f"footprint {placed.get('footprint')}, height {placed.get('height')}, "
                 f"facing {placed.get('dir')}, {len(cells)} cell(s)"
                 + ("" if cells else " -- NOT PLACED"))
+        height = placed.get("height")
         for cell in cells:
-            marks[cell] = mark
+            other = held.get((cell, height))
+            if other is not None and other != aid:
+                # A collision at the same height: both things cannot stand
+                # there. Drawn, never hidden by whichever came last.
+                marks[cell] = "!"
+                legend.append(f"!  {aid} and {other} both stand on {cell} at "
+                              f"height {height}")
+            else:
+                marks.setdefault(cell, mark)
+                held[(cell, height)] = aid
     lines = []
     for y in range(grid.d):
         lines.append("".join(marks.get((x, y)) or ("." if (x, y) in grid.cells else " ")
@@ -152,7 +163,8 @@ def render_room(scene, room_id):
         "room": room_id,
         "name": room.get("name"),
         "grid": f"{grid.w} x {grid.d} paces, {grid.shape}; north at the top, east "
-                "to the right; '.' is floor, blank is outside the shape",
+                "to the right; '.' is floor, blank is outside the shape, '!' is two "
+                "fixtures at the same height on one cell",
         "map": lines,
         "legend": legend,
     }
@@ -187,17 +199,28 @@ def _check(scene, draft, owed):
         return {"errors": [f"the draft could not be merged into the world: {exc}"]}
     drafted = set((draft.get("rooms") or {}))
     missing = [rid for rid in owed if rid not in drafted]
-    unplaced = []
+    unplaced, overlapping = [], []
     try:
         from world.spatial import anchor_cells
         for rid in drafted:
+            held = {}
             for aid, placed in (anchor_cells(merged, rid) or {}).items():
-                if not str(aid).startswith("door:") and not placed.get("cells"):
+                if str(aid).startswith("door:"):
+                    continue
+                if not placed.get("cells"):
                     unplaced.append(f"{rid}.{aid}")
+                for cell in placed.get("cells") or []:
+                    key = (tuple(cell), placed.get("height"))
+                    if key in held and held[key] != aid:
+                        overlapping.append(f"{rid}: {held[key]} and {aid} share "
+                                           f"{tuple(cell)} at height {key[1]}")
+                    held.setdefault(key, aid)
     except Exception:
         pass
+    overlapping = list(dict.fromkeys(overlapping))
     return {"errors": errors, "owed_not_drafted": missing,
-            "fixtures_not_placed": unplaced, "clean": not (errors or missing)}
+            "fixtures_not_placed": unplaced, "fixtures_overlapping": overlapping,
+            "clean": not (errors or missing or unplaced or overlapping)}
 
 
 def _fit(value, limit):
@@ -259,7 +282,12 @@ def design_rooms(ctx, scene, payload, sheet, owed, call, record=None):
                 result = _check(scene, draft, owed)
             elif tool == "submit":
                 result = _check(scene, draft, owed)
-                submitted = True
+                if result.get("clean") or step >= MAX_ROOM_STEPS:
+                    submitted = True
+                else:
+                    # A design is finished when it is right. The problems
+                    # come back instead, and the loop goes on.
+                    result = dict(result, refused="not submitted: fix these first")
             elif tool in ("remove_rooms", "remove_adjacent") and isinstance(args.get("items"), list):
                 draft[tool].extend(args["items"])
                 result = {"recorded": tool}
@@ -267,7 +295,10 @@ def design_rooms(ctx, scene, payload, sheet, owed, call, record=None):
                 result = {"refused": f"unknown tool {tool!r}"}
             transcript.append({"step": step, "tool": tool, "args": args,
                                "result": _fit(result, ROOM_RESULT_CHARS)})
-        if submitted or answer.get("done") or not calls:
+        refused = any((entry.get("result") or {}).get("refused", "").startswith("not submitted")
+                      for entry in transcript if entry["step"] == step
+                      and isinstance(entry.get("result"), dict))
+        if submitted or not calls or (answer.get("done") and not refused):
             stopped = "submitted" if submitted or answer.get("done") else "no_calls"
             break
     final = _check(scene, draft, owed)

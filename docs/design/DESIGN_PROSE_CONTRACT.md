@@ -168,3 +168,72 @@ here clamps it.
 
 **Not measured yet:** more beats, other stories, the narrator's page
 downstream of each contract, and repair and correction rates over a long run.
+
+## Situations (2026-09-22/23, 13 beats, four stories)
+
+This round covered chats 153 (the Doctor), 137 (Mirelle, NSFW; Fireworks
+GLM-5.2-fast on every Director role), 123 and 120. Each beat ran in three
+arms: causal, causal with the hands' reasoning off, and prose with the
+encoder's reasoning off. There were 78 runs and no errors.
+
+**Median wall clock:**
+
+| Stage | Causal | Causal, hands off | Prose |
+|---|---|---|---|
+| Interpret | 19.1 s | 16.0 s | 12.5 s |
+| Resolve | 62.7 s | 34.0 s | 29.1 s |
+
+**Fixes found live** (both contracts unless noted):
+- **A body `inside` another body is its interior.** `canonical_enclosure_mode`
+  runs at containment ingest and is resolved against the holder. The
+  materializer mints a place only for `interior`, and the sheet teaches
+  `inside`, so a swallowed body was concealed but never placed.
+- **A room is never a `positions` key** (`drop_room_keyed_positions`).
+- **Code closes the dependencies it can prove** (prose contract only). A
+  `movement` implies `positions`, and a destination no scene room holds
+  implies a place is needed.
+- **Jev questions state what they would otherwise miss.** The inside of a
+  body is a place (the swallow's `positions` went 0.15 → 0.97), and a body
+  carried, held or swallowed is still present (`cast_changes` had marked the
+  player dormant).
+- **The authority checks were all false positives on prose.** All six
+  warnings over the 13 beats were one of three things: the player's body as
+  the grammatical subject of something done *to* it, a simile, or an
+  involuntary response. They warn on prose and never retry.
+
+## The room designer
+
+Rooms are designed by their own agent (`agents/director_rooms.py`), which
+runs beside the encoder. It uses the Writers' Room loop protocol: each step
+returns tool calls, code runs them, and the results come back in the
+transcript. Its tools:
+- `inspect_rooms`: the neighbours' geometry;
+- `draft_room`: builds the room in pieces;
+- `view_room`: the draft drawn on the engine's own cell grid, north up, with
+  what the engine made of every fixture, and collisions shown;
+- `check`: the real merge plus `room_layout_lint`, owed rooms, unplaced and
+  overlapping fixtures;
+- `submit`: refused while the check fails and steps remain.
+
+It works to the engine's own division of labour:
+- **Planned rooms.** The Writers' Room plans a room. A beat that enters it has
+  the room *developed* under the plan's id. The purpose and exits stay; the
+  contents are the designer's. Jev answers "does the passage enter X?" for
+  each planned stub in reach, in the same one battery.
+- **Invented places.** A place no plan holds is invented by the Director in
+  three simple fields: `name`, `size`, `shape`. An id is reserved before
+  either worker starts, so the encoder places bodies into it at once.
+- **Reconcile.** Afterwards the designer makes one short call naming any of
+  its features that the encoder also wrote as objects. The pairwise Jev check
+  this replaced removed a TARDIS's central console.
+
+**Measured (chat 153 turns 7–8, chat 137 turns 9 and 45):**
+- The designer runs 7 steps and 7–12 tool calls, taking 34–72 s. That
+  outlasts the encoder, so place-entering resolves took 48–94 s.
+- The final check was clean on 3 of 4 beats. The fourth submitted over a
+  size/extent disagreement, which is why `submit` now refuses.
+- The treatment room developed from its plan came out at 5×4 paces with
+  seven fixtures, each with footprint and height, and the doorway on the
+  plan's wall. It also showed two fixtures hidden under others, which is why
+  collisions are now drawn and checked.
+- Caps are `MAX_ROOM_STEPS = 8` and `MAX_ROOM_SECONDS = 150` (named).

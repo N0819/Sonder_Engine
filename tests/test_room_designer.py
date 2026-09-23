@@ -48,10 +48,10 @@ def test_the_designer_works_in_steps_and_sees_its_results():
     steps = iter([
         {"calls": [{"tool": "inspect_rooms", "args": {"room_ids": ["hall"]}},
                    {"tool": "draft_room", "args": {"room_id": "gallery", "room": {
-                       "name": "Gallery", "extent": {"w": 4, "d": 3}, "size": "small"}}}]},
+                       "name": "Gallery", "extent": {"w": 4, "d": 3}, "size": "tiny"}}}]},
         {"calls": [{"tool": "draft_room", "args": {"room_id": "gallery", "room": {
             "anchors": {"rail": {"desc": "an iron rail", "dir": "n"}},
-            "adjacent": [{"to": "hall", "barrier": "open", "dir": "s"}]}}},
+            "adjacent": [{"to": "hall", "barrier": "open", "dir": "n"}]}}},
                    {"tool": "view_room", "args": {"room_id": "gallery"}}]},
         {"calls": [{"tool": "check", "args": {}}, {"tool": "submit", "args": {}}]},
     ])
@@ -121,3 +121,36 @@ def test_a_planned_room_the_beat_enters_is_developed_under_its_id(temp_db, monke
     assert "lamp_gallery" in out["state_diff"]["rooms"]
     rooms = out["orchestration"]["prose_contract"]["room_author"]
     assert rooms["develop"] == ["lamp_gallery"] and rooms["stopped"] == "submitted"
+
+
+def _stacked(anchors):
+    return {"rooms": {"gallery": {"name": "Gallery", "extent": {"w": 4, "d": 3},
+                                  "size": "small", "anchors": anchors,
+                                  "adjacent": [{"to": "hall", "barrier": "open",
+                                                "dir": "s"}]}},
+            "remove_rooms": [], "remove_adjacent": []}
+
+
+def test_two_fixtures_on_one_cell_at_one_height_are_reported():
+    """Measured on chat 137 turn 11: a washstand and a chair shared cells
+    with other fixtures and simply vanished from the drawn plan."""
+    both = _stacked({"stool": {"desc": "a stool", "dir": "n", "cell": [1, 1]},
+                     "chair": {"desc": "a chair", "dir": "n", "cell": [1, 1]}})
+    result = director_rooms._check(SCENE, both, owed=["gallery"])
+    assert result["fixtures_overlapping"] and result["clean"] is False
+    view = director_rooms.render_room(director_rooms._merged(SCENE, both), "gallery")
+    assert any("!" in row for row in view["map"])
+
+
+def test_submit_is_refused_until_the_check_is_clean():
+    steps = iter([
+        {"calls": [{"tool": "submit", "args": {}}], "done": True},
+        {"calls": [{"tool": "draft_room", "args": {"room_id": "gallery", "room": {
+            "name": "Gallery", "size": "tiny", "extent": {"w": 4, "d": 3}}}},
+                   {"tool": "submit", "args": {}}]},
+    ])
+    record = {}
+    draft = director_rooms.design_rooms(None, SCENE, {}, "sheet", ["gallery"],
+                                        lambda s, p: next(steps), record)
+    assert "gallery" in draft["rooms"]
+    assert record["steps"] == 2 and record["stopped"] == "submitted"
