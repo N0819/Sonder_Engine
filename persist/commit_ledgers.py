@@ -44,10 +44,8 @@ def pending_obligation_view(chat_id, turn_idx):
     for entry in (wget(chat_id, "pending_obligations", []) or [])[:OBLIGATION_CAP]:
         if not isinstance(entry, dict):
             continue
-        try:
-            age = max(0, int(turn_idx) - int(entry.get("opened_turn", turn_idx)))
-        except (TypeError, ValueError):
-            age = 0
+        age = _beats_open(turn_idx, entry.get("opened_turn", turn_idx),
+                          chat_id=chat_id)
         view.append({
             "id": entry.get("id"),
             "who": entry.get("who"),
@@ -93,15 +91,31 @@ def _find_obligation(ledger, op, *, exact=False):
             return i
     return None
 
-def _beats_open(turn_idx, opened_turn):
+def _beats_open(turn_idx, opened_turn, chat_id=None):
     """How many beats an entry has stood, tolerating a missing or malformed
     `opened_turn` the same way `pending_obligation_view` does -- a ledger
     entry restored from an old archive must not raise inside the commit
-    lock and roll the turn back."""
+    lock and roll the turn back.
+
+    THIS FRAME'S BEATS, given the chat. A turn index is chat-wide, and two
+    causality bubbles interleave their turns on it, so `now - opened` counted
+    the other bubble's beats too: a debt aged twice as fast as the life that
+    owed it, "age 22 beats" on Emory's twelfth beat, and 22 "MUST be
+    discharged" warnings in one run (playerless Aldermill round 8,
+    2026-09-23). The ledger is frame-scoped, so the turns ANOTHER frame
+    played in between are not its beats, and are taken out of the count."""
     try:
-        return max(0, int(turn_idx) - int(opened_turn))
+        opened, now = int(opened_turn), int(turn_idx)
     except (TypeError, ValueError):
         return 0
+    if chat_id is None or now <= opened:
+        return max(0, now - opened)
+    from core.db import active_frame_id, q
+    row = q("SELECT COUNT(*) AS n FROM turns WHERE chat_id=? "
+            "AND frame_id IS NOT ? AND idx > ? AND idx <= ?",
+            (chat_id, active_frame_id.get(), opened, now), one=True)
+    elsewhere = int(row["n"]) if row else 0
+    return max(0, now - opened - elsewhere)
 
 
 def causal_obligation_ops(ctx, *, causal_program=None, with_origins=False,
@@ -281,10 +295,8 @@ def commit_obligations(ctx, nonce, *, causal_program=None):
 
     overdue = []
     for entry in ledger:
-        try:
-            age = turn.idx - int(entry.get("opened_turn", turn.idx))
-        except (TypeError, ValueError):
-            age = 0
+        age = _beats_open(turn.idx, entry.get("opened_turn", turn.idx),
+                          chat_id=cid)
         if age >= OBLIGATION_OVERDUE_AGE:
             overdue.append(entry)
             ctx.add_warning(
@@ -300,7 +312,7 @@ def commit_obligations(ctx, nonce, *, causal_program=None):
         # prose says they ended. Recorded per entry so the decision log can
         # tell the two apart; see OBLIGATION_CAP.
         for entry in ledger[:-OBLIGATION_CAP]:
-            age = _beats_open(turn.idx, entry.get("opened_turn"))
+            age = _beats_open(turn.idx, entry.get("opened_turn"), chat_id=cid)
             note_step_decision(
                 "obligation_ledger",
                 "%s owes %s" % (entry.get("who") or "someone",

@@ -75,6 +75,28 @@ def test_a_silent_voice_keeps_its_rank_index(monkeypatch, temp_db):
         ("Bran", "turn:7:figure:1:0:action"), ("Cole", "turn:7:figure:2:0:action")]
 
 
+def test_one_line_is_answered_once(monkeypatch, temp_db):
+    """Playerless Aldermill round 8 (2026-09-23) idx 7: three hostlers asked
+    one question gave three near-copies of one answer, and the woman asking
+    said so in her own appraisal. The first in rank keeps the words; the
+    others' acts stand."""
+    heard = {"speaker": "the weathered woman", "exact_quote": '"Seen a team?"',
+             "tone": "", "beats_ago": 0}
+
+    def react(ctx, dr, name, *args, **kwargs):
+        return {"name": name, "room": "scullery", "action": "%s shrugs" % name,
+                "heard_address": heard, "charter_act": None,
+                "charter_offers": [],
+                "dialogue_log_entry": {"speaker": name, "volume": "normal",
+                                       "exact_quote": '"Just town hacks today."'}}
+
+    out = _declared(monkeypatch, temp_db, react)
+    spoke = [d["name"] for d in out
+             if any(e["type"] == "speech" for e in d["sequence"])]
+    assert spoke == ["Ada"]
+    assert [d["name"] for d in out] == ["Ada", "Bran", "Cole"]   # the acts stand
+
+
 def test_one_voice_runs_as_it_always_did():
     caller = threading.get_ident()
     assert background._voices_at_once([lambda: threading.get_ident()]) == [caller]

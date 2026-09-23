@@ -416,6 +416,35 @@ def _voices_at_once(calls):
     return answers
 
 
+def _first_answer_only(reactions):
+    """`(kept, demoted)`: `reactions` in their own order and positions, each
+    later answer to a line already answered here stripped of its words
+    (`demoted_line` keeps them), and `[(name, quote, first answerer)]` for
+    every one stripped. `None` entries pass through where they stand."""
+    answered, kept, demoted = {}, [], []
+    for reaction in reactions:
+        heard = (reaction or {}).get("heard_address") or {}
+        quote = " ".join(str(heard.get("exact_quote") or "").split())
+        entry = (reaction or {}).get("dialogue_log_entry") or {}
+        if (not quote or heard.get("beats_ago")
+                or not str(entry.get("exact_quote") or "").strip()):
+            kept.append(reaction)
+            continue
+        key = quote.casefold()
+        if key not in answered:
+            answered[key] = str(reaction.get("name") or "")
+            kept.append(reaction)
+            continue
+        stripped = dict(reaction)
+        stripped["dialogue_log_entry"] = None
+        stripped["demoted_line"] = entry.get("exact_quote")
+        kept.append(stripped)
+        demoted.append((str(reaction.get("name") or ""),
+                        str(entry.get("exact_quote") or ""),
+                        answered[key]))
+    return kept, demoted
+
+
 def _one_answer_per_line(ctx, result):
     """A LINE AIMED AT ONE PERSON IS ANSWERED BY ONE PERSON.
 
@@ -438,29 +467,7 @@ def _one_answer_per_line(ctx, result):
     reactions = list((result or {}).get("reactions") or [])
     if len(reactions) < 2:
         return result
-    answered = {}
-    kept = []
-    demoted = []
-    for reaction in reactions:
-        heard = (reaction or {}).get("heard_address") or {}
-        quote = " ".join(str(heard.get("exact_quote") or "").split())
-        entry = (reaction or {}).get("dialogue_log_entry") or {}
-        if (not quote or heard.get("beats_ago")
-                or not str(entry.get("exact_quote") or "").strip()):
-            kept.append(reaction)
-            continue
-        key = quote.casefold()
-        if key not in answered:
-            answered[key] = str(reaction.get("name") or "")
-            kept.append(reaction)
-            continue
-        stripped = dict(reaction)
-        stripped["dialogue_log_entry"] = None
-        stripped["demoted_line"] = entry.get("exact_quote")
-        kept.append(stripped)
-        demoted.append((str(reaction.get("name") or ""),
-                        str(entry.get("exact_quote") or ""),
-                        answered[key]))
+    kept, demoted = _first_answer_only(reactions)
     if not demoted:
         return result
     claims = list(result.get("claims") or [])
@@ -1905,6 +1912,20 @@ def declare_charter_figures(ctx, interp, sc, figure_rows, decls, nonce):
             ctx, beat, name, others, roster, sc, rec, nonce,
             player_addressed=name.casefold() in addressed))
         for name, rec, others in asks])
+    # ONE LINE, ONE ANSWERER, here as after resolve (`_one_answer_per_line`).
+    # Each voice answers the beat blind to the others, so three hostlers
+    # asked one question gave three near-copies of one answer -- "Just town
+    # hacks and local nags today...", "...local beasts...", "...a couple of
+    # cob ponies..." -- and the woman asking remarked on it herself: "the
+    # hostlers all gave the same flat line" (playerless Aldermill round 8,
+    # 2026-09-23, idx 7 and 9). The first in rank keeps the words (the one
+    # addressed ranks first); the others' acts stand, their words do not.
+    entries, _chorus = _first_answer_only(entries)
+    for _name, _quote, _answerer in _chorus:
+        ctx.add_warning(
+            "charter voice: %s also answered the line %s answered; one line "
+            "has one answerer, so %s's words are not delivered: %r"
+            % (_name, _answerer, _name, _quote))
     out = []
     for index, ((_name, rec, _others), entry) in enumerate(zip(asks, entries)):
         if not entry:

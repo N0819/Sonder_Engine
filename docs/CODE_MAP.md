@@ -7,7 +7,7 @@
 | Module | Lines | Purpose | Local dependencies |
 |---|---:|---|---|
 | `agents/__init__.py` | 100 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
-| `agents/background.py` | 2198 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
+| `agents/background.py` | 2219 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
 | `agents/character.py` | 4714 | Private character decision agent. | `agents.character_kernel`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/character_kernel.py` | 496 |  | — |
 | `agents/common.py` | 11640 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
@@ -85,7 +85,7 @@
 | `persist/commit_common.py` | 713 | Leaf helpers shared across commit domains: scalar utilities, name/address roster, entity-id canonicalisation. | `core.db`, `mind.memory`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `persist/commit_destruction.py` | 414 | Single- and multi-book destruction cascades, retirement, and latency-gated news. | `core.db`, `mind.memory`, `persist.commit_common`, `world.mechanics`, `world.spatial`, `world.spatial_frames` |
 | `persist/commit_entities.py` | 576 | world_entities projection of the scene commit, awareness gate, disguise supersession. | `core.db`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
-| `persist/commit_ledgers.py` | 664 | Pending-obligation and world-pressure debt ledgers. | `core.db`, `core.pipeline_context`, `persist.commit_common` |
+| `persist/commit_ledgers.py` | 676 | Pending-obligation and world-pressure debt ledgers. | `core.db`, `core.pipeline_context`, `persist.commit_common` |
 | `persist/commit_mapping.py` | 914 | Lore/book mapping commit: book ops, lore ops, canon fallback ops, offscreen-event normaliser. | `core.db`, `core.frames`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.provenance_text`, `world.spatial` |
 | `persist/commit_mechanics.py` | 524 | Transit/news sweeps, the world-event spine, information carriers, cast changes. | `core.db`, `persist.commit_common`, `persist.commit_scene_state`, `story.character_schema`, `story.scene`, `world.mechanics` |
 | `persist/commit_memory.py` | 2103 | Pre-lock memory preparation: per-mind memories and the psychology deltas riding with them. | `core.db`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_background`, `persist.commit_common`, `persist.commit_place_graph`, `story.character_schema`, `world.charter`, `world.comfort`, `world.exposure`, `world.spatial`, `world.stimulation`, `world.survival` |
@@ -236,14 +236,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_react_one()` | 1994 | 205 lines |
-| `_background_react()` | 492 | 183 lines |
-| `scene_life()` | 1158 | 157 lines |
-| `_demanded_presences()` | 945 | 144 lines |
-| `declare_charter_figures()` | 1810 | 127 lines |
-| `_present_others()` | 1551 | 103 lines |
+| `_react_one()` | 2015 | 205 lines |
+| `_background_react()` | 499 | 183 lines |
+| `scene_life()` | 1165 | 157 lines |
+| `_demanded_presences()` | 952 | 144 lines |
+| `declare_charter_figures()` | 1817 | 141 lines |
+| `_present_others()` | 1558 | 103 lines |
 | `_beat_for_presence()` | 194 | 84 lines |
-| `managed_presences()` | 800 | 78 lines |
+| `managed_presences()` | 807 | 78 lines |
 
 ### `agents/character.py`
 
@@ -1102,14 +1102,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `commit_world_pressure()` | 416 | 158 lines |
-| `commit_obligations()` | 230 | 89 lines |
-| `causal_obligation_ops()` | 107 | 69 lines |
-| `commit_world_facts()` | 612 | 53 lines |
-| `_find_obligation()` | 61 | 34 lines |
-| `_demand_unheard_by()` | 195 | 33 lines |
-| `_positioned_body_named()` | 367 | 27 lines |
-| `world_pressure_view()` | 343 | 22 lines |
+| `commit_world_pressure()` | 428 | 158 lines |
+| `commit_obligations()` | 244 | 87 lines |
+| `causal_obligation_ops()` | 121 | 69 lines |
+| `commit_world_facts()` | 624 | 53 lines |
+| `_find_obligation()` | 59 | 34 lines |
+| `_demand_unheard_by()` | 209 | 33 lines |
+| `_positioned_body_named()` | 379 | 27 lines |
+| `_beats_open()` | 94 | 25 lines |
 
 ### `persist/commit_mapping.py`
 
