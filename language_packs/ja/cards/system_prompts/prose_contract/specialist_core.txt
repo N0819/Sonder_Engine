@@ -28,6 +28,8 @@ event を起きた順に書いてください。一つの event は一つの因�
 THE TOOLS YOU HAVE
 この core の後に続く指示が、この beat に付与された唯一の tool です。この記述の内容に応じて選ばれています。これらは、複数の担当が行ごとに位置対応した result を返す契約のために書かれたので、次のように読んでください。「row」「span」「ledger row」はあなたの event の一つです。「Director の裁定」や「resolved_event」は記述です。state_diff.X や state_assertions.X は patch.X を意味します。あなたは同時にすべての担当なので、results、status、settled、verdicts、required_channels、reroute_to、assigned_hands を返せという指示や、作業を別の担当に任せよという指示は無視し、補完的な transform を自分で書いてください。
 記述が変化を述べているのに、それを持つ tool が付与されていないときは、その tool を missing_tools に channel 名で挙げてください: attire, conditions, vitals, overlays, cast_changes, introductions, world_facts, public_evidence, crowd_ops, courier_ops, telling_ops, ratified_claims, contradicted_claims, charter_ops, claim_dispositions, consequences, obligations, contact_ops, contact_action_ops, substance_ops, containment, scales, entities, remove_entities, inventory_ops, artifact_ops, destruction, sensory_events, positions, rooms, remove_rooms, remove_adjacent, stations, poses, comms_ops, following_ops, location, weather。エンジンがそれを付与し、あなたの最初の答えを previous_events として返して、もう一度あなたに尋ねます。そのときは、追加された tool を使って、すべての event を順番どおりに含む完全な beat をもう一度返してください。変化を、それを持たない tool に無理に押し込まないでください。
+new_places は、この beat で組み立てられている room を id ごとに、その name、size、shape とともに挙げたものです。その room が入るところにはその id を使い、身体やものを今そこに置いてください。
+places_authored_elsewhere が true のとき、room author がこの beat の場所を同じ瞬間に書いています。rooms、remove_rooms、remove_adjacent を決して書かず、世界がまだ持っていない場所の room id が入るところには new:<the prose's own words for that place> と書いてください。エンジンがそれを author の作った room に結び付けます。
 記述が必要とするもので、世界が持っておらず、付与された tool のどれでも作れないものは、記述が使った言葉で missing_referents に入れてください。
 
 EXAMPLE（名前と tool は例示にすぎません。与えられた identity、key、付与された tool を使ってください）

@@ -46,11 +46,14 @@ the one widening pass), and `llm.decisions`' own `jev_model`/`jev_provider`.
 
 from __future__ import annotations
 
+import contextvars
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from core.db import get_setting
 from llm import decisions
 from llm.prompts import (
+    ROOM_AUTHOR_CHANNELS,
     jev_channel_questions,
     prose_director_prompt,
     unified_specialist_prompt,
@@ -216,7 +219,8 @@ def author(ctx, stage, model_payload):
     prose = str((out or {}).get("prose") or "").strip()
     if not prose:
         raise RuntimeError(f"{stage}: the prose Director returned no prose")
-    return prose
+    places = (out or {}).get("places")
+    return prose, (places if isinstance(places, list) else [])
 
 
 # ---- 2. the decision model picks the tools -------------------------------
@@ -235,31 +239,51 @@ def _jev_state(prose, model_payload):
     return "\n".join(lines)
 
 
-def select_channels(ctx, stage, prose, model_payload, facts=None):
+#: Jev question keys for "does the beat enter this planned room".
+_ENTER_PREFIX = "enter__"
+
+
+def select_channels(ctx, stage, prose, model_payload, facts=None, planned=None):
     """`(selected, record)`. Fails OPEN: if the decision model cannot answer,
-    every candidate is granted -- a larger sheet, never a lost change."""
+    every candidate is granted -- a larger sheet, never a lost change.
+
+    The same one call also asks, for each PLANNED room in reach (the
+    Writers' Room's stubs, `planned_room_brief`), whether the passage enters
+    or reveals it; `record["entered"]` lists those, which the room author
+    then develops from the plan. Fails open there too: every stub in reach."""
     candidates = candidate_channels(stage, facts)
     questions = jev_channel_questions(candidates, ctx.language)
+    planned = planned if isinstance(planned, dict) else {}
     record = {"candidates": candidates, "threshold": _threshold()}
     t0 = time.time()
+    battery = {channel: {"type": "noul", "instructions": text}
+               for channel, text in questions.items()}
+    for rid, brief in planned.items():
+        name = str((brief or {}).get("name") or rid)
+        battery[_ENTER_PREFIX + str(rid)] = {
+            "type": "noul",
+            "instructions": f"Does the passage enter, open onto or reveal the place "
+                            f"called \"{name}\"? Answer no when it is only mentioned "
+                            "or lies beyond a door nobody opens."}
     try:
-        answers = decisions.decide(_jev_state(prose, model_payload), {
-            channel: {"type": "noul", "instructions": text}
-            for channel, text in questions.items()
-        })
+        answers = decisions.decide(_jev_state(prose, model_payload), battery)
     except Exception as exc:
         record.update(failed=str(exc), seconds=round(time.time() - t0, 3))
         ctx.add_warning(f"{stage}: decision model unavailable, every channel "
                         f"granted (fail-open): {exc}")
         record["selected"] = list(candidates)
+        record["entered"] = list(planned)
         return list(candidates), record
     probabilities = {channel: round(decisions.probability(answers.get(channel)), 4)
                      for channel in questions}
     selected = [channel for channel in candidates
                 if channel not in questions
                 or probabilities.get(channel, 0.0) >= record["threshold"]]
+    entered = [rid for rid in planned
+               if decisions.probability(answers.get(_ENTER_PREFIX + str(rid)))
+               >= record["threshold"]]
     record.update(probabilities=probabilities, selected=selected,
-                  seconds=round(time.time() - t0, 3))
+                  entered=entered, seconds=round(time.time() - t0, 3))
     return selected, record
 
 
@@ -326,9 +350,309 @@ def implied_tools(events, scene=None):
                 destinations.extend(str(value) for value in patch["positions"].values()
                                     if isinstance(value, str) and value.strip())
     if known and any(dest not in known and dest not in created
+                     and not dest.startswith(NEW_PLACE_PREFIX)
                      for dest in destinations):
         tools.append("rooms")
     return tools
+
+
+# ---- 3b. the room author, in parallel ---------------------------------------
+
+#: How the encoder names a place the room author is minting at the same
+#: moment. The engine binds each reference to a minted room afterwards.
+NEW_PLACE_PREFIX = "new:"
+ROOM_AGENT_SETTING = "prose_contract_room_agent"
+#: A Jev binding below this confidence leaves the reference unbound (and
+#: reported) rather than guessing a room. Named per ask-before-limiting.
+ROOM_BIND_CONFIDENCE = 0.5
+
+
+def _isolated(context):
+    """Run a call in a COPY of the caller's context, made in the caller's
+    thread (a worker does not inherit contextvars), with the streaming sinks
+    cleared: the room author produces structure, never player-facing text.
+    The same isolation `director._run_specialists` gives each hand."""
+    def run(fn, *args, **kwargs):
+        def inner():
+            from llm.providers import generation_event_sink, token_sink
+            token_sink.set(None)
+            generation_event_sink.set(None)
+            return fn(*args, **kwargs)
+        return context.run(inner)
+    return run
+
+
+def room_agent_enabled() -> bool:
+    return str(get_setting(ROOM_AGENT_SETTING) or "1").strip() not in ("0", "false", "off")
+
+
+def _room_payload(ctx, sc, prose, model_payload, view, extras, reserved, develop):
+    payload = {
+        "prose": prose,
+        "already_happened": model_payload.get("already_happened") or "",
+        "identity_index": model_payload.get("identity_index") or {},
+        "world_index": model_payload.get("world_index") or {},
+        "reserved_places": dict(reserved or {}),
+        "develop": dict(develop or {}),
+        "variant_seed": model_payload.get("variant_seed"),
+    }
+    try:
+        own = _specialist_payload("spatial", ctx, sc, view, extras)
+    except Exception as exc:
+        ctx.add_warning(f"room author: spatial slice unavailable: {exc}")
+        own = {}
+    for key, value in own.items():
+        if key not in _HAND_ONLY_KEYS and key not in payload:
+            payload[key] = value
+    return payload
+
+
+def author_rooms(ctx, sc, prose, model_payload, view, extras, reserved=None,
+                 develop=None, record=None):
+    """The room designer (`agents/director_rooms.design_rooms`): a tool-using
+    agent that develops the planned rooms the beat enters and builds the
+    places the Director invented -- in pieces, looking at its work on the
+    engine's grid and checking it with the engine's own layout check."""
+    from llm.prompts import room_author_prompt
+    from .director_rooms import design_rooms
+    record = record if record is not None else {}
+    payload = _room_payload(ctx, sc, prose, model_payload, view, extras, reserved, develop)
+    owed = list(dict.fromkeys(list(develop or {}) + list(reserved or {})))
+
+    def call(system, step_payload):
+        return _agent_json("director_rooms", "director_rooms", system, step_payload,
+                           temperature=0.4, max_tokens=None)
+
+    return design_rooms(ctx, sc, payload, room_author_prompt(ctx.language), owed,
+                        call, record)
+
+
+def _walk_strings(value, visit):
+    """Every string leaf of a JSON value, rewritten by `visit`."""
+    if isinstance(value, str):
+        return visit(value)
+    if isinstance(value, list):
+        return [_walk_strings(item, visit) for item in value]
+    if isinstance(value, dict):
+        return {key: _walk_strings(item, visit) for key, item in value.items()}
+    return value
+
+
+def new_place_refs(events):
+    """Every `new:<words>` the encoder wrote, in first-use order."""
+    refs = []
+
+    def visit(text):
+        if text.startswith(NEW_PLACE_PREFIX):
+            ref = text[len(NEW_PLACE_PREFIX):].strip()
+            if ref and ref not in refs:
+                refs.append(ref)
+        return text
+    _walk_strings(events or [], visit)
+    return refs
+
+
+def _fold_place(text):
+    words = "".join(ch if ch.isalnum() else " " for ch in str(text or "").casefold()).split()
+    while words and words[0] in ("the", "a", "an"):
+        words = words[1:]
+    return " ".join(words)
+
+
+def bind_new_places(refs, rooms, prose, scene=None):
+    """`({ref: room_id}, record)`. Candidates are the rooms the author made
+    and the rooms the scene already holds (an encoder may call an existing
+    place new). A folded name or id match binds outright; the rest are asked
+    of the decision model as one CHOICE each -- binding is exactly the bounded
+    decision it exists for -- and a low-confidence answer stays unbound."""
+    candidates = {}
+    for source in (rooms or {}, ((scene or {}).get("rooms") or {})):
+        for rid, room in source.items():
+            if rid not in candidates:
+                candidates[str(rid)] = room if isinstance(room, dict) else {}
+    bound, record = {}, {"asked": {}, "unbound": []}
+    remaining = []
+    for ref in refs:
+        folded = _fold_place(ref)
+        hits = [rid for rid, room in candidates.items()
+                if folded and folded in (_fold_place(rid), _fold_place(room.get("name")))]
+        if len(hits) == 1:
+            bound[ref] = hits[0]
+        else:
+            remaining.append(ref)
+    if remaining and candidates:
+        criteria = {rid: (f"{room.get('name') or rid}: "
+                          f"{str(room.get('desc') or '')[:160]}").strip()
+                    for rid, room in list(candidates.items())[:250]}
+        criteria["none"] = "none of these places"
+        try:
+            answers = decisions.decide("PASSAGE:\n" + prose, {
+                f"place_{index}": {
+                    "type": "choice",
+                    "instructions": f"In this passage, which of these places is "
+                                    f"the one it calls \"{ref}\"?",
+                    "criteria": criteria,
+                } for index, ref in enumerate(remaining)})
+        except Exception as exc:
+            answers = {}
+            record["failed"] = str(exc)
+        for index, ref in enumerate(remaining):
+            answer = answers.get(f"place_{index}") or {}
+            choice = str(answer.get("choice") or "")
+            try:
+                confidence = float(answer.get("confidence") or 0.0)
+            except (TypeError, ValueError):
+                confidence = 0.0
+            record["asked"][ref] = {"choice": choice, "confidence": confidence}
+            if choice in candidates and confidence >= ROOM_BIND_CONFIDENCE:
+                bound[ref] = choice
+    record["unbound"] = [ref for ref in refs if ref not in bound]
+    return bound, record
+
+
+def rewrite_new_places(events, bound):
+    """Replace each bound `new:<words>` with its room id."""
+    def visit(text):
+        if text.startswith(NEW_PLACE_PREFIX):
+            return bound.get(text[len(NEW_PLACE_PREFIX):].strip(), text)
+        return text
+    return _walk_strings(events or [], visit)
+
+
+def reserve_places(places, scene=None):
+    """`{room_id: {name, size, shape}}` for the Director's new places.
+
+    Three simple fields and nothing else -- the room author does the complex
+    work. The id is the engine's own fold of the name (`normalize_room_id`),
+    so both parallel workers hold it before either starts. A place whose id
+    the scene already holds is not new and is not reserved; a size or shape
+    outside the engine's vocabulary falls back to the engine's default."""
+    from world.spatial import (DEFAULT_ROOM_SIZE, DEFAULT_SHAPE, ROOM_SIZES,
+                               SHAPES, normalize_room_id)
+    held = set(((scene or {}).get("rooms") or {}).keys()) if isinstance(scene, dict) else set()
+    reserved = {}
+    for place in places or []:
+        if not isinstance(place, dict):
+            continue
+        name = str(place.get("name") or "").strip()
+        rid = normalize_room_id(name)
+        if not rid or rid in held or rid in reserved:
+            continue
+        size = str(place.get("size") or "").strip().casefold()
+        shape = str(place.get("shape") or "").strip().casefold()
+        reserved[rid] = {
+            "name": name,
+            "size": size if size in ROOM_SIZES else DEFAULT_ROOM_SIZE,
+            "shape": shape if shape in SHAPES else DEFAULT_SHAPE,
+        }
+    return reserved
+
+
+def enforce_reserved(rooms_answer, reserved, warn=None):
+    """Every reserved room exists, under its id, with the Director's name,
+    size and shape. The author's detail stands; those three are the
+    Director's. A room the author left out becomes the minimal record the
+    three fields make, so the encoder's placements still land somewhere."""
+    rooms_answer = dict(rooms_answer or {})
+    rooms = dict(rooms_answer.get("rooms") or {})
+    for rid, spec in (reserved or {}).items():
+        room = rooms.get(rid)
+        if not isinstance(room, dict):
+            if warn:
+                warn(f"room author did not write reserved place {rid!r}; "
+                     "it stands on the Director's three fields")
+            room = {"desc": spec["name"], "adjacent": []}
+        rooms[rid] = dict(room, **spec)
+    rooms_answer["rooms"] = rooms
+    return rooms_answer
+
+
+def _new_objects(events):
+    """`{entity_id: {name, description}}` the encoder created this beat."""
+    found = {}
+    for event in events or []:
+        for transform in (event.get("transforms") or []) if isinstance(event, dict) else []:
+            patch = transform.get("patch") if isinstance(transform, dict) else None
+            entities = (patch or {}).get("entities") if isinstance(patch, dict) else None
+            if not isinstance(entities, dict):
+                continue
+            for eid, record in entities.items():
+                if isinstance(record, dict) and str(record.get("name") or "").strip():
+                    found.setdefault(str(eid), record)
+    return found
+
+
+def reconcile_rooms(ctx, rooms_answer, events, prose, scene=None):
+    """`(rooms_answer, record)`: the room author's own furnishings that are
+    the same thing as an object the encoder made this beat, removed.
+
+    A SHORT CALL TO THE AUTHOR, not a pairwise classifier. Both workers ran
+    at once, so a table the prose sets in a new room can be written twice.
+    The encoder's object is the one the beat used, so it is kept. Only the
+    author knows what each of its features is FOR -- a pairwise yes/no over
+    names removed a TARDIS's central console as a "copy" of an entity keyed
+    by the room (chat 153 turn 7, 2026-09-22) -- so it names its own
+    duplicates, and code removes only what it names, and only when the
+    object it names exists."""
+    from llm.prompts import room_reconcile_prompt
+    record = {}
+    held = set(((scene or {}).get("rooms") or {}).keys()) if isinstance(scene, dict) else set()
+    rooms = (rooms_answer or {}).get("rooms") or {}
+    features = {rid: {aid: (a.get("desc") if isinstance(a, dict) else a)
+                      for aid, a in (room.get("anchors") or {}).items()}
+                for rid, room in rooms.items()
+                if isinstance(room, dict) and room.get("anchors")}
+    objects = {eid: {"name": o.get("name"), "description": o.get("description")}
+               for eid, o in _new_objects(events).items() if eid not in rooms and eid not in held}
+    if not features or not objects:
+        return rooms_answer, record
+    answer = _agent_json(
+        "director_rooms", "director_rooms_reconcile", room_reconcile_prompt(ctx.language),
+        {"prose": prose, "your_features": features, "objects_made": objects},
+        temperature=0.0, max_tokens=None) or {}
+    removed = []
+    rooms = {rid: (dict(room, anchors=dict(room.get("anchors") or {}))
+                   if isinstance(room, dict) else room) for rid, room in rooms.items()}
+    for item in answer.get("duplicates") or []:
+        if not isinstance(item, dict):
+            continue
+        rid, aid = str(item.get("room") or ""), str(item.get("feature") or "")
+        same = str(item.get("same_as") or "")
+        if same in objects and aid in ((rooms.get(rid) or {}).get("anchors") or {}):
+            rooms[rid]["anchors"].pop(aid)
+            removed.append({"room": rid, "feature": aid, "kept": same})
+    record["removed"] = removed
+    return dict(rooms_answer, rooms=rooms), record
+
+
+def room_event(rooms_answer, events):
+    """The places the author made, as the beat's FIRST event: a place exists
+    before any body walks into it. None when the author made nothing."""
+    rooms = rooms_answer.get("rooms") if isinstance(rooms_answer, dict) else None
+    rooms = rooms if isinstance(rooms, dict) else {}
+    removed = [r for r in (rooms_answer or {}).get("remove_rooms") or [] if r]
+    severed = [r for r in (rooms_answer or {}).get("remove_adjacent") or [] if r]
+    if not (rooms or removed or severed):
+        return None
+    first = next((e for e in events or [] if isinstance(e, dict)), {})
+    transforms = [{"item": str((room or {}).get("name") or rid),
+                   "patch": {"rooms": {rid: room}}}
+                  for rid, room in rooms.items() if isinstance(room, dict)]
+    if removed or severed:
+        patch = {}
+        if removed:
+            patch["remove_rooms"] = removed
+        if severed:
+            patch["remove_adjacent"] = severed
+        transforms.append({"item": "places", "patch": patch})
+    return {
+        "source_entity_id": first.get("source_entity_id") or "",
+        "source_event_id": first.get("source_event_id") or "",
+        "event": "The places this beat establishes.",
+        "observable": "", "commitment": "asserted", "seconds": 0,
+        "item_names": [t["item"] for t in transforms],
+        "transforms": transforms,
+    }
 
 
 def _call_encoder(ctx, channels, payload):
@@ -342,16 +666,23 @@ def _call_encoder(ctx, channels, payload):
     ) or {}
 
 
-def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=None):
+def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=None,
+           rooms_elsewhere=False, new_places=None):
     """`(answer, channels, record)`: the encoder's events and the tools it
     finally held. At most one widening pass, whose answer REPLACES the
-    first."""
+    first. With `rooms_elsewhere`, places are the room author's: the encoder
+    holds no room tool, may not ask for one, and names a new place as
+    `new:<words>`."""
     record = {}
     payload = encoder_payload(ctx, sc, prose, model_payload, view, extras, channels)
+    payload["places_authored_elsewhere"] = bool(rooms_elsewhere)
+    payload["new_places"] = dict(new_places or {})
     t0 = time.time()
     answer = _call_encoder(ctx, channels, payload)
     record["seconds"] = round(time.time() - t0, 3)
     known = set(candidate_channels(stage, facts))
+    if rooms_elsewhere:
+        known -= set(ROOM_AUTHOR_CHANNELS)
     missing = [str(tool) for tool in (answer.get("missing_tools") or [])
                if str(tool) in known and str(tool) not in channels]
     # CODE CLOSES THE KNOWN DEPENDENCIES; the decision model only predicts.
@@ -370,6 +701,8 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
             channels = list(channels) + [tool for tool in dict.fromkeys(missing)]
             payload = encoder_payload(ctx, sc, prose, model_payload, view,
                                       extras, channels)
+            payload["places_authored_elsewhere"] = bool(rooms_elsewhere)
+            payload["new_places"] = dict(new_places or {})
             # THE RE-ASK SEES ITS OWN FIRST ANSWER and returns the WHOLE beat.
             # Measured on chat 153 turn 23: asked again with only the new
             # tool, the encoder returned the two events that tool touched,
@@ -491,12 +824,97 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
         if happened:
             model_payload = dict(model_payload, already_happened=happened)
     t0 = time.time()
-    prose = author(ctx, stage, model_payload)
+    prose, places = author(ctx, stage, model_payload)
     author_seconds = round(time.time() - t0, 3)
-    channels, jev = select_channels(ctx, stage, prose, model_payload, facts)
-    answer, channels, encoding = encode(
-        ctx, stage, sc, prose, model_payload, view, extras, channels, facts)
-    rows, transforms = ledger_from_events(answer.get("events") or [])
+    reserved = reserve_places(places, sc)
+    planned = extras.get("planned_rooms") if isinstance(extras, dict) else None
+    planned = planned if isinstance(planned, dict) else {}
+    channels, jev = select_channels(ctx, stage, prose, model_payload, facts, planned)
+    develop = {rid: planned[rid] for rid in jev.get("entered") or () if rid in planned}
+    # THE ROOM CONTRACT RUNS BESIDE THE ENCODER, not inside it. It is the
+    # heaviest sheet the encoder would carry, and a place is authored whole
+    # or not at all, so it goes to its own full-fidelity author, started the
+    # moment the decision model says the beat touches a place; the encoder
+    # names any new place `new:<words>` and the engine binds the two after.
+    rooms_elsewhere = room_agent_enabled()
+    room_record, rooms_answer, room_future, pool = {}, None, None, None
+    if reserved:
+        room_record["reserved"] = reserved
+    if develop:
+        room_record["develop"] = sorted(develop)
+    # Places the encoder may place into at once: the Director's invented
+    # ones, and the planned rooms being developed, each under its own id.
+    new_places = dict(reserved)
+    for rid, brief in develop.items():
+        new_places.setdefault(rid, {"name": str((brief or {}).get("name") or rid),
+                                    "planned": True})
+    if rooms_elsewhere and (reserved or develop
+                            or any(c in ROOM_AUTHOR_CHANNELS for c in channels)):
+        pool = ThreadPoolExecutor(max_workers=1)
+        room_future = pool.submit(_isolated(contextvars.copy_context()),
+                                  author_rooms, ctx, sc, prose, model_payload,
+                                  view, extras, reserved, develop, room_record)
+        room_record["ran"] = "parallel"
+    encoder_channels = ([c for c in channels if c not in ROOM_AUTHOR_CHANNELS]
+                        if rooms_elsewhere else channels)
+    t_rooms = time.time()
+    try:
+        answer, encoder_channels, encoding = encode(
+            ctx, stage, sc, prose, model_payload, view, extras,
+            encoder_channels, facts, rooms_elsewhere=rooms_elsewhere,
+            new_places=new_places if rooms_elsewhere else None)
+    finally:
+        if room_future is not None:
+            try:
+                rooms_answer = room_future.result()
+            except Exception as exc:
+                room_record["failed"] = str(exc)
+                ctx.add_warning(f"{stage}: room author failed (fail-open): {exc}")
+            room_record["seconds"] = round(time.time() - t_rooms, 3)
+            pool.shutdown(wait=True)
+    events = list(answer.get("events") or [])
+    if rooms_elsewhere:
+        refs = new_place_refs(events)
+        if refs and room_future is None:
+            # The decision model did not foresee a place; the encoder named
+            # one. Serial fallback -- the author still writes it whole.
+            t1 = time.time()
+            try:
+                rooms_answer = author_rooms(ctx, sc, prose, model_payload, view,
+                                            extras, reserved, develop, room_record)
+                room_record["ran"] = "serial"
+            except Exception as exc:
+                room_record["failed"] = str(exc)
+                ctx.add_warning(f"{stage}: room author failed (fail-open): {exc}")
+            room_record["seconds"] = round(time.time() - t1, 3)
+        if refs:
+            bound, binding = bind_new_places(
+                refs, (rooms_answer or {}).get("rooms"), prose, sc)
+            room_record["bindings"] = bound
+            room_record["binding"] = binding
+            for ref in binding.get("unbound") or []:
+                ctx.add_warning(f"{stage}: new place {ref!r} bound to no room")
+            events = rewrite_new_places(events, bound)
+        if reserved:
+            rooms_answer = enforce_reserved(rooms_answer, reserved, warn=ctx.add_warning)
+        if rooms_answer and (rooms_answer.get("rooms") or {}):
+            t2 = time.time()
+            try:
+                rooms_answer, reconciled = reconcile_rooms(ctx, rooms_answer, events,
+                                                           prose, sc)
+            except Exception as exc:
+                reconciled = {"failed": str(exc)}
+            if reconciled:
+                reconciled["seconds"] = round(time.time() - t2, 3)
+                room_record["reconcile"] = reconciled
+        extra = room_event(rooms_answer or {}, events)
+        if extra is not None:
+            events = [extra] + events
+            room_record["rooms"] = sorted(((rooms_answer or {}).get("rooms") or {}))
+    channels = list(encoder_channels) + [
+        c for c in ROOM_AUTHOR_CHANNELS
+        if rooms_elsewhere and rooms_answer and (rooms_answer.get(c) or None)]
+    rows, transforms = ledger_from_events(events)
     record = {
         "stage": stage,
         "prose": prose,
@@ -504,7 +922,8 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
         "jev": jev,
         "channels": channels,
         "encoder": encoding,
-        "events": answer.get("events") or [],
+        "room_author": room_record,
+        "events": events,
         "missing_referents": list(answer.get("missing_referents") or []),
         "notes": list(answer.get("notes") or []),
     }

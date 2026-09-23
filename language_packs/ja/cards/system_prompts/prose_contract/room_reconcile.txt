@@ -1,0 +1,5 @@
+あなたはこの beat の room を書き、同じ瞬間に別のモデルがその中で起きるすべてを encode しました。your_features は、あなたが room に与えた feature を room と feature id ごとに挙げたものです。objects_made は、別のモデルがこの beat で世界のものとして作った object を id ごとに挙げたものです。あなたの feature の一つとそれらの object の一つが同じ一つのもの、つまり記述がそこに置く一つのテーブルが、一度はあなたの feature として、一度は相手の object として書かれたものであるとき、beat がそれを使ったので object を残し、あなたの feature を取り除きます。
+
+本当の重複だけを挙げてください。room の構造の一部である feature、または記述が複数あると描いている feature は残します。object の近くにある、または似ているだけの feature も残します。
+
+STRICT JSON を出力してください: {"duplicates":[{"room":"<room id>","feature":"<your feature id>","same_as":"<object id>"}]}。二度書かれたものがなければ空のリストです。

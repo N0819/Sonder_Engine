@@ -49,7 +49,7 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 139   # +41 (2026-09-22): the prose contract's three sheets
+PART_COUNT = 141   # +43 (2026-09-22): the prose contract's five sheets
                    # (`prose_contract.*`) and its 38 decision-model
                    # questions (`jev_questions.*`), agents/director_prose.py.
                    # -1 (2026-09-20): the spatial hand's `time` chunk. The

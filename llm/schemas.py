@@ -3035,6 +3035,11 @@ class ProseDirectorOutput(LenientModel):
     the decision model picks the encoder's tools from this text and the
     encoder turns it into ordered engine events."""
     prose: str = ""
+    # Each place the beat enters or reveals that the world does not hold yet,
+    # in three simple fields: name, size (a ROOM_SIZES word) and shape (a
+    # SHAPES word). Enough to reserve a room id both parallel workers use;
+    # the room author does everything else.
+    places: list[dict] = Field(default_factory=list)
 
 
 class UnifiedEvent(LenientModel):
@@ -3072,6 +3077,21 @@ class UnifiedSpecialistOutput(LenientModel):
     missing_tools: list[str] = Field(default_factory=list)
     missing_referents: list[str] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
+
+
+class RoomDesignStep(LenientModel):
+    """One step of the prose contract's room designer
+    (`agents/director_rooms.py`): the tool calls it makes this step, and
+    whether it is done."""
+    calls: list[dict] = Field(default_factory=list)
+    done: bool = False
+    notes: list[str] = Field(default_factory=list)
+
+
+class RoomReconcileOutput(LenientModel):
+    """The room author's closing call: its own features that the encoder
+    also wrote as objects, each `{room, feature, same_as}`."""
+    duplicates: list[dict] = Field(default_factory=list)
 
 
 class DirectorBodySpecialist(LenientModel):
@@ -4557,6 +4577,8 @@ SCHEMA_MAP = {
     # sub-calls inside director_interpret / director_resolve, like the hands.
     "director_prose": ProseDirectorOutput,
     "director_specialist": UnifiedSpecialistOutput,
+    "director_rooms": RoomDesignStep,
+    "director_rooms_reconcile": RoomReconcileOutput,
     "resolve_reconcile": ResolveReconcileOutput,
     "resolve_repair": ResolveRepairOutput,
     "interpret_repair": InterpretRepairOutput,

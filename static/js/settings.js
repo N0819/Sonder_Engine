@@ -2761,6 +2761,7 @@ function renderFullApiSettings(b) {
           el("div", { style: "margin-top:8px" }, el("b", {}, "director"), " — reads what you typed and decides what actually happens: whether an action succeeds, what an NPC's action resolves to. Gets this wrong and the story stops making sense, so keep it on a strong model."),
           el("div", {}, el("b", {}, "director_body / _social / _contact / _objects / _spatial"), " — scoped specialists that encode bodies (clothing, wounds, vitals, overlays), the scene roster, physical contact and matter, the object world, the room graph and positions, and the world's traffic (crowds, couriers, hearsay) from the beat the Director authored. Left unset each follows ", el("b", {}, "Default"), " like every other role — so where Default is a cheap model, set these rows too rather than leaving the engine's most failure-prone stage on it."),
           el("div", {}, el("b", {}, "director_specialist"), " — only used by the experimental prose contract, where the Director writes the beat as prose and this ONE model turns it into world changes in place of the five specialists above. Idle otherwise."),
+          el("div", {}, el("b", {}, "director_rooms"), " — the prose contract's room author: writes the places a beat establishes, in full detail, at the same time as director_specialist. Idle otherwise."),
           el("div", { class: "small dim" }, "There is no ", el("b", {}, "perception"), " role any more, and that is not an omission: what each character can see, hear and know is now worked out in code rather than asked of a model, so it costs nothing, cannot be got wrong by a cheap model, and has no setting to tune."),
           el("div", {}, el("b", {}, "character_bg / character_mid / character_major"), " — generate what a character does and says, tiered by how central that character is to the scene. Quality shows up directly in dialogue, so keep major characters on a strong model even if you lighten background ones."),
           el("div", {}, el("b", {}, "narrator"), " — turns everything into the prose you actually read. This is the model whose writing style you'll notice most."),
@@ -2814,6 +2815,7 @@ function renderFullApiSettings(b) {
       embeddings: -2, default: -1, director: 0,
       director_body: 1, director_social: 2, director_contact: 3,
       director_objects: 4, director_spatial: 5, director_specialist: 6,
+      director_rooms: 6.5,
       repair: 7,
     };
     const orderedRoles = [...S.boot.roles].sort(

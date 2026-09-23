@@ -545,6 +545,12 @@
     },
     "specialist_core": {
       "$text": "prose_contract/specialist_core.txt"
+    },
+    "room_author": {
+      "$text": "prose_contract/room_author.txt"
+    },
+    "room_reconcile": {
+      "$text": "prose_contract/room_reconcile.txt"
     }
   },
   "jev_questions": {

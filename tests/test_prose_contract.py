@@ -121,7 +121,9 @@ def test_decision_model_failure_grants_every_channel(temp_db, monkeypatch):
     }))
     ctx = _make_ctx(temp_db, interp=_action_interp())
     out = director.director_resolve(ctx, nonce=0)
-    sheet = calls[1]["system"]
+    # The room author also runs (every channel is granted) on its own
+    # thread, so find the encoder's call by its key, not its position.
+    sheet = next(c for c in calls if c["step_key"] == "director_specialist")["system"]
     assert POSITIONS_CHUNK in sheet and ATTIRE_CHUNK in sheet
     assert out["orchestration"]["prose_contract"]["jev"]["failed"]
     assert out["state_diff"]["positions"]["Mara"] == "lamp_room"
@@ -355,6 +357,220 @@ def test_interpret_prose_is_what_already_happened(temp_db):
         "orchestration": {"prose_contract": {"prose": "Hinami grips the bar."}},
         "causal_ledger": [{"event": "ignored", "commitment": "asserted"}]})
     assert director_prose.already_happened(ctx) == "Hinami grips the bar."
+
+
+ROOM_CHUNK = "ROOM CREATION"
+
+
+def _designed(rooms):
+    """A room designer that drafts each room whole and submits."""
+    calls = [{"tool": "draft_room", "args": {"room_id": rid, "room": room}}
+             for rid, room in rooms.items()]
+    return {"calls": calls + [{"tool": "submit", "args": {}}], "done": True}
+GALLERY = {"name": "Lighthouse Gallery", "desc": "A ring of iron walkway.",
+           "adjacent": [{"to": "lamp_room", "barrier": "open", "distance": "near"}]}
+
+
+def _gallery_encoder(ref):
+    return {"events": [
+        {"source_entity_id": "character:1", "event": "Mara steps out onto the gallery.",
+         "item_names": ["Mara"],
+         "movement": {"to_room": "new:" + ref, "mover": "Mara", "arrives": True},
+         "transforms": [{"item": "Mara",
+                         "patch": {"positions": {"Mara": "new:" + ref}}}]}]}
+
+
+def _jev(granted, bind_to=None):
+    def answer(state, questions):
+        out = {}
+        for key, q in questions.items():
+            if q["type"] == "choice":
+                out[key] = {"type": "choice", "choice": bind_to or "none",
+                            "confidence": 0.9}
+            else:
+                out[key] = {"type": "noul", "noul": 0.95 if key in granted else 0.0}
+        return out
+    return answer
+
+
+def test_places_are_minted_in_parallel_and_bound_by_the_decision_model(
+        temp_db, monkeypatch):
+    """The room contract is the heaviest sheet; it runs beside the encoder,
+    not inside it. The encoder names the new place in the prose's words and a
+    decision-model CHOICE binds it to the room the author minted."""
+    temp_db.set_setting("director_contract", "prose")
+    monkeypatch.setattr(decisions, "OVERRIDE",
+                        _jev({"rooms", "positions"}, bind_to="lighthouse_gallery"))
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_prose": {"prose": "Mara steps out onto the gallery."},
+        "director_rooms": _designed({"lighthouse_gallery": GALLERY}),
+        "director_specialist": _gallery_encoder("the gallery"),
+    }))
+    ctx = _make_ctx(temp_db, interp=_action_interp())
+    out = director.director_resolve(ctx, nonce=0)
+    by_key = {c["step_key"]: c for c in calls}
+    assert set(by_key) == {"director_prose", "director_rooms", "director_specialist"}
+    assert ROOM_CHUNK in by_key["director_rooms"]["system"]
+    assert ROOM_CHUNK not in by_key["director_specialist"]["system"]
+    assert by_key["director_specialist"]["payload"]["places_authored_elsewhere"] is True
+    assert "lighthouse_gallery" in out["state_diff"]["rooms"]
+    assert out["state_diff"]["positions"]["Mara"] == "lighthouse_gallery"
+    assert out["ledgers"][0]["event"] == "The places this beat establishes."
+    rooms = out["orchestration"]["prose_contract"]["room_author"]
+    assert rooms["ran"] == "parallel"
+    assert rooms["bindings"] == {"the gallery": "lighthouse_gallery"}
+
+
+def test_a_new_place_named_as_minted_binds_without_asking(temp_db, monkeypatch):
+    temp_db.set_setting("director_contract", "prose")
+    asked = []
+
+    def jev(state, questions):
+        asked.extend(q["type"] for q in questions.values())
+        return _jev({"rooms", "positions"})(state, questions)
+
+    monkeypatch.setattr(decisions, "OVERRIDE", jev)
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_prose": {"prose": "Mara steps out onto the gallery."},
+        "director_rooms": _designed({"lighthouse_gallery": GALLERY}),
+        "director_specialist": _gallery_encoder("The Lighthouse Gallery"),
+    }))
+    out = director.director_resolve(_make_ctx(temp_db, interp=_action_interp()), nonce=0)
+    assert out["state_diff"]["positions"]["Mara"] == "lighthouse_gallery"
+    assert "choice" not in asked
+
+
+def test_an_unforeseen_place_runs_the_room_author_after(temp_db, monkeypatch):
+    """The decision model did not grant rooms; the encoder named a new place
+    anyway. The author still writes it whole, serially."""
+    temp_db.set_setting("director_contract", "prose")
+    monkeypatch.setattr(decisions, "OVERRIDE",
+                        _jev({"positions"}, bind_to="lighthouse_gallery"))
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_prose": {"prose": "Mara steps out onto the gallery."},
+        "director_rooms": _designed({"lighthouse_gallery": GALLERY}),
+        "director_specialist": _gallery_encoder("the gallery"),
+    }))
+    out = director.director_resolve(_make_ctx(temp_db, interp=_action_interp()), nonce=0)
+    assert _steps(calls) == ["director_prose", "director_specialist", "director_rooms"]
+    assert out["state_diff"]["positions"]["Mara"] == "lighthouse_gallery"
+    assert out["orchestration"]["prose_contract"]["room_author"]["ran"] == "serial"
+
+
+def _gallery_placed(eid=None):
+    transforms = [{"item": "Mara", "patch": {"positions": {"Mara": "lighthouse_gallery"}}}]
+    if eid:
+        transforms.append({"item": "brass telescope", "patch": {"entities": {
+            eid: {"name": "brass telescope", "description": "A brass telescope on a tripod."}}}})
+    return {"events": [
+        {"source_entity_id": "character:1", "event": "Mara steps out onto the gallery.",
+         "item_names": ["Mara"],
+         "movement": {"to_room": "lighthouse_gallery", "mover": "Mara", "arrives": True},
+         "transforms": transforms}]}
+
+
+def _dup_jev(duplicate):
+    def answer(state, questions):
+        out = {}
+        for key, q in questions.items():
+            if key.startswith("dup_"):
+                out[key] = {"type": "noul", "noul": 0.9 if duplicate else 0.1}
+            else:
+                out[key] = {"type": "noul",
+                            "noul": 0.95 if key in ("positions",) else 0.0}
+        return out
+    return answer
+
+
+PLACES = [{"name": "Lighthouse Gallery", "size": "small", "shape": "round"}]
+
+
+def test_the_directors_three_fields_reserve_a_room_both_workers_use(
+        temp_db, monkeypatch):
+    """The Director names a new place in three simple fields; code reserves
+    its id before either worker starts, so the encoder places into it at once
+    while the room author fleshes it out -- keeping the Director's size and
+    shape over its own."""
+    temp_db.set_setting("director_contract", "prose")
+    monkeypatch.setattr(decisions, "OVERRIDE", _dup_jev(False))
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_prose": {"prose": "Mara steps out onto the gallery.",
+                           "places": PLACES},
+        "director_rooms": _designed({"lighthouse_gallery": dict(GALLERY, size="vast",
+                                                                  shape="rectangle")}),
+        "director_specialist": _gallery_placed(),
+    }))
+    out = director.director_resolve(_make_ctx(temp_db, interp=_action_interp()), nonce=0)
+    by_key = {c["step_key"]: c for c in calls}
+    reserved = {"lighthouse_gallery": {"name": "Lighthouse Gallery",
+                                       "size": "small", "shape": "round"}}
+    assert by_key["director_specialist"]["payload"]["new_places"] == reserved
+    assert by_key["director_rooms"]["payload"]["reserved_places"] == reserved
+    room = out["state_diff"]["rooms"]["lighthouse_gallery"]
+    assert (room["size"], room["shape"]) == ("small", "round")
+    assert out["state_diff"]["positions"]["Mara"] == "lighthouse_gallery"
+    assert out["orchestration"]["prose_contract"]["room_author"]["ran"] == "parallel"
+
+
+def test_a_reserved_room_the_author_left_out_still_stands(temp_db, monkeypatch):
+    temp_db.set_setting("director_contract", "prose")
+    monkeypatch.setattr(decisions, "OVERRIDE", _dup_jev(False))
+    monkeypatch.setattr(director, "_agent_json", _fake_agent([], {
+        "director_prose": {"prose": "Mara steps out onto the gallery.",
+                           "places": PLACES},
+        "director_rooms": {"calls": [{"tool": "submit", "args": {}}]},
+        "director_specialist": _gallery_placed(),
+    }))
+    out = director.director_resolve(_make_ctx(temp_db, interp=_action_interp()), nonce=0)
+    room = out["state_diff"]["rooms"]["lighthouse_gallery"]
+    assert room["name"] == "Lighthouse Gallery" and room["size"] == "small"
+    assert out["state_diff"]["positions"]["Mara"] == "lighthouse_gallery"
+
+
+def _furnished_gallery():
+    return _designed({"lighthouse_gallery": dict(GALLERY, anchors={
+        "telescope": {"desc": "a brass telescope on its tripod", "dir": "n"}})})
+
+
+def test_a_furnishing_the_encoder_also_made_is_removed_from_the_room(
+        temp_db, monkeypatch):
+    """Both workers can write the same object at once. The encoder's is the
+    one the beat used; the designer's copy goes when the designer itself, in
+    its short reconcile call, names it as the same thing."""
+    temp_db.set_setting("director_contract", "prose")
+    monkeypatch.setattr(decisions, "OVERRIDE", _dup_jev(False))
+    monkeypatch.setattr(director, "_agent_json", _fake_agent([], {
+        "director_rooms_reconcile": {"duplicates": [
+            {"room": "lighthouse_gallery", "feature": "telescope",
+             "same_as": "telescope_1"}]},
+        "director_prose": {"prose": "Mara steps out onto the gallery, to the "
+                                    "brass telescope.", "places": PLACES},
+        "director_rooms": _furnished_gallery(),
+        "director_specialist": _gallery_placed(eid="telescope_1"),
+    }))
+    out = director.director_resolve(_make_ctx(temp_db, interp=_action_interp()), nonce=0)
+    room = out["state_diff"]["rooms"]["lighthouse_gallery"]
+    assert "telescope" not in (room.get("anchors") or {})
+    reconcile = out["orchestration"]["prose_contract"]["room_author"]["reconcile"]
+    assert reconcile["removed"][0]["kept"] == "telescope_1"
+
+
+def test_a_feature_the_designer_does_not_name_is_kept(temp_db, monkeypatch):
+    temp_db.set_setting("director_contract", "prose")
+    monkeypatch.setattr(decisions, "OVERRIDE", _dup_jev(False))
+    monkeypatch.setattr(director, "_agent_json", _fake_agent([], {
+        "director_rooms_reconcile": {"duplicates": []},
+        "director_prose": {"prose": "Two brass telescopes stand on the gallery.",
+                           "places": PLACES},
+        "director_rooms": _furnished_gallery(),
+        "director_specialist": _gallery_placed(eid="telescope_1"),
+    }))
+    out = director.director_resolve(_make_ctx(temp_db, interp=_action_interp()), nonce=0)
+    assert "telescope" in out["state_diff"]["rooms"]["lighthouse_gallery"]["anchors"]
 
 
 def test_the_causal_contract_stays_the_default(temp_db, monkeypatch):

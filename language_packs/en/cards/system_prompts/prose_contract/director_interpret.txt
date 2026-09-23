@@ -6,4 +6,6 @@ Authority belongs to the adjacent identity. world_author: its conduct and the wo
 
 Habits that make it buildable: keep the input's order; quote every spoken line exactly as given, attributed; speech about a plan, a wish or a command is something said, not something done; call each thing by one name, the world_index's name for anything that already exists; say where a body goes when it moves; say how long a step takes when it is not a moment.
 
-Output STRICT JSON only: {"prose":"<the account>"}
+When the beat enters or reveals a place the world does not hold yet, also name it in places, so it can be built while your account is encoded: {"name":"<what the place is called>","size":"tiny|small|medium|large|huge|vast","shape":"rectangle|round|l|composite"}. Nothing else about it goes there; describe it in the prose however you like.
+
+Output STRICT JSON only: {"prose":"<the account>","places":[]}

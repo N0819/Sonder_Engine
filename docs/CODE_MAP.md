@@ -10,17 +10,18 @@
 | `agents/background.py` | 2128 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
 | `agents/character.py` | 4677 | Private character decision agent. | `agents.character_kernel`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/character_kernel.py` | 496 |  | — |
-| `agents/common.py` | 11299 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
+| `agents/common.py` | 11323 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 5107 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
-| `agents/director.py` | 8280 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
+| `agents/director.py` | 8286 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 477 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 3711 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
 | `agents/director_fanout.py` | 1687 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 2117 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 1839 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
-| `agents/director_prose.py` | 540 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts` |
+| `agents/director_prose.py` | 1005 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts` |
 | `agents/director_reconcile.py` | 610 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `llm.schemas`, `story`, `world.spatial` |
+| `agents/director_rooms.py` | 276 |  | — |
 | `agents/director_scopes.py` | 1246 |  | `agents.director_lingua`, `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 706 |  | `agents.common`, `story.character_schema`, `story.scene`, `world.background_claims` |
 | `agents/dramaturge.py` | 348 |  | `core.db`, `core.logging_utils` |
@@ -49,10 +50,10 @@
 | `llm/decisions.py` | 146 |  | `core.db` |
 | `llm/llm_quality.py` | 1281 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
-| `llm/prompts.py` | 639 | Default system prompts and prompt preset access. | `core.db` |
-| `llm/providers.py` | 4723 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
+| `llm/prompts.py` | 666 | Default system prompts and prompt preset access. | `core.db` |
+| `llm/providers.py` | 4727 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
-| `llm/schemas.py` | 7655 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `llm/schemas.py` | 7677 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2503 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 398 |  | — |
@@ -204,7 +205,7 @@
 | `world/spatial_bubbles.py` | 526 |  | `world.spatial`, `world.spatial_frames` |
 | `world/spatial_contact_migration.py` | 332 |  | `story.character_schema`, `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_contacts.py` | 1948 |  | `world.spatial_containment`, `world.spatial_identity`, `world.spatial_transit` |
-| `world/spatial_containment.py` | 3253 |  | `world.spatial_barriers`, `world.spatial_identity`, `world.spatial_transit` |
+| `world/spatial_containment.py` | 3280 |  | `world.spatial_barriers`, `world.spatial_identity`, `world.spatial_transit` |
 | `world/spatial_fov.py` | 1757 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_frames.py` | 2440 |  | `core.db`, `core.frames`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial` |
 | `world/spatial_geometry.py` | 2157 |  | `story.character_schema`, `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
@@ -213,7 +214,7 @@
 | `world/spatial_light.py` | 508 |  | `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity` |
 | `world/spatial_light_field.py` | 1246 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_lint.py` | 444 |  | `world.spatial_barriers`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_orientation` |
-| `world/spatial_merge.py` | 2597 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_orientation`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
+| `world/spatial_merge.py` | 2601 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_orientation`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
 | `world/spatial_orientation.py` | 398 | Bearing math and reciprocal spatial-edge normalization. | — |
 | `world/spatial_prose.py` | 404 |  | `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light` |
 | `world/spatial_routing.py` | 1200 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_light`, `world.spatial_orientation` |
@@ -275,12 +276,12 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `norm_sequence()` | 4289 | 294 lines |
-| `_check_narrator_fidelity()` | 10571 | 252 lines |
+| `_check_narrator_fidelity()` | 10595 | 252 lines |
 | `presence_figures_for_room()` | 2180 | 232 lines |
 | `_unknown_actor_label()` | 5130 | 185 lines |
-| `_scrub_invented_dialogue()` | 9084 | 151 lines |
+| `_scrub_invented_dialogue()` | 9108 | 151 lines |
 | `observer_body_regions()` | 1698 | 140 lines |
-| `_check_quote_attribution()` | 10134 | 139 lines |
+| `_check_quote_attribution()` | 10158 | 139 lines |
 | `_scrub_unknown_identities()` | 5538 | 133 lines |
 
 ### `agents/composer.py`
@@ -300,14 +301,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 5678 | 2569 lines |
-| `director_interpret()` | 1360 | 949 lines |
-| `_run_specialists()` | 3502 | 636 lines |
-| `_reconcile_resolution()` | 2733 | 558 lines |
-| `director_establish()` | 393 | 200 lines |
-| `_reconcile_interpretation()` | 2311 | 172 lines |
-| `mint_unreferenced_things()` | 5354 | 169 lines |
-| `_specialist_repairs()` | 2545 | 134 lines |
+| `director_resolve()` | 5679 | 2574 lines |
+| `director_interpret()` | 1361 | 949 lines |
+| `_run_specialists()` | 3503 | 636 lines |
+| `_reconcile_resolution()` | 2734 | 558 lines |
+| `director_establish()` | 394 | 200 lines |
+| `_reconcile_interpretation()` | 2312 | 172 lines |
+| `mint_unreferenced_things()` | 5355 | 169 lines |
+| `_specialist_repairs()` | 2546 | 134 lines |
 
 ### `agents/director_contact.py`
 
@@ -384,14 +385,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `ledger_from_events()` | 367 | 70 lines |
-| `dispatch()` | 472 | 54 lines |
-| `encode()` | 308 | 49 lines |
-| `already_happened()` | 164 | 39 lines |
-| `run()` | 439 | 31 lines |
-| `encoder_payload()` | 268 | 27 lines |
-| `select_channels()` | 238 | 26 lines |
-| `candidate_channels()` | 135 | 19 lines |
+| `run()` | 818 | 117 lines |
+| `ledger_from_events()` | 746 | 70 lines |
+| `encode()` | 669 | 67 lines |
+| `dispatch()` | 937 | 54 lines |
+| `bind_new_places()` | 462 | 49 lines |
+| `select_channels()` | 246 | 42 lines |
+| `reconcile_rooms()` | 585 | 41 lines |
+| `already_happened()` | 167 | 39 lines |
 
 ### `agents/director_reconcile.py`
 
@@ -405,6 +406,19 @@
 | `_route_repair_omissions()` | 567 | 44 lines |
 | `_verify_no_referent()` | 339 | 27 lines |
 | `_deep_audit_mode()` | 49 | 11 lines |
+
+### `agents/director_rooms.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `design_rooms()` | 224 | 53 lines |
+| `render_room()` | 120 | 39 lines |
+| `_merge_room()` | 86 | 22 lines |
+| `_check()` | 181 | 20 lines |
+| `_inspect()` | 161 | 18 lines |
+| `_shown()` | 210 | 12 lines |
+| `_merged()` | 110 | 8 lines |
+| `_fit()` | 203 | 5 lines |
 
 ### `agents/director_scopes.py`
 
@@ -699,8 +713,8 @@
 |---|---:|---:|
 | `preset_import_document()` | 276 | 51 lines |
 | `specialist_prompt()` | 340 | 38 lines |
-| `_relocate_character_identity()` | 497 | 29 lines |
-| `character_prompt()` | 545 | 28 lines |
+| `_relocate_character_identity()` | 524 | 29 lines |
+| `character_prompt()` | 572 | 28 lines |
 | `_assembled_sheets()` | 38 | 26 lines |
 | `normalize_preset()` | 126 | 26 lines |
 | `unified_specialist_prompt()` | 421 | 23 lines |
@@ -710,14 +724,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_chat_complete_once()` | 3292 | 317 lines |
-| `chat_complete()` | 3005 | 139 lines |
-| `async _chat_complete_async_once()` | 3820 | 126 lines |
-| `_claude_cli_complete()` | 2879 | 124 lines |
-| `_sse_openai()` | 2571 | 90 lines |
-| `async chat_complete_async()` | 3729 | 90 lines |
-| `_json_mode_recovery_stages()` | 2295 | 83 lines |
-| `async _sse_openai_async()` | 3947 | 71 lines |
+| `_chat_complete_once()` | 3296 | 317 lines |
+| `chat_complete()` | 3009 | 139 lines |
+| `async _chat_complete_async_once()` | 3824 | 126 lines |
+| `_claude_cli_complete()` | 2883 | 124 lines |
+| `_sse_openai()` | 2575 | 90 lines |
+| `async chat_complete_async()` | 3733 | 90 lines |
+| `_json_mode_recovery_stages()` | 2299 | 83 lines |
+| `async _sse_openai_async()` | 3951 | 71 lines |
 
 ### `llm/research_providers.py`
 
@@ -735,14 +749,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `semantic_output_errors()` | 6689 | 585 lines |
-| `preprocess_llm_output()` | 5607 | 357 lines |
+| `semantic_output_errors()` | 6711 | 585 lines |
+| `preprocess_llm_output()` | 5629 | 357 lines |
 | `_lenient_coerce()` | 836 | 159 lines |
-| `validate_llm_output_strict()` | 7517 | 139 lines |
-| `_causal_patch_errors()` | 6557 | 130 lines |
-| `canonicalize_prose_markup()` | 5239 | 102 lines |
+| `validate_llm_output_strict()` | 7539 | 139 lines |
+| `_causal_patch_errors()` | 6579 | 130 lines |
+| `canonicalize_prose_markup()` | 5261 | 102 lines |
 | `_coerce_station_table()` | 85 | 81 lines |
-| `_uncross_concealed_speech()` | 5363 | 69 lines |
+| `_uncross_concealed_speech()` | 5385 | 69 lines |
 
 ### `mind/affect.py`
 
@@ -2497,14 +2511,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `derive_inventory_placements()` | 1404 | 203 lines |
-| `materialize_named_stations()` | 2665 | 135 lines |
-| `advance_room_transits()` | 2802 | 130 lines |
-| `replace_engine_minted_interiors()` | 2165 | 123 lines |
-| `mint_transferred_objects()` | 1298 | 104 lines |
-| `release_declared_departures()` | 2946 | 97 lines |
-| `place_enclosed_bodies()` | 2290 | 95 lines |
-| `derive_containment_from_contacts()` | 469 | 90 lines |
+| `derive_inventory_placements()` | 1431 | 203 lines |
+| `materialize_named_stations()` | 2692 | 135 lines |
+| `advance_room_transits()` | 2829 | 130 lines |
+| `replace_engine_minted_interiors()` | 2192 | 123 lines |
+| `mint_transferred_objects()` | 1325 | 104 lines |
+| `release_declared_departures()` | 2973 | 97 lines |
+| `place_enclosed_bodies()` | 2317 | 95 lines |
+| `derive_containment_from_contacts()` | 496 | 90 lines |
 
 ### `world/spatial_fov.py`
 
@@ -2614,14 +2628,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `merge_scene_with_diff()` | 1558 | 782 lines |
-| `_expire_transient_entity_state()` | 598 | 116 lines |
-| `_shield_standing_bearings()` | 880 | 107 lines |
-| `_merge_room()` | 186 | 99 lines |
-| `_shield_minted_edges()` | 1122 | 95 lines |
-| `beat_movement_cuts()` | 2468 | 94 lines |
-| `sync_scene_passages()` | 1384 | 90 lines |
-| `apply_following_ops()` | 1305 | 77 lines |
+| `merge_scene_with_diff()` | 1559 | 785 lines |
+| `_expire_transient_entity_state()` | 599 | 116 lines |
+| `_shield_standing_bearings()` | 881 | 107 lines |
+| `_merge_room()` | 187 | 99 lines |
+| `_shield_minted_edges()` | 1123 | 95 lines |
+| `beat_movement_cuts()` | 2472 | 94 lines |
+| `sync_scene_passages()` | 1385 | 90 lines |
+| `apply_following_ops()` | 1306 | 77 lines |
 
 ### `world/spatial_orientation.py`
 
@@ -3171,9 +3185,9 @@ Sections: Library sidebar (`:305`); Data loading (`:504`); Workspace (`:614`); B
 
 Declared functions: `loreBookTypeIcon()`, `inheritanceModes()`, `knowledgeTags()`, `knowledgeRanges()`, `loreLinkTypes()`, `normalizeLoreBook()`, `loreOwnershipKey()`, `loreRootBooks()`, `loreBooksByParent()`, `loreBookMatches()`, `loreVisibleIds()`, `loreBookLabel()`, `parseStoredJSON()`, `loreField()`, `loreSelect()`, `loreBookOptions()`, `renderLoreLibrarySidebar()`, `renderNode()`, `loreStoryQuery()`, `loreBookIsLibrary()`, `loadLoreWorkspaceData()`, `collectLoreLinkTargets()`, `loreWorkspaceVisible()`, `renderLoreWorkspaceBody()`, `openLoreWorkspace()`, `renderLoreInspector()`, `selectTab()`, `buildLoreWorkspace()`, `renderWorkspaceTree()`, `renderNode()`, `renderTreeList()`, `renderLoreBookEditor()`, `moveLoreBook()`, `reorderLoreBook()`, `promoteLoreBook()`, `demoteLoreBook()`, `createSiblingLoreBook()`, `createLoreBookDialog()`, `refreshLoreUI()`, `renderLoreEntries()`, `renderList()`, `buildLoreEntryCard()`, `splitNumberList()`, `reinterpretLoreBook()`, `generateLoreEntriesPrompt()`, `buildDirectLoreRequest()`, `renderRelationshipOverview()`, `renderLoreRelationshipEditor()`, `renderRelationshipList()`, `showNewRelationshipForm()`, `renderLoreGenerator()`, `adoptGeneratorPlan()`, `generatorPlanMessage()`, `loreGenAgo()`, `refreshLoreGenRecovery()`, `normalizeGeneratorPlan()`, `renderLorePlanPreview()`, `renderOperations()`, `planStat()`, `renderAnalysisSection()`, `addPlanGroup()`, `stripPlanUIFields()`, `acceptedGeneratorPlan()`.
 
-### `static/js/settings.js` (4020 lines)
+### `static/js/settings.js` (4022 lines)
 
-Sections: Chat tool modals (`:1`); Condition tab (`:801`); Survival tracker (`:861`); Character relocation (`:1173`); API connections (`:1936`); Software updates (host-only; git fast-forward from GitHub origin) (`:3249`); Legacy checkpoint conversion (host-only maintenance) (`:3281`); Prompts (`:3515`); and be able to load that pack's own sheets to edit, rather than (`:3526`); Extensions (`:3693`).
+Sections: Chat tool modals (`:1`); Condition tab (`:801`); Survival tracker (`:861`); Character relocation (`:1173`); API connections (`:1936`); Software updates (host-only; git fast-forward from GitHub origin) (`:3251`); Legacy checkpoint conversion (host-only maintenance) (`:3283`); Prompts (`:3517`); and be able to load that pack's own sheets to edit, rather than (`:3528`); Extensions (`:3695`).
 
 Declared functions: `paradoxModes()`, `frameQuery()`, `charterDiagnosticsPanel()`, `selectTab()`, `dialogueColorControl()`, `save()`, `renderCastTab()`, `renderConditionTab()`, `hydrateConditionTab()`, `vitalMeter()`, `syncVitalsGutterNow()`, `syncVitalsGutter()`, `hideVitalsHud()`, `vitalsBlock()`, `refreshVitalsHud()`, `clearVitalsHud()`, `hydrateCastLocations()`, `castRoomLabel()`, `castRoomSelect()`, `renderLorebooksTab()`, `renderBookNode()`, `renderMultiplayerTab()`, `renderFramesTab()`, `renderFramesListPanel()`, `renderPersonaStationingPanel()`, `renderParadoxPanel()`, `renderBackgroundPresencesPanel()`, `renderGuestInvitePanel()`, `renderInsightsTab()`, `renderDramaticIronyPanel()`, `renderPromiseLedgerPanel()`, `embeddingBankBlock()`, `modelRecommendationsBlock()`, `renderFirstRunProviderSetup()`, `preferredBackdropSize()`, `renderFullApiSettings()`, `propagateToFollowers()`, `renderUpdateChecking()`, `renderUpdateError()`, `checkpointCompactionBlock()`, `renderUpdateStatus()`, `runUpdateInstall()`, `renderUpdateDone()`, `openPromptsModal()`, `reopenPromptsIfRequested()`, `extensionTrustNote()`, `extensionCapabilitySummary()`, `extensionSettingsSections()`, `openExtensionsMenu()`.
 

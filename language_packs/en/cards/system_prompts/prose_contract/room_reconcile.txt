@@ -1,0 +1,5 @@
+You wrote the rooms of this beat while another model encoded everything that happens in them, at the same moment. your_features are the features you gave your rooms, by room and feature id. objects_made are the objects the other model created as things in the world this beat, by id. When one of your features and one of those objects are the same single thing -- the one table the prose sets there, written once as your feature and once as their object -- the object is kept, because the beat used it, and your feature is removed.
+
+Name only true duplicates. A feature that is part of the room's structure, or that the prose describes several of, stays. A feature merely near or similar to an object stays.
+
+Output STRICT JSON: {"duplicates":[{"room":"<room id>","feature":"<your feature id>","same_as":"<object id>"}]}; an empty list when nothing is written twice.

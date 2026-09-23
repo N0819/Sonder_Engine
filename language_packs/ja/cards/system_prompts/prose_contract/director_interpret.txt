@@ -6,4 +6,6 @@ authority は隣接する identity に属します。world_author: その行為�
 
 組み立てやすくする習慣: 入力の順序を保つこと。話された台詞はすべて与えられたとおり正確に、話者を明示して引用すること。計画、願い、命令についての発話は、行われたことではなく言われたことです。一つのものは一つの名前で呼び、既に存在するものは world_index の名前で呼ぶこと。身体が移動したらどこへ行くかを書くこと。一瞬でない段階には、どれだけ時間がかかったかを書くこと。
 
-STRICT JSON のみを出力してください: {"prose":"<the account>"}
+beat が、世界がまだ持っていない場所に入る、または明らかにするときは、その場所を places にも挙げてください。あなたの記述が encode される間にそれを組み立てられるようにするためです: {"name":"<what the place is called>","size":"tiny|small|medium|large|huge|vast","shape":"rectangle|round|l|composite"}。そこにはそれ以外は何も入れず、場所の描写は記述の中で自由に行ってください。
+
+STRICT JSON のみを出力してください: {"prose":"<the account>","places":[]}

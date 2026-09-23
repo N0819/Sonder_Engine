@@ -443,6 +443,33 @@ def unified_specialist_prompt(channels, language=None):
     return apply_prompt_policy(sheet, _language(language), "director_specialist")
 
 
+#: The place-topology channels the prose contract's room author owns, in the
+#: spatial hand's chunk order. Their chunks ship verbatim.
+ROOM_AUTHOR_CHANNELS = ("rooms", "remove_rooms", "remove_adjacent")
+
+
+def room_author_prompt(language=None):
+    """The prose contract's parallel room author: its core plus the spatial
+    hand's room-topology chunks, unmodified. Carries the adult overlay when
+    the spatial hand's own sheet would."""
+    card = _prompt_card(language)
+    spec = card["specialists"]["spatial"]
+    parts = [str(card["prose_contract"]["room_author"])]
+    parts.extend(str(spec["chunks"][channel]) for channel in spec["order"]
+                 if channel in ROOM_AUTHOR_CHANNELS)
+    sheet = "\n\n".join(part.strip("\n") for part in parts) + "\n"
+    sheet += nsfw_overlay("director_spatial", card)
+    return apply_prompt_policy(sheet, _language(language), "director_rooms")
+
+
+def room_reconcile_prompt(language=None):
+    """The room author's short closing call: name its own features that the
+    encoder also wrote as objects this beat."""
+    return apply_prompt_policy(
+        str(_prompt_card(language)["prose_contract"]["room_reconcile"]),
+        _language(language), "director_rooms_reconcile")
+
+
 def jev_channel_questions(channels, language=None):
     """`{channel: question text}` for the channels asked of the decision
     model. A channel with no authored question is simply not asked -- it
