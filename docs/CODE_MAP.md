@@ -204,7 +204,7 @@
 | `world/spatial_barriers.py` | 931 |  | `world.spatial_orientation` |
 | `world/spatial_bubbles.py` | 592 |  | `world.spatial`, `world.spatial_frames` |
 | `world/spatial_contact_migration.py` | 332 |  | `story.character_schema`, `world.spatial_contacts`, `world.spatial_identity` |
-| `world/spatial_contacts.py` | 1957 |  | `world.spatial_containment`, `world.spatial_identity`, `world.spatial_transit` |
+| `world/spatial_contacts.py` | 1968 |  | `world.spatial_containment`, `world.spatial_identity`, `world.spatial_transit` |
 | `world/spatial_containment.py` | 3280 |  | `world.spatial_barriers`, `world.spatial_identity`, `world.spatial_transit` |
 | `world/spatial_fov.py` | 1795 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_frames.py` | 2640 |  | `core.db`, `core.frames`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial` |
@@ -2499,9 +2499,9 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_contact_ops()` | 1347 | 431 lines |
+| `apply_contact_ops()` | 1358 | 431 lines |
 | `_clean_contact()` | 925 | 168 lines |
-| `normalize_scene_contacts()` | 1243 | 76 lines |
+| `normalize_scene_contacts()` | 1243 | 87 lines |
 | `contacts_across_enclosure()` | 1135 | 68 lines |
 | `_mirrored_displacements()` | 332 | 50 lines |
 | `_unnamed_touch_between_bodies()` | 866 | 47 lines |

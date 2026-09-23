@@ -1272,6 +1272,17 @@ def normalize_scene_contacts(scene: dict) -> dict:
         contact = _clean_contact(raw, scene)
         if contact is None:
             continue
+        # ONE SPELLING PER BEING, HERE TOO. `normalize_scene_subjects` folds
+        # the ledger at the top of the merge -- before this beat's contact ops
+        # are applied -- so an op naming a body by its entity key reached this
+        # membership test in that spelling, found no position under it and
+        # was dropped without a word: the encoder wrote "char_emory_vane" for
+        # his fingers on the sluice cheek and his knee on the flags, and both
+        # were gone at commit (playerless Aldermill round 9, 2026-09-23, idx 3
+        # and 8). Every contact passes through here, so this is where the
+        # spelling is made one.
+        contact["actor"] = canonical_subject(scene, contact["actor"])
+        contact["target"] = canonical_subject(scene, contact["target"])
         actor_room = _ci_get(positions, contact["actor"])
         target_room = _ci_get(positions, contact["target"])
         # A ROOM'S OWN FIXTURE IS WHERE THE ROOM IS. `positions` places
