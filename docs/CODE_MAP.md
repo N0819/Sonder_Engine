@@ -35,7 +35,7 @@
 | `agents/storage.py` | 103 | Step and active-variant persistence helpers. | `core.db`, `persist.steps` |
 | `agents/story_planner.py` | 1747 |  | `core.db`, `core.logging_utils`, `story.room_calls` |
 | `core/__init__.py` | 6 |  | — |
-| `core/db.py` | 2991 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
+| `core/db.py` | 3008 | SQLite schema, migrations, connection management, transactions, and key/value world access. | `core.paths` |
 | `core/frames.py` | 299 |  | `core.db` |
 | `core/jobs.py` | 317 |  | `core.logging_utils` |
 | `core/logging_utils.py` | 122 | Structured timing and observability helpers. | — |
@@ -87,7 +87,7 @@
 | `persist/commit_entities.py` | 576 | world_entities projection of the scene commit, awareness gate, disguise supersession. | `core.db`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `persist/commit_ledgers.py` | 664 | Pending-obligation and world-pressure debt ledgers. | `core.db`, `core.pipeline_context`, `persist.commit_common` |
 | `persist/commit_mapping.py` | 914 | Lore/book mapping commit: book ops, lore ops, canon fallback ops, offscreen-event normaliser. | `core.db`, `core.frames`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.provenance_text`, `world.spatial` |
-| `persist/commit_mechanics.py` | 469 | Transit/news sweeps, the world-event spine, information carriers, cast changes. | `core.db`, `persist.commit_common`, `persist.commit_scene_state`, `story.character_schema`, `story.scene`, `world.mechanics` |
+| `persist/commit_mechanics.py` | 524 | Transit/news sweeps, the world-event spine, information carriers, cast changes. | `core.db`, `persist.commit_common`, `persist.commit_scene_state`, `story.character_schema`, `story.scene`, `world.mechanics` |
 | `persist/commit_memory.py` | 2103 | Pre-lock memory preparation: per-mind memories and the psychology deltas riding with them. | `core.db`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_background`, `persist.commit_common`, `persist.commit_place_graph`, `story.character_schema`, `world.charter`, `world.comfort`, `world.exposure`, `world.spatial`, `world.stimulation`, `world.survival` |
 | `persist/commit_memory_write.py` | 354 | The durable memory write and its out-of-band consolidation twin. | `core.db`, `mind.memory`, `persist.commit_memory`, `story.character_schema`, `story.scene` |
 | `persist/commit_place_graph.py` | 336 | Per-mind durable place graph and per-beat spatial experience. | `world.spatial` |
@@ -175,7 +175,7 @@
 | `world/charter_promote.py` | 612 |  | `world.charter_commitment`, `world.charter_feel`, `world.charter_politics`, `world.charter_social` |
 | `world/charter_roster.py` | 134 |  | `world.charter_model` |
 | `world/charter_run.py` | 1530 |  | `world`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_enrol`, `world.charter_feel`, `world.charter_figure`, `world.charter_harm`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_roster`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_trigger` |
-| `world/charter_runtime.py` | 5461 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics`, `world.spatial` |
+| `world/charter_runtime.py` | 5492 |  | `core`, `core.logging_utils`, `world.charter`, `world.charter_news`, `world.charter_surface`, `world.day_cycle`, `world.mechanics`, `world.spatial` |
 | `world/charter_social.py` | 865 |  | `world.charter_politics` |
 | `world/charter_space.py` | 337 |  | `world.spatial` |
 | `world/charter_surface.py` | 364 |  | — |
@@ -190,7 +190,7 @@
 | `world/exposure.py` | 232 |  | `story`, `world.spatial`, `world.weather` |
 | `world/gaps.py` | 459 |  | `core.db`, `mind.canon_provenance`, `world.spatial`, `world.subjects` |
 | `world/living_world.py` | 639 |  | `core.logging_utils`, `world.mechanics` |
-| `world/mechanics.py` | 1276 |  | `core`, `world.spatial`, `world.spatial_frames` |
+| `world/mechanics.py` | 1331 |  | `core`, `world.spatial`, `world.spatial_frames` |
 | `world/offscreen.py` | 2305 |  | `core`, `core.logging_utils`, `llm.prompts` |
 | `world/paradox.py` | 655 |  | `core.db`, `core.frames`, `story.character_schema`, `world.spatial` |
 | `world/place_purpose.py` | 554 |  | `mind.theory_of_mind`, `world.comfort`, `world.spatial`, `world.survival` |
@@ -576,14 +576,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_migrate_chat_copies_to_overlays()` | 2370 | 156 lines |
-| `init()` | 2684 | 140 lines |
-| `_recover_scene_time_of_day()` | 2614 | 59 lines |
-| `transaction()` | 2192 | 43 lines |
-| `conn()` | 2152 | 38 lines |
-| `_opening_time_of_day()` | 2558 | 30 lines |
-| `db_read_token()` | 2883 | 30 lines |
-| `_establish_time_of_day_from_variant()` | 2528 | 28 lines |
+| `_migrate_chat_copies_to_overlays()` | 2387 | 156 lines |
+| `init()` | 2701 | 140 lines |
+| `_recover_scene_time_of_day()` | 2631 | 59 lines |
+| `transaction()` | 2209 | 43 lines |
+| `conn()` | 2169 | 38 lines |
+| `_opening_time_of_day()` | 2575 | 30 lines |
+| `db_read_token()` | 2900 | 30 lines |
+| `_establish_time_of_day_from_variant()` | 2545 | 28 lines |
 
 ### `core/frames.py`
 
@@ -1128,10 +1128,11 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `commit_transit_sweep()` | 32 | 258 lines |
-| `commit_information_carriers()` | 340 | 76 lines |
-| `commit_cast_changes()` | 419 | 51 lines |
-| `commit_world_event_spine()` | 292 | 46 lines |
+| `commit_transit_sweep()` | 71 | 271 lines |
+| `commit_information_carriers()` | 395 | 76 lines |
+| `commit_cast_changes()` | 474 | 51 lines |
+| `commit_world_event_spine()` | 344 | 49 lines |
+| `town_for_sweep()` | 32 | 37 lines |
 
 ### `persist/commit_memory.py`
 
@@ -2150,13 +2151,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `_plan_lived_location()` | 1971 | 248 lines |
-| `registry_warnings()` | 2535 | 233 lines |
-| `advance_snapshot()` | 2991 | 200 lines |
+| `registry_warnings()` | 2545 | 233 lines |
+| `advance_snapshot()` | 3017 | 200 lines |
 | `_prepare_cast_histories()` | 1042 | 172 lines |
 | `_generate_lived_location()` | 2279 | 163 lines |
-| `presence_view()` | 4659 | 160 lines |
+| `presence_view()` | 4686 | 160 lines |
 | `_remap_generated_town()` | 1697 | 134 lines |
-| `schedule_charter_ticks()` | 3556 | 114 lines |
+| `schedule_charter_ticks()` | 3582 | 114 lines |
 
 ### `world/charter_social.py`
 
@@ -2338,14 +2339,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_tick_conditions()` | 914 | 130 lines |
+| `_fire_due_events()` | 547 | 133 lines |
+| `_tick_conditions()` | 964 | 130 lines |
 | `read_time_diff()` | 173 | 110 lines |
-| `_fire_due_events()` | 526 | 104 lines |
-| `mechanics_sweep()` | 1203 | 74 lines |
+| `mechanics_sweep()` | 1253 | 79 lines |
 | `beat_time_from_spans()` | 311 | 55 lines |
-| `unanswered_hazard_subjects()` | 1140 | 49 lines |
-| `_schedule_new_arrivals()` | 632 | 46 lines |
-| `_answered_bodies()` | 1106 | 32 lines |
+| `unanswered_hazard_subjects()` | 1190 | 49 lines |
+| `_schedule_new_arrivals()` | 682 | 46 lines |
+| `_answered_bodies()` | 1156 | 32 lines |
 
 ### `world/offscreen.py`
 

@@ -182,7 +182,7 @@ from persist.commit_scene_state import (_anchor_current_room, sync_anchored_book
     _refuse_unheld_transfers, ComposedBeat, compose_beat_key,
     compose_beat_scene, composed_beat_for)
 from persist.commit_mechanics import (commit_transit_sweep, commit_world_event_spine,
-    commit_information_carriers, commit_cast_changes)
+    commit_information_carriers, commit_cast_changes, town_for_sweep)
 from persist.commit_memory import (_names_spoken_by, RECENT_TELLS_CAP, _durable_dialogue_category,
     _cited_memory_ids, _marked_for_memory, _quote_body, _is_player,
     _salience_of, _own_sequence_memory, _inference_memory_text,

@@ -29,6 +29,45 @@ from persist.commit_scene_state import prepare_scene_commit
 _INERT_CONDITION_REPORT_CAP = 6
 
 
+def town_for_sweep(cid, frame_id, scene):
+    """Where this era's TOWN events land (`mechanics._fire_due_events`), or
+    None when the era has no frame but the committing one -- the one-frame
+    story, which keeps the per-frame rule and reads nothing more.
+
+    `frames` is every frame of the era, merged ones included: a town event
+    minted before rows were stamped with the era carries the bubble that
+    ticked it, and must still come due somewhere. `claims` names, for each
+    room some LIVE frame's people attend (`spatial_bubbles.in_range_rooms`,
+    the range a bubble opens and closes on), the frame that answers for it
+    -- the committing frame first, so a room two frames attend is this
+    commit's to fire. `presence_rooms` are the rooms the committing frame's
+    own people stand in, for a frame with no player to walk in on anything.
+    """
+    from core.db import era_of_frame, wget_for_frame
+    from world.spatial import room_of
+    from world.spatial_bubbles import frame_body_names, in_range_rooms
+
+    era = era_of_frame(frame_id)
+    members = [row for row in q(
+        "SELECT id, merged_turn_idx FROM frames WHERE chat_id=?", (cid,))
+        if row["id"] != era and era_of_frame(row["id"]) == era]
+    if not members:
+        return None
+    live = [era] + [row["id"] for row in members
+                    if row["merged_turn_idx"] is None]
+    claims = {}
+    for fid in [frame_id] + [f for f in live if f != frame_id]:
+        seen = scene if fid == frame_id else (
+            wget_for_frame(cid, "scene", fid, {}) or {})
+        for room in in_range_rooms(seen, frame_body_names(cid, fid)) or ():
+            claims.setdefault(str(room), fid)
+    presence = {str(room_of(scene, name))
+                for name in frame_body_names(cid, frame_id)
+                if room_of(scene, name)}
+    return {"frames": {era} | {row["id"] for row in members},
+            "claims": claims, "root": era, "presence_rooms": presence}
+
+
 def commit_transit_sweep(ctx, nonce, *, prepared=None):
     """Commit-domain wrapper around mechanics.mechanics_sweep, run FIRST
     among commit_all's domains -- the sweep mutates the PREPARED scene, and
@@ -86,6 +125,14 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
             (cid,),
         )]
         prev_scene = wget(cid, "scene", {}) or {}
+        # ONE TOWN, ONE PLACE FOR ITS EVENTS. With more than one frame in
+        # the era a town event fires where somebody stands to meet it; a
+        # frame with no player walks in on what lands where its own people
+        # stand (`town_for_sweep`).
+        town = town_for_sweep(cid, frame_id, sc)
+        presence_rooms = ()
+        if town is not None and not _player_room:
+            presence_rooms = town["presence_rooms"]
 
         _, event_ops, notices, counts = mechanics_sweep(
             sc, clock, frame_id, pending,
@@ -94,6 +141,7 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
             cast_names=cast_names,
             cast_changes=diff.get("cast_changes") or [],
             player_room=_player_room,
+            town=town, presence_rooms=presence_rooms,
         )
 
         # A condition that SPELLS a cadence and fills it with nothing acts on
@@ -144,6 +192,9 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
         scheduled = expired = ticked = 0
         fired_consequence_rows = []
         fired_events = []
+        # A town event nobody was standing to meet is the era's record, not
+        # this frame's (`mechanics._fire_due_events`).
+        recorded_in = {op[1]: op[2] for op in event_ops if op[0] == "record_in"}
         for op in event_ops:
             if op[0] == "status":
                 _, event_id, status = op
@@ -163,6 +214,7 @@ def commit_transit_sweep(ctx, nonce, *, prepared=None):
                             "occurred_at": row_by_id[event_id]["due_at"],
                             "payload": row_by_id[event_id]["payload"],
                             "seed": row_by_id[event_id]["seed"],
+                            "frame_id": recorded_in.get(event_id, frame_id),
                         })
                     if row_by_id.get(event_id, {}).get("kind") == "consequence":
                         fired_consequence_rows.append(row_by_id[event_id])
@@ -311,8 +363,11 @@ def commit_world_event_spine(ctx, transit_result):
         if not isinstance(payload, dict):
             payload = {"detail": payload}
         payload["source_event_id"] = str(fired["event_id"])
+        # The frame whose record it is: this one, or -- for a town event
+        # nobody stood to meet -- the era's (`commit_transit_sweep`).
+        frame = fired["frame_id"] if "frame_id" in fired else ctx.turn.frame_id
         world_event_id = stable_event_key(
-            "world_event", ctx.chat.id, ctx.turn.frame_id, fired["event_id"])
+            "world_event", ctx.chat.id, frame, fired["event_id"])
         if q("SELECT 1 FROM world_events WHERE chat_id=? AND event_id=?",
              (ctx.chat.id, world_event_id), one=True):
             continue
@@ -321,7 +376,7 @@ def commit_world_event_spine(ctx, transit_result):
             "event_id,chat_id,turn_id,frame_id,occurred_at,duration_seconds,"
             "kind,location_id,payload,seed,committed) "
             "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-            (world_event_id, ctx.chat.id, ctx.turn.id, ctx.turn.frame_id,
+            (world_event_id, ctx.chat.id, ctx.turn.id, frame,
              float(fired.get("occurred_at") or 0.0), 0.0,
              str(fired.get("kind") or "event"), fired.get("location_id"),
              json.dumps(payload, ensure_ascii=False), fired.get("seed"),

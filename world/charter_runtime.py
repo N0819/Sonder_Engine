@@ -2512,8 +2512,18 @@ def land_presim(cid, frame_id, registry, produced, *, base_turn=0,
         charter_key = str(event.get("charter") or "charter")
         due_at = float(now_seconds) - max(
             0.0, horizon - float(event.get("at_hours") or 0.0)) * 3600.0
+        # HISTORY, NOT DUE. Every presimulated event is at or before "now"
+        # by construction (the line above), so as 'pending' each one came due
+        # at the opening commit and fired as though it happened then: 179 to
+        # 373 rows per chat at turn 0 of the owner's stories, 134 to 278
+        # carrier acquisitions of events up to thirty days old, "witnessed"
+        # at the moment play began (chats 115, 122, 123, 150-153, measured
+        # 2026-09-23). The past a place was generated with is what it
+        # remembers, not news: the presim's own run already gave every body
+        # standing there its account (`charter_news.witness`).
         rows.append(_scheduled_row(
-            cid, frame_id, base_turn, "presim", charter_key, event, due_at))
+            cid, frame_id, base_turn, "presim", charter_key, event, due_at,
+            status="history"))
     with transaction():
         if expected_revision and registry_revision(registry_for(cid, frame_id)) \
                 != expected_revision:
@@ -2845,7 +2855,23 @@ def _event_frame(payload):
 
 
 def _scheduled_row(cid, frame_id, base_turn, epoch_id, charter_key, event,
-                   due_at):
+                   due_at, *, status="pending"):
+    """One charter event as a `scheduled_events` row, stamped with its ERA.
+
+    THE TOWN'S EVENT, NOT THE BUBBLE'S. The charter is one per era
+    (`db.ERA_WORLD_KEYS`) and whichever frame's commit ticks it, an event it
+    produces happened in the town; stamped with the ticking frame, the same
+    event minted by two bubbles was two rows with two ids, and each fired
+    only in the bubble that minted it -- the mill's event recorded in the
+    market while its witnesses stood at the mill (playerless Aldermill,
+    2026-09-23). Where it FIRES is decided at the sweep, by who is standing
+    there (`mechanics._fire_due_events`). The present era stamps `None`, as
+    before, so its ids are unchanged.
+
+    ``status`` is 'history' for an event that happened before the story began
+    (`land_presim`): the past a place was generated with, never due."""
+    from core.db import era_of_frame
+    frame_id = era_of_frame(frame_id)
     kind = str(event.get("kind") or "institution_event")
     subject = _event_subject(event)
     location = str(event.get("place") or "")
@@ -2869,7 +2895,7 @@ def _scheduled_row(cid, frame_id, base_turn, epoch_id, charter_key, event,
         "event_id": event_id, "chat_id": cid, "due_at": float(due_at),
         "kind": "consequence", "location_id": location,
         "payload": json.dumps(payload, ensure_ascii=False),
-        "seed": f"charter:{charter_key}:{epoch_id}", "status": "pending",
+        "seed": f"charter:{charter_key}:{epoch_id}", "status": status,
     }
 
 
@@ -3857,7 +3883,7 @@ def author_charter_ops(cid, frame_id, ops, *, by="writers_room",
 
 def charter_diagnostics(cid, frame_id=None, *, charter_key="", body_key=""):
     """Author-only explanation surface; no result is delivered to a mind."""
-    from core.db import q, wget_for_frame
+    from core.db import era_of_frame, q, wget_for_frame
     from world.charter_log import life_of, summarize
 
     registry = registry_for(cid, frame_id)
@@ -3872,8 +3898,9 @@ def charter_diagnostics(cid, frame_id=None, *, charter_key="", body_key=""):
             # present with events another era minted. `scheduled_events` has
             # no frame column -- the scoping rides in the payload, written by
             # `_scheduled_row` -- so the filter belongs here rather than in
-            # the SQL. `None` is the present era on both sides.
-            if _event_frame(payload) != (frame_id if frame_id else None):
+            # the SQL. `None` is the present era on both sides, and a bubble
+            # reads its era's (`_scheduled_row` stamps the era).
+            if _event_frame(payload) != era_of_frame(frame_id or None):
                 continue
             event = payload.get("charter_event")
             if isinstance(event, dict):
@@ -5348,14 +5375,18 @@ def apply_presence_conduct(cid, name, conduct, *, record=None, frame_id=None,
 
 
 def _charter_events(cid, charter_key, frame_id=None):
-    """Fired objective Charter events only; never a private runtime cache."""
-    from core.db import q
-    if frame_id is None:
-        rows = q("SELECT payload FROM world_events WHERE chat_id=? "
-                 "AND frame_id IS NULL ORDER BY occurred_at", (cid,))
-    else:
-        rows = q("SELECT payload FROM world_events WHERE chat_id=? "
-                 "AND frame_id=? ORDER BY occurred_at", (cid, frame_id))
+    """Fired objective Charter events only; never a private runtime cache.
+
+    THE ERA'S, not the frame's: the charter is one per era, and its events
+    are recorded in the frame whose people met them or in the era's own
+    (`mechanics._fire_due_events`), so a life promoted inside a causality
+    bubble is the town's whole history, not the part that bubble stood in."""
+    from core.db import era_of_frame, q
+    era = era_of_frame(frame_id)
+    rows = [row for row in q(
+        "SELECT payload, frame_id FROM world_events WHERE chat_id=? "
+        "ORDER BY occurred_at", (cid,))
+        if era_of_frame(row["frame_id"]) == era]
     out = []
     for row in rows:
         try:

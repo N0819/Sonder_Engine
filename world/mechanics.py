@@ -523,9 +523,42 @@ def _payload_of(row):
     return payload if isinstance(payload, dict) else {}
 
 
+#: A town event's room no frame's people attend (`_fire_due_events`).
+_UNCLAIMED = object()
+
+
+def _is_town_event(row):
+    """A charter's own event (`charter_runtime._scheduled_row`): the town's,
+    stamped with its era, not with the frame whose commit ticked it."""
+    return str((row or {}).get("seed") or "").startswith("charter:")
+
+
+def _era_stamp(payload):
+    """The era a town event is stamped with; None for the present."""
+    value = (payload or {}).get("frame_id")
+    if value in (None, "", 0):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return value
+
+
 def _fire_due_events(scene, elapsed, frame_id, pending, *, turn_idx=None,
-                     player_room=None, surface_consequences=True):
+                     player_room=None, surface_consequences=True,
+                     town=None, presence_rooms=()):
     """Pass (a). Returns (event_ops, notices, counts, pending_entity_ids).
+
+    ``town`` is how a TOWN event is placed when the era has more than one
+    frame running (`commit_mechanics.town_for_sweep`): `frames`, every frame
+    of the era; `claims`, {room: frame} for the rooms some frame's people
+    attend; `root`, the era's own frame. A town event fires in the frame whose
+    people are standing where it happens, on that frame's clock; nobody
+    there, it is recorded in the era root by whichever frame reaches its time
+    first, and the people of the town who stood there carry it. Without
+    ``town`` every row keeps the rule below -- this frame's rows only.
+    ``presence_rooms`` are the rooms this frame's own people stand in when
+    it has no player: a town event landing there is a walk-in too.
 
     pending rows arrive in due_at order (the caller's query) and each is
     frame-gated by the frame_id in its payload: scheduled_events has no
@@ -559,7 +592,20 @@ def _fire_due_events(scene, elapsed, frame_id, pending, *, turn_idx=None,
     for row in pending:
         payload = _payload_of(row)
         if row.get("kind") == "consequence":
-            if payload.get("frame_id") != frame_id or row["due_at"] > elapsed:
+            where = str(payload.get("where") or "")
+            record_in = frame_id
+            if town is not None and _is_town_event(row):
+                if (_era_stamp(payload) not in town["frames"]
+                        or row["due_at"] > elapsed):
+                    continue
+                claimant = town["claims"].get(where, _UNCLAIMED)
+                if claimant is _UNCLAIMED:
+                    record_in = town["root"]
+                elif claimant != frame_id:
+                    # Another frame's people are standing there: it lands in
+                    # front of them, on their clock, in their commit.
+                    continue
+            elif payload.get("frame_id") != frame_id or row["due_at"] > elapsed:
                 continue
             if jobs.story_rewound_past(payload.get("base_turn"), turn_idx):
                 # The base-revision check at fire time: a fuse minted from a
@@ -569,9 +615,13 @@ def _fire_due_events(scene, elapsed, frame_id, pending, *, turn_idx=None,
                 event_ops.append(("status", row["event_id"], "cancelled"))
                 continue
             event_ops.append(("status", row["event_id"], "fired"))
+            if record_in != frame_id:
+                event_ops.append(("record_in", row["event_id"], record_in))
             consequences_fired += 1
-            if surface_consequences and player_room \
-                    and str(payload.get("where") or "") == str(player_room):
+            walked_in = bool(player_room) and where == str(player_room)
+            if not walked_in and record_in == frame_id:
+                walked_in = where in set(presence_rooms or ())
+            if surface_consequences and walked_in:
                 notices.append(
                     "Falling due here, now: "
                     f"{payload.get('what') or 'a scheduled consequence'} "
@@ -1203,7 +1253,8 @@ def _expire_conditions(conditions, elapsed):
 def mechanics_sweep(scene, clock, frame_id, pending, *,
                     conditions=(), prev_scene=None, chat_id=None,
                     turn_id=None, turn_idx=None, cast_names=(),
-                    cast_changes=(), player_room=None):
+                    cast_changes=(), player_room=None, town=None,
+                    presence_rooms=()):
     """Run the ordered passes (a)-(e).
 
     Returns (scene, event_ops, notices, counts).
@@ -1211,6 +1262,9 @@ def mechanics_sweep(scene, clock, frame_id, pending, *,
     scene is mutated in place and also returned; event_ops is the list of
     durable operations for the caller to apply inside its transaction:
         ("status", event_id, new_status)   -- scheduled_events row update
+        ("record_in", event_id, frame_id)  -- a fired town event belongs to
+                                              another frame's record
+                                              (`_fire_due_events`' `town`)
         ("schedule", row_dict)             -- scheduled_events upsert
         ("expire_condition", condition_id) -- world_conditions deactivate
         ("tick_condition", condition_id, next_tick) -- world_conditions
@@ -1246,7 +1300,8 @@ def mechanics_sweep(scene, clock, frame_id, pending, *,
     event_ops, notices, counts, pending_entity_ids = _fire_due_events(
         scene, elapsed, frame_id, pending or [],
         turn_idx=turn_idx, player_room=player_room,
-        surface_consequences=surface_consequences)
+        surface_consequences=surface_consequences,
+        town=town, presence_rooms=presence_rooms)
 
     # (b) schedule new arrivals.
     schedule_ops, scheduled = _schedule_new_arrivals(

@@ -999,9 +999,11 @@ class TestTheAwayPartyKeepsTheWorld:
             # co-present with them: both are about the party that stayed.
             "persona_carrier_state", "subject_last_seen",
             # Per-beat scratch, rebuilt by the beat that needs it.
+            # `engine_notices` among them: the last beat's notices are for
+            # the next beat of the frame that played it.
             "pending", "lore_cache", "active_books", "offscreen_epoch",
             "offscreen_plans", "planning_needs", "knowledge_circles",
-            "scene", "known",
+            "scene", "known", "engine_notices",
         }
         lost = [k for k in sorted(FRAME_SCOPED_WORLD_KEYS)
                 if k not in author_owned

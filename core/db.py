@@ -113,6 +113,12 @@ FRAME_SCOPED_WORLD_KEYS = {
     # commit_scene, read by gaps.interim_for; keyed by SUBJECT ID from birth
     # (see gaps.LAST_SEEN_KEY).
     "subject_last_seen",
+    # What the deterministic layer made of the last beat, for the NEXT beat's
+    # Director -- in the frame that beat was played in. It was chat-wide, so
+    # every commit in any frame replaced every other frame's notices: on the
+    # playerless Aldermill run (2026-09-23) one unscoped row served both
+    # causality bubbles, and a bubble's commit overwrites the player's too.
+    "engine_notices",
 }
 #: Prefixes whose every key is per-era. `relationships:` because a stance is
 #: held by a mind that exists in one frame and may not exist in another.
@@ -247,7 +253,7 @@ def parse_scoped_world_key(key):
 #: runs from the root. `or` rather than a default argument, so an empty
 #: `ENGINE_DB=` falls through to the anchored path instead of naming the cwd.
 DB = os.environ.get("ENGINE_DB") or os.path.join(INSTALL_ROOT, "engine.db")
-SCHEMA_VERSION = 40
+SCHEMA_VERSION = 41
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT);
@@ -2058,6 +2064,17 @@ END""",
         "ALTER TABLE llm_capture ADD COLUMN reasoning_effort TEXT NOT NULL DEFAULT ''",
         "ALTER TABLE llm_capture ADD COLUMN max_tokens INTEGER",
         "ALTER TABLE llm_capture ADD COLUMN finish_reason TEXT NOT NULL DEFAULT ''",
+    ],
+    # v40 -> v41
+    [
+        # A place's generated past is HISTORY, never due
+        # (`charter_runtime.land_presim`). Rows landed before that were
+        # 'pending' and due at or before the story's first second, so a story
+        # not yet opened would fire every one at its opening commit as though
+        # it happened then. Pending ones only: a row that already fired is
+        # the story's record of what it did, and stays.
+        "UPDATE scheduled_events SET status='history' WHERE status='pending' "
+        "AND kind='consequence' AND seed LIKE 'charter:%:presim'",
     ],
 ]
 
