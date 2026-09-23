@@ -128,6 +128,7 @@ from .common import (
     bind_sequence_targets,
     collapse_duplicate_events,
     canonicalize_positions,
+    drop_room_keyed_positions,
     reconcile_cast_entity_names,
     character_room,
     character_scene_keys,
@@ -6961,6 +6962,11 @@ def director_resolve(ctx, nonce, _corrections=None):
     # position key for a cast member onto the registered name before it reaches
     # perception's mid-turn merge or the commit boundary.
     sd["positions"] = canonicalize_positions(sd["positions"], ctx.cast, player_name=p_name)
+    sd["positions"] = drop_room_keyed_positions(
+        sd["positions"],
+        set((resolve_sc or {}).get("rooms") or {})
+        | set(sd.get("rooms") if isinstance(sd.get("rooms"), dict) else ()),
+        warn=ctx.add_warning)
     # ...and the same reconciliation establish does, for an entity this beat
     # minted or renamed (a promotion writes one).
     reconcile_cast_entity_names(sd, ctx.cast, player_name=p_name)

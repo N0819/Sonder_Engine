@@ -471,3 +471,26 @@ class TestGettingOutStillWorks:
                                              "mode": "interior"}}})
         assert _interiors_of(back) == {MINTED}
         assert back["positions"][OCCUPANT] == MINTED
+
+
+class TestInsideABodyIsItsInterior:
+    """The sheet teaches `inside` for shut away; the ledger spells the inside
+    of a body `interior`, the one word the floor mints a place for. Resolved
+    at ingest against the HOLDER (chat 135, 2026-09-17; chat 137 turn 45 on
+    the prose contract, 2026-09-22): a body swallowed as `inside` was hidden
+    correctly and never placed."""
+
+    def test_inside_a_body_becomes_its_interior_and_is_placed(self):
+        merged = merge_scene_with_diff(
+            _scene(record=False),
+            {"containment": {OCCUPANT: {"in": HOLDER_ID, "mode": "inside"}}})
+        # Placed in the place form, which retires the ledger record.
+        assert _interiors_of(merged) == {MINTED}
+        assert merged["positions"][OCCUPANT] == MINTED
+
+    def test_inside_a_thing_that_is_not_a_body_stays_inside(self):
+        merged = merge_scene_with_diff(
+            _scene(record=False, body=False, kind="crate"),
+            {"containment": {OCCUPANT: {"in": HOLDER_ID, "mode": "inside"}}})
+        assert merged["contained"][OCCUPANT]["mode"] == "inside"
+        assert _interiors_of(merged) == set()

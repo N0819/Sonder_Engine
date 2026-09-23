@@ -176,6 +176,62 @@ def test_a_thinner_widened_answer_never_replaces_the_first(temp_db, monkeypatch,
     assert "widen_rejected" in out["orchestration"]["prose_contract"]["encoder"]
 
 
+def test_a_relocation_the_encoder_wrote_buys_positions(temp_db, monkeypatch,
+                                                      prose_contract):
+    """Code closes the known dependency the decision model missed: an event
+    whose core `movement` names a room needs `positions` (chat 153 turn 8:
+    positions scored 0.43, the step into the console room never moved
+    anyone)."""
+    monkeypatch.setattr(decisions, "OVERRIDE", lambda state, questions: {
+        key: {"type": "noul", "noul": 0.9 if key == "poses" else 0.0}
+        for key in questions})
+    moved = {"events": [{"source_entity_id": "character:1",
+                         "event": "Mara climbs into the lamp room.",
+                         "movement": {"to_room": "lamp_room", "mover": "Mara",
+                                      "arrives": True},
+                         "item_names": ["Mara"], "transforms": []}]}
+    answers = iter([moved, _walk_events()])
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_prose": {"prose": "Mara climbs into the lamp room."},
+        "director_specialist": lambda payload: next(answers),
+    }))
+    ctx = _make_ctx(temp_db, interp=_action_interp())
+    out = director.director_resolve(ctx, nonce=0)
+    assert POSITIONS_CHUNK in calls[2]["system"]
+    assert out["state_diff"]["positions"]["Mara"] == "lamp_room"
+    assert director_prose.implied_tools(moved["events"]) == ["positions"]
+
+
+def test_a_destination_the_scene_lacks_buys_rooms():
+    """Chat 137 turn 45: with no `rooms`, the encoder put a swallowed body
+    at a character id -- the interior was not a room yet. A destination the
+    scene does not hold, and this answer does not create, implies `rooms`."""
+    scene = {"rooms": {"keeper_room": {}, "lamp_room": {}}}
+    into_body = [{"transforms": [{"item": "Hinami", "patch": {
+        "positions": {"Hinami": "char_mirelle"}}}]}]
+    assert director_prose.implied_tools(into_body, scene) == ["rooms"]
+    created = [{"transforms": [{"item": "Hinami", "patch": {
+        "rooms": {"mirelle_stomach": {"parent_entity": "char_mirelle"}},
+        "positions": {"Hinami": "mirelle_stomach"}}}]}]
+    assert director_prose.implied_tools(created, scene) == []
+    known = [{"transforms": [{"item": "Mara", "patch": {
+        "positions": {"Mara": "lamp_room"}}}]}]
+    assert director_prose.implied_tools(known, scene) == []
+
+
+def test_a_room_is_never_a_positions_key():
+    """Chat 137 turn 52: a room keyed into positions (placed in itself)
+    passed every floor. Engine floor, both contracts."""
+    from agents.common import drop_room_keyed_positions
+    warnings = []
+    kept = drop_room_keyed_positions(
+        {"stomach": "stomach", "Hinami": "stomach", "red tin": "keeper_room"},
+        {"stomach", "keeper_room"}, warn=warnings.append)
+    assert kept == {"Hinami": "stomach", "red tin": "keeper_room"}
+    assert len(warnings) == 1
+
+
 def test_events_become_rows_with_one_handle_per_thing():
     rows, transforms = director_prose.ledger_from_events([
         {"source_entity_id": "character:1", "event": "Mara lifts the tin.",

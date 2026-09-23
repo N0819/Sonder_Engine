@@ -404,6 +404,33 @@ def _clean_containment(raw, subject):
     return record
 
 
+def canonical_enclosure_mode(scene: dict, record):
+    """`inside` a BODY is `interior`; `inside` anything else stays `inside`.
+
+    The contact hand's sheet teaches `pocket|container|inside` for shut away,
+    and `CONTAINMENT_MODES` spells the inside of a body `interior` -- the one
+    word `materialize_enclosure_interiors` mints a place for. Nothing mapped
+    one onto the other, so a swallowed body was concealed correctly (the
+    permissive readers accept any hiding mode) and never PLACED: it stood in
+    the outer room while inside a stomach (chat 135, 2026-09-17; again on the
+    prose contract, chat 137 turn 45, 2026-09-22 -- the encoder wrote
+    `inside`, and only a Director that ALSO authored the room by hand ever
+    got the body there).
+
+    Resolved against the HOLDER, never the word alone: inside a pouch is
+    carriage, inside a body is a place. Positive body evidence only
+    (`_is_body_entity`) -- unlike `interior`, the word `inside` says nothing
+    about what the holder is, so a crate, a lift car or a bag keeps it."""
+    if not isinstance(record, dict):
+        return record
+    if str(record.get("mode") or "").strip().casefold() != "inside":
+        return record
+    eid, entity = _unique_entity_keyed(scene, str(record.get("in") or ""))
+    if eid and _is_body_entity(scene, eid, entity):
+        return dict(record, mode="interior")
+    return record
+
+
 def container_of(scene: dict, name: str):
     """What is carrying `name`, or None."""
     contained = (scene or {}).get("contained") or {}

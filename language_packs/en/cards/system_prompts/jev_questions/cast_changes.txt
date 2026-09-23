@@ -1,1 +1,1 @@
-Does a named main character leave the scene entirely, or arrive in it from somewhere else? Answer no for movement between rooms of the same scene, and for unnamed or background people.
+Does a named main character leave the story's present scene entirely -- going away to somewhere beyond it -- or arrive into it from beyond? Answer no for moving between rooms, and for being carried, held, swallowed, hidden or out of sight while still physically there; answer no for unnamed or background people.

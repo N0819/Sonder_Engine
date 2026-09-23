@@ -6281,6 +6281,30 @@ def canonicalize_positions(positions, cast, player_name=None):
         result[canonical(key)] = room
     return result
 
+def drop_room_keyed_positions(positions, room_ids, warn=None):
+    """Remove every `positions` entry whose KEY is a room.
+
+    `positions` keys bodies, objects and presences and VALUES rooms; a room
+    is where a thing is, never a thing placed somewhere. Measured on chat 137
+    turn 52 (prose contract): `{"<stomach room>": "<stomach room>"}` passed
+    every floor into the committed diff, where it would have seated a phantom
+    body named after the room inside itself. No model can mean it, so it is
+    dropped and reported, never repaired into a guess."""
+    if not isinstance(positions, dict) or not room_ids:
+        return positions
+    rooms = {str(room) for room in room_ids}
+    kept = {}
+    for key, room in positions.items():
+        if str(key) in rooms:
+            if warn:
+                warn(f"positions: {key!r} is a room, not a body; a room is "
+                     "where a body is and is never placed itself -- the "
+                     "entry was dropped")
+            continue
+        kept[key] = room
+    return kept
+
+
 def _append_micro_view(base_view, additions):
     parts = [str(base_view or "").strip()]
     parts.extend(str(item).strip() for item in additions if str(item or "").strip())

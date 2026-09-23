@@ -294,6 +294,43 @@ def encoder_payload(ctx, sc, prose, model_payload, view, extras, channels):
     return payload
 
 
+def implied_tools(events, scene=None):
+    """Tools the encoder's own output proves it needs, read from engine
+    vocabulary rather than from prose:
+
+    - a relocation (`movement.to_room`) is a `positions` write;
+    - a destination that is not a room the scene holds, nor one this answer
+      creates, needs `rooms` to exist at all. Measured on chat 137 turn 45
+      (4295): with no `rooms` granted, the encoder put the swallowed player
+      at a CHARACTER id, because the interior it needed was not a room yet
+      and it had no tool to make one (the rooms chunk says how: an interior
+      is a room with `parent_entity`)."""
+    tools = []
+    known = set(((scene or {}).get("rooms") or {}).keys()) if isinstance(scene, dict) else set()
+    destinations, created = [], set()
+    for event in events or []:
+        if not isinstance(event, dict):
+            continue
+        movement = event.get("movement")
+        if isinstance(movement, dict) and str(movement.get("to_room") or "").strip():
+            destinations.append(str(movement["to_room"]).strip())
+            if "positions" not in tools:
+                tools.append("positions")
+        for transform in event.get("transforms") or []:
+            patch = transform.get("patch") if isinstance(transform, dict) else None
+            if not isinstance(patch, dict):
+                continue
+            if isinstance(patch.get("rooms"), dict):
+                created.update(str(key) for key in patch["rooms"])
+            if isinstance(patch.get("positions"), dict):
+                destinations.extend(str(value) for value in patch["positions"].values()
+                                    if isinstance(value, str) and value.strip())
+    if known and any(dest not in known and dest not in created
+                     for dest in destinations):
+        tools.append("rooms")
+    return tools
+
+
 def _call_encoder(ctx, channels, payload):
     return _agent_json(
         "director_specialist",
@@ -317,6 +354,15 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
     known = set(candidate_channels(stage, facts))
     missing = [str(tool) for tool in (answer.get("missing_tools") or [])
                if str(tool) in known and str(tool) not in channels]
+    # CODE CLOSES THE KNOWN DEPENDENCIES; the decision model only predicts.
+    # An event's `movement` is core row shape, written whatever was granted,
+    # and a body that changes room needs `positions` to be moved at all.
+    # Measured on chat 153 turn 8 (4356): the encoder wrote the step into
+    # the console room as movement, Jev scored positions 0.43 under a 0.5
+    # threshold, and the player never changed rooms.
+    for tool in implied_tools(answer.get("events") or [], sc):
+        if tool in known and tool not in channels and tool not in missing:
+            missing.append(tool)
     if missing:
         record["missing_tools"] = missing
         if _widen_allowed():

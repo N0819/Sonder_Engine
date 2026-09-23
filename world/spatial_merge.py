@@ -23,6 +23,7 @@ from world.spatial_contacts import (apply_contact_ops,
                               normalize_scene_contacts)
 from world.spatial_containment import (
     _clean_containment,
+    canonical_enclosure_mode,
     advance_room_transits,
     clamp_scale,
     containment_broken_by_scale_change,
@@ -2043,6 +2044,9 @@ def merge_scene_with_diff(
             if not label:
                 continue
             record = _clean_containment(raw, label) if raw else None
+            # One word per fact, at ingest (`canonical_enclosure_mode`): a
+            # body `inside` another body is in its interior, a place.
+            record = canonical_enclosure_mode(merged, record)
             if record is None:
                 # Released: out of the pocket, off the shoulder, out of the jar.
                 for key in [k for k in merged["contained"]
