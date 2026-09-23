@@ -124,7 +124,11 @@ def is_part_leaf(leaf_path: tuple) -> bool:
         # DIFFERENT hand when a span it was handed is also going there. Five
         # files serve all twenty pairings, because what the body hand settles
         # is the same sentence whoever is reading it.
-        if leaf_path[0] in ("prompts", "co_hands"):
+        # `prose_contract.<sheet>` and `jev_questions.<channel>` are the
+        # prose-contract Director's families (agents/director_prose.py): its
+        # three sheets, and one decision-model question per engine channel.
+        if leaf_path[0] in ("prompts", "co_hands", "prose_contract",
+                            "jev_questions"):
             return isinstance(leaf_path[1], str)
         return False
     if len(leaf_path) == 3:

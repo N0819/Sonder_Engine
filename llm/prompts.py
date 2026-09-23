@@ -403,6 +403,55 @@ def prose_author_prompt(scope, language=None):
         sheet, _language(language), "director_resolve_lean")
 
 
+def prose_director_prompt(stage, language=None):
+    """The prose-contract Director's sheet for `stage` (interpret|resolve).
+
+    The alternative to `prose_author_prompt` that `agents/director_prose.py`
+    runs when `director_contract` is `prose`: the Director writes the beat as
+    an objective account and nothing else. No adult overlay, for the same
+    reason the causal sheet carries none -- the encoder is the one that
+    writes anatomy into records."""
+    pid = f"prose_director_{stage}"
+    override = _preset_override(pid, language)
+    sheet = override if override is not None else str(
+        _prompt_card(language)["prose_contract"][f"director_{stage}"])
+    return apply_prompt_policy(sheet, _language(language), pid)
+
+
+def unified_specialist_prompt(channels, language=None):
+    """One encoder sheet assembled from exactly the granted channels.
+
+    The prose contract's single specialist: its core, then every granted
+    channel's EXISTING chunk from whichever hand owns it, in canonical hand
+    order and each hand's authored chunk order. No chunk is duplicated or
+    rewritten for this contract; the core says how to read the several-hands
+    vocabulary the chunks were written in. The adult overlay is appended when
+    any hand whose chunk shipped would have received it on its own sheet."""
+    card = _prompt_card(language)
+    granted = set(channels or ())
+    parts = [str(card["prose_contract"]["specialist_core"])]
+    hands = []
+    for name, spec in card["specialists"].items():
+        shipped = [channel for channel in spec["order"] if channel in granted]
+        if shipped:
+            hands.append(name)
+        parts.extend(str(spec["chunks"][channel]) for channel in shipped)
+    sheet = "\n\n".join(part.strip("\n") for part in parts) + "\n"
+    overlay = next((nsfw_overlay(f"director_{name}", card) for name in hands
+                    if nsfw_overlay(f"director_{name}", card)), "")
+    sheet += overlay
+    return apply_prompt_policy(sheet, _language(language), "director_specialist")
+
+
+def jev_channel_questions(channels, language=None):
+    """`{channel: question text}` for the channels asked of the decision
+    model. A channel with no authored question is simply not asked -- it
+    cannot be selected, and the caller's fail-open covers it."""
+    questions = _prompt_card(language).get("jev_questions") or {}
+    return {channel: str(questions[channel])
+            for channel in channels if channel in questions}
+
+
 # Restore part of the pre-compaction character call for controlled A/B
 # measurement. This is code/configuration, not human-language content.
 _PAYLOAD_LEGACY_ARMS = frozenset(

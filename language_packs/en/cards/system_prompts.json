@@ -535,5 +535,132 @@
     "spatial": {
       "$text": "co_hands/spatial.txt"
     }
+  },
+  "prose_contract": {
+    "director_interpret": {
+      "$text": "prose_contract/director_interpret.txt"
+    },
+    "director_resolve": {
+      "$text": "prose_contract/director_resolve.txt"
+    },
+    "specialist_core": {
+      "$text": "prose_contract/specialist_core.txt"
+    }
+  },
+  "jev_questions": {
+    "attire": {
+      "$text": "jev_questions/attire.txt"
+    },
+    "conditions": {
+      "$text": "jev_questions/conditions.txt"
+    },
+    "vitals": {
+      "$text": "jev_questions/vitals.txt"
+    },
+    "overlays": {
+      "$text": "jev_questions/overlays.txt"
+    },
+    "cast_changes": {
+      "$text": "jev_questions/cast_changes.txt"
+    },
+    "introductions": {
+      "$text": "jev_questions/introductions.txt"
+    },
+    "world_facts": {
+      "$text": "jev_questions/world_facts.txt"
+    },
+    "public_evidence": {
+      "$text": "jev_questions/public_evidence.txt"
+    },
+    "crowd_ops": {
+      "$text": "jev_questions/crowd_ops.txt"
+    },
+    "courier_ops": {
+      "$text": "jev_questions/courier_ops.txt"
+    },
+    "telling_ops": {
+      "$text": "jev_questions/telling_ops.txt"
+    },
+    "ratified_claims": {
+      "$text": "jev_questions/ratified_claims.txt"
+    },
+    "contradicted_claims": {
+      "$text": "jev_questions/contradicted_claims.txt"
+    },
+    "charter_ops": {
+      "$text": "jev_questions/charter_ops.txt"
+    },
+    "claim_dispositions": {
+      "$text": "jev_questions/claim_dispositions.txt"
+    },
+    "consequences": {
+      "$text": "jev_questions/consequences.txt"
+    },
+    "obligations": {
+      "$text": "jev_questions/obligations.txt"
+    },
+    "contact_ops": {
+      "$text": "jev_questions/contact_ops.txt"
+    },
+    "contact_action_ops": {
+      "$text": "jev_questions/contact_action_ops.txt"
+    },
+    "substance_ops": {
+      "$text": "jev_questions/substance_ops.txt"
+    },
+    "containment": {
+      "$text": "jev_questions/containment.txt"
+    },
+    "scales": {
+      "$text": "jev_questions/scales.txt"
+    },
+    "entities": {
+      "$text": "jev_questions/entities.txt"
+    },
+    "remove_entities": {
+      "$text": "jev_questions/remove_entities.txt"
+    },
+    "inventory_ops": {
+      "$text": "jev_questions/inventory_ops.txt"
+    },
+    "artifact_ops": {
+      "$text": "jev_questions/artifact_ops.txt"
+    },
+    "destruction": {
+      "$text": "jev_questions/destruction.txt"
+    },
+    "sensory_events": {
+      "$text": "jev_questions/sensory_events.txt"
+    },
+    "positions": {
+      "$text": "jev_questions/positions.txt"
+    },
+    "rooms": {
+      "$text": "jev_questions/rooms.txt"
+    },
+    "remove_rooms": {
+      "$text": "jev_questions/remove_rooms.txt"
+    },
+    "remove_adjacent": {
+      "$text": "jev_questions/remove_adjacent.txt"
+    },
+    "stations": {
+      "$text": "jev_questions/stations.txt"
+    },
+    "poses": {
+      "$text": "jev_questions/poses.txt"
+    },
+    "comms_ops": {
+      "$text": "jev_questions/comms_ops.txt"
+    },
+    "following_ops": {
+      "$text": "jev_questions/following_ops.txt"
+    },
+    "location": {
+      "$text": "jev_questions/location.txt"
+    },
+    "weather": {
+      "$text": "jev_questions/weather.txt"
+    }
   }
 }

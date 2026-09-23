@@ -1404,6 +1404,11 @@ ROLES = [
     "director_contact",
     "director_objects",
     "director_spatial",
+    # The prose contract's single encoder (`agents/director_prose.py`): one
+    # call doing every hand's job, its sheet assembled from the channels the
+    # decision model selected. Only called when `director_contract` is
+    # `prose`; unset, it follows `default`.
+    "director_specialist",
     # NO "director_offscreen". The world-traffic hand was retired
     # 2026-09-04: its channels are the social hand's, its simulator is
     # charter's, and its reactive-plan channel is a character's own.

@@ -1150,6 +1150,9 @@ SIDE_CHANNELS = {
                            "back inside `background_react`",
     "_orch_repair": "in-stage: the fan-out's repair view, read back inside "
                     "`director_resolve`",
+    "_prose_contract": "in-stage: the prose contract's encoder answer, set at "
+                       "a Director stage's model call and read back at that "
+                       "same stage's fan-out (`director_prose`)",
     "_destination_residue_report": "diagnostic: absence reads as `no "
                                    "chances`, which is what a replayed beat "
                                    "is (see persist/commit.py)",

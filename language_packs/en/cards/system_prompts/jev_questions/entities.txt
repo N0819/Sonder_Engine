@@ -1,0 +1,1 @@
+Does a particular object change its own state -- opened, closed, lit, put out, switched, broken, filled, emptied -- or is a new object brought into the scene? Answer no when objects are only described as they already are.

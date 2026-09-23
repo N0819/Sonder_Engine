@@ -1,0 +1,1 @@
+Does any body end the passage in a different room from the one it started in? Answer no when bodies move only within a room, or the whole room carries them along inside it.

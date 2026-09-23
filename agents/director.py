@@ -344,6 +344,7 @@ from .director_scopes import (
     _dispatch_specialists,
     specialist_scope,
 )
+from . import director_prose
 from .director_fanout import (
     addressed_figures, addressed_house,
     fanout_is_parallel,
@@ -1678,13 +1679,70 @@ def director_interpret(ctx, nonce):
     _interpret_model_payload = _extension_director_payload(
         ctx, _interpret_model_payload, phase="interpret")
 
-    out = _agent_json(
-        "director",
-        "director_interpret",
-        prose_author_prompt(set(), ctx.language),
-        _interpret_model_payload,
-        max_tokens=None,   # the configured ceiling; see complete_validated_json
-    )
+    _icrowds = _lazy_view(lambda: _crowds_view(chat["id"], sc, ctx.turn["idx"]))
+    _inotices = _lazy_view(lambda: _artifacts_view(chat["id"], sc))
+    _icouriers = _lazy_view(lambda: _couriers_view(chat["id"], sc))
+    _ireports = _lazy_view(lambda: _carried_reports_view(ctx))
+    _iunratified = _lazy_view(
+        lambda: _unratified_background_claims(chat["id"], ctx.turn["idx"]))
+    p_name = pers.get("name") or persona_name(pers)
+
+    def _interpret_extras(out):
+        """A hand's interpret payload extras, read against `out`. Shared by
+        the causal fan-out below and the prose contract's encoder, which
+        is assembled before any `out` exists and reads it empty."""
+        from persist.commit import pending_obligation_view
+        _iparts = scene_extra_parts(ctx.cast, pers, p_name)
+        return {
+            "nonce": nonce,
+            "clock": clock,
+            "active_awareness": _awareness_view(
+                chat["id"], clock, out, {}),
+            "active_restraints": _restraint_view(
+                restraint_conditions(chat["id"]), sc,
+                awareness_map(chat["id"]), clock, None,
+                _restraint_holder_pool(sc, [p_name])),
+            # And the same two facts for EVERY other live condition, which
+            # is where the population is (see `_conditions_view`).
+            "active_conditions": _conditions_view(
+                chat["id"], clock, ctx.turn.idx),
+            "body_parts": ({name: extra_parts_lines(parts)
+                            for name, parts in _iparts.items()}
+                           if _iparts else None),
+            "contacts": sc.get("contacts") or [],
+            "notices": _inotices(),
+            "movement": out.get("movement"),
+            "movers": {p_name: {"exits": _egocentric_exits(sc, p_name)}},
+            "identity_index": _interpret_identities,
+            "entity_interiors": _causal_index.get("entities") or {},
+            "planning_needs": [],
+            "author_notes": payload.get("author_notes"),
+            "sightlines": _sightlines_view(sc, ctx, p_name),
+            "crowds": _icrowds(),
+            "couriers": _icouriers(),
+            "carried_reports": _ireports(),
+            "unratified_claims": _iunratified(),
+            "pending_obligations": pending_obligation_view(chat["id"], ctx.turn.idx),
+        }
+
+    # THE PROSE CONTRACT (agents/director_prose.py): see director_resolve.
+    _prose_contract = director_prose.enabled()
+    if _prose_contract:
+        out = director_prose.run(
+            ctx, "interpret", sc, _interpret_model_payload,
+            _interpret_beat_view(ctx, {}, p_name), _interpret_extras({}),
+            _gate_facts(ctx, sc, physical=True, speech=True,
+                        crowds_rows=_icrowds, notices_rows=_inotices,
+                        couriers_rows=_icouriers, reports_rows=_ireports,
+                        unratified_rows=_iunratified))
+    else:
+        out = _agent_json(
+            "director",
+            "director_interpret",
+            prose_author_prompt(set(), ctx.language),
+            _interpret_model_payload,
+            max_tokens=None,   # the configured ceiling; see complete_validated_json
+        )
     # A QUOTED SPAN IN THE INPUT IS THE PLAYER'S LINE, whatever row the
     # author filed it under (`restore_declared_quotes`).
     restore_declared_quotes(out, ctx.input, warn=ctx.add_warning)
@@ -1877,7 +1935,6 @@ def director_interpret(ctx, nonce):
     # interpret on a copy of chat 114 at turn 13 (C8, review 2026-09-07). A
     # thunk keeps the one-build-per-stage rule intact -- the gate and the
     # payload still read the same rows, so they still cannot disagree.
-    _icrowds = _lazy_view(lambda: _crowds_view(chat["id"], sc, ctx.turn["idx"]))
     # The view carries the interpret author's own ruling (`ledger_notes`),
     # which is what decides who runs; the facts decide how much sheet an
     # addressed hand is assembled with.
@@ -1894,19 +1951,18 @@ def director_interpret(ctx, nonce):
     _iview = _interpret_beat_view(ctx, out, p_name)
     # The four views the gate and the payload both read, built once, and only
     # if one of them reads them.
-    _inotices = _lazy_view(lambda: _artifacts_view(chat["id"], sc))
-    _icouriers = _lazy_view(lambda: _couriers_view(chat["id"], sc))
-    _ireports = _lazy_view(lambda: _carried_reports_view(ctx))
-    _iunratified = _lazy_view(
-        lambda: _unratified_background_claims(chat["id"], ctx.turn["idx"]))
-    _idispatch = _dispatch_specialists(ctx, sc, _gate_facts(
-        ctx, sc,
-        physical=_beat_has_physical_activity(out, {}, []),
-        speech=bool(player_speech_lines(out)),
-        crowds_rows=_icrowds, notices_rows=_inotices,
-        couriers_rows=_icouriers, reports_rows=_ireports,
-        unratified_rows=_iunratified,
-    ), _iview)
+    if _prose_contract:
+        _idispatch, _ianswers = director_prose.dispatch(ctx, "interpret")
+    else:
+        _ianswers = None
+        _idispatch = _dispatch_specialists(ctx, sc, _gate_facts(
+            ctx, sc,
+            physical=_beat_has_physical_activity(out, {}, []),
+            speech=bool(player_speech_lines(out)),
+            crowds_rows=_icrowds, notices_rows=_inotices,
+            couriers_rows=_icouriers, reports_rows=_ireports,
+            unratified_rows=_iunratified,
+        ), _iview)
     # The remaining extras -- three DB-backed condition views, sightlines,
     # exits, the cast's authored body parts -- exist only for a hand's
     # payload; on a beat that dispatches no hand (most declarations) they
@@ -1914,42 +1970,13 @@ def director_interpret(ctx, nonce):
     _any_hand = any(bool((d or {}).get("scope"))
                     for d in (_idispatch or {}).values())
     if _any_hand:
-        from persist.commit import pending_obligation_view
-        _iparts = scene_extra_parts(ctx.cast, pers, p_name)
-        _iextras = {
-            "nonce": nonce,
-            "clock": clock,
-            "active_awareness": _awareness_view(
-                chat["id"], clock, out, {}),
-            "active_restraints": _restraint_view(
-                restraint_conditions(chat["id"]), sc,
-                awareness_map(chat["id"]), clock, None,
-                _restraint_holder_pool(sc, [p_name])),
-            # And the same two facts for EVERY other live condition, which
-            # is where the population is (see `_conditions_view`).
-            "active_conditions": _conditions_view(
-                chat["id"], clock, ctx.turn.idx),
-            "body_parts": ({name: extra_parts_lines(parts)
-                            for name, parts in _iparts.items()}
-                           if _iparts else None),
-            "contacts": sc.get("contacts") or [],
-            "notices": _inotices(),
-            "movement": out.get("movement"),
-            "movers": {p_name: {"exits": _egocentric_exits(sc, p_name)}},
-            "identity_index": _interpret_identities,
-            "entity_interiors": _causal_index.get("entities") or {},
-            "planning_needs": [],
-            "author_notes": payload.get("author_notes"),
-            "sightlines": _sightlines_view(sc, ctx, p_name),
-            "crowds": _icrowds(),
-            "couriers": _icouriers(),
-            "carried_reports": _ireports(),
-            "unratified_claims": _iunratified(),
-            "pending_obligations": pending_obligation_view(chat["id"], ctx.turn.idx),
-        }
+        _iextras = _interpret_extras(out)
     else:
         _iextras = {"nonce": nonce, "clock": clock}
-    _run_specialists(ctx, out, sc, _idispatch, _iview, _iextras, "interpret")
+    _run_specialists(ctx, out, sc, _idispatch, _iview, _iextras, "interpret",
+                     answer_for=_ianswers)
+    if _prose_contract:
+        director_prose.attach_record(ctx, out)
     _settle_minted_interior_movements(sc, out, p_name)
 
     _declared_actions = [
@@ -3472,7 +3499,8 @@ def _span_coherency_report(ctx, out, stage, dispatch, view):
 
 
 
-def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
+def _run_specialists(ctx, out, sc, dispatch, view, extras, stage,
+                     answer_for=None):
     """Fan out to every dispatched specialist and assemble by ownership.
 
     Runs AFTER the stage's own output has settled (retries and validation
@@ -3494,7 +3522,15 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
     untouched. The exception is a required entity-interior mint: an open view
     of no room has no truthful fail-open representation, so the post-fan-out
     integrity floor raises before perception instead of inviting placeholder
-    prose about an interior nobody authored."""
+    prose about an interior nobody authored.
+
+    `answer_for(name, state)`, when given, supplies each hand's answer
+    instead of a model call. The prose contract (`agents/director_prose.py`)
+    uses it: its ONE encoder has already written every hand's transforms in
+    chronological order, and they are split here by channel owner so the
+    binding, validation and fold below judge them exactly as they judge a
+    hand's own. Its answers carry no forwarding requests, so no forwarding
+    round runs."""
     record = {"enabled": True, "stage": stage, "specialists": dispatch,
               # Before any hand merges: what the author itself put in the
               # delegated channels, which is the scope backstop's subject.
@@ -3554,6 +3590,8 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
         def run():
             token_sink.set(None)
             generation_event_sink.set(None)
+            if answer_for is not None:
+                return answer_for(name, state)
             spec = SPECIALISTS[name]
             if spec.get("ext_id"):
                 # An extension-owned family: same isolation, same fail-open,
@@ -3649,7 +3687,11 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage):
     # chronological suffix in the same call. Second declines remain explicit
     # diagnostics rather than an unbounded call loop.
     requests = _completion_requests(jobs, results, scene=sc)
-    forwards = _rows_to_forward(jobs, results, dispatch, requests=requests)
+    # No second hand exists to forward to under a supplied answer: the one
+    # encoder already had every granted tool, and its widening pass is its
+    # own (director_prose). An unmet request stays a reported diagnostic.
+    forwards = {} if answer_for is not None else _rows_to_forward(
+        jobs, results, dispatch, requests=requests)
     for target, entries in forwards.items():
         state = dispatch.get(target)
         fresh = not (state and state.get("run"))
@@ -6426,14 +6468,73 @@ def director_resolve(ctx, nonce, _corrections=None):
             "correction_notes": _campaign_correction_note(_corrections),
         }
 
-    out = _agent_json(
-        "director",
-        "director_resolve",
-        _resolve_prompt,
-        _model_payload,
-        temperature=0.5,
-        max_tokens=None,   # the configured ceiling; see complete_validated_json
-    )
+    _orch_extras = {
+        "nonce": nonce,
+        "clock": clock,
+        "active_awareness": payload.get("active_awareness"),
+        "active_restraints": payload.get("active_restraints"),
+        "active_conditions": payload.get("active_conditions"),
+        "body_parts": (payload.get("scene") or {}).get("body_parts"),
+        "contacts": resolve_sc.get("contacts") or [],
+        "contact_endings": character_contact_endings,
+        "material_effects": character_material_effects,
+        "notices": payload.get("notices") or [],
+        "movement": _mv_for_context,
+        "identity_index": _identity_index,
+        "entity_interiors": _resolve_causal_index.get("entities") or {},
+        "movers": {
+            str(d.get("name")): {
+                "exits": d.get("exits"),
+                "sprint_reach": d.get("sprint_reach"),
+            }
+            for d in decls if d.get("name")
+        },
+        "planning_needs": payload.get("planning_needs") or [],
+        "present_figures": _present_figures,
+        "sightlines": payload.get("sightlines"),
+        "planned_rooms": payload.get("planned_rooms"),
+        "planned_elsewhere": payload.get("planned_elsewhere"),
+        "author_notes": payload.get("author_notes"),
+        # Standing social context belongs to the hand that adjudicates
+        # claims and speech consequences, not the minimal event slicer.
+        "pending_obligations": payload.get("pending_obligations") or [],
+        "social_standing": payload.get("social_standing") or {},
+        "crowds": payload.get("crowds") or [],
+        "couriers": payload.get("couriers") or [],
+        "carried_reports": payload.get("carried_reports") or [],
+        "unratified_claims": payload.get("unratified_claims") or [],
+    }
+    # THE PROSE CONTRACT (`director_contract = prose`, agents/director_prose.py):
+    # the Director writes the beat as prose, the decision model picks the
+    # encoder's tools, one encoder writes the ordered rows and their
+    # transforms. Its output lands HERE as the same `{"ledgers": [...]}` the
+    # causal Director returned, so everything below reads it unchanged.
+    _prose_contract = director_prose.enabled()
+    if _prose_contract:
+        out = director_prose.run(
+            ctx, "resolve", resolve_sc, _model_payload,
+            _resolve_beat_view({"ledgers": []}, decls, char_actions, dice,
+                               p_name, interp, ctx.cast, sc),
+            _orch_extras, _orch_facts)
+    else:
+        out = _agent_json(
+            "director",
+            "director_resolve",
+            _resolve_prompt,
+            _model_payload,
+            temperature=0.5,
+            max_tokens=None,   # the configured ceiling; see complete_validated_json
+        )
+    # THE TWO LIMITS THE PROSE DIRECTOR KEEPS ARE CHECKED ON ITS PROSE. The
+    # authority readings below were written against `resolved_event`, which
+    # under this contract is still empty here (it is synthesised from the
+    # rows later); the prose is the Director's own account and the thing
+    # those limits are about. On a prose beat they WARN and never retry: a
+    # retry would re-run author, decision model and encoder, and the
+    # false-positive rate of these readings on prose is unmeasured.
+    _authority_prose = (
+        ((ctx.get(director_prose.CTX_KEY) or {}).get("record") or {}).get("prose")
+        or "") if _prose_contract else ""
     normalize_causal_ledger(
         out, authority_by_entity(_model_payload.get("event_inputs")),
         _identity_index,
@@ -6478,7 +6579,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     # Current causal-ledger outputs route a due process to specialists and the
     # engine records its lifecycle below. The old prose retry remains only for
     # legacy provider outputs during migration.
-    _must_tick = [] if out.get("causal_ledger") else [
+    _must_tick = [] if out.get("causal_ledger") or _prose_contract else [
         p for p in _pressures if p.get("must_tick_this_beat")]
 
     def _unticked_pressures(res_out):
@@ -6599,7 +6700,7 @@ def director_resolve(ctx, nonce, _corrections=None):
         if isinstance(_pp, dict) and _pp:
             _body_pronouns[_player_name] = _pp
     _mute = _check_character_speech_authority(
-        out.get("resolved_event") or "", _silent_names, _all_names,
+        (out.get("resolved_event") or _authority_prose), _silent_names, _all_names,
         pronouns=_body_pronouns)
     # CHARACTER-ACT AUTHORITY. The third side of the boundary, and the one
     # nothing held: act authority was enforced for the player alone, so the
@@ -6609,7 +6710,7 @@ def director_resolve(ctx, nonce, _corrections=None):
     _cacts = []
     for _cname in _declared_names:
         _cacts.extend(_check_character_act_authority(
-            out.get("resolved_event") or "",
+            (out.get("resolved_event") or _authority_prose),
             char_actions.get(_cname) or [], _cname, _all_names,
             pronouns=_body_pronouns))
     # PROSE-QUOTE AUTHORITY. The dialogue_log backstop further down drops an
@@ -6632,7 +6733,7 @@ def director_resolve(ctx, nonce, _corrections=None):
                 and not is_player_speaker(_spk, chat)):
             _allowed_quote_bodies.add(_quote_body(_d.get("exact_quote", "")))
     _quotes = _check_prose_quote_authority(
-        out.get("resolved_event") or "", _allowed_quote_bodies)
+        (out.get("resolved_event") or _authority_prose), _allowed_quote_bodies)
     # The player's own raw text is what their declaration MEANS -- the
     # interpret stage's `observable` compresses it, and an act is elaboration
     # only against what the player actually wrote.
@@ -6641,12 +6742,12 @@ def director_resolve(ctx, nonce, _corrections=None):
         (interp.get("speech") or ""),
         json.dumps(interp.get("sequence") or [])))
     _invented = _check_player_act_authority(
-        out.get("resolved_event") or "", _declared_player_actions, _player_name,
+        (out.get("resolved_event") or _authority_prose), _declared_player_actions, _player_name,
         _all_names, ctx.input or "")
     # What the player FEELS is theirs as much as what they do. Everything the
     # player wrote this beat is exempt -- declared feeling is declared.
     _felt = _check_player_interiority_authority(
-        out.get("resolved_event") or "", _player_name,
+        (out.get("resolved_event") or _authority_prose), _player_name,
         _player_declared_text, _all_names)
     # THE SAME RULE, ASKED OF THE CHANNEL THAT ALSO EXPRESSES IT. `contact_ops`
     # stores an actor, so it can give the player an act the prose never
@@ -6671,7 +6772,8 @@ def director_resolve(ctx, nonce, _corrections=None):
     _pcontacts = _check_player_contact_authority(
         (out.get("state_diff") or {}).get("contact_ops"),
         _declared_player_actions, _player_name, _standing_ids, ctx.cast)
-    if _invented or _mute or _felt or _cacts or _quotes or _pcontacts:
+    if (_invented or _mute or _felt or _cacts or _quotes or _pcontacts) \
+            and not _prose_contract:
         # ONE retry covering every violation. They are the same boundary from
         # several sides, they are detected at the same moment, and asking
         # separately would cost a call apiece to say the same thing.
@@ -6789,11 +6891,19 @@ def director_resolve(ctx, nonce, _corrections=None):
         _sd = out.get("state_diff")
         if isinstance(_sd, dict):
             _sd["sensory_events"] = list(_sd.get("sensory_events") or []) + _figure_noise
+    # `player_act_warnings` is not a DirectorResolve field, so the schema
+    # dump below discarded it on every beat -- the "surfaced on the step
+    # itself" above never reached the step. Carried across validation like
+    # world_pressure_warnings; under the prose contract it is the only record
+    # that the Director's two limits were crossed.
+    _authority_warnings = out.get("player_act_warnings")
     out, warnings = validate_llm_output("director_resolve", out)
     ctx.warnings.extend(warnings)
 
     # Surfaced on the step itself, not only in ctx.warnings -- attached AFTER
     # validation (the schema dump drops unknown keys).
+    if _authority_warnings:
+        out["player_act_warnings"] = list(_authority_warnings)
     if _wp_missing:
         out["world_pressure_warnings"] = [
             f"must-tick pressure not ticked: {p.get('id')}: "
@@ -6809,49 +6919,19 @@ def director_resolve(ctx, nonce, _corrections=None):
                                     p_name, interp, ctx.cast, sc)
     # Dispatch from the FINAL ruling: which hands the author's ledger_notes
     # and changes_asserted addressed, scoped by the facts computed above.
-    _orch_dispatch = _dispatch_specialists(ctx, sc, _orch_facts, _orch_view)
-    _orch_extras = {
-        "nonce": nonce,
-        "clock": clock,
-        "active_awareness": payload.get("active_awareness"),
-        "active_restraints": payload.get("active_restraints"),
-        "active_conditions": payload.get("active_conditions"),
-        "body_parts": (payload.get("scene") or {}).get("body_parts"),
-        "contacts": resolve_sc.get("contacts") or [],
-        "contact_endings": character_contact_endings,
-        "material_effects": character_material_effects,
-        "notices": payload.get("notices") or [],
-        "movement": _mv_for_context,
-        "identity_index": _identity_index,
-        "entity_interiors": _resolve_causal_index.get("entities") or {},
-        "movers": {
-            str(d.get("name")): {
-                "exits": d.get("exits"),
-                "sprint_reach": d.get("sprint_reach"),
-            }
-            for d in decls if d.get("name")
-        },
-        "planning_needs": payload.get("planning_needs") or [],
-        "present_figures": _present_figures,
-        "sightlines": payload.get("sightlines"),
-        "planned_rooms": payload.get("planned_rooms"),
-        "planned_elsewhere": payload.get("planned_elsewhere"),
-        "author_notes": payload.get("author_notes"),
-        # Standing social context belongs to the hand that adjudicates
-        # claims and speech consequences, not the minimal event slicer.
-        "pending_obligations": payload.get("pending_obligations") or [],
-        "social_standing": payload.get("social_standing") or {},
-        "crowds": payload.get("crowds") or [],
-        "couriers": payload.get("couriers") or [],
-        "carried_reports": payload.get("carried_reports") or [],
-        "unratified_claims": payload.get("unratified_claims") or [],
-    }
+    if _prose_contract:
+        _orch_dispatch, _orch_answers = director_prose.dispatch(ctx, "resolve")
+    else:
+        _orch_dispatch = _dispatch_specialists(ctx, sc, _orch_facts, _orch_view)
+        _orch_answers = None
     # The hands see the previewed world too (see the payload's `scene`
     # comment above): the spatial hand in particular is "the one specialist
     # entitled to the full graph", and the full graph includes the room the
     # interpret stage's spatial hand authored a moment ago.
     _run_specialists(ctx, out, resolve_sc, _orch_dispatch, _orch_view,
-                     _orch_extras, "resolve")
+                     _orch_extras, "resolve", answer_for=_orch_answers)
+    if _prose_contract:
+        director_prose.attach_record(ctx, out)
     _settle_minted_interior_movements(resolve_sc, out, p_name)
     # Kept for the reconciliation seam below: when it detects an
     # omission in a delegated channel, the CHANNEL'S OWNER is re-asked

@@ -3029,6 +3029,51 @@ class CausalSpecialistOutput(LenientModel):
     notes: list[str] = Field(default_factory=list)
 
 
+class ProseDirectorOutput(LenientModel):
+    """The prose-contract Director's whole output (`agents/director_prose.py`):
+    the beat as an objective account. No ledger, no routing, no handles --
+    the decision model picks the encoder's tools from this text and the
+    encoder turns it into ordered engine events."""
+    prose: str = ""
+
+
+class UnifiedEvent(LenientModel):
+    """One ordered event written by the prose contract's single encoder.
+
+    The row fields are `CausalLedgerEntry`'s own, minus the three that only
+    existed to reconcile several hands: `chrono_id` (the event's position IS
+    its chronology), `item_ids` (code assigns one handle per distinct name)
+    and `categories` (code derives them from the channels the transforms
+    wrote). `speech` replaces the `speech` category a row used to carry.
+    The transforms are this event's own; there is no positional result."""
+    source_entity_id: str = ""
+    source_event_id: str = ""
+    event: str = ""
+    act: str = ""
+    observable: str = ""
+    speech: bool = False
+    commitment: str = "asserted"
+    targets: list[str] = Field(default_factory=list)
+    visibility: str = "overt"
+    conceal_from: list[str] = Field(default_factory=list)
+    volume: str = "normal"
+    movement: Optional[dict] = None
+    look: str = ""
+    seconds: Optional[float] = None
+    ability: str = ""
+    difficulty: str = ""
+    item_names: list[str] = Field(default_factory=list)
+    transforms: list[LedgerPatchTransform] = Field(default_factory=list)
+
+
+class UnifiedSpecialistOutput(LenientModel):
+    """The prose contract's encoder output: the beat as ordered events."""
+    events: list[UnifiedEvent] = Field(default_factory=list)
+    missing_tools: list[str] = Field(default_factory=list)
+    missing_referents: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
 class DirectorBodySpecialist(LenientModel):
     """The body specialist's whole output: the four state_diff channels it
     owns under the orchestrated Director (design note 19), in exactly the
@@ -4508,6 +4553,10 @@ SCHEMA_MAP = {
     "director_contact": DirectorContactSpecialist,
     "director_objects": DirectorObjectsSpecialist,
     "director_spatial": DirectorSpatialSpecialist,
+    # The prose contract (`agents/director_prose.py`). Not pipeline steps:
+    # sub-calls inside director_interpret / director_resolve, like the hands.
+    "director_prose": ProseDirectorOutput,
+    "director_specialist": UnifiedSpecialistOutput,
     "resolve_reconcile": ResolveReconcileOutput,
     "resolve_repair": ResolveRepairOutput,
     "interpret_repair": InterpretRepairOutput,

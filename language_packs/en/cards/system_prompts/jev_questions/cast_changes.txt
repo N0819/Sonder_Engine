@@ -1,0 +1,1 @@
+Does a named main character leave the scene entirely, or arrive in it from somewhere else? Answer no for movement between rooms of the same scene, and for unnamed or background people.

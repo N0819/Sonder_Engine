@@ -1,0 +1,1 @@
+Does a body move to a different spot within the same room -- to a piece of furniture, a feature, a wall, beside someone? Answer no for turning, gesturing, and small movements in place.
