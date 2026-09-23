@@ -573,6 +573,27 @@ def test_a_feature_the_designer_does_not_name_is_kept(temp_db, monkeypatch):
     assert "telescope" in out["state_diff"]["rooms"]["lighthouse_gallery"]["anchors"]
 
 
+def test_a_transform_filed_under_the_wrong_thing_still_accounts_for_every_thing(
+        temp_db, monkeypatch, prose_contract):
+    """The encoder's `item` is a label, the patch is the effect. Filed under
+    the room while moving a body, the write stands and nothing is left
+    "neither changed nor accounted for" (56 of 61 alignment warnings across
+    91 audited beats were this label, every write valid)."""
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_prose": {"prose": "Mara climbs into the lamp room."},
+        "director_specialist": {"events": [
+            {"source_entity_id": "character:1", "event": "Mara climbs into the lamp room.",
+             "item_names": ["Lamp Room", "Mara"],
+             "transforms": [{"item": "Lamp Room",
+                             "patch": {"positions": {"Mara": "lamp_room"}}}]}]},
+    }))
+    ctx = _make_ctx(temp_db, interp=_action_interp())
+    out = director.director_resolve(ctx, nonce=0)
+    assert out["state_diff"]["positions"]["Mara"] == "lamp_room"
+    assert not [w for w in ctx.warnings if "neither changed nor accounted for" in w]
+
+
 def test_the_causal_contract_stays_the_default(temp_db, monkeypatch):
     calls = []
     monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {

@@ -3908,11 +3908,15 @@ def _run_specialists(ctx, out, sc, dispatch, view, extras, stage,
                     alignment_errors.append(
                         f"result {index + 1} says encoded without a transform")
                     continue
-                _account_for_every_thing(
-                    ledger, row, raw_transforms, chrono_id, status,
-                    state.setdefault("item_verdicts", []),
-                    state.setdefault("things_unaccounted", []),
-                    alignment_errors, index, sc)
+                # Per-thing verdicts tell one hand's silence from another
+                # hand's ownership; a single encoder (`answer_for`) has no
+                # other hand, so its answer carries no verdicts to account.
+                if answer_for is None:
+                    _account_for_every_thing(
+                        ledger, row, raw_transforms, chrono_id, status,
+                        state.setdefault("item_verdicts", []),
+                        state.setdefault("things_unaccounted", []),
+                        alignment_errors, index, sc)
                 # Keep valid writes, but an incomplete or malformed row is
                 # not a receipt settling every item for this owner.
                 if status and len(alignment_errors) == row_error_count:

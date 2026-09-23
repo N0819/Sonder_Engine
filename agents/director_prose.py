@@ -975,15 +975,17 @@ def dispatch(ctx, stage):
                          if channel in owned}
                 if patch:
                     mine.append({"item": transform["item"], "patch": patch})
-            touched = {t["item"].casefold() for t in mine}
-            settled = {str(item): "not_mine"
-                       for item in (row or {}).get("item_names") or []
-                       if str(item).casefold() not in touched}
+            # NO VERDICTS. `settled`, `not_mine` and the per-thing receipt are
+            # the several-hands contract's: they tell "another hand owns this"
+            # from "a hand dropped it". With ONE encoder there is no other
+            # hand -- a thing it did not change was not changed -- so the
+            # answer carries its transforms and nothing else, and
+            # `_run_specialists(answer_for=)` skips the per-thing accounting.
+            # (Faking `not_mine` receipts had left 56 of 61 alignment
+            # warnings across 91 audited beats, every write valid.)
             results.append({
                 "transforms": mine,
-                "status": "encoded" if mine else "not_mine",
-                "required_channels": [], "reroute_to": "",
-                "settled": settled,
+                "status": "encoded" if mine else "",
             })
         return {"results": results, "notes": []}
 
