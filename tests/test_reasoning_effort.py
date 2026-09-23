@@ -106,3 +106,33 @@ def test_strip_extended_drops_reasoning_for_400_retry():
     out = providers._strip_extended(body)
     assert "reasoning_effort" not in out and "reasoning" not in out
     assert out["temperature"] == 0.7  # non-optional params survive
+
+
+def test_a_provider_that_refuses_disabled_reasoning_is_asked_at_low(monkeypatch):
+    """OpenRouter's gemini-3.8-flash now answers a disabled-reasoning request
+    with 400 "Reasoning is mandatory ... cannot be disabled" (2026-09-23).
+    The send retries once at `low` and remembers the pair."""
+    from llm import providers
+    prov = {"id": 99, "kind": "openrouter", "base_url": "https://openrouter.ai/api/v1",
+            "api_key": "x"}
+    monkeypatch.setattr(providers, "_REASONING_MANDATORY", set())
+    sent = []
+
+    def fake_sse(url, headers, body, sink, role=None, model=None):
+        sent.append(dict(body))
+        if body.get("reasoning") == {"enabled": False}:
+            raise providers.LLMError(
+                'HTTP 400: {"error":{"message":"Reasoning is mandatory for this '
+                'endpoint and cannot be disabled."}}', 400, False)
+        return "ok"
+
+    monkeypatch.setattr(providers, "_sse_openai", fake_sse)
+    body = {"model": "g", "messages": []}
+    providers._apply_reasoning_effort(body, prov, "r", effort_override="off")
+    out = providers._sse_with_reasoning_fallback(
+        "u", {}, body, lambda: None, prov, "r", "g")
+    assert out == "ok"
+    assert sent[1]["reasoning"] == {"effort": "low"}
+    later = {"model": "g", "messages": []}
+    providers._apply_reasoning_effort(later, prov, "r", effort_override="off")
+    assert later["reasoning"] == {"effort": "low"}

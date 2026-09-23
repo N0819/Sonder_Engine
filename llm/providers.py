@@ -1277,15 +1277,54 @@ def reasoning_effort_for(role):
         os.environ.get("FICTION_ENGINE_REASONING_EFFORT"))
 
 
+#: (provider, model) pairs that answered "reasoning is mandatory ... cannot
+#: be disabled": `off` is sent to them as `low` from then on. Measured
+#: 2026-09-23 on OpenRouter's gemini-3.8-flash, which now REFUSES
+#: `reasoning: {enabled: false}` with a 400 where it used to ignore it.
+_REASONING_MANDATORY = set()
+
+
+def _reasoning_key(prov, model):
+    return (str(_prov_field(prov, "id") or _prov_field(prov, "base_url") or ""),
+            str(model or ""))
+
+
+def _disabled_reasoning_refused(exc, body):
+    return (isinstance(exc, LLMError) and exc.status_code == 400
+            and "cannot be disabled" in str(exc).casefold()
+            and (body.get("reasoning") == {"enabled": False}
+                 or body.get("reasoning_effort") == "none"))
+
+
+def _sse_with_reasoning_fallback(url, headers, body, guarded, prov, role, model):
+    """The streaming send, retried ONCE at `low` when the provider refuses a
+    request with reasoning disabled; the pair is remembered so later calls
+    ask for `low` directly. Any other failure is re-raised unchanged into the
+    caller's own recovery ladder."""
+    try:
+        return _sse_openai(url, headers, dict(body), guarded(), role=role, model=model)
+    except LLMError as exc:
+        if not _disabled_reasoning_refused(exc, body):
+            raise
+        _REASONING_MANDATORY.add(_reasoning_key(prov, model))
+        body.pop("reasoning", None)
+        body.pop("reasoning_effort", None)
+        _apply_reasoning_effort(body, prov, role, effort_override="low")
+        return _sse_openai(url, headers, dict(body), guarded(), role=role, model=model)
+
+
 def _apply_reasoning_effort(body, prov, role, effort_override=None):
     """Attach this role's reasoning effort to an OpenAI-compatible request.
     OpenRouter takes `reasoning: {effort}` (and `{enabled: false}` to disable);
     every other OpenAI-style backend takes the flat `reasoning_effort` ('none'
-    to disable). Nothing is added when the role is unset."""
+    to disable). Nothing is added when the role is unset. `off` becomes `low`
+    for a (provider, model) that refused disabling (`_REASONING_MANDATORY`)."""
     effort = (effort_override if effort_override is not None
               else reasoning_effort_for(role))
     if not effort:
         return body
+    if effort == "off" and _reasoning_key(prov, body.get("model")) in _REASONING_MANDATORY:
+        effort = "low"
     is_openrouter = _prov_field(prov, "kind") == "openrouter"
     if effort == "off":
         if is_openrouter:
@@ -3439,14 +3478,8 @@ def _chat_complete_once(
 
     if streaming:
         try:
-            out = _sse_openai(
-                url,
-                headers,
-                dict(body),
-                guarded(),
-                role=role,
-                model=model,
-            )
+            out = _sse_with_reasoning_fallback(
+                url, headers, body, guarded, prov, role, model)
         except (LLMError,) + _RETRYABLE_NETWORK as exc:
             # A SCHEMA THAT IS NEVER ANSWERED IS A SCHEMA THAT WAS REJECTED.
             #
