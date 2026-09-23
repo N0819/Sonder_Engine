@@ -783,7 +783,9 @@ def test_a_voice_aims_its_line_at_the_body_its_words_name(monkeypatch):
     decl = {"name": "Kenend Anvilforder",
             "dialogue_log_entry": {"exact_quote": "Aye.", "intended_target": "the short"},
             "sequence": [{"type": "speech", "text": "Aye.",
-                          "targets": ["the short", "the crowd", "the anvil"]}]}
+                          "targets": ["the short", "the crowd", "the anvil"]}],
+            "charter_act": {"act": "greet", "other": "the short"}}
     director._name_voice_targets(None, {}, decl)
     assert decl["dialogue_log_entry"]["intended_target"] == "Emory Vane"
     assert decl["sequence"][0]["targets"] == ["Emory Vane", "the crowd", "the anvil"]
+    assert decl["charter_act"]["other"] == "Emory Vane"

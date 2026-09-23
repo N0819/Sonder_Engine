@@ -235,8 +235,14 @@ def contact_sensation(contact: dict, *, you: str, scene: dict = None,
     # replaces it with a label: the scene can only vouch for a spelling it
     # holds, and "something" is not one.
     other_is_body = scene is None or contact_endpoint_is_body(scene, other)
-    if callable(label_for):
+    # A BODY TOUCHING ITSELF owns both parts: the other party IS the
+    # observer, and their part is "your" part. Spelled through the name, it
+    # reached a view and a memory as "you's fingertips" and "me's" (playerless
+    # Aldermill round 6, 2026-09-23, idx 16 and 21).
+    self_contact = _is_observer(other)
+    if callable(label_for) and not self_contact:
         other = str(label_for(other) or other)
+    owner = "your" if self_contact else f"{other}'s"
 
     # A slot holding an act, a sound or a state is a malformed record, not a
     # body. Say nothing rather than render a sensation nobody could have.
@@ -287,13 +293,13 @@ def contact_sensation(contact: dict, *, you: str, scene: dict = None,
             # The passage belongs to the OTHER body here -- the observer is
             # the one inside it.
             target_interior = _interior_label(raw_interior, other)
-            enclosure = (f"{other}'s {target_interior}"
+            enclosure = (f"{owner} {target_interior}"
                          if target_interior else other)
             relation = f"{enclosure} enclosing {yours}"
             if theirs:
-                relation += f", with contact at {other}'s {theirs}"
+                relation += f", with contact at {owner} {theirs}"
         else:
-            source = f"{other}'s {theirs}" if theirs else other
+            source = f"{owner} {theirs}" if theirs else other
             # ...and to the OBSERVER here, who is the one enclosing.
             target_interior = _interior_label(raw_interior, you)
             enclosure = f"your {target_interior}" if target_interior else "you"
@@ -305,7 +311,7 @@ def contact_sensation(contact: dict, *, you: str, scene: dict = None,
     sensation_kind = "moving" if motion_kind == "moving" else "settled"
     forms = _SENSATION_FORMS if other_is_body else _SENSATION_FORMS_THING
     relation, quality = forms[(sensation_kind, side)]
-    source = f"{other}'s {theirs}" if theirs else other
+    source = f"{owner} {theirs}" if theirs else other
     # THE PART GOES WHERE IT IS FELT, not in front of a verb. The old shape
     # put the body part in the subject slot -- "your legs registers ... against
     # it" -- which needed a plural agreement fix and a pronoun pointing back at

@@ -158,6 +158,14 @@ def members_of(charter, place):
         # `presence_figures_for_room` was built against. The crowd is the
         # institution's unnamed mass; the named stand out of it.
         and not str((body or {}).get("resident_seed_id") or "").strip()
+        # A BODY THE SCENE STANDS IS NEVER GROUND. A lease is the scene
+        # holding this person beat by beat (`charter_place.
+        # lease_scene_bodies`), which is the most individual presentation
+        # there is; counting them into "a handful of manor peace duties"
+        # beside the three the prose named hid two of their acts and lost a
+        # third to "the unfamiliar person" (playerless Aldermill round 6,
+        # 2026-09-23, idx 9-23).
+        and not (body or {}).get("leased")
         and key not in known)
 
 
@@ -186,6 +194,13 @@ def _plural(noun):
     # for every compound ending that way and needs no vocabulary.
     if noun.endswith("man"):
         return noun[:-3] + "men"
+    # The same kind of rule for the two other regular inflections a bare
+    # "+s" misspells: a consonant before a final -y ("manor peace dutys" in
+    # eight views of one run, 2026-09-23) and a sibilant ending.
+    if noun.endswith("y") and len(noun) > 1 and noun[-2].lower() not in "aeiou":
+        return noun[:-1] + "ies"
+    if noun.endswith(("ch", "sh", "x", "z")):
+        return noun + "es"
     return noun + "s"
 
 

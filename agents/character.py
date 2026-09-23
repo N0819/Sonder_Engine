@@ -4283,7 +4283,8 @@ def character_step(ctx, cid, nonce):
             "spatial_frame": _annotate_known_exits(
                 spatial_digest(sc, character_name(sh),
                                label_for=observer_label_fn(
-                                   chat, character_name(sh), ctx.cast)), sc,
+                                   chat, character_name(sh), ctx.cast,
+                                   scene=sc)), sc,
                 stored_state.get("visited_rooms") or [],
                 known_exits=stored_state.get("known_exits") or {},
                 here_rid=char_room,

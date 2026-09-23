@@ -4571,6 +4571,11 @@ def _name_voice_targets(ctx, scene, declaration):
     for element in declaration.get("sequence") or ():
         if isinstance(element, dict) and element.get("targets"):
             element["targets"] = [_named(t) for t in element["targets"]]
+    # ...and the act it offers the charter, which names its other party the
+    # same way ("greet toward the short", three greets on one run, 2026-09-23).
+    act = declaration.get("charter_act")
+    if isinstance(act, dict) and act.get("other"):
+        act["other"] = _named(act["other"])
 
 
 def _name_declared_targets(ctx, scene, groups, identity_index):

@@ -4972,7 +4972,24 @@ def _identity_token_set(actor_name, aliases=None):
                 tokens.add(tok.casefold())
     return tokens
 
-def observer_label_fn(chat, observer_name, cast):
+def _uncarded_person(scene, name):
+    """`(appearance, aliases)` when `name` is a PERSON the scene records --
+    an animate entity, a charter body among them -- that no card describes;
+    None for anything else. The entity's own spelling and aliases both count.
+    The appearance is the entity's own, or None where it records none (the
+    caller then asks the presence ledger, which is where perception reads a
+    townsperson's look)."""
+    from world.spatial import _is_body_entity, _unique_entity_keyed
+    if not isinstance(scene, dict):
+        return None
+    eid, ent = _unique_entity_keyed(scene, name)
+    if not eid or not isinstance(ent, dict) or not _is_body_entity(scene, eid, ent):
+        return None
+    appearance = ent.get("appearance") or ent.get("description") or None
+    return appearance, [a for a in (ent.get("aliases") or []) if a]
+
+
+def observer_label_fn(chat, observer_name, cast, scene=None):
     """`name -> what THIS observer may call them`, for any payload that names
     a body outside perception's own scrubbing.
 
@@ -5009,6 +5026,40 @@ def observer_label_fn(chat, observer_name, cast):
     p_name = persona_name(persona)
     if p_name:
         sheets.setdefault(p_name, persona)
+    _scene_box, _looks_box = [], []
+
+    def _scene():
+        if not _scene_box:
+            _scene_box.append(scene if isinstance(scene, dict)
+                              else (wget(chat["id"], "scene", {}) or {}))
+        return _scene_box[0]
+
+    def _looks():
+        """{folded name: (appearance, surface, role)} off the presence ledger
+        -- what perception labels a townsperson from, so this label and the
+        view's agree (`presence_figures_for_room`)."""
+        if not _looks_box:
+            from world import charter_crowd
+            looks = {}
+            ledger = wget(chat["id"], "background_presences", {}) or {}
+            for key, rec in (ledger.items() if isinstance(ledger, dict) else ()):
+                if not isinstance(rec, dict):
+                    continue
+                sketch = rec.get("sketch") or {}
+                spelled = str(rec.get("name") or key).strip().casefold()
+                if not spelled:
+                    continue
+                hint = str(sketch.get("role_hint") or "")
+                posts = ([] if hint.startswith("member of ")
+                         else [p.strip() for p in hint.split(",") if p.strip()])
+                role = next((charter_crowd._role_noun(p) for p in posts
+                             if charter_crowd._role_noun(p)), "")
+                surface = sketch.get("surface")
+                looks.setdefault(spelled, (
+                    str(sketch.get("appearance") or "").strip() or None,
+                    surface if isinstance(surface, dict) else None, role))
+            _looks_box.append(looks)
+        return _looks_box[0]
 
     def label(name):
         text = str(name or "").strip()
@@ -5016,10 +5067,22 @@ def observer_label_fn(chat, observer_name, cast):
             return text
         sheet = sheets.get(text)
         if sheet is None:
-            # Not a body this function knows about -- an entity id, a prop, a
-            # room. Nothing to gate, and inventing a description for a lamp
+            # A BODY WITHOUT A CARD IS STILL SOMEBODY. A townsperson the
+            # charter simulates, a person the Director minted: the scene
+            # records them as people and no card describes them, and waving
+            # them through handed a character the full name of the man in
+            # front of him -- `ahead_entity` gave Emory "Master Leofelric
+            # Fenstonwell", and his next want was "Answer Master Fenstonwell"
+            # (playerless Aldermill round 6, 2026-09-23, idx 2). A prop or a
+            # room is still left as it is: inventing a description for a lamp
             # would be worse than leaving it.
-            return text
+            uncarded = _uncarded_person(_scene(), text)
+            if uncarded is None:
+                return text
+            appearance, aliases = uncarded
+            look, surface, role = _looks().get(text.casefold()) or (None, None, "")
+            return _unknown_actor_label(text, appearance or look, aliases,
+                                        role=role, surface=surface)
         return _unknown_actor_label(
             text, character_appearance(sheet), character_scene_keys(sheet)[1:])
 
@@ -5119,7 +5182,21 @@ def scrub_names_deep(value, scrub):
     if isinstance(value, tuple):
         return tuple(scrub_names_deep(item, scrub) for item in value)
     if isinstance(value, dict):
-        return {key: scrub_names_deep(item, scrub) for key, item in value.items()}
+        # KEYS ARE TEXT A MIND READS TOO. A section keyed by who it is about
+        # -- `{"<full name>": {...}}` -- handed the name over whole while the
+        # value beside it was scrubbed (round-6 review of the identity floor,
+        # 2026-09-23). Two keys that scrub to one label are both kept, the
+        # second numbered, rather than one silently overwriting the other.
+        out = {}
+        for key, item in value.items():
+            new_key = scrub(key) if isinstance(key, str) else key
+            if new_key in out:
+                n = 2
+                while f"{new_key} ({n})" in out:
+                    n += 1
+                new_key = f"{new_key} ({n})"
+            out[new_key] = scrub_names_deep(item, scrub)
+        return out
     return value
 
 

@@ -106,3 +106,21 @@ class TestTheBandSaysItInEnglish:
         members = charter_crowd.members_of(held, "forge")
         assert "journeymen" in charter_crowd.composition_of(members, held)
         assert "journeymans" not in charter_crowd.composition_of(members, held)
+
+
+def test_a_body_the_scene_stands_is_never_ground():
+    """Playerless Aldermill round 6 (2026-09-23): three peace duties leased
+    and named on screen were folded into "a handful of manor peace duties",
+    which hid two of their acts."""
+    forge = _forge()
+    body_key = sorted(forge["bodies"])[0]
+    forge["bodies"][body_key] = dict(forge["bodies"][body_key], leased="frame:2")
+    assert body_key not in charter_crowd.members_of(forge, "forge")
+
+
+def test_a_regular_plural_is_spelled_right():
+    assert charter_crowd._plural("peace duty") == "peace duties"
+    assert charter_crowd._plural("journeyman") == "journeymen"
+    assert charter_crowd._plural("watch") == "watches"
+    assert charter_crowd._plural("key") == "keys"
+    assert charter_crowd._plural("clerks") == "clerks"
