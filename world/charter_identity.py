@@ -1088,8 +1088,20 @@ def title_for(body, roles=(), profile=None, *, address=False):
     profile = normalize_naming_profile(profile)
     rank = str(body.get("rank") or "").strip()
     styled = profile["titles"]["ranks"].get(rank, "") if rank else ""
-    called = ""
-    for role in roles or ():
+    # A NAME CARRIES A TRADE, NOT THIS HOUR'S DUTY. `roles` is the watch --
+    # whichever post the institution has this body standing now -- and the
+    # watch rotates on purpose (`charter_plan`: rested equals take turns).
+    # Read for the name, it renamed people every tick: 183 title changes
+    # across 40 townspeople in about 100 s of town time, one flume-tender
+    # renamed ten times, and the prose naming "a different flume-tender"
+    # at the same sluice two beats apart (playerless Aldermill round 7,
+    # 2026-09-23). The body's HOME post -- authored, else the post its
+    # generated id was made for, the planner's own reading -- is what it is
+    # called by; the watch answers only for a body without a titled trade.
+    home = str(body.get("home_post") or "") \
+        or str(body.get("key") or "").split(":", 1)[0]
+    called = profile["titles"]["posts"].get(home, "") if home else ""
+    for role in () if called else (roles or ()):
         title = profile["titles"]["posts"].get(str(role))
         if title:
             called = title

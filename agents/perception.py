@@ -60,6 +60,7 @@ from world.spatial import (
     apply_contact_ops,
     room_display_name,
     hiding_holders_of,
+    scene_names_body,
     ambient_scope,
     contact_sensation,
     contact_action_clause,
@@ -4776,6 +4777,21 @@ def _visible_things(sc, name, room, *, sweep=False, bodies=()):
             continue                                        # rule 2
         if hiding_holders_of(sc, str(eid)):
             continue                                        # rule 3
+        # RULE 3b: A THING IN SOMEBODY'S HANDS IS NOT LYING HERE. Held or
+        # carried in the open it is not concealed, so rule 3 let it through
+        # and the view said "There is the tallow tub here" in seventeen of
+        # Emory's views while the commit held it in his grip (playerless
+        # Aldermill round 7, 2026-09-23). Its place is the body bearing it:
+        # to that body it is theirs, and to anyone else it is part of how the
+        # bearer looks, which the bearer's own sentence carries.
+        holder, mode = _bearer_of(sc, (str(eid), label))
+        if holder:
+            if same_subject(sc, holder, name) and mode != "worn":
+                what = composer.thing_in_hand_clause(label, mode)
+                if what:
+                    rows.append({"what": what, "uid": str(eid),
+                                 "state": [mode, holder]})
+            continue                                        # rule 3b
         if str(eid).casefold() in furniture \
                 or label.casefold() in furniture:
             continue                                        # rule 4
@@ -4815,6 +4831,26 @@ def _visible_things(sc, name, room, *, sweep=False, bodies=()):
             continue
         rows.append({"what": what, "uid": str(eid), "state": [at or room]})
     return rows
+
+
+def _bearer_of(sc, forms):
+    """`(body, mode)` when a BODY holds or carries this thing in the open --
+    the containment ledger naming it under any of `forms` -- else ("", "").
+    A thing on a cart or in an open crate is not a body's, and stays a thing
+    lying where its carrier stands."""
+    contained = (sc or {}).get("contained") or {}
+    if not isinstance(contained, dict):
+        return "", ""
+    for subject, record in contained.items():
+        if not isinstance(record, dict):
+            continue
+        if not any(same_subject(sc, str(subject), form) for form in forms if form):
+            continue
+        holder = str(record.get("in") or "").strip()
+        if holder and scene_names_body(sc, holder):
+            return holder, str(record.get("mode") or "carried").strip().casefold()
+        return "", ""
+    return "", ""
 
 
 #: Barriers sight crosses. Kept as a local read of the one definition in

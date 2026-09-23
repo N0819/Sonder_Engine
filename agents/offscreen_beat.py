@@ -211,11 +211,18 @@ def run_offscreen_beat(chat_id, frame_id):
     be able to take this beat back exactly as it takes back a played one. An
     offscreen beat that no checkpoint covered would be the one kind of turn
     the story could not undo.
+
+    A frame that is no longer a live bubble is skipped before any turn is
+    made: the bubbles to run are listed once, and a meeting earlier in the
+    same pass can fold one into its sibling (`perform_sibling_merge`).
     """
     from agents.runtime import run_pipeline
     from core.db import q, qi, transaction
     from persist.checkpoints import ensure_checkpoint, snapshot_blob
+    from world.spatial_frames import is_bubble_frame
 
+    if not is_bubble_frame(chat_id, frame_id):
+        return {"frame_id": frame_id, "skipped": "not a live bubble"}
     blob = snapshot_blob(chat_id)
     with transaction():
         last = q("SELECT idx FROM turns WHERE chat_id=? ORDER BY idx DESC LIMIT 1",

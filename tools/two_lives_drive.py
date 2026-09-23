@@ -342,6 +342,21 @@ def open_two_bubbles(cid, ids):
     return frames
 
 
+def frames_now(cid, ids):
+    """{name: frame} -- the live bubble each life is in now. Two names on one
+    frame are two lives that met (`spatial_frames.perform_sibling_merge`)."""
+    from agents.offscreen_beat import live_bubbles
+    from story.scene import active_cast
+
+    out = {}
+    for frame_id in live_bubbles(cid, None):
+        held = {row["id"] for row in active_cast(cid, frame_id)}
+        for name, char_id in ids.items():
+            if char_id in held:
+                out[name] = frame_id
+    return out
+
+
 def observe(cid, ids, frames):
     from core.db import wget_for_frame
 
@@ -384,26 +399,34 @@ def main():
     print("  frames: %s" % json.dumps(frames), flush=True)
 
     log = []
-
-    def _clock(frame_id):
-        # The two lives share one town (`db.ERA_WORLD_KEYS`), which runs at
-        # the later of their clocks, so the one furthest behind goes first --
-        # the order `offscreen_beat.live_bubbles` gives the engine's own.
-        from core.db import wget_for_frame
-        from world.mechanics import clock_elapsed
-        return clock_elapsed(
-            wget_for_frame(cid, "simulation_clock", frame_id, {}) or {})
+    from agents.offscreen_beat import live_bubbles
+    from world.spatial_frames import is_bubble_frame
 
     for rnd in range(args.rounds):
-        for name in sorted(frames, key=lambda n: (_clock(frames[n]), n)):
+        # THE ENGINE'S OWN ORDER AND ITS OWN LIST: the live bubbles, the one
+        # furthest behind in its own time first (`live_bubbles`) -- the two
+        # lives share one town, which runs at the later of their clocks. Asked
+        # every round, because two lives that meet become one thread
+        # (`perform_sibling_merge`) and a frame that has ended plays no beat.
+        for frame_id in live_bubbles(cid, None):
+            if not is_bubble_frame(cid, frame_id):
+                continue                    # folded into its sibling this round
+            name = ", ".join(sorted(n for n, f in frames_now(cid, ids).items()
+                                    if f == frame_id)) or "frame %s" % frame_id
             started = time.time()
             error = ""
             try:
-                run_offscreen_beat(cid, frames[name])
+                run_offscreen_beat(cid, frame_id)
             except Exception as exc:            # noqa: BLE001 - reported
                 error = "%s: %s" % (type(exc).__name__, exc)
+            now = frames_now(cid, ids)
+            if len(set(now.values())) < len(set(frames.values())):
+                print("  r%-3d the lives met: %s" % (rnd + 1, json.dumps(now)),
+                      flush=True)
+            frames = now or frames
             seen = observe(cid, ids, frames)
-            log.append({"round": rnd + 1, "who": name, "error": error,
+            log.append({"round": rnd + 1, "who": name, "frame": frame_id,
+                        "error": error,
                         "seconds": round(time.time() - started, 1),
                         "where": {k: v["room"] for k, v in seen.items()}})
             print("  r%-3d %-14s %6.1fs  %s%s" % (

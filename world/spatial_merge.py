@@ -1066,7 +1066,14 @@ def _mirror_symmetric_barriers(prior_rooms, incoming_rooms):
     (it carries `sight_from`), and `wall` is a seal, which the shield above
     already refuses from one side. An edge the diff wrote on BOTH sides is
     left as written -- the diff spoke. Only a room the scene already holds
-    (or the diff declares) receives a mirrored edge; nothing is minted."""
+    (or the diff declares) receives a mirrored edge; nothing is minted.
+
+    AND ITS NAME, for the same reason: what a doorway IS is the doorway's.
+    The room author renamed the mill's edge "oak trapdoor hatch" from the
+    milling floor and wrote nothing of it on the wheelhouse side, so from
+    there it stayed "the open doorway" -- and a pose stood Emory "on the open
+    doorway's rung" (playerless Aldermill round 7, 2026-09-23, idx 7-22).
+    `vertical` is not mirrored: up from one side is down from the other."""
     if not isinstance(incoming_rooms, dict) or not isinstance(prior_rooms, dict):
         return incoming_rooms
     out = {rid: room for rid, room in incoming_rooms.items()}
@@ -1080,24 +1087,33 @@ def _mirror_symmetric_barriers(prior_rooms, incoming_rooms):
                 return e
         return None
 
-    def _prior_barrier(room_id, to_id):
+    def _prior_edge(room_id, to_id):
         room = prior_rooms.get(room_id)
         if not isinstance(room, dict):
             return None
         for e in room.get("adjacent") or []:
             if isinstance(e, dict) and str(e.get("to")) == str(to_id):
-                return normalize_barrier(e.get("barrier"))
+                return e
         return None
+
+    def _prior_barrier(room_id, to_id):
+        edge = _prior_edge(room_id, to_id)
+        return normalize_barrier(edge.get("barrier")) if edge is not None else None
 
     for room_id, room in list(incoming_rooms.items()):
         if not isinstance(room, dict):
             continue
         for edge in room.get("adjacent") or []:
-            if not isinstance(edge, dict) or not edge.get("to") \
-                    or "barrier" not in edge:
+            if not isinstance(edge, dict) or not edge.get("to"):
+                continue
+            fields = [f for f in ("barrier", "name")
+                      if f in edge and (f == "barrier"
+                                        or str(edge.get(f) or "").strip())]
+            if not fields:
                 continue
             to_id = str(edge["to"])
-            barrier = normalize_barrier(edge.get("barrier"))
+            barrier = normalize_barrier(edge.get("barrier")) \
+                if "barrier" in edge else _prior_barrier(room_id, to_id)
             if barrier in ("one_way_window", "wall") or to_id == str(room_id):
                 continue
             if to_id not in prior_rooms and to_id not in out:
@@ -1105,17 +1121,20 @@ def _mirror_symmetric_barriers(prior_rooms, incoming_rooms):
             if _prior_barrier(to_id, room_id) == "one_way_window":
                 continue
             recip = _incoming_edge(to_id, room_id)
-            if recip is not None and "barrier" in recip:
-                continue                    # the diff wrote both sides
-            if recip is None and _prior_barrier(to_id, room_id) is None:
+            # The diff wrote that field on both sides: it spoke.
+            fields = [f for f in fields if recip is None or f not in recip]
+            if not fields:
+                continue
+            if recip is None and _prior_edge(to_id, room_id) is None:
                 continue                    # no reciprocal edge to mirror onto
             if recip is not None:
-                recip["barrier"] = edge.get("barrier")
+                for f in fields:
+                    recip[f] = edge.get(f)
                 continue
             target = out.get(to_id)
             target = dict(target) if isinstance(target, dict) else {}
             edges = list(target.get("adjacent") or [])
-            edges.append({"to": str(room_id), "barrier": edge.get("barrier")})
+            edges.append({"to": str(room_id), **{f: edge.get(f) for f in fields}})
             target["adjacent"] = edges
             out[to_id] = target
     return out

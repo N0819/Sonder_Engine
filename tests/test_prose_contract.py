@@ -757,6 +757,30 @@ def test_a_line_split_around_its_tag_is_still_a_line():
     assert out[1]["act"] == "added"    # words the prose never quoted stay a report
 
 
+def test_jev_is_told_what_is_already_owed(temp_db, monkeypatch):
+    """Round 7 (2026-09-23) idx 7-22: Jev is asked whether a passage fulfils
+    "one already owed" and was never told what was, so the miller's order,
+    carried out three times, stayed open fifteen beats."""
+    from types import SimpleNamespace
+    seen = []
+
+    def jev(state, questions):
+        seen.append(state)
+        return {key: {"type": "noul", "noul": 0.9 if key == "obligations" else 0.0}
+                for key in questions}
+
+    monkeypatch.setattr(decisions, "OVERRIDE", jev)
+    ctx = SimpleNamespace(language="en", add_warning=lambda message: None)
+    owed = [{"who": "Emory Vane",
+             "what": "Slap it thick along the underside of the neck"}]
+    selected, _record = director_prose.select_channels(
+        ctx, "resolve", "Emory works tallow into the underside of the neck.",
+        {"identity_index": {}}, facts={}, owed=owed)
+    assert ("ALREADY OWED: Emory Vane: Slap it thick along the underside "
+            "of the neck") in seen[0]
+    assert "obligations" in selected
+
+
 def test_a_past_act_is_not_conjugated_again():
     from agents.common import communication_verb
     assert communication_verb({"act": "added"}) == "added"

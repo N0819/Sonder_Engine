@@ -524,3 +524,69 @@ def detect_couple_between_frames(chat_id, frame_a, frame_b):
         paradox_active=bool(get_paradox(chat_id, frame_a)
                             or get_paradox(chat_id, frame_b)),
     )
+
+
+def sibling_meet_decision(scene_a, names_a, scene_b, names_b, *, hops=1):
+    """Have two sibling bubbles' people come within each other's range?
+
+    TWO BUBBLES OF ONE ERA ARE TWO THREADS OF ONE TOWN, and two people within
+    each other's range are one thread: each can see and hear the other, and a
+    beat played for one in a frame the other is not in is a beat in which the
+    other does not exist. Measured on the playerless Aldermill runs
+    (2026-09-23): Emory and Sal could stand in one room of the one town and
+    not see each other, because only a bubble and its parent could merge.
+
+    THE RANGE A BUBBLE OPENS ON, asked across two scenes: the same room, or a
+    room within `hops` adjacency steps of the other's -- each side's position
+    read from its own scene, the only place it exists. Adjacency only: a voice
+    carried between rooms (an intercom, a handset) is a couple's to carry
+    (`couple_decision`), and two people talking over a wire are not standing
+    together. Pure.
+    """
+    from world.spatial import nearby_rooms
+
+    rooms_a = {room_of(scene_a, str(n)) for n in (names_a or []) if n} - {None}
+    rooms_b = {room_of(scene_b, str(n)) for n in (names_b or []) if n} - {None}
+    if not rooms_a or not rooms_b:
+        return False
+    if rooms_a & rooms_b:
+        return True
+    return bool(set(nearby_rooms(scene_a, rooms_a, hops=hops)) & rooms_b
+                or set(nearby_rooms(scene_b, rooms_b, hops=hops)) & rooms_a)
+
+
+def detect_sibling_meeting(chat_id, frame_id):
+    """`(survivor, absorbed)` when this committing bubble's people have come
+    within range of a sibling bubble's, else None. Read-only.
+
+    Cheapest refusal first: only a live bubble asks, and never one in a call
+    (a couple partitions its own world back at close) or under a paradox.
+    THE COMMITTING FRAME SURVIVES: every commit domain after the spatial one
+    writes to it -- memories, carriers, plans, presences -- so absorbing it
+    would strand this beat's own writes in a frame that has ended. The later
+    clock is kept by value (`spatial_frames.perform_sibling_merge`).
+    """
+    from core.db import wget_for_frame
+    from world.paradox import get_paradox
+    from world.spatial_frames import (_spatial_children, get_frame,
+                                      is_bubble_frame, live_couple_for)
+
+    frame = get_frame(frame_id)
+    if not frame or not is_bubble_frame(chat_id, frame_id):
+        return None
+    if live_couple_for(chat_id, frame_id) or get_paradox(chat_id, frame_id):
+        return None
+    scene = wget_for_frame(chat_id, "scene", frame_id, {}) or {}
+    names = frame_body_names(chat_id, frame_id)
+    for row in _spatial_children(chat_id, frame.get("parent_frame_id")):
+        other = row["id"]
+        if other == frame_id or not is_bubble_frame(chat_id, other):
+            continue
+        if live_couple_for(chat_id, other) or get_paradox(chat_id, other):
+            continue
+        if sibling_meet_decision(
+                scene, names,
+                wget_for_frame(chat_id, "scene", other, {}) or {},
+                frame_body_names(chat_id, other)):
+            return (frame_id, other)
+    return None

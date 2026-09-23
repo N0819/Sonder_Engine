@@ -433,6 +433,25 @@ def lease_holder(frame_id):
     return "present" if frame_id is None else "frame:%s" % frame_id
 
 
+def rehold_leases(registry, old_holder, new_holder):
+    """Every body leased under `old_holder` is held under `new_holder` now.
+
+    For a frame that ends by folding into another (`spatial_frames.
+    perform_sibling_merge`): the scene that stood these bodies became the
+    survivor's, and a lease left naming a merged frame is no claim at all
+    (`held_elsewhere`), so until the survivor's next commit re-leased them the
+    town's tick could walk a body out of the room it is standing in. Pure over
+    the registry it is handed; returns how many leases moved."""
+    moved = 0
+    for item in ((registry or {}).get("items") or {}).values():
+        bodies = ((item or {}).get("state") or {}).get("bodies") or {}
+        for body in bodies.values():
+            if isinstance(body, dict) and body.get("leased") == old_holder:
+                body["leased"] = new_holder
+                moved += 1
+    return moved
+
+
 def held_elsewhere(body, holder, live=None):
     """Whether another scene holds this body under a live lease.
 

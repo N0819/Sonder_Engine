@@ -41,7 +41,8 @@ from core.db import (_FRAME_KEY_SEP, ERA_WORLD_KEYS, FRAME_SCOPED_WORLD_KEYS, q,
 from core.frames import create_frame, get_frame
 from world.paradox import get_paradox
 from story.scene import (CAST_STATUS_ABSENT, active_cast, cast_change_status,
-                         persona_of, set_char_state, set_char_status)
+                         char_state, persona_of, set_char_state,
+                         set_char_status)
 from world.spatial import (THRESHOLD_CROSSING_BEATS, _SUBJECT_KEYED, _anchor_dir, _hiding_holders,
                      anchor_bearing_of, effective_adjacent,
                      effective_anchors, has_visual,
@@ -1201,7 +1202,38 @@ def _partition_scene(scene, subjects, rooms):
     return out
 
 
-def merge_frame_scenes(parent_scene, child_scene):
+def _merged_rooms(parent_rooms, child_rooms_table, child_rooms):
+    """Two copies of one map, merged room by room.
+
+    A room only the child holds is the child's. A room in `child_rooms` is the
+    child's copy, any other the parent's -- and either way a doorway either
+    side planted survives: `adjacent` is unioned by where each edge leads, the
+    winning copy's edge first. Two sibling bubbles each hold the whole map
+    since the town is one, and a copy that won every room outright would
+    delete what the other side opened (folding round 6's second bubble into
+    the first would have dropped the mill_race -> river_alde doorway the
+    first had planted, playerless Aldermill 2026-09-23)."""
+    parent_rooms = dict(parent_rooms or {})
+    out = dict(parent_rooms)
+    for rid, room in (child_rooms_table or {}).items():
+        mine = parent_rooms.get(rid)
+        if not isinstance(mine, dict):
+            out[rid] = room
+            continue
+        if not isinstance(room, dict):
+            continue
+        winner, other = ((room, mine) if str(rid) in child_rooms
+                         else (mine, room))
+        edges = [e for e in (winner.get("adjacent") or []) if isinstance(e, dict)]
+        leads = {str(e.get("to")) for e in edges}
+        edges += [e for e in (other.get("adjacent") or [])
+                  if isinstance(e, dict) and str(e.get("to")) not in leads]
+        out[rid] = {**winner, "adjacent": edges} \
+            if (edges or "adjacent" in winner) else dict(winner)
+    return out
+
+
+def merge_frame_scenes(parent_scene, child_scene, child_rooms=None):
     """The parent's scene with the away party's ledgers carried home.
 
     `{**parent, rooms, positions}` kept the parent's copy of EVERY other
@@ -1213,17 +1245,35 @@ def merge_frame_scenes(parent_scene, child_scene):
     vitals, overlays, following); a contact or substance record naming a
     child subject is the child's; an entity, passage, channel or scent in a
     child room is the child's; everything else is the parent's.
+
+    `child_rooms` names which rooms are the child's when both sides hold the
+    whole map -- two sibling bubbles of one town do -- rather than every room
+    the child's scene carries (the default, and the parent reunion's rule).
+    A room outside it keeps the parent's copy; a doorway either copy planted
+    survives either way (`_merged_rooms`). And the child's SUBJECTS are then
+    only its own: what stands in its rooms, and what the parent's scene does
+    not place at all -- a fixture both copies place elsewhere keeps the
+    parent's row, where the default rule would hand it the child's.
     """
     parent_scene = dict(parent_scene or {})
     child_scene = child_scene or {}
     child_positions = dict(child_scene.get("positions") or {})
+    parent_positions = dict(parent_scene.get("positions") or {})
+    if child_rooms is None:
+        child_rooms = {str(r) for r in (child_scene.get("rooms") or {})}
+        merged_rooms = {**(parent_scene.get("rooms") or {}),
+                        **(child_scene.get("rooms") or {})}
+    else:
+        child_rooms = {str(r) for r in child_rooms}
+        merged_rooms = _merged_rooms(parent_scene.get("rooms"),
+                                     child_scene.get("rooms"), child_rooms)
+        placed = {_cf(k) for k in parent_positions}
+        child_positions = {k: v for k, v in child_positions.items()
+                           if str(v) in child_rooms or _cf(k) not in placed}
     child_subjects = {_cf(k) for k in child_positions}
-    child_rooms = {str(r) for r in (child_scene.get("rooms") or {})}
     merged = dict(parent_scene)
-    merged["rooms"] = {**(parent_scene.get("rooms") or {}),
-                       **(child_scene.get("rooms") or {})}
-    merged["positions"] = {**(parent_scene.get("positions") or {}),
-                           **child_positions}
+    merged["rooms"] = merged_rooms
+    merged["positions"] = {**parent_positions, **child_positions}
     for ledger in _FRAME_SUBJECT_LEDGERS:
         if ledger == "positions":
             continue
@@ -1670,6 +1720,146 @@ def perform_merge(chat_id, parent_frame_id, child_frame_id, turn_idx):
         log = wget_for_frame(chat_id, "offscreen_log", parent_frame_id, [])
         log.append(notice)
         wset_for_frame(chat_id, "offscreen_log", log, parent_frame_id)
+
+    return warnings
+
+
+#: The party ledgers a sibling merge unions: what each side intends, owes,
+#: has met and has joined. Each bubble answered for different people, so a
+#: key both hold is one subject seen twice, and the survivor's row stands.
+_SIBLING_UNION_KEYS = (("standing_intentions", []), ("pending_obligations", []),
+                       ("background_presences", {}), ("knowledge_circles", {}))
+
+
+def _union(mine, theirs):
+    if isinstance(mine, list) and isinstance(theirs, list):
+        return mine + [row for row in theirs if row not in mine]
+    if isinstance(mine, dict) and isinstance(theirs, dict):
+        return {**theirs, **mine}
+    return mine if mine not in (None, "", [], {}) else theirs
+
+
+def perform_sibling_merge(chat_id, survivor_frame_id, absorbed_frame_id,
+                          turn_idx):
+    """Fold one causality bubble into its sibling: their people met.
+
+    `perform_merge`'s shape for two frames sharing an era and a parent and
+    no player (`spatial_bubbles.detect_sibling_meeting`). One transaction;
+    returns the deterministic warnings.
+
+    Into the SURVIVOR -- the frame whose commit found the meeting -- from the
+    absorbed frame: the later CLOCK (the one behind catches up, as a reunion
+    does); what each side KNOWS, unioned; the absorbed cast's RELATIONSHIPS
+    and their own lived STATE (`chat_char_frames`: `perform_merge` moves only
+    a status, and a bubble's overlay is the character's beat-by-beat life --
+    13,589 bytes of Sal's on the round-6 run); the party ledgers, unioned;
+    the SCENE, each side's people's rooms their own and every doorway kept;
+    the absorbed frame's still-pending local FUSES, re-stamped so they still
+    come due; the town's bodies its scene stood (LEASES), held by the
+    survivor now; and its personas.
+
+    Memory: once `merged_turn_idx` is set, the absorbed frame's rows are an
+    ordinary same-era frame's and the ordinal rule shows them from the
+    survivor (`frames.is_memory_visible`). The survivor's `split_turn_idx`
+    rises to the later of the two, or the absorbed character's own rows from
+    the parent between the two splits stay cut. Nothing wider is granted:
+    each mind reads only its own ledger.
+    """
+    from world.charter_place import lease_holder, rehold_leases
+    from world.charter_runtime import registry_for_update, save_registry
+    from world.spatial_bubbles import frame_body_names
+
+    warnings = []
+    with transaction():
+        s_clock = wget_for_frame(chat_id, "simulation_clock", survivor_frame_id, {}) or {}
+        a_clock = wget_for_frame(chat_id, "simulation_clock", absorbed_frame_id, {}) or {}
+        s_elapsed = float(s_clock.get("elapsed_seconds") or 0.0)
+        a_elapsed = float(a_clock.get("elapsed_seconds") or 0.0)
+        if a_elapsed > s_elapsed:
+            wset_for_frame(chat_id, "simulation_clock", dict(a_clock),
+                           survivor_frame_id)
+        if a_elapsed != s_elapsed:
+            warnings.append(
+                "Meeting clock skew: %.0fs more had passed for %s." % (
+                    abs(a_elapsed - s_elapsed),
+                    "the party that joined" if a_elapsed > s_elapsed
+                    else "the party they joined"))
+
+        known = wget_for_frame(chat_id, "known", survivor_frame_id, {}) or {}
+        for who, learned in (wget_for_frame(chat_id, "known", absorbed_frame_id, {})
+                             or {}).items():
+            have = known.setdefault(who, [])
+            have.extend(name for name in (learned or []) if name not in have)
+        wset_for_frame(chat_id, "known", known, survivor_frame_id)
+
+        for key, default in _SIBLING_UNION_KEYS:
+            wset_for_frame(chat_id, key, _union(
+                wget_for_frame(chat_id, key, survivor_frame_id, default),
+                wget_for_frame(chat_id, key, absorbed_frame_id, default)),
+                survivor_frame_id)
+
+        joining = active_cast(chat_id, absorbed_frame_id)
+        for row in joining:
+            rel = wget_for_frame(chat_id, f"relationships:{row['id']}",
+                                 absorbed_frame_id, None)
+            if rel is not None:
+                wset_for_frame(chat_id, f"relationships:{row['id']}", rel,
+                               survivor_frame_id)
+            lived = char_state(chat_id, row["id"], absorbed_frame_id)
+            if lived is not None:
+                set_char_state(chat_id, row["id"],
+                               json.dumps(lived, ensure_ascii=False),
+                               frame_id=survivor_frame_id)
+            set_char_status(chat_id, row["id"], "active",
+                            frame_id=survivor_frame_id)
+
+        s_scene = wget_for_frame(chat_id, "scene", survivor_frame_id, {}) or {}
+        a_scene = wget_for_frame(chat_id, "scene", absorbed_frame_id, {}) or {}
+        ours = {str(room_of(s_scene, n))
+                for n in frame_body_names(chat_id, survivor_frame_id)
+                if room_of(s_scene, n)}
+        theirs = {str(room_of(a_scene, n))
+                  for n in frame_body_names(chat_id, absorbed_frame_id)
+                  if room_of(a_scene, n)}
+        wset_for_frame(chat_id, "scene", merge_frame_scenes(
+            s_scene, a_scene, child_rooms=theirs - ours), survivor_frame_id)
+
+        for row in q("SELECT event_id, payload FROM scheduled_events "
+                     "WHERE chat_id=? AND status='pending'", (chat_id,)):
+            try:
+                payload = json.loads(row["payload"] or "{}")
+            except (TypeError, ValueError):
+                continue
+            if isinstance(payload, dict) and payload.get("frame_id") == absorbed_frame_id:
+                payload["frame_id"] = survivor_frame_id
+                qi("UPDATE scheduled_events SET payload=? WHERE chat_id=? "
+                   "AND event_id=?",
+                   (json.dumps(payload, ensure_ascii=False), chat_id,
+                    row["event_id"]))
+
+        registry = registry_for_update(chat_id, survivor_frame_id)
+        if rehold_leases(registry, lease_holder(absorbed_frame_id),
+                         lease_holder(survivor_frame_id)):
+            save_registry(chat_id, registry, survivor_frame_id)
+
+        qi("UPDATE chat_personas SET frame_id=? WHERE chat_id=? AND frame_id=?",
+           (survivor_frame_id, chat_id, absorbed_frame_id))
+        qi("UPDATE frames SET merged_turn_idx=? WHERE id=?",
+           (turn_idx, absorbed_frame_id))
+        split = [get_frame(f) or {} for f in (survivor_frame_id, absorbed_frame_id)]
+        later = max(int(f.get("split_turn_idx") or 0) for f in split)
+        qi("UPDATE frames SET split_turn_idx=? WHERE id=?",
+           (later, survivor_frame_id))
+
+        names = sorted(character_name(normalized_character_from_text(row["sheet"]))
+                       for row in joining)
+        notice = {"turn": turn_idx, "kind": "sibling_merge",
+                  "survivor": survivor_frame_id, "absorbed": absorbed_frame_id,
+                  "characters": names, "warnings": warnings}
+        for fid in (survivor_frame_id, absorbed_frame_id):
+            log = wget_for_frame(chat_id, "offscreen_log", fid, [])
+            log.append(notice)
+            wset_for_frame(chat_id, "offscreen_log", log, fid)
 
     return warnings
 
@@ -2333,7 +2523,7 @@ def detect_and_reconcile(ctx, nonce):
     this turn's state_diff, so detection runs against what actually just
     got committed.
 
-    FIVE STRUCTURAL CHANGES, AT MOST ONE PER COMMIT, in the order a beat can
+    SIX STRUCTURAL CHANGES, AT MOST ONE PER COMMIT, in the order a beat can
     produce them. Each returns immediately, matching `detect_split`'s
     one-split-per-commit shape: a second one is next beat's question, asked
     against a world that has settled.
@@ -2344,6 +2534,9 @@ def detect_and_reconcile(ctx, nonce):
         the two answers would disagree.
       * A PARTY MERGE and a PARTY SPLIT, unchanged: two humans reunited, two
         humans separated.
+      * TWO SIBLING BUBBLES MEET, between them: their people came within
+        each other's reach, and a reunion is cheaper than any split
+        (`spatial_bubbles.detect_sibling_meeting`, `perform_sibling_merge`).
       * A COUPLE OPENS when a live channel joins a split to the frame it
         split from, whether the away party is a player's or a bubble's. The
         voice needs somewhere both parties exist to be spoken in.
@@ -2379,6 +2572,19 @@ def detect_and_reconcile(ctx, nonce):
             ctx.add_warning(w)
         return {"merged": True, "parent_frame_id": parent_id, "child_frame_id": child_id,
                 "warnings": warnings}
+
+    from world.spatial_bubbles import detect_sibling_meeting
+    meeting = detect_sibling_meeting(chat_id, frame_id)
+    if meeting:
+        survivor_id, absorbed_id = meeting
+        warnings = perform_sibling_merge(chat_id, survivor_id, absorbed_id,
+                                         turn_idx)
+        for w in warnings:
+            ctx.add_warning(w)
+        ctx.add_warning("Two threads met: their people are within each "
+                        "other's reach, and they are one thread now.")
+        return {"sibling_merged": True, "survivor_frame_id": survivor_id,
+                "absorbed_frame_id": absorbed_id, "warnings": warnings}
 
     away_zone = detect_split(chat_id, frame_id, turn_idx)
     if away_zone:

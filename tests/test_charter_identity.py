@@ -87,6 +87,33 @@ def test_rank_and_post_titles_are_presentation_not_identity():
     assert state["bodies"]["ysra"]["name"] == "Ysra Vale"
 
 
+def test_a_name_carries_the_trade_not_this_hours_duty():
+    """Playerless Aldermill round 7 (2026-09-23): 183 title changes across
+    40 townspeople in about 100 s of town time, one flume-tender renamed ten
+    times, because the name took its title from whichever post the watch had
+    the body standing this tick. The watch rotates on purpose; a trade does
+    not. A body without a titled trade still takes its duty's title."""
+    profile = dict(PROFILE, titles={"ranks": {}, "posts": {
+        "damsman": "Flume-tender", "mill_hand": "Miller's Man"}})
+    state = normalize_charter({
+        "key": "grist", "naming": profile,
+        "posts": {"damsman": {"place": "race", "serves": []},
+                  "mill_hand": {"place": "floor", "serves": []}},
+        "bodies": {"damsman:0002": {"name": "Hob Wheat", "place": "race"},
+                   "mill_hand:0004": {"name": "Tam Rook", "place": "floor",
+                                      "home_post": "damsman"},
+                   "stranger": {"name": "Ada Lane", "place": "floor"}},
+        "watch": {"mill_hand": "damsman:0002", "damsman": "stranger"},
+    })
+    bodies, naming = state["bodies"], state["naming"]
+    assert display_name(bodies["damsman:0002"], ("mill_hand",), naming) \
+        == "Flume-tender Hob Wheat"
+    assert display_name(bodies["mill_hand:0004"], (), naming) \
+        == "Flume-tender Tam Rook"            # an authored home post wins
+    assert display_name(bodies["stranger"], ("damsman",), naming) \
+        == "Flume-tender Ada Lane"            # no trade: the duty's title
+
+
 def test_legacy_full_name_supplies_family_to_a_formal_format():
     profile = {
         "name_format": "{given} {family}",

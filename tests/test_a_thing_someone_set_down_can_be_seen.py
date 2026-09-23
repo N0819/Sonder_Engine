@@ -206,3 +206,37 @@ class TestTheWordingIsThePacks:
         assert "{desc}" in templates["thing_placed"]
         assert "{place}" in templates["thing_placed"]
         assert "{desc}" in templates["thing_here"]
+
+
+class TestAThingInSomebodysHands:
+    """Playerless Aldermill round 7 (2026-09-23): "There is the tallow tub
+    here. There is the horn paddle here." in seventeen of Emory's views, while
+    the commit held both in his grip. Held in the open, the tub was not
+    concealed, so the concealment rule let it through as a thing lying on the
+    floor."""
+
+    def _in_hand(self, mode="held", holder="Sal Weatherby"):
+        scene = _taproom(stations={"Sal Weatherby": {"at": "oak_bar_counter", "near": []}},
+                         contained={"copper_coin": {"in": holder, "mode": mode}})
+        scene["positions"]["Bram Toll"] = "taproom"
+        return scene
+
+    def test_the_bearer_is_told_it_is_theirs(self):
+        said = _said(_things(self._in_hand()))
+        assert said == "You are holding the copper coin."
+        assert _said(_things(self._in_hand("carried"))) == \
+            "You are carrying the copper coin."
+
+    def test_nobody_else_sees_it_lying_here(self):
+        assert _things(self._in_hand(), observer="Bram Toll") == []
+
+    def test_a_worn_thing_is_the_wardrobes(self):
+        assert _things(self._in_hand("worn")) == []
+
+    def test_a_thing_on_a_cart_still_lies_where_the_cart_stands(self):
+        scene = self._in_hand(holder="hand cart")
+        scene["positions"]["hand cart"] = "taproom"
+        scene["entities"]["hand cart"] = {"name": "hand cart", "kind": "cart",
+                                          "description": "A two-wheeled cart."}
+        assert "There is the copper coin here." in _said(
+            _things(scene, observer="Bram Toll"))

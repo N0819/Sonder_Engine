@@ -261,10 +261,18 @@ def author(ctx, stage, model_payload):
 
 # ---- 2. the decision model picks the tools -------------------------------
 
-def _jev_state(prose, model_payload):
-    """What Jev judges: the passage, plus the two facts a channel question
-    can turn on and prose alone may not settle -- who the people are, and
-    which places already exist (a room question asks about a NEW place)."""
+def _jev_state(prose, model_payload, owed=None):
+    """What Jev judges: the passage, plus the facts a channel question can
+    turn on and prose alone may not settle -- who the people are, which
+    places already exist (a room question asks about a NEW place), and what
+    is already OWED.
+
+    The obligations question asks whether someone "fulfil[s] or refuse[s]
+    one already owed", and nothing told Jev what was: the miller's "slap it
+    thick along the underside of the neck" was carried out by Emory at idx
+    18, 20 and 22, the channel was never selected, and the debt was deferred
+    seven times, fifteen beats old at the end (playerless Aldermill round 7,
+    2026-09-23). A fact the question needs, handed to the one answering it."""
     identities = sorted({str(v) for v in identities_with_figures(model_payload).values() if v})
     rooms = sorted({str(v) for v in ((model_payload.get("object_index") or {}).get("rooms") or {}).values() if v})
     lines = ["PASSAGE:", prose, ""]
@@ -272,6 +280,10 @@ def _jev_state(prose, model_payload):
         lines.append("PEOPLE: " + ", ".join(identities))
     if rooms:
         lines.append("PLACES ALREADY KNOWN: " + ", ".join(rooms))
+    debts = [f"{row.get('who')}: {row.get('what')}" for row in (owed or ())
+             if isinstance(row, dict) and row.get("who") and row.get("what")]
+    if debts:
+        lines.append("ALREADY OWED: " + "; ".join(debts))
     return "\n".join(lines)
 
 
@@ -279,9 +291,12 @@ def _jev_state(prose, model_payload):
 _ENTER_PREFIX = "enter__"
 
 
-def select_channels(ctx, stage, prose, model_payload, facts=None, planned=None):
+def select_channels(ctx, stage, prose, model_payload, facts=None, planned=None,
+                    owed=None):
     """`(selected, record)`. Fails OPEN: if the decision model cannot answer,
     every candidate is granted -- a larger sheet, never a lost change.
+    ``owed`` is the open obligation ledger (`pending_obligation_view`), so a
+    passage that discharges a debt can be recognised as doing so.
 
     The same one call also asks, for each PLANNED room in reach (the
     Writers' Room's stubs, `planned_room_brief`), whether the passage enters
@@ -302,7 +317,7 @@ def select_channels(ctx, stage, prose, model_payload, facts=None, planned=None):
                             f"called \"{name}\"? Answer no when it is only mentioned "
                             "or lies beyond a door nobody opens."}
     try:
-        answers = decisions.decide(_jev_state(prose, model_payload), battery)
+        answers = decisions.decide(_jev_state(prose, model_payload, owed), battery)
     except Exception as exc:
         record.update(failed=str(exc), seconds=round(time.time() - t0, 3))
         ctx.add_warning(f"{stage}: decision model unavailable, every channel "
@@ -967,7 +982,10 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     reserved = reserve_places(places, sc)
     planned = extras.get("planned_rooms") if isinstance(extras, dict) else None
     planned = planned if isinstance(planned, dict) else {}
-    channels, jev = select_channels(ctx, stage, prose, model_payload, facts, planned)
+    channels, jev = select_channels(
+        ctx, stage, prose, model_payload, facts, planned,
+        owed=((extras.get("pending_obligations") if isinstance(extras, dict) else None)
+              or model_payload.get("pending_obligations")))
     develop = {rid: planned[rid] for rid in jev.get("entered") or () if rid in planned}
     # Designs prepared between turns for the planned rooms this beat enters.
     try:

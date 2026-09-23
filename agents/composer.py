@@ -2767,6 +2767,21 @@ def thing_clause(desc, place=""):
             else _en("thing_here", desc=desc))
 
 
+def thing_in_hand_clause(desc, mode=""):
+    """A thing the OBSERVER holds or carries, said as theirs.
+
+    Not `thing_clause`'s "There is ... here": a thing in somebody's hands is
+    not lying in the room, and Emory read "There is the tallow tub here" in
+    seventeen views while the commit held the tub in his grip (playerless
+    Aldermill round 7, 2026-09-23). `held` is in hand; anything else a body
+    openly bears is carried."""
+    desc = _noun_phrase(desc)
+    if not desc:
+        return ""
+    return _en("thing_held_by_you" if str(mode or "").strip().casefold() == "held"
+               else "thing_carried_by_you", desc=desc)
+
+
 #: State keys another renderer already voices, or that are structure rather
 #: than a fact a body can read off a thing. `transit`/`hatch` and their
 #: fields render through the doorway the engine derives from them
