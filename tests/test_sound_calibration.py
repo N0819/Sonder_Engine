@@ -116,16 +116,24 @@ def test_a_raised_line_one_pace_off_survives_the_engine_in_pieces():
         assert _levels(sc, "A", "B")["shout"] in ("fragment", "full"), engine
 
 
-def test_a_normal_line_at_arms_reach_is_a_fragment_across_the_deck():
-    """Sharing a cell (the field's arm's reach, a path of 0) the line is 63
-    against 74.7: caught in pieces, which is what people on a launch do
-    with each other's words at the stern. Two paces from the machine the
-    floor is 78-80 and the same line is gone: the play judged "a loud
-    diesel at two paces" physically right, and it stays."""
+def test_a_conversation_at_arms_reach_carries_over_the_deck():
+    """Sharing a cell (the field's arm's reach, a path of 0), three paces from
+    the engine: the floor there is 74.7, and a speaker talking to someone at
+    arm's length raises their voice over it without deciding to (the Lombard
+    effect, `lombard_level_db`) -- heard whole. Two paces from the machine the
+    floor is 78-80: even raised, the line is caught in pieces. A whisper is a
+    choice to be quiet and stays gone (below).
+
+    RECALIBRATED 2026-09-23. This test used to pin a normal line at arm's
+    reach three paces off as a fragment and two paces off as nothing, on the
+    judgment that "a loud diesel at two paces" was physically right -- a
+    judgment of a model in which no voice ever rose over its room. The owner,
+    of arm's-reach replies arriving in pieces in a working room: "doesn't
+    make particular sense"."""
     far = deck((3, 0), (0, 2), (0, 2))
-    assert _levels(far, "A", "B")["normal"] == "fragment"
+    assert _levels(far, "A", "B")["normal"] == "full"
     near = deck((2, 0), (2, 2), (2, 2))
-    assert _levels(near, "A", "B")["normal"] == "none"
+    assert _levels(near, "A", "B")["normal"] == "fragment"
     assert _levels(near, "A", "B")["loud"] == "fragment"
 
 

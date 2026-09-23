@@ -254,6 +254,26 @@ def _clamp_float(value, lo, hi, default):
 
 _PYDANTIC_V2 = hasattr(BaseModel, "model_validate")
 
+
+def _plain(value):
+    """A validated output with every enum member replaced by its value.
+
+    A stage output is persisted as JSON and every reroll reads it back as
+    plain strings, so an enum member left in the live dump was the same field
+    in two representations: `str()` of a `(str, Enum)` member is its NAME
+    ("SpeechVolume.loud"), and every reader that compared `str(volume)`
+    against "whisper" or "loud" saw neither -- all 42 charter voice lines of
+    one playerless run fell to normal volume, a whisper among them
+    (Aldermill round 5, 2026-09-23)."""
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, dict):
+        return {k: _plain(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_plain(v) for v in value]
+    return value
+
+
 if _PYDANTIC_V2:
     from pydantic import field_validator
 
@@ -261,7 +281,7 @@ if _PYDANTIC_V2:
         return model_cls.model_validate(data)
 
     def _dump(model):
-        return model.model_dump(exclude_none=True)
+        return _plain(model.model_dump(exclude_none=True))
 
     def _fields(model_cls):
         return model_cls.model_fields
@@ -277,7 +297,7 @@ else:
         return model_cls.parse_obj(data)
 
     def _dump(model):
-        return model.dict(exclude_none=True)
+        return _plain(model.dict(exclude_none=True))
 
     def _fields(model_cls):
         return model_cls.__fields__
@@ -413,6 +433,14 @@ _VOLUME_ALIASES = {
 }
 
 def normalize_speech_volume(value: Any) -> str:
+    # A VALIDATED VOLUME IS AN ENUM MEMBER, and on this interpreter `str()` of
+    # a `(str, Enum)` member is its NAME ("SpeechVolume.loud"), not its value
+    # -- so every volume that had been through a schema fell through to
+    # "normal": all 42 charter voice lines of one playerless run, a shout and a
+    # whisper among them, and a whisper heard as ordinary speech is a line
+    # heard by people it was kept from (Aldermill round 5, 2026-09-23).
+    if isinstance(value, Enum):
+        value = value.value
     volume = str(value or "normal").strip().casefold()
     volume = _VOLUME_ALIASES.get(volume, volume)
 
@@ -7532,8 +7560,8 @@ def _entity_names_are_words(clean):
 def _dump_unset(model):
     """`model.dict(exclude_unset=True)` across the pydantic major split."""
     if _PYDANTIC_V2:
-        return model.model_dump(exclude_unset=True)
-    return model.dict(exclude_unset=True)
+        return _plain(model.model_dump(exclude_unset=True))
+    return _plain(model.dict(exclude_unset=True))
 
 
 def validate_llm_output_strict(

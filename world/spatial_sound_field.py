@@ -60,6 +60,7 @@ from world.spatial_fov import (
     _door_cells,
     _observer_cell,
     _wall_verdict,
+    anchor_cells,
     body_cell,
     feature_visibility,
     grid_side,
@@ -877,7 +878,36 @@ def pitched_level_db(scene, speaker, addressee) -> float:
     return max(lo, min(hi, level))
 
 
-def sound_field_hear_level(volume, signal_gain, noise, level_db=None) -> str:
+#: THE LOMBARD EFFECT. A speaker raises their voice with the noise around
+#: them without deciding to -- about 0.6 dB of voice for every dB of noise
+#: above roughly 45 dB, up to a shout (Pearsons, Bennett & Fidell 1977,
+#: "Speech Levels in Various Noise Environments", EPA-600/1-77-025; onset
+#: after Lazarus 1986). Conversational speech only: a whisper or a mutter is a
+#: choice to be heard by few, a shout is already the top of the ladder, and a
+#: pitched line is solved for its addressee. Measured: nothing in the engine
+#: adapted a voice to its room, so a smith answering at arm's length over a
+#: working forge was graded as if he had spoken into a quiet room (owner,
+#: 2026-09-23: "doesn't make particular sense").
+LOMBARD_ONSET_DB = 45.0
+LOMBARD_SLOPE = 0.6
+LOMBARD_VOLUMES = ("normal", "loud")
+
+
+def lombard_level_db(volume, source_noise) -> Optional[float]:
+    """The level AT THE CELL a conversational line is actually spoken at,
+    given the noise power where its SPEAKER stands; None where the rule does
+    not apply (another volume, or no noise known). At or under the onset it
+    is exactly the volume's own level, so a quiet room changes nothing."""
+    volume = str(volume or "normal").strip().casefold()
+    if volume not in LOMBARD_VOLUMES or source_noise is None:
+        return None
+    base = SPEECH_DB[volume]
+    raise_db = LOMBARD_SLOPE * max(0.0, db_of_power(source_noise) - LOMBARD_ONSET_DB)
+    return base + min(raise_db, SPEECH_DB["shout"] - base)
+
+
+def sound_field_hear_level(volume, signal_gain, noise, level_db=None,
+                           source_noise=None) -> str:
     """Quantise, LAST (§ 4.5): `full` at FULL_SNR, `fragment` at
     FRAGMENT_SNR and above HEAR_FLOOR, else `none`. `signal_gain` is the
     fraction of the speaker's power arriving at the listener's cell (what
@@ -888,8 +918,13 @@ def sound_field_hear_level(volume, signal_gain, noise, level_db=None) -> str:
     In dB the two terms are ADDED rather than multiplied: the speaker's
     level at one pace, plus the path's gain -- a negative number, the
     aperture losses and the spreading loss the flood accumulated. That is
-    the whole of what "an aperture factor becomes a subtraction" means."""
+    the whole of what "an aperture factor becomes a subtraction" means.
+
+    `source_noise` is the noise where the SPEAKER stands; a conversational
+    line is spoken over it (`lombard_level_db`)."""
     volume = str(volume or "normal").strip().casefold()
+    if level_db is None:
+        level_db = lombard_level_db(volume, source_noise)
     if level_db is None:
         level_db = SPEECH_DB.get(volume, SPEECH_DB["normal"])
     return quantise_hearing_db(float(level_db) + db_ratio(signal_gain),
@@ -1480,6 +1515,17 @@ def sound_sources(scene: dict, *, turn_idx=None, crowds=None, events=None,
         source = str(event.get("source") or "").strip()
         cell = (body_cell(scene, source) if source and
                 room_of(scene, source) == room else None)
+        if cell is None and source:
+            # ...AND WHERE ITS SOURCE IS ONE OF THE ROOM'S OWN FIXTURES, AT
+            # THE FIXTURE. A windlass's clank priced from the room's centre
+            # put the man standing there "in the din" while the windlass
+            # itself read faint (playerless Aldermill round 5, 2026-09-23,
+            # idx 14). The middle cell of the fixture's own footprint.
+            fixture = next((rec for aid, rec in anchor_cells(scene, room).items()
+                            if str(aid).casefold() == source.casefold()), None)
+            cells = list((fixture or {}).get("cells") or ())
+            if cells:
+                cell = tuple(cells[len(cells) // 2])
         out.append({"id": "event:%d" % idx, "kind": "event", "room": room,
                     "cell": cell or room_centre(scene, room),
                     "power": _event_power(event), "level": None,
@@ -1761,8 +1807,18 @@ class SoundField:
         rev = self.reverb.get(str(source_room))
         if not rev:
             return 0.0
+        # ON THE SAME FOOTING AS EVERY OTHER GAIN HERE. `room_reverberation`
+        # states the ring relative to the level ONE PACE off, and every gain
+        # this field returns multiplies the level at the source's OWN cell,
+        # which sits `_ONE_PACE_LOSS_DB` above it (`one_pace_power`). Applied
+        # unscaled, every echo read 3.01 dB loud, so the smear rule's 15 dB
+        # behaved as 12 and a bare room fragmented any line spoken more than
+        # about two paces off, a shout included: a smith answering from 2.4
+        # paces reached the woman he answered as fragments (playerless
+        # Aldermill round 5, 2026-09-23, idx 19; signal +5 dB over the noise).
+        ring = float(rev["gain"]) * ratio_of_db(-_ONE_PACE_LOSS_DB)
         if self.grid.inside.get(cell) == str(source_room):
-            return float(rev["gain"])
+            return ring
         if source_room not in self._rev_spreads:
             spreads = []
             for other in sorted(self.grid.offsets):
@@ -1777,7 +1833,7 @@ class SoundField:
         best = 0.0
         for spread_map in self._rev_spreads[source_room]:
             best = max(best, gain_at(spread_map, cell))
-        return float(rev["gain"]) * best
+        return ring * best
 
     def gain_parts(self, speaker, listener, *, speaker_room=None,
                    listener_room=None):
@@ -1895,6 +1951,17 @@ class SoundField:
                     best = gain
         return best
 
+    def speaker_noise(self, speaker, *, speaker_room=None) -> Optional[float]:
+        """The noise power where `speaker` stands, their own voice excluded,
+        off the field laid on their room; None where that room has no field
+        or the speaker is not on it. What a voice is raised over
+        (`lombard_level_db`)."""
+        room = speaker_room or room_of(self.scene, speaker)
+        field = self._field_for(room) if room else None
+        if field is None:
+            return None
+        return field.noise_at(speaker, exclude=(speaker,), room=room)
+
     def speech_level(self, speaker, volume, listener, *, speaker_room=None,
                      listener_room=None) -> Optional[str]:
         """One line's level for one listener, the speaker not otherwise a
@@ -1909,7 +1976,9 @@ class SoundField:
             # the noise can only come off the LISTENER's, and without it
             # there is nothing to quantise against.
             return None
-        level = sound_field_hear_level(volume, gain, noise)
+        level = sound_field_hear_level(
+            volume, gain, noise,
+            source_noise=self.speaker_noise(speaker, speaker_room=speaker_room))
         if level == "none" and one_opening_away(
                 self.scene, listener_room or room_of(self.scene, listener),
                 speaker_room or room_of(self.scene, speaker)):
@@ -2156,11 +2225,16 @@ def stamp_sound_relation(scene: dict, rel: dict, observer: str, target: str,
         # rooms, not the path, decide that this pair has one, so it is
         # recorded here where the rooms are known.
         rel["open_edge"] = True
+    # WHAT THE SPEAKER IS SPEAKING OVER (`lombard_level_db`): the noise at
+    # their own cell, read once for either branch below.
+    source_noise = sound.speaker_noise(target, speaker_room=t_room)
     gain = sound.gain_between(target, observer, speaker_room=target_room,
                               listener_room=observer_room)
     if gain is not None:
         rel["signal"] = gain
         rel["noise"] = noise
+        if source_noise is not None:
+            rel["source_noise"] = source_noise
         # THE RING OVER THE VOICE. When the reverberant part arrives
         # `REVERB_SMEAR_DB` above the direct part, the words smear and the
         # direction is gone (`hear_level` grades it, `_bearing_through`
@@ -2206,6 +2280,8 @@ def stamp_sound_relation(scene: dict, rel: dict, observer: str, target: str,
     if far is not None:
         rel["signal"] = far
         rel["noise"] = noise
+        if source_noise is not None:
+            rel["source_noise"] = source_noise
         if door is not None and door > 0.0:
             rel["door_gain"] = door
         return rel
@@ -2915,14 +2991,22 @@ def room_holds_a_standing_source(scene: dict, room) -> bool:
 
 
 def _cell_noise(field, room, cell) -> float:
-    """The noise floor at one CELL of `room` on this field: the room's
-    ambient floor plus every placed source's intensity there.
-    `SoundField.noise_at` is the same sum for a BODY -- it locates the
-    body's cell first -- and this is the cell asked directly, which is what
-    a room-wide sweep needs. One arithmetic, so `sound_shape`'s grading and
-    `room_noise_word`'s sweep cannot disagree."""
+    """The room's STANDING noise at one CELL of `room` on this field: the
+    room's ambient floor plus every standing source's intensity there
+    (`STANDING_SOURCE_KINDS`). One arithmetic, so `sound_shape`'s grading
+    and `room_noise_word`'s sweep cannot disagree.
+
+    The room's tone, not the beat's: a one-beat event and a spoken line are
+    reported as themselves, and counted here they graded a room by a single
+    clank -- two windlass impacts made the whole weir read "in the din"
+    around a waterwheel that makes no sound at all, and the sentence named
+    no source because the shape refuses to name a one-beat one (playerless
+    Aldermill round 5, 2026-09-23, idx 14). `SoundField.noise_at` is the
+    MASKING floor for one body and counts everything, as masking must."""
     total = field.ambient.get(room, AMBIENT["enclosed"])
     for source in field.sources:
+        if source.get("kind") not in STANDING_SOURCE_KINDS:
+            continue
         total += field.intensity_at(source, cell)
     return total
 

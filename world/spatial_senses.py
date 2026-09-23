@@ -1126,8 +1126,8 @@ def hear_level(
     door = rel.get("door_gain") if isinstance(rel, dict) else None
     if door is None or rel.get("noise") is None:
         return level
-    return _weaker_hearing(level, _field_hear_level(volume, door,
-                                                    rel["noise"]))
+    return _weaker_hearing(level, _field_hear_level(
+        volume, door, rel["noise"], source_noise=rel.get("source_noise")))
 
 
 _HEARING_ORDER = {"none": 0, "fragment": 1, "full": 2}
@@ -1221,7 +1221,8 @@ def _hear_level(
         # half a pace over one, applied only where the field placed nothing.
         if proximity == "within_reach" and rel.get("tier") is None:
             signal = signal * WITHIN_REACH_SIGNAL_GAIN
-        return _field_hear_level(volume, signal, rel["noise"], level_db)
+        return _field_hear_level(volume, signal, rel["noise"], level_db,
+                                 source_noise=rel.get("source_noise"))
 
     if rel.get("same_room"):
         # The two quiet volumes are NOT one tier, and writing them as one
@@ -1320,12 +1321,15 @@ def _hear_level(
 
     return "none"
 
-def _field_hear_level(volume, signal_gain, noise, level_db=None) -> str:
+def _field_hear_level(volume, signal_gain, noise, level_db=None,
+                      source_noise=None) -> str:
     """`hear_level`'s field branch: the sound field's quantisation, reached
     through a deferred import (the field module imports this one's material
-    ladder at import time)."""
+    ladder at import time). `source_noise` is what the speaker is speaking
+    over (`spatial_sound_field.lombard_level_db`)."""
     from world.spatial_sound_field import sound_field_hear_level
-    return sound_field_hear_level(volume, signal_gain, noise, level_db)
+    return sound_field_hear_level(volume, signal_gain, noise, level_db,
+                                  source_noise=source_noise)
 
 
 def can_perceive(rel: dict, volume: str = "normal") -> bool:

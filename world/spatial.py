@@ -323,6 +323,8 @@ from world.spatial_sound_field import (
     far_path_gain,
     # A room that makes no sound of its own (2026-09-06, UNBUILT 1.140).
     normalize_quiet, QUIET_SCALE, room_quiet,
+    # A voice rises over the noise where its speaker stands (2026-09-23).
+    LOMBARD_ONSET_DB, LOMBARD_SLOPE, LOMBARD_VOLUMES, lombard_level_db,
     SoundField, SPEECH_POWER, SPEECH_VOLUMES, spread, stamp_sound_relation,
     steadiness_this_beat, VOICE_ONE_PACE, WEATHER_NOISE, WIND_NOISE,
     # Decibels: the denomination (DESIGN_SOUND_DECIBELS.md, 2026-09-05).

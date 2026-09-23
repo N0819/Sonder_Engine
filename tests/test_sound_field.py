@@ -378,14 +378,19 @@ GENERATOR = {"gen": {"name": "generator", "kind": "machine",
 def test_a_loud_generator_masks_a_normal_voice():
     """Listener at the hearth, speaker beside them, a loud generator at the
     east window three paces off. RECALIBRATED 2026-09-14: the generator is
-    a real engine, 80 dB(A) at a pace, and reads 73.5 dB at the hearth --
-    a normal voice one pace off (60) is 13.5 dB under it and is `none`, a
-    raised voice (70) is caught in pieces, and a shout (82) clears it. The
-    same pair with no generator is `full`. Speaker at the west wall (path
-    5.2) with the generator on: normal none, loud none, shout a fragment.
+    a real engine, 80 dB(A) at a pace, and reads 73.5 dB at the hearth.
     On the compressed ladder the same engine read 44.6 dB and a normal
     voice beside the listener was a fragment; that engine was as loud as a
-    loud voice, which is the defect the recalibration retired."""
+    loud voice, which is the defect the recalibration retired.
+
+    RECALIBRATED AGAIN 2026-09-23 for the Lombard effect
+    (`lombard_level_db`): a speaker raises a conversational voice over the
+    noise where THEY stand, 0.6 dB for every dB above 45. Beside the
+    listener a normal line now rises to about 80 and is caught in pieces,
+    a raised voice clears the engine, and a whisper or a mutter -- a choice
+    to be quiet -- is still gone. Speaker at the west wall (path 5.2) with
+    the generator on: every effort arrives in pieces. The same pair with no
+    generator is `full`."""
     quiet = scene(hall(), {"S": "hall", "L": "hall"},
                   {"L": {"at": "south"}, "S": {"near": ["L"]}})
     noisy = scene(hall(), {"S": "hall", "L": "hall", "gen": "hall"},
@@ -393,21 +398,22 @@ def test_a_loud_generator_masks_a_normal_voice():
                    "S": {"near": ["L"]}}, GENERATOR)
     assert levels(quiet, "S", "L")["normal"] == "full"
     assert levels(noisy, "S", "L") == {"mutter": "none", "whisper": "none",
-                                       "normal": "none", "loud": "fragment",
+                                       "normal": "fragment", "loud": "full",
                                        "shout": "full"}
     far = scene(hall(), {"S": "hall", "L": "hall", "gen": "hall"},
                 {"gen": {"at": "east"}, "L": {"at": "south"},
                  "S": {"at": "west"}}, GENERATOR)
-    assert levels(far, "S", "L")["normal"] == "none"
-    assert levels(far, "S", "L")["loud"] == "none"
+    assert levels(far, "S", "L")["normal"] == "fragment"
+    assert levels(far, "S", "L")["loud"] == "fragment"
     assert levels(far, "S", "L")["shout"] == "fragment"
 
 
 def test_the_listener_hears_their_own_running_machine_first():
     """A held running generator is at the listener's own cell (the carried
-    entity derives to its holder): a normal voice beside them is `none`, a
-    shout a fragment. Switched off (`state.running` false) the same pair is
-    `full` at every volume."""
+    entity derives to its holder): a voice beside them, raised over the
+    engine at every conversational effort (`lombard_level_db`, 2026-09-23),
+    is caught in pieces, and a whisper or a mutter is gone. Switched off
+    (`state.running` false) the same pair is `full` at every volume."""
     sc = scene(hall(), {"S": "hall", "L": "hall", "gen": "hall"},
                {"L": {"at": "south"}, "S": {"near": ["L"]}}, GENERATOR,
                contained={"gen": {"in": "L", "mode": "held"}})
@@ -415,7 +421,7 @@ def test_the_listener_hears_their_own_running_machine_first():
     [source] = field.sources
     assert source["holder"] == "L" and source["at"] == field.locate("L")
     assert levels(sc, "S", "L") == {"mutter": "none", "whisper": "none",
-                                    "normal": "none", "loud": "none",
+                                    "normal": "fragment", "loud": "fragment",
                                     "shout": "fragment"}
     sc["entities"]["gen"]["state"] = {"running": False}
     assert sound_field(sc, "L").sources == []
@@ -1219,6 +1225,7 @@ def test_every_sound_fixture_gets_the_same_word_in_decibels(name, sc, bodies):
     a word moved, the quantiser moved it, and this is the test that says so.
     """
     from world.spatial import quantise_hearing, SPEECH_POWER
+    from world.spatial import lombard_level_db, power_of_db
 
     graded = 0
     for listener, speaker in ((bodies[0], bodies[1]), (bodies[1], bodies[0])):
@@ -1228,8 +1235,12 @@ def test_every_sound_fixture_gets_the_same_word_in_decibels(name, sc, bodies):
         for volume in VOLUMES:
             graded += 1
             word = hear_level(rel, volume)
-            linear = quantise_hearing(SPEECH_POWER[volume] * rel["signal"],
-                                      rel["noise"])
+            # The same speaker on both sides: a conversational voice raised
+            # over the noise where it stands (2026-09-23).
+            raised = lombard_level_db(volume, rel.get("source_noise"))
+            power = (power_of_db(raised) if raised is not None
+                     else SPEECH_POWER[volume])
+            linear = quantise_hearing(power * rel["signal"], rel["noise"])
             assert word == linear, (
                 "%s: %s hearing %s at %s is %r in decibels and %r linearly "
                 "(signal %r, noise %r)" % (name, listener, speaker, volume,

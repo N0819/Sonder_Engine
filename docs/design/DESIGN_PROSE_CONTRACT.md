@@ -237,3 +237,106 @@ It works to the engine's own division of labour:
   plan's wall. It also showed two fixtures hidden under others, which is why
   collisions are now drawn and checked.
 - Caps are `MAX_ROOM_STEPS = 8` and `MAX_ROOM_SECONDS = 150` (named).
+
+
+## Playerless bubbles (2026-09-23, `tools/two_lives_drive.py`, rounds 2–6)
+
+Two characters, Emory Vane and Sal Weatherby, each live in their own
+causality bubble in the mill town of Aldermill, which is simulated by a
+charter, for 12 rounds each. No player stands anywhere: the chat's persona
+is never placed. Every model role ran on Gemini 3.8 Flash through
+OpenRouter. After each round, every stage of every beat was read against the
+others on a copy of the database. Fixes were replayed on a copy of the beat
+that found them (`run_pipeline(from_key=)`) before the next round ran. What
+each round turned up, and the class it was fixed as:
+
+**Round 2** (mean beat 71 s against the causal contract's 179 s).
+- The aperture was centred on the absent player: it now centres on the
+  frame's own cast.
+- Charter bodies had twins.
+- Pronouns were guessed.
+- Charter voices were ranked by name alone: 24 of their lines reached no
+  view. A voice is now for someone the beat reaches.
+- The identity scrub rewrote a label's own words into the label ("measured
+  the middle-aged … measured").
+
+**Round 3.**
+- A laid charter body's contacts were dropped at the merge: a body that
+  touches something on screen is now stood in the scene and leased.
+- A continuing hold aged out on beats that wrote other contact ops: the
+  encoder is now told that silence ends a contact.
+- Acts were filed to the watching character: every body in view is a source
+  the encoder can name.
+- "Godidric plants his boots" reached a mind that never learned the name: an
+  act's leading own-name is peeled off before the label is applied.
+- Six substance adds to a fixture were discarded: a fixture is a destination
+  for matter.
+
+**Round 4.**
+- 0 of 4 townsperson acts reached the woman watching them. Three causes:
+  - the receipt verifier knew no fixtures, so a hand on a lever was read as
+    the world refusing the act;
+  - a body stood this beat was routed back to the registry and arrived with
+    no position;
+  - its stand landed in the program's final step, after its own acts.
+- A demand the debtor never heard opened a debt.
+- `door:<room>` ids reached pages.
+- A 21-minute beat turned out to be the laptop suspended.
+
+**Round 5.**
+- 30 of 39 townsperson acts and 31 of 42 lines now reached their watchers.
+- A regression from standing bodies: the player-room resolver took a
+  townsperson for the absent persona, costing 35 model calls and 196 s.
+- Every stand rendered as an arrival.
+- A charter-backed presence record stood in the room it was introduced in,
+  after the charter had walked it away: one body in two rooms.
+- A body reached the stand floor under two spellings. It is now keyed on its
+  charter identity.
+- A noise or a strike un-saw the act that made it. These are now transient
+  events; unverified physical channels still hold an act back.
+- The encoder copied declared attempts into `observable` where the prose had
+  resolved them otherwise. This is now a clause in the encoder core.
+- "sayss": an inflected act is now read back to the act in its table.
+- The charter registry cache evicted by insertion order. This was the
+  test-order flake, and it evicted a hot chat's registry for real.
+
+**Round 6 and after: two defects the owner rejected as nonsense.**
+- **One town per era.** Sibling bubbles each simulated their own copy of the
+  town. In round 6, 5 of 40 bodies stood in different places in the two
+  frames, and a body leased beside one bubble's character was walked around
+  by the other bubble.
+  - The fix: the town and the Room's story keys (`db.ERA_WORLD_KEYS`)
+    resolve to their era's row. A bubble or a couple frame is the same era
+    as its parent, and a flashback keeps its own town.
+  - A lease names the scene that holds it. Another live scene yields the
+    body and may not move it.
+  - The charter tick is keyed per era, and bubbles act least-clock-first.
+- **Speech at arm's reach arrived as fragments.** In round 5 the smiths'
+  replies to Sal did not come through. Three causes:
+  - **The cause here was the echo.** `rev_gain` applied a one-pace-relative
+    gain to the source-cell level, so every echo read 3.01 dB loud. A bare
+    room then fragmented any line spoken more than about two paces off,
+    shouts included.
+  - **Charter voice volumes.** Every charter voice's volume was stringified
+    from its enum name and fell to `normal`, so a whisper was heard like
+    speech.
+  - **No Lombard effect.** No voice ever rose over its room's noise. Now a
+    conversational voice rises 0.6 dB per dB of noise above 45 dB, up to a
+    shout (Pearsons et al. 1977). This re-pins the 2026-09-14 launch-deck
+    calibration: a normal line at arm's reach three paces from the engine is
+    now heard whole.
+
+**Open:**
+- **Sibling bubbles never merge** when their characters meet; only a parent
+  and its child do.
+- **Town events** fire in the bubble whose tick produced them. Pre-story
+  history stamped to the present never fires in a bubble.
+- **Jev grants that come back empty.** In round 5 these were: overlays 17 of
+  18, substance_ops 14 of 17, contact_action_ops 7 of 8. The encoder's
+  system prompt grew from 14K to 22K tokens with them. Several of the empty
+  grants were for real marks (a "grit-streaked" hand), so whether Jev
+  over-asks or the encoder under-encodes is not settled. Tuning either would
+  be blind.
+- **Provider stalls.** A 10 s first-token silence limit with a single
+  provider cost roughly 320 s of retries in round 5, and two turns failed
+  outright.
