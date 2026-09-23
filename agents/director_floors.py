@@ -1625,6 +1625,66 @@ def _mint_fallback_room(sd, player_name, player_room_before):
     return arrived or (str(player_room_before or "").strip() or None)
 
 
+def _stand_touching_figures(sc, sd, figures):
+    """A PRESENT CHARTER BODY THAT TOUCHES OR IS TOUCHED STANDS IN THE SCENE.
+
+    A charter figure on screen is laid into the resolve's working scene only;
+    the committed scene holds the bodies the story placed there. So a contact
+    whose endpoint is a laid figure had no body at commit and was dropped at
+    merge -- measured on the playerless Aldermill run (2026-09-23): the miller
+    "laid his broad, flour-crusted palm flat against the timber" and his
+    hand-on-lever was in the resolve's `contact_ops` and in no committed
+    scene, twelve beats running. The owner's lease (2026-09-14) is the
+    intended state -- on screen the scene keeps the body's row and the
+    registry mirrors it -- and the lease governs bodies the scene holds with
+    a `charter_ref`. So such a figure gets that row here: a person entity
+    with its `charter_ref`, placed in the figure's room, which the commit's
+    lease then holds or releases. Creatures stay the charter's to stand.
+
+    Mutates `sd`; returns the names stood."""
+    ops = (sd or {}).get("contact_ops")
+    if not isinstance(ops, list) or not ops or not figures:
+        return []
+    by_name = {}
+    for fig in figures:
+        if not isinstance(fig, dict) or fig.get("reserved") or fig.get("creature"):
+            continue
+        if not (fig.get("charter") and fig.get("body") and fig.get("room")):
+            continue
+        for label in [fig.get("name")] + list(fig.get("aliases") or ()):
+            folded = " ".join(str(label or "").split()).casefold()
+            if folded:
+                by_name.setdefault(folded, fig)
+    held = set()
+    for table in ((sc or {}).get("positions") or {}, (sd or {}).get("positions") or {}):
+        held |= {str(k).casefold() for k in table}
+    for table in ((sc or {}).get("entities") or {}, (sd or {}).get("entities") or {}):
+        for eid, ent in table.items():
+            held.add(str(eid).casefold())
+            if isinstance(ent, dict) and ent.get("name"):
+                held.add(str(ent["name"]).casefold())
+    stood = []
+    for op in ops:
+        if not isinstance(op, dict):
+            continue
+        for end in (op.get("actor"), op.get("target")):
+            folded = " ".join(str(end or "").split()).casefold()
+            fig = by_name.get(folded)
+            if not fig or folded in held:
+                continue
+            name = str(fig.get("name"))
+            eid = re.sub(r"[^a-z0-9]+", "_", name.casefold()).strip("_") or "figure"
+            sd.setdefault("entities", {})[eid] = {
+                "name": name, "kind": "person",
+                "aliases": [a for a in (fig.get("aliases") or []) if a],
+                "charter_ref": {"charter": fig["charter"], "body": fig["body"]},
+            }
+            sd.setdefault("positions", {})[eid] = str(fig["room"])
+            held |= {folded, eid}
+            stood.append(name)
+    return stood
+
+
 def _bind_minted_entities_to_present_figures(sc, sd, figures, *,
                                              fallback_room=None,
                                              dialogue_log=None,

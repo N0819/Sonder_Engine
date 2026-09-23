@@ -216,6 +216,7 @@ from .director_floors import (
     unplaced_mints_needing_a_room,
     place_unplaced_mints,
     _bind_minted_entities_to_present_figures,
+    _stand_touching_figures,
     _mint_fallback_room,
     _untracked_restraint_subjects,
     _MAX_UNCONSCIOUSNESS_GAP,
@@ -7606,6 +7607,11 @@ def director_resolve(ctx, nonce, _corrections=None):
                 "by name)" if _b["ambiguous"] else ""))
     if _bound:
         out["identity_bindings"] = _bound
+    # A present charter body that touches or is touched stands in the scene,
+    # so its contact survives the merge and the lease governs it.
+    for _stood in _stand_touching_figures(sc, sd, list(_present_figures)):
+        ctx.add_warning("charter body %r is in contact on screen; the scene "
+                        "stands it (leased)" % _stood)
 
     # A THING THAT EXISTS AND IS NOWHERE. `entities` carries no location, and
     # the hand that owns it cannot write `positions` -- so a mint plus a

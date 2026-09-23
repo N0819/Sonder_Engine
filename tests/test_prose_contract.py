@@ -638,3 +638,13 @@ def test_the_causal_contract_stays_the_default(temp_db, monkeypatch):
     director.director_resolve(ctx, nonce=0)
     assert _steps(calls)[0] == "director_resolve"
     assert "director_prose" not in _steps(calls)
+
+
+def test_the_encoder_is_told_silence_ends_a_contact(temp_db):
+    """Playerless Aldermill (2026-09-23): Emory's hold on the ledger aged out
+    on a beat whose other contact_ops made the engine read her silence as a
+    release -- the causal contact hand was told to supply a continuing
+    contact, the encoder's core never was."""
+    from llm import prompts
+    core = prompts.unified_specialist_prompt(["contact_ops"])
+    assert "reads every standing contact you leave unmentioned as ended" in core

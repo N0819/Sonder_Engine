@@ -144,3 +144,24 @@ def test_a_charter_person_minted_as_a_fixture_binds_to_the_body():
     ent = sd["entities"]["gushiga_toriki"]
     assert ent["charter_ref"] == {"charter": "yonaha_store", "body": "storekeeper:0001"}
     assert ent["kind"] == "person" and bindings
+
+
+
+def test_a_present_charter_body_in_contact_is_stood_in_the_scene():
+    """Playerless Aldermill (2026-09-23): the miller's palm on the sluice lever
+    was in the resolve's contact_ops and in no committed scene -- he was laid
+    into the working scene only, so the merge dropped his contact."""
+    from agents.director import _stand_touching_figures
+    sc = {"positions": {"Emory Vane": "sluice_house"}, "entities": {}}
+    sd = {"contact_ops": [{"op": "add", "actor": "Master Miller Waerton",
+                           "actor_part": "palm", "target": "sluice_lever"}]}
+    figs = [{"name": "Master Miller Waerton", "room": "sluice_house",
+             "charter": "aldermill", "body": "miller"},
+            {"name": "Tam", "room": "yard", "charter": "aldermill", "body": "tam"}]
+    assert _stand_touching_figures(sc, sd, figs) == ["Master Miller Waerton"]
+    ent = sd["entities"]["master_miller_waerton"]
+    assert ent["kind"] == "person" and ent["name"] == "Master Miller Waerton"
+    assert ent["charter_ref"] == {"charter": "aldermill", "body": "miller"}
+    assert sd["positions"]["master_miller_waerton"] == "sluice_house"
+    # A body the diff already stands is left alone on a second pass.
+    assert _stand_touching_figures(sc, sd, figs) == []
