@@ -104,7 +104,8 @@ def _beats_open(turn_idx, opened_turn):
         return 0
 
 
-def causal_obligation_ops(ctx, *, causal_program=None, with_origins=False):
+def causal_obligation_ops(ctx, *, causal_program=None, with_origins=False,
+                          with_rows=False):
     """Ordered surviving onset/resolve debts, each operation selected once.
 
     Current outputs retain their private chronology in transform history.
@@ -125,6 +126,7 @@ def causal_obligation_ops(ctx, *, causal_program=None, with_origins=False):
         for step in causal_program if isinstance(step, dict)
     }
     operations = []
+    _rows_of_ops = []
     for stage, output in (("interpret", ctx.director_interpret or {}),
                           ("resolve", ctx.director_resolve or {})):
         history = (output.get("orchestration") or {}).get("transform_history")
@@ -164,7 +166,62 @@ def causal_obligation_ops(ctx, *, causal_program=None, with_origins=False):
                 continue
             operations.extend((op, True) for op in (transform.get("patch") or {}).get("obligations") or []
                               if isinstance(op, dict))
+            if with_rows:
+                _rows_of_ops.extend(
+                    row or {} for op in (transform.get("patch") or {}).get("obligations") or []
+                    if isinstance(op, dict))
+    if with_rows:
+        return _zip_rows(operations, _rows_of_ops)
     return operations if with_origins else [op for op, _current in operations]
+
+
+def _zip_rows(operations, rows):
+    """Each (op, current) with the ledger row it came from, in order; an
+    archived op (not current) carries no row."""
+    out, cursor = [], 0
+    for op, current in operations:
+        row = {}
+        if current and cursor < len(rows):
+            row = rows[cursor]
+            cursor += 1
+        out.append((op, current, row))
+    return out
+
+
+def _fold_words(text):
+    return " ".join(str(text or "").replace("’", "'").split()).casefold().strip(" .,!?\"'")
+
+
+def _demand_unheard_by(ctx, who, row):
+    """True when `row` is a spoken line and the one who would owe on it has a
+    view this beat that does not hold it.
+
+    A DEBT IS OPENED BY A DEMAND THAT REACHED ITS DEBTOR. Measured on the
+    playerless Aldermill run, round 4 (2026-09-23): a question put to Sal was
+    refused to her by perception, and the ledger still held her owing its
+    answer for nine beats, re-deferred past its window every one of them.
+    Conservative in the direction that keeps today's behaviour: a debtor with
+    no view (a charter body, an unknown name), a row that is not a line, or a
+    line whose words the view does carry, all leave the debt to open."""
+    if not isinstance(row, dict) or "speech" not in (row.get("categories") or []):
+        return False
+    words = _fold_words(row.get("event"))
+    if len(words) < 8:
+        return False
+    views = (ctx.get("perception_outcome") or {}).get("views") or {}
+    folded_who = " ".join(str(who or "").split()).casefold()
+    pid = None
+    for row_c in ctx.cast or []:
+        try:
+            from story.character_schema import character_name_from_text
+            if character_name_from_text(row_c["sheet"]).casefold() == folded_who:
+                pid = str(row_c["id"])
+                break
+        except Exception:
+            continue
+    if pid is None or pid not in views or not views.get(pid):
+        return False
+    return words[:40] not in _fold_words(views[pid])
 
 
 def commit_obligations(ctx, nonce, *, causal_program=None):
@@ -176,7 +233,8 @@ def commit_obligations(ctx, nonce, *, causal_program=None):
     leave it flagged for the next beat's payload."""
     cid = ctx.chat.id
     turn = ctx.turn
-    ops = causal_obligation_ops(ctx, causal_program=causal_program, with_origins=True)
+    ops = causal_obligation_ops(ctx, causal_program=causal_program,
+                                with_origins=True, with_rows=True)
     ledger = [
         dict(entry)
         for entry in (wget(cid, "pending_obligations", []) or [])
@@ -184,13 +242,20 @@ def commit_obligations(ctx, nonce, *, causal_program=None):
     ]
 
     opened = discharged = 0
-    for op, current in ops:
+    for op, current, row in ops:
         if not isinstance(op, dict):
             continue
         op_kind = str(op.get("op") or "").strip().lower()
         if op_kind == "open":
             what = str(op.get("what") or "").strip()
             if not what or _find_obligation(ledger, op, exact=current) is not None:
+                continue
+            if current and _demand_unheard_by(ctx, op.get("who"), row):
+                note_step_decision(
+                    "obligation_ledger", "%s owes %s" % (op.get("who"), what),
+                    "not_opened",
+                    "the line that would open it never reached %s's view"
+                    % op.get("who"))
                 continue
             ledger.append({
                 "id": f"obl:{turn.idx}:{opened}",

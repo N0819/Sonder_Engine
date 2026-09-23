@@ -1821,7 +1821,19 @@ def _pose_referent(scene, observer_name, display_map, co_present, other,
         if first in _pack_words("pose_bare_determiners"):
             return named
         return _t("pose_entity", name=named)
-    if _anchor_room_of(scene, text, prefer=room_of(scene, observer_name)):
+    _fixture_room = _anchor_room_of(scene, text, prefer=room_of(scene, observer_name))
+    if _fixture_room:
+        # AN EDGE'S DOORWAY IS NOT A MINTED NOUN. Its id is `door:<room id>`
+        # (`spatial_geometry.door_anchor_id`), and splicing it rendered
+        # "against the door:mill race" into seven views and five memories of
+        # one run (playerless Aldermill round 4, 2026-09-23). The implicit
+        # anchor carries its own description -- the edge's name, or what the
+        # boundary looks like -- and that is what the page says.
+        if text.casefold().startswith("door:"):
+            record = (effective_anchors(scene, _fixture_room) or {}).get(text)
+            desc = str((record or {}).get("desc") or "").strip() \
+                if isinstance(record, dict) else ""
+            return desc or None
         return _noun_phrase(text.replace("_", " "))
     if "_" in text and not text.strip().count(" "):
         return None

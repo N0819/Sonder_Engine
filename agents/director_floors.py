@@ -11,6 +11,7 @@ Import direction: nothing outside `agents/director*.py` may import an
 `agents.director` (that is the cycle the facade exists to prevent).
 """
 
+import copy
 import re
 
 from story.character_schema import fold_identity_key, name_boundary_pattern
@@ -1668,14 +1669,13 @@ def _stand_touching_figures(sc, sd, figures, declared_rooms=None, acting=()):
             folded = " ".join(str(label or "").split()).casefold()
             if folded:
                 by_name.setdefault(folded, fig)
+    # HELD MEANS PLACED. An entity record alone is not a body the scene
+    # stands: the lease releases a body that leaves the aperture by stripping
+    # its rows and keeping its record, and counting the record as held left
+    # every such body unplaceable when it came back into view.
     held = set()
     for table in ((sc or {}).get("positions") or {}, (sd or {}).get("positions") or {}):
         held |= {str(k).casefold() for k in table}
-    for table in ((sc or {}).get("entities") or {}, (sd or {}).get("entities") or {}):
-        for eid, ent in table.items():
-            held.add(str(eid).casefold())
-            if isinstance(ent, dict) and ent.get("name"):
-                held.add(str(ent["name"]).casefold())
     stood = []
     ends = [end for op in ops if isinstance(op, dict)
             for end in (op.get("actor"), op.get("target"))]
@@ -1687,12 +1687,28 @@ def _stand_touching_figures(sc, sd, figures, declared_rooms=None, acting=()):
         name = str(fig.get("name"))
         eid = name
         room = str((declared_rooms or {}).get(name) or fig["room"])
-        sd.setdefault("entities", {})[eid] = {
+        record = ((sc or {}).get("entities") or {}).get(eid)
+        sd.setdefault("entities", {})[eid] = dict(record) if isinstance(
+            record, dict) and record.get("charter_ref") else {
             "name": name, "kind": "person",
             "aliases": [a for a in (fig.get("aliases") or []) if a],
             "charter_ref": {"charter": fig["charter"], "body": fig["body"]},
         }
         sd.setdefault("positions", {})[eid] = room
+        # STANDING FROM THE BEAT'S FIRST MOMENT. The body was here all along
+        # -- it is present, not arriving -- but an engine write outside every
+        # row lands in the program's FINAL step (`causal_program.
+        # program_steps`), so every act of its own was graded against moments
+        # it stood in nowhere and reached no view (playerless Aldermill round
+        # 4 replay, 2026-09-23: a tender working the sluice jack in plain view
+        # of the yard). The first step carries the same rows, so the program
+        # reads them as one write, not two.
+        steps = sd.get("causal_steps")
+        if isinstance(steps, list) and steps and isinstance(steps[0], dict):
+            patch = steps[0].setdefault("patch", {})
+            patch.setdefault("entities", {})[eid] = copy.deepcopy(
+                sd["entities"][eid])
+            patch.setdefault("positions", {})[eid] = room
         held.add(folded)
         stood.append(name)
     return stood

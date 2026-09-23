@@ -324,7 +324,7 @@ def select_channels(ctx, stage, prose, model_payload, facts=None, planned=None):
 
 # ---- 3. one encoder builds -----------------------------------------------
 
-def identities_with_figures(model_payload):
+def identities_with_figures(model_payload, extras=None):
     """The identity index, plus every body standing in view by its own name.
 
     The prose makes whoever is here act; the encoder attributes each step to
@@ -333,10 +333,16 @@ def identities_with_figures(model_payload):
     round 3, 2026-09-23: a hand's sacks on the scale filed as Sal's own act,
     and her view never showed the weighing she watched for eight beats). A
     figure's key is its display name, which is what a ledger row's unknown
-    source already resolves to downstream."""
+    source already resolves to downstream. The resolve carries the figures on
+    its orchestration extras, not the model payload -- reading only the
+    payload left the index as thin as before (round 4 replay, same beat)."""
     index = dict(model_payload.get("identity_index") or {})
     named = {str(v).casefold() for v in index.values() if v}
-    for row in model_payload.get("present_figures") or []:
+    rows = list(model_payload.get("present_figures") or []) + list(
+        (extras or {}).get("present_figures") or [])
+    for row in rows:
+        if not isinstance(row, dict) or row.get("reserved"):
+            continue
         name = str((row or {}).get("name") or "").strip()
         if name and name.casefold() not in named:
             index[name] = name
@@ -351,7 +357,7 @@ def encoder_payload(ctx, sc, prose, model_payload, view, extras, channels):
     payload = {
         "prose": prose,
         "event_inputs": model_payload.get("event_inputs") or [],
-        "identity_index": identities_with_figures(model_payload),
+        "identity_index": identities_with_figures(model_payload, extras),
         "world_index": model_payload.get("world_index") or {},
         "standing_relations": model_payload.get("standing_relations") or {},
         "already_happened": model_payload.get("already_happened") or "",

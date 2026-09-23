@@ -49,10 +49,22 @@ def _record(scene, channel, subject):
 
 
 def _known(scene, subject):
-    from world.spatial import _unique_entity_keyed
+    """Whether the scene holds `subject`: an entity, a body in a ledger, or
+    one room's own fixture.
+
+    A FIXTURE IS AN ENDPOINT HERE AS IT IS AT THE MERGE
+    (`spatial_contacts._anchor_room_of`). This reader left it out, so every
+    contact with a fixture -- a palm on a dock, hands on a lever -- verified
+    as "lacks established endpoints", the act that made it counted as refused
+    by the world, and perception un-saw the act whole: a sluice tender
+    working the jack in plain view of the yard and the woman watching him
+    braced on the dock, both invisible (playerless Aldermill round 4 replay,
+    2026-09-23)."""
+    from world.spatial import _anchor_room_of, _unique_entity_keyed
     key, _ = _unique_entity_keyed(scene, subject)
     return bool(key) or any(_record(scene, channel, subject) is not _MISSING
-                            for channel in ("positions", "attire", "scales"))
+                            for channel in ("positions", "attire", "scales")) \
+        or _anchor_room_of(scene, subject) is not None
 
 
 def _receipt(channel, target, satisfied, prior, *, code="postcondition_missing",

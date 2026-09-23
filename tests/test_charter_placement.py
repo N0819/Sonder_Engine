@@ -325,6 +325,17 @@ class TestTheRouting:
             scene)
         assert out["moves"] == [] and out["names"] == []
 
+    def test_a_body_this_diff_stands_keeps_its_row(self):
+        """Playerless Aldermill round 4 (2026-09-23): a sluice tender stood
+        this beat was routed back to the registry, and arrived in the scene
+        with an entity and no position."""
+        diff = {"positions": {"Ysra": "yard"},
+                "entities": {"Ysra": {"name": "Ysra", "kind": "person",
+                                      "charter_ref": {"charter": "inn",
+                                                      "body": "clerk"}}}}
+        out = resolve_scene_placements(_registry(_charter()), diff, _scene())
+        assert out["moves"] == [] and out["names"] == []
+
     def test_a_destination_that_is_no_room_is_not_routed(self):
         out = resolve_scene_placements(
             _registry(_charter()), {"positions": {"Ysra": "the moon"}}, _scene())

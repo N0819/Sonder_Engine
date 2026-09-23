@@ -1764,10 +1764,17 @@ def _ambient_location_for(sc, room_id):
     return (f"inside {label} (sealed interior -- the outer location's "
             "ambience does not reach here)")
 
-def _identity_roster(p_name, p_appearance, cast):
+def _identity_roster(p_name, p_appearance, cast, scene=None):
     """Every identity in play this beat, with the forms (name + uid/aliases)
     and appearance the identity scrub needs: the player plus each cast
-    member. Callers extend it with extra players / background speakers."""
+    member, and -- given the scene -- every other BODY it stands as an
+    entity. Callers extend it with extra players / background speakers.
+
+    A person the scene stands is somebody whose name an observer may not
+    have. Only the cast was listed, so a charter body's name written into
+    the observer's OWN pose ("head turned toward Master Kenelmund") passed
+    the last scrub and was filed to memory by a woman who never learned it
+    (playerless Aldermill round 4, 2026-09-23, t22)."""
     roster = [{"name": p_name, "appearance": p_appearance, "aliases": []}]
     for c in cast:
         sh, _, _ = sheet_state(c)
@@ -1777,6 +1784,19 @@ def _identity_roster(p_name, p_appearance, cast):
             "appearance": character_appearance(sh),
             "aliases": keys[1:],
         })
+    if isinstance(scene, dict):
+        from world.spatial import _is_body_entity
+        listed = {str(r["name"] or "").casefold() for r in roster}
+        for eid, ent in sorted((scene.get("entities") or {}).items()):
+            if not isinstance(ent, dict) or not _is_body_entity(scene, eid, ent):
+                continue
+            name = str(ent.get("name") or eid).strip()
+            if not name or name.casefold() in listed:
+                continue
+            listed.add(name.casefold())
+            roster.append({
+                "name": name, "appearance": ent.get("appearance"),
+                "aliases": [a for a in (ent.get("aliases") or []) if a]})
     return roster
 
 #: How much of the text on either side of an offending fragment a diagnostic
@@ -3376,6 +3396,28 @@ def perception_outcome(ctx, nonce):
         if d and (d.get("sequence") or d.get("speech") or d.get("action")):
             sources.append({"name": character_name(sh),
                             "room": character_room(sc, sh)})
+    # AND EVERY OTHER BODY THE BEAT MADE ACT: a charter figure voiced before
+    # resolve, or one the resolve's own rows are sourced to by name. Neither
+    # is a cast member or a background beat, so neither had a channel to
+    # anyone, and every act of theirs reached no view -- 0 of 4 on the
+    # playerless Aldermill run, round 4 (2026-09-23), a journeyman working the
+    # jack "close by" the woman watching him. Placed where the scene stands
+    # them, else where the beat's declaration did.
+    _sourced = {str(src["name"]).casefold() for src in sources}
+    _actors = [str(_fd.get("name") or "")
+               for _fd in (res.get("charter_declarations") or [])
+               if isinstance(_fd, dict)]
+    _actors += [str(_r.get("source_entity_id") or "")
+                for _r in (res.get("ledgers") or [])
+                if isinstance(_r, dict)
+                and ":" not in str(_r.get("source_entity_id") or "")]
+    for _actor in _actors:
+        if not _actor or _actor.casefold() in _sourced:
+            continue
+        _room = room_of(sc, _actor) or _bg_rooms.get(_actor)
+        if _room:
+            sources.append({"name": _actor, "room": _room})
+            _sourced.add(_actor.casefold())
 
     appearances = {p_name: p_appearance}
 
@@ -5432,7 +5474,7 @@ def _composer_establish_views(ctx, sc, perceivers, known, p_name,
     bodies.extend(presence_bodies or ())
     bodies_by_name = {b["name"]: b for b in bodies if b.get("name")}
     joint_labels = _joint_stranger_labels(bodies)
-    roster = _identity_roster(p_name, p_appearance, ctx.cast)
+    roster = _identity_roster(p_name, p_appearance, ctx.cast, scene=sc)
     identity_space = _composer_identity_space(ctx, p_name, p_appearance)
     cast_parts = _composer_extra_parts(ctx, p_name)
     body_scents = _body_scents(ctx)
@@ -5620,7 +5662,7 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
     onset_loud = any(str(e.get("volume", "")).lower() in ("loud", "shout")
                      for e in speech_elems)
     spoken = player_speech_lines(interp)
-    roster = _identity_roster(p_name, p_visible, ctx.cast)
+    roster = _identity_roster(p_name, p_visible, ctx.cast, scene=sc)
     identity_space = _composer_identity_space(ctx, p_name, p_visible)
     cast_parts = _composer_extra_parts(ctx, p_name)
     body_scents = _body_scents(ctx)
@@ -5910,6 +5952,8 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                         who="%s -> %s" % (event_actor, name))
                     if _cut and not surface:
                         continue        # refusal already recorded
+                    # Own name off before the scrub, as at outcome.
+                    surface = composer._peel_own_name(surface, event_actor)
                     surface = _composer_scrub_surface(
                         surface, name, recognized, unknown,
                         labels=display_map)
@@ -6770,8 +6814,15 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                             # two entities answer to is placed by the stamp
                             # and not by a name `room_of` cannot resolve
                             # (tests/test_background_presence_channels.py).
+                            # A body the moment's scene does not hold -- a
+                            # charter figure voiced this beat, standing only
+                            # in the room its declaration gave it -- keeps the
+                            # stamp: `None` here refused every such line to a
+                            # listener beside it (playerless Aldermill round
+                            # 4, 2026-09-23, t4).
                             sp_room = (
-                                room_of(_then, speaker)
+                                (room_of(_then, speaker)
+                                 or d.get("speaker_room"))
                                 if _moment is not None and (speaker in movement_cuts
                                                            or at_index in causal_moments)
                                 else (d.get("speaker_room")
@@ -6802,7 +6853,8 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                         d, _with_comm_channel(
                             event_scene, rel, speaker=speaker, observer=name,
                             observer_room=event_observer_room,
-                            speaker_room=(room_of(event_scene, speaker)
+                            speaker_room=((room_of(event_scene, speaker)
+                                           or d.get("speaker_room"))
                                           if at_index in causal_moments
                                           else d.get("speaker_room"))),
                         name, display=display, can_see=can_see,
@@ -6920,6 +6972,12 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                 if _cut and not surface:
                     order += 1
                     continue            # refusal already recorded
+                # The actor's own leading name comes off BEFORE the scrub:
+                # scrubbed first, it became the observer's label and the
+                # renderer put the label in front of it again ("The
+                # grey-streaked journeyman the grey-streaked journeyman bears
+                # down", round 4 replay, 2026-09-23).
+                surface = composer._peel_own_name(surface, actor)
                 surface = _composer_scrub_surface(
                     surface, name, recognized, unknown,
                     labels=display_map)

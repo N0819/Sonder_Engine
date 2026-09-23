@@ -659,6 +659,14 @@ def test_a_body_in_view_is_a_source_the_encoder_can_name():
     index = director_prose.identities_with_figures(payload)
     assert index == {"character:1": "Sal Weatherby",
                      "Godenric Brampenford": "Godenric Brampenford"}
+    # The resolve hands the figures on its extras, not the payload; a figure
+    # standing elsewhere (reserved) is no source this beat.
+    index = director_prose.identities_with_figures(
+        {"identity_index": {"character:1": "Sal Weatherby"}},
+        {"present_figures": [{"name": "Master Wimelard"},
+                             {"name": "Aldodin", "reserved": True}]})
+    assert index == {"character:1": "Sal Weatherby",
+                     "Master Wimelard": "Master Wimelard"}
 
 
 def test_a_figure_that_acts_on_screen_is_stood():

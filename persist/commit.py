@@ -119,6 +119,7 @@ from persist.commit_entities import (_is_gated_awareness, _subjects_that_moved,
     commit_world_entities)
 from persist.commit_ledgers import (OBLIGATION_OVERDUE_AGE, OBLIGATION_CAP,
     pending_obligation_view, _find_obligation, causal_obligation_ops, commit_obligations,
+    _demand_unheard_by, _zip_rows,
     WORLD_PRESSURE_STALL_AGE, WORLD_PRESSURE_CAP, world_pressure_view,
     _find_pressure, commit_world_pressure,
     WORLD_FACTS_CAP, WORLD_FACT_CHARS, commit_world_facts)

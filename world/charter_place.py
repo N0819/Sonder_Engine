@@ -511,8 +511,21 @@ def resolve_scene_placements(registry, diff, scene):
         return {"moves": [], "stations": [], "names": []}
     moves, routed_stations, names = [], [], []
 
+    # A body this very diff stands -- an entity record carrying its
+    # `charter_ref` -- is the scene's from this beat on, so its row is the
+    # scene's too. Routed away, the stood body arrived with an entity and no
+    # position: perception could not place a single act of it and the lease
+    # never saw it (playerless Aldermill round 4, 2026-09-23: a sluice tender
+    # working the jack in plain view of the yard, reaching no view).
+    standing = {
+        " ".join(str(key).split()).casefold()
+        for key, ent in ((diff or {}).get("entities") or {}).items()
+        if isinstance(ent, dict) and isinstance(ent.get("charter_ref"), dict)}
+
     def _ref(name):
         if room_of(scene or {}, str(name)):
+            return None
+        if " ".join(str(name or "").split()).casefold() in standing:
             return None
         return table.get(" ".join(str(name or "").split()).casefold())
 
