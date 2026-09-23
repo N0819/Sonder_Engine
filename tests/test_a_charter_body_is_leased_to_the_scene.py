@@ -94,3 +94,53 @@ class TestTheRuntimeHonoursTheLease:
                        "wat": {"place": "yard"}}})
         assert state["bodies"]["tam"]["leased"] is True
         assert "leased" not in state["bodies"]["wat"]
+
+
+class TestOneEntityPerCharterBody:
+    """The owner, 2026-09-23: one entity per charter body. Chat 153's
+    storekeeper stood as a scene `fixture` beside his own charter body for
+    eighteen turns; every move for his name landed on the fixture."""
+
+    def _twin_scene(self):
+        sc = _scene("yard")
+        sc["entities"].pop("inn_keeper")
+        sc["entities"]["tam_fixture"] = {"name": "Tam", "kind": "fixture"}
+        sc["positions"] = {"tam_fixture": "lane", "lamp": "taproom"}
+        return sc
+
+    def test_a_second_record_of_a_body_is_bound_to_it(self):
+        from world.charter_place import heal_unbound_twins
+        sc = self._twin_scene()
+        healed = heal_unbound_twins(_registry(), sc)
+        assert healed == [{"entity_id": "tam_fixture", "charter": "inn",
+                           "body": "tam", "name": "Tam"}]
+        ent = sc["entities"]["tam_fixture"]
+        assert ent["charter_ref"] == {"charter": "inn", "body": "tam"}
+        assert ent["kind"] == "person"
+        # ...and the lease then governs it: outside the aperture, released.
+        out = lease_scene_bodies(_registry(), sc, {"taproom"})
+        assert out["released"] == ["tam_fixture"]
+
+    def test_a_body_already_carried_and_an_unrelated_thing_are_left_alone(self):
+        from world.charter_place import heal_unbound_twins
+        sc = _scene("yard")
+        sc["entities"]["tam_fixture"] = {"name": "Tam", "kind": "fixture"}
+        assert heal_unbound_twins(_registry(), sc) == []
+        assert "charter_ref" not in sc["entities"]["lamp"]
+        assert "charter_ref" not in sc["entities"]["tam_fixture"]
+
+
+def test_a_charter_person_minted_as_a_fixture_binds_to_the_body():
+    """Prevention: a hand wrote a charter person as `kind: fixture` out of
+    view; the reserved charter figure makes the mint that person."""
+    from agents.director_floors import _bind_minted_entities_to_present_figures
+    sd = {"entities": {"gushiga_toriki": {"name": "Gushiga Toriki", "kind": "fixture"}},
+          "positions": {"gushiga_toriki": "moonlit_beach"}}
+    figures = [{"name": "Gushiga Toriki", "aliases": [], "charter": "yonaha_store",
+                "body": "storekeeper:0001", "plan": "charter:yonaha_store/storekeeper:0001",
+                "kind": "person", "room": "konbini_front", "reserved": True}]
+    bindings = _bind_minted_entities_to_present_figures(
+        {"entities": {}, "rooms": {}}, sd, figures, fallback_room="moonlit_beach")
+    ent = sd["entities"]["gushiga_toriki"]
+    assert ent["charter_ref"] == {"charter": "yonaha_store", "body": "storekeeper:0001"}
+    assert ent["kind"] == "person" and bindings

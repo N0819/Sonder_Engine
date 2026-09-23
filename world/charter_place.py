@@ -378,6 +378,54 @@ def _spelling_table(registry, rooms):
     return table
 
 
+def heal_unbound_twins(registry, scene):
+    """ONE ENTITY PER CHARTER BODY: bind a scene entity that is a charter
+    body under another record. Mutates `scene["entities"]`; returns
+    ``[{entity_id, charter, body, name}]``.
+
+    A scene entity with no `charter_ref` whose name or an alias is exactly
+    one unbound, undeparted body's spelling (`_spelling_table` over every
+    room, so a spelling two bodies share binds nobody) IS that body: it gets
+    the `charter_ref` and becomes a person, keeping its id, and
+    `lease_scene_bodies` then leases or releases it like any bound body.
+    Measured on chat 153: the storekeeper stood as a scene `fixture` for
+    eighteen turns while his charter body kept simulating in the store's
+    back room -- every move for his name landed on the fixture. A body some
+    other scene entity already carries is left alone."""
+    entities = (scene or {}).get("entities")
+    if not isinstance(entities, dict) or not entities:
+        return []
+    everywhere = set()
+    for item in ((registry or {}).get("items") or {}).values():
+        for body in (((item or {}).get("state") or {}).get("bodies") or {}).values():
+            if isinstance(body, dict) and body.get("place"):
+                everywhere.add(str(body["place"]))
+    table = _spelling_table(registry, everywhere)
+    if not table:
+        return []
+    carried = {(str((e.get("charter_ref") or {}).get("charter") or ""),
+                str((e.get("charter_ref") or {}).get("body") or ""))
+               for e in entities.values() if isinstance(e, dict) and e.get("charter_ref")}
+    healed = []
+    for eid, ent in entities.items():
+        if not isinstance(ent, dict) or ent.get("charter_ref") or ent.get("plan_ref"):
+            continue
+        labels = [ent.get("name")] + list(ent.get("aliases") or ())
+        refs = {table[f] for f in (" ".join(str(l or "").split()).casefold()
+                                   for l in labels) if f in table}
+        if len(refs) != 1:
+            continue
+        ref = next(iter(refs))
+        if ref in carried:
+            continue
+        ent["charter_ref"] = {"charter": ref[0], "body": ref[1]}
+        ent["kind"] = "person"
+        carried.add(ref)
+        healed.append({"entity_id": str(eid), "charter": ref[0], "body": ref[1],
+                       "name": str(ent.get("name") or "")})
+    return healed
+
+
 def lease_scene_bodies(registry, scene, aperture):
     """A charter body the SCENE stands (a Director-minted entity bound to it,
     `charter_ref` on the entity record) is on loan to the scene while it is

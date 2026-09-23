@@ -2695,6 +2695,48 @@ def reserved_plan_figures(cid, frame_id=None, exclude_rooms=()):
         return []
 
 
+def reserved_charter_bodies(cid, frame_id=None, exclude_rooms=()):
+    """Every charter body standing OUTSIDE the beat's aperture, as a
+    ``reserved`` person figure: a mint naming one is that body, whatever
+    room the mint stands in, never a second record of it.
+
+    ONE ENTITY PER CHARTER BODY (the owner, 2026-09-23). The in-view half
+    already held (`figures_in_view`, commit 4063a37e); the out-of-view half
+    did not. Measured on chat 153 turn 8: a hand reported the storekeeper
+    `no_referent`, `mint_unreferenced_things` minted him as a scene
+    `fixture` on the beach, and from then on every move for his name landed
+    on the fixture while the charter body kept simulating in the store --
+    one man in two rooms for eighteen turns. Rows carry the body's own plan
+    uid (`body_plan_uid`), so a bound render settles exactly like an
+    in-view figure's."""
+    try:
+        from world.charter_runtime import charter_speaker_records
+        from world.planned_entities import body_plan_uid
+    except Exception:
+        return []
+    skip = {str(r) for r in (exclude_rooms or ()) if str(r or "")}
+    out = []
+    try:
+        records = charter_speaker_records(cid, frame_id)
+    except Exception:
+        return []
+    for rec in records:
+        room = str(rec.get("place") or "")
+        if room and room in skip:
+            continue  # in view: `figures_in_view` offers it with its room
+        out.append({
+            "name": rec.get("name"),
+            "aliases": list(rec.get("aliases") or ()),
+            "charter": rec.get("charter"),
+            "body": rec.get("body"),
+            "plan": body_plan_uid(rec.get("charter"), rec.get("body")),
+            "kind": "person",
+            "room": room,
+            "reserved": True,
+        })
+    return out
+
+
 def dwellings_in_reach(cid, rooms, frame_id=None):
     """`charter_dwellings` for the Director's payload: the rooms in reach
     that are somebody's home, who lives there and who is in. Empty for a

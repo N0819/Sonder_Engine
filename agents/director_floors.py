@@ -1708,6 +1708,24 @@ def _bind_minted_entities_to_present_figures(sc, sd, figures, *,
         # the inn's own keeper a street away, which the docstring above
         # promises does not happen.
         pool = by_room.get(room, []) if room else list(people)
+        # A NAME A CHARTER BODY ANSWERS TO IS A BODY, WHATEVER KIND THE MINT
+        # CLAIMS. A hand that wrote the storekeeper as `kind: fixture` (chat
+        # 153 turn 8) put him in the inert set, which searched only planned
+        # THINGS -- so a named person became furniture beside himself. When
+        # the minted name is exactly one charter person's name, in view or
+        # reserved, it is that person.
+        if thing:
+            _bare = {_bare_person_name(label) for label in labels} - {""}
+            _persons = [f for f in people + reserved
+                        if f.get("charter") and f.get("body")
+                        and str(f.get("kind") or "person") != "thing"
+                        and (_bare_person_name(f.get("name")) in _bare
+                             or any(_bare_person_name(a) in _bare
+                                    for a in (f.get("aliases") or ())))]
+            if len({(f["charter"], f["body"]) for f in _persons}) == 1:
+                thing = False
+                ent["kind"] = "person"
+                pool = [f for f in pool if str(f.get("kind") or "person") != "thing"]
         if thing:
             # A minted thing may be the render of a PLANNED thing, by name
             # alone; it is never a person standing here.

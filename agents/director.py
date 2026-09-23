@@ -6044,6 +6044,10 @@ def director_resolve(ctx, nonce, _corrections=None):
             chat["id"], _fig_rooms, frame_id=ctx.turn.frame_id)
         _reserved_figures = reserved_plan_figures(
             chat["id"], frame_id=ctx.turn.frame_id, exclude_rooms=_fig_rooms)
+        # And every charter body out of view, by name: one entity per body.
+        from .common import reserved_charter_bodies
+        _reserved_figures = list(_reserved_figures) + reserved_charter_bodies(
+            chat["id"], frame_id=ctx.turn.frame_id, exclude_rooms=_fig_rooms)
         # What each of them would answer the player's order, request or
         # bargain, by the judgment the commit applies -- so the ruling
         # cannot grant what the ledger declines (Harrowmere replay t26).

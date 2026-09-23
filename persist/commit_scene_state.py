@@ -1868,14 +1868,18 @@ def compose_beat_scene(ctx):
     # and the registry mirrors the room under a lease; outside it the room
     # is returned to the charter and the scene's rows are released.
     try:
-        from world.charter_place import lease_scene_bodies
+        from world.charter_place import heal_unbound_twins, lease_scene_bodies
         from world.charter_runtime import registry_for
+        _registry = registry_for(cid, getattr(getattr(ctx, "turn", None),
+                                              "frame_id", None))
+        # One entity per charter body: a body the scene holds under a second,
+        # unbound record is bound to it first, so the lease below governs it.
+        for _heal in heal_unbound_twins(_registry, sc):
+            ctx.add_warning("charter body %r was a second scene record (%s); "
+                            "bound to its body" % (_heal["name"], _heal["entity_id"]))
         _aperture = (ctx.get("compile_world_context") or {}).get("rooms_in_view")
         if _aperture:
-            _lease = lease_scene_bodies(
-                registry_for(cid, getattr(getattr(ctx, "turn", None),
-                                          "frame_id", None)),
-                sc, _aperture)
+            _lease = lease_scene_bodies(_registry, sc, _aperture)
             if _lease["moves"]:
                 _charter_placements.setdefault("moves", []).extend(
                     _lease["moves"])
