@@ -12,16 +12,16 @@
 | `agents/character_kernel.py` | 496 |  | — |
 | `agents/common.py` | 11323 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 5107 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
-| `agents/director.py` | 8286 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
+| `agents/director.py` | 8290 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 477 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 3711 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
 | `agents/director_fanout.py` | 1687 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 2117 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 1839 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
-| `agents/director_prose.py` | 1005 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts` |
+| `agents/director_prose.py` | 1019 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts` |
 | `agents/director_reconcile.py` | 610 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `llm.schemas`, `story`, `world.spatial` |
-| `agents/director_rooms.py` | 307 |  | — |
+| `agents/director_rooms.py` | 425 |  | — |
 | `agents/director_scopes.py` | 1246 |  | `agents.director_lingua`, `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 706 |  | `agents.common`, `story.character_schema`, `story.scene`, `world.background_claims` |
 | `agents/dramaturge.py` | 348 |  | `core.db`, `core.logging_utils` |
@@ -47,11 +47,11 @@
 | `dressing/ambience.py` | 2103 |  | `core`, `core.db`, `core.paths`, `dressing.backdrops`, `world.weather` |
 | `dressing/backdrops.py` | 1772 |  | `core`, `core.db`, `core.logging_utils`, `core.paths`, `persist.steps`, `world.day_cycle`, `world.spatial`, `world.weather` |
 | `llm/__init__.py` | 6 |  | — |
-| `llm/decisions.py` | 146 |  | `core.db` |
+| `llm/decisions.py` | 151 |  | `core.db` |
 | `llm/llm_quality.py` | 1281 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 666 | Default system prompts and prompt preset access. | `core.db` |
-| `llm/providers.py` | 4727 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
+| `llm/providers.py` | 4738 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
 | `llm/schemas.py` | 7677 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
@@ -79,7 +79,7 @@
 | `persist/chat_archive.py` | 1277 | Typed, atomic chat archive export/import service and HTTP routes. | `core.db`, `llm.schemas`, `mind.memory`, `persist.checkpoints`, `story.character_schema`, `story.room_conversation` |
 | `persist/chat_delete.py` | 42 |  | `core.db` |
 | `persist/checkpoints.py` | 1579 | Whole-chat snapshots and checkpoint restore orchestration. | `core.db`, `mind.memory` |
-| `persist/commit.py` | 836 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
+| `persist/commit.py` | 848 | Atomic commit orchestrator, per-turn lock, thin tail domains, and the facade re-exporting every commit_* name. | `core.db`, `core.frames`, `llm.prompts`, `llm.providers`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_attire`, `persist.commit_background`, `persist.commit_common`, `persist.commit_destruction`, `persist.commit_entities`, `persist.commit_ledgers`, `persist.commit_mapping`, `persist.commit_mechanics`, `persist.commit_memory`, `persist.commit_memory_write`, `persist.commit_place_graph`, `persist.commit_room_registry`, `persist.commit_scene_state`, `story`, `story.character_schema`, `story.scene`, `world.comfort`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.spatial_frames`, `world.survival`, `world.weather` |
 | `persist/commit_attire.py` | 1797 | The mutable clothing ledger: attire notes, shed/worn garment entities, the validated attire diff. | `persist.commit_common`, `story`, `story.attire`, `world.spatial` |
 | `persist/commit_background.py` | 5223 | Background presences: tracking, identity folding, the reactor gate, promotion to cast. | `core.db`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial`, `world.survival` |
 | `persist/commit_common.py` | 713 | Leaf helpers shared across commit domains: scalar utilities, name/address roster, entity-id canonicalisation. | `core.db`, `mind.memory`, `story.character_schema`, `world.mechanics`, `world.spatial` |
@@ -301,13 +301,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 5679 | 2574 lines |
+| `director_resolve()` | 5683 | 2574 lines |
 | `director_interpret()` | 1361 | 949 lines |
-| `_run_specialists()` | 3503 | 636 lines |
+| `_run_specialists()` | 3503 | 640 lines |
 | `_reconcile_resolution()` | 2734 | 558 lines |
 | `director_establish()` | 394 | 200 lines |
 | `_reconcile_interpretation()` | 2312 | 172 lines |
-| `mint_unreferenced_things()` | 5355 | 169 lines |
+| `mint_unreferenced_things()` | 5359 | 169 lines |
 | `_specialist_repairs()` | 2546 | 134 lines |
 
 ### `agents/director_contact.py`
@@ -385,13 +385,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run()` | 818 | 117 lines |
-| `ledger_from_events()` | 746 | 70 lines |
-| `encode()` | 669 | 67 lines |
-| `dispatch()` | 937 | 54 lines |
-| `bind_new_places()` | 462 | 49 lines |
+| `run()` | 820 | 127 lines |
+| `ledger_from_events()` | 748 | 70 lines |
+| `encode()` | 671 | 67 lines |
+| `dispatch()` | 949 | 56 lines |
+| `bind_new_places()` | 464 | 49 lines |
 | `select_channels()` | 246 | 42 lines |
-| `reconcile_rooms()` | 585 | 41 lines |
+| `reconcile_rooms()` | 587 | 41 lines |
 | `already_happened()` | 167 | 39 lines |
 
 ### `agents/director_reconcile.py`
@@ -411,14 +411,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `design_rooms()` | 247 | 61 lines |
-| `render_room()` | 120 | 51 lines |
-| `_check()` | 193 | 31 lines |
-| `_merge_room()` | 86 | 22 lines |
-| `_inspect()` | 173 | 18 lines |
-| `_shown()` | 233 | 12 lines |
-| `_merged()` | 110 | 8 lines |
-| `_fit()` | 226 | 5 lines |
+| `schedule_room_predevelopment()` | 350 | 76 lines |
+| `design_rooms()` | 248 | 73 lines |
+| `render_room()` | 121 | 51 lines |
+| `_check()` | 194 | 31 lines |
+| `_merge_room()` | 87 | 22 lines |
+| `_inspect()` | 174 | 18 lines |
+| `_shown()` | 234 | 12 lines |
+| `prepared_rooms()` | 336 | 12 lines |
 
 ### `agents/director_scopes.py`
 
@@ -679,12 +679,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_post()` | 76 | 30 lines |
-| `decide()` | 108 | 29 lines |
+| `_post()` | 81 | 30 lines |
+| `decide()` | 113 | 29 lines |
 | `_provider()` | 51 | 10 lines |
-| `probability()` | 139 | 8 lines |
+| `_url()` | 70 | 9 lines |
+| `probability()` | 144 | 8 lines |
 | `configured()` | 63 | 5 lines |
-| `_url()` | 70 | 4 lines |
 
 ### `llm/llm_quality.py`
 
@@ -724,14 +724,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_chat_complete_once()` | 3296 | 317 lines |
-| `chat_complete()` | 3009 | 139 lines |
-| `async _chat_complete_async_once()` | 3824 | 126 lines |
-| `_claude_cli_complete()` | 2883 | 124 lines |
-| `_sse_openai()` | 2575 | 90 lines |
-| `async chat_complete_async()` | 3733 | 90 lines |
-| `_json_mode_recovery_stages()` | 2299 | 83 lines |
-| `async _sse_openai_async()` | 3951 | 71 lines |
+| `_chat_complete_once()` | 3307 | 317 lines |
+| `chat_complete()` | 3020 | 139 lines |
+| `async _chat_complete_async_once()` | 3835 | 126 lines |
+| `_claude_cli_complete()` | 2894 | 124 lines |
+| `_sse_openai()` | 2586 | 90 lines |
+| `async chat_complete_async()` | 3744 | 90 lines |
+| `_json_mode_recovery_stages()` | 2310 | 83 lines |
+| `async _sse_openai_async()` | 3962 | 71 lines |
 
 ### `llm/research_providers.py`
 
@@ -1026,7 +1026,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_commit_all_locked()` | 481 | 356 lines |
+| `_commit_all_locked()` | 481 | 368 lines |
 | `commit_crowds()` | 294 | 149 lines |
 | `commit_authored_events()` | 240 | 30 lines |
 | `commit_narration_person()` | 208 | 29 lines |

@@ -594,6 +594,17 @@ def test_a_transform_filed_under_the_wrong_thing_still_accounts_for_every_thing(
     assert not [w for w in ctx.warnings if "neither changed nor accounted for" in w]
 
 
+def test_the_encoder_defaults_to_reasoning_off_and_a_setting_wins(temp_db):
+    import json
+    from llm import providers
+    temp_db.set_setting("reasoning_effort", json.dumps({"default": "high"}))
+    assert providers.reasoning_effort_for("director_specialist") == "off"
+    assert providers.reasoning_effort_for("director_rooms") == "high"
+    temp_db.set_setting("reasoning_effort", json.dumps(
+        {"default": "high", "director_specialist": "low"}))
+    assert providers.reasoning_effort_for("director_specialist") == "low"
+
+
 def test_the_causal_contract_stays_the_default(temp_db, monkeypatch):
     calls = []
     monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {

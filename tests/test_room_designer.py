@@ -154,3 +154,47 @@ def test_submit_is_refused_until_the_check_is_clean():
                                         lambda s, p: next(steps), record)
     assert "gallery" in draft["rooms"]
     assert record["steps"] == 2 and record["stopped"] == "submitted"
+
+
+def test_a_prepared_design_starts_in_the_draft():
+    """A room designed between turns seeds the in-turn designer, which only
+    adapts it: submitting at once keeps the prepared design whole."""
+    prepared = {"gallery": {"name": "Gallery", "size": "tiny", "extent": {"w": 4, "d": 3},
+                            "adjacent": [{"to": "hall", "barrier": "open", "dir": "n"}],
+                            "anchors": {"rail": {"desc": "an iron rail", "dir": "n"}}}}
+    record = {}
+    draft = director_rooms.design_rooms(None, SCENE, {}, "sheet", ["gallery"], lambda s, p: {
+        "calls": [{"tool": "submit", "args": {}}]}, record, seed=prepared)
+    assert draft["rooms"]["gallery"]["anchors"]["rail"]["desc"] == "an iron rail"
+    assert record["prepared"] == ["gallery"] and record["steps"] == 1
+
+
+def test_rooms_beside_the_player_are_prepared_between_turns(temp_db, monkeypatch):
+    """After a prose-contract turn commits, the planned stubs beside the
+    player are designed out of band and cached for the beat that enters one."""
+    import agents.common as common
+    from core import jobs
+    from world import structure
+    temp_db.set_setting("director_contract", "prose")
+    ctx = _make_ctx(temp_db, interp=_action_interp())
+    temp_db.wset(ctx.chat.id, "scene", dict(SCENE, positions={"The Stranger": "hall"}))
+    brief = {"study": {"name": "Study", "purpose": "a quiet room", "exits": {}}}
+    monkeypatch.setattr(structure, "planned_room_brief", lambda cid, sc, ids: brief)
+    monkeypatch.setattr(common, "_agent_json", lambda *a, **k: {"calls": [
+        {"tool": "draft_room", "args": {"room_id": "study", "room": {
+            "name": "Study", "desc": "Shelves and a desk."}}},
+        {"tool": "submit", "args": {}}]})
+    job = director_rooms.schedule_room_predevelopment(ctx)
+    assert job is not None
+    import time
+    deadline = time.monotonic() + 10.0
+    while job.state in ("pending", "running") and time.monotonic() < deadline:
+        time.sleep(0.02)
+    assert job.state == "done", job.as_dict()
+    assert director_rooms.prepared_rooms(ctx.chat.id, ["study"])["study"]["desc"] == \
+        "Shelves and a desk."
+
+
+def test_nothing_is_prepared_under_the_causal_contract(temp_db):
+    ctx = _make_ctx(temp_db, interp=_action_interp())
+    assert director_rooms.schedule_room_predevelopment(ctx) is None

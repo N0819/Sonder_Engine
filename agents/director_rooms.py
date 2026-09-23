@@ -58,8 +58,9 @@ ROOM_TOOLS = {
                  "rooms shape below"},
         "does": "Build or change one room of your draft. Fields MERGE across "
                 "calls: anchors merge by anchor id, adjacent by `to`, anything "
-                "else is replaced. Draft in pieces -- geometry, then doorways, "
-                "then fixtures, then the rest.",
+                "else is replaced. Returns the room's floor plan as the engine "
+                "now draws it, so you see every change as you make it. Several "
+                "draft_room calls may share one step.",
     },
     "view_room": {
         "args": {"room_id": "string"},
@@ -77,8 +78,8 @@ ROOM_TOOLS = {
     },
     "submit": {
         "args": {},
-        "does": "Finish. Submit when the rooms are complete and the check is "
-                "clean.",
+        "does": "Finish. Runs the check first; refused, with the problems, "
+                "while it is not clean.",
     },
 }
 
@@ -244,13 +245,18 @@ def _shown(transcript):
     return list(reversed(shown))
 
 
-def design_rooms(ctx, scene, payload, sheet, owed, call, record=None):
+def design_rooms(ctx, scene, payload, sheet, owed, call, record=None, seed=None):
     """Run the designer. `payload` is its standing input (prose, plans,
     reserved places, the spatial slice); `owed` the room ids it must draft;
     `call(system, payload)` one model step. Returns the draft as
     `{rooms, remove_rooms, remove_adjacent}` and fills `record`."""
     record = record if record is not None else {}
-    draft = {"rooms": {}, "remove_rooms": [], "remove_adjacent": []}
+    # A PREPARED design (`schedule_room_predevelopment`) starts in the draft:
+    # the designer adapts it to this beat's prose instead of building it.
+    draft = {"rooms": copy.deepcopy(dict(seed or {})), "remove_rooms": [],
+             "remove_adjacent": []}
+    if seed:
+        record["prepared"] = sorted(seed)
     transcript = []
     started = time.time()
     stopped = "steps"
@@ -273,7 +279,14 @@ def design_rooms(ctx, scene, payload, sheet, owed, call, record=None):
                     result = {"refused": "draft_room needs room_id and a room object"}
                 else:
                     draft["rooms"][rid] = _merge_room(draft["rooms"].get(rid), args["room"])
-                    result = {"drafted": rid, "fields": sorted(draft["rooms"][rid])}
+                    # The plan comes back with every draft: seeing the room is
+                    # part of drafting it, not a step spent asking to look.
+                    try:
+                        plan = render_room(_merged(scene, draft), rid)
+                    except Exception as exc:
+                        plan = {"refused": f"could not draw the room: {exc}"}
+                    result = {"drafted": rid, "fields": sorted(draft["rooms"][rid]),
+                              "plan": plan}
             elif tool == "view_room":
                 result = render_room(_merged(scene, draft), str(args.get("room_id") or ""))
             elif tool == "inspect_rooms":
@@ -305,3 +318,108 @@ def design_rooms(ctx, scene, payload, sheet, owed, call, record=None):
     record.update(steps=step, calls=len(transcript), stopped=stopped,
                   seconds=round(time.time() - started, 3), final_check=final)
     return draft
+
+
+# ---- between turns: prepare the planned rooms the player could enter next --
+
+#: The world key holding designs prepared before anyone arrived, by room id.
+#: A reconstructible cache: lost, the in-turn designer simply does the work.
+PREPARED_KEY = "prose_contract_prepared_rooms"
+#: Planned rooms prepared per committed turn at most. Named per the owner's
+#: ask-before-limiting rule: each is a full designer run on the room role.
+PREDEVELOP_PER_TURN = 2
+PREPARE_NOTE = ("No beat is happening. These planned rooms lie next to where the "
+                "player is and have not been entered yet: design each at full "
+                "fidelity from its plan now, so it is ready when someone arrives.")
+
+
+def prepared_rooms(chat_id, room_ids):
+    """`{room_id: room}` for the prepared designs among `room_ids`."""
+    from core.db import wget
+    cache = wget(chat_id, PREPARED_KEY) or {}
+    if not isinstance(cache, dict):
+        return {}
+    out = {}
+    for rid in room_ids or ():
+        room = (cache.get(rid) or {}).get("room") if isinstance(cache.get(rid), dict) else None
+        if isinstance(room, dict):
+            out[rid] = room
+    return out
+
+
+def schedule_room_predevelopment(ctx):
+    """After a prose-contract turn commits, design the planned rooms beside
+    the player out of band, so a beat that enters one starts from a finished
+    design and only adapts it to its own prose. Deduped per chat by
+    `jobs.submit`; never inside the turn's wall clock; a failure is logged,
+    never raised."""
+    from core import jobs
+    from core.db import wget
+    from language_runtime import story_language
+    from story.character_schema import persona_name
+    from story.scene import persona_of
+    from world.spatial import room_of
+    from agents import director_prose
+
+    if not (director_prose.enabled() and director_prose.room_agent_enabled()):
+        return None
+    chat = ctx.chat
+    cid = chat["id"] if isinstance(chat, dict) else chat.id
+    pers = persona_of(chat) or {}
+    p_name = pers.get("name") or persona_name(pers)
+    scene = wget(cid, "scene") or {}
+    room = room_of(scene, p_name)
+    if not room:
+        return None
+    frame_id = ctx.turn.frame_id
+    turn_idx = ctx.turn.idx
+    language_id = story_language(cid)
+
+    def _produce(job):
+        from core.db import active_frame_id, wget as _wget, wset
+        from core.logging_utils import logger
+        from language_runtime import current_language_id
+        from llm.prompts import room_author_prompt
+        from world.structure import planned_room_brief, rooms_to_develop
+        from agents.common import _agent_json
+        token = active_frame_id.set(frame_id)
+        language_token = current_language_id.set(language_id)
+        try:
+            current = _wget(cid, "scene") or {}
+            briefs = planned_room_brief(cid, current, rooms_to_develop(current, room)) or {}
+            cache = _wget(cid, PREPARED_KEY) or {}
+            cache = ({rid: entry for rid, entry in cache.items() if rid in briefs}
+                     if isinstance(cache, dict) else {})
+            todo = [rid for rid in briefs if rid not in cache][:PREDEVELOP_PER_TURN]
+            sheet = room_author_prompt(language_id)
+            done = []
+            for rid in todo:
+                if job.cancelled.is_set():
+                    break
+                record = {}
+                try:
+                    draft = design_rooms(
+                        None, current,
+                        {"prose": "", "note": PREPARE_NOTE,
+                         "develop": {rid: briefs[rid]}},
+                        sheet, [rid],
+                        lambda system, payload: _agent_json(
+                            "director_rooms", "director_rooms", system, payload,
+                            temperature=0.4, max_tokens=None),
+                        record)
+                except Exception as exc:
+                    logger.info("room predevelopment failed: chat=%s room=%s "
+                                "error=%s", cid, rid, str(exc)[:300])
+                    continue
+                designed = (draft.get("rooms") or {}).get(rid)
+                if isinstance(designed, dict) and (record.get("final_check") or {}).get("clean"):
+                    cache[rid] = {"room": designed, "turn": turn_idx,
+                                  "steps": record.get("steps")}
+                    done.append(rid)
+            wset(cid, PREPARED_KEY, cache)
+            return [f"prepared {rid}" for rid in done]
+        finally:
+            current_language_id.reset(language_token)
+            active_frame_id.reset(token)
+
+    return jobs.submit(cid, "room_predevelopment", _produce, base_turn=turn_idx)

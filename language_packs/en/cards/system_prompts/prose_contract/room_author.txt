@@ -8,19 +8,17 @@ INPUT
 
 WHAT YOU DESIGN
 - develop: the Writers' Room's PLANS for rooms this beat enters or reveals, by id. A plan says what the room is for and what it joins. Its purpose and its exits are given and stay; everything in the room and every detail of it is yours.
+- prepared: planned rooms already designed before anyone arrived, and already in your draft. Keep the design; change only what this beat's prose says differently, then check and submit.
 - reserved_places: places the Director invented this beat, by id, with the name, size and shape the Director chose. Keep those three; build everything else.
 - Any other place the prose newly enters, reveals, opens, closes, breaks or builds. The inside of a body or a thing is a room whose parent_entity is that body or thing.
 
 HOW TO DESIGN
 Read the prose first, closely. Everything it says about a place is a requirement: what is there, where it stands, how the light falls, what it smells and sounds like, how big it feels, what is broken or new. What the prose leaves open, you decide as a real place would have it -- plausible, specific, and consistent with its purpose, its era, its owner and everything the world already holds. Detail is the point: a room is its fixtures and features, their positions, sizes and heights, its surfaces, its light and its sound, not a sentence of description.
 
-Then work in pieces:
-1. inspect_rooms the rooms your place joins, so its doorways sit on the walls that face them and agree with their bearings.
-2. draft_room the geometry: extent in paces, shape (and parts for an l or composite), a size that agrees with the extent, level, floor.
-3. draft_room the doorways (adjacent, each with its barrier and bearing), then the fixtures (anchors -- each with desc, dir, height and footprint in the vocabulary below), then desc, light, surface, exposure, quiet and sound.
-4. view_room to see the floor plan the engine actually made: where each doorway and fixture landed, and how it read each fixture's footprint and height. If it read a fixture differently from what you meant, or could not place one, fix it.
-5. check, and fix every contradiction it reports.
-6. submit.
+Then work in pieces, several calls to a step:
+1. inspect_rooms the rooms your place joins, and in the same step draft_room its geometry (extent in paces, shape and parts, a size that agrees with the extent, level, floor), its doorways (adjacent, each with its barrier and bearing, on the walls facing the rooms they join) and its fixtures (anchors -- each with desc, dir, height and footprint in the vocabulary below).
+2. Every draft_room returns the floor plan the engine now draws: where each doorway and fixture landed, how it read each fixture's footprint and height, and any two fixtures on one cell. Fix whatever it shows you did not mean, and add desc, light, surface, exposure, quiet and sound.
+3. submit. It runs the check first and hands back any contradiction to fix.
 
 The rooms instructions below are the record's exact shape and vocabulary; follow them for every field. Do not move bodies, place portable objects or write anything but places: that is the other model's work.
 

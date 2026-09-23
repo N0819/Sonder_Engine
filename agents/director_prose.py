@@ -408,7 +408,7 @@ def _room_payload(ctx, sc, prose, model_payload, view, extras, reserved, develop
 
 
 def author_rooms(ctx, sc, prose, model_payload, view, extras, reserved=None,
-                 develop=None, record=None):
+                 develop=None, record=None, prepared=None):
     """The room designer (`agents/director_rooms.design_rooms`): a tool-using
     agent that develops the planned rooms the beat enters and builds the
     places the Director invented -- in pieces, looking at its work on the
@@ -417,6 +417,8 @@ def author_rooms(ctx, sc, prose, model_payload, view, extras, reserved=None,
     from .director_rooms import design_rooms
     record = record if record is not None else {}
     payload = _room_payload(ctx, sc, prose, model_payload, view, extras, reserved, develop)
+    if prepared:
+        payload["prepared"] = sorted(prepared)
     owed = list(dict.fromkeys(list(develop or {}) + list(reserved or {})))
 
     def call(system, step_payload):
@@ -424,7 +426,7 @@ def author_rooms(ctx, sc, prose, model_payload, view, extras, reserved=None,
                            temperature=0.4, max_tokens=None)
 
     return design_rooms(ctx, sc, payload, room_author_prompt(ctx.language), owed,
-                        call, record)
+                        call, record, seed=prepared)
 
 
 def _walk_strings(value, visit):
@@ -831,6 +833,14 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     planned = planned if isinstance(planned, dict) else {}
     channels, jev = select_channels(ctx, stage, prose, model_payload, facts, planned)
     develop = {rid: planned[rid] for rid in jev.get("entered") or () if rid in planned}
+    # Designs prepared between turns for the planned rooms this beat enters.
+    try:
+        from .director_rooms import prepared_rooms
+        chat = ctx.chat
+        prepared = prepared_rooms(chat["id"] if isinstance(chat, dict) else chat.id,
+                                  develop)
+    except Exception:
+        prepared = {}
     # THE ROOM CONTRACT RUNS BESIDE THE ENCODER, not inside it. It is the
     # heaviest sheet the encoder would carry, and a place is authored whole
     # or not at all, so it goes to its own full-fidelity author, started the
@@ -853,7 +863,8 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
         pool = ThreadPoolExecutor(max_workers=1)
         room_future = pool.submit(_isolated(contextvars.copy_context()),
                                   author_rooms, ctx, sc, prose, model_payload,
-                                  view, extras, reserved, develop, room_record)
+                                  view, extras, reserved, develop, room_record,
+                                  prepared)
         room_record["ran"] = "parallel"
     encoder_channels = ([c for c in channels if c not in ROOM_AUTHOR_CHANNELS]
                         if rooms_elsewhere else channels)
@@ -881,7 +892,8 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
             t1 = time.time()
             try:
                 rooms_answer = author_rooms(ctx, sc, prose, model_payload, view,
-                                            extras, reserved, develop, room_record)
+                                            extras, reserved, develop, room_record,
+                                            prepared)
                 room_record["ran"] = "serial"
             except Exception as exc:
                 room_record["failed"] = str(exc)

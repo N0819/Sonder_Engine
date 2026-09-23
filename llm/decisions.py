@@ -68,6 +68,11 @@ def configured() -> bool:
 
 
 def _url(prov) -> str:
+    # A full decisions URL (`jev_url`) points the seam at another host of the
+    # same API -- a self-hosted open-source Jev -- without code changes.
+    explicit = str(get_setting("jev_url") or "").strip()
+    if explicit:
+        return explicit
     base = str(prov["base_url"] or "https://openrouter.ai/api/v1").rstrip("/")
     root = base.split("/api/", 1)[0]
     return root + DECISIONS_PATH

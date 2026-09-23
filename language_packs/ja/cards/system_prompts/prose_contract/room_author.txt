@@ -8,19 +8,17 @@ INPUT
 
 WHAT YOU DESIGN
 - develop: この beat が入る、または明らかにする room についての Writers' Room の計画を id ごとに挙げたものです。計画は room が何のためにあり、何とつながるかを示します。その purpose と出口は与えられたもので、そのまま残します。room の中にあるものとその細部はすべてあなたのものです。
+- prepared: 誰かが到着する前に既に設計され、既にあなたの draft に入っている計画済みの room です。その設計を保ち、この beat の記述が違うことを言っている部分だけを変え、check して submit してください。
 - reserved_places: この beat で Director が創作した場所を id ごとに、Director が選んだ name、size、shape とともに挙げたものです。その三つは保ち、それ以外をすべて作ります。
 - 記述が新しく入る、明らかにする、開く、閉じる、壊す、作るその他の場所。身体やものの内部は、その身体やものを parent_entity とする room です。
 
 HOW TO DESIGN
 まず記述を丁寧に読んでください。場所について記述が言うことはすべて要件です。何がそこにあり、どこに立ち、光がどう差し、どんなにおいと音がし、どれほどの大きさに感じられ、何が壊れ何が新しいか。記述が開いたままにしていることは、実在の場所のように、もっともらしく、具体的に、その purpose、時代、持ち主、世界が既に持っているすべてと矛盾しないように決めてください。細部こそが要点です。room は一文の描写ではなく、その設備と特徴、それらの位置、大きさと高さ、その表面、光と音です。
 
-それから部分ごとに作業します:
-1. inspect_rooms で、あなたの場所がつながる room を調べます。出入口がそれらに面する壁にあり、その方位と一致するようにするためです。
-2. draft_room で形状を作ります。extent（paces）、shape（l や composite なら parts）、extent と一致する size、level、floor。
-3. draft_room で出入口（adjacent、それぞれ barrier と方位つき）、次に設備（anchors。それぞれ desc、dir、height、footprint を下の語彙で）、そして desc、light、surface、exposure、quiet、sound を作ります。
-4. view_room で、エンジンが実際に作った平面図を見ます。各出入口と設備がどこに置かれ、エンジンが各設備の footprint と height をどう読んだか。あなたの意図と違って読まれた設備や、置けなかった設備は直してください。
-5. check を行い、報告されたすべての矛盾を直します。
-6. submit します。
+それから部分ごとに、一つの step で複数の call を使って作業します:
+1. inspect_rooms で、あなたの場所がつながる room を調べ、同じ step で draft_room によって形状（extent（paces）、shape と parts、extent と一致する size、level、floor）、出入口（adjacent、それぞれ barrier と方位つき、つながる room に面する壁に）、設備（anchors。それぞれ desc、dir、height、footprint を下の語彙で）を作ります。
+2. draft_room はそのたびにエンジンが今描く平面図を返します。各出入口と設備がどこに置かれ、各設備の footprint と height がどう読まれ、一つの cell に二つの設備がないか。意図しなかったものを直し、desc、light、surface、exposure、quiet、sound を加えます。
+3. submit します。先に check が行われ、矛盾があれば直すために返されます。
 
 下の rooms の指示が、記録の正確な形と語彙です。すべての項目でそれに従ってください。身体を動かしたり、持ち運べるものを置いたり、場所以外のことを書いたりしないでください。それは別のモデルの仕事です。
 

@@ -1246,6 +1246,15 @@ def reasoning_efforts():
     return out
 
 
+#: A role's effort when the host has not set one, consulted before the
+#: `default` row. One entry: the prose contract's encoder transcribes an
+#: account the Director already decided, and at the host's `high` default it
+#: spent 12-20k tokens of trace on a 1.5k-token answer (102-198s a resolve;
+#: `off`: 3-11s, the same channels written -- chat 153, 2026-09-22). An
+#: explicit setting for the role still wins.
+ROLE_DEFAULT_EFFORTS = {"director_specialist": "off"}
+
+
 def reasoning_effort_for(role):
     """The effort level for one role: its own entry, else the 'default' role's,
     else the env override, else "" (unset).
@@ -1260,6 +1269,8 @@ def reasoning_effort_for(role):
     efforts = reasoning_efforts()
     if role in efforts:
         return efforts[role]
+    if role in ROLE_DEFAULT_EFFORTS:
+        return ROLE_DEFAULT_EFFORTS[role]
     if "default" in efforts:
         return efforts["default"]
     return _coerce_reasoning_effort(

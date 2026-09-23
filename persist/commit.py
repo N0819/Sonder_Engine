@@ -687,6 +687,18 @@ def _commit_all_locked(ctx, nonce):
         ctx.add_warning(f"room work scheduling failed: {exc}")
         results["room_work"] = {"error": str(exc)}
 
+    # The prose contract's room designer, between turns: the planned rooms
+    # beside the player are designed now, so a beat that enters one adapts a
+    # finished design instead of building it inside the player's wait.
+    # Scheduled only under that contract; a failure is a warning.
+    try:
+        from agents.director_rooms import schedule_room_predevelopment
+        job = schedule_room_predevelopment(ctx)
+        results["room_predevelopment"] = job.as_dict() if job else None
+    except Exception as exc:
+        ctx.add_warning(f"room predevelopment scheduling failed: {exc}")
+        results["room_predevelopment"] = {"error": str(exc)}
+
     # -- Plot package store (story/plot_packages.py) ------------------------
     # A package published before this turn is now one the turn has seen:
     # `published -> active`. Bookkeeping on the package alone; what it
