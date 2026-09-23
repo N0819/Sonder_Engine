@@ -5392,10 +5392,27 @@ def _unknown_actor_label(actor_name, appearance_text=None, aliases=None, *,
         # The first clause is what a stranger's eye takes in; the rest is
         # detail a label has no room for.
         head = appearance_text.strip()
+
+        def _content(text):
+            return [w for w in text.split() if w.lower() not in articles]
+
+        # A COMMA BETWEEN ADJECTIVES IS NOT A CLAUSE BREAK. "a short,
+        # thick-forearmed man ..." cut at its first comma left "a short" --
+        # two words only because the article counted -- and a body read "the
+        # short" in every view and memory of him for eight beats (playerless
+        # Aldermill round 9, 2026-09-23); "A tall, powerfully built ...
+        # humanoid" read "the tall". A part with one content word is joined
+        # to the next until the head holds two, so the noun it describes
+        # comes with it.
         for mark in (";", ","):
-            first = head.split(mark, 1)[0].strip()
-            if len(first.split()) >= 2:
-                head = first
+            parts = head.split(mark)
+            taken = parts[0]
+            for part in parts[1:]:
+                if len(_content(taken)) >= 2:
+                    break
+                taken = taken + mark + part
+            if len(_content(taken)) >= 2:
+                head = taken.strip()
         cleaned = re.sub(
             r"^(?:" + "|".join(map(re.escape, articles)) + r")\s+", "",
             head, flags=re.I,

@@ -465,6 +465,18 @@ def subject_label(key, *, bodies=None, figures=None, naming=None,
         # subject; an absent topic stays absent rather than being invented.
         body = key[len("news:"):].rsplit("@", 1)[0]
         topic = body.split(":", 1)[1] if ":" in body else ""
+        # A TOPIC THAT IS A BODY IS THAT PERSON, said as the branch below
+        # says one -- the name spoken aloud -- never the engine's handle for
+        # them: "asking the journeyman about head miller:0001" reached Emory's
+        # views at idx 3, 7 and 11 (playerless Aldermill round 9,
+        # 2026-09-23). A body of another charter, not in `bodies`, keeps its
+        # post's words; the ordinal is the engine's and is nobody's word.
+        person = (bodies or {}).get(topic)
+        if person is not None:
+            from .charter_identity import display_name
+            return display_name(person, (), naming)
+        if ":" in topic and topic.rsplit(":", 1)[1].isdigit():
+            topic = topic.rsplit(":", 1)[0]
         return " ".join(topic.replace("_", " ").split())
     if key in (figures or {}):
         return key

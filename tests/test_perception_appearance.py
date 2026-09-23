@@ -95,6 +95,15 @@ class TestAppearanceReadsAsProse:
         assert "red across her cheeks" in raw
         assert "{'name':" not in raw
 
+    def test_a_summary_sentence_does_not_end_before_its_clauses(self):
+        """Playerless Aldermill round 9 (2026-09-23): "... a tool roll under
+        his arm.; currently slicked with cold spray" in every view of him --
+        the prose pass strips a stop before a comma, never before a
+        semicolon, so the source stops writing one."""
+        raw = appearance_of("H", BASE, _scene(overlays={"H": ["slicked with spray"]}))
+        assert ".;" not in raw and ".;" not in _appearance_as_prose(raw)
+        assert "hood raised" in raw and "slicked with spray" in raw
+
     def test_reasserted_overlay_does_not_reearn_full_appearance(self):
         before = _scene(overlays={"H": [{
             "name": "flush", "description": "red across her cheeks"}]})

@@ -384,3 +384,80 @@ family name reached either character.
   text -- is fixed.
 - A continuing machine noise is sourced to the body that set it going (the
   encoder core's own rule).
+
+**Round 9** ran the sibling merge live: at r4 the two lives came within reach
+and frame 1 folded into frame 2 with every carried ledger unioned, nothing
+duplicated or lost, the wardens' leases moved. The joint beats it made
+exposed four engine defects, all fixed:
+- the interaction loop ended a beat on one speaker's closed exchange before
+  a listed reactor was ever called -- Sal had no turn on 4 of 8 joint beats;
+- a sight line that only grazed one fixture's corner counted as blocked, so
+  two people in one room were each "the unfamiliar person" to the other for
+  three beats while the shadowcast had them in view;
+- the outcome view appended the loop's pre-resolve drafts after its own
+  percepts of the same lines, so every line arrived twice and memory kept
+  both;
+- a contact naming a body by its entity key was dropped at commit, silently.
+
+And the title-word scrub, in its third round (Flume, Reeve, Sluice), was
+fixed as a class: a charter's own titles are exempt, read by one function
+(`charter_titles`) through one reader both rosters call (`_worn_identity`)
+-- the outcome composer had built a second roster that never read the role,
+which is why round 8's fix held in act views and failed in outcome views.
+
+## Real engine turns (2026-09-23, the owner's chats)
+
+Five of the owner's chats (153, 137, 126, 120, 122; three NSFW), each
+branched a few turns back through the real `turn_branch` route and played
+forward with the owner's own recorded inputs through the real `turn_new`
+route, so every gate, checkpoint and commit ran as in play. Each new turn is
+read beside its source: the same input, played under the causal contract.
+Round 1 ran on the host's own models (Fireworks `glm-5p2`) and committed 24
+turns before the provider suspended the account at its spending limit;
+round 2 runs on NanoGPT's `z-ai/glm-5.2`, the thinking variant for reasoning
+roles and the plain one for roles at `off` (the owner's routing).
+
+Round 1, each finding read against the source turn:
+- **A body's inside was out of its own reach** (chat 137, a player
+  swallowed). The body she was inside never acted in seven beats; the line
+  she spoke to it by name reached no one. Three causes: the room designer
+  redrafted the existing throat as `quiet: dead`; the player-contact guard
+  discarded every interior contact the encoder wrote, as "non-co-located";
+  and no reactor rule reached a holder, because every one reads rooms. The
+  guard now joins the pair as the scene layer did (`enclosure_joins_rooms`),
+  the holder is widened into the beat in the planner and the loop alike,
+  and the designer no longer redesigns a place the world holds.
+- **The designer redesigned rooms the world holds**: the TARDIS console room
+  at both stages (40.5 s + 50.6 s) for doors that are the TARDIS entity's own
+  state, which the encoder had already written; the throat on four beats;
+  and it wrote a body ("Hinami stands here") and a named owner into anchor
+  text, both caught by the composer tripwire.
+- **A visible act made with a line was lost** (a blush): folded into the
+  speech as a bogus `conditions` transform that alignment dropped, so nobody
+  could see it -- and in a second lane re-asserted every beat as
+  `cond_hinami_blush_4`, a passing look turned into a lasting state.
+  **Muffling was encoded as the speaker's volume**, and a `mutter` from
+  inside a throat carried to no one. Both stated in the encoder core.
+- **A shed garment read out its record** -- "clothing: yes; worn by: Hinami;
+  shed: yes" -- which also named its owner to anyone reading it.
+
+Timing, round 1: 43-169 s a turn. The character call at the host's `high`
+took 18-46 s and the narrator 8-21 s; the Director's own share was set by the
+room designer on the beats it ran, and by the encoder (5-20 s) otherwise.
+
+**Open (real turns):**
+- A host now feels a body inside it (the contact survives) but hears it only
+  by the room-to-room sound field, which an interior's own acoustics can
+  close; a rule for sound through the host's own tissue is not built.
+- The encoder's debt errors: discharging the player's debts on its behalf
+  ("'Let's do it' implicitly answers all three"), and "consolidating" three
+  open debts into two new ones against the tool's own rule.
+- The Director's flourish -- a lamp flickering on most beats -- minted
+  `lamp_3` beside `lamp` and `lamp_2` rather than reuse a record.
+- A player's name reached Vexara's composed view on every turn of chat 120,
+  under both contracts; the tripwire repaired it each time. The composer path
+  that admits it is not traced.
+- Replay divergence is a property of the method, not a finding: inputs
+  written for the original timeline do not answer questions the replayed
+  characters ask, and the two lanes that diverged (126, 122) read as
+  characters insisting on a precondition.

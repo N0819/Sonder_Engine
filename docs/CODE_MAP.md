@@ -10,7 +10,7 @@
 | `agents/background.py` | 2219 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
 | `agents/character.py` | 4714 | Private character decision agent. | `agents.character_kernel`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/character_kernel.py` | 496 |  | — |
-| `agents/common.py` | 11720 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
+| `agents/common.py` | 11737 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 5168 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 8411 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 489 |  | `story.character_schema`, `world.spatial` |
@@ -48,7 +48,7 @@
 | `dressing/backdrops.py` | 1772 |  | `core`, `core.db`, `core.logging_utils`, `core.paths`, `persist.steps`, `world.day_cycle`, `world.spatial`, `world.weather` |
 | `llm/__init__.py` | 6 |  | — |
 | `llm/decisions.py` | 151 |  | `core.db` |
-| `llm/llm_quality.py` | 1281 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
+| `llm/llm_quality.py` | 1313 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 666 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 4863 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
@@ -125,7 +125,7 @@
 | `story/room_research.py` | 376 |  | `core.db` |
 | `story/room_slice.py` | 556 |  | `story.attire` |
 | `story/room_tools.py` | 1757 |  | `story.plot_packages`, `story.room_research`, `story.room_slice` |
-| `story/scene.py` | 3035 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.day_cycle`, `world.spatial` |
+| `story/scene.py` | 3039 | Scene/cast/persona helpers, recent events, dialogue configuration, and private knowledge. | `core.db`, `story`, `story.attire`, `story.character_schema`, `world.day_cycle`, `world.spatial` |
 | `web/__init__.py` | 6 |  | — |
 | `web/app.py` | 7863 | FastAPI application assembly, resource CRUD, turn control, and streaming endpoints. | `agents`, `agents.story_planner`, `core`, `core.db`, `core.frames`, `core.paths`, `dressing.ambience`, `dressing.backdrops`, `llm`, `llm.prompts`, `llm.providers`, `mind.memory`, `persist.chat_archive`, `persist.chat_delete`, `persist.checkpoints`, `persist.commit`, `persist.steps`, `story`, `story.character_schema`, `story.dialogue_colors`, `story.importers`, `story.prelude`, `story.scene`, `web`, `web.auth_routes`, `web.room_routes`, `web.world_routes`, `world`, `world.survival` |
 | `web/auth_routes.py` | 279 | Typed host-authentication HTTP routes and cookie transport. | `web` |
@@ -143,7 +143,7 @@
 | `world/causality.py` | 425 |  | `world.spatial` |
 | `world/charter.py` | 524 |  | `world.charter_author`, `world.charter_chatter`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_feel`, `world.charter_figure`, `world.charter_identity`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_place`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_promote`, `world.charter_roster`, `world.charter_run`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_temper`, `world.charter_trigger` |
 | `world/charter_author.py` | 813 |  | `world.charter_commitment`, `world.charter_economy`, `world.charter_figure`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_needs`, `world.charter_politics`, `world.charter_practice` |
-| `world/charter_chatter.py` | 475 |  | `world.crowds` |
+| `world/charter_chatter.py` | 487 |  | `world.crowds` |
 | `world/charter_commitment.py` | 292 |  | `world.charter_model` |
 | `world/charter_creature.py` | 464 |  | `world.charter_harm`, `world.charter_model` |
 | `world/charter_crowd.py` | 364 |  | `world.crowds` |
@@ -277,12 +277,12 @@
 |---|---:|---:|
 | `norm_sequence()` | 4417 | 294 lines |
 | `presence_figures_for_room()` | 2230 | 268 lines |
-| `_check_narrator_fidelity()` | 10895 | 252 lines |
-| `_scrub_unknown_identities()` | 5743 | 187 lines |
-| `_unknown_actor_label()` | 5335 | 185 lines |
-| `_scrub_invented_dialogue()` | 9408 | 151 lines |
+| `_check_narrator_fidelity()` | 10912 | 252 lines |
+| `_unknown_actor_label()` | 5335 | 202 lines |
+| `_scrub_unknown_identities()` | 5760 | 187 lines |
+| `_scrub_invented_dialogue()` | 9425 | 151 lines |
 | `observer_body_regions()` | 1724 | 140 lines |
-| `_check_quote_attribution()` | 10458 | 139 lines |
+| `_check_quote_attribution()` | 10475 | 139 lines |
 
 ### `agents/composer.py`
 
@@ -690,12 +690,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `complete_validated_json()` | 638 | 644 lines |
-| `_targeted_field_patch()` | 268 | 98 lines |
-| `note_provider_exchange()` | 577 | 59 lines |
-| `_step_json_schema()` | 526 | 49 lines |
-| `output_ran_out_of_room()` | 116 | 47 lines |
-| `json_failure_diagnosis()` | 165 | 39 lines |
+| `complete_validated_json()` | 670 | 644 lines |
+| `_targeted_field_patch()` | 300 | 98 lines |
+| `note_provider_exchange()` | 609 | 59 lines |
+| `_step_json_schema()` | 558 | 49 lines |
+| `output_ran_out_of_room()` | 146 | 47 lines |
+| `json_failure_diagnosis()` | 195 | 39 lines |
 | `_extract_balanced_object()` | 59 | 37 lines |
 | `_without_trailing_commas()` | 23 | 34 lines |
 
@@ -1578,14 +1578,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `active_disguises()` | 685 | 82 lines |
-| `_positive_presented_appearance()` | 976 | 66 lines |
-| `normalize_transformed_parts()` | 776 | 60 lines |
-| `recent_events_for_observer()` | 1949 | 59 lines |
-| `awareness_conditions()` | 1334 | 58 lines |
-| `normalize_style_guide()` | 2751 | 58 lines |
-| `active_transformations()` | 838 | 54 lines |
-| `dialogue_budget()` | 2856 | 54 lines |
+| `active_disguises()` | 689 | 82 lines |
+| `_positive_presented_appearance()` | 980 | 66 lines |
+| `normalize_transformed_parts()` | 780 | 60 lines |
+| `recent_events_for_observer()` | 1953 | 59 lines |
+| `awareness_conditions()` | 1338 | 58 lines |
+| `normalize_style_guide()` | 2755 | 58 lines |
+| `active_transformations()` | 842 | 54 lines |
+| `dialogue_budget()` | 2860 | 54 lines |
 
 ### `web/app.py`
 
@@ -1752,7 +1752,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `subject_label()` | 427 | 49 lines |
+| `subject_label()` | 427 | 61 lines |
 | `participant_forms()` | 319 | 47 lines |
 | `overheard_fragment()` | 228 | 44 lines |
 | `window_acts()` | 74 | 34 lines |

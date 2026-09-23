@@ -95,6 +95,36 @@ def _extract_balanced_object(text: str):
     return None
 
 
+def _restarted_object(text: str):
+    """The complete object a restarted answer ends with, or None.
+
+    AN AGGREGATOR THAT RESTARTS A GENERATION STREAMS BOTH ATTEMPTS. Measured
+    on NanoGPT's z-ai/glm-5.2:thinking (real-turn replay round 2,
+    2026-09-23): the narrator's text began `{"{"prose": "<p>The frame fights
+    you...` and a character's `{"effect{"effects":[]...` -- a fragment, then
+    the whole answer again from its first brace. The fragment's lone quote
+    throws every later string off by one, so neither parse nor
+    `_extract_balanced_object` can see the answer that follows it, and the
+    beat died on a repair that had to reconstruct from the damage.
+
+    The answer is the object that runs to the END of the text. An object
+    that parses but stops short of the end is the inside of something
+    malformed -- a truncated answer's nested value -- and is never taken."""
+    decoder = json.JSONDecoder()
+    end_of_text = len(text.rstrip())
+    i = text.find("{", 1)
+    while i != -1:
+        try:
+            value, end = decoder.raw_decode(text, i)
+        except json.JSONDecodeError:
+            i = text.find("{", i + 1)
+            continue
+        if isinstance(value, dict) and end >= end_of_text:
+            return value
+        i = text.find("{", i + 1)
+    return None
+
+
 def _strip_fences(text: str) -> str:
     """The model's JSON with any Markdown fence taken off.
 
@@ -210,6 +240,8 @@ def strict_json_parse(text: str) -> dict:
         value = json.loads(raw)
     except json.JSONDecodeError as exc:
         value = _extract_balanced_object(raw)
+        if value is None:
+            value = _restarted_object(raw)
         if value is None:
             raise RuntimeError(
                 "LLM returned invalid JSON: "

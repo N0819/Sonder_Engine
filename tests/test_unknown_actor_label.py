@@ -82,6 +82,23 @@ def test_trims_trailing_dangling_function_word():
     ) == "the veiled figure in mourning"
 
 
+def test_a_comma_between_adjectives_is_not_the_head_clause():
+    """Playerless Aldermill round 9 (2026-09-23): "a short, thick-forearmed
+    man ..." was cut at its first comma to "a short", and he was "the short"
+    in every view and memory of him for eight beats."""
+    label = _unknown_actor_label(
+        "Emory Vane", "a short, thick-forearmed man with a tool roll under his arm.")
+    assert label != "the short" and "man" in label
+    tall = _unknown_actor_label(
+        "Vrenak", "A tall, powerfully built reptilian-adjacent humanoid in a "
+        "dark-grey military uniform with crimson piping.")
+    assert tall != "the tall" and "humanoid" in tall
+    # A real head clause still ends where it did.
+    assert _unknown_actor_label(
+        "Nobody", "a county surveyor of thirty, small and brisk, ink on her "
+        "right cuff") == "the county surveyor of thirty"
+
+
 def test_a_label_never_ends_on_a_function_word():
     """The two tail trims must CONVERGE, because each exposes a tail for the
     other.

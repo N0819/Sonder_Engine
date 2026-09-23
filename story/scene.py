@@ -628,7 +628,11 @@ def appearance_of(name, base, scene):
     # is a garment they can see.
     if att:
         att = attire_model.rederive_entry(att)
-    s = base or "no notable appearance recorded"
+    # A summary written as a sentence ends in its own full stop, and the
+    # clauses joined after it made ".;" in every view that saw the body
+    # ("... a tool roll under his arm.; currently slicked with cold spray",
+    # playerless Aldermill round 9, 2026-09-23).
+    s = str(base or "").strip().rstrip(" .;,") or "no notable appearance recorded"
     if att.get("wearing"):
         s += "; wearing: " + ", ".join(map(str, att["wearing"]))
     if att.get("state"):

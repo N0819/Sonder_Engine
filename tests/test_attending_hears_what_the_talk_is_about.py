@@ -55,6 +55,16 @@ def test_a_topicless_news_key_stays_blank_even_attending():
     assert subject_label("news:sighting:@4.0000", attending=True) == ""
 
 
+def test_a_topic_that_is_a_body_is_that_person_never_its_key():
+    """Playerless Aldermill round 9 (2026-09-23): "asking the journeyman about
+    head miller:0001" in Emory's views at idx 3, 7 and 11."""
+    bodies = {"head_miller:0001": {"name": "Duneloc Lowenmill"}}
+    assert subject_label("news:asked_after:head_miller:0001@12.0000",
+                         bodies=bodies, attending=True) == "Duneloc Lowenmill"
+    assert subject_label("news:asked_after:head_miller:0001@12.0000",
+                         attending=True) == "head miller"
+
+
 def test_a_person_subject_is_unchanged_by_attention():
     """A named body was always legible -- "overhearing a stranger's name is
     how a name first reaches you" -- and attention must not alter that."""
