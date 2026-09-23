@@ -46,6 +46,8 @@ from llm.schemas import normalize_speech_volume
 from world.spatial import (
     _body_interior_holder,
     ambient_scope,
+    earshot_rooms,
+    visible_adjacent_rooms,
     containment_conceals,
     detail_resolves_between,
     effective_room_size,
@@ -11036,9 +11038,9 @@ def player_room_in(sc, ctx, pers=None, interp=None, player_name=None,
 
 
 def rooms_in_view(ctx, sc, player_room, destination=None):
-    """The rooms THIS BEAT is about: the player's room, the rooms its
-    ambient scope reaches (`spatial.ambient_scope`), and the room a declared
-    move targets.
+    """The rooms THIS BEAT is about: the player's room, the rooms within the
+    player's perceptual reach -- one hop of light-gated sight and the sound
+    walk's two-hop earshot -- and the room a declared move targets.
 
     ONE DERIVATION, memoised on the context. Review 2026-09-07 finding C18:
     two stages needed the same aperture and neither asked the other. The
@@ -11082,11 +11084,30 @@ def rooms_in_view(ctx, sc, player_room, destination=None):
     rooms = set()
     if player_room:
         rooms.add(str(player_room))
+        # THE PLAYER'S PERCEPTUAL REACH, never a connectivity closure (the
+        # owner, 2026-09-23: sight plus earshot). This was the whole
+        # `ambient_scope` component, which in an open-plan settlement is the
+        # map: measured on chat 153 turn 20, 23 rooms from inside a TARDIS
+        # whose doors opened on a beach -- the harbour pier three hops off,
+        # clinic interiors six -- so a shopkeeper nobody could see or hear
+        # was voiced, resolved and leased (and every charter body in town
+        # frozen out of the off-screen simulator), while perception itself
+        # reported his line "reached no view". Now: the rooms one hop of
+        # light-gated sight reaches (`visible_adjacent_rooms`), and the rooms
+        # a raised voice reaches within the sound walk's own two-hop bound
+        # (`earshot_rooms`), so a shouter just out of sight can still be
+        # voiced. `ambient_scope` keeps its own readers, whose question is
+        # the partition.
         try:
-            nearby, _ = ambient_scope(sc, str(player_room))
+            rooms.update(str(v.get("room_id")) for v in
+                         visible_adjacent_rooms(sc, str(player_room)) or ()
+                         if isinstance(v, dict) and v.get("room_id"))
         except Exception:
-            nearby = ()
-        rooms.update(str(r) for r in (nearby or ()) if r)
+            pass
+        try:
+            rooms.update(str(r) for r in earshot_rooms(sc, str(player_room)) if r)
+        except Exception:
+            pass
     if destination:
         rooms.add(str(destination))
     ctx["_rooms_in_view_cache"] = (key, frozenset(rooms))

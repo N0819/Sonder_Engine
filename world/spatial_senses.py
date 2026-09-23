@@ -1343,6 +1343,28 @@ def can_perceive(rel: dict, volume: str = "normal") -> bool:
 _SOUND_WALK_BARRIERS = {"open", "open_door", "membrane", "bars"}
 
 
+def earshot_rooms(scene: dict, from_room, max_hops: int = 2) -> set:
+    """Every room a raised voice in `from_room` can reach: the rooms within
+    `max_hops` sound-passing edges, the same walk and the same bound
+    `sound_path` and `sound_walk_level` use ("the castle hears every shout"
+    stays impossible by construction). Excludes `from_room` itself."""
+    if not from_room:
+        return set()
+    neighbors = neighbor_map(scene, _SOUND_WALK_BARRIERS)
+    seen = {from_room}
+    frontier = [from_room]
+    for _ in range(max(0, int(max_hops))):
+        next_frontier = []
+        for current in frontier:
+            for nb in sorted(neighbors.get(current, ())):
+                if nb not in seen:
+                    seen.add(nb)
+                    next_frontier.append(nb)
+        frontier = next_frontier
+    seen.discard(from_room)
+    return seen
+
+
 def sound_path(scene: dict, from_room, to_room, max_hops: int = 2):
     """Shortest room path (inclusive list of room ids) between two rooms over
     sound-passing edges, at most `max_hops` edges long; None when no such

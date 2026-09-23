@@ -251,7 +251,7 @@ from world.spatial_senses import (
     sense_range_class,
     sight_block, sight_level, sight_verdict,
     sound_bearing, sound_bearing_via, sound_path,
-    sound_walk_level,
+    sound_walk_level, earshot_rooms,
     spatial_rel_between, visual_level_between,
 )
 
