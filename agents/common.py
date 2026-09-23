@@ -2203,6 +2203,30 @@ def charter_crowds_for_room(cid, sc, room_id, inputs=None, *, turn_idx=None):
         cid, sc, room_id, inputs, turn_idx=turn_idx)["crowds"]]
 
 
+def charter_titles(charter, body_key=None):
+    """Every title `charter` styles its people with -- its ranks' and its
+    posts', and the body's own authored one -- which a minted name puts in
+    front of the personal name. A word the name shares with the town, never
+    a spelling of the body: scrubbed as a name part, the post "Sluice Warden"
+    gave "Sluice", and the room "Mill Race and Sluice" read "Mill Race and
+    the weathered heavyset journeyman ..." for every body in it, 75 times over
+    11 beats (playerless Aldermill round 9, 2026-09-23) -- the class "Flume"
+    (round 7) and "Reeve" (round 8) were each fixed by the word. `charter` is
+    the flattened record `chatter_inputs` carries."""
+    from world.charter_identity import normalize_naming_profile
+    charter = charter if isinstance(charter, dict) else {}
+    titles = normalize_naming_profile(charter.get("naming"))["titles"]
+    own = ((charter.get("bodies") or {}).get(str(body_key)) or {}).get("title") \
+        if body_key else None
+    out = []
+    for title in [own, *(titles.get("ranks") or {}).values(),
+                  *(titles.get("posts") or {}).values()]:
+        title = " ".join(str(title or "").split())
+        if title and title not in out:
+            out.append(title)
+    return out
+
+
 def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
                               turn_idx=None, frame_id=None):
     """The unregistered bodies standing in this room that no crowd carries.
@@ -2321,6 +2345,15 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
                 by_key.get(charter_key) or {}, body_key)
                 for charter_key, body_key in sorted(refs)) if noun), "")
 
+    def _titles_for(refs):
+        """The titles a minted name may wear (`charter_titles`)."""
+        out = []
+        for charter_key, body_key in sorted(refs):
+            for title in charter_titles(by_key.get(charter_key), body_key):
+                if title not in out:
+                    out.append(title)
+        return out
+
     def _creature_noun_for(refs):
         """The word for a creature body, or "" for a person's."""
         from world.charter_creature import normalize_creature
@@ -2418,6 +2451,9 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
         creature_noun = _creature_noun_for(refs)
         if creature_noun:
             row["noun"] = creature_noun
+        titles = _titles_for(refs)
+        if titles:
+            row["titles"] = titles
         if surface:
             from world.charter_surface import appearance_text
             row["surface"] = surface
@@ -2448,6 +2484,9 @@ def presence_figures_for_room(cid, sc, room_id, inputs=None, *,
                "appearance": str(sketch.get("appearance") or "")
                or _noun_for(refs),
                "role": _noun_for(refs)}
+        titles = _titles_for(refs)
+        if titles:
+            row["titles"] = titles
         if isinstance(sketch.get("surface"), dict):
             row["surface"] = dict(sketch["surface"])
         placed = _placement_for(refs)
@@ -5791,7 +5830,7 @@ def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources,
         # person's Hall" in Sal's views on five beats, with nine false
         # tripwires (playerless Aldermill round 8, 2026-09-23). The full name
         # and the personal parts are still scrubbed.
-        _generic |= {tok.casefold() for key in ("role", "noun")
+        _generic |= {tok.casefold() for key in ("role", "noun", "titles")
                      for tok in re.findall(r"[\w-]+", str(src.get(key) or ""))}
         # A HYPHENATED COMPOUND IS ONE WORD, the rule the label check below
         # already keeps: its fragments are not spellings of the body. Split

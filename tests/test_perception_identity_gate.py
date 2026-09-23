@@ -673,6 +673,64 @@ def test_a_role_worn_in_a_name_is_not_a_name():
     assert leaked == ["Reeve Cuthon Hurster"]
 
 
+def test_a_title_the_town_uses_is_not_a_name():
+    """Playerless Aldermill round 9 (2026-09-23): the wardens' post "Sluice
+    Warden" put "Sluice" among the parts of "Sluice Warden Colricun
+    Beckergarth", and the room "Mill Race and Sluice" read "Mill Race and the
+    weathered heavyset journeyman ..." for every body in it -- 75 times over
+    11 beats. The roster's `role` was the rank noun "journeyman", so round
+    8's exemption could not see the post. The institution's own titles are
+    exempt; the personal parts are still scrubbed."""
+    from agents.common import _scrub_unknown_identities
+    from agents.perception import _identity_roster
+    body = {"name": "Sluice Warden Colricun Beckergarth",
+            "appearance": "a weathered heavyset man", "role": "journeyman",
+            "titles": ["Sluice Warden", "Master Miller"]}
+    roster = _identity_roster("Nobody", "", [], bodies=[body])
+    src = [s for s in roster if s["name"] == body["name"]]
+    assert src and src[0]["titles"] == "Sluice Warden Master Miller"
+    text, leaked = _scrub_unknown_identities(
+        "You are in Mill Race and Sluice. Colricun eases the lever.",
+        allowed_forms=["Sal Weatherby"], unknown_sources=src,
+        labels={body["name"]: "the weathered heavyset journeyman"})
+    assert text.startswith("You are in Mill Race and Sluice.")
+    assert "Colricun" not in text and "the weathered heavyset journeyman" in text
+    assert leaked == [body["name"]]
+
+
+def test_a_body_the_scene_stands_wears_its_charters_titles():
+    """The leased wardens were scene entities, not laid bodies, so the
+    roster found no titles for them; their charter_ref is the way in."""
+    from agents.perception import _worn_identity
+    scene = {"entities": {"e1": {
+        "name": "Sluice Warden Colricun Beckergarth", "kind": "person",
+        "charter_ref": {"charter": "aldermill_mill", "body": "race_tender:0001"}}}}
+    asked = []
+
+    def titles_of(ent):
+        asked.append(ent["charter_ref"]["body"])
+        return ["Sluice Warden", "Master Miller"]
+
+    worn = _worn_identity("Sluice Warden Colricun Beckergarth", [], scene, titles_of)
+    assert worn["titles"] == "Sluice Warden Master Miller"
+    assert asked == ["race_tender:0001"]
+    laid = [{"name": "Bram", "role": "hand", "titles": ["Ostler"]}]
+    assert _worn_identity("Bram", laid, scene, titles_of) == {
+        "role": "hand", "titles": "Ostler"}
+
+
+def test_every_roster_reads_what_a_body_wears():
+    """The outcome composer built its own roster by hand and never asked
+    what a body wears, so round 8's role exemption held in act views and
+    failed in every outcome view -- where "Mill Race and Sluice" was
+    rewritten, on the round-9 replay of idx 8, until this was one reader."""
+    import inspect
+    from agents import perception
+    assert "_worn_identity" in inspect.getsource(perception._identity_roster)
+    assert "_worn_identity(nm, bodies, sc, titles_of)" in inspect.getsource(
+        perception)
+
+
 def test_a_bubble_has_no_player_to_look_for(temp_db, monkeypatch):
     """Playerless Aldermill round 7 (2026-09-23): once Emory carried a tub and
     a paddle, the two props were two candidate rooms for the absent player

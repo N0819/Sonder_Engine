@@ -1778,7 +1778,8 @@ def _ambient_location_for(sc, room_id):
     return (f"inside {label} (sealed interior -- the outer location's "
             "ambience does not reach here)")
 
-def _identity_roster(p_name, p_appearance, cast, scene=None, bodies=()):
+def _identity_roster(p_name, p_appearance, cast, scene=None, bodies=(),
+                     titles_of=None):
     """Every identity in play this beat, with the forms (name + uid/aliases)
     and appearance the identity scrub needs: the player plus each cast
     member, and -- given the scene -- every other BODY it stands as an
@@ -1811,7 +1812,7 @@ def _identity_roster(p_name, p_appearance, cast, scene=None, bodies=()):
             roster.append({
                 "name": name, "appearance": ent.get("appearance"),
                 "aliases": [a for a in (ent.get("aliases") or []) if a],
-                **_worn_role(name, bodies)})
+                **_worn_identity(name, bodies, scene, titles_of)})
     # AND EVERY BODY THIS BEAT LAID IN VIEW. A charter body the scene does
     # not stand is laid for the stage alone, so it is in no ledger the lines
     # above read -- and a given name the encoder wrote into the observer's
@@ -1829,13 +1830,62 @@ def _identity_roster(p_name, p_appearance, cast, scene=None, bodies=()):
     return roster
 
 
+def _charter_titles_of(ctx, sc):
+    """`entity -> [titles]` over the stage's charters (`charter_titles`), or
+    None outside a stage that can read them."""
+    from agents.common import charter_titles, chatter_inputs
+    try:
+        charters = chatter_inputs(ctx.chat.id, sc, turn_idx=ctx.turn.idx).get(
+            "charters") or []
+    except Exception:
+        return None
+    by_key = {str(c.get("key") or ""): c for c in charters if isinstance(c, dict)}
+
+    def titles_of(ent):
+        ref = (ent or {}).get("charter_ref") if isinstance(ent, dict) else None
+        if not isinstance(ref, dict):
+            return []
+        return charter_titles(by_key.get(str(ref.get("charter") or "")),
+                              ref.get("body"))
+    return titles_of
+
+
+def _worn_identity(name, bodies, scene=None, titles_of=None):
+    """What a body WEARS in its name rather than is called by: `_worn_role`
+    for a laid body, and for one the scene stands, the titles its charter
+    styles people with (`_charter_titles_of`). A BODY THE SCENE STANDS IS NO
+    LAID BODY: the leased sluice wardens were entities, so "Sluice" stayed a
+    part of their names (playerless Aldermill round 9, 2026-09-23).
+
+    ONE READER FOR EVERY ROSTER. The outcome composer builds its own roster
+    by hand, and it never asked `_worn_role` -- round 8's exemption held in
+    the act views and failed in every outcome view, which is where the
+    room names were rewritten."""
+    worn = _worn_role(name, bodies)
+    if "titles" in worn or titles_of is None or not isinstance(scene, dict):
+        return worn
+    folded = str(name or "").strip().casefold()
+    for ent in (scene.get("entities") or {}).values():
+        if isinstance(ent, dict) and str(ent.get("name") or "").strip().casefold() == folded:
+            titles = titles_of(ent)
+            if titles:
+                worn["titles"] = " ".join(titles)
+            break
+    return worn
+
+
 def _worn_role(name, bodies):
-    """`{role, noun}` of the laid body called `name`, for the scrub: a role
-    worn in a name is not identity (`_scrub_unknown_identities`)."""
+    """`{role, noun, titles}` of the laid body called `name`, for the scrub:
+    a role or a title worn in a name is not identity
+    (`_scrub_unknown_identities`)."""
     for body in bodies or ():
         if str((body or {}).get("name") or "").strip().casefold() == name.casefold():
-            return {k: str(body.get(k) or "") for k in ("role", "noun")
-                    if str(body.get(k) or "").strip()}
+            out = {k: str(body.get(k) or "") for k in ("role", "noun")
+                   if str(body.get(k) or "").strip()}
+            titles = [str(t) for t in (body.get("titles") or []) if str(t or "").strip()]
+            if titles:
+                out["titles"] = " ".join(titles)
+            return out
     return {}
 
 #: How much of the text on either side of an offending fragment a diagnostic
@@ -2168,6 +2218,7 @@ def _presence_bodies(ctx, sc, rooms, chatter):
                 # description whole (`common._unknown_actor_label`).
                 "role": row.get("role") or "",
                 **({"noun": row["noun"]} if row.get("noun") else {}),
+                **({"titles": list(row["titles"])} if row.get("titles") else {}),
                 "aliases": [],
                 # Its dealt surface, when the registry has one, so the
                 # display map can compose a silhouette at dim light and a
@@ -5577,7 +5628,8 @@ def _composer_establish_views(ctx, sc, perceivers, known, p_name,
     bodies_by_name = {b["name"]: b for b in bodies if b.get("name")}
     joint_labels = _joint_stranger_labels(bodies)
     roster = _identity_roster(p_name, p_appearance, ctx.cast, scene=sc,
-                              bodies=bodies)
+                              bodies=bodies,
+                              titles_of=_charter_titles_of(ctx, sc))
     identity_space = _composer_identity_space(ctx, p_name, p_appearance)
     cast_parts = _composer_extra_parts(ctx, p_name)
     body_scents = _body_scents(ctx)
@@ -5768,7 +5820,8 @@ def _composer_act_views(ctx, sc, interp, perceivers, known, p_name, p_visible,
                      for e in speech_elems)
     spoken = player_speech_lines(interp)
     roster = _identity_roster(p_name, p_visible, ctx.cast, scene=sc,
-                              bodies=co_present)
+                              bodies=co_present,
+                              titles_of=_charter_titles_of(ctx, sc))
     identity_space = _composer_identity_space(ctx, p_name, p_visible)
     cast_parts = _composer_extra_parts(ctx, p_name)
     body_scents = _body_scents(ctx)
@@ -6602,20 +6655,24 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
     # `_outward_form_transitions` for the episode this was minting.
     appearance_changed.update(_outward_form_transitions(diff))
 
+    titles_of = _charter_titles_of(ctx, sc)
     ident_roster = [
-        {"name": nm, "appearance": ap, "aliases": cast_aliases.get(nm) or []}
+        {"name": nm, "appearance": ap, "aliases": cast_aliases.get(nm) or [],
+         **_worn_identity(nm, bodies, sc, titles_of)}
         for nm, ap in appearances.items()
     ]
     for s in identity_bearing_sources(sources):
         if s.get("name") and all(r["name"] != s["name"] for r in ident_roster):
             ident_roster.append(
-                {"name": s["name"], "appearance": None, "aliases": []})
+                {"name": s["name"], "appearance": None, "aliases": [],
+                 **_worn_identity(s["name"], bodies, sc, titles_of)})
     # Every body the beat laid in view, acting or not (`_identity_roster`).
     for b in bodies:
         if b.get("name") and all(r["name"] != b["name"] for r in ident_roster):
             ident_roster.append(
                 {"name": b["name"], "appearance": b.get("appearance"),
-                 "aliases": [a for a in (b.get("aliases") or []) if a]})
+                 "aliases": [a for a in (b.get("aliases") or []) if a],
+                 **_worn_identity(b["name"], bodies, sc, titles_of)})
 
     # The stage roster is who ACTED this beat; the identity space is who
     # this chat could name. Authored prose is gated against the second.
