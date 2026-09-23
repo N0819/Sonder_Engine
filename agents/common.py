@@ -5664,6 +5664,9 @@ def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources,
         parts = [tok for tok in re.split(r"[^\w]+", name)
                  if tok and tok.casefold() not in _generic] \
             if len(name.split()) > 1 else []
+        authored = {name.casefold()} | {
+            str(a or "").strip().casefold() for a in (src.get("aliases") or [])}
+        derived = {tok for tok in parts if tok.casefold() not in authored}
         for form in [name] + [str(a or "").strip()
                               for a in (src.get("aliases") or [])] + parts:
             if not form or form.casefold() in allowed:
@@ -5689,11 +5692,22 @@ def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources,
             if (len(form) < 3 and len(form.split()) == 1
                     and not _UNSPACED_SCRIPT.match(form[:1])):
                 continue
+            # A WORD TAKEN FROM INSIDE A NAME IS A NAME ONLY AS A PROPER
+            # NOUN. "Master" in "Master Godidric Stanpenridge" is a post the
+            # composer's own descriptor uses in lower case ("...measured
+            # master, with flour-dusted hair"); matched in any case it was
+            # rewritten into a label that did not contain it, and every
+            # later pass rewrote it again (playerless Aldermill round 3,
+            # 2026-09-23, Emory's views t7-t23). The given name a Director
+            # or a voice writes is capitalised, so capitalised is what a
+            # derived part matches -- the same rule the common-word names
+            # below already follow.
             if (len(form.split()) == 1
-                    # Single-token names that are also everyday English words ("Rose walks in"
-                    # vs "the rose garden"). For these, only the exact capitalized form is
-                    # scrubbed, so ordinary lowercase prose is never mangled.
-                    and form.casefold() in _ling("_COMMON_WORD_NAMES")):
+                    and (form in derived
+                         # Single-token names that are also everyday English words ("Rose walks in"
+                         # vs "the rose garden"). For these, only the exact capitalized form is
+                         # scrubbed, so ordinary lowercase prose is never mangled.
+                         or form.casefold() in _ling("_COMMON_WORD_NAMES"))):
                 # common-word guard: exact capitalized form only
                 exact = form[:1].upper() + form[1:]
                 candidates.append(

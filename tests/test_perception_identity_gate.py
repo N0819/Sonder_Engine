@@ -583,3 +583,28 @@ def test_a_title_the_label_uses_survives_and_the_scrub_is_idempotent():
     twice, _ = _scrub_unknown_identities(
         once, allowed_forms=["Emory Vane"], unknown_sources=src, labels=labels)
     assert twice == once
+
+
+def test_a_word_from_inside_a_name_is_scrubbed_only_as_a_proper_noun():
+    """Playerless Aldermill round 3 (2026-09-23): "master" in the composer's
+    own descriptor was rewritten into a label that lacked it, in every view
+    Emory read from t7 to t23; the capitalised given name still goes."""
+    from agents.common import _scrub_unknown_identities
+    src = [{"name": "Master Godidric Stanpenridge", "aliases": []}]
+    view = ("You see seasoned tall freckled measured master, with brown hair. "
+            "Godidric bears down on the lever.")
+    out, leaked = _scrub_unknown_identities(
+        view, allowed_forms=["Emory Vane"], unknown_sources=src)
+    assert "measured master, with brown hair" in out
+    assert "Godidric" not in out and leaked == ["Master Godidric Stanpenridge"]
+
+
+def test_an_act_that_opens_with_its_actors_own_name_takes_the_observers_label():
+    """Round 3 t13: a charter voice's act "Godidric plants his boots" reached
+    a view verbatim, a name no channel delivered."""
+    from agents.composer import _peel_own_name
+    name = "Master Godidric Stanpenridge"
+    assert _peel_own_name("Godidric plants his boots.", name) == "plants his boots."
+    assert _peel_own_name("Master Godidric plants", name) == "plants"
+    assert _peel_own_name("Godidric's hands grip it", name) == "Godidric's hands grip it"
+    assert _peel_own_name("The lever groans", name) == "The lever groans"

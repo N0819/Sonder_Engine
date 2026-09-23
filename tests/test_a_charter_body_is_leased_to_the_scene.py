@@ -158,10 +158,34 @@ def test_a_present_charter_body_in_contact_is_stood_in_the_scene():
     figs = [{"name": "Master Miller Waerton", "room": "sluice_house",
              "charter": "aldermill", "body": "miller"},
             {"name": "Tam", "room": "yard", "charter": "aldermill", "body": "tam"}]
-    assert _stand_touching_figures(sc, sd, figs) == ["Master Miller Waerton"]
-    ent = sd["entities"]["master_miller_waerton"]
-    assert ent["kind"] == "person" and ent["name"] == "Master Miller Waerton"
+    assert _stand_touching_figures(
+        sc, sd, figs, declared_rooms={"Master Miller Waerton": "mill_race"}
+    ) == ["Master Miller Waerton"]
+    # Keyed by the name the contact op speaks, so hygiene can place it; and
+    # standing where the beat put it, not at its post.
+    ent = sd["entities"]["Master Miller Waerton"]
+    assert ent["kind"] == "person"
     assert ent["charter_ref"] == {"charter": "aldermill", "body": "miller"}
-    assert sd["positions"]["master_miller_waerton"] == "sluice_house"
+    assert sd["positions"]["Master Miller Waerton"] == "mill_race"
     # A body the diff already stands is left alone on a second pass.
     assert _stand_touching_figures(sc, sd, figs) == []
+
+
+def test_a_stood_figures_contact_survives_the_merge():
+    """Round 3 (2026-09-23) t7: the stood miller's lever hold was emitted and
+    the body stood, and the committed contacts still lacked it."""
+    from agents.director import _stand_touching_figures
+    from world.spatial import merge_scene_with_diff
+    sc = {"rooms": {"sluice_house": {"name": "Sluice House",
+                                     "fixtures": ["lever"]}},
+          "positions": {"Emory Vane": "sluice_house"}, "entities": {},
+          "contacts": []}
+    sd = {"contact_ops": [{"op": "add", "actor": "Master Miller Waerton",
+                           "actor_part": "hands", "target": "Emory Vane",
+                           "target_part": "shoulder", "manner": "grip"}]}
+    figs = [{"name": "Master Miller Waerton", "room": "sluice_house",
+             "charter": "aldermill", "body": "miller"}]
+    _stand_touching_figures(sc, sd, figs)
+    merged = merge_scene_with_diff(sc, sd)
+    assert any(c.get("actor") == "Master Miller Waerton"
+               for c in merged.get("contacts") or [])

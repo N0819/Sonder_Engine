@@ -4542,6 +4542,33 @@ def _causal_event_inputs(ctx, interp, declarations, dice, pressures):
     return groups
 
 
+def _name_declared_targets(ctx, scene, groups, identity_index):
+    """Say which body each declared target IS, where the declarer's words for
+    it name exactly one.
+
+    A mind aims at whom it sees, in the words its view gave it -- "the elderly
+    broad-shouldered miller journeyman" -- and the Director, who knows every
+    name, had to guess which person that was. It guessed wrong: Sal turned to
+    one hand and the account turned her to another, whose answer then came
+    from "a voice" (playerless Aldermill round 3, 2026-09-23, t20 and t22).
+    The declarer's own label is resolved the way an address is
+    (`_bodies_addressed_as`), and the event gains `target_bodies`; its own
+    `targets` stay the declarer's words. Mutates `groups`."""
+    for group in groups or []:
+        speaker = str((identity_index or {}).get(str(group.get("entity_id")))
+                      or "")
+        if not speaker:
+            continue
+        for event in group.get("events") or []:
+            named = []
+            for target in event.get("targets") or []:
+                bodies = _bodies_addressed_as(ctx, scene, speaker, [target])
+                if len(bodies) == 1 and bodies[0] not in named:
+                    named.append(bodies[0])
+            if named:
+                event["target_bodies"] = named
+
+
 def _beat_event_sentences(out, identity_index=None):
     """The beat as one plain sentence per ledger row, in the rows' order.
 
@@ -6446,6 +6473,9 @@ def director_resolve(ctx, nonce, _corrections=None):
     })
     _resolve_event_inputs = _causal_event_inputs(
         ctx, interp, decls, dice, payload.get("world_pressure") or [])
+    if director_prose.enabled():
+        _name_declared_targets(ctx, resolve_sc, _resolve_event_inputs,
+                               _identity_index)
     _resolve_actor_names = [
         _identity_index.get(str(group.get("entity_id")))
         for group in _resolve_event_inputs if isinstance(group, dict)
@@ -7609,7 +7639,14 @@ def director_resolve(ctx, nonce, _corrections=None):
         out["identity_bindings"] = _bound
     # A present charter body that touches or is touched stands in the scene,
     # so its contact survives the merge and the lease governs it.
-    for _stood in _stand_touching_figures(sc, sd, list(_present_figures)):
+    for _stood in _stand_touching_figures(
+            sc, sd, list(_present_figures),
+            declared_rooms={str(_fd.get("name")): str(_fd.get("room"))
+                            for _fd in _figure_declarations
+                            if _fd.get("name") and _fd.get("room")},
+            acting=[str(_r.get("source_entity_id") or "")
+                    for _r in (out.get("ledgers") or [])
+                    if isinstance(_r, dict)] if _prose_contract else ()):
         ctx.add_warning("charter body %r is in contact on screen; the scene "
                         "stands it (leased)" % _stood)
 

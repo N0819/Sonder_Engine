@@ -264,7 +264,7 @@ def _jev_state(prose, model_payload):
     """What Jev judges: the passage, plus the two facts a channel question
     can turn on and prose alone may not settle -- who the people are, and
     which places already exist (a room question asks about a NEW place)."""
-    identities = sorted({str(v) for v in (model_payload.get("identity_index") or {}).values() if v})
+    identities = sorted({str(v) for v in identities_with_figures(model_payload).values() if v})
     rooms = sorted({str(v) for v in ((model_payload.get("object_index") or {}).get("rooms") or {}).values() if v})
     lines = ["PASSAGE:", prose, ""]
     if identities:
@@ -324,6 +324,26 @@ def select_channels(ctx, stage, prose, model_payload, facts=None, planned=None):
 
 # ---- 3. one encoder builds -----------------------------------------------
 
+def identities_with_figures(model_payload):
+    """The identity index, plus every body standing in view by its own name.
+
+    The prose makes whoever is here act; the encoder attributes each step to
+    `source_entity_id`, and a body the index did not list had no key -- so the
+    step went to the cast member the beat was about (playerless Aldermill
+    round 3, 2026-09-23: a hand's sacks on the scale filed as Sal's own act,
+    and her view never showed the weighing she watched for eight beats). A
+    figure's key is its display name, which is what a ledger row's unknown
+    source already resolves to downstream."""
+    index = dict(model_payload.get("identity_index") or {})
+    named = {str(v).casefold() for v in index.values() if v}
+    for row in model_payload.get("present_figures") or []:
+        name = str((row or {}).get("name") or "").strip()
+        if name and name.casefold() not in named:
+            index[name] = name
+            named.add(name.casefold())
+    return index
+
+
 def encoder_payload(ctx, sc, prose, model_payload, view, extras, channels):
     """The prose, the Director's own inputs, and the union of the world
     slices each selected channel's owner would have received. A key two
@@ -331,7 +351,7 @@ def encoder_payload(ctx, sc, prose, model_payload, view, extras, channels):
     payload = {
         "prose": prose,
         "event_inputs": model_payload.get("event_inputs") or [],
-        "identity_index": model_payload.get("identity_index") or {},
+        "identity_index": identities_with_figures(model_payload),
         "world_index": model_payload.get("world_index") or {},
         "standing_relations": model_payload.get("standing_relations") or {},
         "already_happened": model_payload.get("already_happened") or "",

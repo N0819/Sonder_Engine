@@ -3297,6 +3297,34 @@ def communication_percept(entry, rel, observer_name, *, display, can_see,
     )
 
 
+def _peel_own_name(surface, actor_name):
+    """An act's surface with its actor's own leading name words removed.
+
+    Whoever renders the act names the actor -- by the observer's label for
+    it -- so a surface that opens with the actor's own name carries a second
+    subject, and for a stranger that subject is a name no channel delivered.
+    The renderer peels only the words of the LABEL, which for a stranger is
+    a descriptor, so "Godidric plants his boots" read as an independent
+    sentence and reached a mind that had never learned the name (playerless
+    Aldermill round 3, 2026-09-23, t13 and t23: a charter voice writes its
+    act about itself in the third person). A possessive is not peeled -- the
+    predicate after it has its own subject ("Godidric's hands grip") -- and a
+    surface that is nothing but the name is left alone."""
+    if not surface or not actor_name:
+        return surface
+    own = {w.casefold() for w in str(actor_name).split() if w}
+    words = surface.split()
+    peeled = 0
+    while peeled < len(words):
+        word = words[peeled].strip(".,;:").casefold()
+        if word not in own:
+            break
+        peeled += 1
+    if not peeled or peeled == len(words):
+        return surface
+    return " ".join(words[peeled:])
+
+
 def act_percept(scene, event, observer_name, actor_name, rel, *,
                 display, can_see, self_forms=None, self_pronouns=None,
                 other_forms=None,
@@ -3328,7 +3356,7 @@ def act_percept(scene, event, observer_name, actor_name, rel, *,
     if surface is None:
         from .common import observable_action_text
         surface = observable_action_text(event)
-    surface = str(surface or "").strip()
+    surface = _peel_own_name(str(surface or "").strip(), actor_name)
     if not surface:
         note_step_decision("act_percept", _who, "refused",
                            "no observable surface -- a mental beat")

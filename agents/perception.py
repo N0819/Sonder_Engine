@@ -3316,6 +3316,13 @@ def perception_outcome(ctx, nonce):
     # from this step onward would silently lose the background reaction.
     _bg_beats = _background_beats(ctx, sc)
     _bg_rooms = {b["name"]: b["room"] for b in _bg_beats if b["room"]}
+    # A charter body the Director voiced before resolve speaks from the room
+    # its declaration stood it in. It has no scene row, so without this its
+    # line had no source room and was refused to a listener at arm's reach
+    # (playerless Aldermill round 3, 2026-09-23: 10 of 28 lines).
+    for _fd in (res.get("charter_declarations") or []):
+        if isinstance(_fd, dict) and _fd.get("name") and _fd.get("room"):
+            _bg_rooms.setdefault(str(_fd["name"]), str(_fd["room"]))
     br_entries = [b["entry"] for b in _bg_beats if b["entry"]]
 
     raw_dlog = list(res.get("dialogue_log") or [])

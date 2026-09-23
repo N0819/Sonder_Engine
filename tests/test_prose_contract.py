@@ -648,3 +648,43 @@ def test_the_encoder_is_told_silence_ends_a_contact(temp_db):
     from llm import prompts
     core = prompts.unified_specialist_prompt(["contact_ops"])
     assert "reads every standing contact you leave unmentioned as ended" in core
+
+
+def test_a_body_in_view_is_a_source_the_encoder_can_name():
+    """Round 3 (2026-09-23): a hand's sacks on the scale were filed as Sal's
+    own act because the identity index held no key for him."""
+    payload = {"identity_index": {"character:1": "Sal Weatherby"},
+               "present_figures": [{"name": "Godenric Brampenford"},
+                                   {"name": "Sal Weatherby"}]}
+    index = director_prose.identities_with_figures(payload)
+    assert index == {"character:1": "Sal Weatherby",
+                     "Godenric Brampenford": "Godenric Brampenford"}
+
+
+def test_a_figure_that_acts_on_screen_is_stood():
+    from agents.director import _stand_touching_figures
+    sd = {}
+    figs = [{"name": "Godenric Brampenford", "room": "mill_yard",
+             "charter": "aldermill", "body": "hand"}]
+    assert _stand_touching_figures(
+        {"positions": {"Sal Weatherby": "mill_yard"}}, sd, figs,
+        acting=["character:1", "Godenric Brampenford"]) == ["Godenric Brampenford"]
+    assert sd["positions"] == {"Godenric Brampenford": "mill_yard"}
+
+
+def test_a_declared_target_in_the_declarers_words_names_its_body(monkeypatch):
+    """Round 3 (2026-09-23) t20: Sal turned to one hand by description and the
+    account turned her to another."""
+    seen = {"the elderly miller journeyman": ["Kenoreth Bramterwell"],
+            "the stones": []}
+    monkeypatch.setattr(director, "_bodies_addressed_as",
+                        lambda ctx, sc, speaker, forms: seen.get(forms[0], []))
+    groups = [{"entity_id": "character:1", "events": [
+        {"targets": ["the elderly miller journeyman", "the stones"]},
+        {"targets": []}]}]
+    director._name_declared_targets(None, {}, groups,
+                                    {"character:1": "Sal Weatherby"})
+    first, second = groups[0]["events"]
+    assert first["target_bodies"] == ["Kenoreth Bramterwell"]
+    assert first["targets"] == ["the elderly miller journeyman", "the stones"]
+    assert "target_bodies" not in second

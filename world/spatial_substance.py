@@ -5,6 +5,7 @@ transfer, and speech impediment."""
 import hashlib
 
 from world.spatial_contacts import (
+    _anchor_room_of,
     _part_identity,
     _same_region,
     contact_id,
@@ -246,7 +247,16 @@ def _substance_id(record):
 
 
 def _substance_target_exists(scene, target):
-    """Whether a material destination is a live room, body, or entity."""
+    """Whether a material destination is a live room, body, entity, or one
+    room's own fixture.
+
+    A FIXTURE IS A DESTINATION FOR MATTER as it is an endpoint for touch
+    (`spatial_contacts._anchor_room_of`): a bearing packed with tallow, a sill
+    smeared with it. Without this the whole of a repair was discarded as
+    "target is not present" -- six substance adds over one playerless run
+    (Aldermill round 3, 2026-09-23), leaving only the rag and the hand
+    holding anything. An id two rooms both claim names no fixture, as for
+    contact."""
     label = str(target or "").strip()
     if not label:
         return False
@@ -267,7 +277,7 @@ def _substance_target_exists(scene, target):
         if any(same_subject(scene, alias, label)
                for alias in (entity.get("aliases") or [])):
             return True
-    return False
+    return _anchor_room_of(scene, label) is not None
 
 
 def _resolved_substance_add(scene, raw, report=None):

@@ -1625,7 +1625,7 @@ def _mint_fallback_room(sd, player_name, player_room_before):
     return arrived or (str(player_room_before or "").strip() or None)
 
 
-def _stand_touching_figures(sc, sd, figures):
+def _stand_touching_figures(sc, sd, figures, declared_rooms=None, acting=()):
     """A PRESENT CHARTER BODY THAT TOUCHES OR IS TOUCHED STANDS IN THE SCENE.
 
     A charter figure on screen is laid into the resolve's working scene only;
@@ -1641,9 +1641,22 @@ def _stand_touching_figures(sc, sd, figures):
     with its `charter_ref`, placed in the figure's room, which the commit's
     lease then holds or releases. Creatures stay the charter's to stand.
 
+    The row is keyed by the display name, because every contact and
+    position reader looks a body up by the name the op speaks (round 3,
+    2026-09-23: a slug key left the stood miller's lever hold unplaced and
+    hygiene dropped it). It stands in the room the beat's declaration put
+    it in (`declared_rooms`, name -> room), else at its charter place: a body
+    shoving a tub in the race is in the race, wherever its post is.
+
+    `acting` names the bodies the beat's own events are sourced to: a figure
+    that ACTS on screen is on screen for the same reason one that touches is,
+    and perception can only place an act whose actor the scene stands.
+
     Mutates `sd`; returns the names stood."""
     ops = (sd or {}).get("contact_ops")
-    if not isinstance(ops, list) or not ops or not figures:
+    ops = ops if isinstance(ops, list) else []
+    acting = [a for a in (acting or ()) if a]
+    if not (ops or acting) or not figures:
         return []
     by_name = {}
     for fig in figures:
@@ -1664,24 +1677,24 @@ def _stand_touching_figures(sc, sd, figures):
             if isinstance(ent, dict) and ent.get("name"):
                 held.add(str(ent["name"]).casefold())
     stood = []
-    for op in ops:
-        if not isinstance(op, dict):
+    ends = [end for op in ops if isinstance(op, dict)
+            for end in (op.get("actor"), op.get("target"))]
+    for end in ends + list(acting):
+        folded = " ".join(str(end or "").split()).casefold()
+        fig = by_name.get(folded)
+        if not fig or folded in held:
             continue
-        for end in (op.get("actor"), op.get("target")):
-            folded = " ".join(str(end or "").split()).casefold()
-            fig = by_name.get(folded)
-            if not fig or folded in held:
-                continue
-            name = str(fig.get("name"))
-            eid = re.sub(r"[^a-z0-9]+", "_", name.casefold()).strip("_") or "figure"
-            sd.setdefault("entities", {})[eid] = {
-                "name": name, "kind": "person",
-                "aliases": [a for a in (fig.get("aliases") or []) if a],
-                "charter_ref": {"charter": fig["charter"], "body": fig["body"]},
-            }
-            sd.setdefault("positions", {})[eid] = str(fig["room"])
-            held |= {folded, eid}
-            stood.append(name)
+        name = str(fig.get("name"))
+        eid = name
+        room = str((declared_rooms or {}).get(name) or fig["room"])
+        sd.setdefault("entities", {})[eid] = {
+            "name": name, "kind": "person",
+            "aliases": [a for a in (fig.get("aliases") or []) if a],
+            "charter_ref": {"charter": fig["charter"], "body": fig["body"]},
+        }
+        sd.setdefault("positions", {})[eid] = room
+        held.add(folded)
+        stood.append(name)
     return stood
 
 
