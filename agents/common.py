@@ -5615,6 +5615,11 @@ def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources,
     # are therefore matched too, and replaced with themselves, which shields
     # them from being partially consumed.
     candidates = []
+    # Every label this pass may write is shielded like a name the observer
+    # commands, so a second pass leaves a label the first one wrote alone:
+    # the scrub is idempotent, and a view composed through two stages
+    # cannot grow a label inside a label.
+    label_shields = set()
     for src in unknown_sources:
         name = str(src.get("name") or "").strip()
         if not name or name.casefold() in allowed:
@@ -5629,6 +5634,8 @@ def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources,
         # twenties shifts on the bench".
         label = (labels or {}).get(name) or _unknown_actor_label(
             name, src.get("appearance"), aliases=src.get("aliases"))
+        if label:
+            label_shields.add(str(label).strip())
         # A NAME'S OWN PARTS ARE SPELLINGS OF THE BODY IT NAMES. The forms
         # were the full name and the authored aliases, so a Director writing
         # a bare given name in free text walked past this pass while the same
@@ -5661,6 +5668,21 @@ def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources,
                               for a in (src.get("aliases") or [])] + parts:
             if not form or form.casefold() in allowed:
                 continue
+            # A SPELLING THE OBSERVER'S OWN LABEL FOR THIS BODY ALREADY USES
+            # IS NOT A NAME THE OBSERVER LACKS. A post can be both a name
+            # form and what the body is seen as: "Master Miller" is the
+            # miller's title and the head of his label ("the middle-aged ...
+            # master miller"). Scrubbing it rewrote the label's own words
+            # into the label, and every later pass rewrote them again --
+            # "measured the middle-aged tall broad-shouldered pale measured
+            # the middle-aged ..." in every view Emory read (playerless
+            # Aldermill, 2026-09-23). Whole words only, a hyphen joining a
+            # word to another making it part of that word, so a name "Grey"
+            # is still scrubbed beside a label "grey-haired".
+            if label and re.search(
+                    r"(?<![\w-])" + re.escape(form.casefold()) + r"(?![\w-])",
+                    str(label).casefold()):
+                continue
             # A short Latin form cannot be told from an ordinary word; a short
             # CJK form is a perfectly ordinary name, and skipping it is the
             # leak this whole pass exists to prevent.
@@ -5682,7 +5704,8 @@ def _scrub_unknown_identities(view, *, allowed_forms, unknown_sources,
     if not candidates:
         return view, []
     shields = sorted(
-        {str(f or "").strip() for f in (allowed_forms or []) if str(f or "").strip()},
+        {str(f or "").strip() for f in (allowed_forms or []) if str(f or "").strip()}
+        | {f for f in label_shields if f},
         key=len, reverse=True)
     ordered = sorted(candidates, key=lambda item: len(item[0]), reverse=True)
     by_group = {}

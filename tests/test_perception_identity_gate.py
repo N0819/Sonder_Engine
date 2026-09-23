@@ -563,3 +563,23 @@ def test_the_scrub_uses_the_observers_own_label_for_a_dim_stranger():
         "Bram shifts on the bench.", allowed_forms=["Tamsin Reyle"],
         unknown_sources=src)
     assert "Bram" not in text and "young man" in text
+
+
+def test_a_title_the_label_uses_survives_and_the_scrub_is_idempotent():
+    """Playerless Aldermill (2026-09-23): "Master Miller" was both the
+    miller's name form and the head of his label, so every pass rewrote the
+    label's own words into the label -- "measured the middle-aged tall
+    broad-shouldered pale measured the middle-aged ..." in every view."""
+    from agents.common import _scrub_unknown_identities
+    label = "the middle-aged tall broad-shouldered pale measured master miller"
+    view = ("You see middle-aged tall broad-shouldered pale measured master "
+            "miller, with cropped grey hair. Master Miller Millenmoor nods.")
+    src = [{"name": "Master Miller Millenmoor", "aliases": ["Master Miller"]}]
+    labels = {"Master Miller Millenmoor": label}
+    once, leaked = _scrub_unknown_identities(
+        view, allowed_forms=["Emory Vane"], unknown_sources=src, labels=labels)
+    assert "measured master miller, with cropped grey hair" in once
+    assert "Millenmoor" not in once and leaked == ["Master Miller Millenmoor"]
+    twice, _ = _scrub_unknown_identities(
+        once, allowed_forms=["Emory Vane"], unknown_sources=src, labels=labels)
+    assert twice == once
