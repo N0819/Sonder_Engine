@@ -284,11 +284,14 @@ micro-view, and that text flows verbatim into their next character step and
 their memory of the beat. (The player is unaffected: `_composer_outcome` skips
 the `player` key when merging `micro_by_pid`.)
 
-These additions also arrive at `_composer_outcome` **pre-rendered** and are
-appended after the composed view, so they carry none of the percept-level
-gates either — the residual already noted in
-`design_notes/13-composer-build.md` ("the micro loop should emit percepts").
-One fix covers both: emit percepts.
+They no longer reach `_composer_outcome`: appended there pre-rendered, after
+the percepts that stage builds from the same resolved lines and acts, they
+delivered every declared line twice and bypassed its gates, and they were
+removed (playerless Aldermill round 9, 2026-09-23). What remains is the
+micro-view itself -- the between-declaration context a character's next call
+is made from -- which still carries none of the percept-level gates. The fix
+recorded in `design_notes/13-composer-build.md` still covers it: the micro
+loop should emit percepts.
 
 <a id="unbuilt-1-43"></a>
 

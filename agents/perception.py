@@ -6712,20 +6712,19 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
     # single observable surface covers all of them.
     crossed_legs = _multi_room_legs(sc, moves)
 
-    # Micro-round deliveries were gated by `_delivery_ok` when the loop ran;
-    # they arrive pre-rendered. They are minted as percepts and go into the
-    # SAME list as everything else, so the tripwires see them and their
-    # observations are derived rather than asserted. (Residual: the micro loop
-    # should emit percepts of its own rather than prose -- noted in
-    # design_notes/13-composer-build.md, and it lives in agents/loops.py.)
-    micro_by_pid = {}
-    for round_data in (ctx.interaction_loop or {}).get("rounds") or []:
-        for perceiver_id, additions in (
-                round_data.get("delivered_views") or {}).items():
-            key = str(perceiver_id)
-            if key == "player":
-                continue
-            micro_by_pid.setdefault(key, []).append(additions)
+    # THE OUTCOME IS THE RESOLVED BEAT, ONCE. The interaction loop's
+    # between-declaration deliveries (`delivered_views`) are what each mind
+    # was shown BEFORE the resolve decided the beat -- the context its next
+    # declaration was made from, which the loop keeps for exactly that. They
+    # used to be appended here as well, pre-rendered, after every percept
+    # this stage builds from the same lines and acts through its own gates:
+    # every declared line reached a watching character twice, once as the
+    # loop's draft and once as said, and their memory kept both (7 outcome
+    # views; one walk read three times; playerless Aldermill round 9,
+    # 2026-09-23). The drafts carried none of this stage's gates either
+    # (`docs/UNBUILT_IDENTITY.md` 1.39) -- at idx 13 one delivered by sight
+    # an act this stage refused -- so dropping them subtracts only what the
+    # resolve did not stand behind.
 
     base_ledger = dict(_composer_prev_ledger(ctx))
     base_ledger.update(ctx.get("_composer_turn_ledger") or {})
@@ -7225,10 +7224,6 @@ def _composer_outcome_views(ctx, sc, prev_scene, diff, interp, res, known,
                 unknown, order, sense_card=p.get("sense_card"))
             percepts.extend(minted)
             company[pid] = _composer_company(others, display_map, percepts)
-        for additions in micro_by_pid.get(pid) or []:
-            # `additions` is the round's LIST of delivered lines. See
-            # `composer.micro_round_percepts`.
-            percepts.extend(composer.micro_round_percepts(additions))
         rendered = composer.render_view(
             percepts,
             mode="player" if is_player_view else "character",

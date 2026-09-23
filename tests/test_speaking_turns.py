@@ -190,12 +190,23 @@ class TestAMicroRoundDeliversLines:
         assert composer.micro_round_percepts([]) == []
         assert composer.micro_round_percepts(["", "   "]) == []
 
-    def test_the_outcome_composer_uses_it(self):
+    def test_the_outcome_does_not_redeliver_the_loops_drafts(self):
+        """The loop's deliveries are what a mind was shown BEFORE the resolve
+        decided the beat. Appended to the outcome view after the percepts it
+        builds from the same resolved lines, every declared line reached a
+        watching character twice and their memory kept both (playerless
+        Aldermill round 9, 2026-09-23: 7 outcome views, one walk read three
+        times). The loop keeps them for the next declaration; the outcome
+        renders the resolved beat once."""
         import inspect
         from agents import perception
         source = inspect.getsource(perception)
-        assert "micro_round_percepts(additions)" in source
-        assert "micro_round_percept(additions)" not in source
+        assert "micro_round_percepts(" not in source
+        code = "\n".join(
+            line for line in inspect.getsource(
+                perception._composer_outcome_views).splitlines()
+            if not line.lstrip().startswith("#"))
+        assert "delivered_views" not in code
 
 
 class TestTheNarratorIsToldWhatThePlayerWears:
