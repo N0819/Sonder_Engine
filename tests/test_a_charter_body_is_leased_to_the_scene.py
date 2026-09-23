@@ -133,7 +133,7 @@ class TestOneEntityPerCharterBody:
 def test_a_charter_person_minted_as_a_fixture_binds_to_the_body():
     """Prevention: a hand wrote a charter person as `kind: fixture` out of
     view; the reserved charter figure makes the mint that person."""
-    from agents.director_floors import _bind_minted_entities_to_present_figures
+    from agents.director import _bind_minted_entities_to_present_figures
     sd = {"entities": {"gushiga_toriki": {"name": "Gushiga Toriki", "kind": "fixture"}},
           "positions": {"gushiga_toriki": "moonlit_beach"}}
     figures = [{"name": "Gushiga Toriki", "aliases": [], "charter": "yonaha_store",
