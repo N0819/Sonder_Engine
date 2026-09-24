@@ -109,6 +109,25 @@ def test_fidelity_rejects_dialogue_the_player_view_never_received():
     assert any("invented quoted dialogue" in warning for warning in warnings)
 
 
+def test_the_players_own_line_quoted_back_is_not_invented():
+    """The view does not carry the player's line -- it is on the page
+    already -- so quoting it back read as invented dialogue (the owner's
+    chat 137 idx 46, round 9, 2026-09-23). It has a speaker: the player."""
+    warnings = _check_narrator_fidelity(
+        {"prose": 'You squirm. "Ahh... This is really tight." The walls tighten.'},
+        view="The walls tighten around you.",
+        exclude_quotes=['"Ahh... This is really tight."'],
+    )
+
+    assert not any("invented quoted dialogue" in warning for warning in warnings)
+    still = _check_narrator_fidelity(
+        {"prose": 'You squirm. "Let me out."'},
+        view="The walls tighten around you.",
+        exclude_quotes=['"Ahh... This is really tight."'],
+    )
+    assert any("invented quoted dialogue" in warning for warning in still)
+
+
 def test_fidelity_allows_dialogue_delivered_in_the_player_view():
     line = '"Hold the line."'
     warnings = _check_narrator_fidelity(

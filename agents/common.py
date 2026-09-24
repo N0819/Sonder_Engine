@@ -11134,10 +11134,17 @@ def _check_narrator_fidelity(out, view, recent_prose=None, exclude_quotes=None,
     # comparison is against WHAT THE VIEW DELIVERED: a span whose words are
     # in the view verbatim came from the view, however the view marked them.
     delivered = _fold_marks(view_text)
+    # AND THE PLAYER'S OWN LINE HAS A SPEAKER. The view does not carry it --
+    # it is on the page already -- so a narrator that quotes it back was told
+    # it had invented dialogue ("Ahh... This is really tight.", the owner's
+    # chat 137 idx 46, round 9; "Wahh! What's happening?", chat 153 idx 23,
+    # round 4). The same exemption the missing-line check above makes.
+    player_lines = {_fold_marks(body).rstrip(".,!?;:") for body in excluded_bodies}
     for match in quote_pattern.finditer(prose):
         quote = re.sub(r"\s+", " ", match.group(1).strip())
         normalized = _fold_marks(quote).rstrip(".,!?;:")
         if (normalized and normalized not in allowed_quotes
+                and normalized not in player_lines
                 and normalized not in delivered):
             warnings.append(
                 "Narrator invented quoted dialogue absent from the player "
