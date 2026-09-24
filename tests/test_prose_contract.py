@@ -870,6 +870,23 @@ def test_the_players_input_says_what_their_line_is_on_interpret():
     assert director_prose.quotation_authority(SimpleNamespace(), "interpret", "A.") == "A."
 
 
+def test_a_journey_sets_off_before_its_end_is_built():
+    """The owner's chat 153 idx 22-24 (round 7, 2026-09-23): the TARDIS left
+    the beach for Kansai and the encoder wrote no transit -- "no destination
+    room is named in the prose, so no transit state was written" -- because
+    the sheet said setting off was in_transit "with the destination named".
+    The engine never required it (`spatial_transit._transit_state`), so the
+    ship stayed docked on the beach while the page flew it through the
+    vortex, and once it stood it inside its own console room."""
+    from llm import prompts
+    en = prompts.unified_specialist_prompt(["entities"])
+    ja = prompts.unified_specialist_prompt(["entities"], "ja")
+    assert ("naming `destination_room` when the world holds the place it is "
+            "bound for and leaving it out when it does not yet") in en
+    assert "with the destination named" not in en
+    assert "まだ持っていなければ書きません――旅は行き先が作られる前に出発し" in ja
+
+
 def test_every_position_the_encoder_wrote_is_a_stated_crossing():
     """Both stages' records, the later write winning, keys folded -- what the
     floor reads to judge a stated crossing as a declared one (chat 126 idx 9)."""
