@@ -812,3 +812,31 @@ class TestAnEngineIdIsNotAWordOfTheStory:
         text, _ = _render(scene)
         assert "iron_cuff" not in text
         assert "the iron cuffs" in text
+
+
+def test_a_pose_names_no_one_its_observer_has_not_learned():
+    """The owner's chat 120 (2026-09-23), every beat under both contracts:
+    Vexara's own pose detail -- written once, by the Director, in true
+    names -- read "left palm resting on the warmth of Hinami's lower ribs"
+    to a woman who had never learned the name, beside the structured half
+    that called her "the young woman". Perception's gate now labels a pose's
+    free text at admission, in the observer's own labels, and keeps the
+    owner in the third person where the full prose gate would cut it."""
+    from types import SimpleNamespace
+    from agents.perception import _authored_prose_gate
+    ctx = SimpleNamespace(warnings=[])
+    gate = _authored_prose_gate(ctx, "perception_outcome", "Reya",
+                                {"Reya": set()},
+                                [{"name": "Kai"}, {"name": "Reya"}])
+    labels = {"Kai": "the stranger"}
+    scene = _scene({"Reya": {"posture": "kneeling", "relative_to": "Kai",
+                             "relation": "over",
+                             "detail": "left palm resting on Kai's ribs"},
+                    "Kai": {"posture": "lying",
+                            "detail": "Kai's hands in Reya's hair"}})
+    percepts = pose_percepts(scene, "Reya", [{"name": "Kai"}], labels,
+                             scrub=lambda text: gate.names(text, labels=labels))
+    text = render_view(percepts).text
+    assert "Kai" not in text
+    assert "the stranger's ribs" in text
+    assert ctx.warnings == []

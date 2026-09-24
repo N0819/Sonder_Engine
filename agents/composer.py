@@ -2060,9 +2060,20 @@ def _action_target_second_person(text, target_forms, target_pronouns,
 
 
 def pose_percepts(scene, observer_name, co_present, display_map,
-                  senses=None, *, self_forms=(), self_pronouns=None):
+                  senses=None, *, self_forms=(), self_pronouns=None,
+                  scrub=None):
     """How bodies are arranged: posture, what holds them up, who they are
     against, what pins them.
+
+    `scrub` is the observer's identity floor for the pose's free text
+    (posture, constraint, detail), handed in by perception so this stays a
+    leaf: a pose is written once, by the Director, in true names, and served
+    to every mind that sees the body -- its owner included. Without it the
+    detail "Kneeling over Hinami ..., left palm resting on the warmth of
+    Hinami's lower ribs" read to Vexara, who had never learned the name,
+    beside the structured half of the same line that called her "the young
+    woman" (the owner's chat 120, every beat, under both contracts; the
+    tripwire repaired it after the fact).
 
     Poses were already Director-declared (`state_diff.poses`), already
     normalized (`normalize_scene_poses`) and already living in the scene
@@ -2138,6 +2149,10 @@ def pose_percepts(scene, observer_name, co_present, display_map,
         pose = {f: (_no_engine_ids(scene, pose[f])
                     if f in _POSE_FREE_TEXT else pose[f])
                 for f in pose}
+        if scrub is not None:
+            pose = {f: (scrub(pose[f]) if f in _POSE_FREE_TEXT and pose[f]
+                        else pose[f])
+                    for f in pose}
         data = {"posture": _self_second_person(
             pose["posture"], self_forms) if self_forms else pose["posture"]}
         if level == "full":

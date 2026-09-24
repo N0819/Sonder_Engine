@@ -4490,6 +4490,14 @@ def _authored_prose_gate(ctx, stage, name, known, identity_space):
             ctx.warnings.append(note)
         return gated
 
+    def names(text, labels=None):
+        """The identity half alone, in this observer's own labels: for
+        authored text about a body, which must keep the body's owner in
+        the third person where the full gate would cut it (a pose)."""
+        return _composer_scrub_surface(text, name, recognized, unknown,
+                                       labels=labels)
+
+    gate.names = names
     return gate
 
 
@@ -5214,9 +5222,11 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
     senses = p.get("sense_card")
     percepts.extend(composer.presence_percepts(
         sc, name, others, display_map, senses))
+    names = getattr(gate, "names", None)
     percepts.extend(composer.pose_percepts(
         sc, name, others, display_map, senses,
-        self_forms=self_forms, self_pronouns=self_pronouns))
+        self_forms=self_forms, self_pronouns=self_pronouns,
+        scrub=(lambda text: names(text, labels=display_map)) if names else None))
     for body in others:
         b_name = body.get("name")
         if not b_name:
