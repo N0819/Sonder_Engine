@@ -719,6 +719,136 @@ def doorway_edits_only(events, scene, new_ids=(), warn=None):
     return out
 
 
+def _names_a_holder(scene, text):
+    """Does `text` name a thing or a body the scene holds -- something a body
+    can be inside, which the movement path resolves to its interior -- rather
+    than a room?"""
+    folded = _fold_place(text)
+    if not folded or not isinstance(scene, dict):
+        return False
+    names = set()
+    for key, entity in (scene.get("entities") or {}).items():
+        names.add(_fold_place(key))
+        if isinstance(entity, dict):
+            names.add(_fold_place(entity.get("name")))
+    names.update(_fold_place(key) for key in (scene.get("positions") or {}))
+    return folded in names
+
+
+def _held_room(scene, room):
+    """The room the scene holds under this id or the words it is known by."""
+    rooms = ((scene or {}).get("rooms") or {}) if isinstance(scene, dict) else {}
+    if room in rooms:
+        return room
+    try:
+        from world.spatial import scene_room_id
+        return scene_room_id(scene, room) or ""
+    except Exception:
+        return ""
+
+
+def _with_places(event, place):
+    """`event` copied with every room a body goes to -- its transforms'
+    `positions` values and its movement's `to_room` -- passed through
+    `place(room, slot)`; a position `place` answers None for is dropped."""
+    event = dict(event)
+    movement = event.get("movement")
+    if isinstance(movement, dict) and str(movement.get("to_room") or "").strip():
+        routed = place(str(movement["to_room"]).strip(), "movement")
+        if routed is not None:
+            event["movement"] = dict(movement, to_room=routed)
+    if not event.get("transforms"):
+        return event
+    transforms = []
+    for transform in event["transforms"]:
+        patch = transform.get("patch") if isinstance(transform, dict) else None
+        positions = patch.get("positions") if isinstance(patch, dict) else None
+        if isinstance(positions, dict):
+            kept = {}
+            for body, room in positions.items():
+                routed = (place(str(room).strip(), "positions")
+                          if isinstance(room, str) and room.strip() else room)
+                if routed is not None:
+                    kept[body] = routed
+            patch = {k: v for k, v in patch.items() if k != "positions"}
+            if kept:
+                patch["positions"] = kept
+            if not patch:
+                continue
+            transform = dict(transform, patch=patch)
+        transforms.append(transform)
+    event["transforms"] = transforms
+    return event
+
+
+def unheld_places_are_new(events, scene, new_ids=(), warn=None):
+    """A room the encoder sends a body to that the world does not hold, and
+    that names nothing a body can be inside, IS a new place: `new:<its
+    words>`, for the room author to build and the engine to bind.
+
+    The contract has the encoder write `new:` for such a place, and on the
+    owner's chat 137 idx 47 (round 5, 2026-09-23) it wrote an id of its own
+    instead -- `positions: {"Hinami": "char_mirelle_sulmirath_stomach"}`,
+    the prose author's place list empty after a runaway -- for a room
+    nothing built. Perception then stood a body in no room and crashed, both
+    attempts, and the beat was lost. The id's words name the place, so it
+    goes to the author the way a `new:` does."""
+    known = set(new_ids or ())
+    named = []
+
+    def place(room, _slot):
+        if (room.startswith(NEW_PLACE_PREFIX) or room in known
+                or _held_room(scene, room) or _names_a_holder(scene, room)):
+            return room
+        if room not in named:
+            named.append(room)
+        return NEW_PLACE_PREFIX + " ".join(room.replace("_", " ").split())
+
+    out = [_with_places(event, place) if isinstance(event, dict) else event
+           for event in events or []]
+    if named and warn:
+        warn(f"encoder sent a body to {named}, no place the world holds; "
+             "each is a new place for the room author")
+    return out
+
+
+def bodies_stand_in_rooms(events, scene, built=None, warn=None):
+    """Every position a body ends the beat in names a room that stands: one
+    the world holds, one built this beat, or a holder to be inside. One
+    that names none -- a `new:` place nothing built, an id nothing holds --
+    would stand the body in no room (the owner's chat 137 idx 47, round 5:
+    perception_outcome crashed on it and the beat was lost), so it is
+    dropped and said, and the body stays where it stood. Movement is not
+    touched: a walk already ends at the last room the world holds
+    (`director._final_movement`)."""
+    standing = set(built or ())
+    for event in events or []:
+        if not isinstance(event, dict):
+            continue
+        for transform in event.get("transforms") or []:
+            patch = transform.get("patch") if isinstance(transform, dict) else None
+            if isinstance(patch, dict) and isinstance(patch.get("rooms"), dict):
+                standing.update(patch["rooms"])
+    dropped = []
+
+    def place(room, slot):
+        if slot != "positions":
+            return room
+        if not room.startswith(NEW_PLACE_PREFIX) and (
+                room in standing or _held_room(scene, room)
+                or _names_a_holder(scene, room)):
+            return room
+        dropped.append(room)
+        return None
+
+    out = [_with_places(event, place) if isinstance(event, dict) else event
+           for event in events or []]
+    if dropped and warn:
+        warn(f"positions into {dropped}: no such place stands this beat; "
+             "those bodies stay where they stood")
+    return out
+
+
 def _new_objects(events):
     """`{entity_id: {name, description}}` the encoder created this beat."""
     found = {}
@@ -1222,6 +1352,7 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     events = list(answer.get("events") or [])
     if rooms_elsewhere:
         events = doorway_edits_only(events, sc, set(new_places), warn=ctx.add_warning)
+        events = unheld_places_are_new(events, sc, set(new_places), warn=ctx.add_warning)
         refs = new_place_refs(events)
         if refs and room_future is None:
             # The decision model did not foresee a place; the encoder named
@@ -1263,6 +1394,8 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
         if extra is not None:
             events = [extra] + events
             room_record["rooms"] = sorted(((rooms_answer or {}).get("rooms") or {}))
+    events = bodies_stand_in_rooms(events, sc, ((rooms_answer or {}).get("rooms") or {}),
+                                   warn=ctx.add_warning)
     channels = list(encoder_channels) + [
         c for c in ROOM_AUTHOR_CHANNELS
         if rooms_elsewhere and rooms_answer and (rooms_answer.get(c) or None)]

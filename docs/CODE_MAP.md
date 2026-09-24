@@ -19,7 +19,7 @@
 | `agents/director_floors.py` | 2258 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 1839 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
-| `agents/director_prose.py` | 1362 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts` |
+| `agents/director_prose.py` | 1495 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts` |
 | `agents/director_reconcile.py` | 610 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `llm.schemas`, `story`, `world.spatial` |
 | `agents/director_rooms.py` | 425 |  | — |
 | `agents/director_scopes.py` | 1246 |  | `agents.director_lingua`, `agents.director_views`, `core.db`, `world.survival` |
@@ -206,7 +206,7 @@
 | `world/spatial_contact_migration.py` | 332 |  | `story.character_schema`, `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_contacts.py` | 1968 |  | `world.spatial_containment`, `world.spatial_identity`, `world.spatial_transit` |
 | `world/spatial_containment.py` | 3280 |  | `world.spatial_barriers`, `world.spatial_identity`, `world.spatial_transit` |
-| `world/spatial_fov.py` | 1795 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
+| `world/spatial_fov.py` | 1801 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_frames.py` | 2640 |  | `core.db`, `core.frames`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial` |
 | `world/spatial_geometry.py` | 2209 |  | `story.character_schema`, `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_identity.py` | 887 |  | — |
@@ -385,13 +385,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run()` | 1142 | 148 lines |
-| `encode()` | 828 | 80 lines |
-| `ledger_from_events()` | 1070 | 70 lines |
-| `dispatch()` | 1292 | 56 lines |
+| `run()` | 1272 | 151 lines |
+| `encode()` | 958 | 80 lines |
+| `ledger_from_events()` | 1200 | 70 lines |
+| `dispatch()` | 1425 | 56 lines |
 | `bind_new_places()` | 542 | 49 lines |
 | `select_channels()` | 294 | 45 lines |
-| `reconcile_rooms()` | 737 | 41 lines |
+| `reconcile_rooms()` | 867 | 41 lines |
 | `doorway_edits_only()` | 680 | 40 lines |
 
 ### `agents/director_reconcile.py`
@@ -2527,8 +2527,8 @@
 |---|---:|---:|
 | `_place_anchors()` | 544 | 125 lines |
 | `feature_visibility()` | 1454 | 111 lines |
+| `body_visibility()` | 1669 | 81 lines |
 | `body_cell()` | 784 | 76 lines |
-| `body_visibility()` | 1669 | 75 lines |
 | `neighbour_feature_visibility()` | 1598 | 69 lines |
 | `room_field()` | 1179 | 62 lines |
 | `_placed_neighbours()` | 1118 | 49 lines |

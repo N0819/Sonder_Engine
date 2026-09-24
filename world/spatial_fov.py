@@ -1690,6 +1690,12 @@ def body_visibility(scene: dict, observer: str, target: str) -> dict:
             and _has_measured_station(scene, target)):
         return open_answer
     field = observer_field(scene, observer)
+    if field is None:
+        # A station in a room the scene does not hold is no measured
+        # station: nothing here can subtract. The owner's chat 137 idx 47
+        # (round 5, 2026-09-23) placed a body in a stomach nothing had built,
+        # and `field.cell_of` crashed perception_outcome on both attempts.
+        return open_answer
     if t_room != o_room and t_room not in field.offsets:
         return open_answer                 # no doorway casts that far
     o_cell = body_cell(scene, observer)
