@@ -59,6 +59,10 @@ from agents import (
     active_content, ABORTS, PipelineBusyError,
     fanout_is_parallel as director_fanout_is_parallel,
 )
+from agents.director_prose import (
+    CONTRACT_SETTING as DIRECTOR_CONTRACT_SETTING,
+    enabled as director_prose_contract,
+)
 from story.character_schema import (
     EXTRA_PART_ASPECTS,
     character_card_warnings,
@@ -1839,6 +1843,12 @@ def bootstrap() -> dict:
         # default and the point; sequential is for a provider that cannot
         # take concurrent requests (see director.fanout_is_parallel).
         "director_fanout_parallel": director_fanout_is_parallel(),
+        # Which contract the Director works under: "causal" (the default --
+        # a ledger for its specialists) or "prose" (the experiment in
+        # docs/design/DESIGN_PROSE_CONTRACT.md -- the Director writes the
+        # beat as prose, a decision model picks the tools, one encoder
+        # records every change). Reported so the select shows its state.
+        "director_contract": "prose" if director_prose_contract() else "causal",
         # Affect habituation (design note 22). Default OFF, and otherwise
         # reachable only by editing the database -- a switch a host cannot
         # find is a switch that becomes folklore, and this one was live in a
@@ -2728,6 +2738,26 @@ def set_director_fanout_mode(body: dict = Body(...)):
     set_setting("director_fanout_mode",
                 "parallel" if parallel else "sequential")
     return {"parallel": parallel}
+
+
+@app.put("/api/director_contract")
+def set_director_contract(body: dict = Body(...)):
+    """Which contract the Director works under, switchable per install.
+
+    `causal` is the default: the Director writes a causal ledger and its
+    specialists encode the channels. `prose` is the experiment in
+    docs/design/DESIGN_PROSE_CONTRACT.md: the Director writes the beat as
+    prose, a decision model picks the tools, one encoder records every
+    change, and a room designer builds new places. It was reachable only by
+    editing the database, so a host who wanted to play it could not
+    (2026-09-24). Takes effect on the next beat; everything downstream of
+    the Director -- perception, narration, commit -- is the same either way.
+    """
+    contract = str(body.get("contract") or "").strip().casefold()
+    if contract not in ("causal", "prose"):
+        raise HTTPException(400, "contract must be causal or prose")
+    set_setting(DIRECTOR_CONTRACT_SETTING, contract)
+    return {"contract": contract}
 
 
 @app.put("/api/affect_habituation")

@@ -2660,6 +2660,43 @@ function renderFullApiSettings(b) {
           }, "Clear key")));
     }
 
+    // Which contract the Director works under. The causal ledger with its
+    // specialists is the default; the prose contract is the experiment in
+    // docs/design/DESIGN_PROSE_CONTRACT.md. Until this select existed it was
+    // reachable only by editing the database.
+    {
+      const contract = S.boot.director_contract === "prose" ? "prose" : "causal";
+      const contractSel = el("select", { style: "flex:1" }, [
+        el("option", {
+          value: "causal", ...(contract === "causal" ? { selected: "" } : {}),
+        }, "Specialists — the Director writes a ledger for its specialists (default)"),
+        el("option", {
+          value: "prose", ...(contract === "prose" ? { selected: "" } : {}),
+        }, "Writer and encoder — the Director writes prose, one encoder records it (experimental)"),
+      ]);
+      contractSel.onchange = async () => {
+        await api("PUT", "/api/director_contract",
+                  { contract: contractSel.value });
+        await boot();
+        toast(contractSel.value === "prose"
+          ? "The Director will write each beat as prose, and one encoder will record its changes."
+          : "The Director will write a ledger for its specialists.", "ok");
+      };
+      b.append(el("h4", {}, "Director contract"),
+        el("div", { class: "small dim" },
+          "How the Director turns a beat into changes to the world. "
+          + "Specialists: the Director writes a ledger of the beat and the "
+          + "specialist roles below each encode their own kind of change. "
+          + "Writer and encoder: the Director writes the beat as prose, a "
+          + "decision model picks which kinds of change it contains, and the "
+          + "director_specialist role encodes all of them in one call, with "
+          + "director_rooms building any new place (both under Models, "
+          + "falling back to Default like every role). Perception, narration "
+          + "and saving are the same either way. Takes effect on the next "
+          + "beat."),
+        el("div", { class: "row", style: "margin-top:6px" }, contractSel));
+    }
+
     // Fan-out concurrency, switched where the specialists are configured.
     // The fan-out itself is not a choice and has no switch -- it is the
     // only Director path. Whether its specialists run AT ONCE is a choice,
