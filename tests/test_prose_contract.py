@@ -885,6 +885,13 @@ def test_a_journey_sets_off_before_its_end_is_built():
             "bound for and leaving it out when it does not yet") in en
     assert "with the destination named" not in en
     assert "まだ持っていなければ書きません――旅は行き先が作られる前に出発し" in ja
+    # And it arrives somewhere real: chat 153 idx 26 docked the ship at a
+    # clearing built that beat and left its position on the beach -- "the
+    # new room was authored elsewhere" -- so its doors would open back there.
+    assert ("a place built this beat is such a room: name it by the id it was "
+            "reserved under, or as new:<the prose's own words for that place>") in en
+    assert ("この拍で作られる場所もその部屋です。予約された id か "
+            "new:<the prose's own words for that place> で名指してください") in ja
 
 
 def test_every_position_the_encoder_wrote_is_a_stated_crossing():
