@@ -878,6 +878,19 @@ def test_a_place_the_world_holds_is_already_designed():
     assert "何も draft せずにすぐ submit してください" in ja
 
 
+def test_an_answer_without_prose_goes_to_the_repair_ladder():
+    """Chat 126 replay, round 4 (NanoGPT z-ai/glm-5.2:thinking, 2026-09-23):
+    the author answered `{}`, which validated because `prose` had a default,
+    and the beat died on "returned no prose" instead of being asked again.
+    The repair it goes to now is shown the real shape, not `{}`."""
+    from llm.schemas import output_example, validate_llm_output_strict
+    assert not validate_llm_output_strict("director_prose", {}).valid
+    assert not validate_llm_output_strict("director_prose", {"prose": ""}).valid
+    assert validate_llm_output_strict("director_prose", {"prose": "Mara climbs."}).valid
+    example = output_example("director_prose")
+    assert example["prose"] and validate_llm_output_strict("director_prose", example).valid
+
+
 def test_a_places_text_never_describes_who_is_in_it():
     """Chat 153 replay (2026-09-23) idx 23: the designer's redraft of the
     console room wrote "Hinami stands here, six golden tails flared" into the

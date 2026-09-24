@@ -3061,8 +3061,15 @@ class ProseDirectorOutput(LenientModel):
     """The prose-contract Director's whole output (`agents/director_prose.py`):
     the beat as an objective account. No ledger, no routing, no handles --
     the decision model picks the encoder's tools from this text and the
-    encoder turns it into ordered engine events."""
-    prose: str = ""
+    encoder turns it into ordered engine events.
+
+    THE PROSE IS THE ANSWER, so an answer without it is invalid rather than
+    empty. With a default it validated as `{}` -- which a thinking model in
+    JSON mode returns now and then -- and the author then raised "returned no
+    prose" and killed the beat, where the repair ladder every other invalid
+    answer goes through would have asked again (chat 126 replay, round 4,
+    NanoGPT z-ai/glm-5.2:thinking, 2026-09-23)."""
+    prose: str = Field(..., min_length=1)
     # Each place the beat enters or reveals that the world does not hold yet,
     # in three simple fields: name, size (a ROOM_SIZES word) and shape (a
     # SHAPES word). Enough to reserve a room id both parallel workers use;
@@ -6316,6 +6323,16 @@ OUTPUT_EXAMPLES = {
         # repair then "succeeds" into the wrong format.
         "prose": "<p>One paragraph per pair of markers.</p>",
         "new_specifics": [],
+    },
+    # The prose author's shape (`agents/director_prose.author`), for the same
+    # reason as `background_react` below: without it the repair prompt showed
+    # `{}` -- "the required_json_example is empty, so I need to infer the
+    # structure", in the repair model's own words -- and `{}` was what the
+    # failed call had returned (chat 137 replay, round 2, 2026-09-23).
+    "director_prose": {
+        "prose": "Mara climbs the stair into the lamp room and calls down, "
+                 "\"The lamp is cold.\"",
+        "places": [],
     },
     # Without an example, output_example() returned {} and the repair prompt
     # steered a compliant model to return {} -- which validates (all defaults),
