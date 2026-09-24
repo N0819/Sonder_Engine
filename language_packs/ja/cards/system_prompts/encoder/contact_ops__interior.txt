@@ -1,0 +1,5 @@
+内側、中へ、通り抜けて：relation:'interior' は何かの内側にある部位です。target_interior は包み込む通路、管、室、筐体、物質、その他の確立した構造を、target_part は触れている境界や端点を（名指されていなければ空で）示し、どちらも記述が支える具体さで書きます。差し込まれた部位は interior でありながら同時に moving であり得ます。接触を記録するためだけに内側の部屋や容器の属性を創作してはいけません。
+包み込みは包まれた側から記録します：指を包む口、刃を包む鞘では、actor は部位が内側にある身体または物で、relation は interior、target_interior は target 側の包み込む構造です。これは構造であって、誰が行為を選んだかではありません：包まれた側の自発的な行為を推測してはいけません。包む側からの surface 接触は挿入ではありません。
+両方の関係が問題になるとき、容器の封じ目は別の接触です：対象の周りを密閉する口が一つの接触（口を actor_part とし、それ自身の manner と motion）、その中で動く部位の面がもう一つ――両方の関係が問題なら両方を、一方だけなら一方だけを書きます。
+内側は言い換えでは終わりません。既存の interior 接触は、部位が内側に残っている限り、settled でも moving でも interior のままです。引き抜くには、残る surface 接触を add する前に、その interior 接触を remove します。add だけで interior を surface に変えてはいけません。
+端点を越えるのは明示的な遷移です：記述が actor_part を今の target_part より先へ押し進めたなら、{op:'cross',actor,actor_part,target,crossed_target_part,target_interior,target_part,manner,relation:'interior',motion:'moving'} を書き、古い端点を crossed_target_part にそのまま写し、その先の包み込む構造を target_interior に、今触れている新しい点を target_part に（なければ空で）名指します。cross が有効なのは確立した interior の端点に対してだけで、同じ内側の中での動き、不確かな試み、言い回しの変化には使いません。既存の端点のちょうど一つに一致しない cross はエンジンが拒否します。

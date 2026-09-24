@@ -418,25 +418,50 @@ def prose_director_prompt(stage, language=None):
     return apply_prompt_policy(sheet, _language(language), pid)
 
 
-def unified_specialist_prompt(channels, language=None):
-    """One encoder sheet assembled from exactly the granted channels.
+#: `<channel>__<part>`: a part of a big channel's encoder chunk, shipped only
+#: when the decision model says the beat needs it (`encoder_parts`).
+ENCODER_PART_SEP = "__"
 
-    The prose contract's single specialist: its core, then every granted
-    channel's EXISTING chunk from whichever hand owns it, in canonical hand
-    order and each hand's authored chunk order. No chunk is duplicated or
-    rewritten for this contract; the core says how to read the several-hands
-    vocabulary the chunks were written in. The adult overlay is appended when
-    any hand whose chunk shipped would have received it on its own sheet."""
+
+def encoder_parts(channel, language=None):
+    """The part names of one channel's encoder chunk, in card order."""
+    prefix = f"{channel}{ENCODER_PART_SEP}"
+    return tuple(name for name in _prompt_card(language)["encoder"]
+                 if name.startswith(prefix))
+
+
+def unified_specialist_prompt(channels, language=None, parts=None):
+    """The prose contract's encoder sheet, from its own card.
+
+    The core, then every granted channel's `encoder.<channel>` chunk in
+    canonical hand order, each followed by whichever of its parts are in
+    `parts` -- or by all of them when `parts` is None, which is what a
+    caller with no decision to pass on gets (fail open: a longer sheet,
+    never a missing rule). The card is written for ONE encoder that writes
+    every channel itself: none of the several-hands vocabulary the causal
+    specialists' chunks carry (rows, results, verdicts, routing work to
+    another hand) reaches it, which is why it is a card of its own
+    (owner, 2026-09-24: "specific prompts for this version of the director
+    sound necessary? Otherwise we get a lot of weird confusing wording").
+    The adult overlay is appended when any hand whose channel shipped would
+    have received it on its own sheet."""
     card = _prompt_card(language)
+    encoder = card["encoder"]
     granted = set(channels or ())
-    parts = [str(card["prose_contract"]["specialist_core"])]
+    picked = None if parts is None else set(parts)
+    sections = [str(encoder["core"])]
     hands = []
     for name, spec in card["specialists"].items():
         shipped = [channel for channel in spec["order"] if channel in granted]
         if shipped:
             hands.append(name)
-        parts.extend(str(spec["chunks"][channel]) for channel in shipped)
-    sheet = "\n\n".join(part.strip("\n") for part in parts) + "\n"
+        for channel in shipped:
+            sections.append(str(encoder[channel]))
+            prefix = f"{channel}{ENCODER_PART_SEP}"
+            sections.extend(
+                str(text) for part, text in encoder.items()
+                if part.startswith(prefix) and (picked is None or part in picked))
+    sheet = "\n\n".join(section.strip("\n") for section in sections) + "\n"
     overlay = next((nsfw_overlay(f"director_{name}", card) for name in hands
                     if nsfw_overlay(f"director_{name}", card)), "")
     sheet += overlay
@@ -472,8 +497,9 @@ def room_reconcile_prompt(language=None):
 
 def jev_channel_questions(channels, language=None):
     """`{channel: question text}` for the channels asked of the decision
-    model. A channel with no authored question is simply not asked -- it
-    cannot be selected, and the caller's fail-open covers it."""
+    model -- an encoder part (`<channel>__<part>`) is asked by its own name.
+    A channel with no authored question is simply not asked -- it cannot be
+    selected, and the caller's fail-open covers it."""
     questions = _prompt_card(language).get("jev_questions") or {}
     return {channel: str(questions[channel])
             for channel in channels if channel in questions}

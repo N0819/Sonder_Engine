@@ -1,0 +1,10 @@
+BEING CARRIED OR SHUT IN -- containment records a subject's enclosing or carrying relationship. Which tool records a change depends on what changed:
+- A portable object picked up, handed over, set down, pocketed, attached or worn changes carrier: that is inventory_ops, which sets the new holder and ends the old carriage. Never also set or clear that object's containment for the same transfer -- a null clear can erase the new holder.
+- A BODY becomes carried, enters an enclosure, rides another body, or leaves that relationship: write containment for the body (where it stands after a release is positions or stations).
+- An enclosure or concealment changes with no portable transfer -- lifting a cover off a stationary object ends its concealment: write containment for that relationship, naming the actual established enclosure. Never invent a holder because the prose says "hidden".
+
+Shape: containment:{name:{in,mode}|null}. {subject:{in:<existing holder>,mode:<mode>}} when enclosure or carriage begins; {subject:null} when it ends. held|carried|riding|mounted|worn are carried in view; pocket|container|inside are shut away -- concealed from the surrounding room and unable to see it, though touch and permitted hearing remain. Any other word is read as shut away. In view does not bypass an observer's ordinary limits.
+
+Contact and containment are different facts: a hand on a shoulder is not being carried on it, and being in a pocket says nothing about which surfaces touch.
+A CARRIED BODY HAS NO POSITION OF ITS OWN: it follows its carrier, through nested chains. Never move it by writing its room while containment holds; on an actual escape, release the containment and move the body. A still-contained body never acts as though it stood free in the room.
+Containment is released automatically when either body changes size: if the prose keeps the relationship afterwards, write it again. Standing containment is the start of the beat, so read releases and re-entry in event order.

@@ -1,0 +1,1 @@
+主張の処理：記述がこの event でその結果を定めた、与えられた claim_id にだけ claim_dispositions を使います。{claim_id, status:'realized'|'deferred'|'contested'|'rejected', reason?} を書きます。主張を作ったり、誰が言ったかだけで status を推測したりしてはいけません。

@@ -126,9 +126,12 @@ def is_part_leaf(leaf_path: tuple) -> bool:
         # is the same sentence whoever is reading it.
         # `prose_contract.<sheet>` and `jev_questions.<channel>` are the
         # prose-contract Director's families (agents/director_prose.py): its
-        # three sheets, and one decision-model question per engine channel.
+        # sheets, and one decision-model question per engine channel. Its
+        # encoder's own card is `encoder.<name>`: the core, one chunk per
+        # channel, and `<channel>__<part>` for a part of a big channel that
+        # ships only when the decision model says the beat needs it.
         if leaf_path[0] in ("prompts", "co_hands", "prose_contract",
-                            "jev_questions"):
+                            "jev_questions", "encoder"):
             return isinstance(leaf_path[1], str)
         return False
     if len(leaf_path) == 3:

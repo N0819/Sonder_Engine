@@ -15,7 +15,7 @@ event を起きた順に書いてください。一つの event は一つの因�
 - source_event_id: この段階が実行する、またはそこから続いて起きる event_inputs の event_id。
 - event: 話された event なら、記述が引用するとおりの言葉だけ。それ以外は段階の短い客観的な記述。
 - speech: 話された event なら true。act: 記述が言葉を示さずに発話を報告しているときだけ、その発話の動詞。
-- observable: 動機を含まない外から見える動きや変化だけ。純粋な発話なら ""。これは prose が起きたと言っていることを、prose の言葉で書いたものです。event_inputs の行は試みられたことを示すだけで、prose がその試みを別の形で解決したなら、observable は prose に従います。
+- observable: 動機を含まない外から見える動きや変化だけ。純粋な発話なら ""。これは prose が起きたと言っていることを、prose の言葉で書いたものです。event_inputs の項目は試みられたことを示すだけで、prose がその試みを別の形で解決したなら、observable は prose に従います。
 - targets: その段階が向けられている、または話しかけている身体、もの、部屋の key または読める名前。
 - volume (whisper|mutter|normal|loud|shout、または pitched: 相手に届くだけの大きさで、それ以上ではない), visibility, conceal_from: 重要なときの伝達上の事実。volume は話し手がどれだけの大きさで音を出すかです。その後で音をくぐもらせたり運んだりするものは世界の側のもので、音を部屋から部屋へ運ぶのはエンジン自身です。
 - look: 段階が向きを変える、または見るとき。身体、設備、出口の id、left|right|back、または around。
@@ -23,17 +23,16 @@ event を起きた順に書いてください。一つの event は一つの因�
 - movement: 身体が部屋を移るときだけ {to_room, why, mover, arrives, to_anchor?, pace?}。to_room は歩みの終点で、経路はエンジンが歩きます。それ以外は null。
 - commitment: asserted、または記述が結果を開いたままにしているなら contestable。
 - item_names: この段階が変えるもの。それぞれ安定した名前を一つ付け、同じものが再び出るところでは同じ名前を使います。
-- transforms: [{item, patch}]。item はこの event の item_names の一つ。patch はその変化を、付与された tool の正確な形で書きます。一つの段階にいくつもの transform が要ることもあります。記録を何も変えない段階には transform はありません。
+- transforms: [{item, patch}]。item はこの event の item_names の一つ。patch はその変化を、あなたの tool の一つの正確な形で書きます。一つの段階にいくつもの transform が要ることもあります。記録を何も変えない段階には transform はありません。
 
 THE TOOLS YOU HAVE
-この core の後に続く指示が、この beat に付与された唯一の tool です。この記述の内容に応じて選ばれています。これらは、複数の担当が行ごとに位置対応した result を返す契約のために書かれたので、次のように読んでください。「row」「span」「ledger row」はあなたの event の一つです。「Director の裁定」や「resolved_event」は記述です。state_diff.X や state_assertions.X は patch.X を意味します。あなたは同時にすべての担当なので、results、status、settled、verdicts、required_channels、reroute_to、assigned_hands を返せという指示や、作業を別の担当に任せよという指示は無視し、補完的な transform を自分で書いてください。
-記述が変化を述べているのに、それを持つ tool が付与されていないときは、その tool を missing_tools に channel 名で挙げてください: attire, conditions, vitals, overlays, cast_changes, introductions, world_facts, public_evidence, crowd_ops, courier_ops, telling_ops, ratified_claims, contradicted_claims, charter_ops, claim_dispositions, consequences, obligations, contact_ops, contact_action_ops, substance_ops, containment, scales, entities, remove_entities, inventory_ops, artifact_ops, destruction, sensory_events, positions, rooms, remove_rooms, remove_adjacent, stations, poses, comms_ops, following_ops, location, weather。エンジンがそれを付与し、あなたの最初の答えを previous_events として返して、もう一度あなたに尋ねます。そのときは、追加された tool を使って、すべての event を順番どおりに含む完全な beat をもう一度返してください。変化を、それを持たない tool に無理に押し込まないでください。
-contact_ops を一つでも書く beat では、engine はあなたが触れなかった既存の contact をすべて終わったものとして読みます。だから prose がそのまま残している contact は、誰のものであっても、記録済みの part をそのまま使い、それがまだ続いている event で改めて add してください。
+この core の後に続く指示が、この beat に付与された唯一の tool で、この記述が含むものに応じて選ばれています。patch.<tool> はその tool の形で書きます。あなたはそのすべてを同時に担います：どの種類の変化も書くのはあなた自身で、一つの段階が二種類のものを変えるとき――受け渡しが同時に新しい握りでもあるとき――は、その段階で両方の transform を書いてください。いくつかの tool は部分に分かれています。基本部分と、まれな変化のための部分で、部分は <tool>__<part> と名付けられ、記述がそれを必要とすると判断されたときにだけ届きます。
+記述が変化を述べているのに、あなたの tool のどれもそれを記録しないときは、payload の requestable_tools から選んで、その tool か部分を missing_tools に挙げてください。エンジンがそれを付与し、あなたの最初の答えを previous_events として返して、もう一度あなたに尋ねます。そのときは、追加された tool を使って、すべての event を順番どおりに含む完全な beat をもう一度返してください。変化を、それを持たない tool に無理に押し込まないでください。
 new_places は、この beat で組み立てられている room を id ごとに、その name、size、shape とともに挙げたものです。その room が入るところにはその id を使い、身体やものを今そこに置いてください。
-places_authored_elsewhere が true のとき、世界がまだ持っていない場所はすべて room author が作ります。そうした場所の room を書いてはいけません。その場所の room id が入るところには new:<the prose's own words for that place> と書いてください。エンジンがそれを author の作った room に結び付けます。世界が既に持っている場所は作り終えています。あなたのものはただ一つ、記述が開く、閉じる、留める、または突き破る出入口です。その辺だけを patch.rooms.<room id>.adjacent = [{"to": <the other room id>, "barrier": <its new state>}] として書き、その room のほかのことは書かないでください。
-記述が必要とするもので、世界が持っておらず、付与された tool のどれでも作れないものは、記述が使った言葉で missing_referents に入れてください。
+places_authored_elsewhere が true のとき、世界がまだ持っていない場所はすべて room author が作ります。そうした場所の room を書いてはいけません。その場所の room id が入るところには new:<the prose's own words for that place> と書いてください。エンジンがそれを author の作った room に結び付けます。世界が既に持っている場所は作り終えています。あなたのものはただ一つ、記述が開く、閉じる、留める、または突き破る出入口です。その辺だけを patch.rooms.<room id>.adjacent = [{"to": <the other room id>, "barrier": <its new state>}] として書き、その room のほかのことは書かないでください。barrier は open、open_door、closed_door のいずれか、または扉を閉ざしているものを含む語です（locked_door や jammed_door は例示であって、一覧ではありません）。内側を持つもの――乗り物、箱、昇降機――の扉は辺ではありません。それはそのものの entities での state.hatch であり、出入口はエンジンが描きます。
+記述が必要とするもので、世界が持っておらず、あなたの tool のどれでも作れないものは、記述が使った言葉で missing_referents に入れてください。
 
-EXAMPLE（名前と tool は例示にすぎません。与えられた identity、key、付与された tool を使ってください）
+EXAMPLE（名前と tool は例示にすぎません。与えられた identity、key、あなた自身の tool を使ってください）
 Prose: Mara lifts the red tin from the bench. "Keep it shut," she tells Ivo, and hands it to him.
 {"events":[{"source_entity_id":"character:11","source_event_id":"scene:1","event":"Mara lifts the red tin from the bench.","observable":"lifts the red tin","speech":false,"targets":["red tin"],"seconds":2,"movement":null,"commitment":"asserted","item_names":["red tin"],"transforms":[{"item":"red tin","patch":{"inventory_ops":[{"op":"transfer","object_id":"red_tin","from_id":"bench","to_id":"Mara","relation":"held"}]}}]},{"source_entity_id":"character:11","source_event_id":"scene:1","event":"Keep it shut,","observable":"","speech":true,"targets":["Ivo"],"volume":"normal","seconds":2,"movement":null,"commitment":"asserted","item_names":["Mara"],"transforms":[]},{"source_entity_id":"character:11","source_event_id":"scene:1","event":"Mara hands the red tin to Ivo.","observable":"hands the red tin to Ivo","speech":false,"targets":["red tin","Ivo"],"seconds":2,"movement":null,"commitment":"asserted","item_names":["red tin"],"transforms":[{"item":"red tin","patch":{"inventory_ops":[{"op":"transfer","object_id":"red_tin","from_id":"Mara","to_id":"Ivo","relation":"held"}]}}]}],"missing_tools":[],"missing_referents":[],"notes":[]}
 

@@ -543,9 +543,6 @@
     "director_resolve": {
       "$text": "prose_contract/director_resolve.txt"
     },
-    "specialist_core": {
-      "$text": "prose_contract/specialist_core.txt"
-    },
     "room_author": {
       "$text": "prose_contract/room_author.txt"
     },
@@ -667,6 +664,179 @@
     },
     "weather": {
       "$text": "jev_questions/weather.txt"
+    },
+    "conditions__awareness": {
+      "$text": "jev_questions/conditions__awareness.txt"
+    },
+    "conditions__restraint": {
+      "$text": "jev_questions/conditions__restraint.txt"
+    },
+    "conditions__form": {
+      "$text": "jev_questions/conditions__form.txt"
+    },
+    "contact_ops__interior": {
+      "$text": "jev_questions/contact_ops__interior.txt"
+    },
+    "entities__new": {
+      "$text": "jev_questions/entities__new.txt"
+    },
+    "entities__inside": {
+      "$text": "jev_questions/entities__inside.txt"
+    },
+    "entities__emits": {
+      "$text": "jev_questions/entities__emits.txt"
+    },
+    "entities__transit": {
+      "$text": "jev_questions/entities__transit.txt"
+    },
+    "entities__examined": {
+      "$text": "jev_questions/entities__examined.txt"
+    }
+  },
+  "encoder": {
+    "core": {
+      "$text": "encoder/core.txt"
+    },
+    "attire": {
+      "$text": "encoder/attire.txt"
+    },
+    "conditions": {
+      "$text": "encoder/conditions.txt"
+    },
+    "conditions__awareness": {
+      "$text": "encoder/conditions__awareness.txt"
+    },
+    "conditions__restraint": {
+      "$text": "encoder/conditions__restraint.txt"
+    },
+    "conditions__form": {
+      "$text": "encoder/conditions__form.txt"
+    },
+    "vitals": {
+      "$text": "encoder/vitals.txt"
+    },
+    "overlays": {
+      "$text": "encoder/overlays.txt"
+    },
+    "cast_changes": {
+      "$text": "encoder/cast_changes.txt"
+    },
+    "introductions": {
+      "$text": "encoder/introductions.txt"
+    },
+    "world_facts": {
+      "$text": "encoder/world_facts.txt"
+    },
+    "public_evidence": {
+      "$text": "encoder/public_evidence.txt"
+    },
+    "crowd_ops": {
+      "$text": "encoder/crowd_ops.txt"
+    },
+    "courier_ops": {
+      "$text": "encoder/courier_ops.txt"
+    },
+    "telling_ops": {
+      "$text": "encoder/telling_ops.txt"
+    },
+    "ratified_claims": {
+      "$text": "encoder/ratified_claims.txt"
+    },
+    "contradicted_claims": {
+      "$text": "encoder/contradicted_claims.txt"
+    },
+    "charter_ops": {
+      "$text": "encoder/charter_ops.txt"
+    },
+    "claim_dispositions": {
+      "$text": "encoder/claim_dispositions.txt"
+    },
+    "consequences": {
+      "$text": "encoder/consequences.txt"
+    },
+    "obligations": {
+      "$text": "encoder/obligations.txt"
+    },
+    "contact_ops": {
+      "$text": "encoder/contact_ops.txt"
+    },
+    "contact_ops__interior": {
+      "$text": "encoder/contact_ops__interior.txt"
+    },
+    "contact_action_ops": {
+      "$text": "encoder/contact_action_ops.txt"
+    },
+    "substance_ops": {
+      "$text": "encoder/substance_ops.txt"
+    },
+    "containment": {
+      "$text": "encoder/containment.txt"
+    },
+    "scales": {
+      "$text": "encoder/scales.txt"
+    },
+    "entities": {
+      "$text": "encoder/entities.txt"
+    },
+    "entities__new": {
+      "$text": "encoder/entities__new.txt"
+    },
+    "entities__inside": {
+      "$text": "encoder/entities__inside.txt"
+    },
+    "entities__emits": {
+      "$text": "encoder/entities__emits.txt"
+    },
+    "entities__transit": {
+      "$text": "encoder/entities__transit.txt"
+    },
+    "entities__examined": {
+      "$text": "encoder/entities__examined.txt"
+    },
+    "remove_entities": {
+      "$text": "encoder/remove_entities.txt"
+    },
+    "inventory_ops": {
+      "$text": "encoder/inventory_ops.txt"
+    },
+    "artifact_ops": {
+      "$text": "encoder/artifact_ops.txt"
+    },
+    "destruction": {
+      "$text": "encoder/destruction.txt"
+    },
+    "sensory_events": {
+      "$text": "encoder/sensory_events.txt"
+    },
+    "positions": {
+      "$text": "encoder/positions.txt"
+    },
+    "rooms": {
+      "$text": "encoder/rooms.txt"
+    },
+    "remove_rooms": {
+      "$text": "encoder/remove_rooms.txt"
+    },
+    "remove_adjacent": {
+      "$text": "encoder/remove_adjacent.txt"
+    },
+    "stations": {
+      "$text": "encoder/stations.txt"
+    },
+    "poses": {
+      "$text": "encoder/poses.txt"
+    },
+    "comms_ops": {
+      "$text": "encoder/comms_ops.txt"
+    },
+    "following_ops": {
+      "$text": "encoder/following_ops.txt"
+    },
+    "location": {
+      "$text": "encoder/location.txt"
+    },
+    "weather": {
+      "$text": "encoder/weather.txt"
     }
   }
 }

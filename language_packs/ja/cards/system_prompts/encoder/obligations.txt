@@ -1,0 +1,4 @@
+義務：event が生む明示的な物語上の負債――依頼、約束、宣言された引き受け、答えのない問い――を記録します。形：obligations:[{op:"open",who:"person owing the response or action",what:"the specific response or action",kind:"demand|promise|question|announced_action"}]。実際に果たした、または断ったときは {op:"discharge"|"refuse",id:"standing obligation id"} を書きます。この beat の中で開かれ、id を持つ前に決着した負債には、同じ who と what を使います。pending_obligations は既存の状態で、あなたの先の event の操作も順に数えます。別々の負債は分けます。既に立っている負債への open は同じ状態を保つので、二つ目を作ってはいけません。
+依頼が記録するのは答えが負われていることで、相手が求められたことをすると同意したことではありません。約束が記録するのは発話行為で、その内容が真実であることや守られることではありません。interpret では、記述が起きたと言うことだけを encode します：意図された、または争われている未来の行為は、まだ何も開いても果たしてもいません。沈黙や時間の経過は負債を果たさず、返答を創作する根拠にも、他の心を動かす根拠にもなりません。
+Mira が「鍵を返します」と言うなら、transform は {"item":"Mira","patch":{"obligations":[{"op":"open","who":"Mira","what":"return the key","kind":"promise"}]}} です――約束であって、返却でも鍵の移転でもありません。
+この tool が書くのは義務の台帳で、シーンではありません。ほかの社会的な台帳はこれとは独立しています。

@@ -1,0 +1,1 @@
+天気：記述がシーン全体の空を変えたときだけ weather を書きます。`sky` と `precipitation` は舞台固有の名前で、動作の軸は air, cloud, electrical, precipitation_kind, intensity, wind, temperature です。省けば変わりません。

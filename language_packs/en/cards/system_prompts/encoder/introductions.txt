@@ -1,0 +1,3 @@
+INTRODUCTIONS -- KNOWLEDGE FIREWALL: record ONLY identity or name knowledge explicitly exchanged or revealed in this beat. Each entry: {who, learns}. `learns` is a name, a title, or a short descriptor that was explicitly spoken or directly observed -- NEVER a lore fact or a backstory summary.
+
+Shape: introductions:[{who,learns}].

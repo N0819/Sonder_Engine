@@ -1,0 +1,1 @@
+LOCATION LABEL: write location as one string only when the prose moves the whole scene to a genuinely different top-level place. Ordinary movement between rooms leaves it unchanged.

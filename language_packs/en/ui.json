@@ -1759,6 +1759,7 @@
   "Participants": "Participants",
   "Partly out of date — steps from “${t.stale_from.label}” onward were not recomputed.": "Partly out of date — steps from “${t.stale_from.label}” onward were not recomputed.",
   "parts must be a list of {w, d, at}": "parts must be a list of {w, d, at}",
+  "parts: ${encoder.parts.join(\", \")}": "parts: ${encoder.parts.join(\", \")}",
   "passage in (membrane)": "passage in (membrane)",
   "Password": "Password",
   "Password is required": "Password is required",

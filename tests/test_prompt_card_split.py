@@ -49,7 +49,15 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 141   # +43 (2026-09-22): the prose contract's five sheets
+PART_COUNT = 197   # +56 (2026-09-24): the prose contract's encoder gets its
+                   # own card, `encoder.*` -- its core, one chunk per engine
+                   # channel (38) and nine `<channel>__<part>` parts shipped
+                   # only when the decision model picks them -- plus nine
+                   # `jev_questions.<channel>__<part>`; the old
+                   # `prose_contract.specialist_core` is retired into
+                   # `encoder.core` (-1). The causal hands' chunks are
+                   # untouched: the encoder no longer reads them.
+                   # +43 (2026-09-22): the prose contract's five sheets
                    # (`prose_contract.*`) and its 38 decision-model
                    # questions (`jev_questions.*`), agents/director_prose.py.
                    # -1 (2026-09-20): the spatial hand's `time` chunk. The
@@ -449,6 +457,8 @@ def test_canonical_part_path_covers_exactly_the_five_prose_shapes():
     assert canonical_part_path(("prose_author_sheet", 27, 1)) == (
         "prose_author_sheet/27.txt")
     assert canonical_part_path(("nsfw_overlay",)) == "nsfw_overlay.txt"
+    assert canonical_part_path(("encoder", "entities__transit")) == (
+        "encoder/entities__transit.txt")
 
     # Structure does not move.
     assert not is_part_leaf(("specialists", "body", "order", 0))

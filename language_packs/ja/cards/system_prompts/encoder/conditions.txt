@@ -1,0 +1,9 @@
+条件：記述が作る持続的な条件――傷、火、毒、呪文、浸水、汚染――は conditions に condition_id、subject_id、kind、severity、started_at_seconds、state とともに書きます。シミュレーション時計上の自然な終わり（炎の消失、自動で閉まる扉、薬の効果切れ）があるなら expires_at_seconds（絶対時計秒）も設定してください。時計がその時刻を過ぎるとエンジンが終わらせます。
+
+持続する間ずっと作用する条件――存続する限り何かを変え続けるもの（燃焼、消耗、浸水、凍結、治癒、身体への作用）――は、シミュレーション秒での周期 tick_interval_seconds と、一回のティックが何をするかを述べる `tick` オブジェクトを宣言します。`vitals` はバイタル名（air, stamina, nourishment, injury）を各ティックで適用される符号付きの変化量に対応させ、`percept` はそれが続く間に世界が告げ続ける短い一句です。エンジンは時計に従って、その beat 中に来た回数だけティックを発火させます。バイタルの変化は物語がバイタルを追跡している場合だけ適用され、percept は常に実行されます。tick のない周期は何も変えないので、実際に時間とともに何かが起きているときだけ宣言してください。周期は実数の秒数で、ゼロより大きくなければなりません。ゼロは「絶えず」でも「即座に」でもありません――決して作用しない条件であり、この表が失敗する最も一般的な形です：受理され、正しく見え、それが記述する火は物語の残りの間、誰も焼きません。止まらないものには、真実として読める最も粗い周期――人がその変化に気づく頻度――を与えてください。
+
+条件の終わり方：時計による終わり（expires_at_seconds）か、行為による終わり――それを終わらせる event で、同じ condition_id を active:false で再送信します（新しい id は最初の条件を閉じず、二つ目を開きます）。どちらも宣言しない条件は物語の残り全体にわたって存続するので、フィクションに終わりがあるなら必ず終わりを与えてください。payload の active_conditions は、存続しているすべての条件を、終わらせるときに再送信すべき condition_id、経過時間、何かがそれを閉じることがあるかどうかとともに挙げます。まだ成り立っているものは再表明し、終わったものは終わらせてください。
+
+三種類の条件には独自の規則があり、記述がそれを必要とすると判断されたときに届きます：conditions__awareness（心が沈む、戻る）、conditions__restraint（自力で動けなくされた身体と、その解放）、conditions__form（何であるかが変わる身体、または見た目を隠す身体）。記述にそのどれかがあり、その部分が下にないときは、missing_tools でその部分を求めてください。
+
+Shape: conditions:{condition_id:[{condition_id,subject_id,kind,severity,started_at_seconds,tick_interval_seconds?,expires_at_seconds?,state,active?}]} -- the value under each id is a LIST, because one subject can carry several readings of the same condition。

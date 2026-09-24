@@ -1,0 +1,1 @@
+FOLLOWING: following_ops records a voluntary, lasting travel relation. Write {op:'start',follower,target,reason?} when someone starts following, or {op:'stop',follower,reason?} when they stop. Following grants no speed and is not a one-beat position.

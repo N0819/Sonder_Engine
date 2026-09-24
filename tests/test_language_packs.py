@@ -719,8 +719,10 @@ _EMBEDDED_FRAGMENTS = {
     # anchors, storeys, surfaces): the spatial hand's rooms chunk and
     # `director_establish`, which had drifted 23 headings apart by
     # 2026-09-16 -- the opening was still writing anchors without heights
-    # and a neighbour it could not see as a described room.
-    "room_vocabulary": 2,
+    # and a neighbour it could not see as a described room. 3 since
+    # 2026-09-24: the prose contract's encoder has its own rooms chunk
+    # (`encoder/rooms.txt`, read when no room designer runs).
+    "room_vocabulary": 3,
 }
 
 

@@ -1800,6 +1800,9 @@ function proseContractSlice(content, id) {
     const jev = prose.jev || {};
     const probabilities = jev.probabilities || {};
     const selected = jev.selected || [];
+    // A channel's parts (`<channel>__<part>`) are asked beside it and ship
+    // only with it, so a part is ticked when it was chosen, not selected.
+    const chosen = selected.concat(jev.parts || []);
     out.push(`kinds of change the prose holds, granted at ${jev.threshold} `
              + `or above — ${secs(jev.seconds)}`);
     if (jev.failed) {
@@ -1808,7 +1811,7 @@ function proseContractSlice(content, id) {
     const rows = Object.entries(probabilities).sort((a, b) => b[1] - a[1]);
     if (rows.length) out.push("");
     for (const [channel, p] of rows) {
-      const mark = selected.includes(channel) ? "✓" : " ";
+      const mark = chosen.includes(channel) ? "✓" : " ";
       out.push(`${mark} ${Number(p).toFixed(2)}  ${channel}`);
     }
     // A kind with no question of its own is granted without one
@@ -1827,6 +1830,9 @@ function proseContractSlice(content, id) {
     const events = prose.events || [];
     out.push(`one call recorded the beat — ${secs(encoder.seconds)}`,
              `channels: ${(prose.channels || []).join(", ") || "nothing"}`);
+    if ((encoder.parts || []).length) {
+      out.push(`parts: ${encoder.parts.join(", ")}`);
+    }
     if ((encoder.missing_tools || []).length) {
       out.push(`asked for: ${encoder.missing_tools.join(", ")}`);
     }

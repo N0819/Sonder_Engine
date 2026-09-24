@@ -1,0 +1,1 @@
+CLAIM DISPOSITIONS: use claim_dispositions only for a supplied claim_id whose outcome the prose settles at this event. Write {claim_id, status:'realized'|'deferred'|'contested'|'rejected', reason?}. Never invent a claim, and never infer a status from who said it.

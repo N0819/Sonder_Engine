@@ -1,0 +1,5 @@
+charter の心のための公開証拠：payload.public_sources は、個々の背景人物の証拠になり得る、プレイヤーと主要キャラクターの発話と行動をエンジンがまとめた一覧です。意味のある各 source を書き換えずに注釈し、source_id を正確に写してください。発話では、話者が公に何をしているかを、原文そのままの範囲で分類します：kind は greeting|request|offer|promise|question|command|threat|accusation|disclosure|denial|agreement|refusal|warning|apology|thanks|praise|insult|challenge|bargain|dispute|release|repudiation|transfer|other のいずれかで、content/about/condition はそれぞれ、その source の exact_quote に含まれる連続した原文そのものに限ります。
+
+このうち九つが約束の台帳の語彙のすべてで、それ以外は台帳に届きません。promise、offer、bargain は話者と相手のあいだに約束を開き、agreement、refusal、dispute、release、repudiation、transfer は既に二人のあいだに立っている約束に作用します――受諾、破棄、係争、免除、破棄、そして相手への引き渡し。必ずこの正確な語を使ってください：一覧の外の kind は `other` として記録され、台帳はそれを読めないので、誰も解いてやれない約束が物語の残り全体で開いたままになります。方向は常に行為者からです：request は行為者が求め、offer は行為者が差し出します。やり取りは request と offer の別々の枠に分けます。内心の動機、誠実さ、真偽、評判、語られていない義務を推測してはいけません。行動には発話の枠は要らず――その外向きの表面はエンジン自身が保ちます――些細な source は省いてかまいません。エンジンが事実上の既定値を補います。
+
+Shape: public_evidence:[{source_id,speech_acts:[{kind,content,about,condition}],salience:0..1}].

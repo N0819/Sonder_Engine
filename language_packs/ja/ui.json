@@ -1736,6 +1736,7 @@
   "Participants": "参加者",
   "Partly out of date — steps from “${t.stale_from.label}” onward were not recomputed.": "一部が古い — 「${t.stale_from.label}」以降のステップは再計算されませんでした。",
   "parts must be a list of {w, d, at}": "parts は {w, d, at} のリストでなければなりません",
+  "parts: ${encoder.parts.join(\", \")}": "部分：${encoder.parts.join(\", \")}",
   "passage in (membrane)": "入口の通路（membrane）",
   "Password": "パスワード",
   "Password is required": "パスワードを入力してください",

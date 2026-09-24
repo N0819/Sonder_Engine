@@ -1,0 +1,1 @@
+SCHEDULED CONSEQUENCES: consequences starts a future fuse, never this beat's present outcome. Write {what, where, due_seconds, witnessed?, originator?} only when the prose explicitly sets a delayed consequence in motion. `where` names a known place; due_seconds is time from now.

@@ -77,11 +77,16 @@ off.
 
 - `agents/director_prose.py`: the contract (`run`, `dispatch`, `ledger_from_events`).
 - `llm/decisions.py`: the Jev client (`decide`, `OVERRIDE` for tests).
-- `llm/prompts.py`: `prose_director_prompt`, `unified_specialist_prompt`, `jev_channel_questions`.
+- `llm/prompts.py`: `prose_director_prompt`, `unified_specialist_prompt` (the
+  encoder's sheet, from its own card), `encoder_parts`, `jev_channel_questions`.
 - `llm/schemas.py`: `ProseDirectorOutput`, `UnifiedEvent`, `UnifiedSpecialistOutput`.
-- Cards: `prose_contract/*.txt`, `jev_questions/*.txt` (the `ja` pack carries the English text until translated).
+- Cards: `prose_contract/*.txt` (the Director's sheets, the room designer);
+  `encoder/*.txt`, the encoder's own card -- its core, one chunk per engine
+  channel, and `<channel>__<part>` parts for the rarer changes inside the big
+  channels; `jev_questions/*.txt`, one decision-model question per channel
+  and per part. English and Japanese.
 - `agents/director.py`: the two call-site branches and `_run_specialists(answer_for=)`.
-- `tests/test_prose_contract.py`.
+- `tests/test_prose_contract.py`, `tests/test_the_encoder_has_its_own_card.py`.
 
 Each stage's record persists at `orchestration.prose_contract`: the prose,
 Jev's probability per channel, the selection, encoder timings, any widening,
@@ -91,9 +96,16 @@ and the raw events.
 
 - **Extension specialist families are not absorbed.** Their sheets are not
   built from engine chunks. Under this contract they do not run.
-- **The chunks still speak the several-hands dialect** ("request inventory_ops
-  in required_channels"). The core reinterprets it. A native rewrite would be
-  shorter, but it would fork the chunks between the two contracts.
+- **The encoder's card is a fork of the hands' chunks** (2026-09-24). It
+  used to read the causal chunks verbatim, behind a core paragraph telling
+  it how to reread their several-hands dialect; the owner read the sheet in
+  the debug capture ("Seems absurdly long", then "specific prompts for this
+  version of the director sound necessary?"), and it now has its own. The
+  cost is two copies of every rule: a rule changed for the causal hands has
+  to be carried to `encoder/` by hand, and nothing checks that it was.
+  `test_no_record_shape_drifts_from_the_hands` guards the printed record
+  shapes and `test_every_ops_field_the_card_asks_for_exists_on_a_hand` the
+  `_ops` fields; the prose of the rules has no guard.
 - **Establish is out of scope.** The opening turn keeps its own Director.
 - **Author-side retries** (world-pressure must-tick, player-authority) re-ask
   the causal Director with corrections. Under this contract they read the
@@ -566,3 +578,88 @@ outputs.
   written for the original timeline do not answer questions the replayed
   characters ask, and the two lanes that diverged (126, 122) read as
   characters insisting on a precondition.
+
+## Played in the UI (2026-09-24, chat 154)
+
+The owner switched Settings to the prose contract (`054893d9`) and played
+one beat, turn 4398: the player shut the TARDIS doors as the rotor started.
+
+**"It still seems to be running specialists."** It was not: each stage made
+three calls -- `director`, `jev`, `director_specialist`. But the encoder's
+answer is filed through each hand's binding, which records `run`/`ran: true`
+per hand, and the step window built its "Written by" bar from that, so the
+beat read "prose author, social, objects, spatial". The window now tabs a
+prose beat by the calls that ran (writer, channel picker, encoder, room
+designer when it started) and names the hands on the encoder's tab as
+"engine code, no model call"; each hand's record carries `answered_by:
+"encoder"` (`c2227597`).
+
+**"The doors did not close."** They had: both stages set the TARDIS's
+`hatch` closed and the dock edge went `closed_door`. But the console room
+had been minted on a causal beat (idx 7) with "The doors behind stand open
+to the night beach" in its desc, "The open doors' threshold ... the wedge of
+moonlit sand visible past them" on an anchor, and bookkeeping in the notes
+views render as the room ("parented to the_tardis; minted as ..."). The
+player's own view that beat said both "Nothing shows through the shut door"
+and the sand past the open doors. `7959ac5f`: one clause in the rooms chunk
+-- a place's desc, notes and anchor descs are read as the place every beat,
+so they never state a doorway's condition, a thing's state, anyone in it, or
+the record -- and the dock edge keeps its bearing when rebuilt (it had lost
+`dir: "s"` as it closed). Replayed (153 idx 7-8): the prose room designer
+kept the doors' condition out of the room it built (1 of 1) but still wrote
+a thing's condition ("the time rotor ... dark and still"); the causal
+spatial hand wrote "the pale double doors stand open behind, framing a slice
+of moonlit beach" (0 of 1), so its minting sentence now carries the rule too.
+Rooms minted before the clause keep their text.
+
+**The encoder's own card.** The owner read the encoder's sheet in the debug
+capture -- 32.5K characters for four channels, half of it the `entities`
+chunk -- and asked for prompts written for this contract. `encoder/*` is
+that card (see Known gaps for the fork). Measured on the 16 encoder calls
+round 9 captured (chats 137 and 153, idx 46-48 and 22-26), holding the
+payload fixed and swapping only the sheet, DeepSeek v4.1 Flash, reasoning
+off, 48 samples an arm:
+
+| | old sheet | native, first | native, final |
+|---|---|---|---|
+| sheet (every part) | 100% | 75% | 75% |
+| events / call | 4.29 | 4.81 | 4.52 |
+| transforms / call | 3.44 | 3.33 | 3.08 |
+| calls writing nothing | 15% | 10% | 15% |
+| obligations written | 2% | 21% | 17% |
+| sensory_events written | 17% | 6% | 4% |
+
+With the decision model picking parts, a typical sheet is about half the
+old one (the owner's four-channel sheet: 32,543 -> 17,024 characters).
+Seconds per call varied 7.7-16.0 between runs of the same sheet, so the
+provider's latency, not the prompt, dominates them. Two corrections came
+from the fixed-payload runs: the contact chunk had lost its worked example,
+and a player pressing her palms to the walls around her was written as
+contacts in 1 of 3 samples; restored, 3 of 3. And the core's tools
+paragraph had hedged "the only tools granted for this beat, chosen for what
+this prose contains" into "one for each kind of change this prose was
+judged to contain"; on a long stomach beat the hedged core wrote the
+peristalsis's ticking condition 1 of 4 times and the old wording 4 of 4.
+
+**Open:**
+- One-off sounds are written a quarter as often (4-6% of calls against
+  17%). On the one beat read closely (137 idx 48: a stomach's groan, a
+  swallow outside the walls) the old sheet wrote both and the native none;
+  putting the old core in front of the native chunks brought them back (3
+  of 3), and no single sentence of it tried so far does.
+- Obligations are written eight times as often; the one read (a demand,
+  "Hold onto the frame and don't let go!") was right and the old sheet
+  missed it. The rest are unread.
+- The encoder sometimes states a write in `notes` that no event carries:
+  "the TARDIS entity's state.hatch is set to closed" with no transform
+  (153 idx 23 interpret).
+- It wrote an entity interior's doorway edge (`closed_door`) despite the
+  core's rule; the dock derivation overrides it, so it is harmless.
+- **How long a contact lasts is the owner's call.** On any beat that writes
+  `contact_ops`, a standing contact not re-added ages: an act (a strike, a
+  kiss) is over at once, a hold on the second such beat
+  (`spatial_contacts._CONTACT_STALE_BEATS`). The owner: "Some contacts need
+  to hold where as some contacts are brief." A hold that lasts until the
+  prose ends it would need the encoder to write the ending; the ageing was
+  built because the causal Director almost never did (147 adds against 3
+  removes in one story). The encoder card states the rule as it stands.

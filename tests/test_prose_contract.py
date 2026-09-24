@@ -29,8 +29,10 @@ from tests.test_director_orchestration import (
 )
 
 
-POSITIONS_CHUNK = "A CHARACTER'S DECLARED DIRECTION IS THEIRS"
-ATTIRE_CHUNK = "CLOTHING TRACKING"
+#: Markers of two of the encoder card's own chunks (`encoder.positions`,
+#: `encoder.attire`) -- not the causal hands' chunks, which never reach it.
+POSITIONS_CHUNK = "WHERE A BODY WALKS IS ITS OWN"
+ATTIRE_CHUNK = "CLOTHING HAS THREE SEPARATE AXES"
 
 
 @pytest.fixture
@@ -715,10 +717,18 @@ def test_the_encoder_is_told_silence_ends_a_contact(temp_db):
     """Playerless Aldermill (2026-09-23): Emory's hold on the ledger aged out
     on a beat whose other contact_ops made the engine read her silence as a
     release -- the causal contact hand was told to supply a continuing
-    contact, the encoder's core never was."""
+    contact, the encoder's core never was.
+
+    Stated as the engine does it (`spatial_contacts`, `_CONTACT_STALE_BEATS`
+    2, `_CONTACT_MOMENTARY_STALE_BEATS` 1, ageing only on a beat with contact
+    ops), and ONCE: the encoder used to get "silence does not end contact"
+    from the causal chunk and "unmentioned is ended" from its core, both."""
     from llm import prompts
-    core = prompts.unified_specialist_prompt(["contact_ops"])
-    assert "reads every standing contact you leave unmentioned as ended" in core
+    sheet = prompts.unified_specialist_prompt(["contact_ops"])
+    assert "every standing contact you do not add again ages" in sheet
+    assert "a hold is over on the second such beat" in sheet
+    assert "A beat that writes no contact_ops ages nothing" in sheet
+    assert "Silence does not end contact" not in sheet
 
 
 def test_a_body_in_view_is_a_source_the_encoder_can_name():

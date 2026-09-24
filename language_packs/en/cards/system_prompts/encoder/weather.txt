@@ -1,0 +1,1 @@
+WEATHER: write weather only when the prose changes the scene-wide sky. `sky` and `precipitation` are setting-native names; the operational axes are air, cloud, electrical, precipitation_kind, intensity, wind and temperature. Omitted means unchanged.

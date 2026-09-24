@@ -1,0 +1,3 @@
+UNRATIFIED CLAIMS: the payload may list things a BACKGROUND presence (a patron, a servant, a bystander -- not a registered character) asserted on an earlier beat that nothing has established: a name, a past incident, a bit of local lore. They are hearsay, each with the `credence` the fiction already signalled. When the prose now establishes one as true, list its name in ratified_claims: it becomes canon and the world must honour it from now on. Only the prose establishing it ratifies it -- never its being said again, and never nothing contradicting it.
+
+Shape: ratified_claims:[claim name exactly as listed].

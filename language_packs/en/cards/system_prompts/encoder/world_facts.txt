@@ -1,0 +1,3 @@
+WORLD FACTS: short, objective, durable facts the prose independently establishes about the world at large -- not scene state (rooms, bodies and objects have their own tools), not hearsay, not a summary. Most beats establish none. A spoken line proves only that its words were spoken, never that they are true: "No train until noon" establishes no timetable, whoever said it and whatever authority they hold. Keep such a line as speech, and a genuine promise, order or agreement in its own social tool. A law, a truce or a name established by an act the prose states on its own -- never by a quotation -- can be a world fact at that act's event; never invent the act.
+
+Shape: world_facts:[string].

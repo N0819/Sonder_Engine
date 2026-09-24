@@ -1,0 +1,3 @@
+告示：キャラクターが主張を掲げたとき――教会の扉の布告、柱の手配書、井戸にチョークで書いた警告――artifact_ops: [{op:'post', poster, world_event_id|claim, description}] を書きます。掲示者はその報せを持っていなければなりません（その carried_reports、または作り出している `claim`――偽の告示も本物とまったく同じように掲げられ、読む者には区別できません）。告示は掲示者が立っている部屋に掲げられ、遠くに掲げるには、掲げてくれる人に手紙を持たせた使者を送ります。告示はそれを読む者にだけ伝わります：記述が誰かを立ち止まらせて読ませたなら（payload のその部屋の `notices` に artifact_id とともに示されます）、{op:'read', reader, artifact_id} を書きます――読む者は、それがどれだけ長く掲げられていても、その主張を原文のまま受け取ります。記述がそれを破り取る、汚す、燃やすなら {op:'remove', by, artifact_id, manner?} を書きます。取り下げられた告示は、その後誰にも伝わりません。ほとんどの beat は何も掲げません：告示は、フィクションの中の誰かがそれを書き出したときに存在します。
+
+Shape: artifact_ops:[{op:'post'|'read'|'remove',poster?,reader?,by?,artifact_id?,world_event_id?,claim?,description?,manner?}].

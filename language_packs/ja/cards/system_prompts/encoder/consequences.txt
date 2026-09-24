@@ -1,0 +1,1 @@
+予定された結果：consequences はこの beat の現在の結果ではなく、将来へ向けた導火線です。記述が遅れて起きる結果を明示的に動かしたときだけ {what, where, due_seconds, witnessed?, originator?} を書きます。`where` は既知の場所を名指し、due_seconds は今からの秒数です。

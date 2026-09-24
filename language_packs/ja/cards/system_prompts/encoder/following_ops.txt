@@ -1,0 +1,1 @@
+追従：following_ops は、自発的で持続する移動の関係を記録します。誰かが追い始めたら {op:'start',follower,target,reason?}、やめたら {op:'stop',follower,reason?} を書きます。追従は速さを与えず、一 beat だけの位置でもありません。

@@ -54,7 +54,9 @@ from concurrent.futures import ThreadPoolExecutor
 from core.db import get_setting
 from llm import decisions
 from llm.prompts import (
+    ENCODER_PART_SEP,
     ROOM_AUTHOR_CHANNELS,
+    encoder_parts,
     jev_channel_questions,
     prose_director_prompt,
     unified_specialist_prompt,
@@ -155,6 +157,17 @@ def candidate_channels(stage, facts=None):
                 continue
             out.append(channel)
     return out
+
+
+def part_channel(part):
+    """The channel an encoder part (`<channel>__<part>`) belongs to."""
+    return str(part).split(ENCODER_PART_SEP, 1)[0]
+
+
+def parts_of(channels, language=None):
+    """Every encoder part of these channels, in channel then card order."""
+    return [part for channel in channels
+            for part in encoder_parts(channel, language)]
 
 
 def _agent_json(*args, **kwargs):
@@ -301,9 +314,15 @@ def select_channels(ctx, stage, prose, model_payload, facts=None, planned=None,
     The same one call also asks, for each PLANNED room in reach (the
     Writers' Room's stubs, `planned_room_brief`), whether the passage enters
     or reveals it; `record["entered"]` lists those, which the room author
-    then develops from the plan. Fails open there too: every stub in reach."""
+    then develops from the plan. Fails open there too: every stub in reach.
+
+    And, for each candidate channel with PARTS in the encoder card
+    (`<channel>__<part>`: the rules for a rarer kind of change within it),
+    whether the passage needs that part; `record["parts"]` lists the ones
+    that ship, only ever with their own channel. Fails open: every part."""
     candidates = candidate_channels(stage, facts)
-    questions = jev_channel_questions(candidates, ctx.language)
+    parts = parts_of(candidates, ctx.language)
+    questions = jev_channel_questions(candidates + parts, ctx.language)
     planned = planned if isinstance(planned, dict) else {}
     record = {"candidates": candidates, "threshold": _threshold()}
     t0 = time.time()
@@ -323,6 +342,7 @@ def select_channels(ctx, stage, prose, model_payload, facts=None, planned=None,
         ctx.add_warning(f"{stage}: decision model unavailable, every channel "
                         f"granted (fail-open): {exc}")
         record["selected"] = list(candidates)
+        record["parts"] = list(parts)
         record["entered"] = list(planned)
         return list(candidates), record
     probabilities = {channel: round(decisions.probability(answers.get(channel)), 4)
@@ -330,10 +350,14 @@ def select_channels(ctx, stage, prose, model_payload, facts=None, planned=None,
     selected = [channel for channel in candidates
                 if channel not in questions
                 or probabilities.get(channel, 0.0) >= record["threshold"]]
+    chosen = [part for part in parts
+              if part_channel(part) in selected
+              and (part not in questions
+                   or probabilities.get(part, 0.0) >= record["threshold"])]
     entered = [rid for rid in planned
                if decisions.probability(answers.get(_ENTER_PREFIX + str(rid)))
                >= record["threshold"]]
-    record.update(probabilities=probabilities, selected=selected,
+    record.update(probabilities=probabilities, selected=selected, parts=chosen,
                   entered=entered, seconds=round(time.time() - t0, 3))
     return selected, record
 
@@ -967,36 +991,60 @@ def room_event(rooms_answer, events):
     }
 
 
-def _call_encoder(ctx, channels, payload):
+def _call_encoder(ctx, channels, payload, parts):
     return _agent_json(
         "director_specialist",
         "director_specialist",
-        unified_specialist_prompt(channels, ctx.language),
-        dict(payload, granted_tools=list(channels)),
+        unified_specialist_prompt(channels, ctx.language, parts),
+        dict(payload, granted_tools=list(channels) + list(parts)),
         temperature=0.2,
         max_tokens=None,
     ) or {}
 
 
 def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=None,
-           rooms_elsewhere=False, new_places=None):
+           rooms_elsewhere=False, new_places=None, parts=None):
     """`(answer, channels, record)`: the encoder's events and the tools it
     finally held. At most one widening pass, whose answer REPLACES the
     first. With `rooms_elsewhere`, places are the room author's: the encoder
     holds no room tool, may not ask for one, and names a new place as
-    `new:<words>`."""
+    `new:<words>`.
+
+    `parts` are the encoder parts the decision model chose (None: every part
+    of every held channel -- fail open). The payload's `requestable_tools`
+    names every channel and part this stage could grant and the encoder
+    does not hold, and the widening pass grants either kind; a channel
+    granted there arrives with all its parts, since nothing judged which it
+    needs. `record["parts"]` is the parts finally held."""
     record = {}
+    language = ctx.language
+    channels = list(channels)
+    parts = (parts_of(channels, language) if parts is None
+             else [part for part in parts if part_channel(part) in channels])
+    stage_channels = candidate_channels(stage, facts)
+    known = set(stage_channels)
+    if rooms_elsewhere:
+        known -= set(ROOM_AUTHOR_CHANNELS)
+    known_parts = set(parts_of([c for c in stage_channels if c in known], language))
+
+    def requestable():
+        return ([c for c in stage_channels if c in known and c not in channels]
+                + [p for p in parts_of(stage_channels, language)
+                   if p in known_parts and p not in parts])
+
+    def lacking(tools):
+        return [str(tool) for tool in tools or []
+                if (str(tool) in known and str(tool) not in channels)
+                or (str(tool) in known_parts and str(tool) not in parts)]
+
     payload = encoder_payload(ctx, sc, prose, model_payload, view, extras, channels)
     payload["places_authored_elsewhere"] = bool(rooms_elsewhere)
     payload["new_places"] = dict(new_places or {})
+    payload["requestable_tools"] = requestable()
     t0 = time.time()
-    answer = _call_encoder(ctx, channels, payload)
+    answer = _call_encoder(ctx, channels, payload, parts)
     record["seconds"] = round(time.time() - t0, 3)
-    known = set(candidate_channels(stage, facts))
-    if rooms_elsewhere:
-        known -= set(ROOM_AUTHOR_CHANNELS)
-    missing = [str(tool) for tool in (answer.get("missing_tools") or [])
-               if str(tool) in known and str(tool) not in channels]
+    missing = lacking(answer.get("missing_tools"))
     # CODE CLOSES THE KNOWN DEPENDENCIES; the decision model only predicts.
     # An event's `movement` is core row shape, written whatever was granted,
     # and a body that changes room needs `positions` to be moved at all.
@@ -1016,26 +1064,33 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
     referents = [str(r) for r in (answer.get("missing_referents") or []) if str(r).strip()]
     if referents:
         record["missing_referents"] = referents
-        for tool in ("entities", "positions"):
-            if tool in known and tool not in channels and tool not in missing:
+        # ...and minting a thing has rules of its own, in entities' part.
+        for tool in ("entities", "positions", f"entities{ENCODER_PART_SEP}new"):
+            if tool not in missing and lacking([tool]):
                 missing.append(tool)
     if missing:
         record["missing_tools"] = missing
         if _widen_allowed():
-            first = answer
-            channels = list(channels) + [tool for tool in dict.fromkeys(missing)]
+            first, first_channels, first_parts = answer, list(channels), list(parts)
+            added = [tool for tool in dict.fromkeys(missing) if tool in known]
+            channels = channels + added
+            parts = parts + [part for part in dict.fromkeys(
+                [tool for tool in missing if tool in known_parts]
+                + parts_of(added, language))
+                if part not in parts and part_channel(part) in channels]
             payload = encoder_payload(ctx, sc, prose, model_payload, view,
                                       extras, channels)
             payload["places_authored_elsewhere"] = bool(rooms_elsewhere)
             payload["new_places"] = dict(new_places or {})
+            payload["requestable_tools"] = requestable()
             # THE RE-ASK SEES ITS OWN FIRST ANSWER and returns the WHOLE beat.
             # Measured on chat 153 turn 23: asked again with only the new
             # tool, the encoder returned the two events that tool touched,
             # and the replacement dropped every later step of the beat.
             payload["previous_events"] = list(first.get("events") or [])
             t1 = time.time()
-            answer = _call_encoder(ctx, channels, payload)
-            record["widened_to"] = list(channels)
+            answer = _call_encoder(ctx, channels, payload, parts)
+            record["widened_to"] = list(channels) + list(parts)
             record["widen_seconds"] = round(time.time() - t1, 3)
             # A replacement, never a merge -- so a thinner replacement must
             # not win. Fewer events than the first answer means the beat was
@@ -1047,16 +1102,15 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
                 ctx.add_warning(f"{stage}: widened encoder answer was thinner "
                                 f"than the first; kept the first, {missing} "
                                 "unencoded")
-                answer = first
-                channels = [tool for tool in channels if tool not in missing]
-            still = [str(tool) for tool in (answer.get("missing_tools") or [])
-                     if str(tool) in known and str(tool) not in channels]
+                answer, channels, parts = first, first_channels, first_parts
+            still = lacking(answer.get("missing_tools"))
             if still and "widen_rejected" not in record:
                 record["unmet_tools"] = still
                 ctx.add_warning(f"{stage}: encoder still lacked {still} after "
                                 "widening; those changes are unencoded")
         else:
             ctx.add_warning(f"{stage}: encoder lacked {missing} (widening off)")
+    record["parts"] = list(parts)
     return answer, list(channels), record
 
 
@@ -1362,7 +1416,8 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
         answer, encoder_channels, encoding = encode(
             ctx, stage, sc, prose, model_payload, view, extras,
             encoder_channels, facts, rooms_elsewhere=rooms_elsewhere,
-            new_places=new_places if rooms_elsewhere else None)
+            new_places=new_places if rooms_elsewhere else None,
+            parts=jev.get("parts"))
     finally:
         if room_future is not None:
             try:

@@ -1,0 +1,3 @@
+BODILY CONDITION (only when the payload carries `vitals` -- otherwise this story does not track it and you must not invent it): each tracked body has air, stamina, nourishment and injury, 0..1. The engine moves them with the time the beat takes; write vitals only when the FICTION moves them -- a wound taken (injury up), a meal eaten (nourishment to 1), a sprint or a fight (stamina down), a lungful of clean air. Air is the sharp one: a body sealed in a closed container is running out, glass and bars included, since being seen through something is not breathing through it.
+
+Shape: vitals:{name:{air,stamina,nourishment,injury}}, each 0..1.

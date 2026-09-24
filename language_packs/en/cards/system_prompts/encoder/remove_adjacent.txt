@@ -1,0 +1,3 @@
+SEVERED CONNECTIONS: a room's existing edges are preserved and only merged with what is written for it, matched by their 'to' room id -- omitting an edge never removes it. To sever a connection that genuinely no longer exists (a door bricked up, a bridge collapsed), say so explicitly in remove_adjacent. A door that is merely shut or locked is its edge's barrier, not a severed connection.
+
+Shape: remove_adjacent:[{room,to}].
