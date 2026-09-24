@@ -847,7 +847,9 @@ def test_an_act_no_tool_records_is_still_an_event():
     en = prompts.unified_specialist_prompt(["poses"])
     ja = prompts.unified_specialist_prompt(["poses"], "ja")
     assert "whether or not a tool records it -- minds perceive events, never transforms" in en
+    assert "no tool owns it" in en and "no tool asked for" in en
     assert "心が知覚するのは event であって transform ではありません" in ja
+    assert "それを持つ tool もありません" in ja
 
 
 def test_volume_is_the_speakers_and_muffling_is_the_worlds():
