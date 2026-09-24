@@ -822,6 +822,61 @@ def test_a_line_split_around_its_tag_is_still_a_line():
     assert out[1]["act"] == "added"    # words the prose never quoted stay a report
 
 
+def test_a_line_framed_in_its_sentence_is_the_quotation():
+    """The owner's chat 120 idx 8 (2026-09-23, Ling 3.0 Flash): the spoken
+    event held the prose's whole sentence around the player's line, the
+    player-speech floor dropped it as invented, and Vexara never heard the
+    question. The quotation is the line; the outward step around it is its
+    own event, in the order the event wrote it."""
+    line = "Nnn... D-do you like what you see?"
+    prose = (f'Hinami looks up at Vexara and asks, her voice thin and '
+             f'shaking: "{line}" Her breath catches.')
+    framed = {"source_entity_id": "persona:10", "speech": True, "act": "",
+              "event": f'Hinami, lying bare on the bed, looks up at Vexara and '
+                       f'asks, her voice thin and shaking: "{line}"',
+              "observable": "Hinami asks, her voice thin and shaking",
+              "targets": ["Vexara"], "volume": "quiet", "seconds": 3}
+    warned = []
+    out = director_prose.spoken_words_are_the_quotation(
+        [framed], prose, warn=warned.append)
+    assert [e["speech"] for e in out] == [False, True]
+    step, said = out
+    assert said["event"] == line and said["observable"] == ""
+    assert said["volume"] == "quiet" and said["targets"] == ["Vexara"]
+    assert step["event"].startswith("Hinami, lying bare on the bed, looks up")
+    assert step["observable"] == "Hinami asks, her voice thin and shaking"
+    assert "volume" not in step and "seconds" not in step
+    assert warned and "kept as its own event" in warned[0]
+    assert framed["event"].endswith(f'"{line}"')        # copied, never mutated
+    rows, _ = director_prose.ledger_from_events(out)
+    assert rows[1]["categories"] == ["speech"] and rows[1]["event"] == line
+
+
+def test_bare_attribution_around_a_line_is_dropped():
+    """A tag with no outward motion is the speaker's name, which the row
+    already carries: the line alone survives, after or before its tag."""
+    prose = '"Keep it shut," Mara says. 「黙って」とミラが言う。'
+    events = [{"speech": True, "event": '"Keep it shut," Mara says.',
+               "observable": ""},
+              {"speech": True, "event": "ミラが言う「黙って」", "observable": ""}]
+    out = director_prose.spoken_words_are_the_quotation(events, prose)
+    assert [e["event"] for e in out] == ["Keep it shut,", "黙って"]
+
+
+def test_a_line_that_quotes_someone_keeps_its_words():
+    """Two readings are refused: a line quoting another is its own words
+    (its inner quotation is not the prose's), and a reported line (`act`)
+    only mentions what it quotes."""
+    prose = ('Mara says, "Yesterday you said \'Break the lock\', but I won\'t." '
+             'Ivo asks what "the weir" means.')
+    events = [{"speech": True, "event":
+               "Yesterday you said \"Break the lock\", but I won't."},
+              {"speech": True, "act": "asks", "event": 'what "the weir" means'},
+              {"speech": True, "event": "Keep it shut."}]
+    out = director_prose.spoken_words_are_the_quotation(events, prose)
+    assert out == events
+
+
 def test_jev_is_told_what_is_already_owed(temp_db, monkeypatch):
     """Round 7 (2026-09-23) idx 7-22: Jev is asked whether a passage fulfils
     "one already owed" and was never told what was, so the miller's order,

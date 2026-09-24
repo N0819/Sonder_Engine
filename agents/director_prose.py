@@ -909,7 +909,19 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
 
 # ---- 4. code converts ------------------------------------------------------
 
-_QUOTED = re.compile(r'"([^"]+)"|“([^”]+)”')
+#: The quotation pairs of the writing systems the packs install: straight and
+#: curly in English, those plus the corner brackets in Japanese. Typography
+#: the scripts fix, not vocabulary. Single quotes are left out on purpose: a
+#: line that quotes someone ("you said 'break the lock', but I won't") uses
+#: them, and a reader that took them for the line would cut it to its quote.
+_QUOTED = re.compile(r'"([^"]+)"|“([^”]+)”|「([^」]+)」|『([^』]+)』')
+_BRACKET_OPENS = ("「", "『")
+
+
+def _quotations(text):
+    """`[(start, end, words)]` for each quotation in `text`, in order."""
+    return [(m.start(), m.end(), next((g for g in m.groups() if g), ""))
+            for m in _QUOTED.finditer(str(text or ""))]
 
 
 def _fold_line(text):
@@ -928,7 +940,7 @@ def quoted_lines_keep_their_words(events, prose):
     prose quotes the words is a fact about the prose, so code reads it: the
     words inside a quotation there keep them, and the act goes. Events are
     copied, never mutated."""
-    spans = [_fold_line(a or b) for a, b in _QUOTED.findall(str(prose or ""))]
+    spans = [_fold_line(words) for _, _, words in _quotations(prose)]
     if not spans:
         return list(events or [])
     out = []
@@ -959,7 +971,82 @@ def _quoted_whole(words, spans):
             rest = rest.replace(span, " ")
     return not re.sub(r"[\W_]+", "", rest)
 
-_ROW_FIELDS = ("source_entity_id", "source_event_id", "event", "act",
+
+def spoken_words_are_the_quotation(events, prose, warn=None):
+    """A spoken event's words are the line the prose quotes, never the
+    sentence the prose wrapped around it.
+
+    The contract asks a spoken event for the words alone, and the encoder
+    wrote the prose's whole sentence instead -- `Hinami, lying bare on the
+    silk-sheeted bed ..., looks up at Vexara ... and asks, her voice thin and
+    shaking: "Nnn... D-do you like what you see?"` (the owner's chat 120 idx
+    8, Ling 3.0 Flash, 2026-09-23). The row was spoken, so all of it became
+    the player's line; the floor that holds a player to their own words
+    dropped it as invented, and Vexara never heard the question the beat was
+    about. Whether the prose quotes the words is a fact about the prose, so
+    code reads it: where every quotation in a spoken event equals one of the
+    prose's, those are the line. What is left around them is the step the
+    contract asks for BESIDE a line -- kept as its own event, before or after
+    the words as the event wrote it, when the encoder gave it an outward
+    motion or a change; dropped as attribution when it gave none.
+
+    Two readings are refused. A row with `act` reports speech without its
+    words, so a quotation inside it is a mention. A line that quotes someone
+    ("you said 'break the lock', but I won't") is its own words: its inner
+    quotation is not one of the prose's, and a line is never cut to one.
+    Events are copied, never mutated."""
+    lines = {_fold_line(words) for _, _, words in _quotations(prose)} - {""}
+    if not lines:
+        return list(events or [])
+    out = []
+    for event in events or []:
+        split = _framed_line(event, lines)
+        if split is None:
+            out.append(event)
+            continue
+        out.extend(split)
+        if warn:
+            kept = "kept as its own event" if len(split) > 1 else "dropped as attribution"
+            warn("encoder: a spoken event held the sentence around its line; "
+                 f"the line is the prose's quotation and the rest was {kept}")
+    return out
+
+
+def _framed_line(event, lines):
+    """`[rows]` for a spoken event framed around a quoted line, else None."""
+    if not (isinstance(event, dict) and event.get("speech")
+            and not str(event.get("act") or "").strip()):
+        return None
+    text = str(event.get("event") or "")
+    quotes = _quotations(text)
+    if not quotes or any(_fold_line(words) not in lines for _, _, words in quotes):
+        return None
+    framing, last = [], 0
+    for start, end, _ in quotes:
+        framing.append(text[last:start])
+        last = end
+    framing.append(text[last:])
+    if not re.search(r"\w", "".join(framing)):
+        return None
+    words = ""
+    for start, _, piece in quotes:
+        piece = piece.strip()
+        joint = "" if not words or text[start] in _BRACKET_OPENS else " "
+        words = f"{words}{joint}{piece}"
+    physical = (str(event.get("observable") or "").strip()
+                or event.get("transforms") or event.get("movement")
+                or str(event.get("look") or "").strip())
+    line = {k: v for k, v in event.items()
+            if not (physical and k in ("transforms", "movement", "look"))}
+    line.update(event=words, observable="")
+    if not physical:
+        return [line]
+    step = {k: v for k, v in event.items() if k not in ("volume", "act", "seconds")}
+    step.update(speech=False,
+                event=" ".join("".join(framing).split()).strip(" ,;:—–-"))
+    return [line, step] if not re.search(r"\w", framing[0]) else [step, line]
+
+_ROW_FIELDS =("source_entity_id", "source_event_id", "event", "act",
                "observable", "commitment", "targets", "visibility",
                "conceal_from", "volume", "movement", "look", "seconds",
                "ability", "difficulty")
@@ -1165,6 +1252,7 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
         c for c in ROOM_AUTHOR_CHANNELS
         if rooms_elsewhere and rooms_answer and (rooms_answer.get(c) or None)]
     events = quoted_lines_keep_their_words(events, prose)
+    events = spoken_words_are_the_quotation(events, prose, warn=ctx.add_warning)
     rows, transforms = ledger_from_events(events)
     record = {
         "stage": stage,

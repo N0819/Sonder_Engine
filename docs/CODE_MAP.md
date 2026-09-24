@@ -19,7 +19,7 @@
 | `agents/director_floors.py` | 2258 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 1839 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
-| `agents/director_prose.py` | 1258 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts` |
+| `agents/director_prose.py` | 1346 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts` |
 | `agents/director_reconcile.py` | 610 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `llm.schemas`, `story`, `world.spatial` |
 | `agents/director_rooms.py` | 425 |  | — |
 | `agents/director_scopes.py` | 1246 |  | `agents.director_lingua`, `agents.director_views`, `core.db`, `world.survival` |
@@ -385,10 +385,10 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run()` | 1040 | 146 lines |
+| `run()` | 1127 | 147 lines |
 | `encode()` | 828 | 80 lines |
-| `ledger_from_events()` | 968 | 70 lines |
-| `dispatch()` | 1188 | 56 lines |
+| `ledger_from_events()` | 1055 | 70 lines |
+| `dispatch()` | 1276 | 56 lines |
 | `bind_new_places()` | 542 | 49 lines |
 | `select_channels()` | 294 | 45 lines |
 | `reconcile_rooms()` | 737 | 41 lines |
