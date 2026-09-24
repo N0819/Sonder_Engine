@@ -504,6 +504,18 @@ on DeepSeek v4.1 Flash from round 4. One reroll per turn.
   suspending mid-call (systemd, 21:05-21:31), not the engine: all three
   streams resumed within the same 130 ms and were recovered.
 
+- Round 9 (`36e82840`), with the room designer and the Writers' Room at
+  `low` effort in the replay copies (owner: "deepseek v4.1 flash is also a
+  chronic over thinker"): 8 of 8 committed, 137-473 s a turn, the landing
+  beat that took 1,744 s in round 8 now 149 s. Designer reasoning fell from
+  a median of 10,250 characters (max 140,845) at the host's `high` to 3,256
+  (max 7,218), and the stomach it built was as whole as round 7's --
+  parented, joined by a membrane, anchored, the player committed inside.
+  It found a swallowed player's touches all naming the stomach ROOM as their
+  target and discarded as non-co-located -- an inside now names its holder
+  (`1162ca97`) -- and the narrator's fidelity check calling the player's own
+  quoted line invented (`8f2488ae`, a measurement only since E12).
+
 Timing, rounds 6-7: 110-880 s a turn. The character call (GLM thinking)
 took 33 s at the median and up to 290 s; the designer 18-335 s, beside the
 encoder; the narrator 7-190 s. The prose author ran away to the host's
@@ -523,11 +535,16 @@ outputs.
   Compression does not separate it from valid JSON (its best 4 KB window,
   0.265; valid stored outputs reach 0.107), so what bounds it is the
   output ceiling -- per role or the host's -- which is the owner's call.
-- The room designer's reasoning effort: it inherits the host's `default:
-  high`, and on DeepSeek v4.1 Flash that once cost 1,378 s of deliberation
-  for one room (153 idx 26, round 8; 18-335 s otherwise). The encoder has a
-  code default of `off` for the same reason (`ROLE_DEFAULT_EFFORTS`); for
-  the designer it trades quality against time, so it is the owner's call.
+- The room designer's and the Writers' Room's reasoning effort: both
+  inherit the host's `default: high`, and on DeepSeek v4.1 Flash that once
+  cost 1,378 s of deliberation for one room (153 idx 26, round 8). At `low`
+  (round 9) the tail is gone and the rooms held; the setting is the host's
+  (`reasoning_effort` per role), so it is the owner's to make.
+- A vessel's transit is written on some runs and not others by the same
+  encoder under the same clause: round 8 set the TARDIS `in_transit` then
+  `arriving`; round 9, with `entities` granted (p=0.89), recorded the
+  departure as sensory events and two beats later called the ship "already
+  in flight". Detecting a departure would mean reading prose, so no floor.
 - While a vessel is `arriving`, its interior doorway is derived toward its
   last position, not its destination, until the beat that docks it.
 - The provider's stream now and then restarts an answer mid-document --
