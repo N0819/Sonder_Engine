@@ -255,7 +255,12 @@ def test_first_experiment_aliases_do_not_reverse_learning_at_compile():
     }]
 
 
-def test_intention_rows_require_the_field_their_operation_can_address():
+def test_an_intention_row_missing_its_address_is_noted_not_fatal():
+    """By `semantic_output_errors`' own rule a check is fatal only when
+    nothing downstream reads, repairs or reports the field -- and commit
+    does all three (`affect.apply_intent_ops`). Fatal, the id check bought a
+    41-94 s repair on three real beats and cost a fourth its turn (rounds
+    5-7, 2026-09-23). The row is still named, so it is never silent."""
     add_raw = _kernel_shell()
     add_raw["updates"]["intentions"] = [{"op": "add"}]
     existing_raw = _kernel_shell()
@@ -265,12 +270,12 @@ def test_intention_rows_require_the_field_their_operation_can_address():
     missing_existing = validate_llm_output_strict(
         "character_kernel", existing_raw)
 
-    assert missing_add.valid is False
-    assert any("intent is required for add" in error
-               for error in missing_add.errors)
-    assert missing_existing.valid is False
-    assert any("id is required for progress" in error
-               for error in missing_existing.errors)
+    assert missing_add.valid is True
+    assert any("intent is required for add" in note
+               for note in missing_add.warnings)
+    assert missing_existing.valid is True
+    assert any("id is required for progress" in note
+               for note in missing_existing.warnings)
 
 
 def test_kernel_canonicalizes_unambiguous_json_only_update_spellings():

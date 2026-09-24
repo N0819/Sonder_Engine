@@ -1290,6 +1290,32 @@ def steering_intent_ids(intentions, turn_idx):
             out.add(str(intent.get("id")))
     return out
 
+def _intent_named_by_text(intentions, text):
+    """The one live intention `text` names, by the fold an `add` uses to
+    read a rephrased goal as the goal (`claim_similarity` at or above
+    `_INTENT_SIMILARITY`), or None when nothing clears it or two tie.
+
+    An op on an existing goal names it by id, and the character agent
+    sometimes names it by its words instead -- `{"op": "progress", "intent":
+    "..."}`. That cost a 41 s repair on the owner's chat 137 idx 46, a 94 s
+    one on chat 120 idx 8, and on a replay of the same beat the whole turn
+    (rounds 5-7, 2026-09-23), for a row this resolves against the ledger
+    the character was shown."""
+    text = str(text or "").strip()
+    if not text:
+        return None
+    scored = sorted(
+        ((claim_similarity(text, str(intent.get("intent") or "")), index)
+         for index, intent in enumerate(intentions)
+         if intent.get("status") not in ("satisfied", "abandoned")),
+        reverse=True)
+    if not scored or scored[0][0] < _INTENT_SIMILARITY:
+        return None
+    if len(scored) > 1 and scored[1][0] == scored[0][0]:
+        return None
+    return intentions[scored[0][1]]
+
+
 def apply_intent_ops(intentions, ops, turn_idx, evidence_ok, *,
                      intent_cap=None, barren_beat=False):
     """Apply a turn's intention operations under deterministic guards.
@@ -1368,9 +1394,17 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok, *,
             continue
 
         target = _find_intent(result, op.get("id"))
+        named_by_text = False
+        if target is None and not str(op.get("id") or "").strip():
+            target = _intent_named_by_text(result, op.get("intent"))
+            named_by_text = target is not None
         if target is None:
             warnings.append(f"intent op {kind!r} on unknown id {op.get('id')!r}")
             continue
+        if named_by_text:
+            warnings.append(
+                f"intent {kind!r} named its goal by text, not id; the text "
+                f"names {target.get('id')!r} by the fold an add uses")
 
         if kind in ("progress", "block"):
             # An op that MOVES a goal does not rewrite it, and the silence
@@ -1388,7 +1422,8 @@ def apply_intent_ops(intentions, ops, turn_idx, evidence_ok, *,
             # on the original and forms a successor from anything genuinely
             # new.
             claimed = str(op.get("intent") or "").strip()
-            if claimed and claimed != str(target.get("intent") or "").strip():
+            if claimed and not named_by_text \
+                    and claimed != str(target.get("intent") or "").strip():
                 warnings.append(
                     f"intent {target.get('id')!r}: restated text on a {kind} "
                     "op ignored -- an op that moves a goal does not rewrite "

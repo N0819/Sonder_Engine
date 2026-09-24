@@ -1658,32 +1658,31 @@ class TestAnIncompleteKernelKeepsTheBeat:
         raw.pop("sequence", None)
         assert self._fatal(raw)
 
-    def test_an_intention_naming_no_intention_costs_the_row_not_the_beat(
-            self, monkeypatch):
-        """The owner's chat 120 idx 8 (round 6, 2026-09-23): a `progress`
-        with no `id` outlived the repair and the whole beat was thrown away,
-        conduct and all. The check still fails it first, so the repair can
-        ask for the id; only the exhausted ladder drops the row."""
+    def test_an_intention_named_by_its_words_costs_no_repair(self, monkeypatch):
+        """The owner's chats 137 idx 46 and 120 idx 8 (rounds 5-7,
+        2026-09-23): a `progress` naming its goal by text rather than id
+        bought a 41 s and a 94 s repair, and once the whole turn. Commit reads
+        the row by its text (`affect.apply_intent_ops`), so the first answer
+        stands: one call, the row kept for commit, a note instead of a fail."""
         import json
         from llm import llm_quality
-        from llm.schemas import validate_llm_output_strict
         raw = self._whole()
-        good = {"op": "add", "intent": "keep her talking", "why": "she is scared"}
         raw["updates"]["intentions"] = [
-            {"op": "progress", "why": "she finally answered"}, good]
-        assert not validate_llm_output_strict("character_kernel", raw).valid
-        monkeypatch.setattr(llm_quality, "chat_complete",
-                            lambda *a, **k: json.dumps(raw))
+            {"op": "progress", "intent": "keep her talking",
+             "why": "she finally answered"}]
+        calls = []
+
+        def answer(*args, **kwargs):
+            calls.append(1)
+            return json.dumps(raw)
+
+        monkeypatch.setattr(llm_quality, "chat_complete", answer)
         monkeypatch.setattr(llm_quality, "role_candidate_count", lambda role: 1)
-        noted = []
-        monkeypatch.setattr(llm_quality, "note_step_warning", noted.append)
         out = llm_quality.complete_validated_json(
             role="character_major", step_key="character_kernel", system="sys",
-            payload={"x": 1}, repair_attempts=0)
-        assert [row.get("intent") for row in out["updates"]["intentions"]] == [
-            "keep her talking"]
-        assert out["sequence"] == raw["sequence"]
-        assert noted and "names no id" in noted[0]
+            payload={"x": 1})
+        assert len(calls) == 1
+        assert out["updates"]["intentions"][0]["intent"] == "keep her talking"
 
     def test_a_note_past_its_length_is_cut_and_the_beat_kept(self, monkeypatch):
         """The owner's chat 122 idx 8 (round 4, 2026-09-23): one want ran

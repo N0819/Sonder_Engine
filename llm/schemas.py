@@ -7386,12 +7386,20 @@ def semantic_output_errors(
                 errors.append("effects must be an array")
             updates = (output.get("updates")
                        if isinstance(output.get("updates"), dict) else {})
+            # A NOTE, NOT A FATAL CHECK, by this function's own rule: commit
+            # already reads and reports the field. `affect.apply_intent_ops`
+            # resolves an op that names its goal by text through the fold an
+            # `add` uses, and drops and says one that names nothing; an add
+            # with no text is refused there too. Fatal, it bought a 41-94 s
+            # repair on three real beats and cost a fourth its turn (rounds
+            # 5-7, 2026-09-23) over one bookkeeping row.
             for index, update in enumerate(updates.get("intentions") or []):
                 missing, op = _intention_row_missing(update)
                 if missing:
-                    errors.append(
+                    noted.append(
                         f"updates.intentions.{index}.{missing} is required for "
-                        f"{op or 'this operation'}")
+                        f"{op or 'this operation'}; commit reads the row by its "
+                        "text or drops it")
 
     # NARRATION IS NOT VALIDATED HERE ANY MORE. A narrator answer blocks on
     # being parseable JSON of the declared shape and on nothing else: no
@@ -7423,34 +7431,6 @@ def _intention_row_missing(update):
     if op == "add":
         return ("" if str(update.get("intent") or "").strip() else "intent"), op
     return ("" if str(update.get("id") or "").strip() else "id"), op
-
-
-def drop_unaddressable_intentions(output, notes=None):
-    """A kernel answer with every intention update the check refuses removed,
-    in place, each one said in `notes`.
-
-    The salvage's, never the check's: the check still fails the answer so
-    the repair can ask for the missing field -- on the owner's chat 137 idx
-    46 (round 5, 2026-09-23) it did, and got it. Only a beat that would
-    otherwise be thrown away loses the row, as the owner's bar has it ("mild
-    breaks are mostly acceptable"): on chat 120 idx 8 a `progress` naming no
-    intention outlived the repair and cost Vexara's whole beat, conduct and
-    all, where the row could not have been applied to anything anyway."""
-    updates = output.get("updates") if isinstance(output, dict) else None
-    rows = updates.get("intentions") if isinstance(updates, dict) else None
-    if not isinstance(rows, list):
-        return output
-    kept = []
-    for index, update in enumerate(rows):
-        missing, op = _intention_row_missing(update)
-        if missing:
-            if notes is not None:
-                notes.append(f"updates.intentions.{index} ({op or 'no operation'}) "
-                             f"was dropped: it names no {missing}")
-            continue
-        kept.append(update)
-    updates["intentions"] = kept
-    return output
 
 
 def _name_what_was_discarded(step_key, raw, error):
