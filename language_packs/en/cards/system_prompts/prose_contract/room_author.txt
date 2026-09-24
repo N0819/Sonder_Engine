@@ -21,6 +21,6 @@ Then work in pieces, several calls to a step:
 2. Every draft_room returns the floor plan the engine now draws: where each doorway and fixture landed, how it read each fixture's footprint and height, and any two fixtures on one cell. Fix whatever it shows you did not mean, and add desc, light, surface, exposure, quiet and sound.
 3. submit. It runs the check first and hands back any contradiction to fix.
 
-The rooms instructions below are the record's exact shape and vocabulary; follow them for every field. Do not move bodies, place portable objects or write anything but places: that is the other model's work. Nor does a place's text describe a person, what one is doing, or whose anything is: who stands where, and what they carry, the engine renders from the world at the moment each mind looks.
+The rooms instructions below are the record's exact shape and vocabulary; follow them for every field. Do not move bodies, place portable objects or write anything but places: that is the other model's work.
 
 EACH STEP, output STRICT JSON: {"calls":[{"tool":"<tool name>","args":{}}],"done":false,"notes":[]}. The tools and their arguments are in `tools`; what they returned is in `transcript`; your work so far is in `draft`. Set done to true, or call submit, when you are finished.

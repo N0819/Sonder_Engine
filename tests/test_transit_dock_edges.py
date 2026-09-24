@@ -280,3 +280,58 @@ def test_merge_scene_with_diff_applies_the_rewrite():
     merged2 = merge_scene_with_diff(merged, diff2)
     assert spatial_rel(merged2, "elevator_car", "sub4_shelter")["barrier"] == "open_door"
     assert spatial_rel(merged2, "elevator_car", "floor1_hall")["barrier"] == "separated"
+
+
+def _dock_edge(sc):
+    edges = sc["rooms"]["elevator_car"]["adjacent"]
+    assert len(edges) == 1, edges
+    return edges[0]
+
+
+def test_a_door_that_shuts_keeps_the_wall_it_is_in():
+    """Chat 154 turn 4398: the player shut the TARDIS doors, the encoder set
+    the box's `hatch` closed, and the console room's doorway was rebuilt as
+    {to, barrier, distance} -- closed, and no longer in any wall. Where a
+    doorway is and what it is called belong to the doorway; the holder's
+    state decides only where it leads and whether it is open."""
+    sc = _elevator_scene()
+    sc["rooms"]["elevator_car"]["adjacent"][0].update(
+        dir="s", name="sliding doors", way="stair")
+    sc["entities"]["service_elevator"]["state"] = {"hatch": "closed"}
+    assert apply_transit_dock_edges(sc) is True
+    edge = _dock_edge(sc)
+    assert edge["barrier"] == "closed_door"
+    assert (edge["dir"], edge["name"], edge["way"]) == ("s", "sliding doors", "stair")
+
+
+def test_the_door_comes_back_in_the_same_wall_after_a_journey():
+    """In transit the doorway is severed, so no edge is left to carry its
+    bearing; the room remembers it, and the door it arrives with and the one
+    it docks with stand in the wall it left from."""
+    sc = _elevator_scene()
+    sc["rooms"]["elevator_car"]["adjacent"][0]["dir"] = "e"
+    apply_transit_dock_edges(sc)
+    sc["entities"]["service_elevator"]["state"]["transit"] = {
+        "phase": "in_transit", "hatch": "closed"}
+    apply_transit_dock_edges(sc)
+    assert sc["rooms"]["elevator_car"]["adjacent"] == []
+    sc["entities"]["service_elevator"]["state"]["transit"] = {
+        "phase": "arriving", "hatch": "closed", "destination_room": "sub4_shelter"}
+    apply_transit_dock_edges(sc)
+    assert _dock_edge(sc) == {"to": "sub4_shelter", "barrier": "closed_door",
+                              "distance": "near", "dir": "e"}
+    sc["entities"]["service_elevator"]["state"]["transit"] = {
+        "phase": "docked", "hatch": "open"}
+    sc["positions"]["service_elevator"] = "sub4_shelter"
+    apply_transit_dock_edges(sc)
+    assert (_dock_edge(sc)["barrier"], _dock_edge(sc)["dir"]) == ("open_door", "e")
+
+
+def test_a_remembered_doorway_is_still_idempotent():
+    sc = _elevator_scene()
+    sc["rooms"]["elevator_car"]["adjacent"][0]["dir"] = "s"
+    sc["entities"]["service_elevator"]["state"] = {"hatch": "closed"}
+    apply_transit_dock_edges(sc)
+    snapshot = copy.deepcopy(sc)
+    assert apply_transit_dock_edges(sc) is False
+    assert sc == snapshot

@@ -433,6 +433,22 @@ def _same_entity(scene, a, b) -> bool:
         return False
 
 
+#: What a doorway IS, as against where it leads and whether it stands open:
+#: the wall it is in, what it is called, how it is climbed. Deriving the dock
+#: edge from its holder changes the target and the barrier, never these. The
+#: edge used to be rebuilt as {to, barrier, distance}: in chat 154 turn 4398
+#: the TARDIS doors shut, and the console room's doorway lost its bearing.
+_DOORWAY_OWN_FIELDS = ("dir", "name", "way", "vertical")
+
+
+def _doorway_own_fields(edge) -> dict:
+    """The fields of `edge` that belong to the doorway itself, set ones only."""
+    if not isinstance(edge, dict):
+        return {}
+    return {key: edge[key] for key in _DOORWAY_OWN_FIELDS
+            if edge.get(key) not in (None, "")}
+
+
 def apply_transit_dock_edges(scene: dict) -> bool:
     """Rewrite every parent_entity room's exterior adjacency to match
     f(entity position, entity.state.transit), and every state.link entity's
@@ -454,7 +470,11 @@ def apply_transit_dock_edges(scene: dict) -> bool:
     marker stamped on any interior room seen with an exterior edge (rooms
     carry arbitrary extra keys through merges untouched -- the zone-field
     precedent), so sealing and later re-docking restores the door to the
-    same room. An entity's sole interior room is always the dock room.
+    same room. An entity's sole interior room is always the dock room. The
+    doorway's own fields (`_DOORWAY_OWN_FIELDS`: its bearing, name and way)
+    ride every rebuilt edge, and a `dock_doorway` stamp on the same room
+    keeps them through a severed stretch, so the door comes back in the wall
+    it left from.
 
     Only the canonical FORWARD edge (interior -> exterior) is kept; stale
     reverse edges from plain world rooms into the interior are stripped.
@@ -581,10 +601,18 @@ def apply_transit_dock_edges(scene: dict) -> bool:
                         (prev or {}).get("barrier") or "open_door")
                 else:
                     resolved_barrier = barrier
-                new_adjacency.append({
+                edge = {
                     "to": target, "barrier": resolved_barrier,
                     "distance": (prev or {}).get("distance") or "near",
-                })
+                }
+                own = {**_doorway_own_fields(room.get("dock_doorway")),
+                       **_doorway_own_fields(prev)}
+                if own:
+                    edge.update(own)
+                    if room.get("dock_doorway") != own:
+                        room["dock_doorway"] = own
+                        changed = True
+                new_adjacency.append(edge)
             if new_adjacency != adjacency:
                 room["adjacent"] = new_adjacency
                 changed = True

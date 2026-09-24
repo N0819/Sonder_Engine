@@ -1084,9 +1084,30 @@ def test_a_places_text_never_describes_who_is_in_it():
     doorway's anchor -- her own view then narrated her -- and "Gushiga
     Toriki's cuff garment and trousers" into the console's, carrying a
     storekeeper's name to a man who never learned it. Both tripped the
-    composer; both are text that is wrong the moment anyone moves."""
+    composer; both are text that is wrong the moment anyone moves.
+
+    The same class, one field over (chat 154 turn 4398, 2026-09-24): the
+    console room was minted on a causal beat with "The doors behind stand
+    open to the night beach" in its desc and "The open doors' threshold ...
+    the wedge of moonlit sand visible past them" on an anchor. The player
+    shut the doors, the edge went `closed_door`, and the same view said both
+    "Nothing shows through the shut door" and the moonlit sand past the open
+    doors. So the rule is now ONE clause in the rooms chunk, which reaches
+    every writer of a place: the prose contract's designer and the causal
+    spatial hand alike."""
     from llm import prompts
-    en = prompts.room_author_prompt()
-    ja = prompts.room_author_prompt("ja")
-    assert "a place's text describe a person, what one is doing, or whose anything is" in en
-    assert "場所の文も、人物や、その人がしていること、何かが誰のものかを描いてはいけません" in ja
+    for sheet in (prompts.room_author_prompt(),
+                  prompts.specialist_prompt("spatial", ["rooms"])):
+        assert "A PLACE'S TEXT IS READ AS THE PLACE" in sheet
+        # people, as before -- each case the designer's own sentence named
+        assert ("who they are, how they look, where they stand, what they are "
+                "doing, carrying or own") in sheet
+        # a doorway's condition and what shows through it
+        assert "whether a doorway stands open or shut, and what shows through it" in sheet
+        # bookkeeping: the minted room's notes read "parented to the_tardis"
+        assert "Nor is the text about the record" in sheet
+    for sheet in (prompts.room_author_prompt("ja"),
+                  prompts.specialist_prompt("spatial", ["rooms"], "ja")):
+        assert "場所の文は、誰かが書き直すまで" in sheet
+        assert "それが誰で、どう見え、どこに立ち、何をしていて、何を持ち、何を所有しているか" in sheet
+        assert "出入口が開いているか閉まっているか、その向こうに何が見えるか" in sheet
