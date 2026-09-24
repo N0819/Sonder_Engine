@@ -873,6 +873,105 @@ def bodies_stand_in_rooms(events, scene, built=None, warn=None):
     return out
 
 
+#: How many characters a copied id may get wrong and still be read as that
+#: id (`entity_keys_name_held_things`). Named per ask-before-limiting.
+ID_COPY_SLIPS = 3
+
+
+def _slipped_copy(key, eid):
+    """Is `key` the id `eid` copied with a few characters wrong?"""
+    return (len(key) == len(eid) and key != eid
+            and sum(a != b for a, b in zip(key, eid)) <= ID_COPY_SLIPS)
+
+
+def entity_keys_name_held_things(events, scene, warn=None):
+    """An entity written under a key the world does not hold, and not minted
+    there (the record carries no name), is the thing its transform's `item`
+    names -- when that name is exactly one thing the world holds and the key
+    is that thing's id copied with a slip or one of its names.
+
+    The encoder copies ids out of its payload, and an id copied wrong names
+    nothing: the merge files the write as a new, nameless entity and the
+    thing it was for never changes. Re-sent on the owner's chat 154 turn
+    4398 resolve call (GLM 5.2, reasoning off, 2026-09-24), all six transits
+    written for the TARDIS across twelve samples, on either sheet, were keyed
+    `75bd6ac12fa14a5d`, `...14a7d`, `...14d7d` or `...14a5e` for
+    `75bd6ac12fa14e7d`: a phantom would have flown while the ship stayed on
+    the beach. (The owner's own 33 encoder calls had keyed all 28 entities
+    right.) The `item` is the encoder's stable name for the thing, so the key
+    is read through it; an unheld key it cannot vouch for is left as written
+    and said, because re-keying a write onto the wrong thing is worse than a
+    phantom."""
+    entities = ((scene or {}).get("entities") or {}) if isinstance(scene, dict) else {}
+    held = {str(key) for key in entities}
+    by_name = {}
+    for eid, entity in entities.items():
+        names = [eid]
+        if isinstance(entity, dict):
+            names += [entity.get("name")] + list(entity.get("aliases") or [])
+        for name in names:
+            folded = _fold_place(name)
+            if folded:
+                by_name.setdefault(folded, set()).add(str(eid))
+    for event in events or []:
+        for transform in (event.get("transforms") or []) if isinstance(event, dict) else []:
+            patch = transform.get("patch") if isinstance(transform, dict) else None
+            records = patch.get("entities") if isinstance(patch, dict) else None
+            for key, record in (records.items() if isinstance(records, dict) else ()):
+                if isinstance(record, dict) and str(record.get("name") or "").strip():
+                    held.add(str(key))
+
+    def meant(key, item):
+        owners = by_name.get(_fold_place(item)) or set()
+        if len(owners) != 1:
+            return None
+        eid = next(iter(owners))
+        if _slipped_copy(key, eid) or eid in (by_name.get(_fold_place(key)) or set()):
+            return eid
+        return None
+
+    rekeyed, unheld = [], []
+    out = []
+    for event in events or []:
+        if not isinstance(event, dict) or not event.get("transforms"):
+            out.append(event)
+            continue
+        transforms = []
+        for transform in event["transforms"]:
+            patch = transform.get("patch") if isinstance(transform, dict) else None
+            records = patch.get("entities") if isinstance(patch, dict) else None
+            if not isinstance(records, dict) or all(str(k) in held for k in records):
+                transforms.append(transform)
+                continue
+            fixed = {}
+            for key, record in records.items():
+                key = str(key)
+                eid = None if key in held else meant(key, transform.get("item"))
+                if eid is None:
+                    if key not in held:
+                        unheld.append(key)
+                    eid = key
+                else:
+                    rekeyed.append((key, eid))
+                prior = fixed.get(eid)
+                if isinstance(prior, dict) and isinstance(record, dict):
+                    record = {**prior, **record, **(
+                        {"state": {**prior["state"], **record["state"]}}
+                        if isinstance(prior.get("state"), dict)
+                        and isinstance(record.get("state"), dict) else {})}
+                fixed[eid] = record
+            transforms.append(dict(transform, patch=dict(patch, entities=fixed)))
+        out.append(dict(event, transforms=transforms))
+    if warn:
+        for key, eid in rekeyed:
+            warn(f"encoder wrote entities under {key!r}, which the world does not "
+                 f"hold; read as {eid!r}, the thing its item names")
+        if unheld:
+            warn(f"entities under {sorted(set(unheld))}: no thing the world holds "
+                 "and no name to mint one; filed as written")
+    return out
+
+
 def declared_moves(*records):
     """`{folded body name: room}` for every position the encoder wrote, at
     either stage, the later write winning as the merged diff's does.
@@ -1427,7 +1526,8 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
                 ctx.add_warning(f"{stage}: room author failed (fail-open): {exc}")
             room_record["seconds"] = round(time.time() - t_rooms, 3)
             pool.shutdown(wait=True)
-    events = list(answer.get("events") or [])
+    events = entity_keys_name_held_things(list(answer.get("events") or []), sc,
+                                          warn=ctx.add_warning)
     if rooms_elsewhere:
         events = doorway_edits_only(events, sc, set(new_places), warn=ctx.add_warning)
         events = unheld_places_are_new(events, sc, set(new_places), warn=ctx.add_warning)

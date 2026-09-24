@@ -19,7 +19,7 @@
 | `agents/director_floors.py` | 2271 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 1853 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
-| `agents/director_prose.py` | 1579 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts` |
+| `agents/director_prose.py` | 1679 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts` |
 | `agents/director_reconcile.py` | 610 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `llm.schemas`, `story`, `world.spatial` |
 | `agents/director_rooms.py` | 425 |  | — |
 | `agents/director_scopes.py` | 1246 |  | `agents.director_lingua`, `agents.director_views`, `core.db`, `world.survival` |
@@ -222,7 +222,7 @@
 | `world/spatial_senses.py` | 1894 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation`, `world.spatial_routing` |
 | `world/spatial_sound_field.py` | 3141 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light_field`, `world.spatial_senses` |
 | `world/spatial_substance.py` | 1138 |  | `world.spatial_contacts`, `world.spatial_identity` |
-| `world/spatial_transit.py` | 698 |  | `world.spatial_barriers`, `world.spatial_identity` |
+| `world/spatial_transit.py` | 708 |  | `world.spatial_barriers`, `world.spatial_identity` |
 | `world/spatial_walk.py` | 423 |  | `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_routing` |
 | `world/stimulation.py` | 239 |  | `story`, `world.spatial` |
 | `world/structure.py` | 1720 |  | `world.charter_model`, `world.regions`, `world.spatial` |
@@ -385,14 +385,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run()` | 1349 | 152 lines |
-| `encode()` | 1005 | 110 lines |
-| `ledger_from_events()` | 1277 | 70 lines |
-| `dispatch()` | 1503 | 62 lines |
+| `run()` | 1448 | 153 lines |
+| `encode()` | 1104 | 110 lines |
+| `entity_keys_name_held_things()` | 887 | 86 lines |
+| `ledger_from_events()` | 1376 | 70 lines |
+| `dispatch()` | 1603 | 62 lines |
 | `select_channels()` | 307 | 56 lines |
 | `bind_new_places()` | 566 | 49 lines |
-| `reconcile_rooms()` | 914 | 41 lines |
-| `doorway_edits_only()` | 704 | 40 lines |
+| `reconcile_rooms()` | 1013 | 41 lines |
 
 ### `agents/director_reconcile.py`
 
@@ -2729,14 +2729,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_transit_dock_edges()` | 452 | 184 lines |
+| `apply_transit_dock_edges()` | 452 | 194 lines |
 | `evict_self_contained_entities()` | 314 | 89 lines |
 | `sync_entity_interior_rooms()` | 131 | 65 lines |
 | `_is_body_entity()` | 62 | 49 lines |
-| `ambient_scope()` | 670 | 29 lines |
+| `ambient_scope()` | 680 | 29 lines |
 | `infer_body_enclosures()` | 225 | 27 lines |
 | `_interior_entry_room()` | 198 | 25 lines |
-| `containment_chain()` | 650 | 19 lines |
+| `containment_chain()` | 660 | 19 lines |
 
 ### `world/spatial_walk.py`
 
