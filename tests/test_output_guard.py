@@ -88,6 +88,27 @@ class TestAPhraseLoop:
         with pytest.raises(DegenerateOutput):
             self._feed("The corridor was empty and the lamp had gone out. " * 5)
 
+    def test_the_band_between_the_two_rules_is_read(self):
+        """Every runaway on the owner's real-turn replays (2026-09-23) was a
+        short sentence repeated to the output ceiling, with a period of 17-22
+        characters -- the band the short-run rule (then 2-16) and the phrase
+        rule (24 and up) both left unread: 387-522 s each."""
+        for unit in ("The TARDIS hums. ", "The beat is over. ",
+                     "The lamp burns on. ", "The kneading goes on. "):
+            assert 17 <= len(unit) <= 23
+            guard = OutputGuard()
+            with pytest.raises(DegenerateOutput):
+                for _ in range(200):
+                    guard.feed(unit)
+            assert len(guard.text) < 2500, unit     # thousands, not 180,000
+
+    def test_a_refrain_in_that_band_is_still_prose(self):
+        """The band is read at the short rule's own 80-repeat bar, never the
+        phrase rule's three: a line of that length said three times over is
+        something a writer does."""
+        self._feed("Someone opened the door. The lamp burns on. The lamp burns "
+                   "on. The lamp burns on. And then the rain came harder.")
+
     def test_a_repeated_short_run_still_belongs_to_the_older_rule(self):
         """Below the phrase threshold the 2-16 rule owns it, at a much higher
         repeat count -- which is the right trade at that length, because

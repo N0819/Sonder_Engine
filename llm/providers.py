@@ -539,10 +539,20 @@ class DegenerateOutput(LLMError):
         )
         self.reason = reason
 
-#: Shortest phrase worth calling a phrase. Below this the 2-16 rule above has
+#: Shortest phrase worth calling a phrase. Below this the short-run rule has
 #: it covered, at a much higher repeat count, which is the right trade at that
 #: length -- "ha ha ha" is prose and "ha" x 80 is not.
 _LOOP_MIN_PERIOD = 24
+#: The short-run rule, and it ends where the phrase rule begins. It used to
+#: stop at 16, which left a band of 17-23 characters that NEITHER rule read,
+#: and every runaway the prose author produced on the owner's real-turn
+#: replays sat in it (2026-09-23): "The TARDIS hums. " (17, x941, 419 s),
+#: "The beat is over. " (18, x888, 487 s), "The lamp burns on. " (19, x842,
+#: 387 s), "The kneading goes on. " (22, x727, 522 s) -- each ran to the
+#: output ceiling. Derived from `_LOOP_MIN_PERIOD` so the two cannot part
+#: again; the 80-repeat bar is the short rule's own, so a refrain of that
+#: length said three times is still prose.
+_SHORT_LOOP_RE = re.compile(r"(.{2,%d})\1{80,}" % (_LOOP_MIN_PERIOD - 1), re.S)
 #: A short phrase must repeat three times; a long one twice. Two consecutive
 #: identical sentences is something a writer does -- a stammer, a refrain, a
 #: character insisting -- so a short cycle has to prove itself. Two identical
@@ -650,13 +660,13 @@ class OutputGuard:
                 "single-character repetition"
             )
 
-        if re.search(r"(.{2,16})\1{80,}", tail, re.S):
+        if _SHORT_LOOP_RE.search(tail):
             raise DegenerateOutput(
                 "repeating output fragment"
             )
 
         # The SAME failure at sentence scale, which the rule above cannot see:
-        # its longest unit is 16 characters. Measured live, a character step
+        # its longest unit is 23 characters. Measured live, a character step
         # locked onto a 100-character cycle -- "I apologize for the shock. Are
         # you able to understand me? The restraints are a standard precaution."
         # -- and rode it for three and a half minutes toward the 40,000-token
