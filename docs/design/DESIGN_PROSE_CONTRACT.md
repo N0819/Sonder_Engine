@@ -658,7 +658,75 @@ please." -- written "almost a murmur" by that turn's prose -- still mutter
 3/4. The writer, re-run on the same input, now adds reach ("quieter",
 "murmured", "low") in 1 of 4 samples against 3 of 4.
 
+**"I think the TARDIS might be irrevocably broken."** Turn 4398 again, three
+rolls. The first two ran on the old sheet and never moved the ship; the
+second's resolve encoder wrote 1 event for a 5,045-character account (see
+below). The third, on the native card, set it off with `transit {in_transit,
+closed, destination_room: tardis_console_room, route_room: moonlit_beach}`:
+its destination its own console room, "as a placeholder since the actual
+Kyoto/Kansai room does not yet exist ... the engine should bind this", and
+its route the beach it was leaving -- written at interpret, where the
+encoder's own note called it "the place it is leaving from", and carried by
+resolve as standing state. Arriving would have opened the console room onto
+itself, and mid-vortex its door opened onto the beach. Three fixes:
+`apply_transit_dock_edges` drops a destination or route that is one of the
+entity's own rooms (a thing cannot travel into its own inside; the arrival
+scheduler reads the merged scene, so a timed arrival cannot dock it there
+either). The transit part names `destination_room` only for a place the world
+already holds outside it -- never its own room, never one still to be built
+-- and `route_room` only for a place the world holds that it is in while under
+way, never the place it set off from. And `entity_keys_name_held_things`: a
+state-only entity written under a key the world does not hold is the thing
+its transform's `item` names, when that name is exactly one held thing and
+the key is its id copied with at most `ID_COPY_SLIPS` (3) characters wrong or
+one of its names -- re-sent on this beat's resolve call, all six transits
+written for the TARDIS across twelve samples, on either sheet, were keyed
+`75bd6ac12fa14a5d`-style slips of `75bd6ac12fa14e7d`, and the merge filed each
+as a new nameless entity while the ship stayed put. (The owner's own 33
+encoder calls keyed all 28 entities right.) On the owner's interpret call,
+GLM 5.2, reasoning off, 10 samples an arm:
+
+| | old part | shipped |
+|---|---|---|
+| transit written | 5 | 2 |
+| route = the beach it was leaving | 3 | 0 |
+| destination = a place that is not the destination | 1 | 0 |
+| route = an id nothing holds ("the vortex") | 0 | 1 |
+
+Most shipped samples held off because the page had the ship only beginning
+to dematerialise ("has not yet entered transit ... 'first tremors'"), which
+leaves the departure to resolve: on the resolve call with the inherited
+transit removed, 24 samples across three runs, 11 set the ship off (5 of
+them under a slipped id, which the merge would have given a phantom) -- 4
+with no destination, 7 naming `new:Kyoto` (see Open), 8 with no route, 2
+routing through `new:the Time Vortex corridor toward Kansai` and 1 still
+through the beach. Of the other thirteen, eight stopped after the first 3 or
+4 of the account's ten or so happenings, before the ship commits (see Open),
+and the rest wrote no transit the engine reads, two saying in their notes
+that they had. The console room's text
+still says "The doors behind stand open to the night beach": minted before
+`7959ac5f`, and rerolling does not reach it.
+
 **Open:**
+- **An encoder that stops early loses the end of the beat.** Three of the
+  owner's prose-contract resolve calls encoded 0-2 events of 2,852-5,104
+  character accounts (captures 3880, 3890, 3962); 3880 is turn 4398's second
+  roll, and why that roll's ship never left. Re-sent, the same beat's resolve
+  call stopped at 3-4 events in 15 of 53 samples across every sheet tried.
+  One sentence in the core ("from the prose's first sentence to its last")
+  moved it 5 of 12 -> 3 of 12, inside the noise, and is not shipped. A
+  structural floor could close it: every event the cast declares carries an
+  event_id and every encoded event names its `source_event_id`, so an answer
+  that leaves declared ids unaccounted for could be asked once more through
+  the widening path (`previous_events`, "return the COMPLETE beat"). It costs
+  an encoder call on each beat it fires on, and it would also fire on a
+  declared act the account truly dropped, so it is the owner's call.
+- A departure's destination is still usually written `new:<place>` when the
+  room agent is on -- 7 of 11 launches above, citing
+  `places_authored_elsewhere` over the transit part's "never a place still
+  to be built" -- so the room author builds the city as one room before the
+  ship lands anywhere in it. The doorway binds and holds; whether the place
+  is right is unread.
 - A player line the writer still retells as murmured is still usually
   encoded `mutter` (3 of 4), though the encoder is told the player's reach
   is theirs. A structural floor could close it -- a quiet volume that keeps
