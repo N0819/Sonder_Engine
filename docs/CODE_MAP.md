@@ -48,7 +48,7 @@
 | `dressing/backdrops.py` | 1772 |  | `core`, `core.db`, `core.logging_utils`, `core.paths`, `persist.steps`, `world.day_cycle`, `world.spatial`, `world.weather` |
 | `llm/__init__.py` | 6 |  | — |
 | `llm/decisions.py` | 151 |  | `core.db` |
-| `llm/llm_quality.py` | 1316 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
+| `llm/llm_quality.py` | 1351 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 666 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 4863 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
@@ -690,7 +690,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `complete_validated_json()` | 670 | 647 lines |
+| `complete_validated_json()` | 699 | 653 lines |
 | `_targeted_field_patch()` | 300 | 98 lines |
 | `note_provider_exchange()` | 609 | 59 lines |
 | `_step_json_schema()` | 558 | 49 lines |

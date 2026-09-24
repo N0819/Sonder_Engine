@@ -667,6 +667,35 @@ def note_provider_exchange(*, role, system, payload, response, ok,
         pass
 
 
+def _bare_prose_answer(step_key, raw):
+    """`{"prose": raw}` when a step whose answer IS its prose sent the prose
+    alone, without the JSON around it; else None.
+
+    Measured on the round-7 real-turn replays (2026-09-23, NanoGPT
+    z-ai/glm-5.2:thinking): the narrator's first answer on 4 of 13 beats was
+    the narration itself, HTML paragraphs and all, cleanly finished -- once
+    with json_schema requested -- and the parse failed at position 0. The
+    temperature-0 repair then spent 9-52 s re-sending the same prose in an
+    envelope, and on one beat, by its own reasoning, rewrote the engine's
+    `{{L1}}` line tokens into its own version of the lines on the way.
+
+    Which steps: those whose schema declares `prose`, and validation still
+    decides whether prose alone is a whole answer -- the narrator's every
+    field is optional, the prose author's places default empty. Refused: a
+    reply that opens as JSON or a fence (a broken object is not prose), one
+    with no word in it, and one the provider cut off for length."""
+    from llm.schemas import SCHEMA_MAP, _fields
+    model = SCHEMA_MAP.get(step_key)
+    if model is None or "prose" not in _fields(model):
+        return None
+    text = str(raw or "").strip()
+    if not text or text[0] in "{[`" or not re.search(r"\w", text):
+        return None
+    if output_ran_out_of_room(raw):
+        return None
+    return {"prose": text}
+
+
 def complete_validated_json(
     *,
     role: str,
@@ -747,6 +776,12 @@ def complete_validated_json(
     except Exception as exc:
         parsed = {}
         parse_error = str(exc)
+        bare = None if provider_errored else _bare_prose_answer(step_key, raw)
+        if bare is not None:
+            parsed, parse_error = bare, None
+            note_step_warning(
+                f"{step_key}: the answer came as bare prose without its JSON "
+                "envelope; the prose is the answer")
 
     report = validate_llm_output_strict(
         step_key,
