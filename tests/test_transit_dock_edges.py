@@ -327,6 +327,25 @@ def test_the_door_comes_back_in_the_same_wall_after_a_journey():
     assert (_dock_edge(sc)["barrier"], _dock_edge(sc)["dir"]) == ("open_door", "e")
 
 
+def test_a_thing_cannot_travel_into_its_own_inside():
+    """Chat 154 turn 4398 (2026-09-24): the TARDIS set off with
+    `destination_room` its own console room. Arriving there would have
+    opened the inside onto itself; the field is dropped and the journey
+    stays a journey to nowhere yet built."""
+    sc = _elevator_scene(transit={"phase": "in_transit", "hatch": "closed",
+                                  "destination_room": "elevator_car",
+                                  "route_room": "elevator_car"})
+    assert apply_transit_dock_edges(sc) is True
+    transit = sc["entities"]["service_elevator"]["state"]["transit"]
+    assert transit == {"phase": "in_transit", "hatch": "closed"}
+    assert sc["rooms"]["elevator_car"]["adjacent"] == []
+    sc["entities"]["service_elevator"]["state"]["transit"] = {
+        "phase": "arriving", "hatch": "closed", "destination_room": "elevator_car"}
+    apply_transit_dock_edges(sc)
+    assert all(edge["to"] != "elevator_car"
+               for edge in sc["rooms"]["elevator_car"]["adjacent"])
+
+
 def test_a_remembered_doorway_is_still_idempotent():
     sc = _elevator_scene()
     sc["rooms"]["elevator_car"]["adjacent"][0]["dir"] = "s"

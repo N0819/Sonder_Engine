@@ -530,6 +530,16 @@ def apply_transit_dock_edges(scene: dict) -> bool:
             continue
         same = set(interior_ids)
         transit = _transit_state(ent)
+        # A THING CANNOT TRAVEL INTO ITS OWN INSIDE. A destination or route
+        # that is one of this entity's own interior rooms is impossible by
+        # construction -- the doorway derived from it would open the inside
+        # onto itself -- so it is dropped, the way a thing standing inside
+        # itself is evicted. Chat 154 turn 4398: the TARDIS set off with
+        # `destination_room` its own console room, and would have docked in it.
+        for field in ("destination_room", "route_room"):
+            if transit and str(transit.get(field) or "") in same:
+                transit.pop(field, None)
+                changed = True
         exterior = _entity_exterior_room(scene, eid, ent, index=index)
 
         # A container is not "in transit" -- a jar with a lid has a hatch and

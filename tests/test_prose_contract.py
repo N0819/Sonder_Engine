@@ -897,10 +897,19 @@ def test_a_journey_sets_off_before_its_end_is_built():
     from llm import prompts
     en = prompts.unified_specialist_prompt(["entities"])
     ja = prompts.unified_specialist_prompt(["entities"], "ja")
-    assert ("naming `destination_room` when the world holds the place it is "
-            "bound for and leaving it out when it does not yet") in en
+    assert ("naming `destination_room` only when the world already holds the "
+            "place it is bound for, outside it -- never one of its own rooms, "
+            "and never a place still to be built, which is left out: a journey "
+            "sets off before its end is built") in en
     assert "with the destination named" not in en
-    assert "まだ持っていなければ書きません――旅は行き先が作られる前に出発し" in ja
+    assert ("これから作られる場所なら書きません。旅は行き先が作られる前に出発し") in ja
+    # Chat 154 turn 4398 (2026-09-24): the ship set off for its own console
+    # room -- "as a placeholder since the actual Kyoto/Kansai room does not
+    # yet exist" -- and with the beach it was leaving as its route, "the
+    # place it is leaving from", so its door opened onto the beach mid-vortex.
+    assert ("never the place it set off from, which is behind it the moment "
+            "it is under way") in en
+    assert "出発した場所は決して書きません" in ja
     # And it arrives somewhere real: chat 153 idx 26 docked the ship at a
     # clearing built that beat and left its position on the beach -- "the
     # new room was authored elsewhere" -- so its doors would open back there.
