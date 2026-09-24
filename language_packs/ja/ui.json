@@ -2234,7 +2234,6 @@
   "Talk to the Writers' Room first": "先に脚本家の部屋と話す",
   "Target book": "ターゲットブック",
   "Target entries": "ターゲットエントリ",
-  "target_belief must be empty unless operation is revise": "operation が revise でない場合、target_belief は空にしてください",
   "target_book_id is required": "target_book_id は必須です",
   "Tavern": "酒場",
   "technical detail": "技術的な詳細",

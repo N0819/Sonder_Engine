@@ -66,15 +66,20 @@ def test_current_revision_refuses_absent_values_disguised_as_filled_fields(repla
 
 
 @pytest.mark.parametrize("operation", ["reinforce", "weaken", "contradict"])
-def test_other_operations_require_an_explicitly_empty_target(operation):
-    invalid = validate_llm_output_strict(
+def test_a_target_on_another_operation_is_left_for_commit_to_refuse(operation):
+    """Commit refuses the update, unmutated and said (test_belief_revision:
+    `test_invalid_targeted_updates_warn_without_mutating_or_minting`), so
+    the answer is not failed for it: that bought a 43 s repair of a whole
+    beat on the owner's chat 120 idx 9 (round 7, 2026-09-23)."""
+    targeted = validate_llm_output_strict(
         "character_kernel", _answer(_revision(operation=operation)))
-    valid = validate_llm_output_strict(
+    empty = validate_llm_output_strict(
         "character_kernel", _answer(_revision(operation=operation, target_belief="")))
 
-    assert not invalid.valid
-    assert valid.valid, valid.errors
-    assert valid.output["updates"]["beliefs"][0]["target_belief"] == ""
+    assert targeted.valid, targeted.errors
+    assert targeted.output["updates"]["beliefs"][0]["target_belief"]
+    assert empty.valid, empty.errors
+    assert empty.output["updates"]["beliefs"][0]["target_belief"] == ""
 
 
 @pytest.mark.parametrize("confidence", [0.0, 0.9])

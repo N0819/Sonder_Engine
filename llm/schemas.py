@@ -4110,8 +4110,12 @@ class CharacterKernelBeliefUpdate(BeliefUpdate):
         target = str(values.get("target_belief") or "").strip()
         if value == "revise" and not target:
             raise ValueError("revise requires a nonempty target_belief")
-        if value != "revise" and target:
-            raise ValueError("target_belief must be empty unless operation is revise")
+        # A target on any other operation is NOT fatal here: commit reads it
+        # and refuses the update, unmutated and said ("belief update rejected:
+        # target_belief requires revise", `psychology_runtime`), which by
+        # `semantic_output_errors`' rule is what a floor that holds looks
+        # like. Fatal, it bought a 43 s repair of a whole character beat on
+        # the owner's chat 120 idx 9 (round 7, 2026-09-23) over one belief.
         return value
 
 
