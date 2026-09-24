@@ -1471,6 +1471,12 @@ def dispatch(ctx, stage):
             "addressed_by": ["decision_model"] if scope else [],
             "channels": list(spec["channels"]), "facts": {},
         }
+        if scope:
+            # `run`/`ran` are `_run_specialists`'s words for "fold an answer
+            # for this hand", and the answer was the encoder's: no call was
+            # made. Stored without this, a prose beat's record read as
+            # specialists that had run (owner, 2026-09-24, turn 4398).
+            plan[name]["answered_by"] = "encoder"
 
     def answer_for(name, state):
         owned = set(SPECIALISTS[name]["channels"])

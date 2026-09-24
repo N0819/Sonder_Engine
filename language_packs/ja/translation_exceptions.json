@@ -296,5 +296,8 @@
   "${t(title)} (${rows.length})": "The section title is translated before interpolation and is followed only by its row count.",
   "[${metadata.join(\" · \")}]": "Brackets and separators around observer attribution, stored channel/fidelity labels, and individually translated UI hints.",
   "place_at_opening names the room they stand in": "engine refusal text for the `place_at_opening` package operation, naming the operation and its fields; kept in English under the english-first mandate (2026-09-09) until the Japanese pass -- docs/UNBUILT_PIPELINE.md § 1.163",
-  "place_at_opening names who stands there: the player or an attached cast member, by name": "engine refusal text for the `place_at_opening` package operation, naming the operation and its fields; kept in English under the english-first mandate (2026-09-09) until the Japanese pass -- docs/UNBUILT_PIPELINE.md § 1.163"
+  "place_at_opening names who stands there: the player or an attached cast member, by name": "engine refusal text for the `place_at_opening` package operation, naming the operation and its fields; kept in English under the english-first mandate (2026-09-09) until the Japanese pass -- docs/UNBUILT_PIPELINE.md § 1.163",
+  "${mark} ${Number(p).toFixed(2)} ${channel}": "a check mark, a probability and a channel id — no prose to translate",
+  "${name}: ${landed || \"nothing landed\"}": "runtime fallback tokens must remain canonical",
+  "(${calls[c.role]})": "placeholders and punctuation only — no prose to translate"
 }

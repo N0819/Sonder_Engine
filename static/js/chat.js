@@ -1542,6 +1542,14 @@ function stepLenses(content) {
   // what one hand actually did meant scrolling a merged diff and matching
   // channel names by eye. They are tabs of the Director's own window now,
   // which is what they are.
+  // Under the prose contract the same stage is a different set of calls,
+  // tabbed by what ran (see proseContractRecord). It comes first because
+  // its hands keep records too, and those are no evidence that one ran.
+  const prose = proseContractRecord(content);
+  if (prose) {
+    return { kind: "prose_contract", label: "Written by",
+             ids: proseContractIds(prose) };
+  }
   const specialists = specialistIds(content);
   if (specialists.length) {
     return { kind: "specialist", label: "Written by",
@@ -1577,6 +1585,7 @@ function facetBadge(value) {
 }
 
 function lensLabel(lenses, id, content, names) {
+  if (lenses.kind === "prose_contract") return proseContractLabel(content, id);
   if (lenses.kind === "specialist") {
     if (id === "prose") return "prose author";
     const state = (((content.orchestration || {}).specialists) || {})[id];
@@ -1619,6 +1628,7 @@ function renderLensBar(bar, lenses, lens, content, names, onPick) {
 }
 
 function lensSlice(lenses, content, id, names, perceptionPackets) {
+  if (lenses.kind === "prose_contract") return proseContractSlice(content, id);
   if (lenses.kind === "specialist") return specialistSlice(content, id);
   if (lenses.kind === "perceiver") {
     return perceiverSlice(content, id, names, perceptionPackets);
@@ -1721,6 +1731,137 @@ function specialistSlice(content, id) {
   if (ungranted.length) {
     out.push("", `gated out this beat: ${ungranted.join(", ")}`);
   }
+  return out.join("\n");
+}
+
+// The prose contract (agents/director_prose.py) makes a Director stage a
+// different set of calls: the writer (the `director` role) tells the beat as
+// prose, the channel picker (`jev`) chooses which kinds of change the prose
+// holds, ONE encoder (`director_specialist`) records them, and the room
+// designer (`director_rooms`) builds a place the beat needs. The hands keep
+// their records, because the encoder's answer is filed through each channel
+// owner's binding, but that is engine code and makes no call. Tabbed as
+// specialists, a prose beat read "Written by: social, objects, spatial" when
+// no specialist had run, and the owner took the contract switch for broken
+// (2026-09-24, turn 4398: three calls a stage, three hands tabbed).
+const PROSE_CONTRACT_CALLS = {
+  director: "writer",
+  jev: "channel picker",
+  director_specialist: "encoder",
+  director_rooms: "room designer"
+};
+
+function proseContractRecord(content) {
+  const record = content && content.orchestration;
+  const prose = record && typeof record === "object"
+    ? record.prose_contract : null;
+  return prose && typeof prose === "object" && !Array.isArray(prose)
+    ? prose : null;
+}
+
+// The calls that ran, in the order they run. The room designer only when it
+// started: most beats build no place, and a tab for a call that never
+// happened is the defect this lens replaces.
+function proseContractIds(prose) {
+  const ids = ["writer", "channels", "encoder"];
+  const rooms = prose.room_author || {};
+  if (rooms.ran || rooms.failed) ids.push("rooms");
+  return ids;
+}
+
+function proseContractLabel(content, id) {
+  const prose = proseContractRecord(content) || {};
+  if (id === "writer") return "writer";
+  if (id === "channels") {
+    const jev = prose.jev || {};
+    if (jev.failed) return "channel picker ·failed";
+    return `channel picker ·${(jev.selected || []).length}`;
+  }
+  if (id === "encoder") return `encoder ·${(prose.events || []).length}`;
+  const rooms = prose.room_author || {};
+  if (rooms.failed) return "room designer ·failed";
+  return `room designer ·${(rooms.rooms || []).length}`;
+}
+
+function proseContractSlice(content, id) {
+  const prose = proseContractRecord(content) || {};
+  const secs = value => `${(Number(value) || 0).toFixed(1)}s`;
+  const out = [];
+  if (id === "writer") {
+    out.push(`the beat as prose — ${secs(prose.author_seconds)}`, "",
+             String(prose.prose || "(empty)"));
+    const reserved = (prose.room_author || {}).reserved || {};
+    const named = Object.values(reserved)
+      .map(place => place && place.name).filter(Boolean);
+    if (named.length) out.push("", `new places it named: ${named.join(", ")}`);
+    return out.join("\n");
+  }
+  if (id === "channels") {
+    const jev = prose.jev || {};
+    const probabilities = jev.probabilities || {};
+    const selected = jev.selected || [];
+    out.push(`kinds of change the prose holds, granted at ${jev.threshold} `
+             + `or above — ${secs(jev.seconds)}`);
+    if (jev.failed) {
+      out.push("", `FAILED — every kind granted (fail-open): ${jev.failed}`);
+    }
+    const rows = Object.entries(probabilities).sort((a, b) => b[1] - a[1]);
+    if (rows.length) out.push("");
+    for (const [channel, p] of rows) {
+      const mark = selected.includes(channel) ? "✓" : " ";
+      out.push(`${mark} ${Number(p).toFixed(2)}  ${channel}`);
+    }
+    // A kind with no question of its own is granted without one
+    // (director_prose.select_channels).
+    const unasked = selected.filter(channel => !(channel in probabilities));
+    if (unasked.length && !jev.failed) {
+      out.push("", `granted without asking: ${unasked.join(", ")}`);
+    }
+    if ((jev.entered || []).length) {
+      out.push("", `planned places entered: ${jev.entered.join(", ")}`);
+    }
+    return out.join("\n");
+  }
+  if (id === "encoder") {
+    const encoder = prose.encoder || {};
+    const events = prose.events || [];
+    out.push(`one call recorded the beat — ${secs(encoder.seconds)}`,
+             `channels: ${(prose.channels || []).join(", ") || "nothing"}`);
+    if ((encoder.missing_tools || []).length) {
+      out.push(`asked for: ${encoder.missing_tools.join(", ")}`);
+    }
+    if (encoder.widened_to) {
+      out.push(`asked again with them — ${secs(encoder.widen_seconds)}`);
+    }
+    if (encoder.widen_rejected) {
+      out.push(`kept the first answer: ${encoder.widen_rejected}`);
+    }
+    if ((encoder.unmet_tools || []).length) {
+      out.push(`still lacked: ${encoder.unmet_tools.join(", ")}`);
+    }
+    if ((prose.missing_referents || []).length) {
+      out.push("things the prose needs that the world lacks: "
+               + prose.missing_referents.join(", "));
+    }
+    for (const note of prose.notes || []) out.push(`note: ${note}`);
+    const table = ((content.orchestration || {}).specialists) || {};
+    const filed = Object.entries(table).filter(([, state]) => state && state.run);
+    if (filed.length) {
+      out.push("", "— filed by each channel's owner (engine code, no model call) —");
+      for (const [name, state] of filed) {
+        const landed = (state.channels_filled || []).join(", ");
+        out.push(`${name}: ${landed || "nothing landed"}`);
+      }
+    }
+    out.push("", `— events (${events.length}) —`, "",
+             JSON.stringify(events, null, 2));
+    return out.join("\n");
+  }
+  const rooms = prose.room_author || {};
+  out.push(`room designer (${rooms.ran || "did not run"}) — ${secs(rooms.seconds)}`);
+  if (rooms.failed) out.push("", `FAILED (fail-open): ${rooms.failed}`);
+  if ((rooms.rooms || []).length) out.push("", `built: ${rooms.rooms.join(", ")}`);
+  out.push("", JSON.stringify(rooms, null, 2));
   return out.join("\n");
 }
 
@@ -1846,14 +1987,21 @@ function renderEngineNotes(box, content) {
   // The step's per-call ledger (runtime._with_engine_notes `llm_calls`):
   // one line per provider call, so a slow stage explains itself from the
   // stored variant instead of from a stderr line that died with the process.
+  // Under the prose contract each role also says which call it was: the
+  // encoder keeps the Models name `director_specialist`, which read as a
+  // specialist having run.
+  const calls = proseContractRecord(content) ? PROSE_CONTRACT_CALLS : {};
   for (const c of notes.llm_calls || []) {
     const served = c.served && c.served !== c.requested
       ? `${c.requested} → ${c.served}` : (c.served || c.requested || "?");
     const tokens = `in ${c.in || 0}` +
       (c.cached ? ` (${c.cached} cached)` : "") + ` · out ${c.out || 0}`;
     const secs = Number(c.duration) || 0;
+    const role = (c.role || "?")
+      + (Object.prototype.hasOwnProperty.call(calls, c.role)
+        ? ` (${calls[c.role]})` : "");
     box.append(el("div", { class: "dim" },
-      `⏱ ${c.role || "?"} · ${served} · ${tokens} · ${secs.toFixed(2)}s` +
+      `⏱ ${role} · ${served} · ${tokens} · ${secs.toFixed(2)}s` +
       (c.kind && c.kind !== "chat" ? ` · ${c.kind}` : "")));
   }
   for (const w of notes.warnings || []) {

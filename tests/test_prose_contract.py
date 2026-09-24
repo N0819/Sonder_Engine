@@ -105,6 +105,10 @@ def test_resolve_runs_author_then_one_encoder(temp_db, monkeypatch,
     assert record["prose"].startswith("Mara climbs")
     assert record["jev"]["selected"] == ["positions", "poses"]
     assert out["orchestration"]["specialists"]["spatial"]["ran"] is True
+    # ...and the stored record says whose answer it folded, so a prose beat
+    # does not read as a specialist that ran.
+    assert out["orchestration"]["specialists"]["spatial"]["answered_by"] == "encoder"
+    assert "answered_by" not in out["orchestration"]["specialists"]["body"]
 
 
 def test_decision_model_failure_grants_every_channel(temp_db, monkeypatch):
@@ -277,6 +281,8 @@ def test_dispatch_splits_one_transform_across_its_owners(temp_db):
     # contact_ops was written though not granted: still the encoder's work.
     assert plan["contact"]["scope"] == ["contact_ops"]
     assert plan["body"]["run"] is False
+    assert plan["objects"]["answered_by"] == plan["contact"]["answered_by"] == "encoder"
+    assert "answered_by" not in plan["body"]
     objects = answer_for("objects", {"ledger_items": rows})
     contact = answer_for("contact", {"ledger_items": rows})
     assert objects["results"][0]["transforms"][0]["patch"] == {
