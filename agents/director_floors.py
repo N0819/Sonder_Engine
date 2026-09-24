@@ -2175,8 +2175,18 @@ def _canonical_conceal_forms(ref, by_id, by_name):
     return out or [text]
 
 
-def strip_addressee_concealment(sequence, by_id, by_name, warn=None):
+def strip_addressee_concealment(sequence, by_id, by_name, warn=None,
+                                addressees=()):
     """A line cannot be concealed from the person it is addressed to.
+
+    `addressees` is who the speaker says the beat is spoken to, and stands
+    in for a line that names no addressee of its own: a character's
+    `interaction.addresses`. A line that names its own keeps them -- an aside
+    to a third party stays hidden from the person otherwise addressed. The
+    owner's chat 126 idx 9 (round 8, 2026-09-23): Mirelle addressed Hinami
+    and concealed her only line, untargeted, from Hinami -- "Go ahead and
+    lie down whenever you're ready -- face down" -- and the one person it
+    was for never heard it; this rule ran on the player's lines alone.
 
     `llm.schemas._uncross_concealed_speech` already runs this rule against
     the FLOW's addressee list. It is the same rule and it was reading one of
@@ -2217,6 +2227,9 @@ def strip_addressee_concealment(sequence, by_id, by_name, warn=None):
         for ref in (list(event.get("targets") or [])
                     + [event.get("intended_target")]):
             addressed |= _concealment_forms(ref, by_id, by_name)
+        if not addressed:
+            for ref in addressees or ():
+                addressed |= _concealment_forms(ref, by_id, by_name)
         if not addressed:
             continue
         kept, dropped = [], []

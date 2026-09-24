@@ -1405,6 +1405,45 @@ def test_stripping_one_addressee_leaves_the_rest_of_the_exclusion_alone():
     assert not any("reaches nobody" in note for note in notes)
 
 
+def test_a_character_line_naming_no_addressee_is_spoken_to_its_declared_one():
+    """The owner's chat 126 idx 9 (round 8, 2026-09-23): Mirelle declared
+    `interaction.addresses: ["Hinami"]`, left her only line untargeted and
+    concealed it from Hinami -- "Go ahead and lie down whenever you're
+    ready" -- and the one person it was for never heard it. The declared
+    audience stands in for a line that names none; the player, who is in no
+    cast map, is matched by her own name."""
+    sequence = [{"type": "speech", "visibility": "concealed", "targets": [],
+                 "text": "Go ahead and lie down whenever you're ready.",
+                 "conceal_from": ["Hinami"]}]
+    notes = strip_addressee_concealment(
+        sequence, _CAST_BY_ID, _CAST_BY_NAME, addressees=["Hinami"])
+    assert sequence[0]["visibility"] == "overt"
+    assert sequence[0]["conceal_from"] == []
+    assert any("own addressee" in note for note in notes)
+
+
+def test_an_aside_naming_its_own_addressee_keeps_its_secret():
+    """A line with targets of its own is spoken to them: an aside to Felix,
+    hidden from Edmund, stays hidden from Edmund though the beat is
+    otherwise addressed to him."""
+    sequence = [{"type": "speech", "visibility": "concealed",
+                 "text": "Not a word of this to him.", "targets": ["Felix Brand"],
+                 "conceal_from": ["Lord Edmund"]}]
+    assert strip_addressee_concealment(
+        sequence, _CAST_BY_ID, _CAST_BY_NAME, addressees=["Lord Edmund"]) == []
+    assert sequence[0]["conceal_from"] == ["Lord Edmund"]
+    assert sequence[0]["visibility"] == "concealed"
+
+
+def test_the_character_path_runs_the_rule_with_its_declared_audience():
+    import inspect
+
+    import agents.character as character
+    source = inspect.getsource(character)
+    assert "strip_addressee_concealment(" in source
+    assert '(out.get("interaction") or {}).get("addresses")' in source
+
+
 def test_an_action_may_still_be_concealed_from_the_person_it_targets():
     """Picking the pocket of somebody you are talking to is exactly that
     shape, so actions are left alone."""

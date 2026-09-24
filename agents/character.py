@@ -4658,6 +4658,20 @@ def character_step(ctx, cid, nonce):
         out.get("mind_model_updates") or [], absorption=absorption)
     norm_sequence(out, warn=lambda _w: ctx.add_warning(
         "character %s: %s" % (character_name(sh), _w)))
+    # A LINE CANNOT BE CONCEALED FROM THE PERSON IT IS SPOKEN TO -- the rule
+    # the player's own lines already get -- read against the audience this
+    # character declared (`interaction.addresses`) wherever a line names none
+    # of its own. Before the fuse, which compares concealment between lines.
+    # The owner's chat 126 idx 9 (round 8, 2026-09-23): Mirelle's only line
+    # to Hinami was concealed from Hinami and reached nobody.
+    from .director_floors import strip_addressee_concealment
+    from .director_views import _cast_match_forms
+    _by_id, _by_name = _cast_match_forms(ctx.cast)
+    strip_addressee_concealment(
+        out.get("sequence"), _by_id, _by_name,
+        addressees=(out.get("interaction") or {}).get("addresses") or (),
+        warn=lambda _w: ctx.add_warning(
+            "character %s: %s" % (character_name(sh), _w)))
     # THE DETERMINISTIC FLOOR under the ledger extension above, in the same
     # slot as the fuse and for the same reason: after norm_sequence (it reads
     # normalized text) and before the ids are stamped (a dropped element must
