@@ -445,7 +445,95 @@ Timing, round 1: 43-169 s a turn. The character call at the host's `high`
 took 18-46 s and the narrator 8-21 s; the Director's own share was set by the
 room designer on the beats it ran, and by the encoder (5-20 s) otherwise.
 
+**Rounds 2-7** ran on NanoGPT, the routing the owner's as it grew that day:
+GLM 5.2 `:thinking` for every reasoning role; the encoder on plain GLM 5.2
+(rounds 2-3), then Ling 3.0 Flash (round 4-5), then DeepSeek v4.1 Flash
+(round 6 on: "might be better suited for encoder as it is a larger model and
+still decently fast"); the room designer, the Writers' Room and `utility`
+on DeepSeek v4.1 Flash from round 4. One reroll per turn.
+
+- Rounds 2-3 confirmed round 1's fixes on the beats that found them: the
+  player speaks to Mirelle from inside her and Mirelle acts (137 idx 46), a
+  blush is an act (126 idx 5). Plain GLM on the encoder still reasoned on
+  the real prompt, 140-240 s a call; a DNS outage cost round 3 its tail.
+- Round 4 (Ling encoder, 5-41 s a call): the designer redrew rooms the world
+  held on six of seven runs, 73-163 s a beat -- it now builds only new
+  places, and the encoder keeps only a doorway edit of a held room; a body
+  swallowed past the throat fell outside the beat's one-step reach and
+  Mirelle was split into a causality bubble of her own -- a body's insides
+  and the room it stands in are one reach (both `39192472`). Also a thinking
+  model restarting its answer mid-stream, `{"{"prose": ...` (`c7280aaa`),
+  `{}` as the whole prose (`67caf1f5`), and a player's quoted line written
+  inside its sentence and then discarded as invented speech (`9ea47e1e`).
+- Round 5: no bubble split through the swallow. One beat of chat 137 held
+  four defects that ran into each other: a character's lines nested inside
+  their own `text`, printed on the page as Python dicts; a prose of ",",
+  behind which the player's squirm and line were lost; the resolve, with
+  nothing of hers to resolve, and the narration moving her into a stomach on
+  Mirelle's word alone; and the next beat's encoder placing her in a stomach
+  nothing had built, which crashed perception twice (`16141802`, `2849ffce`).
+- Round 6: the DeepSeek encoder answered in 3.6-9.1 s, and chat 126 idx 5
+  committed in 110 s end to end, the fastest real turn. One turn was lost to
+  an intention update naming its goal by text after its repair failed.
+- Round 7 (`918980a5`): 19 of 19 turns committed on chats 137, 120, 122 and
+  153. The stomach was reserved, built in parallel, parented and entered.
+  From the round's own data: the name that reached Vexara every beat was
+  traced to the free text of her own pose, which passed no admission gate
+  (`e9a1d0b9`); the narrator answered in bare prose on 4 of 13 beats and a
+  25-52 s repair re-enveloped it, rewriting line tokens on the way
+  (`31cffa45`); two character checks that commit already reads and reports
+  were fatal -- an intention named by text (`12a9d213`) and a belief target
+  on a non-revise update (`b21936b9`); a walk the prose stated through a
+  shut door was refused by a floor built for hands that re-read rows
+  (`6bcb76a9`); and a vessel set off with no transit and docked without
+  moving, because the sheet asked for a destination the world did not hold
+  and said nothing of a place built that beat (`4ff50bf2`, `8c502613`).
+
+- Round 8 (`8c502613`), on the beats rounds 4-7 found broken: 9 of 9
+  turns committed. The TARDIS set off `in_transit` with its doorway sealed
+  and came in `arriving` over a place the author reserved and the designer
+  built (153 idx 23-26); the walk through the shut treatment-room door
+  committed, Mirelle drawing it closed behind them as the page says (126
+  idx 9); no composer tripwire, no intention or belief repair, and no
+  narrator re-envelope on any beat. It found a character's line to the
+  player concealed from the player and heard by nobody -- the
+  addressee rule now runs on character answers, reading their declared
+  audience (`089907a8`) -- and the room designer, at the host's `high`
+  effort on DeepSeek, deliberating 140,845 characters over one room
+  (1,378 s). Three other beats of 1,589-1,786 s were the host machine
+  suspending mid-call (systemd, 21:05-21:31), not the engine: all three
+  streams resumed within the same 130 ms and were recovered.
+
+Timing, rounds 6-7: 110-880 s a turn. The character call (GLM thinking)
+took 33 s at the median and up to 290 s; the designer 18-335 s, beside the
+encoder; the narrator 7-190 s. The prose author ran away to the host's
+output ceiling four times in the replays -- 50,000 tokens, 387-522 s each --
+and twice in the owner's own play at 40,000 (161-207 s); its legitimate
+answers top out at 12,463 tokens. Read from the debug capture, all four
+replay runaways were one short sentence repeated with a period of 17-22
+characters ("The TARDIS hums. ", "The lamp burns on. "), the band the stream
+guard's two loop rules left between them; the short-run rule now reaches
+the phrase rule (`774e8f56`), with no false positive among 42,000 stored
+outputs.
+
 **Open (real turns):**
+- A runaway that rotates paraphrases instead of repeating has no period
+  for either loop rule: chat 120 idx 8's prose (round 4) and a character's
+  intention note on chat 126 idx 9 (round 8, 184,472 characters, 405 s).
+  Compression does not separate it from valid JSON (its best 4 KB window,
+  0.265; valid stored outputs reach 0.107), so what bounds it is the
+  output ceiling -- per role or the host's -- which is the owner's call.
+- The room designer's reasoning effort: it inherits the host's `default:
+  high`, and on DeepSeek v4.1 Flash that once cost 1,378 s of deliberation
+  for one room (153 idx 26, round 8; 18-335 s otherwise). The encoder has a
+  code default of `off` for the same reason (`ROLE_DEFAULT_EFFORTS`); for
+  the designer it trades quality against time, so it is the owner's call.
+- While a vessel is `arriving`, its interior doorway is derived toward its
+  last position, not its destination, until the beat that docks it.
+- The provider's stream now and then restarts an answer mid-document --
+  `{"effects{"effects":` and, later in the same answer, `"tells2{":` -- on
+  2 of about 83 JSON calls in rounds 6-8. `_restarted_object` reads a
+  restart at the head; garbage mid-document costs a repair (120 s once).
 - A host now feels a body inside it (the contact survives) but hears it only
   by the room-to-room sound field, which an interior's own acoustics can
   close; a rule for sound through the host's own tissue is not built.
@@ -454,9 +542,9 @@ room designer on the beats it ran, and by the encoder (5-20 s) otherwise.
   open debts into two new ones against the tool's own rule.
 - The Director's flourish -- a lamp flickering on most beats -- minted
   `lamp_3` beside `lamp` and `lamp_2` rather than reuse a record.
-- A player's name reached Vexara's composed view on every turn of chat 120,
-  under both contracts; the tripwire repaired it each time. The composer path
-  that admits it is not traced.
+- A pose note that restates its own structured half reads twice ("kneeling
+  over the young woman -- Kneeling over the young woman at the foot of the
+  bed").
 - Replay divergence is a property of the method, not a finding: inputs
   written for the original timeline do not answer questions the replayed
   characters ask, and the two lanes that diverged (126, 122) read as
