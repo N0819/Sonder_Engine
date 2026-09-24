@@ -103,6 +103,7 @@
   "${total.toLocaleString()} stored.": "${total.toLocaleString()}件保存済み。",
   "${toWord} ${x.name} (${x.barrier})": "${toWord} ${x.name} (${x.barrier})",
   "${wbRoomLabel(r)} (${t(\"Planned\")})": "${wbRoomLabel(r)} (${t(\"Planned\")})",
+  "${what} holds no word, so it says nothing": "${what} には語がひとつもなく、何も述べていません",
   "${x},${y}": "${x},${y}",
   "&model=": "&model=",
   "&source=": "&source=",

@@ -3057,6 +3057,14 @@ class CausalSpecialistOutput(LenientModel):
     notes: list[str] = Field(default_factory=list)
 
 
+def _has_a_word(value, what):
+    """`value` when it holds a word character in any script, else a
+    validation error naming `what`."""
+    if not re.search(r"\w", str(value or "")):
+        raise ValueError(f"{what} holds no word, so it says nothing")
+    return value
+
+
 class ProseDirectorOutput(LenientModel):
     """The prose-contract Director's whole output (`agents/director_prose.py`):
     the beat as an objective account. No ledger, no routing, no handles --
@@ -3068,8 +3076,16 @@ class ProseDirectorOutput(LenientModel):
     JSON mode returns now and then -- and the author then raised "returned no
     prose" and killed the beat, where the repair ladder every other invalid
     answer goes through would have asked again (chat 126 replay, round 4,
-    NanoGPT z-ai/glm-5.2:thinking, 2026-09-23)."""
+    NanoGPT z-ai/glm-5.2:thinking, 2026-09-23).
+
+    AND AN ACCOUNT SAYS SOMETHING. A length of one passed `","` -- the whole
+    prose the same model gave for the owner's chat 137 idx 46 (round 5): the
+    encoder, with no account to read, framed the player's line inside the
+    declaration's narration and the line was dropped as invented speech. A
+    prose with no word in it, in any script, goes to the same repair."""
     prose: str = Field(..., min_length=1)
+    _prose_says_something = validator("prose", allow_reuse=True)(
+        lambda cls, value: _has_a_word(value, "the prose"))
     # Each place the beat enters or reveals that the world does not hold yet,
     # in three simple fields: name, size (a ROOM_SIZES word) and shape (a
     # SHAPES word). Enough to reserve a room id both parallel workers use;

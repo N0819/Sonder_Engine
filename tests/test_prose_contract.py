@@ -852,6 +852,24 @@ def test_a_line_framed_in_its_sentence_is_the_quotation():
     assert rows[1]["categories"] == ["speech"] and rows[1]["event"] == line
 
 
+def test_the_players_input_says_what_their_line_is_on_interpret():
+    """The owner's chat 137 idx 46 (round 5): the prose was "," and the
+    encoder framed the player's line inside the declaration's narration.
+    The input is ground truth for the player's words, so on interpret its
+    quotations stand beside the prose's; on resolve only the prose speaks."""
+    from types import SimpleNamespace
+    ctx = SimpleNamespace(input='You squirm. "Ahh... This is really tight."')
+    framed = {"source_entity_id": "persona:10", "speech": True,
+              "event": 'Hinami squirms. "Ahh... This is really tight."',
+              "observable": "Hinami squirms"}
+    quoting = director_prose.quotation_authority(ctx, "interpret", ",")
+    out = director_prose.spoken_words_are_the_quotation([framed], quoting)
+    assert [(e["speech"], e["event"]) for e in out] == [
+        (False, "Hinami squirms."), (True, "Ahh... This is really tight.")]
+    assert director_prose.quotation_authority(ctx, "resolve", ",") == ","
+    assert director_prose.quotation_authority(SimpleNamespace(), "interpret", "A.") == "A."
+
+
 def test_bare_attribution_around_a_line_is_dropped():
     """A tag with no outward motion is the speaker's name, which the row
     already carries: the line alone survives, after or before its tag."""
@@ -1006,7 +1024,11 @@ def test_an_answer_without_prose_goes_to_the_repair_ladder():
     from llm.schemas import output_example, validate_llm_output_strict
     assert not validate_llm_output_strict("director_prose", {}).valid
     assert not validate_llm_output_strict("director_prose", {"prose": ""}).valid
+    # Round 5, chat 137 idx 46: the whole prose was "," -- no account.
+    assert not validate_llm_output_strict("director_prose", {"prose": ","}).valid
+    assert not validate_llm_output_strict("director_prose", {"prose": " -- . "}).valid
     assert validate_llm_output_strict("director_prose", {"prose": "Mara climbs."}).valid
+    assert validate_llm_output_strict("director_prose", {"prose": "ミラが登る。"}).valid
     example = output_example("director_prose")
     assert example["prose"] and validate_llm_output_strict("director_prose", example).valid
 

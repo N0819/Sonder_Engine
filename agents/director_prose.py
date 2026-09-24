@@ -911,9 +911,11 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
 
 #: The quotation pairs of the writing systems the packs install: straight and
 #: curly in English, those plus the corner brackets in Japanese. Typography
-#: the scripts fix, not vocabulary. Single quotes are left out on purpose: a
-#: line that quotes someone ("you said 'break the lock', but I won't") uses
-#: them, and a reader that took them for the line would cut it to its quote.
+#: the scripts fix, not vocabulary. Single quotes are left out on purpose:
+#: the same mark is an apostrophe ("the boys' coats") and the inner quotation
+#: of a line that quotes someone ("you said 'break the lock', but I won't"),
+#: so a reader that took them for a line would cut real words from it. A
+#: prose that quotes dialogue in single quotes is read by nothing here.
 _QUOTED = re.compile(r'"([^"]+)"|“([^”]+)”|「([^」]+)」|『([^』]+)』')
 _BRACKET_OPENS = ("「", "『")
 
@@ -970,6 +972,19 @@ def _quoted_whole(words, spans):
         if span:
             rest = rest.replace(span, " ")
     return not re.sub(r"[\W_]+", "", rest)
+
+
+def quotation_authority(ctx, stage, prose):
+    """The text whose quotations say what a line's words are: the prose,
+    and on interpret the player's own input beside it.
+
+    The input is ground truth for what the player said, and the prose is
+    not always there to repeat it: on the owner's chat 137 idx 46 (round 5,
+    2026-09-23) the whole prose was "," and the encoder framed the player's
+    line inside the declaration -- `Hinami squirms. "Ahh... This is really
+    tight."` -- with no quotation in the prose to recover it from."""
+    said = str(getattr(ctx, "input", "") or "").strip() if stage == "interpret" else ""
+    return f"{prose}\n{said}" if said else str(prose or "")
 
 
 def spoken_words_are_the_quotation(events, prose, warn=None):
@@ -1251,8 +1266,9 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     channels = list(encoder_channels) + [
         c for c in ROOM_AUTHOR_CHANNELS
         if rooms_elsewhere and rooms_answer and (rooms_answer.get(c) or None)]
-    events = quoted_lines_keep_their_words(events, prose)
-    events = spoken_words_are_the_quotation(events, prose, warn=ctx.add_warning)
+    quoting = quotation_authority(ctx, stage, prose)
+    events = quoted_lines_keep_their_words(events, quoting)
+    events = spoken_words_are_the_quotation(events, quoting, warn=ctx.add_warning)
     rows, transforms = ledger_from_events(events)
     record = {
         "stage": stage,

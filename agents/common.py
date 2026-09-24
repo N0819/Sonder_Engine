@@ -4414,6 +4414,67 @@ def _restore_span_fields(source, clean, before):
         built[field] = value
 
 
+def _unnest_spoken(seq, warn=None):
+    """`seq` with every speech element whose `text` holds elements rather than
+    words flattened into the elements it holds.
+
+    A LINE IS WORDS. The character agent (GLM 5.2, the owner's chat 137 idx
+    46, 2026-09-23) wrote each of Mirelle's lines as an element nested inside
+    its own field -- `{"type": "speech", "text": {"text": "There you are. ...",
+    "tone": ..., "volume": "soft", ...}}` -- and `str()` of it went down the
+    acoustic channel: fused with the next line into two Python reprs, it was
+    what she said in the player's view, in her own memory of saying it, and
+    on the page (`"{'text': ..."`). The keys are the engine's own schema, so
+    the shape is structural: a `text` that is an element IS that element,
+    its delivery filling only what the outer one left unsaid; a `text` that
+    is a list is that many lines, in order. A nested element without `text`
+    carries no words the engine can find, and is dropped and said."""
+    flat, lifted, lost = [], 0, 0
+    for element in seq:
+        if not isinstance(element, dict):
+            flat.append(element)
+            continue
+        words = element.get("text") or element.get("speech")
+        kind = element.get("type") or ("speech" if words else "action")
+        if kind != "speech" or not isinstance(words, (dict, list, tuple)):
+            flat.append(element)
+            continue
+        parts = _spoken_parts(element, 0)
+        lifted += 1
+        lost += sum(1 for part in parts if not str(part.get("text") or "").strip())
+        flat.extend(part for part in parts if str(part.get("text") or "").strip())
+    if lifted and warn:
+        warn(f"{lifted} spoken element(s) carried elements inside their own "
+             "text; their words were lifted out"
+             + (f", and {lost} nested element(s) with no words were dropped"
+                if lost else ""))
+    return flat
+
+
+def _spoken_parts(element, depth):
+    """The flat speech elements one speech element holds, in order."""
+    words = element.get("text") or element.get("speech")
+    if not isinstance(words, (dict, list, tuple)) or depth > 3:
+        flat = {k: v for k, v in element.items() if k != "speech"}
+        flat.update(type="speech", text=(
+            "" if isinstance(words, (dict, list, tuple)) or words is None
+            else str(words)))
+        return [flat]
+    outer = {k: v for k, v in element.items()
+             if k not in ("text", "speech") and v not in (None, "", [], {})}
+    parts = []
+    for part in (words if isinstance(words, (list, tuple)) else [words]):
+        if isinstance(part, dict):
+            inner = {k: v for k, v in part.items() if k != "speech"}
+            if not inner.get("text") and part.get("speech"):
+                inner["text"] = part["speech"]
+            parts.extend(_spoken_parts({**inner, **outer}, depth + 1))
+        else:
+            parts.append({**outer, "type": "speech",
+                          "text": "" if part is None else str(part)})
+    return parts
+
+
 def norm_sequence(out, warn=None):
     seq = out.get("sequence")
     if not isinstance(seq, list) or not seq:
@@ -4432,6 +4493,7 @@ def norm_sequence(out, warn=None):
     for a in acts:
         if isinstance(a, dict):
             seq.append({"type": "action", **a})
+    seq = _unnest_spoken(seq, warn)
     clean = []
     for e in seq:
         if not isinstance(e, dict):

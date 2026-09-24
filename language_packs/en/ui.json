@@ -108,6 +108,7 @@
   "${total.toLocaleString()} stored.": "${total.toLocaleString()} stored.",
   "${toWord} ${x.name} (${x.barrier})": "${toWord} ${x.name} (${x.barrier})",
   "${wbRoomLabel(r)} (${t(\"Planned\")})": "${wbRoomLabel(r)} (${t(\"Planned\")})",
+  "${what} holds no word, so it says nothing": "${what} holds no word, so it says nothing",
   "${x},${y}": "${x},${y}",
   "&model=": "&model=",
   "&source=": "&source=",
