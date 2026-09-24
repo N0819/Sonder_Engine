@@ -33,7 +33,7 @@ Each row contains:
 - act: the verb of a speech row whose words were NOT given (asks, explains). Omit it when you have the line itself.
 - commitment: asserted|contestable.
 - targets: exact world/identity keys or readable names of affected/addressed bodies, things and rooms; never item_ids, never the row's own source.
-- visibility, conceal_from, volume: delivery facts when relevant; volume is whisper|mutter|normal|loud|shout, or pitched: loud enough for its target, no louder.
+- visibility, conceal_from, volume: delivery facts when relevant; volume is whisper|mutter|normal|loud|shout, or pitched: loud enough for its target, no louder. Volume is reach, not sound: a line said to someone, however soft or breathy, is pitched for them; mutter and whisper keep words from others present.
 - look: when the span turns or looks: a body, fixture or exit id it turns to; left|right|back turns the body; around sweeps the room. Such a row names attention.
 - seconds: how long THIS step took, in story seconds, at the scale the account gives it -- a night's sleep is a night, a walk is its minutes. Price the step you cut, never the beat; code adds the rows. Nothing has to announce a span for one to exist: a step nobody timed is timed by the work in it. Zero says this step took none.
 - movement only for relocation (a body CHANGES ROOM), else null: {to_room,why,mover,arrives}; to_room is where the walk ENDS (the engine walks the legs); arrives: this beat ends there; to_anchor: the destination feature named (world_index features); pace: run when the span runs. An act that carries a body out of its room is a positions row.

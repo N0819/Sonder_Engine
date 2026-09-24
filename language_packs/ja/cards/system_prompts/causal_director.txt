@@ -28,7 +28,7 @@ resolution_notes は各手順の直後の結果を記し、必要な解放、保
 - act：言葉を与えなかった発話の動詞（asks、explains など）。引用そのものがある場合は省略します。
 - commitment：asserted|contestable。
 - targets：作用した、または呼びかけた身体・物・部屋の正確な world/identity key、または読める参照名。item_ids の番号と行の source 自身は使いません。
-- visibility、conceal_from、volume：関連する知覚条件。volume は whisper|mutter|normal|loud|shout、または対象にだけ届く音量の pitched。
+- visibility、conceal_from、volume：関連する知覚条件。volume は whisper|mutter|normal|loud|shout、または対象にだけ届く音量の pitched。volume は届き方であって音色ではありません：誰かに向けた台詞は、どれほど小さく息まじりでも、その相手に向けた pitched で、mutter と whisper はその場のほかの者から言葉を遠ざけます。
 - look：向く・見る span の対象となる身体、備品、出口の ID。left|right|back は身体の向きを変え、around は室内を見回します。この行は attention を指定します。
 - seconds：この手順が物語の時計上で要した秒数。出来事が語る尺度どおりに——一晩の眠りは一晩、移動はそれにかかる分数です。切り出したその手順だけを見積もり、beat 全体を書かないでください。各行はエンジンが合算します。span が存在するのに誰かが宣言する必要はありません。誰も時間を宣言しなかった手順も、その中でなされた仕事によって計られます。ゼロはこの手順に時間を要しないことを述べます。
 - movement：身体が部屋を変える場合だけ {to_room,why,mover,arrives}、それ以外は null。to_room は移動が終わる部屋（途中の経路はエンジンが処理）、arrives はこのビートに到着するか。to_anchor は目的地の world_index feature、走る場合は pace:run。身体を室外へ運ぶ行為は positions 行です。

@@ -1056,6 +1056,32 @@ def test_volume_is_the_speakers_and_muffling_is_the_worlds():
     assert "その後で音をくぐもらせたり運んだりするものは世界の側のもの" in ja
 
 
+def test_volume_is_how_far_the_words_are_meant_to_carry():
+    """Chat 155 idx 21-31 (2026-09-24): every soft, breathless or moaned line
+    the player said to the woman whose hands were on her was recorded as
+    `mutter`, and perception then handed the woman a fragment of it ("volume
+    mutter, barrier open, tier within_reach"). The owner: "it is marking
+    everything hinami says as muttered which is... obnoxious." Two places
+    wrote it: the prose writer added delivery the input never gave ("then,
+    quieter, almost a murmur"), and both Directors read how a line sounds
+    as how far it goes. Affect is not reach."""
+    from llm import prompts
+    card_en, card_ja = prompts._prompt_card("en"), prompts._prompt_card("ja")
+    encoder = prompts.unified_specialist_prompt(["poses"])
+    causal = str(card_en["causal_director"])
+    writer = str(card_en["prose_contract"]["director_interpret"])
+    assert "how far the speaker means the words to carry, never how they sound" in encoder
+    assert "Volume is reach, not sound" in causal
+    assert "is pitched for them" in causal
+    assert "pitched for whoever it is aimed at" in encoder
+    assert "The player's line keeps the reach their input gave it -- read in event_inputs" in encoder
+    assert "or a sound with no words in it -- carries as any voice does" in encoder
+    assert "how far a line carries is conduct" in writer
+    assert "言葉をどこまで届かせるつもりか" in prompts.unified_specialist_prompt(["poses"], "ja")
+    assert "volume は届き方であって音色ではありません" in str(card_ja["causal_director"])
+    assert "台詞がどこまで届くかも行為です" in str(card_ja["prose_contract"]["director_interpret"])
+
+
 def test_a_place_the_world_holds_is_already_designed():
     """Chat 153 and 137 replays (2026-09-23): the designer redrafted rooms the
     world already held whenever the router granted `rooms` -- the TARDIS

@@ -641,7 +641,30 @@ this prose contains" into "one for each kind of change this prose was
 judged to contain"; on a long stomach beat the hedged core wrote the
 peristalsis's ticking condition 1 of 4 times and the old wording 4 of 4.
 
+**"It is marking everything hinami says as muttered."** Chat 155 (the
+owner's Mirelle story), both contracts: the player's soft, embarrassed or
+moaned lines to the woman whose hands were on her were written `mutter`
+(causal idx 21 and 27, prose idx 30 and 31), and perception gave the woman
+a fragment of each ("volume mutter, barrier open, tier within_reach"). Two
+writers of it: the prose Director added delivery the input never gave
+("Then, quieter, almost a murmur: 'More please.'"), and both Directors read
+how a line sounds as how far it goes. Volume is now reach, not sound, in
+the encoder, the causal Director (its size bound raised 12,600 -> 12,800 to
+hold the sentence, argued in its test) and the writer's never-add-conduct
+sentence. Re-sent on that chat's own captured calls (GLM 5.2, reasoning
+off, 4 samples each): "Hnnnn~" mutter 4/4 -> normal or pitched 3/4 (4/4 on
+the run before); "Haaa... That feels good" mutter 4/4 -> 4/4 not; "More
+please." -- written "almost a murmur" by that turn's prose -- still mutter
+3/4. The writer, re-run on the same input, now adds reach ("quieter",
+"murmured", "low") in 1 of 4 samples against 3 of 4.
+
 **Open:**
+- A player line the writer still retells as murmured is still usually
+  encoded `mutter` (3 of 4), though the encoder is told the player's reach
+  is theirs. A structural floor could close it -- a quiet volume that keeps
+  the words from nobody present is pitched for its targets -- but it would
+  also flatten a deliberate "mutters at him" meant to be half-caught, so it
+  is the owner's call.
 - One-off sounds are written a quarter as often (4-6% of calls against
   17%). On the one beat read closely (137 idx 48: a stomach's groan, a
   swallow outside the walls) the old sheet wrote both and the native none;

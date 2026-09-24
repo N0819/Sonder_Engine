@@ -66,7 +66,17 @@ def test_both_director_invocations_share_one_minimal_contract():
     # charged as seconds), and that nothing has to announce a span for one to
     # exist (which is EVERY beat where no player declares anything -- the
     # whole playerless case the charter runs in).
-    assert len(shared) < 12_600
+    #
+    # RAISED 12,600 -> 12,800 on 2026-09-24 for one sentence: "Volume is
+    # reach, not sound". The owner's chat 155, idx 21 and 27 (this contract):
+    # the player's embarrassed, stammered and moaned lines to the woman whose
+    # hands were on her were written `mutter`, and perception then handed her
+    # a fragment of each ("volume mutter, barrier open, tier within_reach")
+    # -- "it is marking everything hinami says as muttered which is...
+    # obnoxious." The field grades a real mutter correctly; the author was
+    # reading how a line sounds as how far it goes. Reduced before it was
+    # argued, 225 characters to 150: the illustrations of affect cut to two.
+    assert len(shared) < 12_800
 
 
 def test_a_body_is_not_a_room_until_the_world_has_made_it_one():
