@@ -23,6 +23,7 @@ from world.spatial import (
     contacts_of,
     contact_relation,
     enclosure_joins_rooms,
+    inside_as_holder,
     resolve_substance_ops,
     room_of,
     same_subject,
@@ -74,6 +75,15 @@ def _validated_player_contact_assertions(
             continue
         actor = _canonical_scene_subject(sc, item.get("actor"))
         target = _canonical_scene_subject(sc, item.get("target"))
+        # A HAND ON AN INSIDE IS A HAND ON ITS HOLDER (`inside_as_holder`):
+        # a target naming the room that is a body's inside is that body,
+        # touched from within -- chat 137 idx 47, round 9, where all four of
+        # a swallowed player's contacts named her holder's stomach room.
+        holder, inside = inside_as_holder(sc, target)
+        if holder:
+            target = _canonical_scene_subject(sc, holder)
+            if not str(item.get("target_interior") or "").strip():
+                item = dict(item, target_interior=inside)
         actor_part = str(item.get("actor_part") or "").strip()
         target_part = str(item.get("target_part") or "").strip()
         requested_op = str(item.get("op") or "add").strip().casefold()

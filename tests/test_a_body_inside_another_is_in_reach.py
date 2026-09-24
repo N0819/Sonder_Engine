@@ -66,6 +66,34 @@ class TestTheContactGuard:
         assert reports == [
             "discarded a contact assertion between non-co-located bodies"]
 
+    def test_a_hand_on_the_inside_is_a_hand_on_its_holder(self):
+        """Chat 137 idx 47 (round 9, 2026-09-23): every contact named the
+        stomach ROOM as its target -- a room is where a body is, never a
+        body -- and all four were discarded. The room's own record says
+        whose inside it is, and its name is the inside's prose label."""
+        reports = []
+        kept = _validated_player_contact_assertions(
+            _swallowed(), [_hands_on("mirelle_throat")], "Hinami", reports.append)
+        assert [(c["target"], c.get("target_interior")) for c in kept] == [
+            ("Mirelle", "throat")]
+        assert reports == []
+
+    def test_an_ordinary_room_is_still_nobody(self):
+        """Only an inside names a holder; a room with no `parent_entity` is
+        a place, and a contact naming it is still refused."""
+        reports = []
+        kept = _validated_player_contact_assertions(
+            _swallowed(), [_hands_on("treatment_room")], "Hinami", reports.append)
+        assert kept == []
+
+    def test_the_commit_keeps_it_under_the_holders_name(self):
+        from world.spatial import normalize_scene_contacts
+        scene = _swallowed()
+        scene["contacts"] = [dict(_hands_on("mirelle_throat"), relation="surface")]
+        normalize_scene_contacts(scene)
+        assert [(c["target"], c.get("target_interior")) for c in scene["contacts"]] == [
+            ("Mirelle", "throat")]
+
 
 def _chat(temp_db, scene):
     persona_id = temp_db.qi(

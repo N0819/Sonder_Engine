@@ -13,7 +13,7 @@
 | `agents/common.py` | 11799 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 5183 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 8418 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
-| `agents/director_contact.py` | 489 |  | `story.character_schema`, `world.spatial` |
+| `agents/director_contact.py` | 499 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 3711 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
 | `agents/director_fanout.py` | 1687 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 2271 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
@@ -204,8 +204,8 @@
 | `world/spatial_barriers.py` | 931 |  | `world.spatial_orientation` |
 | `world/spatial_bubbles.py` | 592 |  | `world.spatial`, `world.spatial_frames` |
 | `world/spatial_contact_migration.py` | 332 |  | `story.character_schema`, `world.spatial_contacts`, `world.spatial_identity` |
-| `world/spatial_contacts.py` | 1968 |  | `world.spatial_containment`, `world.spatial_identity`, `world.spatial_transit` |
-| `world/spatial_containment.py` | 3280 |  | `world.spatial_barriers`, `world.spatial_identity`, `world.spatial_transit` |
+| `world/spatial_contacts.py` | 1976 |  | `world.spatial_containment`, `world.spatial_identity`, `world.spatial_transit` |
+| `world/spatial_containment.py` | 3314 |  | `world.spatial_barriers`, `world.spatial_identity`, `world.spatial_transit` |
 | `world/spatial_fov.py` | 1801 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_orientation` |
 | `world/spatial_frames.py` | 2640 |  | `core.db`, `core.frames`, `story.character_schema`, `story.scene`, `world.paradox`, `world.spatial` |
 | `world/spatial_geometry.py` | 2209 |  | `story.character_schema`, `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_identity`, `world.spatial_orientation` |
@@ -314,14 +314,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_validated_player_contact_assertions()` | 60 | 159 lines |
-| `_merge_player_contact_assertions()` | 221 | 85 lines |
-| `_character_material_effects()` | 367 | 52 lines |
-| `_validated_character_contact_endings()` | 308 | 51 lines |
-| `_merge_character_material_effects()` | 421 | 35 lines |
-| `_merge_character_contact_endings()` | 458 | 32 lines |
-| `_drop_momentary_contact_adds()` | 32 | 19 lines |
-| `_canonical_scene_subject()` | 52 | 6 lines |
+| `_validated_player_contact_assertions()` | 61 | 168 lines |
+| `_merge_player_contact_assertions()` | 231 | 85 lines |
+| `_character_material_effects()` | 377 | 52 lines |
+| `_validated_character_contact_endings()` | 318 | 51 lines |
+| `_merge_character_material_effects()` | 431 | 35 lines |
+| `_merge_character_contact_endings()` | 468 | 32 lines |
+| `_drop_momentary_contact_adds()` | 33 | 19 lines |
+| `_canonical_scene_subject()` | 53 | 6 lines |
 
 ### `agents/director_evidence.py`
 
@@ -2499,27 +2499,27 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_contact_ops()` | 1358 | 431 lines |
-| `_clean_contact()` | 925 | 168 lines |
-| `normalize_scene_contacts()` | 1243 | 87 lines |
-| `contacts_across_enclosure()` | 1135 | 68 lines |
-| `_mirrored_displacements()` | 332 | 50 lines |
-| `_unnamed_touch_between_bodies()` | 866 | 47 lines |
-| `contact_thing_label()` | 794 | 42 lines |
-| `_anchor_room_of()` | 752 | 40 lines |
+| `apply_contact_ops()` | 1366 | 431 lines |
+| `_clean_contact()` | 926 | 168 lines |
+| `normalize_scene_contacts()` | 1244 | 94 lines |
+| `contacts_across_enclosure()` | 1136 | 68 lines |
+| `_mirrored_displacements()` | 333 | 50 lines |
+| `_unnamed_touch_between_bodies()` | 867 | 47 lines |
+| `contact_thing_label()` | 795 | 42 lines |
+| `_anchor_room_of()` | 753 | 40 lines |
 
 ### `world/spatial_containment.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `derive_inventory_placements()` | 1431 | 203 lines |
-| `materialize_named_stations()` | 2692 | 135 lines |
-| `advance_room_transits()` | 2829 | 130 lines |
-| `replace_engine_minted_interiors()` | 2192 | 123 lines |
-| `mint_transferred_objects()` | 1325 | 104 lines |
-| `release_declared_departures()` | 2973 | 97 lines |
-| `place_enclosed_bodies()` | 2317 | 95 lines |
-| `derive_containment_from_contacts()` | 496 | 90 lines |
+| `derive_inventory_placements()` | 1432 | 203 lines |
+| `materialize_named_stations()` | 2693 | 135 lines |
+| `advance_room_transits()` | 2830 | 130 lines |
+| `replace_engine_minted_interiors()` | 2193 | 123 lines |
+| `mint_transferred_objects()` | 1326 | 104 lines |
+| `release_declared_departures()` | 2974 | 97 lines |
+| `place_enclosed_bodies()` | 2318 | 95 lines |
+| `derive_containment_from_contacts()` | 497 | 90 lines |
 
 ### `world/spatial_fov.py`
 

@@ -5,7 +5,8 @@ hides, and what a size change breaks."""
 import re
 from world.spatial_barriers import (_PASSABLE_BARRIERS, neighbor_map,
                                     normalize_barrier)
-from world.spatial_identity import _ci_get, _entity_named, room_of, same_subject
+from world.spatial_identity import (_ci_get, _entity_named, canonical_subject,
+                                    room_of, same_subject)
 from world.spatial_identity import _unique_entity_keyed, normalize_room_id
 from world.spatial_transit import (_interior_entry_room, _interior_rooms_of,
                                   _is_body_entity)
@@ -3109,6 +3110,39 @@ def enclosure_joins_rooms(scene: dict, room_a, room_b,
         if same_subject(scene, parent, str(outer_name)):
             return True
     return False
+
+
+def inside_as_holder(scene: dict, name) -> tuple:
+    """`(holder, inside)` when `name` is a room that is the inside of a thing
+    the scene holds: the room's `parent_entity`, spelled as the scene spells
+    that holder, and the room's own name as the prose label of the inside
+    (`target_interior`'s namespace, never a room id). Else `("", "")`.
+
+    A HAND ON AN INSIDE IS A HAND ON ITS HOLDER, from within. The encoder
+    named the room a swallowed body stood in as the target of her touch --
+    the owner's chat 137 idx 47 (round 9, 2026-09-23): palms and fingertips
+    on `mirelle_sulmirath_s_stomach`, parts `chamber_walls` and
+    `chamber_floor` -- and a room is where a body is, never a body, so all
+    four contacts were discarded as non-co-located and the body she was
+    inside felt none of it. The room's own record says whose inside it is;
+    the kept form is the one the same chat committed a round earlier,
+    `target: "Mirelle Sulmirath", target_interior: "Mirelle's Stomach"`."""
+    rooms = (scene or {}).get("rooms") or {}
+    text = str(name or "").strip()
+    if not text or not isinstance(rooms, dict):
+        return "", ""
+    room = rooms.get(text)
+    if not isinstance(room, dict):
+        folded = text.casefold()
+        matches = [rid for rid in rooms if str(rid).casefold() == folded]
+        room = rooms.get(matches[0]) if len(matches) == 1 else None
+    if not isinstance(room, dict):
+        return "", ""
+    parent = str(room.get("parent_entity") or "").strip()
+    if not parent:
+        return "", ""
+    return (canonical_subject(scene, parent) or parent,
+            str(room.get("name") or text).strip())
 
 
 def scale_changed_names(previous_scales, current_scales) -> set:

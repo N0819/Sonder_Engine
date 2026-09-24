@@ -121,7 +121,7 @@ from world.spatial_containment import (
     derive_worn_containment,
     mint_transferred_objects,
     derive_minted_entity_placements,
-    enclosure_joins_rooms, hiding_holders_of,
+    enclosure_joins_rooms, hiding_holders_of, inside_as_holder,
     resolve_placement_target,
     interior_occupants, materialize_enclosure_interiors,
     normalize_scene_containment, normalize_scene_scales,

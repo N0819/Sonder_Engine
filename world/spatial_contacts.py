@@ -7,7 +7,8 @@ import re
 
 from world.spatial_containment import (_WHOLE_BODY_PARTS,
                                  containment_conceals, enclosure_joins_rooms,
-                                 hiding_holders_of, scale_changed_names)
+                                 hiding_holders_of, inside_as_holder,
+                                 scale_changed_names)
 from world.spatial_identity import (_ci_get, scene_names_body,
                                     _unique_entity_keyed,
                                     canonical_subject, same_subject)
@@ -1283,6 +1284,13 @@ def normalize_scene_contacts(scene: dict) -> dict:
         # spelling is made one.
         contact["actor"] = canonical_subject(scene, contact["actor"])
         contact["target"] = canonical_subject(scene, contact["target"])
+        # ...and a target naming a body's INSIDE is that body, touched from
+        # within (`inside_as_holder`; chat 137 idx 47, round 9).
+        holder, inside = inside_as_holder(scene, contact["target"])
+        if holder:
+            contact["target"] = canonical_subject(scene, holder)
+            if not str(contact.get("target_interior") or "").strip():
+                contact["target_interior"] = inside
         actor_room = _ci_get(positions, contact["actor"])
         target_room = _ci_get(positions, contact["target"])
         # A ROOM'S OWN FIXTURE IS WHERE THE ROOM IS. `positions` places
