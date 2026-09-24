@@ -1658,6 +1658,60 @@ class TestAnIncompleteKernelKeepsTheBeat:
         raw.pop("sequence", None)
         assert self._fatal(raw)
 
+    def test_an_intention_naming_no_intention_costs_the_row_not_the_beat(
+            self, monkeypatch):
+        """The owner's chat 120 idx 8 (round 6, 2026-09-23): a `progress`
+        with no `id` outlived the repair and the whole beat was thrown away,
+        conduct and all. The check still fails it first, so the repair can
+        ask for the id; only the exhausted ladder drops the row."""
+        import json
+        from llm import llm_quality
+        from llm.schemas import validate_llm_output_strict
+        raw = self._whole()
+        good = {"op": "add", "intent": "keep her talking", "why": "she is scared"}
+        raw["updates"]["intentions"] = [
+            {"op": "progress", "why": "she finally answered"}, good]
+        assert not validate_llm_output_strict("character_kernel", raw).valid
+        monkeypatch.setattr(llm_quality, "chat_complete",
+                            lambda *a, **k: json.dumps(raw))
+        monkeypatch.setattr(llm_quality, "role_candidate_count", lambda role: 1)
+        noted = []
+        monkeypatch.setattr(llm_quality, "note_step_warning", noted.append)
+        out = llm_quality.complete_validated_json(
+            role="character_major", step_key="character_kernel", system="sys",
+            payload={"x": 1}, repair_attempts=0)
+        assert [row.get("intent") for row in out["updates"]["intentions"]] == [
+            "keep her talking"]
+        assert out["sequence"] == raw["sequence"]
+        assert noted and "names no id" in noted[0]
+
+    def test_a_note_past_its_length_is_cut_and_the_beat_kept(self, monkeypatch):
+        """The owner's chat 122 idx 8 (round 4, 2026-09-23): one want ran
+        past its 240 characters and the whole beat was lost. The limit still
+        fails it first; the exhausted ladder cuts it at a word."""
+        import json
+        from llm import llm_quality
+        from llm.schemas import validate_llm_output_strict
+        raw = self._whole()
+        long_want = "keep the ship steady while " + "the vortex settles " * 20
+        raw["state"]["active"]["wants"] = [
+            {"id": "w1", "want": long_want, "urgency": 0.6}]
+        raw["state"]["decision"]["hinge"] = "short and fine"
+        assert not validate_llm_output_strict("character_kernel", raw).valid
+        monkeypatch.setattr(llm_quality, "chat_complete",
+                            lambda *a, **k: json.dumps(raw))
+        monkeypatch.setattr(llm_quality, "role_candidate_count", lambda role: 1)
+        noted = []
+        monkeypatch.setattr(llm_quality, "note_step_warning", noted.append)
+        out = llm_quality.complete_validated_json(
+            role="character_major", step_key="character_kernel", system="sys",
+            payload={"x": 1}, repair_attempts=0)
+        want = out["state"]["active"]["wants"][0]["want"]
+        assert len(want) <= 240 and long_want.startswith(want)
+        assert not want.endswith(" ") and want.split()[-1] in long_want.split()
+        assert out["state"]["decision"]["hinge"] == "short and fine"
+        assert noted and "state.active.wants.0.want ran to" in noted[0]
+
     def test_the_lift_runs_before_the_fill(self):
         """This model routinely writes `effects`, `interaction` and `salience`
         one brace too deep, inside `updates`, and the canonicaliser lifts them

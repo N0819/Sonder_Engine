@@ -48,12 +48,12 @@
 | `dressing/backdrops.py` | 1772 |  | `core`, `core.db`, `core.logging_utils`, `core.paths`, `persist.steps`, `world.day_cycle`, `world.spatial`, `world.weather` |
 | `llm/__init__.py` | 6 |  | — |
 | `llm/decisions.py` | 151 |  | `core.db` |
-| `llm/llm_quality.py` | 1313 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
+| `llm/llm_quality.py` | 1321 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 666 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 4863 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
-| `llm/schemas.py` | 7738 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `llm/schemas.py` | 7836 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2503 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 398 |  | — |
@@ -690,7 +690,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `complete_validated_json()` | 670 | 644 lines |
+| `complete_validated_json()` | 670 | 652 lines |
 | `_targeted_field_patch()` | 300 | 98 lines |
 | `note_provider_exchange()` | 609 | 59 lines |
 | `_step_json_schema()` | 558 | 49 lines |
@@ -749,11 +749,11 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `semantic_output_errors()` | 6772 | 585 lines |
-| `preprocess_llm_output()` | 5680 | 357 lines |
+| `semantic_output_errors()` | 6834 | 581 lines |
+| `preprocess_llm_output()` | 5742 | 357 lines |
 | `_lenient_coerce()` | 864 | 159 lines |
-| `validate_llm_output_strict()` | 7600 | 139 lines |
-| `_causal_patch_errors()` | 6640 | 130 lines |
+| `validate_llm_output_strict()` | 7698 | 139 lines |
+| `_causal_patch_errors()` | 6702 | 130 lines |
 | `canonicalize_prose_markup()` | 5312 | 102 lines |
 | `_coerce_station_table()` | 85 | 81 lines |
 | `_uncross_concealed_speech()` | 5436 | 69 lines |

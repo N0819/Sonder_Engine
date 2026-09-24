@@ -5677,6 +5677,68 @@ def fill_absent_required(model_cls, data, *, notes=None, path="", only=None):
     return data
 
 
+def _declared_max_length(spec):
+    """The `max_length` a string field declares, on either Pydantic major."""
+    for meta in getattr(spec, "metadata", None) or ():
+        length = getattr(meta, "max_length", None)
+        if isinstance(length, int):
+            return length
+    length = getattr(getattr(spec, "field_info", None), "max_length", None)
+    return length if isinstance(length, int) else None
+
+
+def _model_inside(annotation):
+    """The model an annotation holds: itself, or inside a list or Optional."""
+    if hasattr(annotation, "model_fields") or hasattr(annotation, "__fields__"):
+        return annotation
+    for arg in get_args(annotation) or ():
+        found = _model_inside(arg)
+        if found is not None:
+            return found
+    return None
+
+
+def clip_to_declared_length(model_cls, data, *, notes=None, path=""):
+    """A STRING LONGER THAN ITS FIELD DECLARES IS CUT TO FIT, at a word.
+
+    The salvage's, like `fill_absent_required`: the limit still fails the
+    answer first, so the repair can ask for a shorter one, and only a beat
+    that would otherwise be thrown away is kept with the text cut. The
+    owner's chat 122 idx 8 (round 4, 2026-09-23): one want ran past its 240
+    characters, the repair did the same, and the Doctor's whole beat was
+    lost over the length of a private note. Recurses into nested models and
+    lists of them; every cut is reported."""
+    if not isinstance(data, dict):
+        return data
+    for name, spec in _fields(model_cls).items():
+        if name not in data:
+            continue
+        here = f"{path}.{name}" if path else name
+        value = data[name]
+        length = _declared_max_length(spec)
+        if isinstance(value, str) and length and len(value) > length:
+            cut = value[:length]
+            space = cut.rfind(" ")
+            if space >= length // 2:
+                cut = cut[:space]
+            data[name] = cut.rstrip(" ,;:—–-")
+            if notes is not None:
+                notes.append("%s ran to %d characters against its %d and was cut "
+                             "to fit" % (here, len(value), length))
+            continue
+        inner = _model_inside(_outer_annotation(spec))
+        if inner is None:
+            continue
+        if isinstance(value, dict):
+            clip_to_declared_length(inner, value, notes=notes, path=here)
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                if isinstance(item, dict):
+                    clip_to_declared_length(inner, item, notes=notes,
+                                            path=f"{here}.{index}")
+    return data
+
+
 def preprocess_llm_output(step_key: str, raw: dict) -> dict:
     if not isinstance(raw, dict):
         return {}
@@ -7325,15 +7387,11 @@ def semantic_output_errors(
             updates = (output.get("updates")
                        if isinstance(output.get("updates"), dict) else {})
             for index, update in enumerate(updates.get("intentions") or []):
-                if not isinstance(update, dict):
-                    continue
-                op = str(update.get("op") or "").strip().casefold()
-                if op == "add" and not str(update.get("intent") or "").strip():
+                missing, op = _intention_row_missing(update)
+                if missing:
                     errors.append(
-                        f"updates.intentions.{index}.intent is required for add")
-                elif op != "add" and not str(update.get("id") or "").strip():
-                    errors.append(
-                        f"updates.intentions.{index}.id is required for {op or 'this operation'}")
+                        f"updates.intentions.{index}.{missing} is required for "
+                        f"{op or 'this operation'}")
 
     # NARRATION IS NOT VALIDATED HERE ANY MORE. A narrator answer blocks on
     # being parseable JSON of the declared shape and on nothing else: no
@@ -7354,6 +7412,46 @@ def semantic_output_errors(
     # instead of being rejected.
 
     return errors
+
+def _intention_row_missing(update):
+    """`(field, op)`: the field one intention update needs for its operation
+    and does not carry -- `intent` to add one, `id` for anything done to one
+    that exists -- or `("", op)` when it carries it."""
+    if not isinstance(update, dict):
+        return "", ""
+    op = str(update.get("op") or "").strip().casefold()
+    if op == "add":
+        return ("" if str(update.get("intent") or "").strip() else "intent"), op
+    return ("" if str(update.get("id") or "").strip() else "id"), op
+
+
+def drop_unaddressable_intentions(output, notes=None):
+    """A kernel answer with every intention update the check refuses removed,
+    in place, each one said in `notes`.
+
+    The salvage's, never the check's: the check still fails the answer so
+    the repair can ask for the missing field -- on the owner's chat 137 idx
+    46 (round 5, 2026-09-23) it did, and got it. Only a beat that would
+    otherwise be thrown away loses the row, as the owner's bar has it ("mild
+    breaks are mostly acceptable"): on chat 120 idx 8 a `progress` naming no
+    intention outlived the repair and cost Vexara's whole beat, conduct and
+    all, where the row could not have been applied to anything anyway."""
+    updates = output.get("updates") if isinstance(output, dict) else None
+    rows = updates.get("intentions") if isinstance(updates, dict) else None
+    if not isinstance(rows, list):
+        return output
+    kept = []
+    for index, update in enumerate(rows):
+        missing, op = _intention_row_missing(update)
+        if missing:
+            if notes is not None:
+                notes.append(f"updates.intentions.{index} ({op or 'no operation'}) "
+                             f"was dropped: it names no {missing}")
+            continue
+        kept.append(update)
+    updates["intentions"] = kept
+    return output
+
 
 def _name_what_was_discarded(step_key, raw, error):
     """Say that WE dropped the sequence, when we did.

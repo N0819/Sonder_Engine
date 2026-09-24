@@ -1281,12 +1281,20 @@ def complete_validated_json(
             import copy as _copy
             from llm import schemas as _schemas
             from llm.schemas import (KERNEL_CARRIES_THE_BAR,
+                                     clip_to_declared_length,
+                                     drop_unaddressable_intentions,
                                      fill_absent_required)
             if step_key == "character_kernel":
                 salvage = _copy.deepcopy(previous_parsed)
                 filled = []
                 fill_absent_required(_schemas.SCHEMA_MAP[step_key], salvage,
                                      notes=filled, only=KERNEL_CARRIES_THE_BAR)
+                # An intention update that names no intention could not be
+                # applied to one; losing it is a mild break, losing the beat
+                # is not (the owner's chat 120 idx 8, round 6, 2026-09-23).
+                drop_unaddressable_intentions(salvage, notes=filled)
+                clip_to_declared_length(_schemas.SCHEMA_MAP[step_key], salvage,
+                                        notes=filled)
                 if filled:
                     salvaged = validate_llm_output_strict(
                         step_key, salvage, source_payload=payload)
