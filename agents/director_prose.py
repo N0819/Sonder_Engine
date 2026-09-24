@@ -647,6 +647,78 @@ def enforce_reserved(rooms_answer, reserved, warn=None):
     return rooms_answer
 
 
+def keep_new_places(rooms_answer, scene, develop=(), warn=None):
+    """The room author's answer, cut to the places it BUILT this beat.
+
+    A place the world already holds is made; the author does not redo it
+    (owner, 2026-09-23). A redrawn room it holds keeps only the doorways that
+    join it to a place built now -- the one thing about it this beat
+    changed -- and a planned room being developed is being built, stub or
+    not. Measured on the round-4 replays: descriptions rewritten, fixtures
+    and extents redrawn on rooms that stood, while nothing in them moved."""
+    rooms_answer = dict(rooms_answer or {})
+    rooms = dict(rooms_answer.get("rooms") or {})
+    held = set(((scene or {}).get("rooms") or {}).keys())
+    built = {rid for rid in rooms if rid not in held or rid in set(develop or ())}
+    kept = {}
+    for rid, room in rooms.items():
+        if rid in built:
+            kept[rid] = room
+            continue
+        edges = [dict(edge) for edge in ((room or {}).get("adjacent") or [])
+                 if isinstance(edge, dict) and edge.get("to") in built]
+        if edges:
+            kept[rid] = {"adjacent": edges}
+        if warn:
+            warn(f"room author redrew {rid!r}, a place the world holds; "
+                 + ("kept only its doorways to places built now" if edges
+                    else "it stands as it was"))
+    rooms_answer["rooms"] = kept
+    return rooms_answer
+
+
+def doorway_edits_only(events, scene, new_ids=(), warn=None):
+    """The encoder's room writes, kept to what it may change: the doorway
+    between two places, and nothing else of a place the world holds. A room
+    the world does not hold is the room author's to build -- the encoder
+    names it `new:<words>` -- so a record the encoder invents for one is
+    dropped and said."""
+    held = set(((scene or {}).get("rooms") or {}).keys())
+    known = held | set(new_ids or ())
+    out = []
+    for event in events or []:
+        if not isinstance(event, dict):
+            out.append(event)
+            continue
+        transforms = []
+        for transform in event.get("transforms") or []:
+            patch = (transform or {}).get("patch") if isinstance(transform, dict) else None
+            rooms = patch.get("rooms") if isinstance(patch, dict) else None
+            if not isinstance(rooms, dict):
+                transforms.append(transform)
+                continue
+            kept = {}
+            for rid, room in rooms.items():
+                if rid not in held:
+                    if warn:
+                        warn(f"encoder wrote {rid!r}, a place the world does not "
+                             "hold; a new place is the room author's, named new:")
+                    continue
+                edges = [{"to": edge["to"], "barrier": edge["barrier"]}
+                         for edge in ((room or {}).get("adjacent") or [])
+                         if isinstance(edge, dict) and edge.get("to") in known
+                         and str(edge.get("barrier") or "").strip()]
+                if edges:
+                    kept[rid] = {"adjacent": edges}
+            patch = {k: v for k, v in patch.items() if k != "rooms"}
+            if kept:
+                patch["rooms"] = kept
+            if patch:
+                transforms.append(dict(transform, patch=patch))
+        out.append(dict(event, transforms=transforms))
+    return out
+
+
 def _new_objects(events):
     """`{entity_id: {name, description}}` the encoder created this beat."""
     found = {}
@@ -1012,8 +1084,16 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
     for rid, brief in develop.items():
         new_places.setdefault(rid, {"name": str((brief or {}).get("name") or rid),
                                     "planned": True})
-    if rooms_elsewhere and (reserved or develop
-                            or any(c in ROOM_AUTHOR_CHANNELS for c in channels)):
+    # ONLY WHEN THERE IS A PLACE TO BUILD (owner, 2026-09-23: "The designer
+    # does not need to redo rooms it has already made"). It used to start
+    # whenever the decision model granted a room channel, and a room channel
+    # is granted as readily for a place DESCRIBED as for one entered: on the
+    # round-4 replays it redrew rooms the world held on six of seven runs --
+    # the TARDIS console room, a tide strand, a throat twice -- at 73-163 s a
+    # beat. A place the Director invented is reserved, a planned room entered
+    # is developed; an unforeseen one the encoder names `new:` still gets the
+    # serial run below.
+    if rooms_elsewhere and (reserved or develop):
         pool = ThreadPoolExecutor(max_workers=1)
         room_future = pool.submit(_isolated(contextvars.copy_context()),
                                   author_rooms, ctx, sc, prose, model_payload,
@@ -1039,6 +1119,7 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
             pool.shutdown(wait=True)
     events = list(answer.get("events") or [])
     if rooms_elsewhere:
+        events = doorway_edits_only(events, sc, set(new_places), warn=ctx.add_warning)
         refs = new_place_refs(events)
         if refs and room_future is None:
             # The decision model did not foresee a place; the encoder named
@@ -1063,6 +1144,9 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
             events = rewrite_new_places(events, bound)
         if reserved:
             rooms_answer = enforce_reserved(rooms_answer, reserved, warn=ctx.add_warning)
+        if rooms_answer:
+            rooms_answer = keep_new_places(rooms_answer, sc, develop,
+                                           warn=ctx.add_warning)
         if rooms_answer and (rooms_answer.get("rooms") or {}):
             t2 = time.time()
             try:

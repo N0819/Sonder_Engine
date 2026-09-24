@@ -393,11 +393,15 @@ def _jev(granted, bind_to=None):
     return answer
 
 
-def test_places_are_minted_in_parallel_and_bound_by_the_decision_model(
+def test_an_unreserved_new_place_is_built_after_and_bound_by_the_decision_model(
         temp_db, monkeypatch):
-    """The room contract is the heaviest sheet; it runs beside the encoder,
-    not inside it. The encoder names the new place in the prose's words and a
-    decision-model CHOICE binds it to the room the author minted."""
+    """The room contract is the heaviest sheet and is never inside the
+    encoder. A place the Director did not reserve is built once the encoder
+    names it, in the prose's words, and a decision-model CHOICE binds it to
+    the room the author minted. A room grant alone no longer starts the
+    author: a grant is as ready for a place described as for one entered
+    (owner, 2026-09-23: "The designer does not need to redo rooms it has
+    already made")."""
     temp_db.set_setting("director_contract", "prose")
     monkeypatch.setattr(decisions, "OVERRIDE",
                         _jev({"rooms", "positions"}, bind_to="lighthouse_gallery"))
@@ -418,8 +422,69 @@ def test_places_are_minted_in_parallel_and_bound_by_the_decision_model(
     assert out["state_diff"]["positions"]["Mara"] == "lighthouse_gallery"
     assert out["ledgers"][0]["event"] == "The places this beat establishes."
     rooms = out["orchestration"]["prose_contract"]["room_author"]
-    assert rooms["ran"] == "parallel"
+    assert rooms["ran"] == "serial"
     assert rooms["bindings"] == {"the gallery": "lighthouse_gallery"}
+
+
+def test_the_encoder_is_told_what_of_a_held_place_is_its_own():
+    """A doorway, and nothing else of a place the world holds; a place it
+    does not hold is named new: for the room author."""
+    from llm import prompts
+    en = prompts.unified_specialist_prompt(["poses"])
+    ja = prompts.unified_specialist_prompt(["poses"], "ja")
+    assert "A place the world holds is built already" in en
+    assert "write that edge alone" in en
+    assert "世界が既に持っている場所は作り終えています" in ja
+
+
+def test_a_room_grant_with_nothing_to_build_starts_no_designer(temp_db, monkeypatch):
+    """Round-4 replays (2026-09-23): the designer redrew rooms the world held
+    on six of seven runs, 73-163 s a beat, because a room grant started it
+    whatever the beat entered. Nothing reserved, nothing planned, nothing
+    named new: no designer."""
+    temp_db.set_setting("director_contract", "prose")
+    monkeypatch.setattr(decisions, "OVERRIDE", _jev({"rooms", "positions"}))
+    calls = []
+    monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+        "director_prose": {"prose": "Mara crosses the lamp room."},
+        "director_rooms": _designed({"lighthouse_gallery": GALLERY}),
+        "director_specialist": _walk_events(),
+    }))
+    director.director_resolve(_make_ctx(temp_db, interp=_action_interp()), nonce=0)
+    assert "director_rooms" not in _steps(calls)
+
+
+def test_the_designer_keeps_what_it_built_and_leaves_what_stands():
+    scene = {"rooms": {"lamp_room": {"name": "Lamp Room", "adjacent": []}}}
+    answer = {"rooms": {
+        "gallery": {"name": "Gallery", "adjacent": [{"to": "lamp_room", "barrier": "open"}]},
+        "lamp_room": {"desc": "rewritten", "anchors": {"lens": {}},
+                      "adjacent": [{"to": "gallery", "barrier": "open"},
+                                   {"to": "stair", "barrier": "open"}]},
+        "stair_stub": {"desc": "planned, developed now"}}}
+    warned = []
+    kept = director_prose.keep_new_places(
+        answer, dict(scene, rooms=dict(scene["rooms"], stair_stub={})),
+        develop={"stair_stub"}, warn=warned.append)["rooms"]
+    assert kept["gallery"]["name"] == "Gallery"
+    assert kept["lamp_room"] == {"adjacent": [{"to": "gallery", "barrier": "open"}]}
+    assert kept["stair_stub"] == {"desc": "planned, developed now"}
+    assert len(warned) == 1
+
+
+def test_the_encoder_may_turn_a_doorway_and_build_nothing():
+    scene = {"rooms": {"parlour": {"adjacent": [{"to": "treatment_room"}]},
+                       "treatment_room": {}}}
+    events = [{"event": "She shuts the treatment-room door.", "transforms": [
+        {"item": "door", "patch": {"rooms": {
+            "parlour": {"desc": "redrawn", "adjacent": [
+                {"to": "treatment_room", "barrier": "closed_door", "dir": "n"}]},
+            "new_attic": {"name": "Attic", "adjacent": []}}}}]}]
+    warned = []
+    out = director_prose.doorway_edits_only(events, scene, warn=warned.append)
+    assert out[0]["transforms"] == [{"item": "door", "patch": {"rooms": {
+        "parlour": {"adjacent": [{"to": "treatment_room", "barrier": "closed_door"}]}}}}]
+    assert warned and "new_attic" in warned[0]
 
 
 def test_a_new_place_named_as_minted_binds_without_asking(temp_db, monkeypatch):

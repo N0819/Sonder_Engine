@@ -427,7 +427,64 @@ def attended_rooms(scene: dict, centers, *, hops: int = 1, names=()) -> dict:
         for name in (names or ()):
             if name:
                 seeds.update(comms_reachable_rooms(scene, here, str(name)))
-    return nearby_rooms(scene, seeds, hops=hops)
+    seeds |= _body_enclosure_rooms(scene, seeds)
+    reach = nearby_rooms(scene, seeds, hops=hops)
+    # ...and a body the walk reached brings its inside with it: a holder one
+    # step off is in range, so the body she holds is too.
+    extra = _body_enclosure_rooms(scene, set(reach))
+    if extra:
+        room_map = (scene or {}).get("rooms") or {}
+        for rid in extra:
+            if rid in room_map and rid not in reach:
+                reach[rid] = room_map[rid]
+    return reach
+
+
+def _body_enclosure_rooms(scene: dict, rooms) -> set:
+    """The rooms that share a place with `rooms` because they are one BODY:
+    for an interior, the room its holder stands in and every other room of
+    that holder's inside (out through an interior inside an interior); for a
+    room, the insides of the bodies standing in it.
+
+    A BODY'S INSIDE IS AS NEAR AS THE BODY. The place form gives each part of
+    an inside a room of its own, joined in a chain -- mouth, throat, stomach
+    -- so a body swallowed deeper was more adjacency steps from the room its
+    holder stood in, fell outside the beat's one-step range, and the holder
+    was split off into a causality bubble of her own while the body she had
+    swallowed spoke to her from her stomach (chat 137 replay, round 4,
+    2026-09-23, idx 47). Bodies only: a vehicle's inside reaches its outside
+    through the doorway its transit state derives, and a record still naming
+    the room a ship left must not attend that room while it flies.
+    """
+    from world.spatial_identity import room_of
+    from world.spatial_transit import _is_body_entity
+
+    room_map = (scene or {}).get("rooms") or {}
+    entities = (scene or {}).get("entities") or {}
+    if not isinstance(room_map, dict) or not isinstance(entities, dict):
+        return set()
+    insides = {}                       # holder entity id -> its interior rooms
+    for rid, room in room_map.items():
+        holder = str((room or {}).get("parent_entity") or "").strip() \
+            if isinstance(room, dict) else ""
+        ent = entities.get(holder) if holder else None
+        if isinstance(ent, dict) and _is_body_entity(scene, holder, ent):
+            insides.setdefault(holder, set()).add(rid)
+    if not insides:
+        return set()
+    where = {holder: room_of(scene, holder) for holder in insides}
+    out, frontier = set(), set(rooms or ())
+    while frontier:
+        found = set()
+        for holder, interior in insides.items():
+            if interior & frontier or where.get(holder) in frontier:
+                found |= interior
+                if where.get(holder):
+                    found.add(where[holder])
+        found -= set(rooms or ()) | out
+        out |= found
+        frontier = found
+    return out
 
 
 def passable_neighbors(scene: dict) -> dict:

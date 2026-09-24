@@ -129,3 +129,43 @@ class TestTheHolderIsInTheBeat:
         assert "widen_reactors_to_enclosure" in inspect.getsource(runtime.build_plan)
         assert "widen_reactors_to_enclosure" in inspect.getsource(
             loops.interaction_loop)
+
+
+def _stomach():
+    return {
+        "rooms": {
+            "treatment_room": {"name": "Treatment Room", "adjacent": []},
+            "mirelle_mouth": {"name": "mouth", "parent_entity": "char_mirelle",
+                              "adjacent": [{"to": "treatment_room", "barrier": "closed"}]},
+            "mirelle_throat": {"name": "throat", "parent_entity": "char_mirelle",
+                               "adjacent": [{"to": "mirelle_mouth", "barrier": "membrane"}]},
+            "mirelle_stomach": {"name": "stomach", "parent_entity": "char_mirelle",
+                                "adjacent": [{"to": "mirelle_throat", "barrier": "membrane"}]},
+            "hall": {"name": "Hall", "adjacent": [{"to": "treatment_room", "barrier": "open"}]},
+        },
+        "entities": {"char_mirelle": {"name": "Mirelle", "kind": "person"}},
+        "attire": {"Mirelle": {"regions": {}}},
+        "positions": {"Hinami": "mirelle_stomach", "Mirelle": "treatment_room"},
+    }
+
+
+class TestTheHolderIsNeverAway:
+    """Chat 137 replay, round 4 (2026-09-23): swallowed to the stomach, three
+    adjacency steps from the room her holder stood in, the player was out of
+    the beat's one-step range of it -- and Mirelle was split into a causality
+    bubble of her own, while Hinami spoke to her from inside her."""
+
+    def test_the_holders_room_is_attended_from_deep_inside(self):
+        from world.spatial import attended_rooms
+        reach = attended_rooms(_stomach(), {"mirelle_stomach"}, hops=1)
+        assert "treatment_room" in reach and "mirelle_mouth" in reach
+
+    def test_the_holder_is_not_split_off(self):
+        from world.spatial_bubbles import bubble_split_decision
+        assert bubble_split_decision(_stomach(), party_names=["Hinami"],
+                                     cast_names=["Mirelle"]) is None
+
+    def test_the_insides_of_a_body_in_the_room_are_attended(self):
+        from world.spatial import attended_rooms
+        reach = attended_rooms(_stomach(), {"hall"}, hops=1)
+        assert "mirelle_stomach" in reach
