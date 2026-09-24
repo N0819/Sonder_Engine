@@ -873,8 +873,19 @@ def _apply_following_movement(ctx, scene, state_diff, interp, player_name,
     return changed
 
 def _unreachable_position_writes(scene, route_scene, positions, bodies,
-                                 exempt=()):
+                                 exempt=(), declared=None):
     """Position writes with no open route from where the body actually is.
+
+    `declared` is `{folded body: room}` for crossings the causality owner
+    stated: under the prose contract every position the encoder writes is
+    the prose's own statement that the body went there
+    (`director_prose.declared_moves`). Such a crossing is judged as the
+    declared mover's is: a shut door on the way is CONTESTED and the
+    statement asserts it, a wall still refuses (`declared_walk_leg`). The
+    owner's chat 126 idx 9 (round 4, 2026-09-23): "Hinami steps through the
+    threshold into the treatment room" and Mirelle after her, through a
+    paneled door the room designer had drawn shut; this floor refused both,
+    and the narration stood them in a room the scene never put them in.
 
     THE PHYSICAL FLOOR THE DIFF NEVER HAD. `passable_neighbors` is the one
     graph everyone walks -- crowds move on it, couriers move on it, a follower
@@ -937,6 +948,9 @@ def _unreachable_position_writes(scene, route_scene, positions, bodies,
         if not origin or origin not in rooms or origin == dest:
             continue
         if passable_route_exists(route_scene or scene, origin, dest):
+            continue
+        if (declared or {}).get(folded) == dest and not declared_walk_leg(
+                route_scene or scene, origin, dest)[2]:
             continue
         refused.append((str(body), origin, dest))
     return refused

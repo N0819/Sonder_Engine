@@ -849,6 +849,29 @@ def bodies_stand_in_rooms(events, scene, built=None, warn=None):
     return out
 
 
+def declared_moves(*records):
+    """`{folded body name: room}` for every position the encoder wrote, at
+    either stage, the later write winning as the merged diff's does.
+
+    In this contract each is the prose's own statement that the body went
+    there -- the causality owner's declaration. The floor that refuses an
+    undeclared position at a shut door was built for the causal contract's
+    hands, which re-read rows and could move a body the prose kept in place
+    (chat 80); it hands these to the declared mover's rule instead."""
+    moves = {}
+    for record in records:
+        for event in (record or {}).get("events") or []:
+            if not isinstance(event, dict):
+                continue
+            for transform in event.get("transforms") or []:
+                patch = transform.get("patch") if isinstance(transform, dict) else None
+                positions = patch.get("positions") if isinstance(patch, dict) else None
+                for body, room in (positions or {}).items():
+                    if isinstance(room, str) and room.strip() and str(body).strip():
+                        moves[str(body).strip().casefold()] = room.strip()
+    return moves
+
+
 def _new_objects(events):
     """`{entity_id: {name, description}}` the encoder created this beat."""
     found = {}

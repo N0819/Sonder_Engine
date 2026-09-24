@@ -154,6 +154,52 @@ class TestWhatItMustNotOverride:
                         BODIES) == []
 
 
+class TestTheProseStatesItsCrossings:
+    """Under the prose contract every position the encoder writes is the
+    prose's own statement that a body went there -- the causality owner's,
+    where the causal contract's hands re-read rows and could move a body the
+    prose kept in place. The owner's chat 126 idx 9 (round 4, 2026-09-23):
+    "Hinami steps through the threshold into the treatment room", Mirelle
+    after her, through a paneled door the room designer had drawn shut; the
+    floor refused both and the narration stood them where the scene never
+    did. A stated crossing is judged as the declared mover's is."""
+
+    PARLOR = {
+        "positions": {"Hinami": "reception_parlor",
+                      "Mirelle Sulmirath": "reception_parlor"},
+        "rooms": {
+            "reception_parlor": {"adjacent": [
+                {"to": "treatment_room", "barrier": "closed_door"}]},
+            "treatment_room": {"adjacent": [
+                {"to": "reception_parlor", "barrier": "closed_door"}]},
+        },
+    }
+    WHO = ["Hinami", "Mirelle Sulmirath"]
+
+    def test_a_stated_crossing_takes_the_shut_door(self):
+        move = {"Hinami": "treatment_room", "Mirelle Sulmirath": "treatment_room"}
+        assert len(_refused(self.PARLOR, self.PARLOR, move, self.WHO)) == 2
+        stated = {"hinami": "treatment_room", "mirelle sulmirath": "treatment_room"}
+        assert _refused(self.PARLOR, self.PARLOR, move, self.WHO,
+                        declared=stated) == []
+
+    def test_a_stated_crossing_is_only_the_one_stated(self):
+        """A statement about one room does not carry a write to another."""
+        move = {"Hinami": "treatment_room"}
+        assert _refused(self.PARLOR, self.PARLOR, move, self.WHO,
+                        declared={"hinami": "reception_parlor"}) == [
+            ("Hinami", "reception_parlor", "treatment_room")]
+
+    def test_a_stated_crossing_still_takes_no_wall(self):
+        sealed = {
+            "positions": {"Hinami": "cell"},
+            "rooms": {"cell": {"adjacent": [{"to": "yard", "barrier": "wall"}]},
+                      "yard": {"adjacent": [{"to": "cell", "barrier": "wall"}]}},
+        }
+        assert _refused(sealed, sealed, {"Hinami": "yard"}, ["Hinami"],
+                        declared={"hinami": "yard"}) == [("Hinami", "cell", "yard")]
+
+
 class TestTheWiring:
     def test_the_resolve_applies_it_to_the_merged_diff(self):
         """On the MERGED diff, so it holds whichever hand wrote the entry --
@@ -165,6 +211,8 @@ class TestTheWiring:
         source = inspect.getsource(director.director_resolve)
 
         assert "_unreachable_position_writes(" in source
+        # The prose contract's stated crossings go in beside the exemptions.
+        assert "declared=_declared_moves" in source
         # The same merge, memoised on the turn (`route_scene_for`, 2026-09-07):
         # six route checks in one resolve no longer deep-copy the scene each.
         assert "route_scene_for(ctx, sc, sd)" in source

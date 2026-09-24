@@ -870,6 +870,21 @@ def test_the_players_input_says_what_their_line_is_on_interpret():
     assert director_prose.quotation_authority(SimpleNamespace(), "interpret", "A.") == "A."
 
 
+def test_every_position_the_encoder_wrote_is_a_stated_crossing():
+    """Both stages' records, the later write winning, keys folded -- what the
+    floor reads to judge a stated crossing as a declared one (chat 126 idx 9)."""
+    interpret = {"events": [{"transforms": [
+        {"item": "Hinami", "patch": {"positions": {"Hinami": "treatment_room"}}}]}]}
+    resolve = {"events": [
+        {"transforms": [{"item": "Mirelle", "patch": {
+            "positions": {"Mirelle Sulmirath": "treatment_room"}}}]},
+        {"transforms": [{"item": "Hinami", "patch": {
+            "positions": {"Hinami": "wash_room"}, "poses": {}}}]},
+        "not an event"]}
+    assert director_prose.declared_moves(interpret, resolve, None) == {
+        "hinami": "wash_room", "mirelle sulmirath": "treatment_room"}
+
+
 def test_bare_attribution_around_a_line_is_dropped():
     """A tag with no outward motion is the speaker's name, which the row
     already carries: the line alone survives, after or before its tag."""

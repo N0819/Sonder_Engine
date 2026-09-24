@@ -7634,9 +7634,16 @@ def director_resolve(ctx, nonce, _corrections=None):
     # view, so this is the same merge the movement backstops above already
     # asked for; a charter town gets its own entry, and the two do not evict
     # each other. `_unreachable_position_writes` only reads it.
+    # Under the prose contract every position the encoder wrote is the
+    # prose's own statement of a crossing, so a shut door on its way is
+    # contested and asserted, never refused; a wall still is.
+    _declared_moves = director_prose.declared_moves(
+        (interp.get("orchestration") or {}).get("prose_contract"),
+        (ctx.get(director_prose.CTX_KEY) or {}).get("record"),
+    ) if _prose_contract else None
     for _body, _from, _to in _unreachable_position_writes(
             _route_sc, route_scene_for(ctx, _route_sc, sd), sd["positions"],
-            _bodies, exempt=_spared):
+            _bodies, exempt=_spared, declared=_declared_moves):
         sd["positions"].pop(_body, None)
         ctx.add_warning(
             f"Unreachable position: nothing declared a move for {_body}, and "
