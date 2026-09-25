@@ -708,19 +708,29 @@ still says "The doors behind stand open to the night beach": minted before
 `7959ac5f`, and rerolling does not reach it.
 
 **Open:**
-- **An encoder that stops early loses the end of the beat.** Three of the
-  owner's prose-contract resolve calls encoded 0-2 events of 2,852-5,104
-  character accounts (captures 3880, 3890, 3962); 3880 is turn 4398's second
-  roll, and why that roll's ship never left. Re-sent, the same beat's resolve
-  call stopped at 3-4 events in 15 of 53 samples across every sheet tried.
-  One sentence in the core ("from the prose's first sentence to its last")
-  moved it 5 of 12 -> 3 of 12, inside the noise, and is not shipped. A
-  structural floor could close it: every event the cast declares carries an
-  event_id and every encoded event names its `source_event_id`, so an answer
-  that leaves declared ids unaccounted for could be asked once more through
-  the widening path (`previous_events`, "return the COMPLETE beat"). It costs
-  an encoder call on each beat it fires on, and it would also fire on a
-  declared act the account truly dropped, so it is the owner's call.
+- **An encoder that stops early loses the end of the beat** -- now answered,
+  opt-in, by the check and repair pass (`agents/director_repair.py`,
+  `prose_contract_repair`; the owner's design: Jev finds the missing events
+  and the missing or wrong ledgers, builds a targeted encoder for them with
+  the completed ledgers in its context, and orders what comes back).
+  Three of the owner's resolve calls encoded 0-2 events of 2,852-5,104
+  character accounts (captures 3880, 3890, 3962), and the latest roll of
+  turn 4398 (3998) one event of 23 sentences. On eight hand-labeled beats the
+  pass covered 60 of 66 missing sentences at a median 4.1 s a beat -- 3998
+  went from 1 event to 9-10 in 3 of 3 runs -- and declined every false alarm
+  it was handed; the measurements, the thresholds and the limits are in
+  `docs/experiments/ENCODER_REPAIR_2026_09_24.md`. The last roll ran the
+  encoder at reasoning `medium`, and the repair call uses the same role.
+- **A repair copies the draft's own mistakes, and a floor would stop one.**
+  With the transit rules in front of it, the repair of 3979 still wrote the
+  beach as the TARDIS's route, because the draft's other transit writes did;
+  the re-check flagged it (0.80-0.86). A route equal to the ship's own
+  position while it is under way is the place it set off from, which the
+  transit part already forbids -- an engine floor could drop it the way the
+  own-room destination is dropped. It would also cut the rare cart rolling
+  along the very road it stood in, so it is the owner's call.
+- **Duplicated events are not checked.** Capture 3979 writes the spark, the
+  full vibration and the tilt twice each.
 - A departure's destination is still usually written `new:<place>` when the
   room agent is on -- 7 of 11 launches above, citing
   `places_authored_elsewhere` over the transit part's "never a place still
