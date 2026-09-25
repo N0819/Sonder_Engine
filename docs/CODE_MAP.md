@@ -19,9 +19,9 @@
 | `agents/director_floors.py` | 2271 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 1853 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
-| `agents/director_prose.py` | 1694 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts` |
+| `agents/director_prose.py` | 1716 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts` |
 | `agents/director_reconcile.py` | 610 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `llm.schemas`, `story`, `world.spatial` |
-| `agents/director_repair.py` | 1505 |  | `core.db`, `llm`, `llm.prompts` |
+| `agents/director_repair.py` | 1543 |  | `core.db`, `llm`, `llm.prompts` |
 | `agents/director_rooms.py` | 425 |  | — |
 | `agents/director_scopes.py` | 1246 |  | `agents.director_lingua`, `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 706 |  | `agents.common`, `story.character_schema`, `story.scene`, `world.background_claims` |
@@ -386,14 +386,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run()` | 1448 | 168 lines |
-| `encode()` | 1104 | 110 lines |
-| `entity_keys_name_held_things()` | 887 | 86 lines |
-| `ledger_from_events()` | 1376 | 70 lines |
-| `dispatch()` | 1618 | 62 lines |
+| `run()` | 1470 | 168 lines |
+| `encode()` | 1126 | 110 lines |
+| `entity_keys_name_held_things()` | 909 | 86 lines |
+| `ledger_from_events()` | 1398 | 70 lines |
+| `dispatch()` | 1640 | 62 lines |
+| `implied_tools()` | 423 | 58 lines |
 | `select_channels()` | 307 | 56 lines |
-| `bind_new_places()` | 566 | 49 lines |
-| `reconcile_rooms()` | 1013 | 41 lines |
+| `bind_new_places()` | 588 | 49 lines |
 
 ### `agents/director_reconcile.py`
 
@@ -412,14 +412,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_check_and_repair()` | 1323 | 172 lines |
-| `apply_answers()` | 1191 | 83 lines |
+| `_check_and_repair()` | 1361 | 172 lines |
+| `apply_answers()` | 1229 | 83 lines |
 | `battery()` | 604 | 79 lines |
 | `plan_jobs()` | 721 | 75 lines |
 | `native_failures()` | 328 | 66 lines |
-| `_repair_group()` | 962 | 48 lines |
+| `_repair_group()` | 987 | 61 lines |
 | `sentences()` | 115 | 45 lines |
-| `place()` | 1144 | 45 lines |
+| `place()` | 1182 | 45 lines |
 
 ### `agents/director_rooms.py`
 

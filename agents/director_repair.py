@@ -868,6 +868,12 @@ def repair_tools(ctx, stage, units, jobs, model_payload, facts, channels, parts)
     tools = list(dict.fromkeys(t for t in tools if t))
     if not tools:
         tools = list(channels)
+    # A THING THE REPAIR MINTS NEEDS A PLACE, and nothing but `positions`
+    # stands a body: mending an `entities` ledger, the repair of chat 154
+    # turn 4398 minted the figure on the beach and could put it nowhere
+    # (2026-09-25; `director_prose.implied_tools` is the draft's half).
+    if "entities" in tools and "positions" not in tools:
+        tools.append("positions")
     parts = [p for p in dict.fromkeys(list(parts or []) + picked_parts)
              if part_channel(p) in tools]
     return tools, parts, record
@@ -959,6 +965,25 @@ def _said_something(answer):
                 or str(answer.get("none") or "").strip())
 
 
+def _declared_carried(job, answer):
+    """How many of the acts a job was declared to carry its answer's events
+    name as their source."""
+    carried = {str(e.get("source_event_id") or "").strip()
+               for e in (answer or {}).get("events") or [] if isinstance(e, dict)}
+    return sum(1 for act in job.get("declared") or () if act["event_id"] in carried)
+
+
+def _fuller(job, first, again):
+    """The answer to keep of a job's two: the one carrying more of what it
+    was declared to carry, then the one with more events, then the one that
+    said something -- a retry thinner than the first answer never wins."""
+    def weight(answer):
+        answer = answer or {}
+        return (_declared_carried(job, answer), len(answer.get("events") or []),
+                _said_something(answer))
+    return again if weight(again) > weight(first) else first
+
+
 def _repair_group(ctx, stage, sc, units, events, jobs, channels, parts, model_payload,
                   view, extras, facts, rooms_elsewhere, new_places, base_payload):
     """One repair call for one group of jobs, its one retry, and its writes
@@ -973,20 +998,33 @@ def _repair_group(ctx, stage, sc, units, events, jobs, channels, parts, model_pa
     # answered another with one event where the next run gave twenty-five,
     # and answered three of nine jobs and skipped the four transit fixes in
     # the middle (chat 154 turn 4398, 2026-09-24). Any job left unanswered,
-    # or answered with nothing and no reason, is asked ONCE more, alone.
+    # or answered with nothing and no reason, is asked ONCE more, alone --
+    # and so is one whose answer carries fewer of the acts it was declared
+    # to carry than it was given: an answer to a sixteen-sentence job that
+    # stopped five events in, before the Doctor's closing line, is a job
+    # half done by a measure code holds (chat 154 turn 4398's second roll,
+    # 1 of 3 runs, 2026-09-25). Of the two answers the fuller is kept.
     answered = {str(a.get("id") or ""): a for a in answers if isinstance(a, dict)}
     leftover = [job for job in jobs
-                if job["id"] not in answered or not _said_something(answered[job["id"]])]
+                if job["id"] not in answered or not _said_something(answered[job["id"]])
+                or _declared_carried(job, answered[job["id"]]) < len(job.get("declared") or ())]
     retried = []
     if leftover:
         again, more_notes = call_repair(ctx, sc, units, events, leftover, tools, tool_parts,
                                         model_payload, view, extras, rooms_elsewhere,
                                         new_places, base_payload)
         retried = [job["id"] for job in leftover]
-        redo = {str(a.get("id") or ""): a for a in again if isinstance(a, dict)}
+        by_id = {job["id"]: job for job in leftover}
+        redo, extra = {}, []
+        for answer in again:
+            job_id = str(answer.get("id") or "") if isinstance(answer, dict) else ""
+            if job_id in by_id:
+                redo[job_id] = _fuller(by_id[job_id], answered.get(job_id), answer)
+            else:
+                extra.append(answer)  # kept, so the report still says it
         answers = [a for a in answers
                    if not (isinstance(a, dict) and str(a.get("id") or "") in redo)]
-        answers += list(redo.values())
+        answers += list(redo.values()) + extra
         notes = list(notes) + list(more_notes)
     # A repair writes only the tools it was granted; anything else is
     # dropped here and said (a first run wrote a doorway edge and a station

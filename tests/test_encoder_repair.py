@@ -407,6 +407,63 @@ def test_the_pass_recovers_a_declared_act_jev_never_flagged(monkeypatch):
     assert any("declared act" in w for w in ctx.warnings)
 
 
+def test_an_answer_short_of_its_declared_acts_is_asked_again_and_the_fuller_kept(monkeypatch):
+    """A repair can stop inside one job as the draft stops inside a beat: a
+    sixteen-sentence job came back five events in, before the Doctor's
+    closing line (chat 154 turn 4398's second roll, 1 of 3 runs). What the
+    job was declared to carry is code's measure of whether it is done."""
+    monkeypatch.setattr(decisions, "OVERRIDE", lambda state, q: {
+        key: {"type": "noul", "noul": 0.02} for key in q})
+    units = repair.sentences(DECLARED_PROSE)
+
+    def replying(first, retry):
+        calls = []
+
+        def repair_call(role, step_key, system, payload, **kw):
+            job = payload["jobs"][0]
+            acts = (first if not calls else retry)(job["declared"])
+            calls.append(job["id"])
+            return {"answers": [{"id": job["id"], "after": "e1", "none": "" if acts else "no",
+                                 "events": [{"source_entity_id": "character:1",
+                                             "source_event_id": act["event_id"],
+                                             "event": act["act"], "transforms": []}
+                                            for act in acts]}]}
+        return calls, repair_call
+
+    calls, fake = replying(lambda acts: acts[:1], lambda acts: acts)
+    monkeypatch.setattr(director, "_agent_json", fake)
+    events, record = repair.check_and_repair(
+        _Ctx(), "resolve", {}, units, _stops_after_the_first(), ["poses"], [], {}, None, None,
+        base_payload=_declaring())
+    assert calls == ["j1", "j1"] and record["retried"] == ["j1"]
+    assert [e["source_event_id"] for e in events] == ["t:0:action", "t:1:speech", "t:2:action"]
+    assert "declared_left" not in record
+
+    # A thinner retry never replaces the fuller first answer.
+    calls, fake = replying(lambda acts: acts[:1], lambda acts: [])
+    monkeypatch.setattr(director, "_agent_json", fake)
+    events, record = repair.check_and_repair(
+        _Ctx(), "resolve", {}, units, _stops_after_the_first(), ["poses"], [], {}, None, None,
+        base_payload=_declaring())
+    assert [e["source_event_id"] for e in events] == ["t:0:action", "t:1:speech"]
+    assert record["declared_left"] == ["t:2:action"]
+
+
+def test_a_repair_that_can_mint_can_place():
+    """Mending an `entities` ledger, the repair of chat 154 turn 4398 minted
+    the figure on the beach and could put it nowhere: a body is stood by
+    `positions` and nothing else."""
+    units = repair.sentences(PROSE3)
+    job = {"id": "j1", "kind": "ledger", "event": "e1", "channel": "entities"}
+    tools, _, _ = repair.repair_tools(_Ctx(), "resolve", units, [job], {}, None,
+                                      ["entities", "poses"], [])
+    assert tools == ["entities", "positions"]
+    job = {"id": "j1", "kind": "ledger", "event": "e1", "channel": "poses"}
+    tools, _, _ = repair.repair_tools(_Ctx(), "resolve", units, [job], {}, None,
+                                      ["entities", "poses"], [])
+    assert tools == ["poses"]
+
+
 # ---- never the beat ---------------------------------------------------------------
 
 class _Ctx(dict):

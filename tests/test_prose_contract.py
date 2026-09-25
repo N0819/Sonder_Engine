@@ -228,6 +228,32 @@ def test_a_destination_the_scene_lacks_buys_rooms():
     assert director_prose.implied_tools(known, scene) == []
 
 
+def test_a_thing_minted_and_placed_nowhere_buys_positions():
+    """Chat 154 turn 4398, rerolled with the encoder's reasoning off: 2 of 3
+    rolls minted the figure on the beach without `positions` granted, and a
+    body is stood by nothing else -- it was in no room, so nobody could see
+    it. A key the scene does not hold, that the answer neither positions
+    nor transfers anywhere, implies `positions`."""
+    scene = {"rooms": {"beach": {}}, "entities": {
+        "75bd": {"name": "The TARDIS"}}}
+    minted = [{"transforms": [{"item": "child", "patch": {
+        "entities": {"beach_child": {"name": "the child", "kind": "person"}}}}]}]
+    assert director_prose.implied_tools(minted, scene) == ["positions"]
+    placed = [{"transforms": [{"item": "child", "patch": {
+        "entities": {"beach_child": {"name": "the child", "kind": "person"}},
+        "positions": {"beach_child": "beach"}}}]}]
+    assert director_prose.implied_tools(placed, scene) == []
+    carried = [{"transforms": [{"item": "key", "patch": {
+        "entities": {"key_2": {"name": "a key"}},
+        "inventory_ops": [{"op": "transfer", "object_id": "key_2", "to_id": "Mara"}]}}]}]
+    assert director_prose.implied_tools(carried, scene) == []
+    # A thing the world holds -- by its key or by its name -- is no mint.
+    held = [{"transforms": [{"item": "The TARDIS", "patch": {"entities": {
+        "75bd": {"state": {"hatch": "closed"}},
+        "The TARDIS": {"state": {"hatch": "closed"}}}}}]}]
+    assert director_prose.implied_tools(held, scene) == []
+
+
 def test_a_room_is_never_a_positions_key():
     """Chat 137 turn 52: a room keyed into positions (placed in itself)
     passed every floor. Engine floor, both contracts."""

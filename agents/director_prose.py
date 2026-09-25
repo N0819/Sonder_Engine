@@ -430,9 +430,21 @@ def implied_tools(events, scene=None):
       (4295): with no `rooms` granted, the encoder put the swallowed player
       at a CHARACTER id, because the interior it needed was not a room yet
       and it had no tool to make one (the rooms chunk says how: an interior
-      is a room with `parent_entity`)."""
+      is a room with `parent_entity`);
+    - a thing minted this beat -- an `entities` key the scene holds by
+      neither key nor name -- that the answer neither positions nor
+      transfers anywhere needs `positions` to be anywhere at all. Measured
+      on chat 154 turn 4398, rerolled with the encoder's reasoning off
+      (2026-09-25): 2 of 3 rolls minted the figure on the beach with no
+      `positions` granted, and a body is stood by nothing else, so it was
+      in no room and nobody could see it."""
     tools = []
     known = set(((scene or {}).get("rooms") or {}).keys()) if isinstance(scene, dict) else set()
+    entities = ((scene or {}).get("entities") or {}) if isinstance(scene, dict) else {}
+    held = {str(key) for key in entities} | {
+        str(value.get("name") or "").strip().casefold()
+        for value in entities.values() if isinstance(value, dict)}
+    minted, placed = set(), set()
     destinations, created = [], set()
     for event in events or []:
         if not isinstance(event, dict):
@@ -451,6 +463,16 @@ def implied_tools(events, scene=None):
             if isinstance(patch.get("positions"), dict):
                 destinations.extend(str(value) for value in patch["positions"].values()
                                     if isinstance(value, str) and value.strip())
+                placed.update(str(key) for key in patch["positions"])
+            if isinstance(patch.get("entities"), dict):
+                minted.update(str(key) for key in patch["entities"]
+                              if str(key) not in held
+                              and str(key).strip().casefold() not in held)
+            for op in patch.get("inventory_ops") or []:
+                if isinstance(op, dict) and str(op.get("to_id") or "").strip():
+                    placed.add(str(op.get("object_id") or ""))
+    if minted - placed and "positions" not in tools:
+        tools.append("positions")
     if known and any(dest not in known and dest not in created
                      and not dest.startswith(NEW_PLACE_PREFIX)
                      for dest in destinations):
