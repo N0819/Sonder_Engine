@@ -3120,6 +3120,10 @@ class UnifiedEvent(LenientModel):
     difficulty: str = ""
     item_names: list[str] = Field(default_factory=list)
     transforms: list[LedgerPatchTransform] = Field(default_factory=list)
+    # The numbered sentences of the prose this event encodes (`s1`, `s2`),
+    # asked for only when the repair pass will check the draft against them
+    # (`agents/director_repair.py`). Empty everywhere else.
+    sources: list[str] = Field(default_factory=list)
 
 
 class UnifiedSpecialistOutput(LenientModel):
@@ -3127,6 +3131,30 @@ class UnifiedSpecialistOutput(LenientModel):
     events: list[UnifiedEvent] = Field(default_factory=list)
     missing_tools: list[str] = Field(default_factory=list)
     missing_referents: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
+class EncoderRepairAnswer(LenientModel):
+    """The encoder's answer to ONE repair job, bound to it by `id` -- never
+    by position, so two answers returned in another order cannot swap which
+    event they change (a defect of positional binding found in review of
+    the checked encoder, 2026-09-24). `events` answer a missing sentence,
+    placed `after` the draft event they follow; `transforms` answer a
+    missing or wrong write; `remove` and `move_to` answer a write that
+    belongs to no event or to another one; `none` says why a job needs
+    nothing."""
+    id: str = ""
+    events: list[UnifiedEvent] = Field(default_factory=list)
+    after: str = ""
+    transforms: list[LedgerPatchTransform] = Field(default_factory=list)
+    remove: bool = False
+    move_to: str = ""
+    none: str = ""
+
+
+class EncoderRepairOutput(LenientModel):
+    """The prose contract's repair call: one answer per job."""
+    answers: list[EncoderRepairAnswer] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
 
 
@@ -4632,6 +4660,7 @@ SCHEMA_MAP = {
     # sub-calls inside director_interpret / director_resolve, like the hands.
     "director_prose": ProseDirectorOutput,
     "director_specialist": UnifiedSpecialistOutput,
+    "director_repair": EncoderRepairOutput,
     "director_rooms": RoomDesignStep,
     "director_rooms_reconcile": RoomReconcileOutput,
     "resolve_reconcile": ResolveReconcileOutput,

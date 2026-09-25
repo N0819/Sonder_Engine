@@ -58,6 +58,7 @@ from llm.prompts import (
     ROOM_AUTHOR_CHANNELS,
     encoder_parts,
     jev_channel_questions,
+    prose_contract_text,
     prose_director_prompt,
     unified_specialist_prompt,
 )
@@ -1090,11 +1091,11 @@ def room_event(rooms_answer, events):
     }
 
 
-def _call_encoder(ctx, channels, payload, parts):
+def _call_encoder(ctx, channels, payload, parts, extra=()):
     return _agent_json(
         "director_specialist",
         "director_specialist",
-        unified_specialist_prompt(channels, ctx.language, parts),
+        unified_specialist_prompt(channels, ctx.language, parts, extra=extra),
         dict(payload, granted_tools=list(channels) + list(parts)),
         temperature=0.2,
         max_tokens=None,
@@ -1102,7 +1103,7 @@ def _call_encoder(ctx, channels, payload, parts):
 
 
 def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=None,
-           rooms_elsewhere=False, new_places=None, parts=None):
+           rooms_elsewhere=False, new_places=None, parts=None, cite_units=None):
     """`(answer, channels, record)`: the encoder's events and the tools it
     finally held. At most one widening pass, whose answer REPLACES the
     first. With `rooms_elsewhere`, places are the room author's: the encoder
@@ -1114,9 +1115,23 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
     names every channel and part this stage could grant and the encoder
     does not hold, and the widening pass grants either kind; a channel
     granted there arrives with all its parts, since nothing judged which it
-    needs. `record["parts"]` is the parts finally held."""
+    needs. `record["parts"]` is the parts finally held.
+
+    `cite_units`, the prose's numbered sentences, is given when the repair
+    pass will check the draft (`director_repair`): the encoder then reads
+    the prose with each sentence's address and cites them per event."""
     record = {}
     language = ctx.language
+    extra = ()
+    if cite_units:
+        from .director_repair import numbered
+        extra = (prose_contract_text("encoder_sources", language),)
+        numbered_prose = numbered(cite_units)
+
+    def cite(payload):
+        if cite_units:
+            payload["prose"] = numbered_prose
+        return payload
     channels = list(channels)
     parts = (parts_of(channels, language) if parts is None
              else [part for part in parts if part_channel(part) in channels])
@@ -1136,12 +1151,12 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
                 if (str(tool) in known and str(tool) not in channels)
                 or (str(tool) in known_parts and str(tool) not in parts)]
 
-    payload = encoder_payload(ctx, sc, prose, model_payload, view, extras, channels)
+    payload = cite(encoder_payload(ctx, sc, prose, model_payload, view, extras, channels))
     payload["places_authored_elsewhere"] = bool(rooms_elsewhere)
     payload["new_places"] = dict(new_places or {})
     payload["requestable_tools"] = requestable()
     t0 = time.time()
-    answer = _call_encoder(ctx, channels, payload, parts)
+    answer = _call_encoder(ctx, channels, payload, parts, extra)
     record["seconds"] = round(time.time() - t0, 3)
     missing = lacking(answer.get("missing_tools"))
     # CODE CLOSES THE KNOWN DEPENDENCIES; the decision model only predicts.
@@ -1177,8 +1192,8 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
                 [tool for tool in missing if tool in known_parts]
                 + parts_of(added, language))
                 if part not in parts and part_channel(part) in channels]
-            payload = encoder_payload(ctx, sc, prose, model_payload, view,
-                                      extras, channels)
+            payload = cite(encoder_payload(ctx, sc, prose, model_payload, view,
+                                           extras, channels))
             payload["places_authored_elsewhere"] = bool(rooms_elsewhere)
             payload["new_places"] = dict(new_places or {})
             payload["requestable_tools"] = requestable()
@@ -1188,7 +1203,7 @@ def encode(ctx, stage, sc, prose, model_payload, view, extras, channels, facts=N
             # and the replacement dropped every later step of the beat.
             payload["previous_events"] = list(first.get("events") or [])
             t1 = time.time()
-            answer = _call_encoder(ctx, channels, payload, parts)
+            answer = _call_encoder(ctx, channels, payload, parts, extra)
             record["widened_to"] = list(channels) + list(parts)
             record["widen_seconds"] = round(time.time() - t1, 3)
             # A replacement, never a merge -- so a thinner replacement must
@@ -1510,13 +1525,17 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
         room_record["ran"] = "parallel"
     encoder_channels = ([c for c in channels if c not in ROOM_AUTHOR_CHANNELS]
                         if rooms_elsewhere else channels)
+    # The repair pass checks the draft sentence by sentence, so the encoder
+    # is handed the same numbered sentences and cites them per event.
+    from . import director_repair
+    units = director_repair.sentences(prose) if director_repair.enabled() else None
     t_rooms = time.time()
     try:
         answer, encoder_channels, encoding = encode(
             ctx, stage, sc, prose, model_payload, view, extras,
             encoder_channels, facts, rooms_elsewhere=rooms_elsewhere,
             new_places=new_places if rooms_elsewhere else None,
-            parts=jev.get("parts"))
+            parts=jev.get("parts"), cite_units=units)
     finally:
         if room_future is not None:
             try:
@@ -1528,6 +1547,17 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
             pool.shutdown(wait=True)
     events = entity_keys_name_held_things(list(answer.get("events") or []), sc,
                                           warn=ctx.add_warning)
+    repair_record = None
+    if units is not None:
+        events = director_repair.strip_markers(events)
+        events, repair_record = director_repair.check_and_repair(
+            ctx, stage, sc, units, events, encoder_channels,
+            encoding.get("parts") or [], model_payload, view, extras, facts=facts,
+            rooms_elsewhere=rooms_elsewhere,
+            new_places=new_places if rooms_elsewhere else None)
+        # A repaired write copies ids out of the same payload, and can slip
+        # one the same way (`entity_keys_name_held_things`).
+        events = entity_keys_name_held_things(events, sc, warn=ctx.add_warning)
     if rooms_elsewhere:
         events = doorway_edits_only(events, sc, set(new_places), warn=ctx.add_warning)
         events = unheld_places_are_new(events, sc, set(new_places), warn=ctx.add_warning)
@@ -1593,6 +1623,8 @@ def run(ctx, stage, sc, model_payload, view, extras, facts=None):
         "missing_referents": list(answer.get("missing_referents") or []),
         "notes": list(answer.get("notes") or []),
     }
+    if repair_record is not None:
+        record["repair"] = repair_record
     for note in record["notes"]:
         ctx.add_warning(f"encoder: {note}")
     ctx[CTX_KEY] = {"record": record, "transforms": transforms,

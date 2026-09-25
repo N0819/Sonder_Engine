@@ -430,7 +430,13 @@ def encoder_parts(channel, language=None):
                  if name.startswith(prefix))
 
 
-def unified_specialist_prompt(channels, language=None, parts=None):
+def prose_contract_text(name, language=None):
+    """One text of the prose contract's own family (`prose_contract.<name>`):
+    a sheet, a section added to the encoder's, or a decision-model check."""
+    return str(_prompt_card(language)["prose_contract"][name])
+
+
+def unified_specialist_prompt(channels, language=None, parts=None, extra=()):
     """The prose contract's encoder sheet, from its own card.
 
     The core, then every granted channel's `encoder.<channel>` chunk in
@@ -444,12 +450,13 @@ def unified_specialist_prompt(channels, language=None, parts=None):
     (owner, 2026-09-24: "specific prompts for this version of the director
     sound necessary? Otherwise we get a lot of weird confusing wording").
     The adult overlay is appended when any hand whose channel shipped would
-    have received it on its own sheet."""
+    have received it on its own sheet. `extra` are sections read right after
+    the core -- the repair pass's sentence addresses."""
     card = _prompt_card(language)
     encoder = card["encoder"]
     granted = set(channels or ())
     picked = None if parts is None else set(parts)
-    sections = [str(encoder["core"])]
+    sections = [str(encoder["core"])] + [str(text) for text in extra or ()]
     hands = []
     for name, spec in card["specialists"].items():
         shipped = [channel for channel in spec["order"] if channel in granted]

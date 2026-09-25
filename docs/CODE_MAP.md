@@ -19,8 +19,9 @@
 | `agents/director_floors.py` | 2271 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
 | `agents/director_movement.py` | 1853 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
-| `agents/director_prose.py` | 1679 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts` |
+| `agents/director_prose.py` | 1711 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts` |
 | `agents/director_reconcile.py` | 610 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `llm.schemas`, `story`, `world.spatial` |
+| `agents/director_repair.py` | 889 |  | `core.db`, `llm`, `llm.prompts` |
 | `agents/director_rooms.py` | 425 |  | — |
 | `agents/director_scopes.py` | 1246 |  | `agents.director_lingua`, `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 706 |  | `agents.common`, `story.character_schema`, `story.scene`, `world.background_claims` |
@@ -50,10 +51,10 @@
 | `llm/decisions.py` | 151 |  | `core.db` |
 | `llm/llm_quality.py` | 1351 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
-| `llm/prompts.py` | 692 | Default system prompts and prompt preset access. | `core.db` |
+| `llm/prompts.py` | 699 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 4873 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
-| `llm/schemas.py` | 7820 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `llm/schemas.py` | 7849 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2538 |  | `mind.theory_of_mind` |
 | `mind/canon_provenance.py` | 398 |  | — |
@@ -385,14 +386,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `run()` | 1448 | 153 lines |
-| `encode()` | 1104 | 110 lines |
-| `entity_keys_name_held_things()` | 887 | 86 lines |
-| `ledger_from_events()` | 1376 | 70 lines |
-| `dispatch()` | 1603 | 62 lines |
-| `select_channels()` | 307 | 56 lines |
-| `bind_new_places()` | 566 | 49 lines |
-| `reconcile_rooms()` | 1013 | 41 lines |
+| `run()` | 1463 | 170 lines |
+| `encode()` | 1105 | 124 lines |
+| `entity_keys_name_held_things()` | 888 | 86 lines |
+| `ledger_from_events()` | 1391 | 70 lines |
+| `dispatch()` | 1635 | 62 lines |
+| `select_channels()` | 308 | 56 lines |
+| `bind_new_places()` | 567 | 49 lines |
+| `reconcile_rooms()` | 1014 | 41 lines |
 
 ### `agents/director_reconcile.py`
 
@@ -406,6 +407,19 @@
 | `_route_repair_omissions()` | 567 | 44 lines |
 | `_verify_no_referent()` | 339 | 27 lines |
 | `_deep_audit_mode()` | 49 | 11 lines |
+
+### `agents/director_repair.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `_check_and_repair()` | 789 | 101 lines |
+| `apply_answers()` | 667 | 74 lines |
+| `native_failures()` | 249 | 66 lines |
+| `sentences()` | 94 | 45 lines |
+| `place()` | 620 | 45 lines |
+| `plan_jobs()` | 481 | 40 lines |
+| `battery()` | 422 | 39 lines |
+| `before_lines()` | 351 | 27 lines |
 
 ### `agents/director_rooms.py`
 
@@ -713,9 +727,9 @@
 |---|---:|---:|
 | `preset_import_document()` | 276 | 51 lines |
 | `specialist_prompt()` | 340 | 38 lines |
-| `unified_specialist_prompt()` | 433 | 36 lines |
-| `_relocate_character_identity()` | 550 | 29 lines |
-| `character_prompt()` | 598 | 28 lines |
+| `unified_specialist_prompt()` | 439 | 37 lines |
+| `_relocate_character_identity()` | 557 | 29 lines |
+| `character_prompt()` | 605 | 28 lines |
 | `_assembled_sheets()` | 38 | 26 lines |
 | `normalize_preset()` | 126 | 26 lines |
 | `_preset_override()` | 223 | 22 lines |
@@ -749,14 +763,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `semantic_output_errors()` | 6838 | 589 lines |
-| `preprocess_llm_output()` | 5746 | 357 lines |
+| `semantic_output_errors()` | 6867 | 589 lines |
+| `preprocess_llm_output()` | 5775 | 357 lines |
 | `_lenient_coerce()` | 864 | 159 lines |
-| `validate_llm_output_strict()` | 7682 | 139 lines |
-| `_causal_patch_errors()` | 6706 | 130 lines |
-| `canonicalize_prose_markup()` | 5316 | 102 lines |
+| `validate_llm_output_strict()` | 7711 | 139 lines |
+| `_causal_patch_errors()` | 6735 | 130 lines |
+| `canonicalize_prose_markup()` | 5345 | 102 lines |
 | `_coerce_station_table()` | 85 | 81 lines |
-| `_uncross_concealed_speech()` | 5440 | 69 lines |
+| `_uncross_concealed_speech()` | 5469 | 69 lines |
 
 ### `mind/affect.py`
 

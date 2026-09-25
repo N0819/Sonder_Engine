@@ -548,6 +548,24 @@
     },
     "room_reconcile": {
       "$text": "prose_contract/room_reconcile.txt"
+    },
+    "encoder_sources": {
+      "$text": "prose_contract/encoder_sources.txt"
+    },
+    "encoder_repair": {
+      "$text": "prose_contract/encoder_repair.txt"
+    },
+    "check_missing_event": {
+      "$text": "prose_contract/check_missing_event.txt"
+    },
+    "check_missing_ledger": {
+      "$text": "prose_contract/check_missing_ledger.txt"
+    },
+    "check_wrong_ledger": {
+      "$text": "prose_contract/check_wrong_ledger.txt"
+    },
+    "check_placement": {
+      "$text": "prose_contract/check_placement.txt"
     }
   },
   "jev_questions": {
