@@ -723,6 +723,17 @@ still says "The doors behind stand open to the night beach": minted before
   (where it belongs: yes; which condition fails: no), are measured there
   too, in `docs/experiments/ENCODER_REPAIR_2026_09_24.md`. The last roll ran
   the encoder at reasoning `medium`, and the repair call uses the same role.
+  **Most of the early stop was the grammar** (2026-09-25): the same captured
+  payloads re-sent 78 times each way stopped under half their best coverage
+  18 times with the enforced `json_schema` and 2 times with no response
+  format, and left a declared act with no event 11 times against 0. The
+  encoder role now goes without it by a measured default the models panel
+  shows and a host can override (`providers.ROLE_DEFAULT_FORMATS`); the
+  repair and any rebuild of a broken answer keep it. An act the cast
+  declared that no event carries is found by code and made a certain
+  repair job (`director_repair.declared_gaps`), and a repair answering one
+  job in pieces is no longer cut to its first piece (`merge_answers`; 192 of
+  844 recovered events had been dropped that way).
 - **A repair copies the draft's own mistakes, and a floor would stop one.**
   With the transit rules in front of it, the repair of 3979 still wrote the
   beach as the TARDIS's route, because the draft's other transit writes did;
@@ -732,7 +743,10 @@ still says "The doors behind stand open to the night beach": minted before
   own-room destination is dropped. It would also cut the rare cart rolling
   along the very road it stood in, so it is the owner's call.
 - **Duplicated events are not checked.** Capture 3979 writes the spark, the
-  full vibration and the tilt twice each.
+  full vibration and the tilt twice each; fresh drafts do it about 3 times in
+  213, and the one signal found (an event re-telling part of another) also
+  fires on a line spoken inside narration, which is its own event -- so no
+  check was built.
 - A departure's destination is still usually written `new:<place>` when the
   room agent is on -- 7 of 11 launches above, citing
   `places_authored_elsewhere` over the transit part's "never a place still

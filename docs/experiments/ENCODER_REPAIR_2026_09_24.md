@@ -162,12 +162,126 @@ beats and three runs cannot separate them. What the versions did show:
 - **No wording fixed the beach route.** Every version wrote it back in most
   runs; the engine floor is the reliable fix (see Limits).
 
+## 2026-09-25: the grammar, the declared acts, and the answers dropped in pieces
+
+The owner asked what else would improve accuracy, then "Go ahead" on the two
+first tried: the draft without the enforced grammar, and a code check that
+every act the cast declared reached an event.
+
+### The grammar truncates the draft
+
+Thirteen captured encoder payloads (the eight labeled beats and five long
+resolves of the time-travel test story and the chat 153 replay) re-sent in
+three arms interleaved in one process -- `json_schema` (the grammar every
+call carried until now), `json_object` (the engine's fallback for a model
+that refuses one) and no `response_format` at all -- reasoning off, the
+owner's OpenRouter routing, three samples each; the schema and no-format arms
+run twice, the second time with the serving host recorded. Coverage is
+against the best any sample reached on that beat; an early stop is under
+half of it.
+
+| arm | calls | early stops | a declared act left uncited | mean coverage | labeled recall (runs 1, 2) | median / p90 |
+|---|---|---|---|---|---|---|
+| no format | 78 | 2 | 0 | 0.78 | 0.90, 0.89 | 10.3 / 19.0 s |
+| `json_schema` | 78 | 18 | 11 | 0.70 | 0.82, 0.83 | 8.8 / 17.1 s |
+| `json_object` | 39 | 14 | 5 | 0.63 | 0.71 | 7.5 s |
+
+By host (run 2): BaseTen stopped early in 5 of 16 schema calls and 2 of 17
+without; Fireworks in 2 of 19 and 0 of 19. The grammar costs completeness on
+every host, and BaseTen is the weakest either way. Without it, 2 of 78
+answers were malformed and the validator re-asked (one took 145 s).
+
+So a role now names its format (`providers.response_format_for`: the host's
+per-role choice in the models panel, else a measured default, else the
+`default` row, else the engine's choice), and the encoder's measured default
+is no format (`ROLE_DEFAULT_FORMATS`). Two calls keep the grammar whatever
+the role says (`providers._role_json_mode`):
+
+- **the repair.** Sent free (v7 below), GLM 5.2 answered a sixteen-sentence
+  event job by re-encoding the whole beat in the draft's `events` shape,
+  after a paragraph of reasoning and with a brace dropped seven levels into a
+  transit patch; 3 of 30 repairs failed validation outright and the pass fell
+  to 31 of 66 labeled sentences. Its answers bind to jobs by id, so the shape
+  is the contract.
+- **every rung that rebuilds a broken answer** (`llm_quality.REBUILD_FORMAT`):
+  the first attempt had its chance at a complete answer; the rebuild owes a
+  valid one.
+
+### Declared acts, found by code
+
+`director_repair.declared_gaps`: every `event_inputs` entry no event names
+as its `source_event_id`, located by its own words -- a line's text, an act's
+`observable`, then its `attempt`, the player's `raw_text`. On the 40 captured
+drafts it held for 3 (3998, and two resolves of the time-travel story that
+encoded one event of 14 and 28 sentences), all real; all 7 uncited
+declarations landed on the sentence that tells them. A located gap is a
+missing-event finding at 1.0 whatever Jev scored, and its job carries the
+declaration so the repair writes it under that `source_event_id`; whatever
+the pass leaves uncarried is recorded (`declared_left`) and said. Once the
+grammar is gone the draft rarely leaves one (0 of 78 above), so this is the
+floor for the calls that still do.
+
+### Answers dropped in pieces
+
+Reading why the time-travel story's 26-sentence job lost both its declared
+acts found a defect in every version above: the repair answers one job in
+pieces -- ten answers all `j1`, or `j1`, `j1b` ... `j1h` -- and
+`apply_answers` bound the first piece and dropped the rest as repeats or
+unknown ids. Across the 198 whole-pass runs that answered, 30 split an answer
+and 192 of 844 returned events were dropped (v4: 70 of 133). Part of what
+this document called the repair "stopping short" was the engine discarding
+what it wrote. `merge_answers` now joins the pieces of a job in order, the
+first piece's `after` placing the group; an id with a digit after a job's id
+is another job's, never a piece.
+
+### The pass again, and the new pipeline
+
+| | missing sentences | wrong writes changed | missing ledgers | median wall |
+|---|---|---|---|---|
+| v6 (the pass as last reported) | 50/66 | 8/18 | 5/9 | 4.8 s |
+| v7: the repair sent no grammar | 31/66 | 12/18 | 6/9 | 6.8 s |
+| v8: the repair keeps the grammar; declared acts | 43/66 | 9/18 | 6/9 | 5.0 s |
+
+v8 is inside the band the six earlier versions spanned (41-50), and ran before
+the merge fix: 7 of its 30 runs split an answer and lost 17 of 115 events.
+Declared acts were recovered in 3 of 3 runs of 3998 and of the 14-sentence
+resolve, and 1 of 3 of the 28-sentence one -- the two losses were split
+answers.
+
+The pipeline as it now runs (a fresh draft with no format, then the pass),
+on the same ten beats: the first sample of each and two more completed before
+the OpenRouter account ran out of credit (HTTP 402, `in_flight_budget_exhausted`).
+On those 12, labeled recall went 74/89 in the draft to 81/89 after the pass;
+early stops 1 of 10 to 0; a declared act uncarried 1 to 0 (the one draft
+that stopped, a chat 153 replay resolve, went from 3 events to 9 with all
+four of its missing declarations); the draft took a median 9.4 s and the
+pass 4.2 s.
+
+### Duplicates
+
+An event re-telling part of another -- same source, its sentences within the
+other's, its text held in the other's -- was found in capture 3979 (its four
+doubles) and in about 3 of 213 fresh drafts. The same signal fires on a line
+a character speaks inside narration ("Kansai," "come on, come on, come on."),
+which is its own event by the encoder's rules, so it would need speech held
+out, and at that rate no check was built.
+
 ## Limits
 
-- **The repair call stops short too.** The first runs skipped a 16-sentence
-  event job beside a fix, and one job came back with 1 event where the next
-  run gave 25; hence the one retry. On the malformed 3880 it still returned
-  4-39 events across runs.
+- **The merge fix is unmeasured live**, and so is the pipeline beyond 12
+  samples: the OpenRouter account these runs used, the one the owner's own
+  play routes through, had $2.85 of $710 left when they stopped.
+- **The format measurement is one model on one route**: GLM 5.2 through
+  OpenRouter (BaseTen, Fireworks, Parasail). The owner's replay route
+  (NanoGPT) and the encoders tried before (DeepSeek v4.1 Flash, Ling 3.0
+  Flash) are not measured; the measured default follows the role, so a host
+  moving the encoder to another model inherits it and can set it back.
+- **The repair call stops short too** -- less than it looked. The first runs
+  skipped a 16-sentence event job beside a fix, and one job came back with 1
+  event where the next run gave 25; hence the one retry. Some of those "1
+  event" answers were a job answered in pieces with every piece after the
+  first dropped (above), fixed by `merge_answers`; how much short-stopping
+  remains is unmeasured since.
 - **A repair copies the draft's own mistakes.** Shipped the transit part,
   the fixes of 3979 still wrote `route_room: moonlit_beach` -- the other
   transit writes in the draft said so -- and the re-check judged them wrong
@@ -177,8 +291,8 @@ beats and three runs cannot separate them. What the versions did show:
 - **Two labeled defects are never flagged:** the Doctor's half of "Together
   they push" (0.32) and the transit a ship breaking free leaves unwritten
   (0.37-0.39, even asked by the transit part's own definition).
-- **Duplicated events are not checked.** Capture 3979 carries three acts
-  written twice (the spark, the vibration, the tilt).
+- **Duplicated events are not checked** -- rare, and the signal found for
+  them also fires on lines spoken inside narration (above).
 - **The owner's current routing reasons at `medium` for
   `director_specialist`.** The repair call uses that role, so on it every
   repair call -- like the draft itself, 62-137 s on the owner's last reroll --
