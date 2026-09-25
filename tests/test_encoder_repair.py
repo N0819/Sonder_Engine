@@ -254,6 +254,31 @@ def test_answers_bind_by_job_id_not_position():
     assert report["unknown"] == ["j9"] and report["unanswered"] == []
 
 
+def test_a_job_answered_in_pieces_is_one_answer():
+    """The repair answers one job in pieces -- ten answers all `j1`, or
+    `j1`, `j1b` ... `j1h` -- and binding the first alone dropped 192 of 844
+    returned events across every whole-pass run (the time-travel test
+    story's 26-sentence job lost both acts its cast declared)."""
+    jobs = [{"id": "j1", "kind": "event", "sentence": "s2", "sentences": ["s2", "s3"]},
+            {"id": "j2", "kind": "fix", "event": "e1", "index": 0, "channel": "positions"}]
+    pieces = [
+        {"id": "j1", "after": "e1", "events": [{"event": "a"}]},
+        {"id": "j1b", "after": "e2", "events": [{"event": "b"}]},
+        {"id": "j2", "transforms": [{"item": "Mara", "patch": {"positions": {"Mara": "hall"}}}]},
+        {"id": "j1", "events": [{"event": "c"}]},
+        {"id": "j12", "events": [{"event": "stray"}]},
+    ]
+    merged = repair.merge_answers(pieces, jobs)
+    assert [a["id"] for a in merged] == ["j1", "j2", "j12"]
+    assert [e["event"] for e in merged[0]["events"]] == ["a", "b", "c"]
+    # The first piece places the whole group; a digit is another job's id.
+    assert merged[0]["after"] == "e1"
+    units = repair.sentences(PROSE3)
+    events, report = repair.apply_answers(_draft(), units, jobs, merged, {"j1": 0})
+    assert [e["event"] for e in events][1:4] == ["a", "b", "c"]
+    assert report["applied"] == ["j1", "j2"] and report["unknown"] == ["j12"]
+
+
 def test_a_wrong_write_is_replaced_removed_or_moved():
     draft = _draft()
     job = {"id": "j1", "kind": "fix", "event": "e1", "index": 0, "channel": "positions",
@@ -292,6 +317,94 @@ def test_a_recovered_event_goes_where_jev_places_it(monkeypatch):
     groups["j1"]["after"] = "e2"
     slots, _ = repair.place(Ctx(), units, draft, groups)
     assert slots == {"j1": 1}
+
+
+# ---- declared acts ------------------------------------------------------------------
+
+DECLARED_PROSE = ("Mara sets the lamp down. \"It's gone out,\" she says. "
+                  "She turns to the stair.")
+
+
+def _declaring():
+    return {"identity_index": {"character:1": "Mara"}, "event_inputs": [
+        {"entity_id": "character:1", "authority_mode": "autonomous", "events": [
+            {"event_id": "t:0:action", "type": "action",
+             "attempt": "set the lamp on the table", "observable": "sets the lamp down"},
+            {"event_id": "t:1:speech", "type": "speech", "text": "It's gone out."},
+            {"event_id": "t:2:action", "type": "action", "attempt": "go back down",
+             "observable": "turns to the stair"}]}]}
+
+
+def _stops_after_the_first():
+    return [{"source_entity_id": "character:1", "source_event_id": "t:0:action",
+             "event": "Mara sets the lamp down.", "speech": False, "item_names": ["lamp"],
+             "transforms": []}]
+
+
+def test_a_declared_act_no_event_carries_is_certain_and_found_by_its_words():
+    """Chat 154 turn 4398's second roll encoded the Doctor's first act and
+    none of his next three: code knows that without a model, and knows where
+    each is told -- a line by its words, an act by how it was seen."""
+    units = repair.sentences(DECLARED_PROSE)
+    gaps = repair.declared_gaps(_stops_after_the_first(), units, _declaring())
+    assert [(g["event_id"], g["sentences"]) for g in gaps] == [
+        ("t:1:speech", ["s2"]), ("t:2:action", ["s3"])]
+    # A declaration some event tells under another source is encoded, not
+    # missing: its sentence is cited, so it builds nothing.
+    draft = _stops_after_the_first() + [
+        {"source_entity_id": "character:1", "source_event_id": "t:0:action",
+         "event": "It's gone out.", "speech": True, "transforms": []}]
+    gaps = repair.declared_gaps(draft, units, _declaring())
+    assert [(g["event_id"], g["sentences"]) for g in gaps] == [
+        ("t:1:speech", []), ("t:2:action", ["s3"])]
+
+
+def test_a_declared_gap_is_a_job_whatever_jev_scored_and_says_what_was_declared():
+    units = repair.sentences(DECLARED_PROSE)
+    gaps = repair.declared_gaps(_stops_after_the_first(), units, _declaring())
+    confident = repair.declared_findings(gaps, [], {"character:1": "Mara"})
+    assert {(f["sentence"], f["p"]) for f in confident} == {("s2", 1.0), ("s3", 1.0)}
+    jobs = repair.plan_jobs([], confident, _stops_after_the_first())
+    assert [(j["id"], j["sentences"]) for j in jobs] == [("j1", ["s2", "s3"])]
+    view = repair._job_view(jobs[0], units)
+    assert view["declared"] == [
+        {"event_id": "t:1:speech", "by": "Mara", "act": "It's gone out."},
+        {"event_id": "t:2:action", "by": "Mara", "act": "turns to the stair"}]
+
+
+def test_the_pass_recovers_a_declared_act_jev_never_flagged(monkeypatch):
+    monkeypatch.setattr(decisions, "OVERRIDE", lambda state, q: {
+        key: {"type": "noul", "noul": 0.02} for key in q})
+    seen = []
+
+    def repair_call(role, step_key, system, payload, **kw):
+        seen.append(payload["jobs"])
+        job = payload["jobs"][0]
+        return {"answers": [{"id": job["id"], "after": "e1", "events": [
+            {"source_entity_id": "character:1", "source_event_id": act["event_id"],
+             "event": act["act"], "speech": act["event_id"].endswith("speech"),
+             "transforms": []} for act in job["declared"]]}]}
+
+    monkeypatch.setattr(director, "_agent_json", repair_call)
+    units = repair.sentences(DECLARED_PROSE)
+    ctx = _Ctx()
+    events, record = repair.check_and_repair(
+        ctx, "resolve", {}, units, _stops_after_the_first(), ["poses"], [], {}, None, None,
+        base_payload=_declaring())
+    assert record["declared_gaps"] == [{"event_id": "t:1:speech", "sentences": ["s2"]},
+                                       {"event_id": "t:2:action", "sentences": ["s3"]}]
+    assert seen and seen[0][0]["declared"][0]["event_id"] == "t:1:speech"
+    assert [e["source_event_id"] for e in events] == ["t:0:action", "t:1:speech", "t:2:action"]
+    assert "declared_left" not in record
+
+    # Unrecovered, it is said -- the one loss the pass can name for certain.
+    monkeypatch.setattr(director, "_agent_json", lambda *a, **k: {"answers": []})
+    ctx = _Ctx()
+    events, record = repair.check_and_repair(
+        ctx, "resolve", {}, units, _stops_after_the_first(), ["poses"], [], {}, None, None,
+        base_payload=_declaring())
+    assert record["declared_left"] == ["t:1:speech", "t:2:action"]
+    assert any("declared act" in w for w in ctx.warnings)
 
 
 # ---- never the beat ---------------------------------------------------------------

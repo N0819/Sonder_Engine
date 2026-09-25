@@ -24,7 +24,8 @@ failure: its final runs ended with 220 of 225 ledger findings uncertain, and
    samples, chat 154 turn 4398, 2026-09-24), and with the field moved
    first it cited nothing (0 of 22 real events).
 2. Code finds what is certain: a write the engine's own schema or reader
-   would discard (`native_failures`).
+   would discard (`native_failures`), and an act the cast declared that no
+   event carries, located by its own words (`declared_gaps`).
 3. Jev judges, per sentence, whether it states an occurrence no event
    records; per event and granted channel, whether a change of that
    channel's kind went unwritten; per write, whether it is wrong for its
@@ -392,6 +393,86 @@ def native_failures(events, scene, payload):
     return failures
 
 
+# ---- 2b. declared acts no event carries -----------------------------------------
+
+#: The fields a declaration is found by in the prose, most exact first: a
+#: line's own words, an act as it was seen, as it was meant, the player's
+#: input as typed. Measured on the three captured drafts that left a
+#: declaration uncarried (chat 154 turn 4398's second roll and two turns of
+#: the time-travel test story, 2026-09-25): every line's `text` and every
+#: act's `observable` landed on the sentence that tells it; an `attempt`
+#: landed on the right one in 1 of 3.
+_DECLARED_WORDS = ("text", "observable", "attempt", "raw_text")
+
+
+def declarations(payload):
+    """`[{event_id, source, speech, words}]`: every act this beat's
+    `event_inputs` declare, with the words it is found by in the prose."""
+    out = []
+    for entry in (payload or {}).get("event_inputs") or []:
+        if not isinstance(entry, dict):
+            continue
+        for act in entry.get("events") or []:
+            if not isinstance(act, dict) or not str(act.get("event_id") or "").strip():
+                continue
+            words = [str(act[k]).strip() for k in _DECLARED_WORDS
+                     if isinstance(act.get(k), str) and act[k].strip()]
+            out.append({"event_id": str(act["event_id"]).strip(),
+                        "source": str(entry.get("entity_id") or ""),
+                        "speech": act.get("type") == "speech", "words": words})
+    return out
+
+
+def declared_gaps(events, units, payload):
+    """`[{event_id, source, act, sentences}]`: every declared act no event
+    carries -- none names it as its `source_event_id` -- with the sentences
+    no event comes from that tell it.
+
+    CERTAIN, AND NO MODEL IS ASKED. An act the cast declared is not replaced
+    (the prose contract's own limit), so the prose tells it and the beat
+    must carry it; a draft that names no event after it stopped before it.
+    Measured on 33 real encoder calls (2026-09-24): it held for 6, all six
+    real failures -- five empty answers and one that stopped two acts early
+    -- and never for a draft that covered its prose. Where the act lies is
+    code's too: its own words, attributed like an event's. A declaration
+    whose sentences some event already comes from was encoded under another
+    source, which is not a missing event, and one its words place nowhere
+    is left to the sentence check -- `sentences` is empty for both."""
+    carried = {str(e.get("source_event_id") or "").strip()
+               for e in events or [] if isinstance(e, dict)}
+    cited = citations(events, units) if units is not None else {}
+    gaps = []
+    for act in declarations(payload):
+        if act["event_id"] in carried:
+            continue
+        found = []
+        for words in act["words"]:
+            found = attribute([{"event": words}], units)[0] if units is not None else []
+            if found:
+                break
+        gaps.append({"event_id": act["event_id"], "source": act["source"],
+                     "act": _clip(act["words"][0] if act["words"] else "", 300),
+                     "sentences": [sid for sid in found if not cited.get(sid)]})
+    return gaps
+
+
+def declared_findings(gaps, confident, identities=None):
+    """Jev's findings with every located declaration made certain: its
+    sentences become missing-event findings at 1.0, carrying the act, so
+    the job built for them says what the cast declared there."""
+    by_sentence = {f["sentence"]: f for f in confident if f["kind"] == "event"}
+    out = [f for f in confident if f["kind"] != "event"]
+    for gap in gaps:
+        who = (identities or {}).get(gap["source"]) or gap["source"]
+        shown = {"event_id": gap["event_id"], "by": who, "act": gap["act"]}
+        for sid in gap["sentences"]:
+            finding = dict(by_sentence.get(sid) or {"kind": "event", "sentence": sid})
+            finding["p"] = 1.0
+            finding["declared"] = list(finding.get("declared") or []) + [shown]
+            by_sentence[sid] = finding
+    return out + list(by_sentence.values())
+
+
 # ---- 3. what Jev judges --------------------------------------------------------
 
 def _clip(value, n=_SHOWN):
@@ -670,6 +751,9 @@ def plan_jobs(native, confident, events):
         else:
             runs.append({"kind": "event", "sentence": finding["sentence"],
                          "sentences": [finding["sentence"]], "last": n, "p": finding["p"]})
+        for act in finding.get("declared") or ():
+            if act not in runs[-1].setdefault("declared", []):
+                runs[-1]["declared"].append(act)
     for run in runs:
         run.pop("last")
     confident = runs + [f for f in confident if f["kind"] != "event"]
@@ -740,6 +824,8 @@ def _job_view(job, units, sources=None):
         sentences = job.get("sentences") or [job["sentence"]]
         text = " ".join(u["text"].strip() for u in units if u["id"] in sentences)
         view.update(sentences=sentences, text=text)
+        if job.get("declared"):
+            view["declared"] = [dict(act) for act in job["declared"]]
     else:
         view.update(event=job["event"], channel=job["channel"])
         sentences = list((sources or {}).get(job["event"]) or [])
@@ -806,9 +892,65 @@ def call_repair(ctx, sc, units, events, jobs, tools, parts, model_payload, view,
     payload["minted"] = _minted(events)
     sources = dict(zip(refs_of(events), attribute(events, units)))
     payload["jobs"] = [_job_view(job, units, sources) for job in jobs]
+    # THE REPAIR KEEPS THE GRAMMAR its role's draft call goes without: its
+    # answers bind to their jobs by id, and sent free, GLM 5.2 answered a
+    # sixteen-sentence job by re-encoding the whole beat in the draft's own
+    # `events` shape, with a brace dropped seven levels deep (chat 154 turn
+    # 4398's first roll, 2 of 3 runs, 2026-09-25).
     out = _agent_json("director_specialist", "director_repair", sheet, payload,
-                      temperature=0.2, max_tokens=None) or {}
-    return list(out.get("answers") or []), list(out.get("notes") or [])
+                      temperature=0.2, max_tokens=None,
+                      response_format="json_schema") or {}
+    return merge_answers(out.get("answers"), jobs), list(out.get("notes") or [])
+
+
+def _job_of(answer_id, job_ids):
+    """The job an answer is for: its own id, or the job id it extends with
+    a suffix that is not a digit ("j1b", "j1-2" are j1's; "j12" is not)."""
+    if answer_id in job_ids:
+        return answer_id
+    best = ""
+    for job_id in job_ids:
+        rest = answer_id[len(job_id):] if answer_id.startswith(job_id) else ""
+        if rest and not rest[0].isdigit() and len(job_id) > len(best):
+            best = job_id
+    return best or None
+
+
+def merge_answers(answers, jobs):
+    """One answer per job, however the repair divided it: pieces carrying
+    the same id, or the id with a suffix, are joined in the order they came
+    -- their events and writes in sequence, the first piece's `after`
+    placing the whole group. An answer for no job is kept, to be reported.
+
+    THE REPAIR ANSWERS ONE JOB IN PIECES, and binding the first piece alone
+    threw the rest away. Measured over every whole-pass run of 2026-09-24/25
+    (eight versions, 198 runs that answered): 30 split an answer -- ten all
+    `j1` with one event each; `j1`, `j1b` ... `j1h` -- and 192 of 844
+    returned events were dropped, among them both acts the cast declared in
+    a 26-sentence job (the time-travel test story, capture 3877)."""
+    job_ids = [job["id"] for job in jobs or []]
+    merged, order, stray = {}, [], []
+    for answer in answers or []:
+        if not isinstance(answer, dict):
+            continue
+        job_id = _job_of(str(answer.get("id") or ""), job_ids)
+        if job_id is None:
+            stray.append(answer)
+            continue
+        if job_id not in merged:
+            merged[job_id] = dict(answer, id=job_id,
+                                  events=list(answer.get("events") or []),
+                                  transforms=list(answer.get("transforms") or []))
+            order.append(job_id)
+            continue
+        whole = merged[job_id]
+        whole["events"] += list(answer.get("events") or [])
+        whole["transforms"] += list(answer.get("transforms") or [])
+        whole["remove"] = bool(whole.get("remove") or answer.get("remove"))
+        for key in ("move_to", "after", "none"):
+            if not str(whole.get(key) or "").strip() and str(answer.get(key) or "").strip():
+                whole[key] = answer[key]
+    return [merged[job_id] for job_id in order] + stray
 
 
 def _said_something(answer):
@@ -1210,6 +1352,13 @@ def _check_and_repair(ctx, stage, sc, units, events, channels, parts, model_payl
         record["jev_failed"] = str(exc)[:300]
         ctx.add_warning(f"{stage}: encoder check could not ask the decision model: {exc}")
     confident, unsure = findings(about, answers)
+    # A DECLARED ACT NO EVENT CARRIES IS CERTAIN, and located by code: its
+    # sentences are missing whatever Jev scored them -- asked or not.
+    gaps = declared_gaps(events, units, payload)
+    if gaps:
+        record["declared_gaps"] = [{"event_id": g["event_id"], "sentences": g["sentences"]}
+                                   for g in gaps]
+        confident = declared_findings(gaps, confident, identities)
     confident = bridge(confident, citations(events, units))
     record["unsure"] = len(unsure)
 
@@ -1239,7 +1388,7 @@ def _check_and_repair(ctx, stage, sc, units, events, channels, parts, model_payl
     jobs = plan_jobs(native, confident, events)
     record["jobs"] = [{k: v for k, v in job.items() if k != "write"} for job in jobs]
     if not jobs:
-        return events, record
+        return _declared_left(ctx, stage, events, units, payload, record), record
 
     # TWO REPAIR CALLS, IN PARALLEL: recovering events writes long answers,
     # mending writes short ones, and one call doing both skipped the short
@@ -1341,4 +1490,16 @@ def _check_and_repair(ctx, stage, sc, units, events, channels, parts, model_payl
                             "kept as written")
     for job_id in report["unanswered"]:
         ctx.add_warning(f"{stage}: encoder repair left job {job_id} unanswered")
-    return [e for e in repaired if isinstance(e, dict)], record
+    repaired = [e for e in repaired if isinstance(e, dict)]
+    return _declared_left(ctx, stage, repaired, units, payload, record), record
+
+
+def _declared_left(ctx, stage, events, units, payload, record):
+    """The events as they are, with any declared act still carried by none
+    of them recorded and said -- the one loss this pass can name for
+    certain after it is done."""
+    left = [gap["event_id"] for gap in declared_gaps(events, units, payload)]
+    if left:
+        record["declared_left"] = left
+        ctx.add_warning(f"{stage}: no event carries declared act(s) {left}")
+    return events
