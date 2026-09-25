@@ -16,8 +16,13 @@ match sentences to events to writes itself, and counted "uncertain" as a
 failure: its final runs ended with 220 of 225 ledger findings uncertain, and
 1 of 12 real stages finished. Here:
 
-1. The prose arrives as numbered sentences (`sentences`) and the encoder
-   cites the ones each event encodes (`sources`).
+1. The prose is split into sentences (`sentences`), and each event is
+   attributed to the sentences its own text comes from (`attribute`) --
+   by code, so the draft is the encoder's ordinary call, unchanged. Asking
+   the encoder to cite them instead broke its answer outright: GLM 5.2
+   opened the beat with an empty event holding every citation (3 of 3
+   samples, chat 154 turn 4398, 2026-09-24), and with the field moved
+   first it cited nothing (0 of 22 real events).
 2. Code finds what is certain: a write the engine's own schema or reader
    would discard (`native_failures`).
 3. Jev judges, per sentence, whether it states an occurrence no event
@@ -180,15 +185,53 @@ def refs_of(events):
     return [f"e{i + 1}" for i in range(len(events or []))]
 
 
+#: The share of an event's own text a sentence must hold for the event to
+#: be attributed to it at all, and the share a neighbouring sentence needs
+#: (of the best one's) to be attributed too, for an event told across two.
+ATTRIBUTION_MIN = 0.2
+ATTRIBUTION_SPAN = 0.6
+
+
+def _grams(text, n=3):
+    text = " ".join(str(text or "").casefold().split())
+    return {text[i:i + n] for i in range(len(text) - n + 1)} if len(text) >= n else set()
+
+
+def attribute(events, units):
+    """`[[sentence id, ...] per event]`: the sentences each event's own text
+    comes from, by the share of its character trigrams each sentence holds.
+    Language-blind (trigrams, not words), and untroubled by the encoder
+    reordering acts because each event is scored on its own. Measured on the
+    owner's capture 3979 (chat 154 turn 4398): all 17 events' best sentence
+    was theirs, 15 of them at 0.87-1.00."""
+    sentence_grams = [_grams(unit["text"]) for unit in units]
+    out = []
+    for event in events or []:
+        text = ""
+        if isinstance(event, dict):
+            text = str(event.get("event") or "") or str(event.get("observable") or "")
+        grams = _grams(text)
+        if not grams or not units:
+            out.append([])
+            continue
+        scores = [len(grams & g) / len(grams) for g in sentence_grams]
+        best = max(range(len(units)), key=lambda j: scores[j])
+        if scores[best] < ATTRIBUTION_MIN:
+            out.append([])
+            continue
+        out.append([units[j]["id"] for j in (best - 1, best, best + 1)
+                    if 0 <= j < len(units)
+                    and (j == best or scores[j] >= max(ATTRIBUTION_MIN,
+                                                       ATTRIBUTION_SPAN * scores[best]))])
+    return out
+
+
 def citations(events, units):
-    """`{sentence id: [event index, ...]}` from each event's `sources`;
-    an address no sentence has is ignored."""
-    known = {unit["id"] for unit in units}
+    """`{sentence id: [event index, ...]}`, from `attribute`."""
     cited = {unit["id"]: [] for unit in units}
-    for index, event in enumerate(events or []):
-        for sid in (event.get("sources") or []) if isinstance(event, dict) else []:
-            sid = str(sid).strip().strip("[]")
-            if sid in known and index not in cited[sid]:
+    for index, sources in enumerate(attribute(events, units)):
+        for sid in sources:
+            if index not in cited[sid]:
                 cited[sid].append(index)
     return cited
 
@@ -384,10 +427,11 @@ def jev_state(units, events, payload):
     identities = (payload or {}).get("identity_index") or {}
     lines = ["PROSE:"] + [f"[{u['id']}] {u['text'].strip()}" for u in units if u["text"].strip()]
     lines += ["", "EVENTS, in the order they happen:"]
-    for ref, event in zip(refs_of(events), events):
+    attributed = attribute(events, units)
+    for ref, event, sources in zip(refs_of(events), events, attributed):
         source = str(event.get("source_entity_id") or "")
         who = identities.get(source) or source or "-"
-        cites = ", ".join(str(s) for s in event.get("sources") or []) or "none"
+        cites = ", ".join(sources) or "none"
         kind = "SAYS" if event.get("speech") else "DOES"
         lines.append(f"{ref} (cites {cites}) {who} {kind}: {_clip(event.get('event') or '', 400)}")
         for transform in event.get("transforms") or []:
@@ -533,8 +577,9 @@ def _minted(events):
     return out
 
 
-def _draft(events):
-    return [dict(copy.deepcopy(event), ref=ref) for ref, event in zip(refs_of(events), events)]
+def _draft(events, units):
+    return [dict(copy.deepcopy(event), ref=ref, sources=sources)
+            for ref, event, sources in zip(refs_of(events), events, attribute(events, units))]
 
 
 def _job_view(job, units):
@@ -576,18 +621,21 @@ def repair_tools(ctx, stage, units, jobs, model_payload, facts, channels, parts)
 
 
 def call_repair(ctx, sc, units, events, jobs, tools, parts, model_payload, view, extras,
-                rooms_elsewhere=False, new_places=None):
-    """One encoder call for every job, with the completed draft in front of it."""
+                rooms_elsewhere=False, new_places=None, base_payload=None):
+    """One encoder call for every job, with the completed draft in front of it.
+    `base_payload` stands in for the slices the stage would assemble -- a
+    replay of a captured encoder call has them and nothing to rebuild them
+    from."""
     from .director_prose import _agent_json, encoder_payload
     language = ctx.language
-    sheet = unified_specialist_prompt(
-        tools, language, parts, extra=[prose_contract_text("encoder_sources", language)])
+    sheet = unified_specialist_prompt(tools, language, parts)
     sheet += "\n" + prose_contract_text("encoder_repair", language)
-    payload = encoder_payload(ctx, sc, numbered(units), model_payload, view, extras, tools)
+    payload = (dict(base_payload, prose=numbered(units)) if base_payload is not None
+               else encoder_payload(ctx, sc, numbered(units), model_payload, view, extras, tools))
     payload["places_authored_elsewhere"] = bool(rooms_elsewhere)
     payload["new_places"] = dict(new_places or {})
     payload["granted_tools"] = list(tools) + list(parts)
-    payload["draft"] = _draft(events)
+    payload["draft"] = _draft(events, units)
     payload["minted"] = _minted(events)
     payload["jobs"] = [_job_view(job, units) for job in jobs]
     out = _agent_json("director_specialist", "director_repair", sheet, payload,
@@ -767,7 +815,8 @@ def _changed_writes(before, after):
 
 
 def check_and_repair(ctx, stage, sc, units, events, channels, parts, model_payload,
-                     view, extras, facts=None, rooms_elsewhere=False, new_places=None):
+                     view, extras, facts=None, rooms_elsewhere=False, new_places=None,
+                     base_payload=None):
     """`(events, record)`. Never raises except for a user's Stop: any
     failure returns the draft as it came, with a warning."""
     from llm.providers import Aborted
@@ -776,7 +825,7 @@ def check_and_repair(ctx, stage, sc, units, events, channels, parts, model_paylo
     try:
         events, record = _check_and_repair(
             ctx, stage, sc, units, events, channels, parts, model_payload, view, extras,
-            facts, rooms_elsewhere, new_places, record)
+            facts, rooms_elsewhere, new_places, record, base_payload)
     except Aborted:
         raise
     except Exception as exc:
@@ -787,12 +836,15 @@ def check_and_repair(ctx, stage, sc, units, events, channels, parts, model_paylo
 
 
 def _check_and_repair(ctx, stage, sc, units, events, channels, parts, model_payload,
-                      view, extras, facts, rooms_elsewhere, new_places, record):
+                      view, extras, facts, rooms_elsewhere, new_places, record,
+                      base_payload=None):
     from .director_prose import encoder_payload
     events = [e for e in events or [] if isinstance(e, dict)]
     cited = citations(events, units)
     record["cited"] = sum(1 for sid in cited if cited[sid])
-    payload = encoder_payload(ctx, sc, numbered(units), model_payload, view, extras, channels)
+    payload = (dict(base_payload) if base_payload is not None
+               else encoder_payload(ctx, sc, numbered(units), model_payload, view, extras,
+                                    channels))
 
     t1 = time.time()
     try:
@@ -828,7 +880,8 @@ def _check_and_repair(ctx, stage, sc, units, events, channels, parts, model_payl
                                               facts, channels, parts)
     record["tools"] = {"channels": tools, "parts": tool_parts, **({"routing": routing} if routing else {})}
     answers_, notes = call_repair(ctx, sc, units, events, jobs, tools, tool_parts,
-                                  model_payload, view, extras, rooms_elsewhere, new_places)
+                                  model_payload, view, extras, rooms_elsewhere, new_places,
+                                  base_payload)
     record["repair_seconds"] = round(time.time() - t2, 3)
     answers_ = [dict(a, events=strip_markers(a.get("events") or []))
                 if isinstance(a, dict) else a for a in answers_]

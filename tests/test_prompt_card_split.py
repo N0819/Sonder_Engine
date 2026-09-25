@@ -49,12 +49,11 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 203   # +6 (2026-09-24): the encoder's check and repair pass --
-                   # `prose_contract.encoder_sources` and `.encoder_repair`
-                   # (sections added to the encoder's sheet) and the four
-                   # decision-model checks `.check_missing_event`,
-                   # `.check_missing_ledger`, `.check_wrong_ledger` and
-                   # `.check_placement`.
+PART_COUNT = 202   # +5 (2026-09-24): the encoder's check and repair pass --
+                   # `prose_contract.encoder_repair` (the repair call's
+                   # section) and the four decision-model checks
+                   # `.check_missing_event`, `.check_missing_ledger`,
+                   # `.check_wrong_ledger` and `.check_placement`.
                    # +56 (2026-09-24): the prose contract's encoder gets its
                    # own card, `encoder.*` -- its core, one chunk per engine
                    # channel (38) and nine `<channel>__<part>` parts shipped

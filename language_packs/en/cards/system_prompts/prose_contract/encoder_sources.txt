@@ -1,1 +1,0 @@
-SENTENCES. The prose arrives with each sentence numbered -- [s1], [s2] and on. Give every event `sources`: the numbers of the sentences it encodes, in order. The numbers are addresses: never copy one into any text you write.

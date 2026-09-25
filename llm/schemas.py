@@ -3120,10 +3120,6 @@ class UnifiedEvent(LenientModel):
     difficulty: str = ""
     item_names: list[str] = Field(default_factory=list)
     transforms: list[LedgerPatchTransform] = Field(default_factory=list)
-    # The numbered sentences of the prose this event encodes (`s1`, `s2`),
-    # asked for only when the repair pass will check the draft against them
-    # (`agents/director_repair.py`). Empty everywhere else.
-    sources: list[str] = Field(default_factory=list)
 
 
 class UnifiedSpecialistOutput(LenientModel):

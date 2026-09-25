@@ -7,10 +7,11 @@ pass checks the draft sentence by sentence, event by event and write by
 write, and has ONE encoder call repair exactly what a confident check found,
 with the whole draft -- the ledgers as completed so far -- in front of it.
 
-Pinned here: sentences stay whole and lossless; each check is anchored on
-the thing it judges; only a confident yes builds a job; answers bind to
-their job by id; recovered events land where Jev places them; and the pass
-never costs the player the beat -- only their own Stop propagates.
+Pinned here: sentences stay whole and lossless; each event is attributed to
+its sentences by code, so the draft call is untouched; each check is
+anchored on the thing it judges; only a confident yes builds a job; answers
+bind to their job by id; recovered events land where Jev places them; and
+the pass never costs the player the beat -- only their own Stop propagates.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from __future__ import annotations
 import pytest
 
 import agents.director as director
-from agents import director_prose, director_repair as repair
+from agents import director_repair as repair
 from llm import decisions
 from llm.providers import Aborted
 
@@ -42,36 +43,46 @@ def test_sentences_are_lossless_and_keep_a_quotation_whole():
     assert [u["id"] for u in units] == ["s1", "s2", "s3", "s4"]
 
 
-def test_the_encoder_reads_addresses_and_none_survive():
+PROSE3 = ("Mara climbs the stair into the lamp room. The wind rises against the glass. "
+          "\"The lamp is cold,\" she calls down.")
+
+
+def _draft():
+    return [
+        {"source_entity_id": "character:1",
+         "event": "Mara climbs the stair into the lamp room.",
+         "speech": False, "item_names": ["Mara"],
+         "transforms": [{"item": "Mara", "patch": {"positions": {"Mara": "lamp_room"}}}]},
+        {"source_entity_id": "character:1", "event": "The lamp is cold.",
+         "speech": True, "item_names": ["Mara"], "transforms": []},
+    ]
+
+
+def test_code_attributes_each_event_to_the_sentences_it_comes_from():
+    units = repair.sentences(PROSE3)
+    assert repair.attribute(_draft(), units) == [["s1"], ["s3"]]
+    assert repair.citations(_draft(), units) == {"s1": [0], "s2": [], "s3": [1]}
+    # An event with no text of its own comes from nowhere.
+    assert repair.attribute([{"event": ""}], units) == [[]]
+
+
+def test_the_repair_call_reads_addresses_and_none_survive():
     units = repair.sentences("Mara climbs. She waves.")
     assert repair.numbered(units) == "[s1] Mara climbs. [s2] She waves."
-    events = [{"event": "[s2] She waves.", "sources": ["s2"], "speech": False,
+    events = [{"event": "[s2] She waves.", "speech": False,
                "transforms": [{"item": "Mara", "patch": {"poses": {"Mara": {"detail": "[s2] waving"}}}}]}]
     clean = repair.strip_markers(events)
     assert clean[0]["event"] == "She waves."
     assert clean[0]["transforms"][0]["patch"]["poses"]["Mara"]["detail"] == "waving"
-    assert clean[0]["sources"] == ["s2"]
-    assert repair.citations(clean + [{"sources": ["s9", "[s1]"]}], units) == {
-        "s1": [1], "s2": [0]}
 
 
 # ---- what is asked ------------------------------------------------------------
 
-def _draft():
-    return [
-        {"source_entity_id": "character:1", "event": "Mara climbs into the lamp room.",
-         "speech": False, "sources": ["s1"], "item_names": ["Mara"],
-         "transforms": [{"item": "Mara", "patch": {"positions": {"Mara": "lamp_room"}}}]},
-        {"source_entity_id": "character:1", "event": "The lamp is cold.",
-         "speech": True, "sources": ["s3"], "item_names": ["Mara"], "transforms": []},
-    ]
-
-
 def test_each_check_is_anchored_on_what_it_judges():
-    units = repair.sentences("Mara climbs. The wind rises. \"The lamp is cold,\" she says.")
+    units = repair.sentences(PROSE3)
     questions, about = repair.battery(units, _draft(), ["positions", "poses"])
-    # One per sentence; the sentence nothing cites is compared with its
-    # neighbours' events, so an address one sentence off still counts.
+    # One per sentence; the sentence nothing comes from is compared with its
+    # neighbours' events, so an attribution one sentence off still counts.
     assert about["ev:s2"] == {"kind": "event", "sentence": "s2"}
     assert "e1, e2" in questions["ev:s2"]["instructions"]
     # One per event and granted channel, and one per existing write.
@@ -82,6 +93,8 @@ def test_each_check_is_anchored_on_what_it_judges():
     # The ledger's own routing question says what the record holds.
     assert "Does any body end the passage" in questions["led:e1:positions"]["instructions"]
     assert all(q["type"] == "noul" for q in questions.values())
+    state = repair.jev_state(units, _draft(), {})
+    assert "e1 (cites s1)" in state and "e2 (cites s3)" in state
 
 
 def test_only_a_confident_yes_builds_a_job():
@@ -99,7 +112,8 @@ def test_only_a_confident_yes_builds_a_job():
     draft = _draft()
     draft[1]["transforms"] = [{"item": "Mara", "patch": {"sensory_events": [{"kind": "sound"}]}}]
     jobs = repair.plan_jobs(native, confident, draft)
-    # Certain first; a ledger job on a write already being fixed is one job.
+    # Certain first; a ledger job on a write already being fixed is one job,
+    # whichever of the two findings scored higher.
     assert [(j["id"], j["kind"]) for j in jobs] == [("j1", "fix"), ("j2", "event"), ("j3", "fix")]
     assert jobs[0]["reason"] == "no room"
     assert jobs[2]["write"] == {"Mara": "lamp_room"}
@@ -138,10 +152,11 @@ def test_a_wrong_write_is_replaced_removed_or_moved():
     assert kept == draft and report["declined"] == {"j1": "it is right"}
 
 
-def test_a_recovered_event_goes_where_jev_places_it(temp_db, monkeypatch):
-    units = repair.sentences("Mara climbs. The wind rises. She says it is cold.")
+def test_a_recovered_event_goes_where_jev_places_it(monkeypatch):
+    units = repair.sentences(PROSE3)
     draft = _draft()
-    groups = {"j1": {"sentence": "s2", "after": "", "events": [{"event": "The wind rises."}]}}
+    groups = {"j1": {"sentence": "s2", "after": "",
+                     "events": [{"event": "The wind rises against the glass."}]}}
 
     class Ctx:
         language = "en"
@@ -152,10 +167,10 @@ def test_a_recovered_event_goes_where_jev_places_it(temp_db, monkeypatch):
     assert slots == {"j1": 0} and placed["j1"]["choice"] == "after_e1"
     events, _ = repair.apply_answers(
         draft, units, [{"id": "j1", "kind": "event", "sentence": "s2"}],
-        [{"id": "j1", "events": [{"event": "The wind rises."}]}], slots)
+        [{"id": "j1", "events": [{"event": "The wind rises against the glass."}]}], slots)
     assert [e["event"] for e in events] == [
-        "Mara climbs into the lamp room.", "The wind rises.", "The lamp is cold."]
-    assert events[1]["sources"] == ["s2"]
+        "Mara climbs the stair into the lamp room.", "The wind rises against the glass.",
+        "The lamp is cold."]
     # Unsure, Jev's placement gives way to the encoder's `after`.
     monkeypatch.setattr(decisions, "OVERRIDE", lambda state, q: {
         "place:j1": {"type": "choice", "choice": "before_e1", "confidence": 0.3}})
@@ -209,7 +224,7 @@ def _encoder_skips_the_line(payload):
     return {"events": [
         {"source_entity_id": "character:1", "source_event_id": "x",
          "event": "Mara climbs the stair into the lamp room.", "speech": False,
-         "sources": ["s1"], "item_names": ["Mara"], "commitment": "asserted",
+         "item_names": ["Mara"], "commitment": "asserted",
          "transforms": [{"item": "Mara", "patch": {"positions": {"Mara": "lamp_room"}}}]},
     ], "missing_tools": [], "missing_referents": [], "notes": []}
 
@@ -219,17 +234,15 @@ def _repair_answers(payload):
     return {"answers": [{"id": job["id"], "events": [
         {"source_entity_id": "character:1", "source_event_id": "x",
          "event": "The lamp is cold.", "speech": True, "targets": ["The Stranger"],
-         "volume": "loud", "sources": [job["sentence"]], "item_names": ["Mara"],
+         "volume": "loud", "item_names": ["Mara"],
          "commitment": "asserted", "transforms": []}], "after": "e1"}], "notes": []}
 
 
 def test_a_line_the_draft_dropped_is_recovered(temp_db, monkeypatch):
     temp_db.set_setting("director_contract", "prose")
     temp_db.set_setting(repair.REPAIR_SETTING, "1")
-    asked = []
 
     def jev(state, questions):
-        asked.append(dict(questions))
         out = {}
         for key in questions:
             if key == "ev:s2":
@@ -251,26 +264,26 @@ def test_a_line_the_draft_dropped_is_recovered(temp_db, monkeypatch):
     out = director.director_resolve(ctx, nonce=0)
 
     assert _steps(calls) == ["director_prose", "director_specialist", "director_repair"]
-    encoder = calls[1]
-    assert encoder["payload"]["prose"].startswith("[s1] Mara climbs")
-    assert "SENTENCES." in encoder["system"]
+    # The draft is the encoder's ordinary call, untouched.
+    assert calls[1]["payload"]["prose"] == PROSE
     repair_call = calls[2]
     assert "REPAIR." in repair_call["system"]
+    assert repair_call["payload"]["prose"].startswith("[s1] Mara climbs")
     assert repair_call["payload"]["jobs"] == [{"id": "j1", "kind": "event", "sentence": "s2",
                                                "text": "\"The lamp is cold,\" she calls down."}]
-    # The completed ledgers ride along: the whole draft, by reference.
-    assert repair_call["payload"]["draft"][0]["ref"] == "e1"
-    assert repair_call["payload"]["draft"][0]["transforms"][0]["patch"]["positions"] == {
-        "Mara": "lamp_room"}
+    # The completed ledgers ride along: the whole draft, by reference, with
+    # the sentences code attributed each event to.
+    draft = repair_call["payload"]["draft"]
+    assert draft[0]["ref"] == "e1" and draft[0]["sources"] == ["s1"]
+    assert draft[0]["transforms"][0]["patch"]["positions"] == {"Mara": "lamp_room"}
     rows = out["ledgers"]
     assert [row["chrono_id"] for row in rows] == [1, 2]
     assert "speech" in rows[1]["categories"]
     record = out["orchestration"]["prose_contract"]["repair"]
     assert record["jobs"][0]["kind"] == "event" and record["applied"]["applied"] == ["j1"]
-    assert all("[s" not in e["event"] for e in out["orchestration"]["prose_contract"]["events"])
 
 
-def test_off_by_default_the_encoder_is_asked_as_before(temp_db, monkeypatch):
+def test_off_by_default_nothing_changes(temp_db, monkeypatch):
     temp_db.set_setting("director_contract", "prose")
     monkeypatch.setattr(decisions, "OVERRIDE", lambda state, q: {
         key: {"type": "noul", "noul": 0.95 if key == "positions" else 0.02} for key in q})
@@ -283,5 +296,4 @@ def test_off_by_default_the_encoder_is_asked_as_before(temp_db, monkeypatch):
     out = director.director_resolve(ctx, nonce=0)
     assert _steps(calls) == ["director_prose", "director_specialist"]
     assert calls[1]["payload"]["prose"] == PROSE
-    assert "SENTENCES." not in calls[1]["system"]
     assert "repair" not in out["orchestration"]["prose_contract"]

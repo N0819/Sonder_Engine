@@ -549,9 +549,6 @@
     "room_reconcile": {
       "$text": "prose_contract/room_reconcile.txt"
     },
-    "encoder_sources": {
-      "$text": "prose_contract/encoder_sources.txt"
-    },
     "encoder_repair": {
       "$text": "prose_contract/encoder_repair.txt"
     },
