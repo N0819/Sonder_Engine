@@ -925,10 +925,18 @@ def test_a_journey_sets_off_before_its_end_is_built():
     ja = prompts.unified_specialist_prompt(["entities"], "ja")
     assert ("naming `destination_room` only when the world already holds the "
             "place it is bound for, outside it -- never one of its own rooms, "
-            "and never a place still to be built, which is left out: a journey "
-            "sets off before its end is built") in en
+            "never the place it is setting off from, and never a place still to "
+            "be built, which is left out: a journey sets off before its end is "
+            "built") in en
     assert "with the destination named" not in en
     assert ("これから作られる場所なら書きません。旅は行き先が作られる前に出発し") in ja
+    # The owner's ruling (2026-09-25): the place it sets off from is never
+    # where it arrives, and under way it is in no room until the story brings
+    # it in -- `spatial_transit.settle_departures` holds the floor.
+    assert ("a thing under way is nowhere but in transit, and stays so, beat "
+            "after beat, until the prose brings it in") in en
+    assert "出発しようとしている場所でもなく" in ja
+    assert "散文がそれを着かせるまで、拍から拍へとそのままです" in ja
     # Chat 154 turn 4398 (2026-09-24): the ship set off for its own console
     # room -- "as a placeholder since the actual Kyoto/Kansai room does not
     # yet exist" -- and with the beach it was leaving as its route, "the

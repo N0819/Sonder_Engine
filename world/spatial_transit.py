@@ -645,6 +645,137 @@ def apply_transit_dock_edges(scene: dict) -> bool:
     return changed
 
 # ---------------------------------------------------------------------------
+# A journey's two ends (the owner's ruling, 2026-09-25): where a vehicle sets
+# off from is never where it arrives, and under way it is in no room -- as
+# long as it likes -- until the story brings it in.
+# ---------------------------------------------------------------------------
+
+#: Phases in which a vehicle is between its places: it is where its route
+#: is, or nowhere.
+_UNDER_WAY_PHASES = {"in_transit", "arriving"}
+
+
+def _keys_filing(table: dict, eid, entity) -> list:
+    """Every key `table` (positions, stations) files this entity under --
+    its id, name or an alias, with `_positions_lookup`'s case, spacing and
+    script tolerance -- the id first."""
+    from story.character_schema import fold_identity_key
+    record = entity if isinstance(entity, dict) else {}
+    labels = [str(label) for label in (eid, record.get("name"), *(record.get("aliases") or []))
+              if label]
+    folded = {label.strip().casefold() for label in labels}
+    identities = {fold_identity_key(label.lower().strip()) for label in labels} - {""}
+    keys = [key for key in (table or {})
+            if str(key) in labels or str(key).strip().casefold() in folded
+            or fold_identity_key(str(key).lower().strip()) in identities]
+    return sorted(keys, key=lambda key: str(key) != str(eid))
+
+
+def _same_room(a, b) -> bool:
+    return bool(str(a or "").strip()) and \
+        str(a or "").strip().casefold() == str(b or "").strip().casefold()
+
+
+def settle_departures(before: dict, merged: dict) -> bool:
+    """WHERE A VEHICLE SETS OFF FROM IS NEVER WHERE IT ARRIVES, AND UNDER WAY
+    IT IS IN NO ROOM until the story brings it in -- the owner's ruling,
+    2026-09-25. `before` is the world the beat (or the causal step) started
+    from, read for where the vehicle stood; `merged` is rewritten in place.
+    Idempotent. Returns True when anything changed.
+
+    - Setting off (`in_transit` or `arriving`), the room it stood in is kept
+      as `transit.departed_from` for the whole journey.
+    - A `destination_room` or `route_room` naming that room is dropped, and a
+      destination's `eta_seconds` with it, so no timed arrival carries it
+      back. A vehicle sealed and not yet away is bound for nowhere it stands.
+    - Under way it stands in its `route_room` when the world holds one, and
+      in no room otherwise -- a thing in transit is between places by
+      construction (`unplaced_mints_needing_a_room` already says so), and
+      nothing asks it to arrive: with no destination it stays in transit,
+      beat after beat, until a write brings it in.
+    - Docked, the journey is over: `departed_from` goes, and a vehicle docked
+      with no room but a `destination_room` stands there, as the timed
+      arrival already stands it. A position the story wrote itself stands.
+
+    Measured on chat 154 turn 4398 (2026-09-25): with no grammar and no
+    reasoning, fresh drafts still wrote the beach the TARDIS was leaving as
+    its route (3 of 3 samples of capture 3979), and once in twelve rerolls as
+    its destination with an ETA of 5 s; and its position stayed on the beach
+    for the whole journey, in plain view of anyone standing there."""
+    entities = merged.get("entities") if isinstance(merged, dict) else None
+    positions = merged.get("positions") if isinstance(merged, dict) else None
+    if not isinstance(entities, dict) or not isinstance(positions, dict):
+        return False
+    rooms = merged.get("rooms") or {}
+    stations = merged.get("stations") if isinstance(merged.get("stations"), dict) else {}
+    earlier = before if isinstance(before, dict) else {}
+    earlier_entities = earlier.get("entities") or {}
+    changed = False
+    for eid, ent in entities.items():
+        transit = _transit_state(ent)
+        if transit is None:
+            continue
+        phase = str(transit.get("phase") or "docked").strip().casefold()
+        here = room_of_record(merged, eid, ent)
+        if phase == "docked":
+            if transit.pop("departed_from", None) is not None:
+                changed = True
+            destination = str(transit.get("destination_room") or "")
+            if not here and isinstance(rooms.get(destination), dict) \
+                    and rooms[destination].get("parent_entity") != eid:
+                positions[eid] = destination
+                transit.pop("destination_room", None)
+                transit.pop("eta_seconds", None)
+                changed = True
+            continue
+        stood = room_of_record(earlier, eid, earlier_entities.get(eid) or ent) \
+            if earlier else None
+        if phase in _UNDER_WAY_PHASES:
+            # THE JOURNEY KEEPS WHERE IT BEGAN through every write of its
+            # transit: a beat's diff is merged more than once, and each later
+            # beat that touches the vehicle writes its whole `transit` again,
+            # over a world where it is already in no room. Replayed live on
+            # chat 154 turn 4398, the committed TARDIS had lost the beach it
+            # left, and a later beat could have sent it straight back.
+            prior = _transit_state(earlier_entities.get(eid)) or {}
+            carried = str(prior.get("departed_from") or "").strip() \
+                if str(prior.get("phase") or "").strip().casefold() in _UNDER_WAY_PHASES else ""
+            if not str(transit.get("departed_from") or "").strip() \
+                    and (carried or stood or here):
+                transit["departed_from"] = carried or stood or here
+                changed = True
+            origin = transit.get("departed_from")
+        else:  # sealed, or a phase not yet under way: where it stands
+            origin = stood or here
+        for field in ("destination_room", "route_room"):
+            if _same_room(transit.get(field), origin):
+                transit.pop(field, None)
+                if field == "destination_room":
+                    transit.pop("eta_seconds", None)
+                changed = True
+        if phase not in _UNDER_WAY_PHASES:
+            continue
+        route = str(transit.get("route_room") or "")
+        keys = _keys_filing(positions, eid, ent)
+        if isinstance(rooms.get(route), dict) and rooms[route].get("parent_entity") != eid:
+            for key in keys[1:]:
+                positions.pop(key, None)
+                changed = True
+            key = keys[0] if keys else eid
+            if positions.get(key) != route:
+                positions[key] = route
+                changed = True
+            continue
+        for key in keys:
+            positions.pop(key, None)
+            changed = True
+        for key in _keys_filing(stations, eid, ent):
+            stations.pop(key, None)
+            changed = True
+    return changed
+
+
+# ---------------------------------------------------------------------------
 # Nesting-aware ambient scope (movement/space Phase 1, item 5).
 #
 # Read-only helpers over the SCENE's containment structure (rooms'

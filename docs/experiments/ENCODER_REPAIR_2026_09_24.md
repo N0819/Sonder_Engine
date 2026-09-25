@@ -308,9 +308,14 @@ go, the sealed doors behind Hinami. What the rolls found:
   heard over a speaker has a place") extended to a body shown on a screen
   were tried on 6 more rolls: none minted the figure at all -- each recorded
   it as the scanner's state -- so both were dropped. Open.
-- **A destination equal to the place the ship is leaving** joins the route
-  written that way (3979). The own-interior floor does not cover it, and the
-  repair's checks did not flag it.
+- **A destination equal to the place the ship is leaving** joined the route
+  written that way (3979), and the repair's checks flagged neither. The
+  owner ruled (2026-09-25) that departure is never arrival, and that a
+  vehicle under way may be in no room, in transit until the story brings it
+  in: `spatial_transit.settle_departures` holds both, and two more rerolls
+  committed the TARDIS in transit, `departed_from` the beach, in no room,
+  its console room with no doorway out -- where every earlier roll had left
+  it standing on the beach it had left.
 
 ## Limits
 

@@ -665,6 +665,8 @@ def _fire_due_events(scene, elapsed, frame_id, pending, *, turn_idx=None,
         transit["phase"] = "docked"
         transit.pop("eta_seconds", None)
         transit.pop("destination_room", None)
+        # Docked, the journey is over (`spatial_transit.settle_departures`).
+        transit.pop("departed_from", None)
         event_ops.append(("status", row["event_id"], "fired"))
         fired += 1
         label = (ent.get("name") if isinstance(ent, dict) else "") or eid

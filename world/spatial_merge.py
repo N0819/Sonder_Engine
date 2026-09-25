@@ -62,6 +62,7 @@ from world.spatial_routing import stamp_sight_direction
 from world.spatial_transit import (apply_transit_dock_edges,
                                   evict_self_contained_entities,
                                   infer_body_enclosures,
+                                  settle_departures,
                                   sync_entity_interior_rooms)
 
 
@@ -1970,6 +1971,13 @@ def merge_scene_with_diff(
     # things only the Director can answer, not for arithmetic it can do itself.
     # The evictions are returned for a caller that wants them.
     evict_self_contained_entities(merged)
+
+    # A JOURNEY'S TWO ENDS, BEFORE ITS DOORWAY: the place a vehicle left is
+    # never where it arrives, and under way it stands in its route or in no
+    # room -- read against `scene`, the world this merge started from, which
+    # is the only record of where it stood. The dock rewrite then derives the
+    # doorway from what that leaves.
+    settle_departures(scene, merged)
 
     apply_transit_dock_edges(merged)
 

@@ -17,7 +17,8 @@ _REFERENCE_FIELDS = frozenset({
     "wearer", "owner", "carrier", "mover", "speaker", "intended_target", "in",
 })
 _ROOM_FIELDS = frozenset({"room", "room_id", "to_room", "from_room", "to", "place",
-                          "destination_room", "route_room", "source_room", "speaker_room"})
+                          "destination_room", "route_room", "departed_from",
+                          "source_room", "speaker_room"})
 
 
 def _forms(key, record):

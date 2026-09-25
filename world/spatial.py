@@ -103,7 +103,7 @@ from world.spatial_transit import (
     _link_state, _open_enclosure_barrier, _TRANSIT_CLOSED_PHASES,
     _transit_state, ambient_scope, apply_transit_dock_edges,
     CONTAINER_ENCLOSURES, containment_chain, evict_self_contained_entities,
-    infer_body_enclosures, sync_entity_interior_rooms,
+    infer_body_enclosures, settle_departures, sync_entity_interior_rooms,
 )
 
 

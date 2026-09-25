@@ -139,7 +139,7 @@
 | `world/background_claims.py` | 598 |  | `core.db` |
 | `world/beat_ledger.py` | 184 |  | — |
 | `world/causal_completion.py` | 154 |  | `world.causal_verification` |
-| `world/causal_program.py` | 387 |  | — |
+| `world/causal_program.py` | 388 |  | — |
 | `world/causal_verification.py` | 751 |  | — |
 | `world/causality.py` | 425 |  | `world.spatial` |
 | `world/charter.py` | 524 |  | `world.charter_author`, `world.charter_chatter`, `world.charter_commitment`, `world.charter_decide`, `world.charter_drift`, `world.charter_economy`, `world.charter_feel`, `world.charter_figure`, `world.charter_identity`, `world.charter_intervene`, `world.charter_log`, `world.charter_mark`, `world.charter_mind`, `world.charter_model`, `world.charter_move`, `world.charter_needs`, `world.charter_news`, `world.charter_place`, `world.charter_plan`, `world.charter_politics`, `world.charter_practice`, `world.charter_promote`, `world.charter_roster`, `world.charter_run`, `world.charter_social`, `world.charter_space`, `world.charter_talk`, `world.charter_temper`, `world.charter_trigger` |
@@ -191,7 +191,7 @@
 | `world/exposure.py` | 232 |  | `story`, `world.spatial`, `world.weather` |
 | `world/gaps.py` | 459 |  | `core.db`, `mind.canon_provenance`, `world.spatial`, `world.subjects` |
 | `world/living_world.py` | 639 |  | `core.logging_utils`, `world.mechanics` |
-| `world/mechanics.py` | 1331 |  | `core`, `world.spatial`, `world.spatial_frames` |
+| `world/mechanics.py` | 1333 |  | `core`, `world.spatial`, `world.spatial_frames` |
 | `world/offscreen.py` | 2305 |  | `core`, `core.logging_utils`, `llm.prompts` |
 | `world/paradox.py` | 655 |  | `core.db`, `core.frames`, `story.character_schema`, `world.spatial` |
 | `world/place_purpose.py` | 554 |  | `mind.theory_of_mind`, `world.comfort`, `world.spatial`, `world.survival` |
@@ -215,7 +215,7 @@
 | `world/spatial_light.py` | 508 |  | `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity` |
 | `world/spatial_light_field.py` | 1246 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_lint.py` | 444 |  | `world.spatial_barriers`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_orientation` |
-| `world/spatial_merge.py` | 2633 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_orientation`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
+| `world/spatial_merge.py` | 2641 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_orientation`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
 | `world/spatial_orientation.py` | 398 | Bearing math and reciprocal spatial-edge normalization. | — |
 | `world/spatial_prose.py` | 410 |  | `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light` |
 | `world/spatial_routing.py` | 1257 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_light`, `world.spatial_orientation` |
@@ -223,7 +223,7 @@
 | `world/spatial_senses.py` | 1894 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation`, `world.spatial_routing` |
 | `world/spatial_sound_field.py` | 3141 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light_field`, `world.spatial_senses` |
 | `world/spatial_substance.py` | 1138 |  | `world.spatial_contacts`, `world.spatial_identity` |
-| `world/spatial_transit.py` | 708 |  | `world.spatial_barriers`, `world.spatial_identity` |
+| `world/spatial_transit.py` | 839 |  | `world.spatial_barriers`, `world.spatial_identity` |
 | `world/spatial_walk.py` | 423 |  | `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_routing` |
 | `world/stimulation.py` | 239 |  | `story`, `world.spatial` |
 | `world/structure.py` | 1720 |  | `world.charter_model`, `world.regions`, `world.spatial` |
@@ -1717,14 +1717,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `bind_items()` | 61 | 164 lines |
-| `program_steps()` | 303 | 54 lines |
-| `_rewrite_patch()` | 31 | 28 lines |
-| `event_worlds()` | 238 | 28 lines |
-| `program_from_history()` | 268 | 23 lines |
-| `prune_program()` | 369 | 19 lines |
-| `fold_steps()` | 227 | 9 lines |
-| `_content()` | 293 | 8 lines |
+| `bind_items()` | 62 | 164 lines |
+| `program_steps()` | 304 | 54 lines |
+| `_rewrite_patch()` | 32 | 28 lines |
+| `event_worlds()` | 239 | 28 lines |
+| `program_from_history()` | 269 | 23 lines |
+| `prune_program()` | 370 | 19 lines |
+| `fold_steps()` | 228 | 9 lines |
+| `_content()` | 294 | 8 lines |
 
 ### `world/causal_verification.py`
 
@@ -2353,14 +2353,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_fire_due_events()` | 547 | 133 lines |
-| `_tick_conditions()` | 964 | 130 lines |
+| `_fire_due_events()` | 547 | 135 lines |
+| `_tick_conditions()` | 966 | 130 lines |
 | `read_time_diff()` | 173 | 110 lines |
-| `mechanics_sweep()` | 1253 | 79 lines |
+| `mechanics_sweep()` | 1255 | 79 lines |
 | `beat_time_from_spans()` | 311 | 55 lines |
-| `unanswered_hazard_subjects()` | 1190 | 49 lines |
-| `_schedule_new_arrivals()` | 682 | 46 lines |
-| `_answered_bodies()` | 1156 | 32 lines |
+| `unanswered_hazard_subjects()` | 1192 | 49 lines |
+| `_schedule_new_arrivals()` | 684 | 46 lines |
+| `_answered_bodies()` | 1158 | 32 lines |
 
 ### `world/offscreen.py`
 
@@ -2643,14 +2643,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `merge_scene_with_diff()` | 1579 | 797 lines |
-| `_expire_transient_entity_state()` | 600 | 116 lines |
-| `_shield_standing_bearings()` | 882 | 107 lines |
-| `_merge_room()` | 188 | 99 lines |
-| `_shield_minted_edges()` | 1143 | 95 lines |
-| `beat_movement_cuts()` | 2504 | 94 lines |
-| `sync_scene_passages()` | 1405 | 90 lines |
-| `_mirror_symmetric_barriers()` | 1053 | 88 lines |
+| `merge_scene_with_diff()` | 1580 | 804 lines |
+| `_expire_transient_entity_state()` | 601 | 116 lines |
+| `_shield_standing_bearings()` | 883 | 107 lines |
+| `_merge_room()` | 189 | 99 lines |
+| `_shield_minted_edges()` | 1144 | 95 lines |
+| `beat_movement_cuts()` | 2512 | 94 lines |
+| `sync_scene_passages()` | 1406 | 90 lines |
+| `_mirror_symmetric_barriers()` | 1054 | 88 lines |
 
 ### `world/spatial_orientation.py`
 
@@ -2744,13 +2744,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `apply_transit_dock_edges()` | 452 | 194 lines |
+| `settle_departures()` | 679 | 97 lines |
 | `evict_self_contained_entities()` | 314 | 89 lines |
 | `sync_entity_interior_rooms()` | 131 | 65 lines |
 | `_is_body_entity()` | 62 | 49 lines |
-| `ambient_scope()` | 680 | 29 lines |
+| `ambient_scope()` | 811 | 29 lines |
 | `infer_body_enclosures()` | 225 | 27 lines |
 | `_interior_entry_room()` | 198 | 25 lines |
-| `containment_chain()` | 660 | 19 lines |
 
 ### `world/spatial_walk.py`
 

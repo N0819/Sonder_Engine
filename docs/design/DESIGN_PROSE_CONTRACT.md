@@ -734,18 +734,19 @@ still says "The doors behind stand open to the night beach": minted before
   repair job (`director_repair.declared_gaps`), and a repair answering one
   job in pieces is no longer cut to its first piece (`merge_answers`; 192 of
   844 recovered events had been dropped that way).
-- **A repair copies the draft's own mistakes, and a floor would stop one.**
-  With the transit rules in front of it, the repair of 3979 still wrote the
-  beach as the TARDIS's route, because the draft's other transit writes did;
-  the re-check flagged it (0.80-0.86). A route equal to the ship's own
-  position while it is under way is the place it set off from, which the
-  transit part already forbids -- an engine floor could drop it the way the
-  own-room destination is dropped. It would also cut the rare cart rolling
-  along the very road it stood in, so it is the owner's call. Rerolled live
-  on 2026-09-25 with no grammar and reasoning off, fresh drafts of 3979
-  still wrote the beach route in 3 of 3 samples, and one of twelve rerolls
-  of turn 4398 wrote the beach as the DESTINATION with an ETA of 5 s -- the
-  same floor would answer both.
+- **Where a vehicle sets off from is never where it arrives -- built, by the
+  owner's ruling (2026-09-25):** "the location of departure cannot be the
+  location of arrival and that is perfectly fine for vehicle to be contained
+  in no room with a perpetual in transit state until the story declares
+  otherwise." The repair of 3979 had written the beach as the TARDIS's route
+  because the draft's other transit writes did; fresh drafts with no grammar
+  still did (3 of 3 samples), one reroll of turn 4398 wrote it as the
+  DESTINATION with an ETA of 5 s, and the ship's own position stayed on the
+  beach the whole journey. `spatial_transit.settle_departures` now holds it:
+  setting off keeps `departed_from` for the journey, a destination or route
+  naming it is dropped (its ETA with it), and under way the vehicle stands in
+  its route or in no room until a write brings it in. Rerolled live, the
+  TARDIS left the beach for no room in 2 of 2.
 - **A body shown on a screen is not minted where it stands.** Rerolling
   turn 4398, the figure the Doctor sees on the scanner was minted and left
   in no room, or recorded only as the scanner's state; code now grants

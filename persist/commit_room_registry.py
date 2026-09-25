@@ -128,7 +128,7 @@ def _apply_room_renames(diff, renames):
         state = ent.get("state")
         transit = state.get("transit") if isinstance(state, dict) else None
         if isinstance(transit, dict):
-            for field in ("destination_room", "route_room"):
+            for field in ("destination_room", "route_room", "departed_from"):
                 if transit.get(field) in renames:
                     transit[field] = renames[transit[field]]
 
