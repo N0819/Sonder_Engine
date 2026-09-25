@@ -716,11 +716,13 @@ still says "The doors behind stand open to the night beach": minted before
   Three of the owner's resolve calls encoded 0-2 events of 2,852-5,104
   character accounts (captures 3880, 3890, 3962), and the latest roll of
   turn 4398 (3998) one event of 23 sentences. On eight hand-labeled beats the
-  pass covered 60 of 66 missing sentences at a median 4.1 s a beat -- 3998
-  went from 1 event to 9-10 in 3 of 3 runs -- and declined every false alarm
-  it was handed; the measurements, the thresholds and the limits are in
-  `docs/experiments/ENCODER_REPAIR_2026_09_24.md`. The last roll ran the
-  encoder at reasoning `medium`, and the repair call uses the same role.
+  pass covered 50 of 66 missing sentences (counted by the recovered events'
+  own text) at a median 4-5 s a beat -- 3998 went from 1 event to 9-10 in 3
+  of 3 runs -- and declined every false alarm it was handed; six versions of
+  the repair's framing, and of Jev saying what a flagged write has wrong
+  (where it belongs: yes; which condition fails: no), are measured there
+  too, in `docs/experiments/ENCODER_REPAIR_2026_09_24.md`. The last roll ran
+  the encoder at reasoning `medium`, and the repair call uses the same role.
 - **A repair copies the draft's own mistakes, and a floor would stop one.**
   With the transit rules in front of it, the repair of 3979 still wrote the
   beach as the TARDIS's route, because the draft's other transit writes did;

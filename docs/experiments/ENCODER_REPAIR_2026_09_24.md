@@ -32,13 +32,19 @@ recovered in chronological order.
    `encoder.<channel>`), not the routing question.
 4. Only a finding at its threshold builds a job; consecutive missing sentences
    are one job; an uncited sentence between two missing ones joins them.
-5. ONE `director_repair` call answers every job by id, with the whole draft,
-   the numbered prose and the roster of minted things in front of it; an
-   event job left unanswered or empty is asked once more, alone. Writes to
-   records the repair was not granted are dropped.
-6. Jev places each recovered group among the events of its sentence and its
+5. For each flagged write Jev also says whether its change happens at
+   another event, and which; when both answers are sure, code moves it
+   there and its fix job follows it.
+6. The `director_repair` calls answer every job by id -- recovering events
+   and mending writes as two calls in parallel -- with the whole draft, the
+   numbered prose and the roster of minted things in front of it, and every
+   job quoting the sentences that decide it: a flagged mistake is the
+   prose's to settle, not the draft's or the check's. A job left unanswered
+   or empty is asked once more, alone. Writes to records a call was not
+   granted are dropped.
+7. Jev places each recovered group among the events of its sentence and its
    neighbours; below 0.5 the encoder's `after`, then sentence order.
-7. Only the repaired writes are checked again. Nothing aborts the turn; a
+8. Only the repaired writes are checked again. Nothing aborts the turn; a
    user's Stop still propagates.
 
 ## Data
@@ -88,12 +94,18 @@ their own sentence.
 
 | | |
 |---|---|
-| labeled missing sentences covered after repair | 60 / 66 |
+| labeled missing sentences covered after repair | 50 / 66 |
 | labeled wrong writes changed | 10-12 / 18 |
 | labeled missing ledgers written | 2 -> 4 / 9 (before / after parts shipped whole) |
 | false alarms handed to the repair and declined by it | every one |
 | repair calls per beat | 1 (the one-retry never fired) |
 | wall per beat | median 4.1 s, max 21-25 s (checks 0.25-1.9 s) |
+
+**Corrected 2026-09-25:** the first report said 60/66. That count credited a
+missing sentence to any recovered event stamped with its job's sentences, and
+a job covering a sixteen-sentence run stamps all sixteen on each event it
+returns -- one run recovered two events and was counted as covering six
+sentences. Counted by the events' own text (code's attribution), it is 50/66.
 
 The owner's latest roll (3998) went from 1 event to 9-10 in 3 of 3 runs: the
 Doctor's two lines with the questions they leave open, his hand leaving the
@@ -101,6 +113,54 @@ lever, his turn to the doors, the figure on the beach minted as a person
 standing in the surf, the floor's shudder as a sensory event, and the TARDIS
 `in_transit` with no invented destination or route. Jev placed the group after
 the first event at 0.99.
+
+## After the first report (2026-09-25): the repair's framing, and Jev saying what is wrong
+
+The owner asked whether the repair call was told a mistake was made and to
+compare against the original prose. It was not, in so many words: the prose
+was in its payload and the encoder core calls the prose authoritative, but
+the repair section never said the correction comes from the prose; only an
+event job quoted its sentences; a write Jev flagged arrived with no reason.
+And the owner: "I don't think it would be particularly hard to get jev to
+flag which ledger is wrong." Six versions, the same 24 runs each, scored by
+the events' own text:
+
+| version | what changed | missing sentences | wrong writes changed | missing ledgers | median wall |
+|---|---|---|---|---|---|
+| v1 | the pass as first reported | 50/66 | 10/18 | 4/9 | 4.1 s |
+| v2 | every job quotes its sentences; the prose decides a flagged mistake, not the draft or the check | 46/66 | 6/18 | 5/9 | 4.5 s |
+| v3 | an event job's own "the draft already records it" clause, strengthened; any skipped job retried | 44/66 | 10/18 | 5/9 | 8.1 s |
+| v4 | v3's clause back to v1's; two repair calls in parallel; Jev asked WHAT is wrong as one six-way choice | 41/66 | 9/18 | 5/9 | 5.5 s |
+| v5 | each way of being wrong asked as its own yes/no; a write on the wrong event moved by code | 48/66 | 11/18 | 4/9 | 5.7 s |
+| v6 | only "does it belong at another event, and which" kept; a moved write keeps its fix job | 50/66 | 8/18 | 5/9 | 4.8 s |
+
+Across six versions the totals moved within +-9 of 66 and +-3 of 18 -- eight
+beats and three runs cannot separate them. What the versions did show:
+
+- **Quoting the prose changes what a fix writes, when a fix is answered.**
+  In v1 every run wrote the beach route back into all four of 3979's transit
+  writes, copied from the draft's others; in v2's one run that answered them,
+  none survived. But a repair told each job is a flagged mistake added events
+  for false alarms it used to decline, until the event job's own "when the
+  draft does record it, say why in `none`" was restored (v2 -> v4). Worded
+  more strongly (v3), it declined the one real sixteen-sentence gap in
+  3998 in one run of three.
+- **Jev says WHICH write is wrong (precision 1.00, recall 0.78 at 0.8) and
+  WHERE a misplaced change belongs -- not WHICH condition fails.** Asked as a
+  six-way choice it answered 0.24-0.65 and called the transits' wrong value a
+  wrong subject; asked as five yes/no questions it said yes to nearly all of
+  them (0.52-0.80) for every flagged write; asked which record a change
+  belongs in, it named one even for writes filed in the right one. Asked
+  which event, it named e5 for the time-travel story's premature pose at
+  0.99-1.00 in every run -- code moved it and the repair refined it there --
+  and gathered 3979's stray transit writes on the event where the ship
+  commits at 0.89-0.94.
+- **The repair call skips jobs.** One run answered three of nine and skipped
+  the four transit fixes between them; retrying every skipped job, and
+  splitting event recovery from write mending into parallel calls, is what
+  v4-v6 carry.
+- **No wording fixed the beach route.** Every version wrote it back in most
+  runs; the engine floor is the reliable fix (see Limits).
 
 ## Limits
 
@@ -123,5 +183,6 @@ the first event at 0.99.
   `director_specialist`.** The repair call uses that role, so on it every
   repair call -- like the draft itself, 62-137 s on the owner's last reroll --
   would run minutes, not the 1.5-23 s measured here.
-- One labeler, eight beats. The next step is more labeled beats, and a live
-  play with the setting on.
+- One labeler, eight beats: the versions above differ by less than the
+  noise. The next step is more labeled beats -- enough to tell a +-5 of 66
+  apart -- and a live play with the setting on.
