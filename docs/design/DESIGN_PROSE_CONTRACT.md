@@ -741,7 +741,17 @@ still says "The doors behind stand open to the night beach": minted before
   position while it is under way is the place it set off from, which the
   transit part already forbids -- an engine floor could drop it the way the
   own-room destination is dropped. It would also cut the rare cart rolling
-  along the very road it stood in, so it is the owner's call.
+  along the very road it stood in, so it is the owner's call. Rerolled live
+  on 2026-09-25 with no grammar and reasoning off, fresh drafts of 3979
+  still wrote the beach route in 3 of 3 samples, and one of twelve rerolls
+  of turn 4398 wrote the beach as the DESTINATION with an ETA of 5 s -- the
+  same floor would answer both.
+- **A body shown on a screen is not minted where it stands.** Rerolling
+  turn 4398, the figure the Doctor sees on the scanner was minted and left
+  in no room, or recorded only as the scanner's state; code now grants
+  `positions` wherever a mint needs one, and two card wordings that a
+  device carries a body's image, never the body, changed nothing in 6 rolls
+  (`docs/experiments/ENCODER_REPAIR_2026_09_24.md`).
 - **Duplicated events are not checked.** Capture 3979 writes the spark, the
   full vibration and the tilt twice each; fresh drafts do it about 3 times in
   213, and the one signal found (an event re-telling part of another) also

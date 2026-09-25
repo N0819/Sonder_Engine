@@ -266,11 +266,56 @@ a character speaks inside narration ("Kansai," "come on, come on, come on."),
 which is its own event by the encoder's rules, so it would need speech held
 out, and at that rate no check was built.
 
+## Tested live, 2026-09-25, with the credit back
+
+**The pipeline as it runs, all 30 samples** (ten beats, three each, reasoning
+off): the draft with no format covered 196/216 labeled sentences (0.91), with
+no early stop in 24 labeled runs and no declared act uncarried in 30 -- and
+after the pass, the same 196/216. On drafts this complete the pass recovered
+no labeled sentence: it applied 64 jobs, declined 74, left none unanswered,
+and the one known wrong write -- capture 3979's beach written as the ship's
+route, 5 writes over 3 runs -- survived it every time. Its median cost was
+5.5 s a beat, the draft's 11.0 s.
+
+**The pass on the frozen drafts again (v9, merge fix in):** 48/66 missing
+sentences, 10/18 wrong writes, 5/9 ledgers, median 5.9 s; 0 of 141 returned
+events dropped (v8: 17 of 115). Declared acts were recovered in 8 of 9 runs;
+the ninth stopped inside the repair -- 3998's sixteen-sentence job answered
+five events in, before the Doctor's closing line -- so a job whose answer
+carries fewer of its declared acts than it was given is now asked once more,
+and the fuller of the two answers is kept.
+
+**Chat 154 turn 4398 rerolled from `director_resolve`** on copies of the
+owner's database, their own routing, the repair on:
+
+| encoder reasoning | rolls | a turn | the draft call | declared acts carried | the TARDIS |
+|---|---|---|---|---|---|
+| `medium` (as it was set) | 2 | 221, 223 s | 157, 163 s | 8 of 8 | in transit, no invented destination or route, both |
+| `off` (the owner's call, set in their database) | 12 | 44-115 s, median about 59 | 5-16 s | all | in transit 10, sealed 2 (the prose had not launched it); once the departure beach written as the destination, an ETA of 5 s |
+
+Both pages read as the beat: the Doctor's two lines in order, the lever let
+go, the sealed doors behind Hinami. What the rolls found:
+
+- **The figure on the beach is not in the world.** Before any change, 4 of
+  the first 6 rolls minted it and none placed it -- 3 by an encoder that had
+  not been granted `positions`, 1 by the repair, which is never given it --
+  and a body is stood by `positions` and nothing else, so it was nowhere.
+  Code now closes both: a thing the answer mints and neither positions nor
+  transfers implies `positions` for the draft (`implied_tools`), and a
+  repair holding `entities` holds `positions`. The draft's rule fired once;
+  the widened answer still left the figure unplaced, calling it "only a
+  scanner image". Two wordings of the `entities` part's own test ("a body
+  heard over a speaker has a place") extended to a body shown on a screen
+  were tried on 6 more rolls: none minted the figure at all -- each recorded
+  it as the scanner's state -- so both were dropped. Open.
+- **A destination equal to the place the ship is leaving** joins the route
+  written that way (3979). The own-interior floor does not cover it, and the
+  repair's checks did not flag it.
+
 ## Limits
 
-- **The merge fix is unmeasured live**, and so is the pipeline beyond 12
-  samples: the OpenRouter account these runs used, the one the owner's own
-  play routes through, had $2.85 of $710 left when they stopped.
+- **The merge fix is measured on frozen drafts only** (v9); the pipeline's
+  own fresh drafts rarely leave a job big enough to split.
 - **The format measurement is one model on one route**: GLM 5.2 through
   OpenRouter (BaseTen, Fireworks, Parasail). The owner's replay route
   (NanoGPT) and the encoders tried before (DeepSeek v4.1 Flash, Ling 3.0
