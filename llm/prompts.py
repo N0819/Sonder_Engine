@@ -436,6 +436,27 @@ def prose_contract_text(name, language=None):
     return str(_prompt_card(language)["prose_contract"][name])
 
 
+#: The longest definition `encoder_definition` returns, cut back to a
+#: sentence end.
+ENCODER_DEFINITION_CHARS = 420
+
+
+def encoder_definition(channel, language=None):
+    """What a channel's record holds, in the encoder card's own words: the
+    opening paragraph of its `encoder.<channel>` chunk, cut back to the last
+    sentence end within `ENCODER_DEFINITION_CHARS`. It is the contract the
+    encoder writes by, so a check asking whether a write is missing or wrong
+    judges by the same rule -- not by the routing question, which is written
+    to grant the tool generously ("a cry" as a signal, measured 2026-09-24)."""
+    text = str((_prompt_card(language).get("encoder") or {}).get(channel) or "").strip()
+    first = text.split("\n\n", 1)[0].strip()
+    if len(first) <= ENCODER_DEFINITION_CHARS:
+        return first
+    head = first[:ENCODER_DEFINITION_CHARS]
+    cut = max(head.rfind(". "), head.rfind("。"), head.rfind(".\n"))
+    return head[:cut + 1] if cut > 0 else head
+
+
 def unified_specialist_prompt(channels, language=None, parts=None):
     """The prose contract's encoder sheet, from its own card.
 

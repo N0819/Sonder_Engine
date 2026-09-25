@@ -82,16 +82,23 @@ def test_each_check_is_anchored_on_what_it_judges():
     units = repair.sentences(PROSE3)
     questions, about = repair.battery(units, _draft(), ["positions", "poses"])
     # One per sentence; the sentence nothing comes from is compared with its
-    # neighbours' events, so an attribution one sentence off still counts.
+    # neighbours' events -- carried in the question, not named for lookup.
     assert about["ev:s2"] == {"kind": "event", "sentence": "s2"}
-    assert "e1, e2" in questions["ev:s2"]["instructions"]
-    # One per event and granted channel, and one per existing write.
+    ask = questions["ev:s2"]["instructions"]
+    assert "The wind rises against the glass." in ask
+    assert '"Mara climbs the stair into the lamp room."' in ask and '"The lamp is cold."' in ask
+    # One per existing write; a missing-ledger question only where the event
+    # writes nothing to that record -- whether a write exists is code's fact.
     assert {k for k in about if k.startswith("led:")} == {
-        "led:e1:positions", "led:e1:poses", "led:e2:positions", "led:e2:poses"}
+        "led:e1:poses", "led:e2:positions", "led:e2:poses"}
     assert about["bad:e1:0:positions"] == {"kind": "fix", "event": "e1", "index": 0,
                                            "channel": "positions"}
-    # The ledger's own routing question says what the record holds.
-    assert "Does any body end the passage" in questions["led:e1:positions"]["instructions"]
+    # What the record holds is the encoder card's own contract; the event
+    # and its write ride in the question.
+    wrong = questions["bad:e1:0:positions"]["instructions"]
+    assert "positions names the room each body ends the beat in" in wrong
+    assert '{"Mara": "lamp_room"}' in wrong and "Mara climbs the stair" in wrong
+    assert "It writes nothing to the poses record" in questions["led:e1:poses"]["instructions"]
     assert all(q["type"] == "noul" for q in questions.values())
     state = repair.jev_state(units, _draft(), {})
     assert "e1 (cites s1)" in state and "e2 (cites s3)" in state
@@ -102,12 +109,15 @@ def test_only_a_confident_yes_builds_a_job():
              "led:e1:poses": {"kind": "ledger", "event": "e1", "channel": "poses"},
              "bad:e1:0:positions": {"kind": "fix", "event": "e1", "index": 0,
                                     "channel": "positions"},
+             "bad:e2:0:poses": {"kind": "fix", "event": "e2", "index": 0, "channel": "poses"},
              "led:e1:positions": {"kind": "ledger", "event": "e1", "channel": "positions"}}
-    answers = {"ev:s2": {"noul": 0.97}, "led:e1:poses": {"noul": 0.62},
-               "bad:e1:0:positions": {"noul": 0.91}, "led:e1:positions": {"noul": 0.99}}
+    answers = {"ev:s2": {"noul": 0.97}, "led:e1:poses": {"noul": 0.42},
+               "bad:e1:0:positions": {"noul": 0.91}, "bad:e2:0:poses": {"noul": 0.62},
+               "led:e1:positions": {"noul": 0.99}}
     confident, unsure = repair.findings(about, answers)
     assert {f["key"] for f in confident} == {"ev:s2", "bad:e1:0:positions", "led:e1:positions"}
-    assert [f["key"] for f in unsure] == ["led:e1:poses"]
+    # Between 0.5 and a check's threshold is logged, never acted on.
+    assert [f["key"] for f in unsure] == ["bad:e2:0:poses"]
     native = [{"ref": "e2", "index": 0, "channel": "sensory_events", "detail": "no room"}]
     draft = _draft()
     draft[1]["transforms"] = [{"item": "Mara", "patch": {"sensory_events": [{"kind": "sound"}]}}]
@@ -117,6 +127,45 @@ def test_only_a_confident_yes_builds_a_job():
     assert [(j["id"], j["kind"]) for j in jobs] == [("j1", "fix"), ("j2", "event"), ("j3", "fix")]
     assert jobs[0]["reason"] == "no room"
     assert jobs[2]["write"] == {"Mara": "lamp_room"}
+
+
+def test_consecutive_missing_sentences_are_one_job():
+    """Chat 154 turn 4398's second roll: one line of dialogue ran across six
+    sentences and none was encoded -- a job each would invite it written
+    six times."""
+    found = [{"kind": "event", "sentence": s, "p": p}
+             for s, p in (("s3", 0.9), ("s2", 0.85), ("s4", 0.95), ("s7", 0.99))]
+    jobs = repair.plan_jobs([], found, _draft())
+    assert [(j["id"], j["sentences"]) for j in jobs] == [
+        ("j1", ["s7"]), ("j2", ["s2", "s3", "s4"])]
+    assert jobs[1]["p"] == 0.95 and jobs[1]["sentence"] == "s2"
+    units = repair.sentences("A. B happens. C happens. D happens. E. F. G happens.")
+    view = repair._job_view(jobs[1], units)
+    assert view == {"id": "j2", "kind": "event", "sentences": ["s2", "s3", "s4"],
+                    "text": "B happens. C happens. D happens."}
+
+
+def test_an_uncited_gap_between_two_missing_sentences_joins_them():
+    found = [{"kind": "event", "sentence": "s2", "p": 0.7},
+             {"kind": "event", "sentence": "s6", "p": 0.8}]
+    cited = {"s1": [0], "s2": [], "s3": [], "s4": [], "s5": [], "s6": [], "s7": [1]}
+    joined = repair.bridge(found, cited)
+    jobs = repair.plan_jobs([], joined, _draft())
+    assert [j["sentences"] for j in jobs] == [["s2", "s3", "s4", "s5", "s6"]]
+    # A gap holding an encoded sentence is not bridged.
+    cited["s4"] = [1]
+    assert [j["sentences"] for j in repair.plan_jobs([], repair.bridge(found, cited), _draft())] == [
+        ["s6"], ["s2"]]
+
+
+def test_an_event_telling_several_sentences_is_attributed_to_each():
+    units = repair.sentences("The ship groans. The sound deepens. Then the floor gives a "
+                             "long, rolling lurch beneath them as the ship breaks free. "
+                             "He does not move yet.")
+    events = [{"event": "The ship groans, the sound deepening; the floor gives a long, "
+                        "rolling lurch beneath them as the ship breaks free."},
+              {"event": "The Doctor, who does not move, watches the rotor."}]
+    assert repair.attribute(events, units) == [["s1", "s2", "s3"], ["s4"]]
 
 
 # ---- applying ------------------------------------------------------------------
@@ -269,7 +318,7 @@ def test_a_line_the_draft_dropped_is_recovered(temp_db, monkeypatch):
     repair_call = calls[2]
     assert "REPAIR." in repair_call["system"]
     assert repair_call["payload"]["prose"].startswith("[s1] Mara climbs")
-    assert repair_call["payload"]["jobs"] == [{"id": "j1", "kind": "event", "sentence": "s2",
+    assert repair_call["payload"]["jobs"] == [{"id": "j1", "kind": "event", "sentences": ["s2"],
                                                "text": "\"The lamp is cold,\" she calls down."}]
     # The completed ledgers ride along: the whole draft, by reference, with
     # the sentences code attributed each event to.

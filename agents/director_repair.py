@@ -57,9 +57,17 @@ from llm.prompts import prose_contract_text, unified_specialist_prompt
 REPAIR_SETTING = "prose_contract_repair"
 #: The yes-probability at which a check's finding builds a job. Anything
 #: below is logged, never acted on: an unsure judgment costs no call and
-#: fails no beat. Named per the owner's ask-before-limiting rule.
-MISSING_EVENT_AT = 0.8
-MISSING_LEDGER_AT = 0.8
+#: fails no beat. Named per the owner's ask-before-limiting rule. Set from
+#: eight hand-labeled beats (chats 153/154 and the time-travel test story,
+#: 2026-09-24, three runs each; Jev's probabilities rarely pass 0.8):
+#: a missing event at 0.5 -- precision 0.67, recall 0.50 -- and a missing
+#: ledger at 0.5 -- precision 0.46, recall 0.67 -- because a false alarm
+#: costs only a job the repair declines: across 24 whole-pass runs the
+#: repair declined every false alarm it was handed; a wrong write at 0.8 --
+#: precision 1.00, recall 0.78 -- because a correct write sent to be
+#: "fixed" can come back changed.
+MISSING_EVENT_AT = 0.5
+MISSING_LEDGER_AT = 0.5
 WRONG_LEDGER_AT = 0.8
 #: A Jev placement below this confidence falls back to the encoder's own
 #: `after`, then to sentence order.
@@ -190,11 +198,31 @@ def refs_of(events):
 #: (of the best one's) to be attributed too, for an event told across two.
 ATTRIBUTION_MIN = 0.2
 ATTRIBUTION_SPAN = 0.6
+#: The share of a SENTENCE an event must hold as ONE unbroken run of its
+#: text to be attributed to it as well -- the event that tells three short
+#: sentences at once ("The TARDIS groans. The sound deepens. ... the floor
+#: gives a long, rolling lurch", replay of chat 153) is scored best against
+#: the longest and holds the other two whole. One run, not scattered
+#: trigrams: a short common sentence ("He does not move yet.") shares
+#: trigrams with any long event about the same man.
+ATTRIBUTION_HOLDS = 0.6
 
 
 def _grams(text, n=3):
     text = " ".join(str(text or "").casefold().split())
     return {text[i:i + n] for i in range(len(text) - n + 1)} if len(text) >= n else set()
+
+
+def _holds(event_text, sentence):
+    """Does the event's text hold most of the sentence as one unbroken run?"""
+    from difflib import SequenceMatcher
+    sentence = " ".join(str(sentence or "").casefold().split())
+    event_text = " ".join(str(event_text or "").casefold().split())
+    if len(sentence) < 3 or not event_text:
+        return False
+    match = SequenceMatcher(None, sentence, event_text, autojunk=False).find_longest_match(
+        0, len(sentence), 0, len(event_text))
+    return match.size / len(sentence) >= ATTRIBUTION_HOLDS
 
 
 def attribute(events, units):
@@ -219,10 +247,10 @@ def attribute(events, units):
         if scores[best] < ATTRIBUTION_MIN:
             out.append([])
             continue
-        out.append([units[j]["id"] for j in (best - 1, best, best + 1)
-                    if 0 <= j < len(units)
-                    and (j == best or scores[j] >= max(ATTRIBUTION_MIN,
-                                                       ATTRIBUTION_SPAN * scores[best]))])
+        held = {j for j, unit in enumerate(units) if _holds(text, unit["text"])}
+        near = {j for j in (best - 1, best + 1) if 0 <= j < len(units)
+                and scores[j] >= max(ATTRIBUTION_MIN, ATTRIBUTION_SPAN * scores[best])}
+        out.append([units[j]["id"] for j in sorted({best} | near | held)])
     return out
 
 
@@ -424,7 +452,7 @@ def jev_state(units, events, payload):
     """What every check is judged against: the numbered prose, the draft's
     events in order with their writes, and the standing records of what the
     beat touches."""
-    identities = (payload or {}).get("identity_index") or {}
+    identities = names_of(payload)
     lines = ["PROSE:"] + [f"[{u['id']}] {u['text'].strip()}" for u in units if u["text"].strip()]
     lines += ["", "EVENTS, in the order they happen:"]
     attributed = attribute(events, units)
@@ -463,45 +491,125 @@ def _fill(text, **values):
     return text
 
 
-def battery(units, events, channels, language=None):
+def names_of(payload):
+    """`{key: name}` for every person and thing the payload knows -- an
+    event's source may be an entity id, shown to Jev by what it is called."""
+    names = {}
+    for key, value in ((payload or {}).get("identity_index") or {}).items():
+        if value:
+            names[str(key)] = str(value)
+    world = (payload or {}).get("world_index") or {}
+    for source in ((payload or {}).get("entities") or {}, world.get("entities") or {}):
+        for key, value in source.items() if isinstance(source, dict) else []:
+            if isinstance(value, dict) and value.get("name"):
+                names.setdefault(str(key), str(value["name"]))
+    return names
+
+
+def _event_line(ref, event, identities=None):
+    source = str(event.get("source_entity_id") or "")
+    who = (identities or {}).get(source) or source or "-"
+    kind = "SAYS" if event.get("speech") else "DOES"
+    return f'{ref} ({who} {kind}): "{_clip(event.get("event") or "", 300)}"'
+
+
+def battery(units, events, channels, language=None, identities=None, parts=None):
     """`{key: noul question}`, every check this draft needs, and `{key:
-    what it is about}` for reading the answers back."""
-    from llm.prompts import jev_channel_questions
+    what it is about}` for reading the answers back.
+
+    EACH QUESTION CARRIES ITS OWN MATERIAL -- the sentence and the events it
+    is compared with, the event and its writes -- rather than naming them for
+    Jev to look up in the state. Measured 2026-09-24 on eight labeled beats:
+    asked by reference, a sentence event 1 copies word for word still scored
+    0.52-0.58 "missing", and an obligation already written scored up to 0.74
+    "missing"; the one check that carried its write in the question was the
+    one that worked (precision 0.84, recall 0.89)."""
+    from llm.prompts import ENCODER_PART_SEP, encoder_definition, encoder_parts
     refs = refs_of(events)
     cited = citations(events, units)
     missing_event = prose_contract_text("check_missing_event", language)
     missing_ledger = prose_contract_text("check_missing_ledger", language)
     wrong_ledger = prose_contract_text("check_wrong_ledger", language)
-    kinds = jev_channel_questions(list(channels or ()), language)
+    definitions = {c: encoder_definition(c, language) for c in channels or ()}
+    definitions = {c: d for c, d in definitions.items() if d}
+    # A PART IS ASKED BY ITS OWN DEFINITION. The rarer kinds of change a
+    # big record holds have parts of their own in the encoder card, and the
+    # record's opening does not reach them: asked as `entities`, a ship
+    # breaking free of the beach scored 0.37 missing; its transit part
+    # says a moving room is moved by its entity's state. Every part of a
+    # held record is asked, whatever routing picked -- a missed write is
+    # what routing can miss too.
+    if parts is None:
+        parts = [part for channel in definitions for part in encoder_parts(channel, language)]
+    part_definitions = {p: encoder_definition(p, language) for p in parts
+                        if p.split(ENCODER_PART_SEP, 1)[0] in definitions}
+    part_definitions = {p: d for p, d in part_definitions.items() if d}
     questions, about = {}, {}
     for unit in units:
         if not re.search(r"\w", unit["text"]):
             continue
         own, near = _neighbours(cited, units, unit["id"])
-        shown = ", ".join(refs[i] for i in own + near) or "none"
+        shown = "; ".join(_event_line(refs[i], events[i], identities)
+                          for i in own + near) or "none"
         key = f"ev:{unit['id']}"
         questions[key] = {"type": "noul", "instructions": _fill(
-            missing_event, sentence=unit["id"], events=shown)}
+            missing_event, sentence=unit["id"], sentence_text=unit["text"].strip(),
+            events=shown)}
         about[key] = {"kind": "event", "sentence": unit["id"]}
     for ref, event in zip(refs, events):
+        line = _event_line(ref, event, identities)
         written = {}
         for index, transform in enumerate(event.get("transforms") or []):
             patch = transform.get("patch") if isinstance(transform, dict) else None
             for channel, value in (patch or {}).items() if isinstance(patch, dict) else []:
-                written.setdefault(channel, []).append(index)
-                if channel not in kinds:
+                written.setdefault(channel, []).append(value)
+                if channel not in definitions:
                     continue
                 key = f"bad:{ref}:{index}:{channel}"
                 questions[key] = {"type": "noul", "instructions": _fill(
-                    wrong_ledger, event=ref, channel=channel, question=kinds[channel],
-                    write=_clip(value))}
+                    wrong_ledger, event=line, channel=channel,
+                    definition=definitions[channel], write=_clip(value))}
                 about[key] = {"kind": "fix", "event": ref, "index": index, "channel": channel}
-        for channel, question in kinds.items():
+        # A MISSING LEDGER IS ASKED ONLY WHERE THE EVENT WRITES NOTHING TO IT.
+        # Whether a write already records the change is a fact code holds;
+        # asked of Jev inside the same question, it was ignored -- events
+        # carrying an obligation, a pose or a hatch write scored 0.61-0.78
+        # "missing" on 2026-09-24's labeled beats. A write that is present
+        # but wrong is the wrong-ledger check's.
+        for channel, definition in definitions.items():
+            if channel in written:
+                continue
             key = f"led:{ref}:{channel}"
             questions[key] = {"type": "noul", "instructions": _fill(
-                missing_ledger, event=ref, channel=channel, question=question)}
+                missing_ledger, event=line, channel=channel, definition=definition)}
             about[key] = {"kind": "ledger", "event": ref, "channel": channel}
+        for part, definition in part_definitions.items():
+            channel = part.split(ENCODER_PART_SEP, 1)[0]
+            if channel in written:
+                continue
+            key = f"led:{ref}:{part}"
+            questions[key] = {"type": "noul", "instructions": _fill(
+                missing_ledger, event=line, channel=channel, definition=definition)}
+            about[key] = {"kind": "ledger", "event": ref, "channel": channel, "part": part}
     return questions, about
+
+
+def bridge(confident, cited):
+    """A sentence no event comes from, lying between two sentences found
+    missing, joins them: one occurrence told across several sentences is
+    often judged sentence by sentence, and a line of dialogue cut into
+    fragments reads as narration once its quotation marks are elsewhere
+    ("Odds are this is the smoothest flight you'll ever have." scored 0.11
+    in the middle of a six-sentence line nothing encoded, chat 154 turn
+    4398's second roll). Joined, the repair sees the whole span."""
+    flagged = sorted(int(f["sentence"][1:]) for f in confident if f["kind"] == "event")
+    extra = []
+    for low, high in zip(flagged, flagged[1:]):
+        gap = [f"s{n}" for n in range(low + 1, high)]
+        if gap and all(not cited.get(sid) for sid in gap):
+            extra.extend({"kind": "event", "sentence": sid, "p": 0.0, "bridged": True}
+                         for sid in gap)
+    return list(confident) + extra
 
 
 _AT = {"event": MISSING_EVENT_AT, "ledger": MISSING_LEDGER_AT, "fix": WRONG_LEDGER_AT}
@@ -539,7 +647,27 @@ def plan_jobs(native, confident, events):
         seen.add(key)
         jobs.append({"kind": "fix", "event": failure["ref"], "index": failure["index"],
                      "channel": failure["channel"], "reason": failure["detail"], "p": 1.0})
+    # CONSECUTIVE MISSING SENTENCES ARE ONE JOB. One occurrence is often
+    # told across several sentences -- a speech the splitter cut at its own
+    # stops -- and a job per sentence invites the repair to write it once
+    # per sentence (chat 154 turn 4398's second roll: one line of dialogue
+    # across six sentences, none encoded).
+    runs = []
+    for finding in sorted((f for f in confident if f["kind"] == "event"),
+                          key=lambda f: int(f["sentence"][1:])):
+        n = int(finding["sentence"][1:])
+        if runs and n == runs[-1]["last"] + 1:
+            runs[-1]["sentences"].append(finding["sentence"])
+            runs[-1]["last"] = n
+            runs[-1]["p"] = max(runs[-1]["p"], finding["p"])
+        else:
+            runs.append({"kind": "event", "sentence": finding["sentence"],
+                         "sentences": [finding["sentence"]], "last": n, "p": finding["p"]})
+    for run in runs:
+        run.pop("last")
+    confident = runs + [f for f in confident if f["kind"] != "event"]
     ranked = sorted(confident, key=lambda f: (-f["p"], {"event": 0, "fix": 1, "ledger": 2}[f["kind"]]))
+    ledger_jobs = {}
     for finding in ranked:
         if finding["kind"] == "event":
             key = ("event", finding["sentence"])
@@ -549,10 +677,22 @@ def plan_jobs(native, confident, events):
             key = ("ledger", finding["event"], finding["channel"])
             if (finding["event"], finding["channel"]) in fixing:
                 continue
+            # A record and its part found missing on one event are one job,
+            # carrying the part so the repair holds its rules.
+            if key in ledger_jobs:
+                if finding.get("part"):
+                    ledger_jobs[key].setdefault("parts", [])
+                    if finding["part"] not in ledger_jobs[key]["parts"]:
+                        ledger_jobs[key]["parts"].append(finding["part"])
+                continue
         if key in seen:
             continue
         seen.add(key)
-        job = {k: v for k, v in finding.items() if k not in ("key",)}
+        job = {k: v for k, v in finding.items() if k not in ("key", "part")}
+        if finding.get("part"):
+            job["parts"] = [finding["part"]]
+        if finding["kind"] == "ledger":
+            ledger_jobs[key] = job
         jobs.append(job)
     jobs = jobs[:MAX_JOBS]
     for n, job in enumerate(jobs, 1):
@@ -585,10 +725,13 @@ def _draft(events, units):
 def _job_view(job, units):
     view = {"id": job["id"], "kind": job["kind"]}
     if job["kind"] == "event":
-        text = next((u["text"].strip() for u in units if u["id"] == job["sentence"]), "")
-        view.update(sentence=job["sentence"], text=text)
+        sentences = job.get("sentences") or [job["sentence"]]
+        text = " ".join(u["text"].strip() for u in units if u["id"] in sentences)
+        view.update(sentences=sentences, text=text)
     else:
         view.update(event=job["event"], channel=job["channel"])
+        if job.get("parts"):
+            view["parts"] = list(job["parts"])
         if job["kind"] == "fix":
             view["write"] = job.get("write")
             if job.get("reason"):
@@ -600,10 +743,18 @@ def repair_tools(ctx, stage, units, jobs, model_payload, facts, channels, parts)
     """The tools the targeted encoder holds: whatever the ledger and fix
     jobs name, and for a missing sentence whatever Jev picks for THAT
     sentence -- falling back to the beat's own tools."""
+    from llm.prompts import encoder_parts
     from .director_prose import part_channel, select_channels
     tools = [job["channel"] for job in jobs if job["kind"] in ("ledger", "fix")]
-    picked_parts = []
-    missing = [job["sentence"] for job in jobs if job["kind"] == "event"]
+    # A record being mended ships whole, parts and all: the transit fixes
+    # of chat 154 turn 4398 were answered from the `entities` chunk alone,
+    # never saw that a route is not the place a ship set off from, and wrote
+    # the beach back in (the re-check still judged them wrong, 0.82-0.86).
+    picked_parts = [part for job in jobs for part in job.get("parts") or ()]
+    picked_parts += [part for channel in dict.fromkeys(tools)
+                     for part in encoder_parts(channel, ctx.language)]
+    missing = [sid for job in jobs if job["kind"] == "event"
+               for sid in job.get("sentences") or [job["sentence"]]]
     record = {}
     if missing:
         text = " ".join(u["text"].strip() for u in units if u["id"] in missing)
@@ -611,7 +762,7 @@ def repair_tools(ctx, stage, units, jobs, model_payload, facts, channels, parts)
         record = {"sentences": missing, "selected": chosen, "parts": routing.get("parts"),
                   "seconds": routing.get("seconds"), "failed": routing.get("failed")}
         tools += [c for c in chosen if c in channels or not channels]
-        picked_parts = list(routing.get("parts") or [])
+        picked_parts += list(routing.get("parts") or [])
     tools = list(dict.fromkeys(t for t in tools if t))
     if not tools:
         tools = list(channels)
@@ -719,7 +870,7 @@ def apply_answers(events, units, jobs, answers, slots):
     events = copy.deepcopy(list(events))
     refs = refs_of(events)
     by_id = {job["id"]: job for job in jobs}
-    report = {"applied": [], "unanswered": [], "unknown": [], "declined": {}}
+    report = {"applied": [], "unanswered": [], "unknown": [], "declined": {}, "empty": []}
     inserts = {}
     seen = set()
     for answer in answers:
@@ -732,41 +883,50 @@ def apply_answers(events, units, jobs, answers, slots):
         if job["id"] in seen:
             continue
         seen.add(job["id"])
-        if str(answer.get("none") or "").strip() and not (
-                answer.get("events") or answer.get("transforms") or answer.get("remove")
-                or answer.get("move_to")):
-            report["declined"][job["id"]] = str(answer["none"])[:300]
+        new = [e for e in answer.get("events") or [] if isinstance(e, dict)]
+        writes = [t for t in answer.get("transforms") or []
+                  if isinstance(t, dict) and isinstance(t.get("patch"), dict) and t["patch"]]
+        move_to = str(answer.get("move_to") or "")
+        moves = job["kind"] == "fix" and move_to in refs and move_to != job.get("event")
+        removes = job["kind"] == "fix" and bool(answer.get("remove"))
+        if not (new or writes or moves or removes):
+            # AN EMPTY ANSWER CHANGES NOTHING. A fix used to drop the old
+            # write before looking at what came back, so an answer with no
+            # content deleted it (2026-09-24, first repair runs).
+            if str(answer.get("none") or "").strip():
+                report["declined"][job["id"]] = str(answer["none"])[:300]
+            else:
+                report["empty"].append(job["id"])
             continue
         if job["kind"] == "event":
-            new = [e for e in answer.get("events") or [] if isinstance(e, dict)]
             if new:
                 for event in new:
-                    event.setdefault("sources", [job["sentence"]])
+                    event.setdefault("sources", list(job.get("sentences") or [job["sentence"]]))
                 inserts[job["id"]] = new
                 report["applied"].append(job["id"])
+            else:
+                report["empty"].append(job["id"])
             continue
         target = refs.index(job["event"]) if job["event"] in refs else None
         if target is None:
             report["unknown"].append(job["id"])
             continue
-        writes = [t for t in answer.get("transforms") or []
-                  if isinstance(t, dict) and isinstance(t.get("patch"), dict) and t["patch"]]
         if job["kind"] == "fix":
             transform = (events[target].get("transforms") or [None] * (job["index"] + 1))[job["index"]]
             if isinstance(transform, dict) and isinstance(transform.get("patch"), dict):
                 transform["patch"].pop(job["channel"], None)
-            move_to = str(answer.get("move_to") or "")
-            if move_to in refs and move_to != job["event"] and job.get("write") is not None:
+            if moves and job.get("write") is not None:
                 events[refs.index(move_to)].setdefault("transforms", []).append(
                     {"item": (transform or {}).get("item", ""),
                      "patch": {job["channel"]: job["write"]}})
             elif writes:
                 events[target].setdefault("transforms", []).extend(writes)
             report["applied"].append(job["id"])
+        elif writes:
+            events[target].setdefault("transforms", []).extend(writes)
+            report["applied"].append(job["id"])
         else:
-            if writes:
-                events[target].setdefault("transforms", []).extend(writes)
-                report["applied"].append(job["id"])
+            report["empty"].append(job["id"])
     for event in events:
         if isinstance(event, dict) and event.get("transforms"):
             event["transforms"] = [t for t in event["transforms"]
@@ -854,7 +1014,8 @@ def _check_and_repair(ctx, stage, sc, units, events, channels, parts, model_payl
         record["native_failed"] = str(exc)[:300]
     record["native"] = native
 
-    questions, about = battery(units, events, channels, ctx.language)
+    identities = names_of(payload)
+    questions, about = battery(units, events, channels, ctx.language, identities)
     record["questions"] = len(questions)
     state = jev_state(units, events, payload)
     try:
@@ -866,6 +1027,7 @@ def _check_and_repair(ctx, stage, sc, units, events, channels, parts, model_payl
         record["jev_failed"] = str(exc)[:300]
         ctx.add_warning(f"{stage}: encoder check could not ask the decision model: {exc}")
     confident, unsure = findings(about, answers)
+    confident = bridge(confident, citations(events, units))
     record["found"] = [{k: f[k] for k in f if k != "key"} for f in confident]
     record["unsure"] = len(unsure)
     record["check_seconds"] = round(time.time() - t1, 3)
@@ -882,9 +1044,53 @@ def _check_and_repair(ctx, stage, sc, units, events, channels, parts, model_payl
     answers_, notes = call_repair(ctx, sc, units, events, jobs, tools, tool_parts,
                                   model_payload, view, extras, rooms_elsewhere, new_places,
                                   base_payload)
+    # THE REPAIR CALL STOPS SHORT AS THE ENCODER DOES: on its first runs it
+    # answered a fix and skipped the sixteen-sentence event job beside it,
+    # and answered another with one event where the next run gave twenty-five
+    # (chat 154 turn 4398, 2026-09-24). An event job left unanswered, or
+    # answered with nothing and no reason, is asked ONCE more, alone.
+    answered = {str(a.get("id") or ""): a for a in answers_ if isinstance(a, dict)}
+    leftover = [job for job in jobs if job["kind"] == "event" and (
+        job["id"] not in answered
+        or not (answered[job["id"]].get("events") or str(answered[job["id"]].get("none") or "").strip()))]
+    if leftover:
+        again, more_notes = call_repair(ctx, sc, units, events, leftover, tools, tool_parts,
+                                        model_payload, view, extras, rooms_elsewhere,
+                                        new_places, base_payload)
+        record["retried"] = [job["id"] for job in leftover]
+        redo = {str(a.get("id") or ""): a for a in again if isinstance(a, dict)}
+        answers_ = [a for a in answers_ if not (isinstance(a, dict)
+                                                and str(a.get("id") or "") in redo)]
+        answers_ += list(redo.values())
+        notes = list(notes) + list(more_notes)
     record["repair_seconds"] = round(time.time() - t2, 3)
+    # A repair writes only the tools it was granted; anything else is
+    # dropped here and said (a first run wrote a doorway edge and a station
+    # into an event it was asked to recover).
+    granted = set(tools)
+    stray = []
+    for answer in answers_:
+        if not isinstance(answer, dict):
+            continue
+        for holder in [answer] + [e for e in answer.get("events") or [] if isinstance(e, dict)]:
+            for transform in holder.get("transforms") or []:
+                patch = transform.get("patch") if isinstance(transform, dict) else None
+                for channel in [c for c in (patch or {}) if c not in granted] if isinstance(patch, dict) else []:
+                    stray.append(channel)
+                    patch.pop(channel, None)
+    if stray:
+        record["dropped_ungranted"] = sorted(set(stray))
+        ctx.add_warning(f"{stage}: repair wrote ungranted {sorted(set(stray))}; dropped")
     answers_ = [dict(a, events=strip_markers(a.get("events") or []))
                 if isinstance(a, dict) else a for a in answers_]
+    record["answers"] = [
+        {"id": str(a.get("id") or ""), "events": len(a.get("events") or []),
+         "transforms": len(a.get("transforms") or []), "remove": bool(a.get("remove")),
+         "move_to": str(a.get("move_to") or ""), "after": str(a.get("after") or ""),
+         "none": str(a.get("none") or "")[:200]}
+        for a in answers_ if isinstance(a, dict)]
+    if notes:
+        record["repair_notes"] = [str(n)[:300] for n in notes]
     groups = {}
     for answer in answers_:
         job = next((j for j in jobs if isinstance(answer, dict)
@@ -921,7 +1127,7 @@ def _check_and_repair(ctx, stage, sc, units, events, channels, parts, model_payl
         record["dropped"] = dropped
         ctx.add_warning(f"{stage}: repair wrote {len(dropped)} write(s) the engine would "
                         "discard; dropped")
-    recheck_q, recheck_about = battery(units, repaired, channels, ctx.language)
+    recheck_q, recheck_about = battery(units, repaired, channels, ctx.language, identities)
     recheck_q = {k: v for k, v in recheck_q.items()
                  if recheck_about[k]["kind"] == "fix"
                  and (recheck_about[k]["event"], recheck_about[k]["index"],

@@ -21,7 +21,7 @@
 | `agents/director_movement.py` | 1853 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `agents/director_prose.py` | 1694 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts` |
 | `agents/director_reconcile.py` | 610 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `llm.schemas`, `story`, `world.spatial` |
-| `agents/director_repair.py` | 942 |  | `core.db`, `llm`, `llm.prompts` |
+| `agents/director_repair.py` | 1148 |  | `core.db`, `llm`, `llm.prompts` |
 | `agents/director_rooms.py` | 425 |  | — |
 | `agents/director_scopes.py` | 1246 |  | `agents.director_lingua`, `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 706 |  | `agents.common`, `story.character_schema`, `story.scene`, `world.background_claims` |
@@ -51,7 +51,7 @@
 | `llm/decisions.py` | 151 |  | `core.db` |
 | `llm/llm_quality.py` | 1351 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
-| `llm/prompts.py` | 698 | Default system prompts and prompt preset access. | `core.db` |
+| `llm/prompts.py` | 719 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 4873 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
 | `llm/schemas.py` | 7845 | Pydantic output contracts and semantic validation for agent payloads. | — |
@@ -412,14 +412,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_check_and_repair()` | 838 | 105 lines |
-| `apply_answers()` | 715 | 74 lines |
-| `native_failures()` | 292 | 66 lines |
-| `sentences()` | 99 | 45 lines |
-| `place()` | 668 | 45 lines |
-| `plan_jobs()` | 525 | 40 lines |
-| `battery()` | 466 | 39 lines |
-| `attribute()` | 200 | 27 lines |
+| `_check_and_repair()` | 998 | 151 lines |
+| `apply_answers()` | 866 | 83 lines |
+| `battery()` | 516 | 79 lines |
+| `plan_jobs()` | 633 | 72 lines |
+| `native_failures()` | 320 | 66 lines |
+| `sentences()` | 107 | 45 lines |
+| `place()` | 819 | 45 lines |
+| `repair_tools()` | 742 | 30 lines |
 
 ### `agents/director_rooms.py`
 
@@ -727,9 +727,9 @@
 |---|---:|---:|
 | `preset_import_document()` | 276 | 51 lines |
 | `specialist_prompt()` | 340 | 38 lines |
-| `unified_specialist_prompt()` | 439 | 36 lines |
-| `_relocate_character_identity()` | 556 | 29 lines |
-| `character_prompt()` | 604 | 28 lines |
+| `unified_specialist_prompt()` | 460 | 36 lines |
+| `_relocate_character_identity()` | 577 | 29 lines |
+| `character_prompt()` | 625 | 28 lines |
 | `_assembled_sheets()` | 38 | 26 lines |
 | `normalize_preset()` | 126 | 26 lines |
 | `_preset_override()` | 223 | 22 lines |
