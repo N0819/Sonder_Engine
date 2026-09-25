@@ -34,6 +34,7 @@ from llm.providers import (
     openrouter_routing, normalize_openrouter_routing, list_openrouter_endpoints,
     max_output_tokens, _coerce_max_output_tokens,
     reasoning_efforts, _coerce_reasoning_effort, REASONING_EFFORTS,
+    response_formats, _coerce_response_format, RESPONSE_FORMATS, ROLE_DEFAULT_FORMATS,
     MAX_OUTPUT_TOKENS_DEFAULT, MAX_OUTPUT_TOKENS_MIN, MAX_OUTPUT_TOKENS_MAX,
     DEFAULT_BASES, ROLES, ROLE_FALLBACKS, SAMPLER_KEYS, DEFAULT_SAMPLERS,
 )
@@ -1643,6 +1644,7 @@ _INSTALL_BLOCK_KEYS = frozenset({
     "attire_regions", "attire_region_zones", "extra_part_aspects",
     "interior_lights", "exemplar_bounds", "max_output_tokens_bounds",
     "reasoning_effort_levels", "lorebook_link_types", "ambience_licenses",
+    "response_format_levels", "response_format_defaults",
     "default_prompts", "language_packs", "ui_messages",
 })
 
@@ -1818,6 +1820,12 @@ def bootstrap() -> dict:
         "max_output_tokens": max_output_tokens(),
         "reasoning_effort": reasoning_efforts(),
         "reasoning_effort_levels": list(REASONING_EFFORTS),
+        # Per-role response format, and the roles whose unset row the engine
+        # fills from a measurement -- shown on that row, so the default a
+        # host inherits is one they can see and override.
+        "response_format": response_formats(),
+        "response_format_levels": list(RESPONSE_FORMATS),
+        "response_format_defaults": dict(ROLE_DEFAULT_FORMATS),
         "openrouter_routing": openrouter_routing(),
         "max_output_tokens_bounds": {
             "default": MAX_OUTPUT_TOKENS_DEFAULT,
@@ -2189,6 +2197,30 @@ def put_reasoning_effort(body: dict = Body(...)):
             reasoning_efforts(), cleaned)
     set_setting("reasoning_effort", json.dumps(cleaned))
     return {"ok": True, "reasoning_effort": cleaned}
+
+@app.put("/api/response_format")
+def put_response_format(body: dict = Body(...)):
+    """PER-ROLE response format, {role: format}: `json_schema`, `json_object`
+    or `none`; anything else (or absent) is unset -> the role's measured
+    default when it has one, else the 'default' role's, else the engine's
+    choice. Coerced rather than rejected, like the effort map, and the same
+    two shapes: the full map, or a single {role, value}."""
+    if "role" in body and "value" in body:  # single-role update
+        cleaned = response_formats()
+        fmt = _coerce_response_format(body.get("value"))
+        if fmt:
+            cleaned[str(body["role"])] = fmt
+        else:
+            cleaned.pop(str(body["role"]), None)
+    else:  # full map
+        cleaned = {}
+        for role, value in (body.get("formats") or body).items():
+            fmt = _coerce_response_format(value)
+            if fmt:
+                cleaned[str(role)] = fmt
+        cleaned = extension_runtime.keep_orphan_lane_rows(response_formats(), cleaned)
+    set_setting("response_format", json.dumps(cleaned))
+    return {"ok": True, "response_format": cleaned}
 
 @app.put("/api/max_output_tokens")
 def put_max_output_tokens(body: dict = Body(...)):

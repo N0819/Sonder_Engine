@@ -3079,6 +3079,31 @@ function renderFullApiSettings(b) {
       roleInputs[role] = roleInputs[role] || {};
       roleInputs[role].effort = effortSel;
 
+      // Response format for this role: what its requests ask the provider
+      // for. Empty follows the engine -- the role's measured default when it
+      // has one, named on the row so the inherited choice is visible, else
+      // the Default role's, else whatever the provider supports. Whole
+      // literals rather than "format: " + level, so each label is harvested
+      // into the language packs.
+      const FORMAT_LABELS = {
+        json_schema: "format: json_schema",
+        json_object: "format: json_object",
+        none: "format: none",
+      };
+      const FORMAT_DEFAULT_LABELS = {
+        json_schema: "format: json_schema (measured default)",
+        json_object: "format: json_object (measured default)",
+        none: "format: none (measured default)",
+      };
+      const fmtMap = S.boot.response_format || {};
+      const fmtDefault = (S.boot.response_format_defaults || {})[role];
+      const formatSel = el("select", { style: "min-width:118px", title: "Response format" },
+        [el("option", { value: "" }, FORMAT_DEFAULT_LABELS[fmtDefault]
+          || (isDefault ? "format: auto" : "format: follow default"))]
+          .concat((S.boot.response_format_levels || Object.keys(FORMAT_LABELS)).map(l => el("option",
+            { value: l, ...(fmtMap[role] === l ? { selected: "" } : {}) }, FORMAT_LABELS[l] || l))));
+      roleInputs[role].format = formatSel;
+
       const rebuildPrimary = (provider, model) => {
         primaryContainer.innerHTML = "";
         const combo = modelCombobox(
@@ -3164,7 +3189,8 @@ function renderFullApiSettings(b) {
               )
             : null,
           primaryContainer,
-          effortSel
+          effortSel,
+          formatSel
         ),
         advanced,
         fallbackControls
@@ -3246,8 +3272,16 @@ function renderFullApiSettings(b) {
           if (v) efforts[role] = v;
         }
 
+        // The response format travels the same way: blank is omitted.
+        const formats = {};
+        for (const [role, entry] of Object.entries(roleInputs)) {
+          const v = entry.format ? entry.format.value : "";
+          if (v) formats[role] = v;
+        }
+
         await api("PUT", "/api/agent_models", out);
         await api("PUT", "/api/reasoning_effort", { efforts });
+        await api("PUT", "/api/response_format", { formats });
         await boot();
         closeModal();
         toast("Agent models saved.", "ok");

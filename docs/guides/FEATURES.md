@@ -858,6 +858,12 @@ legitimately perceive, learn, remember or infer.
 - **Fallback models** — Backups tried when the first fails.
 - **Per-role reasoning effort** — Thinking off or dialled up separately per
   role.
+- **Per-role response format** — Whether a role's requests carry the enforced
+  JSON grammar, the advisory JSON flag or neither. Unset, the engine chooses
+  by what the provider supports, except the prose contract's encoder, which
+  goes without the grammar by a measured default shown on its row: under it,
+  answers stopped short. A rebuild of a broken answer always asks for the
+  grammar.
 - **Model browsing** — Pull the list a provider actually offers, including image
   models with their price band.
 - **Output ceiling** — One adjustable cap on how much any single call may

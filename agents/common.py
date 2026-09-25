@@ -3842,6 +3842,7 @@ def _agent_json(
     temperature=None,
     max_tokens=None,   # the configured ceiling; see complete_validated_json
     sampler=None,
+    response_format=None,  # this call's own; see providers._role_json_mode
 ):
     """The STRICT validated-JSON path every state-mutating pipeline stage
     must use for its primary LLM call. complete_validated_json parses
@@ -3864,6 +3865,7 @@ def _agent_json(
         max_tokens=max_tokens,
         sampler=sampler,
         repair_attempts=1,
+        response_format=response_format,
     )
 
 def jparse(text, fallback_key="text", required=False):

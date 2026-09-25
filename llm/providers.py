@@ -2592,6 +2592,85 @@ def _stream_answer(text, reasoning, url, model, body):
     return text
 
 
+#: What a role's requests carry as their response format when one is chosen
+#: for it: the enforced grammar, the advisory flag, or nothing at all -- the
+#: prompt alone asks for the JSON and `complete_validated_json` still checks
+#: it on the way back. Unset leaves `_apply_json_mode` to choose by what the
+#: provider supports, exactly as before this existed.
+RESPONSE_FORMATS = ("json_schema", "json_object", "none")
+
+
+def _coerce_response_format(value):
+    """A valid format, or "" for 'unset / the engine's choice'. Anything
+    unrecognized degrades to "" -- this rides on requests."""
+    v = str(value or "").strip().lower()
+    return v if v in RESPONSE_FORMATS else ""
+
+
+def response_formats():
+    """The per-role response-format map, {role: format}. Read per call so a
+    settings change applies on the next turn without a restart."""
+    try:
+        data = json.loads(get_setting("response_format") or "{}")
+    except Exception:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    out = {}
+    for role, value in data.items():
+        fmt = _coerce_response_format(value)
+        if fmt:
+            out[str(role)] = fmt
+    return out
+
+
+#: A role's format when the host has not chosen one, consulted before the
+#: `default` row. One entry, measured: the prose contract's encoder writes
+#: the longest open-ended list in the pipeline, and under the grammar GLM 5.2
+#: closed it early. The same captured payloads re-sent 78 times each way
+#: (thirteen beats of chat 154 and the time-travel test story, OpenRouter,
+#: reasoning off, 2026-09-25): with the grammar 18 answers stopped under half
+#: of what the beat's best answer covered and 11 left a declared act with no
+#: event; with no format, 2 and 0 -- on every host that served them (BaseTen
+#: 5 of 16 against 2 of 17, Fireworks 2 of 19 against 0 of 19). The advisory
+#: flag, the engine's fallback for a model that refuses the grammar, was
+#: worse than either (14 of 39). The cost: a median 1.5 s more a call, and
+#: now and then a malformed answer the validator re-asks for.
+ROLE_DEFAULT_FORMATS = {"director_specialist": "none"}
+
+
+def response_format_for(role):
+    """The response format for one role: its own entry, else its measured
+    default, else the 'default' role's, else "" (the engine's choice)."""
+    formats = response_formats()
+    if role in formats:
+        return formats[role]
+    if role in ROLE_DEFAULT_FORMATS:
+        return ROLE_DEFAULT_FORMATS[role]
+    return formats.get("default", "")
+
+
+def _role_json_mode(role, json_mode, json_schema, override=None):
+    """`(json_mode, json_schema)` as the chosen format has them: `none` sends
+    no response_format, `json_object` the flag without the grammar,
+    `json_schema` (or unset) whatever the provider supports.
+
+    `override` is the CALL's own format, and wins over the role's: a call
+    whose answer is read by its shape asks for the grammar whatever the role
+    chose. Two do (2026-09-25). The prose encoder's repair, whose answers
+    bind to their jobs by id -- sent no grammar, GLM 5.2 answered a repair
+    by re-encoding the whole beat in the draft's own shape. And every rung
+    that REBUILDS a broken answer: the first attempt had its chance at a
+    complete one, and sent free GLM miscounted a brace seven levels into a
+    transit patch, twice, on the same long beat."""
+    fmt = _coerce_response_format(override) or (response_format_for(role) if role else "")
+    if fmt == "none":
+        return False, None
+    if fmt == "json_object":
+        return json_mode, None
+    return json_mode, json_schema
+
+
 def _apply_json_mode(body, prov, model, json_mode, json_schema=None):
     """Attach JSON mode, preferring an ENFORCED schema over an advisory flag.
 
@@ -3171,13 +3250,17 @@ def chat_complete(
     token_ceiling=None,
     json_schema=None,
     reasoning_effort=None,
+    response_format=None,
 ):
     """``reasoning_effort`` is a per-CALL override of the role's configured
     effort (`reasoning_effort_for`): "off" for a JSON-shaped utility call
     whose output is the whole budget, because every OpenAI-style seam counts
     a thinking model's private trace against `max_tokens` and the seam
     offers no way to budget the two apart. None leaves the role's setting
-    in charge, exactly as before the parameter existed."""
+    in charge, exactly as before the parameter existed.
+
+    ``response_format`` is the same for the role's format
+    (`response_format_for`); see `_role_json_mode` for who passes one."""
     _check_cancel()
     # Final, universal boundary: even repair prompts and utility calls that do
     # not originate in prompts.py must know that free text is localized while
@@ -3238,6 +3321,7 @@ def chat_complete(
                 resolved=resolved,
                 json_schema=json_schema,
                 reasoning_effort_override=reasoning_effort_override,
+                response_format=response_format,
             )
         except Aborted:
             raise
@@ -3456,6 +3540,7 @@ def _chat_complete_once(
     resolved=None,
     json_schema=None,
     reasoning_effort_override=None,
+    response_format=None,
 ):
     _check_cancel()
     # Clear before the request, not after: every path below either records a
@@ -3466,6 +3551,7 @@ def _chat_complete_once(
     last_request_shape.set(None)
 
     prov, model, cfg = resolved or resolve_role(role)
+    json_mode, json_schema = _role_json_mode(role, json_mode, json_schema, response_format)
     t, merged = _merge_samplers(cfg, sampler, temperature)
     base = prov["base_url"].rstrip("/")
     raw_sink = token_sink.get()
@@ -3887,6 +3973,7 @@ async def chat_complete_async(
     retry_config=None,
     candidate_offset=0,
     json_schema=None,
+    response_format=None,
 ):
     _check_cancel()
     retry_config = retry_config or DEFAULT_RETRY
@@ -3937,6 +4024,7 @@ async def chat_complete_async(
                     sampler,
                     resolved=candidate,
                     json_schema=json_schema,
+                    response_format=response_format,
                 )
             except Aborted:
                 raise
@@ -3977,11 +4065,13 @@ async def _chat_complete_async_once(
     sampler,
     resolved=None,
     json_schema=None,
+    response_format=None,
 ):
     _check_cancel()
     _capture_finish_reason(None)
     last_request_shape.set(None)
     prov, model, cfg = resolved or resolve_role(role)
+    json_mode, json_schema = _role_json_mode(role, json_mode, json_schema, response_format)
     t, merged = _merge_samplers(cfg, sampler, temperature)
     base = prov["base_url"].rstrip("/")
     raw_sink = token_sink.get()

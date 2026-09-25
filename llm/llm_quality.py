@@ -696,6 +696,13 @@ def _bare_prose_answer(step_key, raw):
     return {"prose": text}
 
 
+#: The response format of a rung that rebuilds a broken answer -- the
+#: temperature-0 repair and every fallback candidate -- whatever the role
+#: or the call chose (see `providers._role_json_mode`). The grammar where
+#: the provider supports it; the advisory flag where it does not.
+REBUILD_FORMAT = "json_schema"
+
+
 def complete_validated_json(
     *,
     role: str,
@@ -706,6 +713,7 @@ def complete_validated_json(
     max_tokens: int | None = None,
     sampler=None,
     repair_attempts: int = 1,
+    response_format=None,
 ) -> dict:
     # None means "the configured ceiling" (providers._clamp_max_tokens). This
     # used to be a hardcoded 16000, which made max_output_tokens a one-way
@@ -743,6 +751,13 @@ def complete_validated_json(
     # `_targeted_field_patch` deliberately does NOT get it: that rung returns
     # the corrected FIELDS, not the step's object, so the step's grammar would
     # refuse the only shape it is allowed to send.
+    #
+    # Whether the grammar is SENT is the role's format, or this call's own
+    # (`response_format`; `providers._role_json_mode`): the request itself
+    # and each re-ask of it -- the empty object, the truncation -- carry it.
+    # The two rungs that REBUILD a broken answer carry `REBUILD_FORMAT`
+    # instead: the first attempt had its chance at a complete answer, and
+    # what the rebuild owes is a valid one.
     json_schema = _step_json_schema(step_key)
 
     try:
@@ -755,6 +770,7 @@ def complete_validated_json(
             sampler=sampler,
             candidate_offset=0,
             json_schema=json_schema,
+            response_format=response_format,
         )
     except Aborted:
         raise
@@ -817,7 +833,8 @@ def complete_validated_json(
             again = chat_complete(
                 role, system, user, temperature=temperature,
                 max_tokens=max_tokens, sampler=sampler, candidate_offset=0,
-                token_ceiling=token_ceiling, json_schema=json_schema)
+                token_ceiling=token_ceiling, json_schema=json_schema,
+                response_format=response_format)
         except Aborted:
             raise
         except LLMError as exc:
@@ -911,6 +928,7 @@ def complete_validated_json(
                     candidate_offset=0,
                     token_ceiling=token_ceiling,
                     json_schema=json_schema,
+                    response_format=response_format,
                 )
             except Aborted:
                 raise
@@ -996,7 +1014,8 @@ def complete_validated_json(
             previous_raw = chat_complete(
                 role, system, user, temperature=temperature,
                 max_tokens=max_tokens, sampler=sampler, candidate_offset=0,
-                token_ceiling=token_ceiling, json_schema=json_schema)
+                token_ceiling=token_ceiling, json_schema=json_schema,
+                response_format=response_format)
         except Aborted:
             raise
         except LLMError as exc:
@@ -1119,6 +1138,7 @@ def complete_validated_json(
                 candidate_offset=0,
                 token_ceiling=token_ceiling,
                 json_schema=json_schema,
+                response_format=REBUILD_FORMAT,
             )
         except Aborted:
             raise
@@ -1197,6 +1217,7 @@ def complete_validated_json(
                 candidate_offset=candidate_offset,
                 token_ceiling=token_ceiling,
                 json_schema=json_schema,
+                response_format=REBUILD_FORMAT,
             )
         except Aborted:
             raise

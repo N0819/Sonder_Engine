@@ -679,7 +679,8 @@ def test_reasoning_only_replies_retry_then_fall_to_the_next_candidate(monkeypatc
         return [{"model": "first"}, {"model": "second"}]
 
     def _once(role, system, user, temperature, json_mode, max_tokens, sampler,
-              *, resolved, json_schema=None, reasoning_effort_override=None):
+              *, resolved, json_schema=None, reasoning_effort_override=None,
+              response_format=None):
         tried.append((resolved["model"], reasoning_effort_override))
         if resolved["model"] == "first":
             raise providers.ReasoningBudgetExhausted("no answer")
