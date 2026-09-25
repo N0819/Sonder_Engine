@@ -1,0 +1,1 @@
+The change written on event {event} to the {channel} record -- {write} -- happens at a different event. At which event in EVENTS does the change it records actually happen?

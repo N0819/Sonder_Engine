@@ -145,6 +145,72 @@ def test_consecutive_missing_sentences_are_one_job():
                     "text": "B happens. C happens. D happens."}
 
 
+def test_every_job_quotes_the_prose_that_decides_it():
+    """A flagged write is shown with the sentences its event encodes: the
+    prose decides the mistake, not the draft, which can repeat it (chat 154
+    turn 4398: fixes shown by reference copied the draft's beach route)."""
+    units = repair.sentences(PROSE3)
+    sources = dict(zip(repair.refs_of(_draft()), repair.attribute(_draft(), units)))
+    fix = {"id": "j1", "kind": "fix", "event": "e1", "index": 0, "channel": "positions",
+           "write": {"Mara": "lamp_room"}}
+    view = repair._job_view(fix, units, sources)
+    assert view["sentences"] == ["s1"]
+    assert view["text"] == "Mara climbs the stair into the lamp room."
+    ledger = {"id": "j2", "kind": "ledger", "event": "e2", "channel": "obligations"}
+    assert repair._job_view(ledger, units, sources)["text"] == \
+        "\"The lamp is cold,\" she calls down."
+
+
+def _flag(event="e1", index=0, channel="positions"):
+    return {"kind": "fix", "event": event, "index": index, "channel": channel,
+            "key": f"bad:{event}:{index}:{channel}", "p": 0.9}
+
+
+def test_a_write_on_the_wrong_event_is_moved_by_code_and_still_checked():
+    """Jev says the change happens at another event, and which: code moves
+    the write, and its fix job follows it -- a move alone once put a ship's
+    transit on the right event still carrying a wrong route."""
+    explained = {"bad:e1:0:positions": {"elsewhere": 0.8, "to_event": "e2", "to_event_p": 0.9}}
+    events, left, moved = repair.act_on_explanations(_draft(), [_flag()], explained)
+    assert moved == [{"from": "e1", "to": "e2", "channel": "positions", "p": 0.9}]
+    assert events[0]["transforms"][0]["patch"] == {}
+    assert events[1]["transforms"] == [{"item": "Mara", "patch": {"positions": {"Mara": "lamp_room"}}}]
+    assert [(f["event"], f["index"], f["channel"]) for f in left] == [("e2", 0, "positions")]
+    assert "It was on e1" in left[0]["reason"]
+    job = repair.plan_jobs([], left, events)[0]
+    assert job["event"] == "e2" and job["write"] == {"Mara": "lamp_room"}
+
+
+def test_a_move_needs_both_answers_sure():
+    for answer in ({"elsewhere": 0.8, "to_event": "e2", "to_event_p": 0.6},   # where: unsure
+                   {"elsewhere": 0.3, "to_event": "e2", "to_event_p": 0.95},  # whether: no
+                   {"elsewhere": 0.9, "to_event": "e1", "to_event_p": 0.95}):  # its own event
+        events, left, moved = repair.act_on_explanations(
+            _draft(), [_flag()], {"bad:e1:0:positions": answer})
+        assert moved == [] and left == [_flag()] and events == _draft()
+
+
+def test_explaining_asks_whether_and_where_a_change_happens_instead(monkeypatch):
+    seen = {}
+
+    def jev(state, questions):
+        seen.update(questions)
+        return {"elsewhere:bad:e1:0:positions": {"type": "noul", "noul": 0.7},
+                "at:bad:e1:0:positions": {"choice": "e2", "confidence": 0.9}}
+
+    monkeypatch.setattr(decisions, "OVERRIDE", jev)
+
+    class Ctx:
+        language = "en"
+
+    units = repair.sentences(PROSE3)
+    out = repair.explain_wrong(Ctx(), units, _draft(), [_flag()], ["positions", "poses"], {}, {})
+    assert out == {"bad:e1:0:positions": {"elsewhere": 0.7, "to_event": "e2", "to_event_p": 0.9}}
+    assert seen["elsewhere:bad:e1:0:positions"]["type"] == "noul"
+    assert "different event" in seen["elsewhere:bad:e1:0:positions"]["instructions"]
+    assert list(seen["at:bad:e1:0:positions"]["criteria"]) == ["e2"]
+
+
 def test_an_uncited_gap_between_two_missing_sentences_joins_them():
     found = [{"kind": "event", "sentence": "s2", "p": 0.7},
              {"kind": "event", "sentence": "s6", "p": 0.8}]

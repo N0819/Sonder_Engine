@@ -563,6 +563,12 @@
     },
     "check_placement": {
       "$text": "prose_contract/check_placement.txt"
+    },
+    "check_elsewhere": {
+      "$text": "prose_contract/check_elsewhere.txt"
+    },
+    "check_which_event": {
+      "$text": "prose_contract/check_which_event.txt"
     }
   },
   "jev_questions": {

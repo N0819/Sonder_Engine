@@ -1,0 +1,3 @@
+Event {event}
+Its write to the {channel} record, flagged as wrong: {write}
+Answer yes only if the change this write records is real, but happens at a different event in EVENTS than this one.

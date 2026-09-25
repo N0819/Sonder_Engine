@@ -30,12 +30,19 @@ failure: its final runs ended with 220 of 225 ledger findings uncertain, and
    channel's kind went unwritten; per write, whether it is wrong for its
    event (`prose_contract.check_*` in the card carries each TRUE/FALSE
    condition). Only a confident yes builds a job; anything less is logged.
-4. The jobs go to ONE encoder call, by id, with the whole draft -- the
-   ledgers as completed so far -- and the roster of things it minted in
-   front of it (owner, 2026-09-24: keep the completed ledgers in the
-   encoder's context on the repair pass). Jev picks the tools for a missing
-   sentence, and places each recovered event among its neighbours.
-5. Only the repaired writes are checked again, and nothing aborts the turn:
+4. For a write it flags, Jev also says whether its change happens at
+   another event, and which; code moves it there, and its fix job follows
+   (owner, 2026-09-25: Jev can flag which ledger is wrong -- WHERE, measured,
+   yes; WHICH condition fails, measured, no: see `explain_wrong`).
+5. The jobs go to the encoder by id -- recovering events and mending writes
+   as two calls in parallel -- with the whole draft (the ledgers as
+   completed so far) and the roster of things it minted in front of it
+   (owner, 2026-09-24: keep the completed ledgers in the encoder's context
+   on the repair pass), and every job quoting the sentences that decide it:
+   a flagged mistake is the prose's to settle, not the draft's, which can
+   repeat it. Jev picks the tools for a missing sentence, and places each
+   recovered event among its neighbours. A job skipped is asked once more.
+6. Only the repaired writes are checked again, and nothing aborts the turn:
    whatever stays unresolved is committed with a warning. A user's Stop
    (`Aborted`) is the one thing that propagates.
 
@@ -722,7 +729,12 @@ def _draft(events, units):
             for ref, event, sources in zip(refs_of(events), events, attribute(events, units))]
 
 
-def _job_view(job, units):
+def _job_view(job, units, sources=None):
+    """What the repair is shown of one job -- always with the sentences it
+    concerns quoted, because the prose decides a flagged mistake, not the
+    draft: shown a fix by reference alone, the repair of chat 154 turn 4398
+    copied the beach route back in from the draft's other transit writes.
+    `sources` maps an event reference to the sentences it encodes."""
     view = {"id": job["id"], "kind": job["kind"]}
     if job["kind"] == "event":
         sentences = job.get("sentences") or [job["sentence"]]
@@ -730,6 +742,10 @@ def _job_view(job, units):
         view.update(sentences=sentences, text=text)
     else:
         view.update(event=job["event"], channel=job["channel"])
+        sentences = list((sources or {}).get(job["event"]) or [])
+        if sentences:
+            view.update(sentences=sentences, text=" ".join(
+                u["text"].strip() for u in units if u["id"] in sentences))
         if job.get("parts"):
             view["parts"] = list(job["parts"])
         if job["kind"] == "fix":
@@ -788,10 +804,177 @@ def call_repair(ctx, sc, units, events, jobs, tools, parts, model_payload, view,
     payload["granted_tools"] = list(tools) + list(parts)
     payload["draft"] = _draft(events, units)
     payload["minted"] = _minted(events)
-    payload["jobs"] = [_job_view(job, units) for job in jobs]
+    sources = dict(zip(refs_of(events), attribute(events, units)))
+    payload["jobs"] = [_job_view(job, units, sources) for job in jobs]
     out = _agent_json("director_specialist", "director_repair", sheet, payload,
                       temperature=0.2, max_tokens=None) or {}
     return list(out.get("answers") or []), list(out.get("notes") or [])
+
+
+def _said_something(answer):
+    return bool(answer.get("events") or answer.get("transforms") or answer.get("remove")
+                or str(answer.get("move_to") or "").strip()
+                or str(answer.get("none") or "").strip())
+
+
+def _repair_group(ctx, stage, sc, units, events, jobs, channels, parts, model_payload,
+                  view, extras, facts, rooms_elsewhere, new_places, base_payload):
+    """One repair call for one group of jobs, its one retry, and its writes
+    held to its grant. Returns `{answers, notes, tools, retried, stray}`."""
+    tools, tool_parts, routing = repair_tools(ctx, stage, units, jobs, model_payload,
+                                              facts, channels, parts)
+    answers, notes = call_repair(ctx, sc, units, events, jobs, tools, tool_parts,
+                                 model_payload, view, extras, rooms_elsewhere, new_places,
+                                 base_payload)
+    # THE REPAIR CALL STOPS SHORT AS THE ENCODER DOES: on its first runs it
+    # answered a fix and skipped the sixteen-sentence event job beside it,
+    # answered another with one event where the next run gave twenty-five,
+    # and answered three of nine jobs and skipped the four transit fixes in
+    # the middle (chat 154 turn 4398, 2026-09-24). Any job left unanswered,
+    # or answered with nothing and no reason, is asked ONCE more, alone.
+    answered = {str(a.get("id") or ""): a for a in answers if isinstance(a, dict)}
+    leftover = [job for job in jobs
+                if job["id"] not in answered or not _said_something(answered[job["id"]])]
+    retried = []
+    if leftover:
+        again, more_notes = call_repair(ctx, sc, units, events, leftover, tools, tool_parts,
+                                        model_payload, view, extras, rooms_elsewhere,
+                                        new_places, base_payload)
+        retried = [job["id"] for job in leftover]
+        redo = {str(a.get("id") or ""): a for a in again if isinstance(a, dict)}
+        answers = [a for a in answers
+                   if not (isinstance(a, dict) and str(a.get("id") or "") in redo)]
+        answers += list(redo.values())
+        notes = list(notes) + list(more_notes)
+    # A repair writes only the tools it was granted; anything else is
+    # dropped here and said (a first run wrote a doorway edge and a station
+    # into an event it was asked to recover).
+    granted = set(tools)
+    stray = []
+    for answer in answers:
+        if not isinstance(answer, dict):
+            continue
+        for holder in [answer] + [e for e in answer.get("events") or [] if isinstance(e, dict)]:
+            for transform in holder.get("transforms") or []:
+                patch = transform.get("patch") if isinstance(transform, dict) else None
+                if not isinstance(patch, dict):
+                    continue
+                for channel in [c for c in patch if c not in granted]:
+                    stray.append(channel)
+                    patch.pop(channel, None)
+    return {"answers": answers, "notes": list(notes), "retried": retried, "stray": stray,
+            "tools": {"channels": tools, "parts": tool_parts,
+                      **({"routing": routing} if routing else {})}}
+
+
+# ---- 4b. what is wrong with a flagged write ---------------------------------
+
+#: WHERE A FLAGGED WRITE'S CHANGE REALLY HAPPENS IS WHAT JEV CAN SAY. Asked
+#: WHICH condition a flagged write fails -- its subject, its value, a change
+#: its event lacks, another event, another record -- as a six-way choice it
+#: answered 0.24-0.65 and called a wrong value a wrong subject; as five
+#: yes/no questions it said yes to nearly all of them (0.52-0.80) for every
+#: flagged write; and which record a change belongs in came back named even
+#: for writes filed in the right one ("location 0.70" for a transit). Which
+#: EVENT a misplaced change belongs to it named at 0.90-0.99 where the draft
+#: had put it early or late (chat 154 turn 4398, the time-travel test story,
+#: 2026-09-25). So that is the one thing asked.
+#: The yes-probability that a flagged write's change happens elsewhere...
+ELSEWHERE_AT = 0.5
+#: ...and how sure the choice of WHERE must be before code moves it: the
+#: choice presupposes a move and always names somebody.
+MOVE_AT = 0.85
+
+
+def _choice(answer):
+    pick = str((answer or {}).get("choice") or "")
+    try:
+        confidence = float((answer or {}).get("confidence") or 0.0)
+    except (TypeError, ValueError):
+        confidence = 0.0
+    return pick, round(confidence, 4)
+
+
+def explain_wrong(ctx, units, events, flagged, channels, identities, payload):
+    """`{finding key: {elsewhere, to_event, to_event_p}}`: for each write Jev
+    flagged wrong, whether its change happens at another event, and which --
+    asked together in ONE request, each question independent."""
+    language = ctx.language
+    refs = refs_of(events)
+    questions = {}
+    for finding in flagged:
+        ref, index, channel = finding["event"], finding["index"], finding["channel"]
+        if ref not in refs:
+            continue
+        event = events[refs.index(ref)]
+        transforms = event.get("transforms") or []
+        if index >= len(transforms):
+            continue
+        write = _clip(((transforms[index] or {}).get("patch") or {}).get(channel))
+        others = {r: _event_line(r, events[i], identities)
+                  for i, r in enumerate(refs) if r != ref}
+        if not others:
+            continue
+        key = finding["key"]
+        questions[f"elsewhere:{key}"] = {"type": "noul", "instructions": _fill(
+            prose_contract_text("check_elsewhere", language),
+            event=_event_line(ref, event, identities), channel=channel, write=write)}
+        questions[f"at:{key}"] = {"type": "choice", "criteria": others, "instructions": _fill(
+            prose_contract_text("check_which_event", language),
+            event=ref, channel=channel, write=write)}
+    if not questions:
+        return {}
+    answers = decisions.decide(jev_state(units, events, payload), questions)
+    out = {}
+    for finding in flagged:
+        key = finding["key"]
+        if f"elsewhere:{key}" not in questions:
+            continue
+        to_event, to_event_p = _choice(answers.get(f"at:{key}"))
+        out[key] = {"elsewhere": round(decisions.probability(answers.get(f"elsewhere:{key}")), 4),
+                    "to_event": to_event, "to_event_p": to_event_p}
+    return out
+
+
+def _move_write(events, ref, index, channel, to_ref):
+    """`(events, new index)`: the draft with one write moved to the event it
+    belongs to, and where it now sits among that event's transforms."""
+    events = copy.deepcopy(list(events))
+    refs = refs_of(events)
+    source = events[refs.index(ref)]
+    transform = (source.get("transforms") or [])[index]
+    value = (transform.get("patch") or {}).pop(channel, None)
+    target = events[refs.index(to_ref)].setdefault("transforms", [])
+    target.append({"item": transform.get("item", ""), "patch": {channel: value}})
+    return events, len(target) - 1
+
+
+def act_on_explanations(events, confident, explained, channels=None, language=None):
+    """`(events, findings, moved)`: a flagged write whose change happens at
+    another event -- both answers sure enough -- is moved there by code, and
+    its fix job follows it, so the repair checks its value against the
+    sentences it now belongs to. Moving alone put a ship's stray transit
+    writes on the event where it commits still carrying the beach route
+    (chat 154 turn 4398, 2026-09-25)."""
+    moved, kept = [], []
+    for finding in confident:
+        answer = explained.get(finding.get("key")) if finding["kind"] == "fix" else None
+        refs = refs_of(events)
+        if not (answer and answer["elsewhere"] >= ELSEWHERE_AT
+                and answer["to_event_p"] >= MOVE_AT
+                and answer["to_event"] in refs and answer["to_event"] != finding["event"]):
+            kept.append(finding)
+            continue
+        events, index = _move_write(events, finding["event"], finding["index"],
+                                    finding["channel"], answer["to_event"])
+        moved.append({"from": finding["event"], "to": answer["to_event"],
+                      "channel": finding["channel"], "p": answer["to_event_p"]})
+        kept.append(dict(finding, event=answer["to_event"], index=index,
+                         key=f"moved:{answer['to_event']}:{index}:{finding['channel']}",
+                         reason=f"It was on {finding['event']}; the change happens at this "
+                                "event, so it was moved here. Make its value what the "
+                                "sentences of this event make true."))
+    return events, kept, moved
 
 
 # ---- 5. placing and applying -------------------------------------------------
@@ -1028,8 +1211,29 @@ def _check_and_repair(ctx, stage, sc, units, events, channels, parts, model_payl
         ctx.add_warning(f"{stage}: encoder check could not ask the decision model: {exc}")
     confident, unsure = findings(about, answers)
     confident = bridge(confident, citations(events, units))
-    record["found"] = [{k: f[k] for k in f if k != "key"} for f in confident]
     record["unsure"] = len(unsure)
+
+    # WHAT IS WRONG WITH A FLAGGED WRITE IS JEV'S TO SAY (owner, 2026-09-25:
+    # "I don't think it would be particularly hard to get jev to flag which
+    # ledger is wrong"). A write it flags went to the repair with no reason
+    # while a code-found one carried its schema error; now one more request
+    # says which condition fails, and where the change belongs. A change on
+    # the wrong event is moved by code -- no model call.
+    flagged = [f for f in confident if f["kind"] == "fix" and f.get("key")]
+    if flagged:
+        t_x = time.time()
+        try:
+            explained = explain_wrong(ctx, units, events, flagged, channels, identities, payload)
+        except Exception as exc:
+            explained = {}
+            record["explain_failed"] = str(exc)[:300]
+        record["explained"] = explained
+        record["explain_seconds"] = round(time.time() - t_x, 3)
+        events, confident, moved = act_on_explanations(events, confident, explained,
+                                                       channels, ctx.language)
+        if moved:
+            record["moved"] = moved
+    record["found"] = [{k: f[k] for k in f if k != "key"} for f in confident]
     record["check_seconds"] = round(time.time() - t1, 3)
 
     jobs = plan_jobs(native, confident, events)
@@ -1037,50 +1241,42 @@ def _check_and_repair(ctx, stage, sc, units, events, channels, parts, model_payl
     if not jobs:
         return events, record
 
+    # TWO REPAIR CALLS, IN PARALLEL: recovering events writes long answers,
+    # mending writes short ones, and one call doing both skipped the short
+    # ones in the middle (three of nine jobs answered, chat 154 turn 4398).
     t2 = time.time()
-    tools, tool_parts, routing = repair_tools(ctx, stage, units, jobs, model_payload,
-                                              facts, channels, parts)
-    record["tools"] = {"channels": tools, "parts": tool_parts, **({"routing": routing} if routing else {})}
-    answers_, notes = call_repair(ctx, sc, units, events, jobs, tools, tool_parts,
-                                  model_payload, view, extras, rooms_elsewhere, new_places,
-                                  base_payload)
-    # THE REPAIR CALL STOPS SHORT AS THE ENCODER DOES: on its first runs it
-    # answered a fix and skipped the sixteen-sentence event job beside it,
-    # and answered another with one event where the next run gave twenty-five
-    # (chat 154 turn 4398, 2026-09-24). An event job left unanswered, or
-    # answered with nothing and no reason, is asked ONCE more, alone.
-    answered = {str(a.get("id") or ""): a for a in answers_ if isinstance(a, dict)}
-    leftover = [job for job in jobs if job["kind"] == "event" and (
-        job["id"] not in answered
-        or not (answered[job["id"]].get("events") or str(answered[job["id"]].get("none") or "").strip()))]
-    if leftover:
-        again, more_notes = call_repair(ctx, sc, units, events, leftover, tools, tool_parts,
-                                        model_payload, view, extras, rooms_elsewhere,
-                                        new_places, base_payload)
-        record["retried"] = [job["id"] for job in leftover]
-        redo = {str(a.get("id") or ""): a for a in again if isinstance(a, dict)}
-        answers_ = [a for a in answers_ if not (isinstance(a, dict)
-                                                and str(a.get("id") or "") in redo)]
-        answers_ += list(redo.values())
-        notes = list(notes) + list(more_notes)
+    groups = [g for g in ([j for j in jobs if j["kind"] == "event"],
+                          [j for j in jobs if j["kind"] != "event"]) if g]
+
+    def run_group(group):
+        return _repair_group(ctx, stage, sc, units, events, group, channels, parts,
+                             model_payload, view, extras, facts, rooms_elsewhere,
+                             new_places, base_payload)
+
+    if len(groups) > 1:
+        import contextvars
+        from concurrent.futures import ThreadPoolExecutor
+        from .director_prose import _isolated
+        with ThreadPoolExecutor(max_workers=len(groups)) as pool:
+            futures = [pool.submit(_isolated(contextvars.copy_context()), run_group, group)
+                       for group in groups]
+            results = [future.result() for future in futures]
+    else:
+        results = [run_group(groups[0])]
     record["repair_seconds"] = round(time.time() - t2, 3)
-    # A repair writes only the tools it was granted; anything else is
-    # dropped here and said (a first run wrote a doorway edge and a station
-    # into an event it was asked to recover).
-    granted = set(tools)
-    stray = []
-    for answer in answers_:
-        if not isinstance(answer, dict):
-            continue
-        for holder in [answer] + [e for e in answer.get("events") or [] if isinstance(e, dict)]:
-            for transform in holder.get("transforms") or []:
-                patch = transform.get("patch") if isinstance(transform, dict) else None
-                for channel in [c for c in (patch or {}) if c not in granted] if isinstance(patch, dict) else []:
-                    stray.append(channel)
-                    patch.pop(channel, None)
-    if stray:
-        record["dropped_ungranted"] = sorted(set(stray))
-        ctx.add_warning(f"{stage}: repair wrote ungranted {sorted(set(stray))}; dropped")
+    answers_, notes = [], []
+    record["tools"] = []
+    for result in results:
+        answers_ += result["answers"]
+        notes += result["notes"]
+        record["tools"].append(result["tools"])
+        if result["retried"]:
+            record.setdefault("retried", []).extend(result["retried"])
+        if result["stray"]:
+            record.setdefault("dropped_ungranted", [])
+            record["dropped_ungranted"] = sorted(set(record["dropped_ungranted"]) | set(result["stray"]))
+    if record.get("dropped_ungranted"):
+        ctx.add_warning(f"{stage}: repair wrote ungranted {record['dropped_ungranted']}; dropped")
     answers_ = [dict(a, events=strip_markers(a.get("events") or []))
                 if isinstance(a, dict) else a for a in answers_]
     record["answers"] = [
