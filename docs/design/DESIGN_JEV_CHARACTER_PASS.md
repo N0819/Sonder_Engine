@@ -1,9 +1,11 @@
 # Jev around the character call: the tracking pass and the memory packet
 
-**Status: PROPOSAL, 2026-09-26, branch `worktree-jev-character-tracking`.**
-Nothing is built. Every number below comes from four read-only surveys of the
-code and of `engine.db` (`llm_capture`/`llm_blobs`, `variants._engine_notes`)
-over the ten days to 2026-09-26, spot-checked by hand.
+**Status: PARTLY BUILT, 2026-09-26, branch `worktree-jev-character-tracking`.**
+The affect pass is wired (increment 1, "Wiring the affect pass" below); the
+memory packet and everything else here is a proposal. The survey numbers come
+from four read-only surveys of the code and of `engine.db`
+(`llm_capture`/`llm_blobs`, `variants._engine_notes`) over the ten days to
+2026-09-26, spot-checked by hand.
 
 ## Why
 
@@ -619,6 +621,69 @@ stores every character call's full request, so the same inputs can be replayed.
 Character calls are the expensive part: credit is checked first, on the
 owner's replay route.
 
+## Wiring the affect pass
+
+The owner, 2026-09-26: "remove all mood related machinery from the character
+prompt. and just have it fed to the character in it's packet. And have it
+update the moods again post character actions." Mapped before any edit: the
+prompt carries eleven affect clauses; the reply's `affect`, `stress`,
+`hedonic` and full `appraisal` are required fields; commit folds the reply's
+affect into stored state through `affect.resolve_affect(..., proposed=...)`,
+and memory rows, mood-congruent recall, tells, absorption and stress read
+that state.
+
+**Increment 1 -- feelings. Built 2026-09-26** (`mind/affect_pass.py`, wired
+in `agents/character.py`; `tests/test_affect_pass.py`,
+`tests/test_character_continuity.py`; the full suite, 16,488, green on the
+shipped stack).
+
+- **Leaves the prompt:** CURRENT FEELINGS as an instruction to propose
+  feelings, the `affect` object in the required shape, and the feelings in
+  EARLIER THIS BEAT. CURRENT FEELINGS becomes the explanation of the given
+  block; `active_concerns` stays with the character.
+- **Before each character call:** the carried mood (`active_state.mood_coords`,
+  persisted) decays over the psych units since it was last touched; Jev
+  appraises what this character legitimately holds -- its own card, this
+  call's perception, its recalled memories, its concerns, its people -- one
+  request per character; `affect_mix` turns that into emotions, mixes them into
+  the mood and settles it toward Jev's direct reading; the packet gains
+  `self.feelings`: the surface feeling with its object, the undercurrent, and
+  the mood in words.
+- **After the call:** Jev appraises the character's own speech, actions and
+  held-back want; pride, shame, frustration and easing or stoking move the
+  mood.
+- **Into commit through the existing seam:** the engine writes the given
+  affect into the result's `active_state.affect` -- the field the model used
+  to fill -- so `resolve_affect`, tells, the round merge and memory context
+  read the same field, now from the engine; `mood_coords` and per-memory
+  habituation ride in the state JSON, so checkpoints and archives carry them.
+- **Fails open:** when Jev cannot be asked, the carried mood decays and the
+  turn goes on.
+
+What increment 1 leaves, found while documenting it:
+
+- **Two records of one mood.** The pass keeps `mood_coords`; memory rows,
+  tells and mood-congruent recall read `affect.surface`, which
+  `resolve_affect` still blends from the decayed prior toward the pass's
+  point, nudged by the model's own `appraisal` dV/dA. The next call's
+  feelings read the first, the memory written this beat the second, and
+  they can disagree. Writing the pass's point through (or deriving one
+  from the other) changes every new memory row's valence -- the owner's call.
+- **The undercurrent synthesis is retired in effect.** The pass always
+  writes the undercurrent key, so `resolve_affect`'s contradiction synthesis
+  never fires on a given affect; the layer beneath is memory and concern.
+- **Latency is unmeasured.** Two Jev requests a character call, the first on
+  the critical path before the model call; each lands in the turn's call
+  records as `role: jev`.
+- **A memory with no stable key never habituates** -- named by its place in
+  the packet, it has nothing to habituate by (134 of 17,065 rows in the
+  owner's database).
+
+**Increment 2 -- asked of the owner first:** the appraisal object
+(`goal_impacts`, `somatic_impact`, `memory_modulation`), stress `coping_mode`
+and `hedonic.released` feed stress, drive strain and pain and pleasure; each
+needs a Jev question before its clause can leave the prompt.
+
 ## Owner decisions
 
 1. **Absorption.** Under pain, pleasure or stress the packet is cut to 4 or 8
@@ -628,7 +693,10 @@ owner's replay route.
    (0 of 227). Asking Jev about it would start feeding drive strain -- a
    behaviour change.
 3. **Mood as a given.** The character is told how the beat lands instead of
-   deciding it.
+   deciding it. **Decided 2026-09-26** (the owner: "we should remove all mood
+   related machinery from the character prompt. and just have it fed to the
+   character in it's packet. And have it update the moods again post character
+   actions"); built in increments, below ("Wiring the affect pass").
 4. **Order.** Proposed: the memory packet first, then the pre-pass, then the
    post-pass.
 5. **The moment tag.** A new stored field on every memory, written by Jev at

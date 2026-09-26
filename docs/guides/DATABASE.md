@@ -209,9 +209,17 @@ archives and branches already carry the whole state, including:
   protecting the enacted choice first. The existing capacity and one-situational
   limits still apply. Invalid or absent indexes retain the urgency fallback.
   Explicit `active_concerns: []` clears the carried list; omission preserves it.
-  Within `active_state.affect`, explicit `undercurrent: null` clears residue
-  and prevents synthesis on that call; omission runs the existing decay,
-  relief and synthesis rules.
+  `active_state.affect` is now written by the engine (`mind/affect_pass.py`),
+  not the model; its explicit `undercurrent: null` clears residue and prevents
+  synthesis on that call, and omission -- a result with no given affect --
+  runs the existing decay, relief and synthesis rules.
+- `active_state.mood_coords`, `mood_habits`, `mood_clock`: the engine's mood
+  between calls -- fourteen spectrums and thirty-two standalone moods (only
+  the nonzero ones are kept), each recalled memory's habituation keyed by its
+  copy-stable `event_key`, and the psych clock habituation is read against.
+  Inside the state JSON, so rollback, branching and export carry them with no
+  remapping (`tests/test_affect_pass.py`). A beat the pass did not reach
+  keeps the last.
 - `interior.intentions[*].last_transition: {op, turn, why, evidence}`: one
   record for the latest accepted `add`, `progress`, `block`, `satisfy`,
   `abandon` or `nonviable` operation. A folded `add` records its effective

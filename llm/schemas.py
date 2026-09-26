@@ -4029,11 +4029,14 @@ class CharacterKernelDecision(LenientModel):
 
 class CharacterKernelActiveState(LenientModel):
     # The object itself is required as a structural checksum.  Values may be
-    # empty, but a brace slip cannot move wants/decision under ``affect`` and
+    # empty, but a brace slip cannot move wants/decision under a sibling and
     # then pass merely because every missing sibling had a default.
-    # Legacy alias; current models supply the surface label once in affect.
+    # Legacy alias; the surface label now comes from the engine.
     mood: Any = ""
-    affect: dict
+    # NOT ASKED FOR ANY MORE: the engine computes the mood and writes this
+    # after the call (mind/affect_pass.py; the owner, 2026-09-26). Optional so
+    # a reply without it validates; a legacy reply's own is overwritten.
+    affect: dict = {}
     wants: list[CharacterKernelWant]
     active_concerns: list[str]
     # The stable models validate these after compilation. Keeping their
@@ -6397,7 +6400,7 @@ OUTPUT_EXAMPLES = {
                 "goal_impacts": [],
             },
             "active": {
-                "affect": {}, "wants": [],
+                "wants": [],
                 "active_concerns": [], "stress": {}, "hedonic": {},
             },
             "decision": {

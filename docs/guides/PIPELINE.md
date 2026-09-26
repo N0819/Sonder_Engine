@@ -731,19 +731,43 @@ open question across turns; it does not establish that the chosen action
 succeeded, and no thought transcript is required.
 
 Within an interaction loop, `self.earlier_this_beat` carries the same mind's
-earlier feelings, decision and active concerns from the loop-owned
-`beat_declared` map. Its `status: proposed_before_resolution` marks a prior
-self-report awaiting the Director's resolution. It is separate from settled
-active state and gives no other character's private state or physical outcome.
-The loop's existing own-line/move history remains the record of what this mind
-has already declared this beat.
+earlier decision and active concerns from the loop-owned `beat_declared` map.
+Its `status: proposed_before_resolution` marks a prior self-report awaiting the
+Director's resolution. It is separate from settled active state and gives no
+other character's private state or physical outcome. The loop's existing
+own-line/move history remains the record of what this mind has already
+declared this beat.
 Each loop clears its own result map before re-execution, including no-call
 exits; interaction results are assembled from that run's fresh declarations.
 Hydrated results from a discarded reroll cannot become private continuity or
 committed conduct. Reaction and interaction maps remain separately owned.
-Within a run, a later legacy omission preserves earlier explicit concerns,
-undercurrent and choice; explicit empty concerns or choice, and a null
-undercurrent, retain their clearing meaning through the merge.
+Within a run, a later legacy omission preserves earlier explicit concerns and
+choice; explicit empty concerns or choice retain their clearing meaning
+through the merge.
+
+How this mind feels is given, not asked for (`mind/affect_pass.py`). Before
+the call, the mood its state carries (`active_state.mood_coords`: fourteen
+spectrums and thirty-two standalone moods, `mind/affect_mix.py`) decays toward
+the card's temperament over the psych units since it last moved, and one Jev
+request (`mind/affect_appraisal.py`) appraises what this mind legitimately
+holds: its own card, this call's non-standing observations, its recalled
+memories, its active concerns and its own relationship rows. The emotions
+those answers imply mix into the mood, which then settles toward Jev's direct
+reading of it. The packet carries the result as `self.feelings`: `now` (the
+surface feeling and what it is about), `beneath` (the layer under it, fed by
+memory and concern) and `mood` (its most salient parts in words). A recalled
+memory's feeling habituates per `memory_ref` (`active_state.mood_habits`); a
+row with no stable key never habituates. A later round in the same loop starts
+from the earlier round's mood, undecayed, carried in that round's
+`beat_declared` entry. After the call a second request appraises the mind's
+own speech, actions and held-back want, and pride, shame, frustration, easing
+or stoking move the mood again. The engine then writes the result where the
+model's self-report used to go -- `active_state.affect` (`surface`, and
+`undercurrent` as an object or an explicit `null`) and `active_state.mood` --
+and the prompt no longer asks for either. Both passes fail open: when Jev
+cannot be asked the carried mood stands, the before-call failure is a step
+warning, and the result's `_affect_pass.note` records why either pass did not
+move the mood.
 
 At commit, `affect.normalize_wants` receives the compiler's original
 `enacted_want` and `suppressed_want` indexes and reindexes them after
@@ -755,9 +779,16 @@ Invalid or absent indexes retain the
 legacy urgency fallback. This preserves a deliberate lower-urgency choice,
 such as restraint, instead of silently turning the strongest urge into the
 chosen act. `active_concerns: []` clears carried concerns, while omission in a
-legacy answer preserves them. Explicit `affect.undercurrent: null` clears prior
-residue and prevents fresh synthesis on that call; an omitted key keeps the
-existing decay, relief and synthesis behavior.
+legacy answer preserves them. `resolve_affect` folds the given affect into
+stored state as it once folded the self-report: the stored surface blends from
+the decayed prior toward the given point, still nudged by the character's own
+`appraisal` object, which stays model-authored until the second increment
+(`docs/design/DESIGN_JEV_CHARACTER_PASS.md`). The given `undercurrent: null`
+clears prior residue and prevents synthesis, so the layer beneath is named by
+the pass alone; an omitted key -- a result that carries no given affect --
+keeps the existing decay, relief and synthesis behavior. `mood_coords`,
+`mood_habits` and `mood_clock` ride in the same state JSON, so rollback,
+branching and export carry them unchanged (`tests/test_affect_pass.py`).
 
 `self.embodiment_capabilities` contains conditional facts hidden from ordinary
 observers but necessarily known by their owner. When a chosen completed process

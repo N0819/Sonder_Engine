@@ -92,8 +92,9 @@ Minds:
   Partly built.
 - [`DESIGN_JEV_CHARACTER_PASS.md`](design/DESIGN_JEV_CHARACTER_PASS.md) —
   Jev (TypeSafe's decision model) around the character call: a tracking pass
-  before and after it, and a memory packet it chooses. Proposal; the packet
-  is measured, nothing is built.
+  before and after it, and a memory packet it chooses. Partly built: the
+  mood is given, not self-reported (increment 1 wired); the packet is
+  measured, not built.
 - [`DESIGN_GOOD_MEMORY.md`](design/DESIGN_GOOD_MEMORY.md) — twelve features
   borrowed from how people remember, for good memory rather than realistic
   forgetting. Proposal.

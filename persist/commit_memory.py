@@ -1647,6 +1647,16 @@ def prepare_memory_commit(ctx, *, scene=None):
                     # One-beat, source-labelled state. Deliberately separate
                     # from hedonic pain/pleasure and from current observations.
                     "memory_echo": _memory_echo,
+                    # The engine's mood (`mind/affect_pass.py`): its
+                    # coordinates, each recalled memory's habituation and its
+                    # psych clock, kept for the next call. A beat the pass did
+                    # not reach keeps the last.
+                    **{key: ((own_result.get("_affect_pass") or {}).get(key)
+                             if (own_result.get("_affect_pass") or {}).get(key) is not None
+                             else prev_as.get(key))
+                       for key in ("mood_coords", "mood_habits", "mood_clock")
+                       if (own_result.get("_affect_pass") or {}).get(key) is not None
+                       or prev_as.get(key) is not None},
                     "active_concerns": (
                         asv.get("active_concerns")
                         if asv.get("active_concerns") is not None else

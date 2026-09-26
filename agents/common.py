@@ -1253,6 +1253,9 @@ _MERGE_LATEST_WINS_FIELDS = (
     # Identity of the character both results belong to; equal by construction.
     "name",
     "char_id",
+    # The engine's mood after this round (`affect_pass.persisted`): each round
+    # starts from the one before it, so the latest round's is the beat's.
+    "_affect_pass",
 )
 
 #: Result keys that are NOT CharacterOutput fields: written by the stage after
@@ -1264,7 +1267,7 @@ _MERGE_LATEST_WINS_FIELDS = (
 _MERGE_NON_SCHEMA_KEYS = frozenset({
     "stance_updates", "inference_updates", "ponder", "speech_volume",
     "name", "char_id", "unbidden_probe", "recalled_memory_ids",
-    "_barren_beat",
+    "_barren_beat", "_affect_pass",
 })
 
 

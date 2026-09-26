@@ -274,13 +274,62 @@ def test_repeated_round_payload_separates_proposals_and_only_its_own_mind(story,
     character.character_step(ctx, char_id, 1)
     prior = captured["self"]["earlier_this_beat"]
     assert prior["status"] == "proposed_before_resolution"
-    assert prior["feelings"]["surface"]["label"] == "restrained"
+    # Feelings are given afresh each round (mind/affect_pass.py), never
+    # carried as an earlier round's proposal.
+    assert "feelings" not in prior
+    assert set(captured["self"]["feelings"]) == {"now", "beneath", "mood"}
     assert prior["decision"] == own["decision_continuity"]
     assert prior["active_concerns"] == []
     assert captured["self"]["active_state"]["active_concerns"] == ["settled concern"]
     assert "FOREIGN PRIVATE SECRET" not in json.dumps(captured)
     assert "DISCARDED REROLL" not in json.dumps(captured)
     assert ctx._extra["beat_declared"] == before
+
+
+def test_the_mood_is_given_in_the_packet_and_the_engine_writes_it_back(story, monkeypatch):
+    """The owner, 2026-09-26: the mood is "fed to the character in it's packet"
+    and updated "post character actions". The reply below still carries a
+    model's old self-report ("restrained"); the engine's mood replaces it,
+    and commit keeps the mood for the next call."""
+    import agents.character as character
+    from llm import decisions
+    char_id, context, commit = story
+    ctx = context({"active_state": {"active_concerns": ["the visitor may be in danger"]}})
+    asked = []
+
+    def jev(state, questions):
+        asked.append(state)
+
+        def pick(key, criteria):
+            for needle, choice in (("dim:tension", "s4"), ("mood:anger", "strong"), ("weight", "strong"),
+                                   ("act_against_values", "strong")):
+                if needle in key and choice in criteria:
+                    return choice
+            for neutral in ("neutral", "neither", "none", "s2", "nobody"):
+                if neutral in criteria:
+                    return neutral
+            return next(iter(criteria))
+        return {k: {"type": "choice", "probabilities": {pick(k, q["criteria"]): 1.0}} for k, q in questions.items()}
+
+    captured = {}
+
+    def answer(role, step_key, system, payload, **kwargs):
+        captured.update(deepcopy(payload))
+        return _decision()
+
+    monkeypatch.setattr(decisions, "OVERRIDE", jev)
+    monkeypatch.setattr(character, "_agent_json", answer)
+    result = character.character_step(ctx, char_id, 1)
+    feelings = captured["self"]["feelings"]
+    assert set(feelings) == {"now", "beneath", "mood"} and isinstance(feelings["mood"], list)
+    # one request before the call, one on the character's own acts after it
+    assert len(asked) == 2 and "WHAT YOU JUST DID" in asked[1]
+    given = result["active_state"]["affect"]
+    assert given["surface"]["label"] != "restrained"
+    assert result["active_state"]["mood"] == given["surface"]["label"]
+    assert result["_affect_pass"]["asked"] and result["_affect_pass"]["mood_coords"]
+    state, _ = commit(result, index=2)
+    assert state["active_state"]["mood_coords"] == result["_affect_pass"]["mood_coords"]
 
 
 def test_private_projection_has_no_stale_result_or_extra_internal_fields():
@@ -292,7 +341,7 @@ def test_private_projection_has_no_stale_result_or_extra_internal_fields():
     prior = _private_continuity({"beat_declared": {"7": result}}, 7, {})["earlier_this_beat"]
     assert len(prior["decision"]["why"]) == 240
     assert len(prior["active_concerns"]) == 8
-    assert "secret" not in prior["feelings"]["surface"]
+    assert "feelings" not in prior and "NOT A FEELING" not in json.dumps(prior)
 
 
 def test_revised_authored_belief_does_not_reappear_as_its_old_card_copy(monkeypatch):

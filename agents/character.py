@@ -8,7 +8,7 @@ from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
 
-from mind import affect
+from mind import affect, affect_pass
 from mind.affect import (CRISIS_STRAIN_MIN, INTENT_DORMANT_AFTER,
                     RUPTURE_FORCE_AFTER, ground_tells)
 from core.db import q, wget
@@ -78,7 +78,7 @@ from world.spatial import (contact_phrase, contacts_of, corridor_sightlines, roo
 from world.survival import vitals_of
 from world.place_purpose import (affords_here, felt_needs, here_affords,
                            place_options)
-from mind.psychology_runtime import cognitive_absorption
+from mind.psychology_runtime import cognitive_absorption, elapsed_psych_units
 from mind.theory_of_mind import mind_models_for_payload, sheet_capacity
 
 from .impossible_knowledge import (aired_in_story, folded_tokens,
@@ -3449,25 +3449,10 @@ def _private_continuity(ctx, cid, stored_state):
     choice = note(earlier.get("decision_continuity"))
     if not active and not any(choice.values()):
         return out
-    feelings = {"mood": str(active.get("mood") or "")[:240]}
-    affect = active.get("affect") or {}
-    if isinstance(affect, dict):
-        for layer in ("surface", "undercurrent"):
-            value = affect.get(layer)
-            if isinstance(value, dict):
-                feelings[layer] = {
-                    key: value[key][:240] if isinstance(value[key], str)
-                    else value[key] for key in
-                    ("label", "valence", "arousal", "source", "serves")
-                    if key in value and isinstance(value[key], (str, int, float))}
-            elif layer in affect and value is None:
-                feelings[layer] = None
-    stress = active.get("stress") or {}
-    if isinstance(stress, dict) and stress.get("coping_mode"):
-        feelings["coping_mode"] = str(stress["coping_mode"])[:240]
+    # No `feelings` here any more: how this mind feels is given afresh as
+    # `self.feelings`, moved by the earlier round (mind/affect_pass.py).
     out["earlier_this_beat"] = {
         "status": "proposed_before_resolution",
-        "feelings": feelings,
         "decision": choice,
         "active_concerns": [str(item)[:240] for item in
                             (active.get("active_concerns") or [])],
@@ -3969,6 +3954,26 @@ def character_step(ctx, cid, nonce):
     _goal_destination = _destination_from_goals(
         stored_state, stored_state.get("place_graph") or {},
         here_rid=char_room, now_turn=getattr(ctx, "turn_idx", None))
+    # THE MOOD IS GIVEN, NOT ASKED FOR (the owner, 2026-09-26: "remove all mood
+    # related machinery from the character prompt. and just have it fed to the
+    # character in it's packet"). The decision model appraises what this mind
+    # legitimately holds -- its card, this call's perception, its recall, its
+    # concerns, its people -- and the carried mood moves; an earlier round this
+    # beat hands its mood on undecayed. Fails open: the carried mood stands.
+    # The earlier round's mood rides in the LOOP-OWNED declaration map, which a
+    # reroll resets -- never in a context-wide map a discarded run could leave.
+    _declared_before = ctx.get("beat_declared", {}) or {}
+    _earlier_felt = (_declared_before.get(cid) or _declared_before.get(str(cid)) or {}).get("_affect_pass")
+    _felt = affect_pass.before_call(
+        character_name(sh), sh, active,
+        (active or {}).get("affect", {}).get("baseline")
+        if isinstance((active or {}).get("affect"), dict) else None,
+        elapsed_psych_units((active or {}).get("affect_seconds"), (_sim_clock or {}).get("elapsed_seconds"),
+                            max(1, ctx.turn.idx - int((active or {}).get("affect_turn") or (ctx.turn.idx - 1)))),
+        observations=observations, memory_context=memory_context, relationships=relationships,
+        language=ctx.language, earlier=_earlier_felt)
+    if _felt.note and not _felt.asked and _felt.note != "nothing new to appraise":
+        ctx.add_warning(f"character {character_name(sh)}: mood carried, not moved -- {_felt.note}")
     # _node_names, _governed_ids, _self_lines and the annotated goal currency
     # were all resolved above, before the memory context -- the unbidden
     # trigger and this payload must judge the SAME annotated goal.
@@ -4072,6 +4077,9 @@ def character_step(ctx, cid, nonce):
         "learned_beliefs": _interior.get("beliefs") or [],
         "learned_associations": _interior.get("associations") or [],
         **_private_continuity(ctx, cid, stored_state),
+        # How this mind feels, given: what the moment stirs (`now`), what sits
+        # beneath it (`beneath`), its mood in words (`mood`).
+        "feelings": affect_pass.feelings_block(_felt),
     }
     # Exact handles for contacts this body can deliberately end.  The prose
     # view already tells the character what they feel; these opaque refs make
@@ -4642,6 +4650,18 @@ def character_step(ctx, cid, nonce):
     # thrown away, and the ledger would have gone on trusting the self-report.
     if _barren_beat:
         out["_barren_beat"] = True
+    # THE MOOD, MOVED AGAIN BY WHAT THIS MIND JUST DID (the owner: "have it
+    # update the moods again post character actions"), and written where the
+    # model's self-report used to be: commit's `resolve_affect`, the tells
+    # below and the round merge read `active_state.affect` unchanged, now from
+    # the engine. `_affect_pass` carries the mood to the next round and to
+    # commit, which keeps it in the character's state.
+    _felt = affect_pass.after_call(_felt, out)
+    if isinstance(out.get("active_state"), dict):
+        _given = affect_pass.given_affect(_felt)
+        out["active_state"]["affect"] = _given
+        out["active_state"]["mood"] = _given["surface"]["label"]
+    out["_affect_pass"] = {**affect_pass.persisted(_felt), "asked": _felt.asked, "note": _felt.note}
     for _warning in _ground_observation_citations(
             out, observations, memory_context, memory_internal):
         ctx.add_warning(f"character {character_name(sh)}: {_warning}")

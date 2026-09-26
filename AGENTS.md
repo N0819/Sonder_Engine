@@ -324,11 +324,18 @@ turn and the next call reads it as `self.decision_continuity`. Each of `chosen`,
 `suppressed`, `why` and `uncertainty` is bounded to 240 characters. It records
 the mind's choice, never proof that an act succeeded. During an interaction
 loop, `self.earlier_this_beat` projects only this mind's loop-owned
-`beat_declared` feelings, decision and concerns, marked
-`proposed_before_resolution`; settled state remains separate. Explicit selected
-want indexes survive deduplication and capacity trimming, enacted first.
-`active_concerns: []` and `affect.undercurrent: null` clear their respective
-state; omission preserves concerns or runs the existing affect decay. Accepted
+`beat_declared` decision and concerns, marked `proposed_before_resolution`;
+settled state remains separate. Explicit selected want indexes survive
+deduplication and capacity trimming, enacted first. `active_concerns: []`
+clears carried concerns; omission preserves them. **The mood is given, not
+self-reported** (`mind/affect_pass.py`): Jev appraises what this mind
+legitimately holds -- its card, this call's observations, its recall, its
+concerns, its own relationship rows -- before the call, and its own conduct
+after it; the packet carries the result as `self.feelings`, and the engine
+writes it into `active_state.affect`/`mood`, which the model no longer
+authors. The pass's inputs are exactly the character call's own: never widen
+them to another mind's state or a raw Director event, and never let a pass
+that cannot ask Jev fail the turn -- the carried mood stands. Accepted
 intention changes keep one `last_transition: {op, turn, why, evidence}`, not a
 transcript. Targeted belief revision names the exact held `target_belief`
 (trimmed/casefolded) and replaces it with `belief` at the supplied `confidence`;

@@ -1276,12 +1276,16 @@ still open:
 
 ### 6.15 Jev around the character call — [`DESIGN_JEV_CHARACTER_PASS.md`](design/DESIGN_JEV_CHARACTER_PASS.md)
 
-Proposal, 2026-09-26. Built but NOT WIRED: the affect pass --
-`mind/affect_appraisal.py` (the Jev questions) and `mind/affect_mix.py` (OCC
-emotions, the mood as fourteen spectrums and thirty-two standalone moods,
-habituation, the layer beneath); nothing in the turn calls them. Open: wiring
-them before and after the character call and retiring the prompt's affect
-paragraphs; every knob and every `EMOTION_EFFECTS` value (the owner's);
+Proposal, 2026-09-26. Increment 1 WIRED 2026-09-26: the affect pass
+(`mind/affect_pass.py`, over `mind/affect_appraisal.py` and
+`mind/affect_mix.py`) runs before and after every character call, the packet
+carries `self.feelings`, and the engine writes `active_state.affect`/`mood`,
+which the prompt no longer asks for. Open: increment 2 -- the `appraisal`
+object, `stress.coping_mode` and `hedonic.released`, each needing a Jev
+question before its clause can leave the prompt (ask the owner first); the two
+records of one mood (`mood_coords` against the `affect.surface` that
+`resolve_affect` still blends); the latency of the two requests, unmeasured in
+play; every knob and every `EMOTION_EFFECTS` value (the owner's);
 Japanese situations for the battery, since the Japanese wordings are
 untested translations; a concern gate that discriminates (Jev weighs every listed
 concern about 0.7);

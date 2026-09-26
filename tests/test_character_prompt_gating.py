@@ -263,10 +263,11 @@ def test_character_output_example_matches_the_kernel_without_duplicate_affect(
         "salience",
     }
     active = example["state"]["active"]
-    assert "mood" not in active
-    assert "baseline" not in active["affect"]
-    assert set(active["affect"]) == {"surface", "undercurrent"}
-    assert active["affect"]["undercurrent"] is None
+    # THE MODEL NO LONGER WRITES ITS FEELINGS: the engine computes them and
+    # gives them in `self.feelings` (mind/affect_pass.py; the owner,
+    # 2026-09-26), so the copyable example asks for neither a mood nor an
+    # affect object.
+    assert "mood" not in active and "affect" not in active
     assert active["active_concerns"] == []
     assert report.output["state"]["decision"]["hinge"] == ""
     assert report.output["state"]["decision"]["uncertainty"] == ""
@@ -288,12 +289,14 @@ def test_character_output_example_matches_the_kernel_without_duplicate_affect(
 
 def test_character_state_and_learning_instructions_match_their_commit_meaning():
     text = character_prompt(FULL, base=BASE)
-    assert "propose the feelings you now carry, including feelings that persist" in text
+    # Feelings are given, not proposed: the prompt explains `self.feelings`
+    # and asks for no affect.
+    assert "`self.feelings` is how you feel right now, and it is given, not yours to write" in text
+    assert "never report or revise it" in text
+    assert "propose the feelings you now carry" not in text and "undercurrent:null" not in text
     assert "not proof that the intended action succeeded" in text
     assert "`status:proposed_before_resolution`" in text
-    assert "`self.active_state` holds settled emotion values" in text
     assert "physical facts come from `self.body_state` and current perception" in text
-    assert "explicit `undercurrent:null` clears" in text
     assert "`[]` clears them" in text
     assert "Use `updates.memory.keep` rows" in text
     assert "`reinforce` acquires a belief" in text

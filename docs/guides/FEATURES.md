@@ -211,6 +211,12 @@ legitimately perceive, learn, remember or infer.
   worth more when exhausted, and habituating if they stay there.
 - **Mood decays, stances do not** — Mood relaxes toward a personal baseline over
   story time; trust and grudges move only when something moves them.
+- **Feelings are given, not reported** — The engine works out how each moment
+  lands on a character from what that character perceived, remembers, worries
+  about and feels toward the people there, and hands the character its
+  feeling, what lies beneath it and its mood; what the character then says
+  and does moves the mood again. A memory that keeps coming back stirs less
+  each time. (partial: the character still appraises its own goals.)
 - **Wants, intentions, projects, drives** — Beat-level wants under longer
   intentions, under at most two standing projects, under the one thing a
   character fundamentally lives for.
