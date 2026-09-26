@@ -269,20 +269,29 @@ the split between `mood_match` and `mood_contrast` rows follows temperament
 (a steady character repairs, a vulnerable one spirals), and a memory's pull
 habituates:
 
-**Habituation, with decay.** Habituation's defining properties (Thompson and
-Spencer, 1966; revised by Rankin et al., 2009) include spontaneous recovery
-when the stimulus is withheld, slower recovery after repeated series, and
-dishabituation by something new. Per memory, that is:
+**Habituation, with decay** -- the owner's model: "a character recalls a
+pleasant memory and gets a mood boost from it for a few turns of recalling
+before habituation reduces that effect. but that same memory if evoked
+some... number of turns later can once again deliver that pleasantness."
+Habituation's defining properties agree -- a response that wanes with
+repetition and recovers spontaneously when the stimulus is withheld
+(Thompson and Spencer, 1966; Rankin et al., 2009). Per memory:
 
 - each time a memory lands, its habituation rises by a step;
-- it decays on TWO half-lives in psych units -- a short one (the same memory
-  resurfacing within a scene is blunted) and a long one that builds only
-  across repeated series (the tenth recall of a crash in a week stirs less
-  than the first, even after a rest, but never nothing);
-- the evoked push is scaled down by habituation up to a ceiling, so a
-  charged memory always keeps some bite;
+- below a grace level it costs nothing: the first few recalls deliver the
+  memory's full feeling -- the shape of the surface habituation's protected
+  range, where only elevation above a floor is paid for;
+- above the grace level, the evoked push shrinks toward a ceiling of
+  reduction;
+- while the memory is not evoked, its habituation decays on a half-life in
+  psych units, back to nothing -- after enough turns away, the same memory
+  delivers its full feeling again;
 - new information about the memory -- a reinterpretation, or a new event of
-  the same kind -- resets it.
+  the same kind -- resets it at once.
+
+Psychology also describes a slower habituation that builds across repeated
+series and outlasts a rest; the owner's model recovers fully, so it is not
+part of this design.
 
 This dulls a memory's FEELING, never its availability: the row stays in
 recall in full (the owner's goal is good memory, not forgetting). The surface
