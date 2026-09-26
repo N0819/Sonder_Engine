@@ -781,6 +781,26 @@ beats (the evidence doc, "Round seven"):
   weighs on a quiet evening, which the best discriminator ("does what just
   happened bring this forward?", 20 of 21) would not allow.
 
+**Frustration is the restraint's, once -- the same day.** Traced end to end
+(the owner: "probe what jev answers with vs input and how the character
+behaves as a result and ask if it makes sense";
+`docs/experiments/AFFECT_TRACE_2026_09_26.md`), Jev read the moment apt and
+conduct followed, but 15 of 16 characters' stored feeling after the call
+was frustration: "was there something else you wanted to do or say
+instead?" was asked of every act, and the held-back want listed beside them
+made each say yes -- the pride tilt, moved to the next own-act feeling. The
+owner: "Likely needs some question refinement." The held-back want alone is
+now asked "How much do you mind not having done it?"
+(`affect_appraisal.HELD_QUESTION`): 14 of 16 on a restraint battery,
+costly restraints 0.89 against cheap ones 0.25, where the old question met
+10. On the traced beats frustration is stored on 10 of 16 -- the restraint
+each was about. Open for the owner: a moment's feelings are its stir split
+by share while an act's are whole, so a strong restraint still outweighs
+the moment's guilt or dread in the stored feeling; and shame is any act
+that leaves the mind thinking worse of itself (`max(against, -regard)`),
+the mirror of the pride rule, so an act like reading one's own name in
+print can be stored as shame.
+
 Still open: a memory-sourced feeling's object is its opening text, which for
 a remembered scene is scene description ("resolve (You are in the
 harbourmaster's shed...)"); marking it as remembered wants a pack phrase in

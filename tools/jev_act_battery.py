@@ -117,15 +117,20 @@ def _maths(a, proud):
     must honour a value AND leave the character thinking better of itself;
     `was: either` is the rule before it, either one enough; `honours only`
     drops the self-regard half; `proud` puts a candidate question in the
-    honours slot."""
+    honours slot. `shame: both` and `shame: against` keep the shipped pride
+    and take shame as the act going against a value AND leaving the
+    character thinking worse of itself, or as the first alone."""
     against = max(0.0, min(1.0, a.get("against_values") or 0.0))
     honours = max(0.0, min(1.0, a.get("honors_values") or 0.0))
     regard = max(-1.0, min(1.0, a.get("self_regard") or 0.0))
     shame = max(against, max(0.0, -regard))
+    pride = min(honours, max(0.0, regard)) * (1 - against)
     out = {
-        "now: both": (min(honours, max(0.0, regard)) * (1 - against), shame),
+        "now: both": (pride, shame),
         "was: either": (max(honours, max(0.0, regard)) * (1 - against), shame),
         "honours only": (honours * (1 - against), shame),
+        "shame: both": (pride, min(against, max(0.0, -regard))),
+        "shame: against": (pride, against),
     }
     for i, p in enumerate(proud):
         if p is not None:

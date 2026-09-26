@@ -57,9 +57,9 @@
 | `llm/schemas.py` | 7848 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2538 |  | `mind.theory_of_mind` |
-| `mind/affect_appraisal.py` | 257 |  | `llm`, `llm.prompts` |
-| `mind/affect_mix.py` | 563 |  | — |
-| `mind/affect_pass.py` | 424 |  | `llm.prompts`, `mind` |
+| `mind/affect_appraisal.py` | 273 |  | `llm`, `llm.prompts` |
+| `mind/affect_mix.py` | 573 |  | — |
+| `mind/affect_pass.py` | 425 |  | `llm.prompts`, `mind` |
 | `mind/canon_provenance.py` | 398 |  | — |
 | `mind/knowledge_circles.py` | 134 |  | `core.db` |
 | `mind/memory.py` | 142 | Facade re-exporting every mind.memory_* name; holds no domain code of its own. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_context`, `mind.memory_inference`, `mind.memory_lore_entries`, `mind.memory_lorebooks`, `mind.memory_read`, `mind.memory_relationships`, `mind.memory_retrieval`, `mind.memory_snapshot`, `mind.memory_summaries`, `mind.memory_time`, `mind.memory_vectors`, `mind.memory_write`, `mind.theory_of_mind` |
@@ -792,40 +792,40 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `read()` | 198 | 49 lines |
-| `questions_for()` | 128 | 31 lines |
-| `_labels()` | 96 | 9 lines |
-| `_probabilities()` | 161 | 9 lines |
-| `_read_event()` | 187 | 9 lines |
-| `appraise()` | 249 | 9 lines |
-| `_number()` | 172 | 7 lines |
-| `_choice()` | 107 | 6 lines |
+| `read()` | 214 | 49 lines |
+| `questions_for()` | 139 | 36 lines |
+| `_labels()` | 107 | 9 lines |
+| `_probabilities()` | 177 | 9 lines |
+| `_read_event()` | 203 | 9 lines |
+| `appraise()` | 265 | 9 lines |
+| `_number()` | 188 | 7 lines |
+| `_choice()` | 118 | 6 lines |
 
 ### `mind/affect_mix.py`
 
 | Function | Start | Size |
 |---|---:|---:|
+| `emotions_from_act()` | 322 | 35 lines |
 | `emotions_from_appraisal()` | 280 | 25 lines |
-| `emotions_from_act()` | 322 | 25 lines |
-| `surface_and_undercurrent()` | 532 | 25 lines |
-| `decay()` | 387 | 18 lines |
-| `targets()` | 407 | 18 lines |
-| `concern_emotions()` | 366 | 17 lines |
-| `memory_emotions()` | 349 | 15 lines |
-| `mix()` | 427 | 15 lines |
+| `surface_and_undercurrent()` | 542 | 25 lines |
+| `decay()` | 397 | 18 lines |
+| `targets()` | 417 | 18 lines |
+| `concern_emotions()` | 376 | 17 lines |
+| `memory_emotions()` | 359 | 15 lines |
+| `mix()` | 437 | 15 lines |
 
 ### `mind/affect_pass.py`
 
 | Function | Start | Size |
 |---|---:|---:|
 | `before_call()` | 239 | 39 lines |
-| `feelings_block()` | 399 | 26 lines |
+| `feelings_block()` | 400 | 26 lines |
 | `psychology_text()` | 192 | 24 lines |
-| `after_call()` | 298 | 23 lines |
-| `given_affect()` | 360 | 19 lines |
+| `after_call()` | 299 | 23 lines |
+| `given_affect()` | 361 | 19 lines |
 | `carried()` | 88 | 17 lines |
 | `state_text()` | 218 | 17 lines |
-| `acts_from()` | 280 | 16 lines |
+| `acts_from()` | 280 | 17 lines |
 
 ### `mind/canon_provenance.py`
 

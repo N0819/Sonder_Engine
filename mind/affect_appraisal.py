@@ -20,9 +20,13 @@ Designed with the owner on 2026-09-26 (`docs/design/DESIGN_JEV_CHARACTER_PASS.md
 - **The character's own acts**, after its turn (the owner: "a pass after the
   character turn finishes to see how their actions speech and thoughts
   affect their mood"): did it go against something the character values
-  (dissonance), honour something it values, cost something it wanted
-  instead, ease the feeling or stoke it, and how does it leave the
-  character feeling about itself.
+  (dissonance), honour something it values, ease the feeling or stoke it,
+  and how does it leave the character feeling about itself -- and, of the
+  want the character held back alone, how much it minds not having done it.
+  Until 2026-09-26 every act was asked whether there was something else the
+  character wanted to do instead, and with the held-back want listed beside
+  it every act said yes: frustration was what the story kept of 15 of 16
+  traced beats (`docs/experiments/AFFECT_TRACE_2026_09_26.md`).
 - **Recalled memories**: does recalling this stir a feeling now, is it
   pleasant, and which of the standalone moods does it stir most -- where the
   moods whose object is the past (nostalgia, grief, regret, longing) come
@@ -52,7 +56,7 @@ from llm.prompts import affect_appraisal_options, affect_appraisal_text
 OPTION_SET = {
     "stir_strength": "grade", "feel": "feel",
     "concern_weight": "grade",
-    "act_against_values": "grade", "act_honors_values": "grade", "act_wanted_instead": "grade",
+    "act_against_values": "grade", "act_honors_values": "grade", "act_held_back": "grade",
     "act_eased_or_stoked": "ease", "act_self_regard": "regard",
     "evoke_strength": "grade", "evoke_tone": "tone", "evoke_mood": "stir",
     "dimension": "steps", "mood_strength": "grade",
@@ -63,8 +67,15 @@ EVENT_QUESTIONS = ("stir_strength", "feel")
 #: The questions asked of each recalled memory, and the key each reads into.
 MEMORY_QUESTIONS = {"evoke_strength": "strength", "evoke_tone": "tone", "evoke_mood": "kinds"}
 #: The questions asked of each of the character's own acts.
-ACT_QUESTIONS = ("act_against_values", "act_honors_values", "act_wanted_instead",
-                 "act_eased_or_stoked", "act_self_regard")
+ACT_QUESTIONS = ("act_against_values", "act_honors_values", "act_eased_or_stoked", "act_self_regard")
+#: Asked of the want the character held back alone (an act marked `held`,
+#: quoted by its `want`): how much it minds not having done it. On the
+#: restraint battery (`tools/jev_restraint_battery.py`) it met 14 of 16
+#: expectations, costly restraints 0.89 against cheap ones 0.25, where the
+#: retired per-act "was there something else you wanted to do or say
+#: instead?" met 10 (0.84 against 0.52) and read 0.72 of the ordinary acts
+#: beside a held-back want.
+HELD_QUESTION = "act_held_back"
 #: Where each option sits, for the option sets read as a number.
 SCALES = {
     "ease": {"eased_much": -1.0, "eased": -0.5, "neither": 0.0, "stoked": 0.5, "stoked_much": 1.0},
@@ -128,8 +139,10 @@ def _event_questions(prefix, event, language=None):
 def questions_for(events=(), memories=(), acts=(), mood=False, language=None, concerns=()):
     """`{key: question}` for one character. Keys: `ev:<ref>:<question>`; a
     concern's the same under `con:` plus `con:<ref>:weight`;
-    `act:<ref>:<question>`; `mem:<ref>:<strength|tone|kinds>`; with `mood`,
-    `dim:<spectrum>` and `mood:<standalone mood>`."""
+    `act:<ref>:<question>`, and for an act marked `held` (its `want`, the
+    want held back) `act:<ref>:act_held_back`;
+    `mem:<ref>:<strength|tone|kinds>`; with `mood`, `dim:<spectrum>` and
+    `mood:<standalone mood>`."""
     qs = {}
     for event in events:
         qs.update(_event_questions("ev", event, language))
@@ -142,6 +155,9 @@ def questions_for(events=(), memories=(), acts=(), mood=False, language=None, co
         text = " ".join(str(act.get("text") or "").split())
         for name in ACT_QUESTIONS:
             qs[f"act:{ref}:{name}"] = _choice(name, language, act=text)
+        if act.get("held"):
+            want = " ".join(str(act.get("want") or text).split())
+            qs[f"act:{ref}:{HELD_QUESTION}"] = _choice(HELD_QUESTION, language, want=want)
     for memory in memories:
         ref = str(memory["ref"])
         text = " ".join(str(memory.get("text") or "").split())
@@ -202,8 +218,8 @@ def read(answers, events=(), memories=(), acts=(), mood=False, language=None, co
       `stirs`, the distribution over what it makes the character feel --
       OCC's event emotions, the standalone moods and `none`;
     - per concern: the same, and `weight` in [0, 1];
-    - per act: `against_values`, `honors_values`, `wanted_instead` in [0, 1];
-      `eased_or_stoked`, `self_regard` in [-1, 1];
+    - per act: `against_values`, `honors_values` in [0, 1]; `eased_or_stoked`,
+      `self_regard` in [-1, 1]; of the held-back want, `held_back` in [0, 1];
     - per memory: `strength` in [0, 1], `tone` in [-1, 1], `kinds` as a
       distribution over the standalone moods and `none`;
     - with `mood`: `spectrums` {name: [-1, 1]} and `moods` {name: [0, 1]}.
@@ -223,7 +239,7 @@ def read(answers, events=(), memories=(), acts=(), mood=False, language=None, co
     for act in acts:
         ref = str(act["ref"])
         a = {}
-        for name in ACT_QUESTIONS:
+        for name in ACT_QUESTIONS + (HELD_QUESTION,):
             value = _number(answers, f"act:{ref}:{name}", OPTION_SET[name])
             if value is not None:
                 a[name[len("act_"):]] = value

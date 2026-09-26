@@ -89,3 +89,20 @@ each other as the ceiling:
   and the standalone moods together: the engine's question against
   candidates, by exact name, by family of near-synonyms and by pleasant or
   unpleasant sign. It retired OCC's rules on 2026-09-26.
+
+## `restraints.json`
+
+What a character's held-back want costs it: each case is one beat -- who,
+what happened, what the character did in the pass's own words, and the
+want it held back -- with `expect` high where holding back costs (a nurse
+kept from her own son's bedside by a stranger bleeding out, a humiliation
+swallowed, a truth kept from a court) and low where it does not (a second
+biscuit, a yawn, a retort one is glad not to have made). Run by
+[`tools/jev_restraint_battery.py`](../jev_restraint_battery.py), which asks
+each candidate question (`--variants`, a JSON list; `{act}` for any act,
+`{want}` for the held-back want alone) of every act, so a report shows both
+how a wording separates costly from cheap restraints and what it would read
+of an ordinary act. It chose "How much do you mind not having done it?" on
+2026-09-26, after "was there something else you wanted to do or say
+instead?", asked of every act, made frustration what the story kept of 15
+of 16 traced beats.

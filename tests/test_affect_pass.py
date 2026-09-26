@@ -48,7 +48,7 @@ def _pick(key, criteria):
     mood; and an act against the character's values that stoked it."""
     rules = [("stir_strength", "strong"), ("feel", "anger"), ("strength", "strong"), ("tone", "pleasant"),
              ("kinds", "nostalgia"), ("weight", "clear"), ("dim:tension", "s4"), ("dim:pleasure", "s0"),
-             ("mood:anger", "strong"), ("act_against_values", "strong"), ("act_wanted_instead", "strong"),
+             ("mood:anger", "strong"), ("act_against_values", "strong"), ("act_held_back", "strong"),
              ("act_eased_or_stoked", "stoked")]
     for needle, choice in rules:
         if needle in key and choice in criteria:
@@ -171,6 +171,14 @@ def test_the_characters_own_acts_move_the_mood_again(jev):
     assert len(jev) == 2 and "WHAT YOU JUST DID" in jev[1][0] and "You held back from: tell her the truth" in jev[1][0]
     assert {"shame", "frustration"} <= {e.name for e in after.emotions if e.source == "act"}
     assert after.mood.get("self_regard") < before_regard
+    # the restraint's cost is felt once, from the want held back -- never
+    # once more for every act beside it (15 of 16 traced beats kept
+    # frustration when it was)
+    frustrated = [e for e in after.emotions if e.name == "frustration"]
+    assert [e.ref for e in frustrated] == ["held"]
+    held_questions = [k for k in jev[1][1] if k.endswith(":act_held_back")]
+    assert held_questions == ["act:held:act_held_back"]
+    assert "tell her the truth" in jev[1][1]["act:held:act_held_back"]["instructions"]
 
 
 def test_a_memory_recalled_beat_after_beat_habituates(jev):

@@ -873,8 +873,8 @@
     "act_honors_values": {
       "$text": "affect_appraisal/act_honors_values.txt"
     },
-    "act_wanted_instead": {
-      "$text": "affect_appraisal/act_wanted_instead.txt"
+    "act_held_back": {
+      "$text": "affect_appraisal/act_held_back.txt"
     },
     "act_eased_or_stoked": {
       "$text": "affect_appraisal/act_eased_or_stoked.txt"

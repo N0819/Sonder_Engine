@@ -291,7 +291,8 @@ def acts_from(reply):
     wants = active.get("wants") or []
     held = active.get("suppressed_want")
     if isinstance(held, int) and 0 <= held < len(wants) and isinstance(wants[held], dict) and wants[held].get("want"):
-        acts.append({"ref": "held", "text": _text(f"You held back from: {wants[held]['want']}"), "actor": ""})
+        acts.append({"ref": "held", "text": _text(f"You held back from: {wants[held]['want']}"), "actor": "",
+                     "held": True, "want": _text(wants[held]["want"])})
     return acts
 
 

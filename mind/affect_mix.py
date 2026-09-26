@@ -323,8 +323,18 @@ def emotions_from_act(appraisal, *, ref="", about=""):
     """What the character's own act, appraised after its turn, makes it feel:
     pride where the act honoured its values AND left it thinking better of
     itself, shame where it went against them or left it thinking worse, and
-    frustration for what it wanted to do instead. The act's easing or
-    stoking of the feeling is not an emotion; `ease` applies it.
+    -- of the want it held back (`held_back`) -- frustration, by how much it
+    minds not having done it. The act's easing or stoking of the feeling is
+    not an emotion; `ease` applies it.
+
+    FRUSTRATION IS THE RESTRAINT'S, ONCE (2026-09-26). It was asked of every
+    act -- "was there something else you wanted to do or say instead?" --
+    and with the held-back want listed beside them every act said yes:
+    frustration two to six times a call, and the stored feeling of 15 of 16
+    traced beats (`docs/experiments/AFFECT_TRACE_2026_09_26.md`), whatever
+    the moment had stirred. Asked of the held-back want alone, it reads a
+    costly restraint 0.89 and a cheap one 0.25
+    (`tools/jev_restraint_battery.py`).
 
     PRIDE NEEDS BOTH (2026-09-26, the owner: "adjust the pride tilt a
     bit"). Almost anything a principled character says honours some value
@@ -339,10 +349,10 @@ def emotions_from_act(appraisal, *, ref="", about=""):
     against = _clamp(a.get("against_values"), 0.0, 1.0)
     honours = _clamp(a.get("honors_values"), 0.0, 1.0)
     regard = _clamp(a.get("self_regard"))
-    wanted = _clamp(a.get("wanted_instead"), 0.0, 1.0)
+    held_back = _clamp(a.get("held_back"), 0.0, 1.0)
     raw = [("pride", min(honours, max(0.0, regard)) * (1 - against), about),
            ("shame", max(against, max(0.0, -regard)), about),
-           ("frustration", wanted, about)]
+           ("frustration", held_back, about)]
     return [Emotion(n, round(i, 4), obj, "act", ref) for n, i, obj in raw if i > 1e-4]
 
 

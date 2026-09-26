@@ -122,8 +122,14 @@ def test_an_act_that_only_fits_ones_values_is_not_pride():
     assert brave["pride"].intensity == pytest.approx(0.88)
 
 
-def test_what_was_wanted_instead_is_frustration():
-    assert "frustration" in _names(mix.emotions_from_act({"wanted_instead": 0.7}, ref="held"))
+def test_frustration_is_what_holding_back_costs_and_an_act_alone_has_none():
+    """How much the mind minds not having done what it held back is the
+    frustration; an act's own answers carry none (asked of every act, the
+    held-back want made each one say yes)."""
+    held = _names(mix.emotions_from_act({"held_back": 0.7}, ref="held"))
+    assert held["frustration"].intensity == pytest.approx(0.7) and held["frustration"].source == "act"
+    spoken = _names(mix.emotions_from_act({"honors_values": 0.9, "self_regard": 0.5}, ref="s0"))
+    assert "frustration" not in spoken
 
 
 def test_dissonance_takes_the_pride_out_of_an_act():

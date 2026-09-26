@@ -67,6 +67,54 @@ fiction.
   standing." stirs 0.44, with resolve; they rarely reach the handed block,
   but they add the present's mood back as if it were the past's.
 
+## The questions refined (the owner: "Likely needs some question refinement")
+
+**The restraint.** A restraint battery (`tools/jev_restraint_battery.py`,
+16 beats in `tools/mood_battery/restraints.json`: a nurse kept from her own
+son's bedside by a stranger bleeding out, a humiliation swallowed, a truth
+kept from a court; against a second biscuit, a yawn, a retort one is glad
+not to have made) put candidate questions to the want held back:
+
+| question | met | costly | cheap | asked of an ordinary act |
+|---|---|---|---|---|
+| "Was there something else you wanted to do or say instead?" (was, of every act) | 10/16 | 0.84 | 0.52 | 0.72 |
+| "How hard was it to hold back?" | 11/16 | 0.95 | 0.43 | 0.67 |
+| "How much does it gnaw at you, not having done it?" | 12/16 | 0.93 | 0.29 | 0.49 |
+| "How much does it frustrate you to have held back?" | 13/16 | 0.91 | 0.27 | 0.60 |
+| "YOU HELD BACK FROM: {want} -- How much do you mind not having done it?" -- adopted | 14/16 | 0.89 | 0.25 | -- |
+
+Now asked of the held-back want alone, frustration is counted once a call.
+The same 16 beats' after-call pass, asked again with it (the state rebuilt
+from the trace and the story's own card), keep frustration on 10 instead of
+15, and what remains is the restraint the beat was about: Isolde not playing
+her melody for the man who took it (0.92), the magistrate not asking whether
+the girl was at the mill race (0.85). The teacher's two beats keep
+protectiveness. Two things remain, for the owner:
+
+- **The moment's feeling and the act's compete on unequal scales.** A
+  moment's feelings are its stir split by share (guilt 0.62 at "Go on,
+  then"), an own act's are whole (minding not having held her words in,
+  0.67), so a strong restraint still becomes the beat's stored feeling over
+  the moment's guilt or dread.
+- **With frustration gone, shame surfaces**: Isolde reading the proof of
+  her own name is stored as "shame", because an act that leaves the mind
+  thinking even a little worse of itself is shame
+  (`max(against, -regard)`) -- the mirror of the pride rule eased earlier.
+  On the act battery, shame needing both meets 30 of 33 and shame from the
+  value alone 31, the rule as shipped 31; the battery has no case of an act
+  that leaves a mind feeling worse without going against a value.
+
+**The mood question.** Four anchorings of "Right now, is this one of the
+main things you feel?" to the moment ("in this moment", "with what is
+happening right now", "this moment makes you feel", "here") were read
+against each rater on the 76 story beats: none brought longing (11-17
+beats clearly, the raters 5 and 1), grief (13-14; 9 and 5) or dread (23-29;
+15 and 17) down; "Is this one of the main things this moment makes you
+feel?" shared more of each rater's four strongest (2.57 and 2.51 against
+2.50 and 2.41) but read longing and dread clearly more often. Kept as it
+is: a card's standing feelings are not separated from the present by the
+question's words.
+
 ## The traces
 
 Each call: what reached the mind and Jev's reading (how strongly it stirs,

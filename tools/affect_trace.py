@@ -189,9 +189,13 @@ def show(args):
             print(f"  -- AFTER, own acts:")
             for act in r.get("acts") or []:
                 x = a.get(act["ref"]) or {}
+                # the restraint's cost: `held_back` of the held-back want since the
+                # frustration fix; `wanted_instead` of every act in traces before it
+                cost = (f", minds not having done it {x['held_back']:.2f}" if "held_back" in x
+                        else f", wanted else {x['wanted_instead']:.2f}" if "wanted_instead" in x else "")
                 print(f"     {act['text'][:110]}\n        against {x.get('against_values', 0):.2f}, honours "
-                      f"{x.get('honors_values', 0):.2f}, regard {x.get('self_regard', 0):+.2f}, wanted else "
-                      f"{x.get('wanted_instead', 0):.2f}, eased/stoked {x.get('eased_or_stoked', 0):+.2f}")
+                      f"{x.get('honors_values', 0):.2f}, regard {x.get('self_regard', 0):+.2f}{cost}, "
+                      f"eased/stoked {x.get('eased_or_stoked', 0):+.2f}")
             felt = ", ".join(f"{e['name']} {e['intensity']:.2f}" for e in r.get("emotions") or []) or "nothing"
             stored = (r.get("stored") or {}).get("surface") or {}
             print(f"     felt: {felt}\n     mood after: {_profile(r.get('mood_after'))}  (stored surface: {stored.get('label')})")

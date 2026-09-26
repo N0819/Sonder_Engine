@@ -1299,7 +1299,15 @@ whether a given feeling improves what a character does at all -- a six-beat
 blind pilot split at chance, below the variation between two calls
 (`docs/experiments/FEELINGS_AB_PILOT_2026_09_26.md`), and a design that could
 resolve it (a noise floor, several samples a beat) costs several times more,
-the owner's call; vigilance and wariness, which both
+the owner's call; the stored feeling after a call weighing a moment's
+feelings (its stir split by share) against an own act's (whole), so a strong
+restraint outweighs the moment's guilt or dread
+(`docs/experiments/AFFECT_TRACE_2026_09_26.md`); shame from any act that
+leaves the mind thinking worse of itself, the mirror of the eased pride rule
+(the act battery has no case to measure it by); a card's standing feelings
+read as present (a widower magistrate's longing mid-interrogation), which
+four anchorings of the mood question to the moment did not reduce;
+vigilance and wariness, which both
 blind readers still name as uncovered, not yet retried in narrower words;
 a memory-sourced feeling named by its scene text ("resolve (You are in the
 harbourmaster's shed...)"); naming the combinations the coverage table lists; the

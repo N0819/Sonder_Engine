@@ -141,6 +141,24 @@ def test_an_unanswered_question_is_left_out_not_read_as_zero():
     assert out["events"]["o1"] == {"stir": pytest.approx(1 / 3)}
 
 
+@pytest.mark.parametrize("language", ["en", "ja"])
+def test_only_the_held_back_want_is_asked_what_holding_back_costs(language):
+    """Asked of every act, "was there something else you wanted to do
+    instead?" was answered yes for each whenever a want was held back beside
+    them. The cost of a restraint is asked of the held-back want alone, by
+    its own words."""
+    acts = ACTS + [{"ref": "held", "text": "You held back from: tell her the truth", "held": True,
+                    "want": "tell her the truth"}]
+    qs = appraisal.questions_for(acts=acts, language=language)
+    held = [k for k in qs if k.endswith(f":{appraisal.HELD_QUESTION}")]
+    assert held == [f"act:held:{appraisal.HELD_QUESTION}"]
+    assert "tell her the truth" in qs[held[0]]["instructions"]
+    assert "{" not in qs[held[0]]["instructions"]
+    out = appraisal.read({held[0]: _answer(clear=1.0)}, acts=acts, language=language)
+    assert out["acts"]["held"] == {"held_back": pytest.approx(2 / 3)}
+    assert out["acts"]["s0"] == {}
+
+
 def test_one_request_carries_every_question(monkeypatch):
     seen = []
 
