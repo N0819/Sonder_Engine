@@ -122,10 +122,13 @@ def test_the_centre_is_a_weighted_average_where_bad_outweighs_good():
     assert biased[0] < even[0]
 
 
-def test_memories_weigh_less_than_events():
-    event, memory = Emotion("joy", 0.5), Emotion("distress", 0.5, source="memory")
-    c, _ = mix.centre([event, memory], negativity=1.0, memory_weight=mix.MEMORY_WEIGHT)
+@pytest.mark.parametrize("source", ["memory", "concern"])
+def test_memories_and_concerns_weigh_less_than_events(source):
+    event, other = Emotion("joy", 0.5), Emotion("distress", 0.5, source=source)
+    c, _ = mix.centre([event, other], negativity=1.0)
     assert c[0] > (mix.EMOTION_PAD["joy"][0] + mix.EMOTION_PAD["distress"][0]) / 2
+    even, _ = mix.centre([event, other], negativity=1.0, weights={source: 1.0})
+    assert even[0] == pytest.approx((mix.EMOTION_PAD["joy"][0] + mix.EMOTION_PAD["distress"][0]) / 2)
 
 
 def test_several_emotions_push_harder_than_one_but_never_past_one():

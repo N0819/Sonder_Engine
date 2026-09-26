@@ -455,6 +455,57 @@ shape that fits is code carrying the mood and Jev supplying the push -- how
 character is a judgement this reference cannot make, since the reference
 anchors on its own previous answer.
 
+## The affect pass, built and run
+
+The owner: "We can also probably do math with moods, the cumulative effects
+of events and memories average into an overall mood with multiple
+dimensions. Anyways design test and build", then "We can also probably do a
+pass after the character turn finishes to see how their actions speech and
+thoughts affect their mood." Built: `mind/affect_appraisal.py` (the questions)
+and `mind/affect_mix.py` (OCC emotions, the PAD mood, habituation), not wired.
+Instrument: `tools/jev_affect_probe.py`, on the 98 captured beats that carry
+per-event perception -- The Doctor 38, Mirelle 60 -- one call per beat. Arms:
+`E` the beat's events; `M` + the memories recall delivered; `C` + the
+character's unsettled concerns, appraised like events; `P` the pass after the
+turn, on the character's own speech, actions and held-back want.
+
+**Event emotions against an independent reader.** The `utility` model (GLM on
+NanoGPT, which never saw Jev's answers) named the likely emotion per event
+from OCC's list. The mix's strongest emotion per event agrees modestly: the
+same sign 63% for the Doctor (shuffled 43%), the same family 31% and 36%
+(shuffled 21% and 23%). Many disagreements are other readings of one event:
+the reader calls her brushing off sand "relief" (he had feared her hurt), the
+mix "satisfaction".
+
+**The mood as its own trajectory** -- started from the first beat's mood and
+never again shown the character's reports -- tracks the Doctor's reported
+valence at r 0.42 (sign 89%) and Mirelle's arousal at r 0.54, and the change
+from beat to beat at r 0.30-0.45, as the whole-beat reading did.
+
+**Undercurrents come from concerns, not events.** On 21 of the 32 Doctor beats
+whose own report carries a negative undercurrent ("worry" beneath delight),
+no event of the beat produced a negative feeling; appraising the character's
+unsettled concerns alongside finds one on 32 of 32 -- but also adds one where
+none was reported (5 of 6 Doctor beats, 11 of 60 of Mirelle's), and every
+share of the SURFACE mood they are given costs its tracking: valence r 0.39,
+0.33, 0.27, 0.19 at concern weights 0, 0.25, 0.5, 1. So concerns name the
+undercurrent and do not move the surface (`CONCERN_WEIGHT = 0`).
+
+**Memories as context** -- recall's delivered rows, today's packet -- are
+mixed: Mirelle's change r 0.38 -> 0.45, the Doctor's 0.30 -> 0.17. That packet
+is the one graded above at about a quarter relevant; the Jev packet is the
+one to test.
+
+**The pass after the turn** helps a little and harms nothing that matters:
+the Doctor's valence sign 89% -> 95%, Mirelle's arousal r 0.54-0.56 ->
+0.59-0.61. But the event questions read a character's own acts with a
+self-serving tilt: "gratification" (pride with joy) is the strongest emotion
+for 175 of 459 acts, remorse for 2; "who brought this about" for the Doctor
+praising her line returns her, so his own speech reads as gratitude; a held
+back want reads as pride or desire, rarely as a cost. Own acts need their own
+questions -- acting against a value (dissonance), what restraint costs, and
+whether saying a feeling eased it (affect labelling) or fed it (venting).
+
 ## What Jev costs
 
 Measured from Jev's own response (`usage.cost`): one 64-question request,

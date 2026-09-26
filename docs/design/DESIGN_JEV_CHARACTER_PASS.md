@@ -323,9 +323,28 @@ dimensions." Built in `mind/affect_mix.py` (pure code) and
   or the mood when it disagrees with the surface.
 
 Knobs, all the owner's, none tuned: reactivity, half-life, negativity weight,
-negative decay factor, memory weight, and habituation's step, grace, ceiling
-and half-life. The card's `stress_profile` can set reactivity and half-life
-per character once the defaults are chosen.
+negative decay factor, memory weight, concern weight, and habituation's step,
+grace, ceiling and half-life. The card's `stress_profile` can set reactivity
+and half-life per character once the defaults are chosen.
+
+**Measured 2026-09-26** (the evidence doc, "The affect pass, built and run"):
+
+- **Concerns are the layer beneath.** Appraising what is still unsettled for
+  the character (rumination) names the undercurrent its report carries on 32
+  of 32 beats where events alone named 11 -- but moving the surface mood with
+  them costs its tracking at every weight tried, so a concern names the
+  undercurrent and does not push the surface (`CONCERN_WEIGHT = 0`).
+- **The pass after the turn** (the owner: "a pass after the character turn
+  finishes to see how their actions speech and thoughts affect their mood")
+  runs beside `director_resolve`, off the critical path, and carries its push
+  into the next beat. With the event questions it helps a little and reads
+  the character's own acts with a self-serving tilt, so it gets its own
+  questions: did this go against something you value (dissonance -- Festinger);
+  did you hold back something you wanted (restraint's cost); did saying it
+  ease the feeling or feed it (affect labelling -- Lieberman et al., 2007 --
+  against venting -- Bushman, 2002).
+- **Memories as context** wait for the Jev packet: the packet recall delivers
+  today is about a quarter relevant, and its effect was mixed.
 
 This dulls a memory's FEELING, never its availability: the row stays in
 recall in full (the owner's goal is good memory, not forgetting). The surface

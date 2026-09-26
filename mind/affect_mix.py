@@ -73,6 +73,16 @@ NEGATIVITY_WEIGHT = 1.5
 NEGATIVE_DECAY_FACTOR = 1.5
 #: A memory-evoked feeling's weight against an event's.
 MEMORY_WEIGHT = 0.5
+#: A standing concern's feeling -- what is still unsettled, appraised each
+#: beat (rumination) -- against an event's. Measured 2026-09-26 on 38 of The
+#: Doctor's beats: concerns named the undercurrent the character reported on
+#: 32 of 32 beats (events alone: 11), but every share of the surface they
+#: took cost its tracking -- own-trajectory valence r 0.39 at weight 0, 0.33
+#: at 0.25, 0.27 at 0.5, 0.19 at 1. So a concern is the layer BENEATH: its
+#: feeling names the undercurrent and does not move the surface mood.
+CONCERN_WEIGHT = 0.0
+#: The weight of each source in the beat's centre.
+SOURCE_WEIGHT = {"event": 1.0, "memory": MEMORY_WEIGHT, "concern": CONCERN_WEIGHT}
 #: The owner's habituation: each landing adds a step; at or below the grace
 #: level a recall delivers its full feeling; above it the feeling shrinks
 #: toward (1 - ceiling); resting halves habituation every half-life.
@@ -99,7 +109,8 @@ def _clamp(x, lo=-1.0, hi=1.0):
 @dataclass
 class Emotion:
     """One felt emotion: its OCC name, how strong (0-1), what it is about,
-    whether an event or a memory stirred it, and which one."""
+    what stirred it -- an `event`, a `memory`, or a standing `concern` -- and
+    which one."""
     name: str
     intensity: float
     about: str = ""
@@ -229,16 +240,17 @@ def decay(mood, home, dt, *, half_life=MOOD_HALF_LIFE, negative_factor=NEGATIVE_
     return Mood.of(out)
 
 
-def centre(emotions, *, negativity=NEGATIVITY_WEIGHT, memory_weight=MEMORY_WEIGHT):
+def centre(emotions, *, negativity=NEGATIVITY_WEIGHT, weights=None):
     """This beat's emotional centre and push strength: the weighted average
     of the emotions' directions -- weight = intensity, times `negativity`
-    where the emotion is unpleasant, times `memory_weight` where a memory
-    stirred it -- and the strength of their joint push, 1 - prod(1 - i),
-    which grows with every emotion and never passes 1. (None, 0) when no
-    emotion is felt."""
+    where the emotion is unpleasant, times its source's weight (`weights`,
+    SOURCE_WEIGHT by default: an event 1, a memory and a concern less) --
+    and the strength of their joint push, 1 - prod(1 - i), which grows with
+    every emotion and never passes 1. (None, 0) when no emotion is felt."""
+    weights = {**SOURCE_WEIGHT, **(weights or {})}
     total, acc, rest = 0.0, [0.0, 0.0, 0.0], 1.0
     for e in emotions:
-        scale = memory_weight if e.source == "memory" else 1.0
+        scale = weights.get(e.source, 1.0)
         w = e.intensity * scale * (negativity if e.pad[0] < 0 else 1.0)
         if w <= 0:
             continue
@@ -252,13 +264,12 @@ def centre(emotions, *, negativity=NEGATIVITY_WEIGHT, memory_weight=MEMORY_WEIGH
 
 
 def mix(mood, home, emotions, dt, *, reactivity=REACTIVITY, half_life=MOOD_HALF_LIFE,
-        negativity=NEGATIVITY_WEIGHT, negative_factor=NEGATIVE_DECAY_FACTOR,
-        memory_weight=MEMORY_WEIGHT):
+        negativity=NEGATIVITY_WEIGHT, negative_factor=NEGATIVE_DECAY_FACTOR, weights=None):
     """One beat: decay toward home over `dt`, then move toward this beat's
     centre by `reactivity` times the push strength. Returns the new mood and
     a trace of the centre and strength."""
     moved = decay(mood, home, dt, half_life=half_life, negative_factor=negative_factor)
-    c, strength = centre(emotions, negativity=negativity, memory_weight=memory_weight)
+    c, strength = centre(emotions, negativity=negativity, weights=weights)
     if c is not None:
         step = _clamp(reactivity, 0.0, 1.0) * strength
         moved = Mood.of(tuple(m + step * (ci - m) for m, ci in zip(moved.vector(), c)))

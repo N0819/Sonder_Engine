@@ -58,7 +58,7 @@
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2538 |  | `mind.theory_of_mind` |
 | `mind/affect_appraisal.py` | 169 |  | `llm`, `llm.prompts` |
-| `mind/affect_mix.py` | 337 |  | — |
+| `mind/affect_mix.py` | 348 |  | — |
 | `mind/canon_provenance.py` | 398 |  | — |
 | `mind/knowledge_circles.py` | 134 |  | `core.db` |
 | `mind/memory.py` | 142 | Facade re-exporting every mind.memory_* name; holds no domain code of its own. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_context`, `mind.memory_inference`, `mind.memory_lore_entries`, `mind.memory_lorebooks`, `mind.memory_read`, `mind.memory_relationships`, `mind.memory_retrieval`, `mind.memory_snapshot`, `mind.memory_summaries`, `mind.memory_time`, `mind.memory_vectors`, `mind.memory_write`, `mind.theory_of_mind` |
@@ -802,14 +802,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `emotions_from_appraisal()` | 132 | 49 lines |
-| `form_compounds()` | 183 | 21 lines |
-| `centre()` | 232 | 20 lines |
-| `surface_and_undercurrent()` | 317 | 15 lines |
-| `recall_lands()` | 284 | 13 lines |
-| `mix()` | 254 | 12 lines |
-| `decay()` | 219 | 11 lines |
-| `memory_emotion()` | 206 | 9 lines |
+| `emotions_from_appraisal()` | 143 | 49 lines |
+| `form_compounds()` | 194 | 21 lines |
+| `centre()` | 243 | 21 lines |
+| `surface_and_undercurrent()` | 328 | 15 lines |
+| `recall_lands()` | 295 | 13 lines |
+| `decay()` | 230 | 11 lines |
+| `mix()` | 266 | 11 lines |
+| `memory_emotion()` | 217 | 9 lines |
 
 ### `mind/canon_provenance.py`
 
