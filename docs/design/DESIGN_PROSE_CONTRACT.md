@@ -747,6 +747,37 @@ still says "The doors behind stand open to the night beach": minted before
   naming it is dropped (its ETA with it), and under way the vehicle stands in
   its route or in no room until a write brings it in. Rerolled live, the
   TARDIS left the beach for no room in 2 of 2.
+- **Under way it is somewhere -- the same evening, from three branches of
+  that departure.** Chat 154's active roll built `in_the_time_vortex` as the
+  ship's route (the prose author had sent it `new:in the time vortex`) and
+  held together for the two beats after: in transit, the beach remembered,
+  one shut door into the vortex. Chat 156 routed it through `the_open_sea`.
+  Chat 157 named no space -- the transit part allowed a route only for a room
+  the world already held, and left it out for a journey through "nowhere a
+  body could step" -- and its next beat wrote the ship `docked` in no room,
+  which erased `departed_from`, so the beat after set it off again with
+  nothing remembering the beach; its scanner and power readouts meanwhile
+  named a vortex the world did not hold. No room was the floor the ruling
+  allowed, and it had been read as the place to stand. The part now says
+  setting off names the space it moves through as `route_room` -- the room
+  the world holds for it, or `new:<the prose's own words for that space>` --
+  and that nothing arrives nowhere; the room author builds a `new:` route as
+  it builds any new place. `settle_departures` carries the route through a
+  later write that does not name another, as it carries `departed_from`, and
+  keeps a vehicle `docked` with no position, destination or route under way.
+  A route naming no room is kept for the step that builds it and derives no
+  doorway (the rewrite had drawn `{"to": "the vortex"}` from a console room
+  whose ship was in no room). In no room remains the floor; code never
+  invents the space.
+- **A moving room's doorway keeps no passage record** (chats 156 and 157). A
+  World Browser edit to the TARDIS's doorway on the beach minted one, and
+  `sync_scene_passages` -- after the dock rewrite -- minted the beach edge
+  back on every merge: 157's console room had a shut door onto the beach
+  while its ship was in no room, 156's opened onto the sea and the beach at
+  once. `spatial_transit._release_dock_passages` folds such a record into the
+  door it describes (name, material, width, climb -- `_DOORWAY_OWN_FIELDS`,
+  which now also keeps a doorway's `offset` along its wall) and drops it, so
+  the door carries itself to every place it docks.
 - **A body shown on a screen is not minted where it stands.** Rerolling
   turn 4398, the figure the Doctor sees on the scanner was minted and left
   in no room, or recorded only as the scanner's state; code now grants

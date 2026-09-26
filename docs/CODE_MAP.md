@@ -223,7 +223,7 @@
 | `world/spatial_senses.py` | 1894 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation`, `world.spatial_routing` |
 | `world/spatial_sound_field.py` | 3141 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light_field`, `world.spatial_senses` |
 | `world/spatial_substance.py` | 1138 |  | `world.spatial_contacts`, `world.spatial_identity` |
-| `world/spatial_transit.py` | 839 |  | `world.spatial_barriers`, `world.spatial_identity` |
+| `world/spatial_transit.py` | 948 |  | `world.spatial_barriers`, `world.spatial_identity` |
 | `world/spatial_walk.py` | 423 |  | `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_routing` |
 | `world/stimulation.py` | 239 |  | `story`, `world.spatial` |
 | `world/structure.py` | 1720 |  | `world.charter_model`, `world.regions`, `world.spatial` |
@@ -2743,14 +2743,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `apply_transit_dock_edges()` | 452 | 194 lines |
-| `settle_departures()` | 679 | 97 lines |
+| `apply_transit_dock_edges()` | 516 | 205 lines |
+| `settle_departures()` | 755 | 130 lines |
 | `evict_self_contained_entities()` | 314 | 89 lines |
 | `sync_entity_interior_rooms()` | 131 | 65 lines |
+| `_release_dock_passages()` | 454 | 60 lines |
 | `_is_body_entity()` | 62 | 49 lines |
-| `ambient_scope()` | 811 | 29 lines |
+| `ambient_scope()` | 920 | 29 lines |
 | `infer_body_enclosures()` | 225 | 27 lines |
-| `_interior_entry_room()` | 198 | 25 lines |
 
 ### `world/spatial_walk.py`
 

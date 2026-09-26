@@ -931,12 +931,27 @@ def test_a_journey_sets_off_before_its_end_is_built():
     assert "with the destination named" not in en
     assert ("これから作られる場所なら書きません。旅は行き先が作られる前に出発し") in ja
     # The owner's ruling (2026-09-25): the place it sets off from is never
-    # where it arrives, and under way it is in no room until the story brings
+    # where it arrives, and a thing under way stays so until the story brings
     # it in -- `spatial_transit.settle_departures` holds the floor.
-    assert ("a thing under way is nowhere but in transit, and stays so, beat "
-            "after beat, until the prose brings it in") in en
+    assert ("a thing under way stays so, beat after beat, until the prose "
+            "brings it in") in en
     assert "出発しようとしている場所でもなく" in ja
     assert "散文がそれを着かせるまで、拍から拍へとそのままです" in ja
+    # And it is SOMEWHERE while it is (the same evening): chat 154 built a
+    # room for the space the TARDIS crossed and held together; chat 157 --
+    # told a route was only for a room the world already held, and to leave
+    # it out for a journey through "nowhere a body could step" -- named none,
+    # and its next beat docked the ship in no room at all.
+    assert ("UNDER WAY IT IS SOMEWHERE: `route_room` is the space it moves "
+            "through between its places") in en
+    assert ("or new:<the prose's own words for that space> when the world "
+            "holds none") in en
+    assert "nothing arrives nowhere" in en
+    assert "nowhere a body could step" not in en
+    assert "移動中のものは、どこかにいます。" in ja
+    assert "new:<the prose's own words for that space>" in ja
+    assert "どこでもない場所に着くものはない" in ja
+    assert "身体が足を踏み入れられる場所をどこも通らない旅なら書きません" not in ja
     # Chat 154 turn 4398 (2026-09-24): the ship set off for its own console
     # room -- "as a placeholder since the actual Kyoto/Kansai room does not
     # yet exist" -- and with the beach it was leaving as its route, "the

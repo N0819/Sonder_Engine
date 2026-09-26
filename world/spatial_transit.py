@@ -434,11 +434,13 @@ def _same_entity(scene, a, b) -> bool:
 
 
 #: What a doorway IS, as against where it leads and whether it stands open:
-#: the wall it is in, what it is called, how it is climbed. Deriving the dock
-#: edge from its holder changes the target and the barrier, never these. The
-#: edge used to be rebuilt as {to, barrier, distance}: in chat 154 turn 4398
-#: the TARDIS doors shut, and the console room's doorway lost its bearing.
-_DOORWAY_OWN_FIELDS = ("dir", "name", "way", "vertical")
+#: the wall it is in and where along it, what it is called and made of, how
+#: wide, how it is climbed. Deriving the dock edge from its holder changes the
+#: target and the barrier, never these. The edge used to be rebuilt as {to,
+#: barrier, distance}: in chat 154 turn 4398 the TARDIS doors shut, and the
+#: console room's doorway lost its bearing.
+_DOORWAY_OWN_FIELDS = ("dir", "offset", "name", "material", "width", "way",
+                       "vertical")
 
 
 def _doorway_own_fields(edge) -> dict:
@@ -447,6 +449,68 @@ def _doorway_own_fields(edge) -> dict:
         return {}
     return {key: edge[key] for key in _DOORWAY_OWN_FIELDS
             if edge.get(key) not in (None, "")}
+
+
+def _release_dock_passages(scene: dict, interior_ids) -> bool:
+    """A MOVING ROOM'S DOORWAY HAS ONE WRITER, and it is the rewrite below.
+
+    A passage record (`scene.passages`, DESIGN_ROOM_FIDELITY §5) makes a
+    doorway ONE object keyed by the two rooms it joins, and
+    `sync_scene_passages` writes both of its edges back from it on every merge
+    -- AFTER this rewrite. For a doorway between an entity's inside and the
+    world, the second room is wherever the entity happens to be, so a record
+    keyed by it pins the door to one landing. Measured on the owner's chats
+    156 and 157 (2026-09-25): a World Browser edit to the TARDIS's doorway on
+    the beach minted one (`web/world_routes._ensure_passage`), and after the
+    ship left, 157's console room -- a ship in no room -- still had a shut door
+    onto the beach, and 156's opened onto the sea and the beach at once.
+
+    So the record goes, and what it knew about the doorway ITSELF -- its
+    name, material, width and climb (`_DOORWAY_OWN_FIELDS`) -- goes onto the
+    inside room's edge and its `dock_doorway`, which carry the door to every
+    place it docks after. A record joining two of the entity's own rooms is an
+    ordinary inner doorway and stays. Returns True when anything changed."""
+    passages = scene.get("passages") if isinstance(scene, dict) else None
+    if not isinstance(passages, dict) or not passages:
+        return False
+    from world.spatial_orientation import normalize_vertical, opposite_vertical
+    rooms = scene.get("rooms") or {}
+    same = {str(rid) for rid in interior_ids}
+    released = []
+    for pid, record in list(passages.items()):
+        pair = record.get("rooms") if isinstance(record, dict) else None
+        if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+            continue
+        pair = [str(pair[0]), str(pair[1])]
+        inside = [rid for rid in pair if rid in same]
+        if len(inside) != 1:
+            continue
+        inside, outside = inside[0], next(rid for rid in pair if rid not in same)
+        own = {key: record[key] for key in ("name", "material", "width")
+               if record.get(key) not in (None, "")}
+        vertical = normalize_vertical(record.get("vertical"))
+        if vertical:
+            # Stored as seen from rooms[0]; the doorway is kept from inside.
+            own["vertical"] = vertical if pair[0] == inside \
+                else (opposite_vertical(vertical) or vertical)
+        room = rooms.get(inside)
+        if own and isinstance(room, dict):
+            for edge in room.get("adjacent") or []:
+                if isinstance(edge, dict) and str(edge.get("to")) == outside:
+                    edge.update(own)
+            room["dock_doorway"] = {**_doorway_own_fields(room.get("dock_doorway")),
+                                    **own}
+        passages.pop(pid, None)
+        released.append(pid)
+    if not released:
+        return False
+    for room in rooms.values():
+        for edge in (room.get("adjacent") or []) if isinstance(room, dict) else []:
+            if isinstance(edge, dict) and edge.get("passage") in released:
+                edge.pop("passage", None)
+    if not passages:
+        scene.pop("passages", None)
+    return True
 
 
 def apply_transit_dock_edges(scene: dict) -> bool:
@@ -529,6 +593,8 @@ def apply_transit_dock_edges(scene: dict) -> bool:
         if not interior_ids:
             continue
         same = set(interior_ids)
+        if _release_dock_passages(scene, interior_ids):
+            changed = True
         transit = _transit_state(ent)
         # A THING CANNOT TRAVEL INTO ITS OWN INSIDE. A destination or route
         # that is one of this entity's own interior rooms is impossible by
@@ -572,10 +638,19 @@ def apply_transit_dock_edges(scene: dict) -> bool:
                        if hatch in ("closed", "locked")
                        else _open_enclosure_barrier(ent))
         elif phase in _TRANSIT_CLOSED_PHASES:
-            target = str(transit.get("route_room") or "") or None
+            # A ROUTE IS A ROOM OR IT IS NOTHING. Words that name no room the
+            # world holds -- a `new:` place nothing has built yet, an id a
+            # model made up -- stay on the transit for the step that builds
+            # the room, but a doorway onto them opens onto a room that is not
+            # there: the rewrite drew `{"to": "the vortex"}` from a console
+            # room whose ship stood in no room. The door opens once it exists.
+            route = str(transit.get("route_room") or "")
+            target = route if isinstance(rooms.get(route), dict) else None
             barrier = "closed_door"
         elif phase == "arriving":
-            target = str(transit.get("destination_room") or "") or exterior
+            destination = str(transit.get("destination_room") or "")
+            target = destination if isinstance(rooms.get(destination), dict) \
+                else exterior
             barrier = "closed_door"
         else:  # docked, or an unrecognized phase read conservatively as docked
             target = exterior
@@ -646,8 +721,9 @@ def apply_transit_dock_edges(scene: dict) -> bool:
 
 # ---------------------------------------------------------------------------
 # A journey's two ends (the owner's ruling, 2026-09-25): where a vehicle sets
-# off from is never where it arrives, and under way it is in no room -- as
-# long as it likes -- until the story brings it in.
+# off from is never where it arrives. Between them it is in the space it moves
+# through -- its route room -- for as long as it likes, and in no room only
+# when nothing has named that space, until the story brings it in.
 # ---------------------------------------------------------------------------
 
 #: Phases in which a vehicle is between its places: it is where its route
@@ -678,10 +754,11 @@ def _same_room(a, b) -> bool:
 
 def settle_departures(before: dict, merged: dict) -> bool:
     """WHERE A VEHICLE SETS OFF FROM IS NEVER WHERE IT ARRIVES, AND UNDER WAY
-    IT IS IN NO ROOM until the story brings it in -- the owner's ruling,
-    2026-09-25. `before` is the world the beat (or the causal step) started
-    from, read for where the vehicle stood; `merged` is rewritten in place.
-    Idempotent. Returns True when anything changed.
+    IT IS IN THE SPACE IT MOVES THROUGH until the story brings it in -- the
+    owner's ruling, 2026-09-25, and its evening. `before` is the world the
+    beat (or the causal step) started from, read for where the vehicle stood;
+    `merged` is rewritten in place. Idempotent. Returns True when anything
+    changed.
 
     - Setting off (`in_transit` or `arriving`), the room it stood in is kept
       as `transit.departed_from` for the whole journey.
@@ -689,19 +766,28 @@ def settle_departures(before: dict, merged: dict) -> bool:
       destination's `eta_seconds` with it, so no timed arrival carries it
       back. A vehicle sealed and not yet away is bound for nowhere it stands.
     - Under way it stands in its `route_room` when the world holds one, and
-      in no room otherwise -- a thing in transit is between places by
-      construction (`unplaced_mints_needing_a_room` already says so), and
-      nothing asks it to arrive: with no destination it stays in transit,
-      beat after beat, until a write brings it in.
+      the route holds through every later write of the transit that does not
+      name another, as the place it left does: silence is not a move into
+      nowhere. In no room is the floor for a journey nothing has named a
+      space for -- a thing in transit is between places by construction
+      (`unplaced_mints_needing_a_room` already says so) -- and code never
+      invents one. Nothing asks it to arrive: with no destination it stays
+      in transit, beat after beat, until a write brings it in.
     - Docked, the journey is over: `departed_from` goes, and a vehicle docked
       with no room but a `destination_room` stands there, as the timed
       arrival already stands it. A position the story wrote itself stands.
+      Docked with nowhere at all to be -- no position, no destination, no
+      route -- is not an arrival, and a vehicle that was under way stays so.
 
     Measured on chat 154 turn 4398 (2026-09-25): with no grammar and no
     reasoning, fresh drafts still wrote the beach the TARDIS was leaving as
     its route (3 of 3 samples of capture 3979), and once in twelve rerolls as
     its destination with an ETA of 5 s; and its position stayed on the beach
-    for the whole journey, in plain view of anyone standing there."""
+    for the whole journey, in plain view of anyone standing there. The same
+    evening, three branches of that departure: 154 built a room for the space
+    the ship crossed and held for the beats after; 157 named none, its next
+    beat wrote the ship docked in no room, and the beat after that set it off
+    again with nothing remembering the beach."""
     entities = merged.get("entities") if isinstance(merged, dict) else None
     positions = merged.get("positions") if isinstance(merged, dict) else None
     if not isinstance(entities, dict) or not isinstance(positions, dict):
@@ -717,17 +803,32 @@ def settle_departures(before: dict, merged: dict) -> bool:
             continue
         phase = str(transit.get("phase") or "docked").strip().casefold()
         here = room_of_record(merged, eid, ent)
+        prior = _transit_state(earlier_entities.get(eid)) or {}
+        prior_phase = str(prior.get("phase") or "").strip().casefold()
+        was_under_way = prior_phase in _UNDER_WAY_PHASES
         if phase == "docked":
-            if transit.pop("departed_from", None) is not None:
-                changed = True
             destination = str(transit.get("destination_room") or "")
-            if not here and isinstance(rooms.get(destination), dict) \
-                    and rooms[destination].get("parent_entity") != eid:
-                positions[eid] = destination
-                transit.pop("destination_room", None)
-                transit.pop("eta_seconds", None)
-                changed = True
-            continue
+            lands = isinstance(rooms.get(destination), dict) \
+                and rooms[destination].get("parent_entity") != eid
+            if here or lands or not was_under_way:
+                if transit.pop("departed_from", None) is not None:
+                    changed = True
+                if not here and lands:
+                    positions[eid] = destination
+                    transit.pop("destination_room", None)
+                    transit.pop("eta_seconds", None)
+                    changed = True
+                continue
+            # NOTHING ARRIVES NOWHERE. An arrival is AT somewhere, and this
+            # one names nowhere to be: no position, no destination the world
+            # holds, no route it stood in. Chat 157 turn 4481: under way in no
+            # room, the TARDIS was written `{"phase": "docked"}` -- the
+            # Director's prose had read a ship in flight as "a ship that has
+            # not landed clean" -- and docking erased the place it left, so
+            # the next beat set it off with nothing remembering the beach. The
+            # journey stays as it was, and keeps its ends below.
+            transit["phase"] = phase = prior_phase
+            changed = True
         stood = room_of_record(earlier, eid, earlier_entities.get(eid) or ent) \
             if earlier else None
         if phase in _UNDER_WAY_PHASES:
@@ -737,14 +838,22 @@ def settle_departures(before: dict, merged: dict) -> bool:
             # over a world where it is already in no room. Replayed live on
             # chat 154 turn 4398, the committed TARDIS had lost the beach it
             # left, and a later beat could have sent it straight back.
-            prior = _transit_state(earlier_entities.get(eid)) or {}
             carried = str(prior.get("departed_from") or "").strip() \
-                if str(prior.get("phase") or "").strip().casefold() in _UNDER_WAY_PHASES else ""
+                if was_under_way else ""
             if not str(transit.get("departed_from") or "").strip() \
                     and (carried or stood or here):
                 transit["departed_from"] = carried or stood or here
                 changed = True
             origin = transit.get("departed_from")
+            # AND THE SPACE IT IS CROSSING, the same way: a write that names
+            # no route is silence, not a move into nowhere. Chat 157 turn 4482
+            # wrote `{"phase": "in_transit"}` and nothing else, which on a
+            # ship standing in its route room would have dropped it out of
+            # the world. Naming another space moves it there.
+            kept = str(prior.get("route_room") or "").strip() if was_under_way else ""
+            if kept and not str(transit.get("route_room") or "").strip():
+                transit["route_room"] = kept
+                changed = True
         else:  # sealed, or a phase not yet under way: where it stands
             origin = stood or here
         for field in ("destination_room", "route_room"):
