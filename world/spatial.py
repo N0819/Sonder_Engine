@@ -313,7 +313,7 @@ from world.spatial_sound_field import (
     failing_sound_sources_out, FRAGMENT_SNR, FULL_SNR, gain_at, HEAR_FLOOR,
     heard_events, noise_word, NOISE_WORDS, normalize_sound_level,
     one_opening_away, open_edge_floor, RAISED_VOLUMES, room_noise_word,
-    room_holds_a_standing_source, STANDING_SOURCE_KINDS,
+    room_holds_a_standing_source, room_still_sounding, STANDING_SOURCE_KINDS,
     quantise_hearing, sound_field, sound_field_hear_level, sound_notices,
     sound_passes, sound_shape, sound_sources, SOUND_LEVELS, SOUND_POWER,
     # An impact is not a voice and is not a machine (2026-09-06).

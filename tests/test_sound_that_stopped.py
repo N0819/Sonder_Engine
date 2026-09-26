@@ -290,3 +290,46 @@ def test_a_one_beat_sound_is_never_heard_to_stop(size):
 
 def test_the_verdict_is_in_the_published_vocabulary():
     assert "ceased" in composer.STANDING_VERDICTS
+
+
+SUBSIDED_EN = "The noise has died down."
+SUBSIDED_JA = "騒音が和らいだ。"
+
+
+@pytest.mark.parametrize("language,sentence,wrong",
+                         [("en", SUBSIDED_EN, CEASED_EN),
+                          ("ja", SUBSIDED_JA, CEASED_JA)])
+def test_a_machine_that_quiets_has_not_stopped(language, sentence, wrong):
+    """The room goes even at `quiet` a THIRD way: its source keeps running
+    below the voice it was drowning. The noise words measure what a sound
+    does to a voice one pace off, so `quiet` is "you can talk over it", never
+    silence. Chat 157 turn 4482: the Director's prose had the TARDIS's din
+    "gentle into a hum" an hour from landing, the hand moved the console's
+    `sound_source` from loud to audible with it still running, and the view
+    said "The noise has stopped." -- which the page rendered as "a silence
+    so total your ears ring with it", with the ship still in flight."""
+    sc = lamp_hall(generator=True)
+    key = _soundscape_key(sc, "Q")
+
+    sc["entities"]["gen"]["sound_source"] = "audible"     # still running
+    assert sound_shape(sc, "Q") is None                  # the room went even
+    assert room_noise_word(sc, "r") == NOISE_WORDS[0]    # at `quiet`
+    percepts = _standing(sc, "Q", prev_standing={key})
+    [news] = [p for p in percepts if (p.data or {}).get("ceased")]
+    assert composer.standing_verdicts(percepts, {key})[news.dedupe_key] == "ceased"
+    text = composer.render_view(percepts, mode="player", prev_standing={key},
+                                language=language).text
+    assert sentence in text and wrong not in text
+
+    # And when it IS switched off, that is news again: the din died down one
+    # beat and the hum stopped the next.
+    sc["entities"]["gen"]["state"] = {"running": False}
+    later = _standing(sc, "Q", prev_standing={news.dedupe_key})
+    [stopped] = [p for p in later if (p.data or {}).get("ceased")]
+    assert stopped.dedupe_key != news.dedupe_key
+    assert composer._subject_prefix(stopped.dedupe_key) == \
+        composer._subject_prefix(key)
+    text = composer.render_view(later, mode="player",
+                                prev_standing={news.dedupe_key},
+                                language=language).text
+    assert wrong in text and sentence not in text

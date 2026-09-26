@@ -473,7 +473,8 @@ class JapaneseRenderer:
         if p.kind == "scent":
             return self._scent(data, label, prefix)
         if p.kind == "ambient" and data.get("ceased") and not prefix:
-            return self._text("sound_ceased")
+            return self._text("sound_subsided" if data.get("subsided")
+                              else "sound_ceased")
         if p.kind == "ambient" and data.get("soundscape") and not prefix:
             return self._sound_shape(data.get("soundscape"))
         if p.kind in ("sensation", "substance", "ambient"):

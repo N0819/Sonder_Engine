@@ -107,6 +107,7 @@ from world.spatial import (
     sound_shape,
     room_holds_a_standing_source,
     room_noise_word,
+    room_still_sounding,
     NOISE_WORDS,
     substance_event_clause,
     visible_adjacent_rooms,
@@ -5168,7 +5169,15 @@ def _composer_standing_percepts(sc, p, name, others, display_map, known, *,
             # percept nobody renders, and it is what makes "in the same
             # room" exact -- a body that walked somewhere else carries the
             # old room's key, which is not this room's subject.
-            percepts.append(composer.sound_ceased_percept(room))
+            #
+            # AND A ROOM THAT FELL QUIET HAS NOT NECESSARILY STOPPED. `quiet`
+            # is what a sound does to a voice one pace off -- "you can talk
+            # over it" -- so a source still running below that goes even at
+            # `quiet` too: the din died down, and the thing is still sounding
+            # (chat 157 turn 4482, a TARDIS rotor's din "gentling into a hum"
+            # in flight, rendered as a total silence).
+            percepts.append(composer.sound_ceased_percept(
+                room, still_sounding=room_still_sounding(sc, room, sound=sound)))
     # Crowds, couriers and posted notices: three built subsystems whose whole
     # perception seam is these three keys, and until now nothing read them.
     # Already room-scoped and already reduced to what a bystander takes in by

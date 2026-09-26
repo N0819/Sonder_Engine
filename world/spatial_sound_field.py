@@ -2990,6 +2990,37 @@ def room_holds_a_standing_source(scene: dict, room) -> bool:
     return False
 
 
+def room_still_sounding(scene: dict, room, *, sound=None) -> bool:
+    """Is a standing source in this room still SOUNDING this beat -- running,
+    at any level, and not out on a failing beat?
+
+    The half of the `ceased` question `room_holds_a_standing_source` leaves
+    open. A room goes even at `quiet` with a source standing in it two ways:
+    the source stopped, or it fell below the voice it had been drowning and
+    went on. The noise words measure what a sound does to a voice one pace
+    off, so `quiet` says "you can talk over it", never "silent". Chat 157
+    turn 4482: the Director's prose had the TARDIS's din "gentle into a hum"
+    an hour from landing, the hand moved the console's `sound_source` from
+    loud to audible with it still running, and the view said "The noise has
+    stopped." -- which the page made "a silence so total your ears ring with
+    it", the ship still in flight.
+
+    Read from the field's own sources -- the one `room_noise_word` grades,
+    built the same way when none is handed in -- so a switched-off source
+    and a failing one that went out this beat answer False here, and a crowd
+    the field carries answers True, exactly as they count in the grading.
+    """
+    rid = str(room or "")
+    if not rid or not isinstance(scene, dict):
+        return False
+    field = sound if sound is not None else sound_field(scene, rid, room=rid)
+    sources = getattr(field, "sources", None) or ()
+    return any(isinstance(source, dict) and str(source.get("room") or "") == rid
+               and source.get("kind") in ("entity", "crowd")
+               and float(source.get("power") or 0.0) > 0.0
+               for source in sources)
+
+
 def _cell_noise(field, room, cell) -> float:
     """The room's STANDING noise at one CELL of `room` on this field: the
     room's ambient floor plus every standing source's intensity there

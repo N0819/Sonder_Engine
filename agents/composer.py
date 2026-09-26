@@ -992,7 +992,7 @@ def soundscape_percept(shape, room_id):
     )
 
 
-def sound_ceased_percept(room_id):
+def sound_ceased_percept(room_id, *, still_sounding=False):
     """The room's sound STOPPING, as one standing hearing percept.
 
     SILENCE WHERE THERE WAS SOUND (review 2026-09-07 D3). A room the sound
@@ -1013,14 +1013,24 @@ def sound_ceased_percept(room_id):
     once, not every beat), and an observer who was never delivered the sound
     gets `first` -- which `unheard_ceasing` drops, because a silence is only
     news to an ear that had the noise.
+
+    `still_sounding` is the room that went quiet with its source still going
+    (`spatial_sound_field.room_still_sounding`): the noise DIED DOWN, which is
+    not the noise stopping -- a TARDIS rotor whose din "gentled into a hum"
+    in flight was told to the page as a stop (chat 157 turn 4482). Same
+    subject, its own content, so the hum stopping later is news again.
     """
     if not room_id:
         return None
+    data = {"ceased": True}
+    if still_sounding:
+        data["subsided"] = True
     return Percept(
         kind="ambient", channel="hearing",
-        data={"ceased": True},
+        data=data,
         salience=0.4,
-        dedupe_key=standing_key("soundscape", (room_id,), ("ceased",)),
+        dedupe_key=standing_key("soundscape", (room_id,),
+                                ("subsided" if still_sounding else "ceased",)),
     )
 
 
@@ -4366,7 +4376,8 @@ def _render_standing(p):
         return _en(template, subject=subject, detail=detail)
     if p.kind == "ambient":
         if p.data.get("ceased"):
-            return _en("sound_ceased")
+            return _en("sound_subsided" if p.data.get("subsided")
+                       else "sound_ceased")
         if p.data.get("soundscape"):
             return render_sound_shape(p.data.get("soundscape"))
         if p.data.get("distant"):
