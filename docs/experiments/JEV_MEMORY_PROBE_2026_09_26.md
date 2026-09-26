@@ -384,6 +384,77 @@ own mechanism the knee should move out; only a conduct replay can say whether
 it does. (The same judge grades a little harder in the larger sheets: the
 new packet's first 24 earn 13.7 here against 15.5 among 24-row sheets.)
 
+## Mood as a Jev job
+
+The owner: "We can make mood a category job for jev and even have it emit
+multiple. and yes this should include nsfw and niche moods", "mood likely
+needs a rather large context input like recent moods recent chat memories,
+and opinions of the person they are interacting with", "some moods are
+combinations of moods ... we can reduce category count by breaking down
+moods that are actually mixes of moods", and "some moods can be broken down
+into spectrums which jev can also answer." Instrument:
+`tools/jev_mood_probe.py`, on captured character calls; the reference is the
+mood the character model reported on the same call (`state.active.affect`).
+Explicit chats are used under the owner's 2026-09-26 permission ("we aren't
+playing with censored models atm"); nothing from them is quoted here.
+
+Two ways of asking, both multi-mood because every option is graded alone:
+**labels**, 121 of them (the lexicon's 67 plus niche and intimate moods it
+lacks), and **bases**: Plutchik's eight primaries plus desire, five spectrums
+(pleasure, arousal and dominance -- the PAD space -- then playful/serious and
+open/guarded), and two questions for the quieter layer beneath (how strong,
+which base). Code names what co-occurs from Plutchik's dyads ("optimism (joy
+with anticipation)"). Sixteen questions against 121.
+
+Context sizes: A identity and this beat's perception; B + the mood the
+character came in with and its last three; C + its recent memories; D + its
+standing with and readings of the people around it.
+
+**Round two**, one call per beat: The Doctor, 38 beats (SFW); Mirelle
+Sulmirath, 70 beats (explicit story). Correlation with the character's own
+reported mood (bases: the pleasure and arousal spectrums):
+
+| | Doctor valence | Doctor arousal | Mirelle valence | Mirelle arousal |
+|---|---|---|---|---|
+| bases, A | 0.16 | 0.36 | 0.51 | 0.65 |
+| bases, B | 0.59 | **0.81** | **0.90** | **0.92** |
+| bases, D | 0.65 | 0.69 | 0.82 | 0.91 |
+| 121 labels, D | **0.71** | 0.73 | **0.01** | 0.68 |
+
+- **Recent moods are the context that matters**: A to B is the jump every
+  time; memories and opinions (D) then move the numbers by about a tenth
+  either way.
+- **Sixteen questions nearly match 121 labels, and are selective.** The label
+  list grades 13-17 labels "clearly" on every call and its valence collapses
+  on the second character; the bases grade 1-3.
+- **The quieter layer needs its own question.** Round one, which asked only
+  "how much fear do you feel", found a negative base on 9 of 61 negative
+  undercurrents the character reported; the two undercurrent questions point
+  the right way on 23 of 32.
+- **Intimate moods need explicit words.** Round one's "aroused" was graded
+  "clearly" on all 68 SFW calls and "dominant" on 27: Jev read them as
+  stirred up and commanding. Renamed ("sexually aroused", "sexually
+  dominant", ...), no intimate label and no desire grade fires on any of the
+  38 SFW beats. On the explicit story, against the character's own words
+  (marked by the `utility` model), the desire base finds 98% of the beats
+  that report sexual or romantic desire at 72% precision -- and a beat can
+  hold desire its report does not name.
+
+**The reference is mostly inertia.** The character prompt says "Begin from
+`self.active_state` and propose the feelings you now carry, including feelings
+that persist", and the reports do: the mood the character came in with
+agrees with its report better than Jev does (valence r 0.72 and 0.95; the
+second character's reported valence moves by a standard deviation of 0.05 a
+beat). Jev still tracks how a beat MOVES the mood (r 0.37-0.46 on the change
+in valence), and carrying the mood forward while moving it about a fifth of
+the way toward Jev's reading beats pure persistence on every axis, fitted
+leave one out: error 0.172 -> 0.139 and 0.055 -> 0.043 (Doctor valence,
+arousal), 0.027 -> 0.020 and 0.049 -> 0.044 (the second character). So the
+shape that fits is code carrying the mood and Jev supplying the push -- how
+`psychology_runtime` already treats stress. How much a beat SHOULD move a
+character is a judgement this reference cannot make, since the reference
+anchors on its own previous answer.
+
 ## What Jev costs
 
 Measured from Jev's own response (`usage.cost`): one 64-question request,

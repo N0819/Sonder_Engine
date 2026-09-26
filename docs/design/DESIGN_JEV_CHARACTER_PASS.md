@@ -87,7 +87,7 @@ the beat's observations with ids, and the delivered memories with refs.
 
 | Replaces | Question |
 |---|---|
-| `active.affect` (surface, undercurrent) | One `choice` over the pack's 67-label `AFFECT_LEXICON`: which best names how the moment leaves you, given how you felt a moment ago. Surface = the top label; valence and arousal = the distribution's expectation over each label's signs; undercurrent = the strongest label of the other valence carrying real weight -- **a hypothesis to test**, not assumed. |
+| `active.affect` (surface, undercurrent) | **Measured 2026-09-26** (the evidence doc, "Mood as a Jev job"): not one choice over the lexicon but sixteen graded questions -- Plutchik's eight primaries plus desire, five spectrums (pleasure, arousal, dominance, playful/serious, open/guarded), and two for the quieter layer beneath. Several moods come out at once; code names the blend from Plutchik's dyads. Code carries the mood from beat to beat and moves it part of the way toward Jev's reading (the card's `stress_profile` sets how far), which beat pure persistence on every axis measured. Needs the moods the character came in with in Jev's state; intimate moods need explicit words. |
 | appraisal's six axes | An ordinal `choice` each (five grades), read as the expected grade; `score` measured alongside. |
 | `goal_impacts[]` | Per live aim: impact grade (hinders strongly ... helps strongly, "does not bear on it"), agency (self/other/world/none), evidence (one of the beat's observation ids, or none). |
 | `somatic_impact` | Pain and pleasure grades plus an evidence choice. |
