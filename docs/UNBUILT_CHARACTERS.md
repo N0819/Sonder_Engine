@@ -1271,3 +1271,27 @@ still open:
   `_log_usage`'s `cached_tokens` shows (a) hits landing at all, and (b) hits
   consistently stopping near the system-prompt boundary rather than deeper —
   only that pattern makes the reorder worth a quality A/B.
+
+<a id="unbuilt-6-15"></a>
+
+### 6.15 Jev around the character call — [`DESIGN_JEV_CHARACTER_PASS.md`](design/DESIGN_JEV_CHARACTER_PASS.md)
+
+Proposal, 2026-09-26; nothing built. Open: the tracking pass before and after
+the character call; the memory packet (a fitted weighted-RRF net of 100 over
+new lanes, then Jev) with the moment tag written at commit; the fun sections;
+a ponder answered by Jev over the whole bank; same-beat recall. The note's nine
+owner decisions are the list. Measured in
+[`JEV_MEMORY_PROBE_2026_09_26.md`](experiments/JEV_MEMORY_PROBE_2026_09_26.md);
+instruments `tools/jev_*.py`.
+
+<a id="unbuilt-6-16"></a>
+
+### 6.16 Good memory — [`DESIGN_GOOD_MEMORY.md`](design/DESIGN_GOOD_MEMORY.md)
+
+Proposal, 2026-09-26; nothing built. Twelve features borrowed from how people
+remember, under the owner's goal of good memory rather than realistic
+forgetting: sifting within the moment, larger packets organized by why each
+row is there, activation from use, open intentions, unbidden cues, mood-aware
+recall, surprise, self-defining memories, person dossiers, who else would
+remember, consolidation that organizes, and the current state first (which is
+§2.24). The note says where to start.

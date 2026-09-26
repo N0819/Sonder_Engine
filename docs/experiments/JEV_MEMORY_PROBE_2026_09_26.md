@@ -311,7 +311,10 @@ answer the question you are asking your own memory"); 61 of 71 have a row at
   uses the name: for "What do I actually know about this fox-eared woman?"
   the memory "my name is Hinami" sat at fused rank 119 and **first** in the
   hypothetical lane on the trial run, but 48th and 63rd on two regenerations
-  of the same question whose answers did not name her.
+  of the same question whose answers did not name her. This is HyDE, which
+  `UNBUILT_CHARACTERS.md` §2.25 REJECTED on 2026-08-20 for breaking more hits
+  than it rescued; +3 to +5 points here, with breakage unmeasured, does not
+  reopen it.
 - Tuning is worth about 6 points at 50: similarity finds rows ABOUT a
   question's subject; Jev's answers are often inferential. A pool of 50 holds
   60% of the best five at best.

@@ -382,6 +382,8 @@ Not scheduled and not committed to a phase. See the
 - [§6.6 — Psychology as pressure — `DESIGN_PSYCHOLOGY_AS_PRESSURE.md`](UNBUILT_CHARACTERS.md#unbuilt-6-6)
 - [§6.7 — Long-term goals — `DESIGN_LONG_TERM_GOALS.md`](UNBUILT_CHARACTERS.md#unbuilt-6-7)
 - [§6.9 — Character-agent output audit — `../design_notes/09-character-agent-audit.md`](UNBUILT_CHARACTERS.md#unbuilt-6-9)
+- [§6.15 — Jev around the character call — `DESIGN_JEV_CHARACTER_PASS.md`](UNBUILT_CHARACTERS.md#unbuilt-6-15)
+- [§6.16 — Good memory — `DESIGN_GOOD_MEMORY.md`](UNBUILT_CHARACTERS.md#unbuilt-6-16)
 
 ### Living world and institutions
 

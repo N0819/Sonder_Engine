@@ -90,6 +90,13 @@ Minds:
 - [`DESIGN_PSYCHOLOGY_AS_PRESSURE.md`](design/DESIGN_PSYCHOLOGY_AS_PRESSURE.md)
   — why a sheet should bias deliberation rather than serve as its premises.
   Partly built.
+- [`DESIGN_JEV_CHARACTER_PASS.md`](design/DESIGN_JEV_CHARACTER_PASS.md) —
+  Jev (TypeSafe's decision model) around the character call: a tracking pass
+  before and after it, and a memory packet it chooses. Proposal; the packet
+  is measured, nothing is built.
+- [`DESIGN_GOOD_MEMORY.md`](design/DESIGN_GOOD_MEMORY.md) — twelve features
+  borrowed from how people remember, for good memory rather than realistic
+  forgetting. Proposal.
 
 World and body:
 
@@ -268,6 +275,10 @@ modes each one documents.
   the per-role configuration derived from it. **The model ids in that config are
   stale** — it predates the Director fan-out — but its two arguments are not:
   why role fallbacks exist, and why embeddings must not move providers.
+- [`JEV_MEMORY_PROBE_2026_09_26.md`](experiments/JEV_MEMORY_PROBE_2026_09_26.md)
+  — Jev as a memory judge: probe beats, a 22-beat label set and a fitted net,
+  71 ponders, and today's packet graded blind against Jev's (about 2.5 times
+  the relevant rows, by two judges).
 
 ## `archive/` — superseded
 

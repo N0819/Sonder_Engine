@@ -67,6 +67,15 @@ unrun experiment is unfinished work, not a broken thing.
   put the first word at ~75% of a turn instead of 100%, but the narrator
   re-runs on a fidelity or craft rewrite on roughly a quarter of turns, so it
   needs a re-stream or a visible "revising" state first.
+- **The packet-size conduct replay** —
+  [`DESIGN_JEV_CHARACTER_PASS.md`](../design/DESIGN_JEV_CHARACTER_PASS.md)
+  decision 8. `RETRIEVAL_COST.md` section 6 put conduct's peak at k=24 and
+  traced the decline to irrelevant rows; graded blind on 2026-09-26, a
+  48-row Jev packet carries fewer of them (3.6) than today's 24 (5.6).
+  Replay captured character calls with only the memory section swapped
+  (RRF@24, Jev@24, Jev@48, Jev@48 with a slimmed prompt), judge the conduct
+  blind, and have the owner read a sample. Spends character calls on the
+  owner's route.
 
 ### From the alpha 8.4.4 measurements
 
