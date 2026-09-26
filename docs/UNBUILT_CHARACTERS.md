@@ -1289,8 +1289,13 @@ records of one mood (`mood_coords` against the `affect.surface` that
 high while waiting on news nothing can be done about (0.70-0.79 on every
 wording tried);
 Japanese situations for the battery, since the Japanese wordings are
-untested translations; a concern gate that discriminates (Jev weighs every listed
-concern about 0.7);
+untested translations; the worry question's six misses of 21 on the concern
+battery (the wording that meets 20, "does what just happened bring this
+forward?", lets a worry go in an idle moment); longing, grief, dread and
+curiosity read "clearly" on more story beats than two blind readers read them
+(14, 13, 23 and 45 against 0, 4, 10 and 22), each ranked as they rank it;
+vigilance and wariness, which both
+blind readers still name as uncovered, not yet retried in narrower words;
 a memory-sourced feeling named by its scene text ("resolve (You are in the
 harbourmaster's shed...)"); naming the combinations the coverage table lists; the
 memory packet (a fitted weighted-RRF net of 100 over new lanes, then Jev) with

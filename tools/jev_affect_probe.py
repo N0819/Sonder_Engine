@@ -213,9 +213,8 @@ def ask(args):
     def run(job):
         call, arm = job
         if arm == "V":
-            result = appraisal.appraise(_state(call), call["events"], call["people"],
-                                        memories=call.get("memories") or [], mood=True, language="en",
-                                        concerns=call.get("concerns") or [])
+            result = appraisal.appraise(_state(call), call["events"], memories=call.get("memories") or [],
+                                        mood=True, language="en", concerns=call.get("concerns") or [])
         else:
             result = appraisal.appraise(_state(call, acts=True), acts=call.get("acts") or [], language="en")
         return f"{call['capture']}:{arm}", result
@@ -303,9 +302,6 @@ def dimlabel(args):
     print(f"rated {sum(1 for c in calls if c.get('dims_ref', {}).get('spectrums'))} of {len(calls)} beats")
 
 
-DESIRES = ("romance", "sexual_desire", "craving")
-
-
 def _emotions(call, appr, acts=False, multipliers=None, gate=True, parts=("events", "concerns", "memories")):
     """The mix's emotions for one beat, as (per item, all): per event (with
     the moods it stirred), per concern (scaled by its weight, unless `gate`
@@ -322,11 +318,10 @@ def _emotions(call, appr, acts=False, multipliers=None, gate=True, parts=("event
             per_item[a["ref"]] = es
             everything += es
         return per_item, everything
-    liking = {p["name"]: p["liking"] for p in call["people"]}
     if "events" in parts:
         for e in call["events"]:
             es = mix.emotions_from_appraisal((appr.get("events") or {}).get(e["ref"]) or {}, ref=e["ref"],
-                                             actor=e["actor"], about=e["text"][:60], liking=liking)
+                                             about=e["text"][:60])
             per_item[e["ref"]] = es
             everything += es
     if "concerns" in parts:
@@ -335,7 +330,7 @@ def _emotions(call, appr, acts=False, multipliers=None, gate=True, parts=("event
             if a is None:  # round two appraised concerns among the events
                 a = (appr.get("events") or {}).get(c["ref"]) or {}
             es = mix.concern_emotions(a, a.get("weight") if gate else None, ref=c["ref"],
-                                      about=c["text"][:60], liking=liking)
+                                      about=c["text"][:60])
             per_item[c["ref"]] = es
             everything += es
     if "memories" in parts:
@@ -348,16 +343,12 @@ def _emotions(call, appr, acts=False, multipliers=None, gate=True, parts=("event
     return per_item, everything
 
 
-def _occ_top(appr_event, actor, liking):
-    """The strongest OCC emotion of one event, desire's three kinds counted
-    among them -- what round two's labels can be compared with."""
+def _event_top(appr_event):
+    """The strongest feeling named for one event -- what round two's labels
+    can be compared with (OCC's rules gave it until 2026-09-26)."""
     from mind import affect_mix as mix
 
-    a = {k: v for k, v in (appr_event or {}).items() if k not in ("stir", "stirs")}
-    es = mix.emotions_from_appraisal(a, actor=actor, liking=liking)
-    es += mix.stirred((appr_event or {}).get("stir"),
-                      {k: p for k, p in ((appr_event or {}).get("stirs") or {}).items() if k in DESIRES})
-    es = sorted(es, key=lambda e: -e.intensity)
+    es = sorted(mix.emotions_from_appraisal(appr_event), key=lambda e: -e.intensity)
     return es[0].name if es and es[0].intensity >= 0.15 else "none"
 
 
@@ -410,11 +401,10 @@ def score(args):
     pairs = []
     for c in calls:
         appr = appraisals[f"{c['capture']}:V"]
-        liking = {p["name"]: p["liking"] for p in c["people"]}
-        actors = {e["ref"]: e["actor"] for e in c["events"]}
+        refs = {e["ref"] for e in c["events"]}
         for ref, lab in (c.get("labels") or {}).items():
-            if ref in actors:
-                pairs.append((_occ_top((appr.get("events") or {}).get(ref), actors[ref], liking), lab["emotion"]))
+            if ref in refs:
+                pairs.append((_event_top((appr.get("events") or {}).get(ref)), lab["emotion"]))
     if pairs:
         fam = np.mean([FAMILY.get(a) == FAMILY.get(b) for a, b in pairs])
         sign = lambda n: 0 if n == "none" else (  # noqa: E731
@@ -593,16 +583,13 @@ def score(args):
               sorted(words.items(), key=lambda t: -t[1])[:25])
 
 
-FAMILY = {}
-for _fam, _names in {
-    "good outcome": ("joy", "satisfaction", "gratification", "relief", "pride", "happy_for", "gloating"),
-    "hope": ("hope",), "bad outcome": ("distress", "disappointment", "fears_confirmed", "remorse", "shame",
-                                       "pity", "resentment", "frustration"),
-    "fear": ("fear",), "toward someone, good": ("admiration", "gratitude"),
-    "toward someone, bad": ("reproach", "anger"), "desire": ("desire",) + DESIRES, "none": ("none",),
-}.items():
-    for _n in _names:
-        FAMILY[_n] = _fam
+# Every feeling an event can be named, in near-synonym families
+# (`jev_event_feelings.FAMILIES`), plus round two's own label words. The
+# table this replaced grouped only OCC's names, so any two standalone moods
+# compared as one family (both missing, `None == None`).
+from jev_event_feelings import FAMILY as _NAMED  # noqa: E402
+
+FAMILY = {**_NAMED, "desire": "desire", "frustration": "hostile"}
 
 
 def main():

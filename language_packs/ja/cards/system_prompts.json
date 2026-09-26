@@ -861,35 +861,11 @@
     }
   },
   "affect_appraisal": {
-    "desirability": {
-      "$text": "affect_appraisal/desirability.txt"
-    },
-    "standards": {
-      "$text": "affect_appraisal/standards.txt"
-    },
-    "control": {
-      "$text": "affect_appraisal/control.txt"
-    },
-    "fortune": {
-      "$text": "affect_appraisal/fortune.txt"
-    },
     "evoke_strength": {
       "$text": "affect_appraisal/evoke_strength.txt"
     },
     "evoke_tone": {
       "$text": "affect_appraisal/evoke_tone.txt"
-    },
-    "ahead": {
-      "$text": "affect_appraisal/ahead.txt"
-    },
-    "fear_change": {
-      "$text": "affect_appraisal/fear_change.txt"
-    },
-    "hope_change": {
-      "$text": "affect_appraisal/hope_change.txt"
-    },
-    "doer": {
-      "$text": "affect_appraisal/doer.txt"
     },
     "act_against_values": {
       "$text": "affect_appraisal/act_against_values.txt"
@@ -921,29 +897,15 @@
     "stir_strength": {
       "$text": "affect_appraisal/stir_strength.txt"
     },
-    "stir_mood": {
-      "$text": "affect_appraisal/stir_mood.txt"
+    "feel": {
+      "$text": "affect_appraisal/feel.txt"
     },
     "options": {
-      "goodness": {
-        "very_bad": "とても悪い。",
-        "bad": "悪い。",
-        "neutral": "良くも悪くもない。",
-        "good": "良い。",
-        "very_good": "とても良い。"
-      },
       "grade": {
         "none": "まったくない。",
         "slight": "少し。",
         "clear": "はっきりと。",
         "strong": "強く。"
-      },
-      "standards": {
-        "very_wrong": "まったく間違っている。",
-        "wrong": "間違っている。",
-        "neither": "正しくも間違ってもいない。",
-        "right": "正しい。",
-        "very_right": "まったく正しい。"
       },
       "tone": {
         "very_unpleasant": "とても不快。",
@@ -951,33 +913,6 @@
         "neither": "どちらでもない。",
         "pleasant": "快い。",
         "very_pleasant": "とても快い。"
-      },
-      "prospect": {
-        "much_worse": "悪いことがずっと起こりやすくなる。",
-        "worse": "悪いことが起こりやすくなる。",
-        "neither": "どちらでもない。",
-        "better": "良いことが起こりやすくなる。",
-        "much_better": "良いことがずっと起こりやすくなる。"
-      },
-      "fear_change": {
-        "much_less": "ずっと起こりにくくなる。",
-        "less": "起こりにくくなる。",
-        "none": "そんな恐れはない。",
-        "more": "起こりやすくなる。",
-        "much_more": "ずっと起こりやすくなる。"
-      },
-      "hope_change": {
-        "much_further": "ずっと遠ざける。",
-        "further": "遠ざける。",
-        "none": "そんな望みはない。",
-        "closer": "近づける。",
-        "much_closer": "ぐっと近づける。"
-      },
-      "doer": {
-        "self": "あなた自身。",
-        "actor": "{actor}。",
-        "other": "ほかの誰か。",
-        "nobody": "誰でもない――ただ起きた。"
       },
       "ease": {
         "eased_much": "とても和らいだ。",
@@ -1103,6 +1038,9 @@
       "stir": {
         "none": "どれでもない。"
       },
+      "feel": {
+        "none": "特に何も――ほとんど心が動かない。"
+      },
       "emotion_words": {
         "joy": "喜び",
         "distress": "苦しみ",
@@ -1122,6 +1060,24 @@
         "resentment": "恨み",
         "gloating": "他人の不幸を喜ぶ気持ち",
         "frustration": "もどかしさ"
+      },
+      "event_emotions": {
+        "joy": "喜び――何か良いことが起きた嬉しさ",
+        "distress": "苦しみ――何か悪いことが起きたことへの動揺",
+        "hope": "希望――ここから何か良いことが来るという望み",
+        "fear": "恐れ――何か悪いことが起きるのではという不安",
+        "satisfaction": "満足――望んでいたことが叶った気持ち",
+        "disappointment": "落胆――望んでいたことが叶わなかった気持ち",
+        "fears_confirmed": "恐れていたことの現実化",
+        "pride": "自分のしたことへの誇り",
+        "shame": "自分のしたことへの恥",
+        "reproach": "誰かのしたことへの非難",
+        "gratification": "充足――自分のしたことがうまくいった満足",
+        "remorse": "悔恨――自分のしたことが悪い結果になった申し訳なさ",
+        "happy_for": "大切な人に良いことがあった喜び",
+        "pity": "憐れみ――大切な人の不運を悲しむ気持ち",
+        "resentment": "恨み――嫌いな相手に良いことがあった不満",
+        "gloating": "嫌いな相手の不運を喜ぶ気持ち"
       },
       "mood_words": {
         "romance": "恋心",

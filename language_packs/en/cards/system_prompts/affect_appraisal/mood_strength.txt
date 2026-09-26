@@ -1,1 +1,1 @@
-Right now, how much do you feel this: {mood}?
+Right now, is this one of the main things you feel? How strongly: {mood}?

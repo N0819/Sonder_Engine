@@ -222,14 +222,15 @@ entirely from the prompt. And code can combine moods into moods that are
 actually combos", "I still imagine jev needs event context to handle how
 events might change mood", "if we ask these questions after jev has crafted
 the memory packet ... can we factor memories into mood?", and "habituation
-should also have a decay rate." Measured so far: the evidence doc's "Mood as
-a Jev job". Nothing below is built.
+should also have a decay rate." Built and wired (`mind/affect_pass.py`,
+"Wiring the affect pass" below); measured in the evidence doc from "Mood as a
+Jev job" on.
 
 **Three layers** -- temperament, mood, emotion -- the structure of ALMA
 (Gebhard, "A Layered Model of Affect", 2005), built for virtual characters:
 
-- **Emotion** is fast, about something, caused by an event. Jev appraises;
-  code names it.
+- **Emotion** is fast, about something, caused by an event. Jev names it
+  and says how strongly it stirs; code carries it into the mood.
 - **Mood** is slow and diffuse, a point in pleasure-arousal-dominance space
   that emotions push and that drifts home. Code owns it -- the measured
   shape: carrying the mood and moving it part way toward Jev's reading beat
@@ -240,17 +241,25 @@ a Jev job". Nothing below is built.
 **Order within the before-call pass:**
 
 1. The memory packet (net, then Jev).
-2. Each of the beat's events appraised with the packet in Jev's state --
-   desirability, happened or might, confirmation of a hope or fear, who
-   caused it, right or wrong by the character's standards, good or bad for
-   someone they like or dislike, how much they can do about it (Lazarus;
-   Scherer's component process model). Memory is the appraisal's context: a
-   third lie is not a first.
-3. Code turns appraisals into emotions by the OCC rules (Ortony, Clore and
-   Collins, 1988), whose compounds are the combinations the owner describes --
-   gratitude is admiration and joy, anger reproach and distress, remorse
-   shame and distress -- each with its object ("angry at Hinami, who lied
-   about the key before").
+2. Each of the beat's events put to Jev with the packet in its state: how
+   strongly it stirs the character, and how it makes the character feel --
+   one choice over OCC's event emotions (Ortony, Clore and Collins, 1988:
+   joy and distress, hope and fear, a hope or a fear come true or not,
+   pride, shame, disapproval, the fortunes of others, gratification and
+   remorse) beside the forty standalone moods, or nothing much. Memory is the
+   appraisal's context: a third lie is not a first.
+3. Code turns the answer into emotions -- each feeling by its share times
+   how strongly the event stirs -- each about its event ("disapproval
+   (Hinami: says she took the key)").
+
+   Until 2026-09-26 step 2 was nine appraisal questions (desirability,
+   happened or might, confirmation of a hope or fear, who caused it, right or
+   wrong by the character's standards, good or bad for someone liked or
+   disliked, how much the character can do -- Lazarus; Scherer's component
+   process model) and step 3 OCC's rules over them, compounds included.
+   Against two blind readers the rules named an event's feeling at chance,
+   and the direct question named it as well as the readers named it for each
+   other (the evidence doc, "Round seven"); the rules are retired.
 4. Memory-evoked feeling: for the packet's charged rows, does recalling this
    stir something now? The moment tag gives the direction; Jev whether it
    lands. Recalling a feeling brings part of it back (autobiographical
@@ -300,7 +309,8 @@ part of this design.
 The owner: "We can also probably do math with moods, the cumulative effects
 of events and memories average into an overall mood with multiple
 dimensions." Built in `mind/affect_mix.py` (pure code) and
-`mind/affect_appraisal.py` (the Jev questions); not wired into the pipeline.
+`mind/affect_appraisal.py` (the Jev questions); run around each character
+call by `mind/affect_pass.py`.
 
 - **The space.** A mood is a point `M` in forty-six coordinates: fourteen
   bipolar spectrums in [-1, 1] and forty standalone moods in [0, 1] (the
@@ -312,10 +322,10 @@ dimensions." Built in `mind/affect_mix.py` (pure code) and
 - **Emotions.** Each emotion `e` has an intensity `i` in [0, 1] and a
   direction `v`: the coordinates it moves (`EMOTION_EFFECTS`) -- one row per
   OCC emotion, after ALMA's table (Gebhard, 2005), and one per standalone
-  mood, itself in full and the spectrums it moves. An event yields both: the
-  OCC emotions its appraisal gives, and each standalone mood it stirs (how
-  strongly it stirs the character times that mood's share of "which of these
-  does it stir most").
+  mood, itself in full and the spectrums it moves. An event yields the
+  feelings named for it, an OCC emotion or a standalone mood alike: how
+  strongly it stirs the character times each feeling's share of "how does
+  this make you feel".
 - **Decay.** Between beats `M` returns toward `H` by `0.5^(dt / half_life)`
   per axis, `dt` in psych units; pleasure below home decays more slowly
   (bad is stronger than good -- Baumeister et al., 2001).
@@ -332,9 +342,9 @@ dimensions." Built in `mind/affect_mix.py` (pure code) and
   memory related ... or their undercurrents at least"). A memory stirs the
   standalone moods named for it ("which of these does recalling it stir
   most"), the share none of them covers a plain pleasant or unpleasant
-  feeling by its tone, all of it dulled by habituation. A concern stirs what
-  the event rules give it, scaled by "how much is this weighing on you right
-  now", and does not push the surface (`CONCERN_WEIGHT = 0`).
+  feeling by its tone, all of it dulled by habituation. A concern is named
+  like an event, scaled by "in this moment, how much does this crowd out
+  everything else?", and does not push the surface (`CONCERN_WEIGHT = 0`).
 - **Names.** Mehrabian's eight octants (exuberant, relaxed, dependent,
   docile, hostile, disdainful, anxious, bored) for a compact label; the
   surface is the strongest feeling the present stirred, with its object; the
@@ -379,7 +389,7 @@ the pack's (`affect_appraisal.options`); the words below are its English.
 | boldness | timid -- bold | approach against avoidance: anger approaches and fear withdraws at the same displeasure (Carver and Harmon-Jones, 2009) |
 | sociability | wanting to be alone -- wanting company | loneliness is the gap between wanted and felt connection (Perlman and Peplau, 1981), so wanting company is apart from feeling connected |
 
-**Thirty-two standalone moods**, one graded question each: every category
+**Forty standalone moods**, one graded question each: every category
 Cowen and Keltner (2017) found self-report keeps distinct that no spectrum
 already holds, then what their list lacks.
 
@@ -460,8 +470,9 @@ illustrations of the rule, not a list the engine matches against:
 | predatory hunger | craving, bold, in command |
 | aroused by being watched or shamed | sexual desire with embarrassment |
 
-Code can name what the combinations make, as it names OCC's compounds (the
-owner: "code can combine moods into moods that are actually combos"); none of
+Code can name what the combinations make, as OCC's rules named their
+compounds until 2026-09-26 (the owner: "code can combine moods into moods
+that are actually combos"); none of
 the rows above is built as a name yet. The blind rater in round three also
 lists any mood a beat holds that no coordinate covers (the evidence doc).
 
@@ -529,7 +540,9 @@ and rounds two to four):
   concern names the undercurrent and does not push the surface
   (`CONCERN_WEIGHT = 0`). "How much is this weighing on you right now" does
   not discriminate: Jev answers about 0.7 for every concern the character
-  listed.
+  listed. Since round seven the question is "In this moment, how much does
+  this crowd out everything else?": 15 of 21 expectations on the concern
+  battery against 9, and still present on a quiet evening.
 - **The pass after the turn** (the owner: "a pass after the character turn
   finishes to see how their actions speech and thoughts affect their mood")
   runs beside `director_resolve`, off the critical path, and carries its push
@@ -741,6 +754,32 @@ held one feeling, so a mind lost the second one pulling the other way.
 per kind -- and `beneath` up to `BENEATH_FEELINGS` (2); the prompt says they
 may pull against each other. The stored `affect` keeps one surface and one
 undercurrent, which memory rows and tells read.
+
+**Feelings named, not derived -- and better questions, the same day** (the
+owner: "We may need some better questions too potentially, anyways fine tune
+and experiment"). Scored against two blind readers on the four stories'
+beats (the evidence doc, "Round seven"):
+
+- **Each event's feeling is named by the question "How does this make you
+  feel?"** over OCC's event emotions and the standalone moods together, times
+  "How strongly does this stir you?" (`affect_appraisal.EVENT_QUESTIONS`).
+  OCC's rules named it at chance -- 17% and 22% of a reader's feeling family
+  where the readers share 44% -- because the change questions ask whether a
+  fear grew more likely and the rules named it a fear come true; named
+  directly, 37% and 43%. A beat's `now` list overlaps each reader's own
+  strongest three 55% and 65% by family, where the readers overlap 58%. A
+  concern is named the same way, times its weight. An event costs two
+  questions where it cost nine plus one per person.
+- **The mood's questions ask whether a mood is one of the main things felt**
+  ("Right now, is this one of the main things you feel? How strongly:
+  {mood}?"): 4.7 moods read clearly per beat where the readers name 3.2 and
+  the old wording read 5.6, the reading's r against the readers 0.67 (their
+  own 0.66).
+- **The worry question asks what a concern crowds out** ("In this moment,
+  how much does this crowd out everything else?"): the concern battery's
+  expectations met 15 of 21 where the old question met 9, and a worry still
+  weighs on a quiet evening, which the best discriminator ("does what just
+  happened bring this forward?", 20 of 21) would not allow.
 
 Still open: a memory-sourced feeling's object is its opening text, which for
 a remembered scene is scene description ("resolve (You are in the

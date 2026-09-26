@@ -43,11 +43,10 @@ BASELINE = {"valence": 0.0, "arousal": 0.5}
 
 
 def _pick(key, criteria):
-    """How the fake decision model answers: a harm done wrongly by Hinami, a
-    pleasant memory that stirs nostalgia, a concern that weighs, a tense and
-    angry mood, and an act against the character's values that stoked it."""
-    rules = [("desirability", "very_bad"), ("doer", "actor"), ("standards", "very_wrong"),
-             ("stir_strength", "strong"), ("stir_mood", "anger"), ("strength", "strong"), ("tone", "pleasant"),
+    """How the fake decision model answers: what Hinami did angers, strongly;
+    a pleasant memory stirs nostalgia; a concern weighs; a tense and angry
+    mood; and an act against the character's values that stoked it."""
+    rules = [("stir_strength", "strong"), ("feel", "anger"), ("strength", "strong"), ("tone", "pleasant"),
              ("kinds", "nostalgia"), ("weight", "clear"), ("dim:tension", "s4"), ("dim:pleasure", "s0"),
              ("mood:anger", "strong"), ("act_against_values", "strong"), ("act_wanted_instead", "strong"),
              ("act_eased_or_stoked", "stoked")]

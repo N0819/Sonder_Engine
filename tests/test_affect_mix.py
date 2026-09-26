@@ -1,17 +1,18 @@
 """Emotion and mood as arithmetic (mind/affect_mix.py).
 
 Designed with the owner on 2026-09-26: the decision model appraises what a
-character perceived, did and recalled, and code turns appraisals into
-emotions by the OCC rules and moves a high-dimensional mood -- fourteen
+character perceived, did and recalled -- naming what each event stirs --
+and code turns appraisals into emotions and moves a high-dimensional mood -- fourteen
 spectrum coordinates and forty moods that stand on their own ("spectrums of
 moods as coordinates as well as some moods that truly stand as their own",
 "cover all moods") -- part of the way toward the targets the beat's emotions
 set, decays it, eases or stokes it by the character's own acts, and
 habituates a memory's evoked feeling the owner's way.
 
-Pinned here: each OCC rule produces its emotion with its object; compounds
-form only from both halves, never from a stirred mood; every standalone mood
-can be stirred by name, desire as three; a memory's feeling splits between
+Pinned here: an event stirs what was named for it -- OCC's event emotions
+and the standalone moods alike -- by share of how strongly it stirs, and
+every feeling it can be named moves the mood; desire is three moods; each
+feeling is about its item; a memory's feeling splits between
 the moods named for it and a plain remainder by its tone; a concern stirs in
 proportion to its weight; own acts give pride, shame and frustration; a
 coordinate's target is a weighted average in which a negativity weight tilts
@@ -63,62 +64,28 @@ def test_desire_is_three_moods():
     assert "desire" not in mix.STANDALONE and "desire" not in mix.EMOTION_EFFECTS
 
 
-# --- OCC: emotions from one perceived event -------------------------------------------
+# --- what one perceived event stirs ----------------------------------------------------
 
-def test_harm_another_did_wrongly_is_anger_at_them():
+@pytest.mark.parametrize("language", ["en", "ja"])
+def test_every_feeling_an_event_can_be_named_moves_the_mood(language):
+    """The naming question offers OCC's event emotions and the standalone
+    moods together; a name without a row would move nothing."""
+    offered = {**affect_appraisal_options("event_emotions", language),
+               **affect_appraisal_options("standalone", language)}
+    assert set(offered) <= set(mix.EMOTION_EFFECTS), set(offered) - set(mix.EMOTION_EFFECTS)
+
+
+def test_an_event_stirs_what_was_named_for_it_by_share_of_its_strength():
+    """Named, not derived (2026-09-26): OCC's rules read a fear made MORE
+    LIKELY as a fear come true and a hope brought CLOSER as a hope
+    fulfilled, and matched two blind raters' feeling family at chance; the
+    feeling named directly matched them as well as they matched each
+    other."""
     named = _names(mix.emotions_from_appraisal(
-        {"desirability": -0.8, "doer": {"actor": 1.0}, "standards": -0.8},
-        ref="o1", actor="Hinami", about="the lie"))
-    assert named["anger"].about == "Hinami" and named["anger"].intensity == pytest.approx(0.8)
-    assert "reproach" not in named and "distress" not in named
-
-
-def test_good_another_did_is_gratitude_toward_them():
-    named = _names(mix.emotions_from_appraisal(
-        {"desirability": 0.9, "doer": {"actor": 1.0}, "standards": 0.9}, ref="o2", actor="Hinami"))
-    assert named["gratitude"].about == "Hinami"
-
-
-def test_own_good_act_is_gratification_and_own_wrong_is_remorse():
-    good = _names(mix.emotions_from_appraisal(
-        {"desirability": 0.7, "doer": {"self": 1.0}, "standards": 0.7}, ref="a"))
-    bad = _names(mix.emotions_from_appraisal(
-        {"desirability": -0.7, "doer": {"self": 1.0}, "standards": -0.7}, ref="b"))
-    assert "gratification" in good and "remorse" in bad
-
-
-def test_a_compound_needs_both_halves():
-    named = _names(mix.emotions_from_appraisal(
-        {"desirability": -0.8, "doer": {"nobody": 1.0}, "standards": 0.0}, ref="c"))
-    assert "anger" not in named and named["distress"].intensity == pytest.approx(0.8)
-
-
-def test_what_it_makes_likely_ahead_is_hope_or_fear_and_control_eases_fear():
-    ahead_good = _names(mix.emotions_from_appraisal({"ahead": 0.8}, ref="d"))
-    helpless = _names(mix.emotions_from_appraisal({"ahead": -0.8, "control": 0.0}, ref="d"))
-    able = _names(mix.emotions_from_appraisal({"ahead": -0.8, "control": 1.0}, ref="d"))
-    assert "hope" in ahead_good and "fear" in helpless
-    assert able["fear"].intensity < helpless["fear"].intensity
-
-
-def test_a_fear_eased_is_relief_and_confirmed_is_fears_confirmed():
-    eased = _names(mix.emotions_from_appraisal({"fear_change": -0.8}, ref="e"))
-    worse = _names(mix.emotions_from_appraisal({"fear_change": 0.8}, ref="e"))
-    assert "relief" in eased and "fears_confirmed" in worse
-
-
-def test_a_hope_brought_closer_is_satisfaction_and_pushed_away_disappointment():
-    closer = _names(mix.emotions_from_appraisal({"hope_change": 0.8}, ref="f"))
-    further = _names(mix.emotions_from_appraisal({"hope_change": -0.8}, ref="f"))
-    assert "satisfaction" in closer and "disappointment" in further
-
-
-def test_fortunes_of_others_follow_liking():
-    named = _names(mix.emotions_from_appraisal(
-        {"fortune": {"Hinami": -0.8, "Rassilon": 0.8}}, ref="g",
-        liking={"Hinami": 0.8, "Rassilon": -0.8}))
-    assert named["pity"].about == "Hinami" and named["resentment"].about == "Rassilon"
-    assert "gloating" not in named and "happy_for" not in named
+        {"stir": 0.9, "stirs": {"fears_confirmed": 0.5, "dread": 0.3, "none": 0.2}}, ref="o1", about="the letter"))
+    assert named["fears_confirmed"].intensity == pytest.approx(0.45)
+    assert named["dread"].intensity == pytest.approx(0.27) and named["dread"].about == "the letter"
+    assert {e.source for e in named.values()} == {"event"} and "none" not in named
 
 
 def test_what_an_event_stirs_is_its_share_of_how_strongly_it_stirs():
@@ -129,12 +96,11 @@ def test_what_an_event_stirs_is_its_share_of_how_strongly_it_stirs():
     assert "none" not in named and "craving" not in named
 
 
-def test_a_stirred_mood_never_becomes_half_of_a_compound():
-    # joy and a stirred admiration are not gratitude: only OCC's own halves compound
-    named = _names(mix.emotions_from_appraisal(
-        {"desirability": 0.8, "stir": 1.0, "stirs": {"admiration": 1.0}}, ref="i"))
-    assert "gratitude" not in named
-    assert named["joy"].intensity == pytest.approx(0.8) and named["admiration"].intensity == pytest.approx(1.0)
+def test_an_event_that_stirs_nothing_or_nothing_named_feels_nothing():
+    assert mix.emotions_from_appraisal({"stir": 0.8, "stirs": {"none": 1.0}}, ref="o2") == []
+    assert mix.emotions_from_appraisal({"stir": 0.0, "stirs": {"joy": 1.0}}, ref="o2") == []
+    assert mix.emotions_from_appraisal({"stirs": {"joy": 1.0}}, ref="o2") == []
+    assert mix.emotions_from_appraisal({}, ref="o2") == []
 
 
 # --- the character's own acts --------------------------------------------------------
@@ -189,28 +155,27 @@ def test_a_memory_stirs_the_moods_named_for_it_and_its_tone_carries_the_rest():
 
 
 def test_a_concern_stirs_in_proportion_to_how_much_it_weighs_now():
-    worry = {"ahead": -0.8, "control": 0.0}
+    worry = {"stir": 0.8, "stirs": {"dread": 1.0}}
     whole = _names(mix.concern_emotions(worry, 1.0, ref="c0"))
     light = _names(mix.concern_emotions(worry, 0.25, ref="c0"))
-    assert whole["fear"].source == "concern"
-    assert light["fear"].intensity == pytest.approx(whole["fear"].intensity * 0.25)
+    assert whole["dread"].source == "concern" and whole["dread"].intensity == pytest.approx(0.8)
+    assert light["dread"].intensity == pytest.approx(whole["dread"].intensity * 0.25)
     assert mix.concern_emotions(worry, 0.0, ref="c0") == []
     unasked = _names(mix.concern_emotions(worry, None, ref="c0"))
-    assert unasked["fear"].intensity == pytest.approx(whole["fear"].intensity)
+    assert unasked["dread"].intensity == pytest.approx(whole["dread"].intensity)
 
 
-def test_a_feeling_toward_nobody_named_is_about_the_thing_itself():
-    """A concern has no actor, and its blame landed on the word "someone":
-    "anger (someone)" is what the magistrate in the lie test story was handed
-    as the layer beneath his mood (2026-09-26), which tells a mind nothing.
-    Where nobody is named the feeling is about the thing -- the concern's own
-    text; a named actor still takes it."""
-    lie = {"desirability": -0.8, "standards": -0.9, "doer": {"other": 1.0}}
+def test_a_feeling_is_about_its_item_never_about_someone():
+    """A concern has no actor, and under OCC's rules its blame landed on the
+    word "someone": "anger (someone)" is what the magistrate in the lie test
+    story was handed as the layer beneath his mood (2026-09-26), which tells
+    a mind nothing. A named feeling is about its item -- the concern's own
+    text, or the event's, which names whoever acted."""
+    lie = {"stir": 0.9, "stirs": {"reproach": 0.7, "anger": 0.3}}
     felt = _names(mix.concern_emotions(lie, 1.0, ref="c0", about="she lied to him"))
-    blamed = felt.get("anger") or felt.get("reproach")
-    assert blamed is not None and blamed.about == "she lied to him", felt
-    named = _names(mix.emotions_from_appraisal(lie, ref="o1", actor="Margit", about="she lied"))
-    assert (named.get("anger") or named.get("reproach")).about == "Margit"
+    assert felt["reproach"].about == "she lied to him" and felt["anger"].about == "she lied to him"
+    named = _names(mix.emotions_from_appraisal(lie, ref="o1", about="Margit: says she was home all night"))
+    assert {e.about for e in named.values()} == {"Margit: says she was home all night"}
 
 
 # --- the mood -----------------------------------------------------------------------------

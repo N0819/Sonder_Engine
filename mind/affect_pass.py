@@ -251,20 +251,18 @@ def before_call(name, sheet, active, baseline, units, observations=(), memory_co
         felt.note = "nothing new to appraise"
         return felt
     try:
-        out = appraisal.appraise(felt.state_text, events, people, memories, mood=True, language=language,
+        out = appraisal.appraise(felt.state_text, events, memories=memories, mood=True, language=language,
                                  concerns=concerns)
     except Exception as exc:  # noqa: BLE001 -- the pass fails open; the turn never does
         felt.note = f"the decision model could not be asked ({type(exc).__name__}: {str(exc)[:120]})"
         return felt
-    likes = {p["name"]: p["liking"] for p in people}
     emotions = []
     for e in events:
-        emotions += mix.emotions_from_appraisal(out["events"].get(e["ref"]) or {}, ref=e["ref"], actor=e["actor"],
-                                                about=_text(e["text"], ABOUT_CHARS), liking=likes)
+        emotions += mix.emotions_from_appraisal(out["events"].get(e["ref"]) or {}, ref=e["ref"],
+                                                about=_text(e["text"], ABOUT_CHARS))
     for c in concerns:
         a = out["concerns"].get(c["ref"]) or {}
-        emotions += mix.concern_emotions(a, a.get("weight"), ref=c["ref"], about=_text(c["text"], ABOUT_CHARS),
-                                         liking=likes)
+        emotions += mix.concern_emotions(a, a.get("weight"), ref=c["ref"], about=_text(c["text"], ABOUT_CHARS))
     for m in memories:
         a = out["memories"].get(m["ref"]) or {}
         multiplier = 1.0

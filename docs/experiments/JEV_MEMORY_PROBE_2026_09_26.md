@@ -1,9 +1,13 @@
 # Jev as a memory judge: the first probe
 
 Status: EVIDENCE, 2026-09-26: two probe beats, then a 22-beat label set and 71
-questions. Instruments: `tools/jev_memory_probe.py`, `tools/jev_net_recall.py`,
+questions; then seven rounds on the affect pass. Instruments:
+`tools/jev_memory_probe.py`, `tools/jev_net_recall.py`,
 `tools/jev_net_labels.py`, `tools/jev_moment_affect.py`,
-`tools/jev_question_recall.py`, run against a copy of `engine.db` in the
+`tools/jev_question_recall.py`; for the affect pass `tools/jev_affect_probe.py`,
+`tools/jev_mood_battery.py`, `tools/jev_act_battery.py`,
+`tools/jev_concern_battery.py`, `tools/jev_mood_calibration.py` and
+`tools/jev_event_feelings.py`; all run against copies of `engine.db` in the
 worktree. Design context:
 [`DESIGN_JEV_CHARACTER_PASS.md`](../design/DESIGN_JEV_CHARACTER_PASS.md).
 
@@ -951,6 +955,125 @@ keeping the peace. Adopting "both" asks nothing new of the decision model.
 
 **Several at once.** `now` lists up to three present feelings, each at least
 half the strongest, one per kind; `beneath` up to two.
+
+## Round seven: better questions, against readers who are not Jev
+
+The owner, after round six: "Jev seems like a good system for emotions just
+need to fine tune", then "We may need some better questions too
+potentially, anyways fine tune and experiment."
+
+**A reference that is not Jev's own.** Every earlier score leaned on one
+rater or on Jev itself. Two blind raters -- GLM 5.2 and Gemini 3.8 Flash,
+the `utility` role routed to each on its own database copy -- rated every
+coordinate at the 76 beats of the four test stories, from the state Jev
+reads (`jev_affect_probe.py dimlabel`); their mean is the consensus and
+their agreement with each other the ceiling. The stories are safe for work,
+so Gemini may grade them.
+
+- **Jev's mood reading sits at the ceiling**: r 0.65 against the consensus
+  over 53 coordinates, the raters 0.66 with each other; of the four moods
+  the consensus rates strongest at a beat, Jev's four share 2.72, the two
+  raters' 2.68 with each other.
+- **It reads too many moods "clearly"**: 5.6 per beat against the raters'
+  3.2. "Right now, how much do you feel this: {mood}?" is answered clearly
+  of nearly anything the beat touches. "Right now, is this one of the main
+  things you feel? How strongly: {mood}?" reads 4.7 per beat at r 0.67 and
+  top-four 2.78, and the battery still meets 403 of 414 expectations (97%)
+  and the persons 153 of 155 (99%). Adopted
+  (`tools/jev_mood_calibration.py`).
+- **Two ideas rejected**: a per-mood linear calibration fitted on three
+  stories and scored on the fourth lowered r to 0.50; one question asking
+  which mood the character feels most read r 0.46.
+
+**The worry question** (`tools/jev_concern_battery.py`: eight situations in
+`tools/mood_battery/concerns.json`, each with the concern its event touches
+and background ones it leaves alone). On the stories Jev weighed every
+listed concern about 0.75 -- a concern is on the list because it weighs -- so
+a worry the beat left alone stirred as much as the one it touched:
+
+| wording | met | touched | untouched | quiet evening (rent, sister) |
+|---|---|---|---|---|
+| "How much is this weighing on you right now?" (was) | 9/21 | 0.88 | 0.46 | 0.84, 0.72 |
+| "Does what just happened bring this forward in your mind? How much?" | 20/21 | 0.93 | 0.11 | 0.20, 0.29 |
+| "In this moment, how much does this crowd out everything else?" -- adopted | 15/21 | 0.86 | 0.28 | 0.83, 0.63 |
+| "In this moment, how much is this pressing on you, more than anything else?" | 14/21 | 0.88 | 0.35 | 0.87, 0.73 |
+| six more (attention, front of mind, keeps going back to...) | 10-11/21 | 0.88-0.94 | 0.41-0.49 | 0.67-0.95 |
+
+"Brought forward" discriminates best and was not taken: it ties a worry to
+the event, and on a quiet porch, where a mind drifts back to what is
+unsettled, it lets the rent go. "Crowd out everything else" judges a worry
+against everything else going on -- low beside a fire, present on the porch.
+
+**Naming each event's feeling** (`tools/jev_event_feelings.py`). What a
+character is handed as `now` is the feeling named for each event it
+perceived. Both raters named, per event, the feeling it stirs most from one
+vocabulary -- OCC's event emotions, each given a phrase, beside the forty
+standalone moods -- or none, a second one alongside, and a strength 0-3; 264
+events carry both labels. OCC's rules, over nine appraisal questions per
+event, named them this way:
+
+| source | exact (GLM / Gemini) | family | sign | family where the raters agree (116) | a rater's label in its top three |
+|---|---|---|---|---|---|
+| the raters, with each other | 30% | 44% | 61% | -- | -- |
+| OCC's rules plus the stirred moods (as shipped) | 6% / 11% | 17% / 22% | 40% | 24% | 39% |
+| OCC's rules alone | 3% / 5% | 12% / 15% | 36% | 16% | 16% |
+| "Which of these does it stir in you most?", moods only (as shipped) | 18% / 26% | 33% / 39% | 53% | 47% | 71% |
+| "How does this make you feel?", both vocabularies -- adopted | 23% / 33% | 37% / 43% | 59% | 54% | 75% |
+| eight more wordings of it (first feeling, more than anything else...) | 22-24% / 29-33% | 36-38% / 40-44% | 56-59% | 49-54% | 72-75% |
+| the same, OCC's names alone | 9% / 12% | 25% / 27% | 45% | 35% | 30% |
+
+Shuffled, a source's labels share the family 9-14% of the time. The rules
+failed for a reason the table cannot show: the change questions ask
+whether a fear grew MORE LIKELY and a hope came CLOSER, and the rules named a
+fear COME TRUE and a hope FULFILLED -- 81 and 70 of the 264 events, where
+readers heard suspicion, curiosity, dread and anticipation. Read as asked
+(more likely is fear, closer is hope) they named nearly everything fear (110)
+or hope (95), because OCC's vocabulary has no suspicion, curiosity, urgency
+or protectiveness. Asked directly, the model names the feeling as well as
+the two readers name it for each other; every wording of the question is
+within a point or two of the others, so the gain is in asking, not in the
+words. Two more checks before adopting it:
+
+- **Across a beat**, the list a character is given overlaps each rater's own
+  strongest three by family 55% and 65% (exact 36% and 50%), against 58%
+  (38%) between the raters; the shipped rules' list, 33% and 41%. Weighting
+  each feeling by its share times the stir strength -- what the mix already
+  does -- beat normalising each event's shares.
+- **As the mood's push**, the named feelings move a neutral mood toward the
+  raters' reading as well as the rules' did: spectrums r 0.44 against 0.40,
+  standalone moods 0.46 against 0.48 (pleasure 0.61 against 0.43, safety
+  0.15 against 0.34). And "How strongly does this stir you?" tracks the
+  raters' strength at r 0.74, above the raters' 0.63 with each other.
+
+A standing concern is named the same way, times its weight: over 279
+concerns both raters labelled, the family matched 46-47% and 56% on every
+wording tried (raters 54% with each other) against 20% and 28% by the rules,
+and the stir strength, the weight and their product track the raters'
+strength alike (r 0.68, 0.66, 0.67; raters 0.61). The engine now asks an
+event two questions where it asked nine plus one per person
+(`affect_appraisal.EVENT_QUESTIONS`), and OCC's rules, compounds and the
+fortunes-of-others questions are gone. On three beats of the stories, live:
+Margit, as the boy bares his burned wrists to the magistrate, is handed
+protectiveness, compassion and a fear come true, with protectiveness and
+dread beneath; Isolde, asked whether the melody is hers, a fear come true,
+with dread and embarrassment beneath; Wren, as Jonah recalls their first
+launch, nostalgia, with anticipation of the unopened letter and urgency of
+the tide beneath.
+
+**Surprise is not over-read in play.** It reads high in 57 of the 152
+battery situations that do not name it, but most of those are surprising (a
+returned watch, a lunging dog, black ice); on the story beats Jev reads it
+clearly on 2 where the readers do on 3 (r 0.65). What Jev reads higher than
+the readers in play is longing (clearly on 14 beats, the readers on none),
+grief (13 against 4), dread (23 against 10) and curiosity (45 against 22),
+each ranked as the readers rank it (r 0.69-0.91). Its four strongest moods
+already share as much with the readers' as theirs do with each other, so a
+wording has little left to find there.
+
+**Still open**: urgency reads 0.70-0.79 while waiting for tomorrow's results
+on every wording tried; vigilance and wariness, which both raters keep
+naming as uncovered, were dropped for leaking and have not been retried in
+narrower words.
 
 ## What Jev costs
 

@@ -56,3 +56,36 @@ optional `person` from `battery.json`, the `context` it happened in and the
 shame under the shipped rule and its alternatives, and any candidate pride
 question passed as a JSON list with `--variants`. It is what eased the pride
 tilt on 2026-09-26.
+
+## `concerns.json`
+
+The worry question: does a standing concern weigh on the character when the
+moment brings it forward, and not when it does not? Each situation is one
+beat (`who`, what `happened`) and the concerns the character carries into
+it, one the event touches (`expect: high`) and background ones it leaves
+alone (`low`); the quiet-evening situation touches none of them. Run by
+[`tools/jev_concern_battery.py`](../jev_concern_battery.py), which scores the
+pack's `concern_weight` question and any candidates (`--variants`, a JSON
+list of question texts with `{concern}`) by what each reads high and low and
+by the gap between the touched and the untouched. It is what replaced "How
+much is this weighing on you right now?" -- which weighed every listed
+concern about 0.75, since a concern is on the list because it weighs -- on
+2026-09-26.
+
+## Measured against readers, not constructed cases
+
+Two instruments score the decision model against two blind raters (the
+`utility` role routed to a different model family per database copy) on
+captured beats of the four test stories, with the raters' agreement with
+each other as the ceiling:
+
+- [`tools/jev_mood_calibration.py`](../jev_mood_calibration.py) -- the mood
+  coordinates, the pack's questions against candidate templates
+  (`"_template"`), a which-mood-most question, and a per-mood linear
+  calibration fitted on three stories and scored on the fourth. It chose
+  the mood question's wording on 2026-09-26 and rejected the calibration.
+- [`tools/jev_event_feelings.py`](../jev_event_feelings.py) -- the feeling
+  each event (and each standing concern) is named, from OCC's event emotions
+  and the standalone moods together: the engine's question against
+  candidates, by exact name, by family of near-synonyms and by pleasant or
+  unpleasant sign. It retired OCC's rules on 2026-09-26.

@@ -1,2 +1,0 @@
-EVENT: {event}
-How much can you do about this?

@@ -1,2 +1,0 @@
-EVENT: {event}
-Does this make something good or bad for you more likely to happen next?

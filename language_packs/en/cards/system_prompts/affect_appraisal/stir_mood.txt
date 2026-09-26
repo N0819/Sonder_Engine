@@ -1,2 +1,0 @@
-EVENT: {event}
-Which of these does it stir in you most?

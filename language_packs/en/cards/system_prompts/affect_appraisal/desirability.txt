@@ -1,2 +1,0 @@
-EVENT: {event}
-How good or bad is this for you -- for what you want and what you care about?

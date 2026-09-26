@@ -49,7 +49,11 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 225   # +18 (2026-09-26): `affect_appraisal.*`, the decision
+PART_COUNT = 217   # -8 (2026-09-26, later): an event's feeling is named by
+                   # one question (`feel`), retiring the nine OCC's rules
+                   # read -- desirability, ahead, fear_change, hope_change,
+                   # doer, standards, control, fortune, stir_mood.
+                   # +18 (2026-09-26): `affect_appraisal.*`, the decision
                    # model's appraisal of an event, of the character's own
                    # act and of a recalled memory, and its direct reading of
                    # the mood (one `dimension` and one `mood_strength`

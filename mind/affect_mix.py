@@ -5,13 +5,12 @@ Designed with the owner on 2026-09-26 (`docs/design/DESIGN_JEV_CHARACTER_PASS.md
 "Emotion and mood" and "The mood math"). The decision model appraises
 (`mind/affect_appraisal.py`); this module is the code half and holds no model.
 
-- **Emotions** from appraisals by the OCC rules (Ortony, Clore and Collins,
-  "The Cognitive Structure of Emotions", 1988), each with its object -- who
-  or what it is about -- and OCC's compounds formed where both halves are
-  present (gratitude, anger, gratification, remorse). Beside them, each
-  standalone mood an event stirs, by how strongly it stirs the character and
-  which moods the model named. The character's own acts, appraised after its
-  turn, add pride, shame and the cost of restraint.
+- **Emotions** an event stirs, each with its object -- what it is about:
+  the feelings the model names for it, from OCC's event emotions (Ortony,
+  Clore and Collins, "The Cognitive Structure of Emotions", 1988) and the
+  standalone moods offered together, each by its share times how strongly
+  the event stirs the character. The character's own acts, appraised after
+  its turn, add pride, shame and the cost of restraint.
 - **Mood as a high-dimensional object** (the owner: "spectrums of moods as
   coordinates as well as some moods that truly stand as their own", and "We
   are trying to cover all moods and make a coordinate system out of them"):
@@ -27,13 +26,13 @@ Designed with the owner on 2026-09-26 (`docs/design/DESIGN_JEV_CHARACTER_PASS.md
   moods "may be purely memory related ... or their undercurrents at least").
   A memory stirs the standalone moods the model names for it -- nostalgia,
   grief, regret and the rest -- and a plain pleasant or unpleasant feeling
-  for what none of them covers; a concern stirs what the event rules give it,
-  in proportion to how much it weighs on the character now.
+  for what none of them covers; a concern stirs what it is named to stir, in
+  proportion to how much it weighs on the character now.
 - **Habituation** of a memory's evoked feeling, the owner's model: full for a
   few recalls, less after, full again after a rest.
 
-NOT WIRED. Nothing in the turn calls this yet. Every knob below, and every
-number in `EMOTION_EFFECTS`, is the owner's to set; the values are
+`mind/affect_pass.py` runs it around each character call. Every knob below,
+and every number in `EMOTION_EFFECTS`, is the owner's to set; the values are
 placeholders.
 """
 
@@ -70,10 +69,11 @@ STANDALONE = ("romance", "sexual_desire", "craving", "greed", "curiosity", "anti
 #: How each emotion moves the mood: a value per coordinate it touches
 #: (spectrums in [-1, 1], standalone moods in [0, 1]). The OCC emotions and
 #: `frustration` (the cost of a restraint the character's own act paid), then
-#: one row per standalone mood -- itself in full and the spectrums it moves --
-#: which an event, a memory or a concern stirs by name. Three names are both
-#: (admiration, gratitude, anger): OCC's emotion and the standalone mood are
-#: one feeling. Hand-set, coarse, the owner's.
+#: one row per standalone mood -- itself in full and the spectrums it moves.
+#: An event or a concern stirs any of them by name, a memory the standalone
+#: moods. Four names are both (admiration, gratitude, anger, relief): OCC's
+#: emotion and the standalone mood are one feeling. Hand-set, coarse, the
+#: owner's.
 EMOTION_EFFECTS = {
     "joy": {"pleasure": .8, "energy": .4, "tension": -.3, "hope": .3, "playfulness": .3,
             "engagement": .3, "sociability": .2},
@@ -170,11 +170,6 @@ MEMORY_TONE_EMOTION = {True: "joy", False: "distress"}
 #: character's own act -- is the surface; the past and the unsettled -- a
 #: recalled memory, a standing concern -- the layer beneath.
 BENEATH = frozenset({"memory", "concern"})
-#: OCC's compounds, formed within one event where both halves are present.
-COMPOUNDS = {
-    ("admiration", "joy"): "gratitude", ("reproach", "distress"): "anger",
-    ("pride", "joy"): "gratification", ("shame", "distress"): "remorse",
-}
 #: Mehrabian's octants, by the signs of pleasure, arousal and dominance (read
 #: here as pleasure, the mean of energy and tension, and control).
 OCTANTS = {
@@ -225,8 +220,6 @@ HABITUATION_STEP = 0.2
 HABITUATION_GRACE = 0.6
 HABITUATION_CEILING = 0.8
 HABITUATION_HALF_LIFE = 5.0
-#: Both halves of a compound must reach this before it forms.
-COMPOUND_FLOOR = 0.15
 #: A feeling beneath -- a memory's or a concern's -- must reach this to be
 #: named the undercurrent.
 UNDERCURRENT_FLOOR = 0.15
@@ -284,71 +277,44 @@ class Mood:
 
 # --- emotions from appraisals ---------------------------------------------------
 
-def emotions_from_appraisal(appraisal, *, ref="", actor="", about="", liking=None):
-    """OCC's rules over one perceived event's appraisal (the shape
-    `affect_appraisal.read` returns): its consequence for the character now
-    (joy, distress) and ahead (hope, fear -- a threat one cannot master is
-    more frightening); what it does to a fear (relief, fears confirmed) or a
-    hope (satisfaction, disappointment); the act of whoever did it (pride,
-    shame, admiration, reproach); its consequences for people the character
-    has a standing with (happy-for, pity, resentment, gloating) -- then the
-    compounds. Beside them, each standalone mood the event stirs: `stir`, how
-    strongly it stirs the character, times its share in `stirs`, the model's
-    distribution over which mood it stirs most (a share named as none of
-    them stirs none).
+def emotions_from_appraisal(appraisal, *, ref="", about=""):
+    """What one perceived event stirs: each feeling the model named for it
+    -- `stirs`, its distribution over OCC's event emotions and the
+    standalone moods (the pack's `feel` options) -- by its share, times how
+    strongly the event stirs the character (`stir` in [0, 1]). A share named
+    as none of them stirs nothing. `about` is what the feelings are about.
 
-    `liking` maps each person's name to the character's liking of them in
-    [-1, 1]; `actor` names the event's agent when it had one; `about` is what
-    the event-directed emotions are about."""
+    NAMED, NOT DERIVED (2026-09-26). Until then OCC's rules named an event's
+    feelings from nine questions -- how good or bad, what it makes likely,
+    what it does to a fear or a hope, whose doing, right or wrong, how much
+    the character can do, each person's fortune. Against two blind raters
+    on 264 events of the four test stories (`tools/jev_event_feelings.py`),
+    the rules' strongest emotion shared a rater's feeling family 17% and 22%
+    of the time -- 9% by chance, 44% for the raters with each other --
+    because the change questions ask whether a fear grew MORE LIKELY and a
+    hope came CLOSER, and the rules named a fear COME TRUE and a hope
+    FULFILLED: 81 and 70 of the 264 events. Asked directly, the model's
+    feeling shared the family 37% and 43%; a beat's feelings overlapped a
+    rater's own strongest three 55% and 65% by family, against 58% between
+    the raters; the stir strength tracked the raters' strength at r 0.74
+    (0.63 between them); and the named feelings push the mood as well as the
+    rules' did (spectrums r 0.44 against 0.40, standalone moods 0.46 against
+    0.48, against the raters' reading of the mood)."""
     a = appraisal or {}
-    d = _clamp(a.get("desirability"))
-    ahead = _clamp(a.get("ahead"))
-    fear_change = _clamp(a.get("fear_change"))
-    hope_change = _clamp(a.get("hope_change"))
-    control = _clamp(a.get("control", 0.5), 0.0, 1.0)
-    standards = _clamp(a.get("standards"))
-    doer = a.get("doer") or {}
-    raw = [
-        ("joy", max(0.0, d), about), ("distress", max(0.0, -d), about),
-        ("hope", max(0.0, ahead), about),
-        ("fear", max(0.0, -ahead) * (1 - 0.5 * control), about),
-        ("relief", max(0.0, -fear_change), about), ("fears_confirmed", max(0.0, fear_change), about),
-        ("satisfaction", max(0.0, hope_change), about),
-        ("disappointment", max(0.0, -hope_change), about),
-    ]
-    me = _clamp(doer.get("self"), 0.0, 1.0)
-    other = _clamp(doer.get("actor", 0.0), 0.0, 1.0) + _clamp(doer.get("other", 0.0), 0.0, 1.0)
-    praise, blame = max(0.0, standards), max(0.0, -standards)
-    # Toward the agent, when one is named; toward the thing itself when not.
-    # A concern has no actor, and its blame used to land on the bare word
-    # "someone" -- "anger (someone)" beneath a magistrate's mood in the lie
-    # test story (2026-09-26), which told the mind nothing it could act on.
-    who = actor or about or "someone"
-    raw += [("pride", me * praise, about), ("shame", me * blame, about),
-            ("admiration", min(1.0, other) * praise, who), ("reproach", min(1.0, other) * blame, who)]
-    for person, fortune in (a.get("fortune") or {}).items():
-        f = _clamp(fortune)
-        like = _clamp((liking or {}).get(person, 0.0))
-        raw += [("happy_for", max(0.0, f) * max(0.0, like), person),
-                ("pity", max(0.0, -f) * max(0.0, like), person),
-                ("resentment", max(0.0, f) * max(0.0, -like), person),
-                ("gloating", max(0.0, -f) * max(0.0, -like), person)]
-    emotions = form_compounds([Emotion(n, round(i, 4), obj, "event", ref) for n, i, obj in raw if i > 1e-4])
-    # after the compounds, so a stirred mood never becomes half of one
-    return emotions + stirred(a.get("stir"), a.get("stirs"), ref=ref, about=about, source="event")
+    return stirred(a.get("stir"), a.get("stirs"), ref=ref, about=about, source="event")
 
 
 def stirred(strength, shares, *, ref="", about="", source="event", multiplier=1.0):
-    """The standalone moods one item stirs: `strength` in [0, 1] -- how
-    strongly it stirs the character, scaled by `multiplier` -- times each
-    mood's share in `shares`, the model's distribution over which mood it
-    stirs most. Shares on anything but a standalone mood (the model's "none
-    of these") stir nothing."""
+    """The feelings one item stirs: `strength` in [0, 1] -- how strongly it
+    stirs the character, scaled by `multiplier` -- times each feeling's share
+    in `shares`, the model's distribution over which it stirs. Shares on
+    anything that is not a feeling (the model's "none of these") stir
+    nothing."""
     total = _clamp(strength, 0.0, 1.0) * _clamp(multiplier, 0.0, 1.0)
     out = []
     for name, share in (shares or {}).items():
         i = round(total * _clamp(share, 0.0, 1.0), 4)
-        if name in STANDALONE and i > 1e-4:
+        if name in EMOTION_EFFECTS and i > 1e-4:
             out.append(Emotion(name, i, about, source, ref))
     return out
 
@@ -380,29 +346,6 @@ def emotions_from_act(appraisal, *, ref="", about=""):
     return [Emotion(n, round(i, 4), obj, "act", ref) for n, i, obj in raw if i > 1e-4]
 
 
-def form_compounds(emotions):
-    """OCC's compounds, within one event: where both halves reach
-    COMPOUND_FLOOR, the compound takes their geometric mean and each half
-    keeps only what the compound did not absorb -- so the mood is not pushed
-    twice by one feeling. A compound is about the agent where one half is
-    (gratitude and anger are toward someone), else about the event."""
-    by_ref = {}
-    for e in emotions:
-        by_ref.setdefault(e.ref, {})[e.name] = e
-    out = list(emotions)
-    for (first, second), name in COMPOUNDS.items():
-        for ref, named in by_ref.items():
-            a, b = named.get(first), named.get(second)
-            if not a or not b or min(a.intensity, b.intensity) < COMPOUND_FLOOR:
-                continue
-            strength = round(math.sqrt(a.intensity * b.intensity), 4)
-            a.intensity = round(max(0.0, a.intensity - strength), 4)
-            b.intensity = round(max(0.0, b.intensity - strength), 4)
-            about = a.about if first in ("admiration", "reproach") else b.about
-            out.append(Emotion(name, strength, about, "event", ref))
-    return [e for e in out if e.intensity > 1e-4]
-
-
 def memory_emotions(strength, tone, kinds=None, *, ref="", about="", multiplier=1.0):
     """What a recalled memory stirs, all of it scaled by `strength` in [0, 1]
     (does it stir something now) and the memory's habituation `multiplier`:
@@ -411,7 +354,7 @@ def memory_emotions(strength, tone, kinds=None, *, ref="", about="", multiplier=
     none of them covers (all of it when `kinds` was not asked) as a plain
     feeling in the direction of `tone` in [-1, 1]."""
     out = stirred(strength, kinds, ref=ref, about=about, source="memory", multiplier=multiplier)
-    named = sum(_clamp(p, 0.0, 1.0) for k, p in (kinds or {}).items() if k in STANDALONE)
+    named = sum(_clamp(p, 0.0, 1.0) for k, p in (kinds or {}).items() if k in EMOTION_EFFECTS)
     rest = max(0.0, 1.0 - named) if kinds else 1.0
     tone = _clamp(tone)
     plain = _clamp(strength, 0.0, 1.0) * _clamp(multiplier, 0.0, 1.0) * abs(tone) * rest
@@ -420,16 +363,19 @@ def memory_emotions(strength, tone, kinds=None, *, ref="", about="", multiplier=
     return out
 
 
-def concern_emotions(appraisal, weight=None, *, ref="", about="", liking=None):
+def concern_emotions(appraisal, weight=None, *, ref="", about=""):
     """What a standing concern -- something still unsettled, appraised each
-    beat (rumination) -- stirs: the event rules over its appraisal, each
-    feeling scaled by how much the concern weighs on the character now
+    beat (rumination) -- stirs: the feelings named for it, as for an event,
+    each scaled by how much the concern weighs on the character now
     (`weight` in [0, 1]; unasked, the concern passes whole) and tagged
     `concern`. Ungated, round two's concerns named a negative feeling on 65
-    of 66 beats whose character reported none."""
+    of 66 beats whose character reported none. Named directly, a concern's
+    feeling shared two blind raters' family 47% and 56% of the time, against
+    20% and 28% by OCC's rules and 54% between the raters (279 concerns,
+    2026-09-26)."""
     w = 1.0 if weight is None else _clamp(weight, 0.0, 1.0)
     out = []
-    for e in emotions_from_appraisal(appraisal, ref=ref, about=about, liking=liking):
+    for e in emotions_from_appraisal(appraisal, ref=ref, about=about):
         i = round(e.intensity * w, 4)
         if i > 1e-4:
             out.append(Emotion(e.name, i, e.about, "concern", ref))

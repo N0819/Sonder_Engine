@@ -861,35 +861,11 @@
     }
   },
   "affect_appraisal": {
-    "desirability": {
-      "$text": "affect_appraisal/desirability.txt"
-    },
-    "standards": {
-      "$text": "affect_appraisal/standards.txt"
-    },
-    "control": {
-      "$text": "affect_appraisal/control.txt"
-    },
-    "fortune": {
-      "$text": "affect_appraisal/fortune.txt"
-    },
     "evoke_strength": {
       "$text": "affect_appraisal/evoke_strength.txt"
     },
     "evoke_tone": {
       "$text": "affect_appraisal/evoke_tone.txt"
-    },
-    "ahead": {
-      "$text": "affect_appraisal/ahead.txt"
-    },
-    "fear_change": {
-      "$text": "affect_appraisal/fear_change.txt"
-    },
-    "hope_change": {
-      "$text": "affect_appraisal/hope_change.txt"
-    },
-    "doer": {
-      "$text": "affect_appraisal/doer.txt"
     },
     "act_against_values": {
       "$text": "affect_appraisal/act_against_values.txt"
@@ -921,29 +897,15 @@
     "stir_strength": {
       "$text": "affect_appraisal/stir_strength.txt"
     },
-    "stir_mood": {
-      "$text": "affect_appraisal/stir_mood.txt"
+    "feel": {
+      "$text": "affect_appraisal/feel.txt"
     },
     "options": {
-      "goodness": {
-        "very_bad": "Very bad.",
-        "bad": "Bad.",
-        "neutral": "Neither good nor bad.",
-        "good": "Good.",
-        "very_good": "Very good."
-      },
       "grade": {
         "none": "Not at all.",
         "slight": "Slightly.",
         "clear": "Clearly.",
         "strong": "Strongly."
-      },
-      "standards": {
-        "very_wrong": "Very wrong.",
-        "wrong": "Wrong.",
-        "neither": "Neither right nor wrong.",
-        "right": "Right.",
-        "very_right": "Very right."
       },
       "tone": {
         "very_unpleasant": "Very unpleasant.",
@@ -951,33 +913,6 @@
         "neither": "Neither.",
         "pleasant": "Pleasant.",
         "very_pleasant": "Very pleasant."
-      },
-      "prospect": {
-        "much_worse": "It makes something bad much more likely.",
-        "worse": "It makes something bad more likely.",
-        "neither": "Neither.",
-        "better": "It makes something good more likely.",
-        "much_better": "It makes something good much more likely."
-      },
-      "fear_change": {
-        "much_less": "Much less likely.",
-        "less": "Less likely.",
-        "none": "No such fear.",
-        "more": "More likely.",
-        "much_more": "Much more likely."
-      },
-      "hope_change": {
-        "much_further": "Pushes it far away.",
-        "further": "Pushes it away.",
-        "none": "No such hope.",
-        "closer": "Brings it closer.",
-        "much_closer": "Brings it much closer."
-      },
-      "doer": {
-        "self": "Yours.",
-        "actor": "{actor}'s.",
-        "other": "Someone else's.",
-        "nobody": "Nobody's -- it just happened."
       },
       "ease": {
         "eased_much": "It eased it a lot.",
@@ -1103,6 +1038,9 @@
       "stir": {
         "none": "None of these."
       },
+      "feel": {
+        "none": "Nothing much -- it barely touches you."
+      },
       "emotion_words": {
         "joy": "joy",
         "distress": "distress",
@@ -1122,6 +1060,24 @@
         "resentment": "resentment",
         "gloating": "gloating",
         "frustration": "frustration"
+      },
+      "event_emotions": {
+        "joy": "joy, gladness at something good happening",
+        "distress": "distress, being upset at something bad happening",
+        "hope": "hope that something good will come of this",
+        "fear": "fear that something bad will happen",
+        "satisfaction": "satisfaction, something you hoped for coming true",
+        "disappointment": "disappointment, something you hoped for falling through",
+        "fears_confirmed": "a fear come true",
+        "pride": "pride in something you did",
+        "shame": "shame at something you did",
+        "reproach": "disapproval of something someone did",
+        "gratification": "gratification, pleased with something you did that turned out well",
+        "remorse": "remorse, sorry for something you did that turned out badly",
+        "happy_for": "gladness at good fortune for someone you care about",
+        "pity": "pity, sorrow at misfortune for someone you care about",
+        "resentment": "resentment of good fortune for someone you dislike",
+        "gloating": "gloating over misfortune for someone you dislike"
       },
       "mood_words": {
         "romance": "love",
