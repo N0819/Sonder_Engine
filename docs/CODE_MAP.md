@@ -204,7 +204,7 @@
 | `world/regions.py` | 587 |  | `world.spatial` |
 | `world/routines.py` | 256 |  | `world.day_cycle` |
 | `world/scene_memo.py` | 195 |  | — |
-| `world/spatial.py` | 365 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_light`, `world.spatial_light_field`, `world.spatial_lint`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_scent_field`, `world.spatial_senses`, `world.spatial_sound_field`, `world.spatial_substance`, `world.spatial_transit`, `world.spatial_walk` |
+| `world/spatial.py` | 367 | Deterministic room, barrier, hearing, visibility, placement, and scene-diff logic. | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_light`, `world.spatial_light_field`, `world.spatial_lint`, `world.spatial_merge`, `world.spatial_orientation`, `world.spatial_prose`, `world.spatial_routing`, `world.spatial_scent_field`, `world.spatial_senses`, `world.spatial_sound_field`, `world.spatial_substance`, `world.spatial_transit`, `world.spatial_walk` |
 | `world/spatial_barriers.py` | 931 |  | `world.spatial_orientation` |
 | `world/spatial_bubbles.py` | 592 |  | `world.spatial`, `world.spatial_frames` |
 | `world/spatial_contact_migration.py` | 332 |  | `story.character_schema`, `world.spatial_contacts`, `world.spatial_identity` |
@@ -224,7 +224,7 @@
 | `world/spatial_routing.py` | 1257 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_scent_field.py` | 233 |  | `world.spatial_barriers` |
 | `world/spatial_senses.py` | 1894 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation`, `world.spatial_routing` |
-| `world/spatial_sound_field.py` | 3191 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light_field`, `world.spatial_senses` |
+| `world/spatial_sound_field.py` | 3252 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light_field`, `world.spatial_senses` |
 | `world/spatial_substance.py` | 1138 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_transit.py` | 948 |  | `world.spatial_barriers`, `world.spatial_identity` |
 | `world/spatial_walk.py` | 423 |  | `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_routing` |
@@ -2759,14 +2759,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `sound_sources()` | 1398 | 146 lines |
-| `stamp_sound_relation()` | 2218 | 94 lines |
-| `sound_shape()` | 3100 | 92 lines |
-| `spread()` | 1118 | 88 lines |
-| `room_sound_flood()` | 2758 | 73 lines |
-| `far_path_gain()` | 2129 | 66 lines |
-| `distant_sounds()` | 2909 | 59 lines |
-| `sound_field()` | 2059 | 44 lines |
+| `sound_sources()` | 1440 | 165 lines |
+| `stamp_sound_relation()` | 2279 | 94 lines |
+| `sound_shape()` | 3161 | 92 lines |
+| `spread()` | 1146 | 88 lines |
+| `room_sound_flood()` | 2819 | 73 lines |
+| `far_path_gain()` | 2190 | 66 lines |
+| `distant_sounds()` | 2970 | 59 lines |
+| `quantise_hearing_db()` | 1020 | 56 lines |
 
 ### `world/spatial_substance.py`
 

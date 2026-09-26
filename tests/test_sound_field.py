@@ -1225,7 +1225,7 @@ def test_every_sound_fixture_gets_the_same_word_in_decibels(name, sc, bodies):
     a word moved, the quantiser moved it, and this is the test that says so.
     """
     from world.spatial import quantise_hearing, SPEECH_POWER
-    from world.spatial import lombard_level_db, power_of_db
+    from world.spatial import lombard_level_db, power_of_db, UNVOICED_VOLUMES
 
     graded = 0
     for listener, speaker in ((bodies[0], bodies[1]), (bodies[1], bodies[0])):
@@ -1240,7 +1240,8 @@ def test_every_sound_fixture_gets_the_same_word_in_decibels(name, sc, bodies):
             raised = lombard_level_db(volume, rel.get("source_noise"))
             power = (power_of_db(raised) if raised is not None
                      else SPEECH_POWER[volume])
-            linear = quantise_hearing(power * rel["signal"], rel["noise"])
+            linear = quantise_hearing(power * rel["signal"], rel["noise"],
+                                      voiced=volume not in UNVOICED_VOLUMES)
             assert word == linear, (
                 "%s: %s hearing %s at %s is %r in decibels and %r linearly "
                 "(signal %r, noise %r)" % (name, listener, speaker, volume,
@@ -1744,11 +1745,17 @@ def test_every_barrier_in_the_table_is_on_one_scale():
     # A floor is heavier than a wall, as concrete is heavier than plaster.
     assert FLOOR_CEILING_LOSS_DB > WALL_LOSS_DB
     # The consequence, measured so it is a fact and not a fear: a normal
-    # line at the far wall of the next room, through a shut door, is `full`
-    # (63 at the cell, 6.0 for the door, 22.8 of path against a 27.0 floor).
+    # line at the far wall of the next room, through a real shut door, is
+    # CAUGHT IN PIECES -- under a still room's 27.0 dB floor, but inside the
+    # 12 dB a voice's words survive under the noise. It was `none` until
+    # 2026-09-26, when the absolute floor stopped holding voiced speech
+    # (`quantise_hearing_db`, the owner: "Sound gatings is entirely
+    # overzealous"). What a shut door still keeps is what is said on the
+    # breath: a mutter at the same door is gone.
     sc = scene(two_rooms("closed_door"), {"S": "a", "L": "b"},
                {"S": {"at": "c"}, "L": {"at": "w"}})
-    assert levels(sc, "S", "L")["normal"] == "none"   # a real shut door
+    assert levels(sc, "S", "L")["normal"] == "fragment"   # a real shut door
+    assert levels(sc, "S", "L")["mutter"] == "none"
 
 
 # ---------------------------------------------------------------------------
@@ -2080,7 +2087,29 @@ def _run(hops, barrier="open_door", size="medium"):
     return scene(rooms, {"L": "r0", "S": "r%d" % hops})
 
 
-def test_a_shout_down_a_long_run_is_heard_and_a_normal_voice_is_not():
+def test_a_voice_is_caught_in_pieces_under_a_quiet_room_and_a_breath_is_not():
+    """The absolute floor holds breath, not voice (2026-09-26). A voiced line
+    keeps its words in pieces down to `FRAGMENT_SNR` under the room, as the
+    margin says; a whisper or a mutter under the room's own level is gone.
+    Measured on the lie test story: a boy pressed to a shut door, listening,
+    caught nothing of a normal conversation 1.3 dB under a 27 dB room."""
+    from world.spatial import (FRAGMENT_SNR_DB, HEAR_FLOOR_DB, quantise_hearing_db,
+                               ratio_of_db, sound_field_hear_level, SPEECH_DB)
+
+    under = HEAR_FLOOR_DB - 6.0
+    assert quantise_hearing_db(under, HEAR_FLOOR_DB, voiced=True) == "fragment"
+    assert quantise_hearing_db(under, HEAR_FLOOR_DB) == "none"
+    # The margin is still the limit for a voice.
+    assert quantise_hearing_db(HEAR_FLOOR_DB + FRAGMENT_SNR_DB - 1.0, HEAR_FLOOR_DB,
+                               voiced=True) == "none"
+    # And the volume word decides which it is.
+    noise = 10.0 ** ((HEAR_FLOOR_DB - 40.0) / 10.0)
+    for volume, word in (("normal", "fragment"), ("mutter", "none"), ("whisper", "none")):
+        gain = ratio_of_db(under - SPEECH_DB[volume])
+        assert sound_field_hear_level(volume, gain, noise) == word, volume
+
+
+def test_a_shout_carries_down_a_long_run_and_a_normal_voice_falls_away():
     """§ 1.146. `separated` was ONE WORD FOR EVERY DISTANCE beyond the next
     room, and `door_gain` -- the ceiling it fell through to -- is what this
     room's best opening admits and knows nothing about how far away anyone
@@ -2104,10 +2133,14 @@ def test_a_shout_down_a_long_run_is_heard_and_a_normal_voice_is_not():
     # less than the `full` margin. Before, it was `none` from two rooms.
     # What the test is FOR is unchanged: the answer falls with distance.
     words = [hear_level(spatial_rel_between(_run(h), "L", "S"), "normal")
-             for h in (2, 3, 4, 5)]
+             for h in (2, 3, 5, 7, 8)]
     # Real doorway losses (2 dB each, 2026-09-14): whole two rooms down an
-    # open run, in pieces at three, gone at four.
-    assert words == ["full", "fragment", "none", "none"]
+    # open run, then in pieces. It was gone at four until 2026-09-26, and
+    # that was the absolute floor, not the distance: a voice under a still
+    # building's 27 dB floor was refused however little under it, against
+    # the 12 dB its words survive by (`quantise_hearing_db`). It now goes
+    # where the margin says, at eight.
+    assert words == ["full", "fragment", "fragment", "fragment", "none"]
 
     # ...and the gain FALLS with distance, which is the whole complaint.
     gains = [spatial_rel_between(_run(h), "L", "S")["signal"]

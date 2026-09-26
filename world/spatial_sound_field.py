@@ -928,7 +928,8 @@ def sound_field_hear_level(volume, signal_gain, noise, level_db=None,
     if level_db is None:
         level_db = SPEECH_DB.get(volume, SPEECH_DB["normal"])
     return quantise_hearing_db(float(level_db) + db_ratio(signal_gain),
-                               db_of_power(noise))
+                               db_of_power(noise),
+                               voiced=volume not in UNVOICED_VOLUMES)
 
 
 #: The volumes a voice is RAISED at -- the two the bounded loudness walk
@@ -988,12 +989,21 @@ def open_edge_floor(volume, rel: dict) -> Optional[str]:
     noise = rel.get("noise")
     if noise is not None and quantise_hearing_db(
             SPEECH_DB[volume] - _ONE_PACE_LOSS_DB,
-            db_of_power(noise)) == "none":
+            db_of_power(noise), voiced=True) == "none":
         return None
     return "fragment"
 
 
-def quantise_hearing(signal: float, noise: float) -> str:
+#: The volumes spoken ON THE BREATH: the two the absolute floor still holds
+#: (`quantise_hearing_db`). A voiced line carries its harmonics, and an ear
+#: picks those out of broadband noise several decibels under the noise's own
+#: level -- which is the whole premise of `FRAGMENT_SNR` at -12 dB. A
+#: whisper is breath with no harmonics to pick out, and a mutter is nearly
+#: that, so under the room's own level they are simply gone.
+UNVOICED_VOLUMES = ("whisper", "mutter")
+
+
+def quantise_hearing(signal: float, noise: float, *, voiced: bool = False) -> str:
     """Quantise, LAST, from two LINEAR powers. The reference path, kept in
     step with the dB path below so the conversion property has something to
     prove (`tests/test_sound_field.py`)."""
@@ -1001,12 +1011,14 @@ def quantise_hearing(signal: float, noise: float) -> str:
         return "full" if signal >= HEAR_FLOOR else "none"
     if signal >= FULL_SNR * noise:
         return "full"
-    if signal >= FRAGMENT_SNR * noise and signal >= min(HEAR_FLOOR, noise):
+    if signal >= FRAGMENT_SNR * noise and (
+            voiced or signal >= min(HEAR_FLOOR, noise)):
         return "fragment"
     return "none"
 
 
-def quantise_hearing_db(signal_db: float, noise_db: float) -> str:
+def quantise_hearing_db(signal_db: float, noise_db: float, *,
+                        voiced: bool = False) -> str:
     """Quantise, LAST, from two LEVELS. THE PRODUCTION PATH.
 
     The same inequality with a logarithm taken of both sides: `full` at
@@ -1036,13 +1048,29 @@ def quantise_hearing_db(signal_db: float, noise_db: float) -> str:
     quiet room, and where a room is quieter than that, the room is the
     limit. A room that declares no quiet has a floor at or above
     `HEAR_FLOOR` and takes `HEAR_FLOOR`, byte for byte as before.
+
+    A VOICED LINE IS NOT HELD TO THE FLOOR (`voiced`, which
+    `sound_field_hear_level` sets for every volume outside
+    `UNVOICED_VOLUMES`). The sentence above is true of a breath and false
+    of a voice: `FRAGMENT_SNR` puts the words of a voice in pieces down to
+    12 dB UNDER the noise, and in any room whose noise sits near the floor
+    this gate cancelled that whole band, so a normal line had to reach the
+    room's own level before a single word of it arrived. The two numbers
+    stopped agreeing on 2026-09-14, when the fragment margin moved from
+    -1 dB to -12 dB and the floor did not: a quiet house became harder to
+    overhear in than a noisy one. Measured on the mood test stories
+    (2026-09-26): a boy pressed to a shut door, listening for every word,
+    caught none of a normal conversation arriving 1.3 dB under a 27 dB
+    room. A whisper and a mutter keep the floor, which is what their own
+    calibration (the far wall of a large room, `SPEECH_ONE_PACE_DB`)
+    stands on.
     """
     if noise_db == float("-inf"):
         return "full" if _at_least(signal_db, HEAR_FLOOR_DB) else "none"
     if _at_least(signal_db, noise_db + FULL_SNR_DB):
         return "full"
-    if _at_least(signal_db, noise_db + FRAGMENT_SNR_DB) \
-            and _at_least(signal_db, min(HEAR_FLOOR_DB, noise_db)):
+    if _at_least(signal_db, noise_db + FRAGMENT_SNR_DB) and (
+            voiced or _at_least(signal_db, min(HEAR_FLOOR_DB, noise_db))):
         return "fragment"
     return "none"
 
@@ -1371,9 +1399,23 @@ def room_reverberation(scene: dict, room_id) -> Optional[dict]:
     ONE-PACE direct level the ladders are authored at
     (L_rev - L_1 = 8.5 + 10 log10(4 / R), R = A / (1 - a)), as a power
     ratio; `echo` says the room's longer side clears `ECHO_SPAN_PACES`.
+
+    ONLY AN ENCLOSED ROOM RINGS, for the reason only an enclosed room is a
+    duct (`is_duct`): a ring is sound the walls AND THE ROOF keep, and a
+    place open to the sky, or open at its sides, lets it go. Sabine's rule
+    here assumes a ceiling (`ROOM_HEIGHT_M`) on every room, so a stone
+    breakwater under a gale was priced as a stone hall: a 2.2 s
+    "cavernous" ring about 4 dB over a voice at one pace, which smeared
+    every normal line spoken a few paces apart on it (the homecoming test
+    story, 2026-09-26: 22 lines caught in pieces in the open air). The
+    owner, that day: "Sound gatings is entirely overzealous."
     """
+    from world import weather as _weather
+
     surface = room_surface(scene, room_id)
     if surface not in REVERBERANT_SURFACES:
+        return None
+    if _weather.room_exposure(scene, room_id) != "enclosed":
         return None
     from world.spatial_fov import room_grid
     grid = room_grid(scene, room_id)
@@ -1480,9 +1522,28 @@ def sound_sources(scene: dict, *, turn_idx=None, crowds=None, events=None,
             # the place across a level, while `faint` and `audible` stay
             # near-field things you meet at the door -- which is the
             # gradient a story wants and neither ladder gave on its own.
+            # A ROOM'S OWN VOICE ALREADY CARRIES ITS ECHO. The word is how
+            # the place sounds to someone standing in it -- a drip in a
+            # stone cell is written `faint` because that is what it is
+            # there, ring and all -- so the ring must not be laid on top of
+            # it a second time. The power is set so that direct and ring
+            # together make the word at one pace, and the far field, which
+            # hands a ringing room's walls its ring (`ring_boost_db`), then
+            # starts from the word too. A THING's `sound_source` is not
+            # scaled: it is the thing's, it goes where the thing goes, and
+            # a bare room it is carried into rings with it. Measured on the
+            # mood test stories (2026-09-26): a `faint` drip in a hushed
+            # 4x3 stone infirmary stood at 58 dB where anyone stood --
+            # louder than a mutter at arm's length -- and rain written into
+            # a 3x3 stone stoop left it at 69 dB and drowned the rehearsal
+            # room two doors away.
+            power = EVENT_POWER[level]
+            ring = room_reverberation(scene, rid)
+            if ring:
+                power = power / (1.0 + float(ring["gain"]))
             out.append({"id": "room:%s" % rid, "kind": "room",
                         "room": str(rid), "cell": room_centre(scene, rid),
-                        "power": EVENT_POWER[level], "level": level,
+                        "power": power, "level": level,
                         "holder": None, "beat": "steady",
                         "detail": str(record.get("detail") or "")})
     for crowd in crowds or []:

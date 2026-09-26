@@ -437,12 +437,10 @@ that mind then remembers — and they are FIXED together, pinned in
   graded one shout differently because the relations perception builds for a
   beat did not all carry the same sound field (manor turn 16, F61 with the
   roles reversed). FIXED here: every `spatial_rel_between` perception builds
-  for a beat is given the beat's field. **STILL OPEN:** the field's own floor
-  — a raised voice one passable edge away should not grade below `fragment`
-  when the edge model says `full` — belongs in
-  `world/spatial_sound_field.py` and is not built. Until it lands the two
-  passes agree and both are the strict answer, so a shout across one open
-  archway can still reach nobody.
+  for a beat is given the beat's field. **Since built:** the field's own
+  floor — a raised voice one passable edge away does not grade below
+  `fragment` — is `spatial_sound_field.open_edge_floor`, capped by the
+  noise at the listener's own cell.
 
 **Still open from PA1's own report**, and deliberately: the per-leg action
 ELEMENT. The Director cannot say which leg an act happened on, because
@@ -1519,7 +1517,8 @@ curtain 5, shut door 25, glass 28), `WALL_LOSS_DB` 45 and
 `FLOOR_CEILING_LOSS_DB` 50 -- forced by
 `tests/test_replay_defects_h.py`'s shut-door test failing the moment the
 ladders went real. Measured after: a normal voice at a shut door is a
-fragment beyond it and nothing at the far wall; one shut door passes a
+fragment beyond it and nothing at the far wall (a fragment there too since
+2026-09-26, § 1.167); one shut door passes a
 shout, two end it; a normal voice down an open run is whole at two rooms,
 pieces at three; no voice's level clears a masonry wall; the far-field
 reach on a 300-room chain is 10 / 18 / 26 / 35 for loud / deafening /
@@ -1533,6 +1532,11 @@ voice is `full` across any room and a mutter carries three paces);
 emission ladder at `loud` and `deafening` -- nothing compares the two, so
 no verdict turns on it. Each is one number with a known direction: rooms
 mask more, weather masks at all, a whisper's reach shortens by a pace.
+**The owner bears on the weather half (2026-09-26):** "Rain is not even that
+loud you could still call to someone across a street in rain and not really
+strain your voice" -- which today's `WEATHER_NOISE` satisfies (a call across a
+12 m street in heavy rain is `full`) and the real 55-70 figures would not
+(§ 1.167).
 
 **A composer symptom the fragment exposed, not fixed:** a delivered fragment
 that quotes the perceiver's own name ("...here's... Hinami... kitsune...")
@@ -1540,6 +1544,76 @@ trips the `COMPOSER TRIPWIRE -- composed view narrated its own perceiver`
 warning, because the fragment renderer does not mark its pieces as quoted
 speech the way a whole line is. Seen on chat 122's beach beat once the far
 line became a fragment; a false alarm, and the warning is only a warning.
+
+<a id="unbuilt-1-167"></a>
+
+### 1.167 Ordinary speech was gated four ways too hard — FIXED 2026-09-26, residuals open
+
+The owner, 2026-09-26: "Sound gatings is entirely overzealous. Rain is not
+even that loud you could still call to someone across a street in rain and
+not really strain your voice." Measured first on the four mood test stories
+(`docs/experiments/JEV_MEMORY_PROBE_2026_09_26.md`): 7 of 17 narrated turns
+in the opera story and 3 of 11 on the harbour broke an NPC's line into
+fragments, and the page blamed "the stone and the rain". Replayed through
+the engine's own `line_hear_level` on each turn's checkpointed scene
+(`tools/speech_replay.py`, which re-derives every number below) -- 508
+recorded speech decisions, 69-79% reproduced, the misses mostly the act
+pass's reach tier -- the rain as WEATHER was never the cause: a call across a
+12 m street in heavy rain is `full`, in a gale too. Four things were:
+
+- **A ring in the open air.** `room_reverberation` gated on `surface` alone
+  and assumed a ceiling, so a stone breakwater under a gale rang like a hall
+  (2.2 s) and smeared every normal line spoken a few paces apart on it (the
+  harbour story, 22 lines). Only an enclosed room rings now, as only an
+  enclosed room is a duct.
+- **The absolute floor cancelled a voice's fragment band.** The floor stayed
+  at 27 dB when `FRAGMENT_SNR` moved from -1 to -12 dB (2026-09-14), so in
+  any quiet room a voice had to reach the room's own level before one word
+  of it arrived: a quiet house was harder to overhear in than a noisy one. A
+  boy pressed to a shut door, listening for every word, caught nothing of a
+  normal conversation 1.3 dB under a 27 dB room. The floor now holds breath
+  only (`UNVOICED_VOLUMES`), so a mutter's far-wall calibration stands.
+- **A room's own voice was echoed twice.** A room's `sound` is written as
+  heard in the room, and the ring was laid on top of it: a `faint` drip in a
+  hushed 4x3 stone infirmary stood at 58 dB wherever anyone stood (the siege
+  story, 25 lines masked), and rain written into a 3x3 stone stoop stood at
+  69 dB and reached the rehearsal room two doors off "loud enough to drown
+  everything". The power is now set so direct and ring together make the
+  word; a thing's `sound_source`, which goes where the thing goes, still
+  rings with the room it is in.
+- **The planner wrote the evening's acts and the weather as the place's
+  sound.** "A soprano singing with piano accompaniment" (`loud`, 72 dB at the
+  room's centre) on the rehearsal room, "a soprano's voice carrying" on the
+  corridor, "rain on cobblestones" on the stoop -- none ever stopped, and the
+  first held the rehearsal room at 64-69 dB for twenty turns. The plan's
+  schema now says a room's sound is what the place makes with nobody in it,
+  whatever the weather.
+
+Measured after, on the same 508 decisions: the harbour's fragments 35 -> 7
+(and a whisper across open ground in a gale now goes, as a whisper does);
+the schoolhouse's `none` 41 -> 32; the siege's `full` 60 -> 69. The opera
+story is five lines worse and all of one mechanism: with one inflated stale
+sound made honest, a speaker in the corridor no longer raises his voice over
+it (the Lombard rule), and his listener still stands under the other.
+
+**Still open:**
+
+- **A room's sound has no retirement.** No Director hand is taught
+  `rooms[rid].sound`, so a stale one a plan wrote stands for the whole story
+  -- the opera house's soprano is still singing. Prevention is in; a way to
+  clear one (the spatial hand writing `sound: null`) is the owner's call.
+- **Two distances for one pair.** Stations say two bodies are within reach
+  and the field's cells put them 2.6 paces apart, so a normal line at arm's
+  length in a small stone room smears (the infirmary, 6 lines). The field
+  should place a `near` body beside the body it is near.
+- **A small hard room is priced as an empty one.** Sabine's rule here counts
+  no absorption from the room's open doorways or the bodies standing in it,
+  and a drip is steady noise where a real one is glimpsed between drops.
+
+**Found on the way, not a hearing defect:** "Tomas finds Miss Varga alone in
+the practice room" moved the player to the rehearsal room while she was on
+the stage in a bubble of her own; the two spoke through a shut door for two
+beats while the narrator sat them on one bench and blamed the acoustics.
 
 ## 2. Roadmap
 

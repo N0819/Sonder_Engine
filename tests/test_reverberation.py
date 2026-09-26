@@ -57,6 +57,29 @@ def test_a_plain_room_does_not_ring_and_a_bare_one_does():
     assert room_reverberation(sc, "hall") is None, "an ordinary room keeps today's model"
 
 
+def test_only_an_enclosed_room_rings():
+    """A ring is what the walls AND THE ROOF keep, as a duct is (`is_duct`).
+    The owner, 2026-09-26: "Sound gatings is entirely overzealous" -- a
+    stone breakwater under a gale was priced as a stone hall, and every
+    normal line spoken a few paces apart on it came out in pieces (the
+    homecoming test story, 22 lines)."""
+    def breakwater(exposure):
+        return {"rooms": {"wall": {"name": "wall", "extent": {"w": 4, "d": 20}, "anchors": {},
+                                   "adjacent": [], "surface": "bare", "exposure": exposure}},
+                "positions": {"A": "wall", "B": "wall"},
+                "stations": {"A": {"cell": [2, 3]}, "B": {"cell": [2, 13]}}, "entities": {}}
+    for exposure in ("open", "sheltered"):
+        sc = breakwater(exposure)
+        assert room_reverberation(sc, "wall") is None, exposure
+        rel = spatial_rel_between(sc, "B", "A")
+        assert not rel.get("reverberant"), exposure
+        assert hear_level(rel, "normal") == "full", exposure
+    # The same stone under a roof is a hall, and its ring still smears.
+    roofed = breakwater("enclosed")
+    assert room_reverberation(roofed, "wall") is not None
+    assert spatial_rel_between(roofed, "B", "A").get("reverberant") is True
+
+
 def test_a_voice_carries_further_through_bare_rooms():
     assert _reach("normal", "bare") > _reach("normal"), (_reach("normal", "bare"), _reach("normal"))
     assert _reach("whisper", "bare", quiet="dead") >= _reach("whisper", quiet="dead")
