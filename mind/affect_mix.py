@@ -104,9 +104,12 @@ SPECTRUM_HALF_LIFE = 8.0
 STANDALONE_HALF_LIFE = 8.0
 #: Bad is stronger than good (Baumeister et al., 2001): an unpleasant
 #: emotion's weight in a target, and how much slower pleasure below home
-#: decays.
-NEGATIVITY_WEIGHT = 1.5
-NEGATIVE_DECAY_FACTOR = 1.5
+#: decays. Neutral since 2026-09-26: at 1.5 and 1.5 the owner judged it "way
+#: too strong", and measured on 98 captured beats the derived mood's valence
+#: tracked the characters' reports at r 0.26 (The Doctor) and 0.08 (Mirelle),
+#: against 0.33 and 0.11 at 1.0 and 1.0 (0.37 and 0.12 at 0.75 and 1.0).
+NEGATIVITY_WEIGHT = 1.0
+NEGATIVE_DECAY_FACTOR = 1.0
 #: A memory-evoked feeling's weight against an event's.
 MEMORY_WEIGHT = 0.5
 #: A standing concern's feeling -- what is still unsettled, appraised each

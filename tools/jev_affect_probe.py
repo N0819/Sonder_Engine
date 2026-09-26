@@ -1,4 +1,4 @@
-"""Does the decision model's event appraisal, with the mood math, say how a
+"""Does the decision model's appraisal, with the mood math, say how a
 character feels?
 
 An experiment instrument for `mind/affect_appraisal.py` and
@@ -8,32 +8,32 @@ math"). On captured character calls that carry per-event perception:
 
 `collect` -- per character and chat, in order, one call per beat: the events
 the character perceived (quoted, with actors), the people it has a standing
-with and its liking of each, the memories recall delivered, the story time
-that passed, and the mood the character model reported on that call.
+with and its liking of each, its unsettled concerns, its own speech, actions
+and held-back want, the story time that passed, and the mood the character
+model reported on that call.
 
-`ask` -- the appraisal through the engine's own module, by arm (`--arms`):
-`E` the events alone; `M` + the delivered memories in the state, each asked
-whether it stirs a feeling now; `C` + the character's unsettled concerns,
-appraised like events (rumination); `P` the pass after the turn -- the
-character's own speech, actions and held-back want, appraised as events it
-brought about. `score --concern-weight` sets a concern's share of the
-surface mood; `score --post` carries the `P` push into the next beat.
+`ask` -- two requests per beat through the engine's own module: `V`, the
+events and concerns appraised and the mood read directly (twelve spectrums,
+eleven standalone moods); `VP`, the pass after the turn on the character's
+own acts.
 
-`label` -- the `utility` model (GLM on NanoGPT), which never sees Jev's
-answers, names the emotion the character most likely feels about each event
-and toward whom, from OCC's list.
+`label` and `dimlabel` -- the `utility` model (GLM on NanoGPT), blind to the
+decision model's answers, names each event's likely emotion from OCC's list
+and rates every mood coordinate from the same state.
 
-`score` -- (a) per event, the strongest emotion the mix derives against the
-label, exact and by sign, against a shuffled baseline; (b) the mood as its
-OWN trajectory -- started from the first beat's mood and never again shown
-the character's reports -- against what the character reported, level and
-change; (c) both arms.
+`score` -- event emotions against the labels by family and sign (shuffled
+baselines); the undercurrent against the characters' reports; what own acts
+produce; each mood coordinate three ways -- read directly, derived from the
+emotions by the math, and the direct reading settled with inertia -- against
+the rating; valence and arousal against the reports; and which coordinates
+the direct readings move together on.
 
 Usage:
     ENGINE_DB=<a copy> python tools/jev_affect_probe.py collect --chats 150,151 --out calls.json
     ENGINE_DB=<a copy> python tools/jev_affect_probe.py ask --calls calls.json --out appraisals.json
     ENGINE_DB=<a copy> python tools/jev_affect_probe.py label --calls calls.json
-    python tools/jev_affect_probe.py score --calls calls.json --appraisals appraisals.json
+    ENGINE_DB=<a copy> python tools/jev_affect_probe.py dimlabel --calls calls.json
+    python tools/jev_affect_probe.py score --calls calls.json --appraisals appraisals.json --post
 """
 
 from __future__ import annotations
@@ -53,13 +53,6 @@ MAX_PEOPLE = 3
 MAX_MEMORIES = 8
 MAX_CONCERNS = 4
 MAX_ACTS = 6
-#: `E` events; `M` + the delivered memories (in the state, and each asked
-#: whether it stirs a feeling); `C` + the character's unsettled concerns,
-#: appraised like events. `P` is the pass after the character's turn (the
-#: owner: "a pass after the character turn finishes to see how their actions
-#: speech and thoughts affect their mood"): its own speech, actions and the
-#: want it held back, appraised as events it brought about.
-ARMS = ("E", "EM", "EC", "ECM")
 LABELS = ("joy", "distress", "hope", "fear", "satisfaction", "disappointment", "relief",
           "fears_confirmed", "pride", "shame", "admiration", "reproach", "gratitude", "anger",
           "gratification", "remorse", "happy_for", "pity", "resentment", "gloating", "desire", "none")
@@ -189,56 +182,49 @@ def collect(args):
     print(f"{len(calls)} beats with per-event perception and a reported mood: {names}")
 
 
-def _state(call, arm):
+def _state(call, concerns=True, acts=False):
     b = call["blocks"]
     parts = [b["identity"], b["mood"], b["people"], b["happened"]]
-    if "C" in arm and call.get("concerns"):
-        parts.append("WHAT IS STILL UNSETTLED FOR YOU:\n" + "\n".join(f"- {c['ref']}: {c['text']}"
-                                                                    for c in call["concerns"]))
-    if "M" in arm:
-        parts.append(b["remembered"])
-    if arm == "P" and call.get("acts"):
+    if concerns and call.get("concerns"):
+        parts.append("WHAT IS STILL UNSETTLED FOR YOU:\n" + "\n".join(
+            f"- {c['ref']}: {c['text']}" for c in call["concerns"]))
+    if acts and call.get("acts"):
         parts.append("WHAT YOU JUST DID:\n" + "\n".join(f"- {a['ref']}: {a['text']}" for a in call["acts"]))
     return "\n\n".join(p for p in parts if p)
 
 
-def _appraised(call, arm):
-    """The events an arm appraises: this beat's, plus the concerns in `C`;
-    in `P`, the character's own acts."""
-    if arm == "P":
-        return call.get("acts") or []
-    return call["events"] + (call.get("concerns") or [] if "C" in arm else [])
-
-
-def _source(ref, arm):
-    return "act" if arm == "P" else ("concern" if str(ref).startswith("c") else "event")
-
-
 def ask(args):
+    """Two requests per beat through the engine's own module: `V`, the
+    beat's events and the character's unsettled concerns appraised and the
+    mood read directly; `VP`, the pass after the turn on its own acts."""
     from mind import affect_appraisal as appraisal
 
     calls = json.loads(Path(args.calls).read_text())
     out = Path(args.out)
     done = json.loads(out.read_text()) if out.exists() else {}
-    arms = [a for a in args.arms.split(",") if a in ARMS or a == "P"]
-    jobs = [(c, arm) for c in calls for arm in arms if f"{c['capture']}:{arm}" not in done]
+    jobs = [(c, arm) for c in calls for arm in ("V", "VP") if f"{c['capture']}:{arm}" not in done]
 
     def run(job):
         call, arm = job
-        mems = call["memories"] if "M" in arm else ()
-        return f"{call['capture']}:{arm}", appraisal.appraise(_state(call, arm), _appraised(call, arm),
-                                                            call["people"], mems, language="en")
+        if arm == "V":
+            result = appraisal.appraise(_state(call), call["events"] + (call.get("concerns") or []),
+                                        call["people"], mood=True, language="en")
+        else:
+            result = appraisal.appraise(_state(call, acts=True), acts=call.get("acts") or [], language="en")
+        return f"{call['capture']}:{arm}", result
 
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
         for n, (key, result) in enumerate(pool.map(run, jobs), 1):
             done[key] = result
             if n % 20 == 0 or n == len(jobs):
                 out.write_text(json.dumps(done), encoding="utf-8")
-                print(f"{n} of {len(jobs)} appraisals")
+                print(f"{n} of {len(jobs)} requests")
     out.write_text(json.dumps(done), encoding="utf-8")
 
 
 def label(args):
+    """The `utility` model names, per event, the emotion the character most
+    likely feels about it -- blind to the decision model's answers."""
     from agents.common import jparse
     from llm.providers import chat_complete
 
@@ -247,7 +233,7 @@ def label(args):
     todo = [c for c in calls if "labels" not in c]
 
     def run(call):
-        user = _state(call, "E") + "\n\nEVENT IDS: " + ", ".join(e["ref"] for e in call["events"])
+        user = _state(call, concerns=False) + "\n\nEVENT IDS: " + ", ".join(e["ref"] for e in call["events"])
         reply = jparse(chat_complete("utility", LABEL_SYSTEM, user, json_mode=True, temperature=0.0,
                                      max_tokens=1500, reasoning_effort="off")) or {}
         out = {}
@@ -265,31 +251,77 @@ def label(args):
     print(f"labelled {sum(1 for c in calls if c.get('labels'))} of {len(calls)} beats")
 
 
-def _emotions(call, appr, habit, now, arm="E"):
-    """The mix's emotions for one beat: per event (and per concern in the `C`
-    arms), and per memory with its habituation. Returns (per-event emotion
-    lists, all emotions, habit)."""
+def dimlabel(args):
+    """The `utility` model rates every mood coordinate for the character at
+    the beat, from the same state the decision model saw and blind to its
+    answers: each spectrum -2..2, each standalone mood 0..3."""
+    from agents.common import jparse
+    from llm.prompts import affect_appraisal_options
+    from llm.providers import chat_complete
+
+    poles = affect_appraisal_options("dimensions", "en")
+    phrases = affect_appraisal_options("standalone", "en")
+    system = ("You judge how a character most likely feels right now, from their own situation. Rate each "
+              "SPECTRUM from -2 (entirely the first word) to 2 (entirely the second) and each MOOD from 0 "
+              "(not at all) to 3 (strongly). Return JSON only: {\"spectrums\": {\"<name>\": n}, "
+              "\"moods\": {\"<name>\": n}} with every name.\nSPECTRUMS: "
+              + "; ".join(f"{n}: {p['low']} .. {p['high']}" for n, p in poles.items())
+              + "\nMOODS: " + "; ".join(f"{n}: {t}" for n, t in phrases.items()))
+    path = Path(args.calls)
+    calls = json.loads(path.read_text())
+    todo = [c for c in calls if "dims_ref" not in c]
+
+    def run(call):
+        reply = jparse(chat_complete("utility", system, _state(call), json_mode=True, temperature=0.0,
+                                     max_tokens=1200, reasoning_effort="off")) or {}
+        ref = {"spectrums": {}, "moods": {}}
+        for part, scale in (("spectrums", 2.0), ("moods", 3.0)):
+            for name, v in (reply.get(part) or {}).items():
+                try:
+                    ref[part][str(name)] = float(v) / scale
+                except (TypeError, ValueError):
+                    continue
+        return call["capture"], ref
+
+    with ThreadPoolExecutor(max_workers=args.workers) as pool:
+        got = dict(pool.map(run, todo))
+    for c in calls:
+        if c["capture"] in got:
+            c["dims_ref"] = got[c["capture"]]
+    path.write_text(json.dumps(calls, indent=1), encoding="utf-8")
+    print(f"rated {sum(1 for c in calls if c.get('dims_ref', {}).get('spectrums'))} of {len(calls)} beats")
+
+
+def _emotions(call, appr, acts=False):
+    """The mix's emotions for one beat -- per event and concern (a concern's
+    tagged as one), or per own act -- as (per item, all)."""
     from mind import affect_mix as mix
 
+    per_item, everything = {}, []
+    if acts:
+        for a in call.get("acts") or []:
+            es = mix.emotions_from_act((appr.get("acts") or {}).get(a["ref"]) or {}, ref=a["ref"],
+                                       about=a["text"][:60])
+            per_item[a["ref"]] = es
+            everything += es
+        return per_item, everything
     liking = {p["name"]: p["liking"] for p in call["people"]}
-    per_event, everything = {}, []
-    for e in _appraised(call, arm):
+    for e in call["events"] + (call.get("concerns") or []):
         es = mix.emotions_from_appraisal((appr.get("events") or {}).get(e["ref"]) or {}, ref=e["ref"],
                                          actor=e["actor"], about=e["text"][:60], liking=liking)
-        for x in es:
-            x.source = _source(e["ref"], arm)
-        per_event[e["ref"]] = es
+        if e["ref"].startswith("c"):
+            for x in es:
+                x.source = "concern"
+        per_item[e["ref"]] = es
         everything += es
-    for m in call["memories"]:
-        a = (appr.get("memories") or {}).get(m["ref"])
-        if not a:
-            continue
-        multiplier, habit = mix.recall_lands(habit, m["ref"], now)
-        me = mix.memory_emotion(a.get("strength", 0), a.get("tone", 0), ref=m["ref"],
-                                about=m["text"][:60], multiplier=multiplier)
-        if me:
-            everything.append(me)
-    return per_event, everything, habit
+    return per_item, everything
+
+
+def _r(x, y):
+    import numpy as np
+
+    x, y = np.asarray(x, float), np.asarray(y, float)
+    return float(np.corrcoef(x, y)[0, 1]) if len(x) > 2 and x.std() > 0 and y.std() > 0 else float("nan")
 
 
 def score(args):
@@ -297,101 +329,147 @@ def score(args):
 
     from mind import affect_mix as mix
 
+    if args.negativity is None:
+        args.negativity = mix.NEGATIVITY_WEIGHT
+    if args.negative_decay is None:
+        args.negative_decay = mix.NEGATIVE_DECAY_FACTOR
     calls = json.loads(Path(args.calls).read_text())
     appraisals = json.loads(Path(args.appraisals).read_text())
     if args.chats:
         keep = {int(c) for c in args.chats.split(",")}
         calls = [c for c in calls if c["chat"] in keep]
+    calls = [c for c in calls if f"{c['capture']}:V" in appraisals]
+    print(f"{len(calls)} beats; characters {sorted({c['name'] for c in calls})}")
 
-    def r(x, y):
-        x, y = np.asarray(x, float), np.asarray(y, float)
-        return float(np.corrcoef(x, y)[0, 1]) if len(x) > 2 and x.std() > 0 and y.std() > 0 else float("nan")
+    # (a) event emotions against the utility model's labels, by family and sign
+    pairs, under_told = [], []
+    for c in calls:
+        per, everything = _emotions(c, appraisals[f"{c['capture']}:V"])
+        for ref, lab in (c.get("labels") or {}).items():
+            es = sorted(per.get(ref) or [], key=lambda e: -e.intensity)
+            pairs.append((es[0].name if es and es[0].intensity >= 0.15 else "none", lab["emotion"]))
+        neg = any(e.valence < 0 and e.intensity >= 0.15 for e in everything)
+        under_told.append(((c["told"].get("under_valence") or 0) < 0, neg))
+    if pairs:
+        fam = np.mean([FAMILY.get(a) == FAMILY.get(b) for a, b in pairs])
+        sign = lambda n: 0 if n == "none" else (1 if mix.EMOTION_EFFECTS[n].get("pleasure", 0) >= 0 else -1)  # noqa: E731
+        same = np.mean([sign(a) == sign(b) for a, b in pairs])
+        rng = random.Random(3)
+        ours = [a for a, _ in pairs]
+        base_fam, base_sign = [], []
+        for _ in range(300):
+            rng.shuffle(ours)
+            base_fam.append(np.mean([FAMILY.get(a) == FAMILY.get(b) for a, (_x, b) in zip(ours, pairs)]))
+            base_sign.append(np.mean([sign(a) == sign(b) for a, (_x, b) in zip(ours, pairs)]))
+        print(f"  events ({len(pairs)}): same family {fam:.0%} (shuffled {np.mean(base_fam):.0%}), "
+              f"same sign {same:.0%} (shuffled {np.mean(base_sign):.0%})")
+    told_neg = [f for t, f in under_told if t]
+    told_not = [f for t, f in under_told if not t]
+    print(f"  undercurrent: a negative feeling on {sum(told_neg)} of {len(told_neg)} beats reporting a negative "
+          f"one, and on {sum(told_not)} of {len(told_not)} reporting none")
 
-    print(f"{len(calls)} beats; characters {sorted({c['name'] for c in calls})}"
-          + (f"; concern weight {args.concern_weight}" if args.concern_weight is not None else "")
-          + ("; with the pass after the turn" if args.post else ""))
-    weights = {"concern": args.concern_weight} if args.concern_weight is not None else None
-    for arm in ARMS:
-        if not all(f"{c['capture']}:{arm}" in appraisals for c in calls):
+    # (b) the character's own acts
+    act_top, eased = {}, []
+    for c in calls:
+        post = appraisals.get(f"{c['capture']}:VP") or {}
+        per, _all = _emotions(c, post, acts=True)
+        for a in c.get("acts") or []:
+            es = sorted(per.get(a["ref"]) or [], key=lambda e: -e.intensity)
+            top = es[0].name if es and es[0].intensity >= 0.15 else "none"
+            act_top[top] = act_top.get(top, 0) + 1
+            e = ((post.get("acts") or {}).get(a["ref"]) or {}).get("eased_or_stoked")
+            if e is not None:
+                eased.append(e)
+    print("  own acts, strongest emotion:", sorted(act_top.items(), key=lambda t: -t[1]))
+    if eased:
+        print(f"  own acts, eased or stoked: eased {np.mean([e < -0.2 for e in eased]):.0%}, stoked "
+              f"{np.mean([e > 0.2 for e in eased]):.0%}, mean {np.mean(eased):+.2f}")
+
+    # (c) the mood, three ways, against the utility model's ratings and the reports
+    coords = list(mix.SPECTRUMS) + list(mix.STANDALONE)
+    rows = {"direct": {}, "derived": {}, "settled": {}, "ref": {}}
+    va = {"direct": [], "derived": [], "settled": [], "told": []}
+    for key in sorted({(c["chat"], c["who"]) for c in calls}):
+        seq = sorted((c for c in calls if (c["chat"], c["who"]) == key), key=lambda c: c["turn_idx"])
+        first = seq[0]
+
+        def start(v, a):
+            v = float(v if v is not None else 0.0)
+            a = float(a if a is not None else 0.5) * 2 - 1
+            return {"pleasure": v, "energy": a, "tension": a}
+
+        home = mix.Mood(start(first["home"]["valence"], first["home"]["arousal"]))
+        derived = mix.Mood(start(first["entering"]["valence"], first["entering"]["arousal"]))
+        settled = derived.copy()
+        for c in seq:
+            dt = c["elapsed_seconds"] / 60.0 if args.clock and c["elapsed_seconds"] else 1.0
+            appr = appraisals[f"{c['capture']}:V"]
+            reading = {**(appr.get("spectrums") or {}), **(appr.get("moods") or {})}
+            _per, everything = _emotions(c, appr)
+            derived, _g = mix.mix(derived, home, everything, dt, reactivity=args.reactivity,
+                                  negativity=args.negativity, negative_factor=args.negative_decay)
+            settled = mix.settle(mix.decay(settled, home, dt, negative_factor=args.negative_decay), reading,
+                                 reactivity=args.reactivity)
+            ref = {**(c.get("dims_ref") or {}).get("spectrums", {}), **(c.get("dims_ref") or {}).get("moods", {})}
+            for name in coords:
+                if name in ref and name in reading:
+                    rows["ref"].setdefault(name, []).append(ref[name])
+                    rows["direct"].setdefault(name, []).append(reading[name])
+                    rows["derived"].setdefault(name, []).append(derived.get(name))
+                    rows["settled"].setdefault(name, []).append(settled.get(name))
+            direct_mood = mix.Mood(reading)
+            for name, mood in (("direct", direct_mood), ("derived", derived), ("settled", settled)):
+                va[name].append(tuple(mix.engine_affect(mood).values()))
+            va["told"].append((float(c["told"]["valence"] or 0), float(c["told"]["arousal"] or 0)))
+            if args.post:
+                post = appraisals.get(f"{c['capture']}:VP") or {}
+                _pp, own = _emotions(c, post, acts=True)
+                derived, _g2 = mix.mix(derived, home, own, 0, reactivity=args.reactivity,
+                                       negativity=args.negativity, negative_factor=args.negative_decay)
+                eases = [x.get("eased_or_stoked") for x in (post.get("acts") or {}).values()
+                         if x.get("eased_or_stoked") is not None]
+                if eases:
+                    derived = mix.ease(derived, home, float(np.mean(eases)))
+    print("  coordinate           n  direct  derived  settled   (r against the utility model's rating)")
+    means = {"direct": [], "derived": [], "settled": []}
+    for name in coords:
+        ref = rows["ref"].get(name) or []
+        if len(ref) < 5:
             continue
-        # (a) event emotions against the utility model's labels
-        pairs, under_found, under_told = [], 0, 0
-        for c in calls:
-            appr = appraisals.get(f"{c['capture']}:{arm}") or {}
-            per_event, everything, _h = _emotions(c, appr, {}, c["turn_idx"], arm)
-            if (c["told"].get("under_valence") or 0) < 0:
-                under_told += 1
-                under_found += any(e.pad[0] < 0 and e.intensity >= 0.15 for e in everything)
-            for ref, lab in (c.get("labels") or {}).items():
-                es = sorted(per_event.get(ref) or [], key=lambda e: -e.intensity)
-                ours = es[0].name if es and es[0].intensity >= 0.15 else "none"
-                pairs.append((ours, lab["emotion"]))
-        if pairs:
-            exact = np.mean([a == b for a, b in pairs])
-            sign = lambda n: 0 if n == "none" else (1 if mix.EMOTION_PAD[n][0] >= 0 else -1)  # noqa: E731
-            same = np.mean([sign(a) == sign(b) for a, b in pairs])
-            rng = random.Random(3)
-            ours = [a for a, _ in pairs]
-            base_exact, base_sign = [], []
-            for _ in range(200):
-                shuffled = ours[:]
-                rng.shuffle(shuffled)
-                base_exact.append(np.mean([a == b for a, (_x, b) in zip(shuffled, pairs)]))
-                base_sign.append(np.mean([sign(a) == sign(b) for a, (_x, b) in zip(shuffled, pairs)]))
-            print(f"  {arm}: event emotion vs label ({len(pairs)} events): exact {exact:.0%} "
-                  f"(shuffled {np.mean(base_exact):.0%}), same sign {same:.0%} (shuffled {np.mean(base_sign):.0%})")
-        if under_told:
-            print(f"  {arm}: a negative feeling (>= 0.15) on {under_found} of the {under_told} beats whose own "
-                  f"reported undercurrent is negative")
-        # (b) the mood as its own trajectory, per character and chat
-        sims, tolds, dsims, dtolds = [], [], [], []
-        for key in sorted({(c["chat"], c["who"]) for c in calls}):
-            seq = sorted((c for c in calls if (c["chat"], c["who"]) == key), key=lambda c: c["turn_idx"])
-            first = seq[0]
-            hv = first["home"]["valence"] if first["home"]["valence"] is not None else 0.0
-            ha = first["home"]["arousal"] if first["home"]["arousal"] is not None else 0.5
-            home = mix.Mood(float(hv), float(ha) * 2 - 1, 0.0)
-            ev = first["entering"]["valence"] if first["entering"]["valence"] is not None else hv
-            ea = first["entering"]["arousal"] if first["entering"]["arousal"] is not None else ha
-            mood = mix.Mood(float(ev), float(ea) * 2 - 1, 0.0)
-            habit, clock, prev = {}, 0.0, None
-            for c in seq:
-                dt = c["elapsed_seconds"] / 60.0 if args.clock and c["elapsed_seconds"] else 1.0
-                clock += dt
-                appr = appraisals.get(f"{c['capture']}:{arm}") or {}
-                _pe, everything, habit = _emotions(c, appr, habit, clock, arm)
-                mood, _trace = mix.mix(mood, home, everything, dt, reactivity=args.reactivity,
-                                       weights=weights)
-                # The character reports during its call, so the comparison
-                # point is here -- before the pass after its turn, whose push
-                # is carried into the next beat.
-                sim = mix.engine_affect(mood)
-                told = (float(c["told"]["valence"] or 0), float(c["told"]["arousal"] or 0))
-                sims.append((sim["valence"], sim["arousal"]))
-                tolds.append(told)
-                if prev is not None:
-                    dsims.append((sim["valence"] - prev[0][0], sim["arousal"] - prev[0][1]))
-                    dtolds.append((told[0] - prev[1][0], told[1] - prev[1][1]))
-                prev = ((sim["valence"], sim["arousal"]), told)
-                post = appraisals.get(f"{c['capture']}:P") if args.post else None
-                if post:
-                    _pp, own, _h2 = _emotions(c, post, {}, clock, "P")
-                    mood, _t2 = mix.mix(mood, home, own, 0, reactivity=args.reactivity, weights=weights)
-        s, t = np.array(sims), np.array(tolds)
-        ds, dt_ = np.array(dsims), np.array(dtolds)
-        print(f"  {arm}: own trajectory vs reports: valence r {r(s[:, 0], t[:, 0]):.2f} "
-              f"(sign {np.mean(np.sign(s[:, 0]) == np.sign(t[:, 0])):.0%}), arousal r {r(s[:, 1], t[:, 1]):.2f}; "
-              f"change: valence r {r(ds[:, 0], dt_[:, 0]):.2f}, arousal r {r(ds[:, 1], dt_[:, 1]):.2f}")
-    if args.show:
-        for c in calls[:args.show]:
-            appr = appraisals.get(f"{c['capture']}:EM") or {}
-            _pe, everything, _h = _emotions(c, appr, {}, c["turn_idx"])
-            surface, under = mix.surface_and_undercurrent(everything, mix.Mood())
-            top = sorted(everything, key=lambda e: -e.intensity)[:4]
-            print(f"\n  chat {c['chat']} idx {c['turn_idx']} {c['name']}\n    told: {c['told']['surface']}"
-                  f" | beneath: {c['told'].get('undercurrent')}\n    mix:  " + "; ".join(
-                      f"{e.name} {e.intensity:.2f} ({e.about[:40]})" for e in top)
-                  + (f"\n    labels: " + ", ".join(f"{k}: {v['emotion']}" for k, v in (c.get('labels') or {}).items())))
+        cells = {m: _r(rows[m][name], ref) for m in ("direct", "derived", "settled")}
+        for m, v in cells.items():
+            if v == v:
+                means[m].append(v)
+        print(f"    {name:16} {len(ref):3}  " + "  ".join(f"{cells[m]:7.2f}" for m in ("direct", "derived", "settled")))
+    print("    mean r            " + "  ".join(f"{np.mean(v):7.2f}" for v in means.values()))
+    told = np.array(va["told"])
+    for m in ("direct", "derived", "settled"):
+        est = np.array(va[m])
+        print(f"  {m:8} vs the character's own report: valence r {_r(est[:, 0], told[:, 0]):.2f}, "
+              f"arousal r {_r(est[:, 1], told[:, 1]):.2f}")
+    # (d) which coordinates Jev's direct readings move together on
+    names = [n for n in coords if len(rows["direct"].get(n) or []) >= 5]
+    mat = np.array([rows["direct"][n] for n in names])
+    close = []
+    for i in range(len(names)):
+        for j in range(i + 1, len(names)):
+            v = _r(mat[i], mat[j])
+            if v == v and abs(v) >= args.redundant:
+                close.append((names[i], names[j], round(v, 2)))
+    print(f"  coordinate pairs Jev reads together (|r| >= {args.redundant}):",
+          sorted(close, key=lambda t: -abs(t[2]))[:14])
+
+
+FAMILY = {}
+for _fam, _names in {
+    "good outcome": ("joy", "satisfaction", "gratification", "relief", "pride", "happy_for", "gloating"),
+    "hope": ("hope",), "bad outcome": ("distress", "disappointment", "fears_confirmed", "remorse", "shame",
+                                       "pity", "resentment", "frustration"),
+    "fear": ("fear",), "toward someone, good": ("admiration", "gratitude"),
+    "toward someone, bad": ("reproach", "anger"), "desire": ("desire",), "none": ("none",),
+}.items():
+    for _n in _names:
+        FAMILY[_n] = _fam
 
 
 def main():
@@ -404,22 +482,24 @@ def main():
     p.add_argument("--calls", required=True)
     p.add_argument("--out", required=True)
     p.add_argument("--workers", type=int, default=4)
-    p.add_argument("--arms", default="E,EM")
-    p = sub.add_parser("label")
-    p.add_argument("--calls", required=True)
-    p.add_argument("--workers", type=int, default=3)
+    for mode in ("label", "dimlabel"):
+        p = sub.add_parser(mode)
+        p.add_argument("--calls", required=True)
+        p.add_argument("--workers", type=int, default=3)
     p = sub.add_parser("score")
     p.add_argument("--calls", required=True)
     p.add_argument("--appraisals", required=True)
     p.add_argument("--chats", default="")
     p.add_argument("--reactivity", type=float, default=0.25)
     p.add_argument("--clock", action="store_true", help="decay by story minutes instead of one unit a beat")
-    p.add_argument("--post", action="store_true", help="apply the pass after the turn (arm P)")
-    p.add_argument("--concern-weight", type=float, default=None,
-                   help="a concern's weight in the centre (default: affect_mix.CONCERN_WEIGHT)")
-    p.add_argument("--show", type=int, default=0)
+    p.add_argument("--post", action="store_true", help="carry the pass after the turn into the next beat")
+    p.add_argument("--redundant", type=float, default=0.8)
+    p.add_argument("--negativity", type=float, default=None,
+                   help="an unpleasant emotion's weight in a target (default affect_mix.NEGATIVITY_WEIGHT)")
+    p.add_argument("--negative-decay", type=float, default=None,
+                   help="how much slower pleasure below home decays (default affect_mix.NEGATIVE_DECAY_FACTOR)")
     args = parser.parse_args()
-    {"collect": collect, "ask": ask, "label": label, "score": score}[args.mode](args)
+    {"collect": collect, "ask": ask, "label": label, "dimlabel": dimlabel, "score": score}[args.mode](args)
 
 
 if __name__ == "__main__":

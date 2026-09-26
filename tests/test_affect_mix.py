@@ -141,10 +141,10 @@ def test_a_memory_stirs_the_direction_of_its_tone_scaled_by_habituation():
 
 # --- the mood -----------------------------------------------------------------------------
 
-def test_a_target_is_a_weighted_average_where_bad_outweighs_good():
+def test_a_target_is_a_weighted_average_and_a_negativity_weight_tilts_it():
     joy, distress = Emotion("joy", 0.5), Emotion("distress", 0.5)
     even = mix.targets([joy, distress], negativity=1.0)["pleasure"][0]
-    biased = mix.targets([joy, distress], negativity=mix.NEGATIVITY_WEIGHT)["pleasure"][0]
+    biased = mix.targets([joy, distress], negativity=1.5)["pleasure"][0]
     assert even == pytest.approx((mix.EMOTION_EFFECTS["joy"]["pleasure"]
                                   + mix.EMOTION_EFFECTS["distress"]["pleasure"]) / 2)
     assert biased < even
@@ -191,8 +191,7 @@ def test_decay_returns_spectrums_home_fades_standalone_moods_and_lingers_below_h
     up = mix.decay(Mood({"pleasure": 0.8, "anger": 0.8}), home, mix.SPECTRUM_HALF_LIFE, negative_factor=1.0)
     assert up.get("pleasure") == pytest.approx(0.4)
     assert up.get("anger") == pytest.approx(0.8 * 0.5 ** (mix.SPECTRUM_HALF_LIFE / mix.STANDALONE_HALF_LIFE))
-    down = mix.decay(Mood({"pleasure": -0.8}), home, mix.SPECTRUM_HALF_LIFE,
-                     negative_factor=mix.NEGATIVE_DECAY_FACTOR)
+    down = mix.decay(Mood({"pleasure": -0.8}), home, mix.SPECTRUM_HALF_LIFE, negative_factor=1.5)
     assert abs(down.get("pleasure")) > abs(up.get("pleasure"))
     toward = mix.decay(Mood({"pleasure": 0.0}), Mood({"pleasure": 0.5}), mix.SPECTRUM_HALF_LIFE,
                        negative_factor=1.0)

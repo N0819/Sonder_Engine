@@ -506,6 +506,71 @@ back want reads as pride or desire, rarely as a cost. Own acts need their own
 questions -- acting against a value (dissonance), what restraint costs, and
 whether saying a feeling eased it (affect labelling) or fed it (venting).
 
+## The affect pass, round two (same day)
+
+The owner: "Perhaps our questions need refinement. also i imagine mood has
+way more dimensions than what you have mentioned", "Yes mood is a high
+dimension object. What we are really answering is spectrums of moods as
+coordinates as well as some moods that truly stand as their own", and "it
+will take quite a few questions to get all of these spectrums and individual
+mood values." Built in fedf5cb3: the event battery separates how good the
+event is now from what it makes likely ahead, asks about a fear and a hope
+each on its own, and names the event's own actor as an answer to "whose
+doing"; own acts get five questions of their own; the mood is twelve bipolar
+spectrums (one five-step question each) and eleven standalone moods (one
+graded question each), read directly; and code turns each emotion into a
+push on the coordinates it moves.
+
+Same 98 beats. Two requests per beat: `V`, the events and concerns
+appraised and the mood read directly; `VP`, the pass after the turn. The
+`utility` model (GLM on NanoGPT), blind to Jev's answers, rated all 23
+coordinates from the same state.
+
+| r against the `utility` model's rating | direct reading | derived by the math | direct, settled with inertia |
+|---|---|---|---|
+| mean of 20 coordinates | **0.64** | 0.30 | 0.52 |
+| pleasure | **0.88** | 0.31 | 0.66 |
+| tension | **0.82** | 0.58 | 0.65 |
+| safety | **0.82** | 0.36 | 0.81 |
+| hope | 0.67 | **0.73** | 0.63 |
+| desire | **0.87** | 0.76 | 0.79 |
+| engagement | **0.55** | 0.11 | 0.38 |
+| amusement | **0.65** | 0.02 | 0.47 |
+| anger | **0.70** | -0.18 | 0.63 |
+| guilt | **0.64** | -0.18 | 0.33 |
+
+- **Jev's direct reading is the estimator.** It leads on 18 of the 20
+  coordinates that varied, and tracks the characters' own reported valence at
+  r 0.67 (arousal 0.48). The derived mood is weakest exactly where OCC has
+  little to say: engagement, awe, amusement, guilt and anger are reached
+  through one or two OCC emotions, and clarity and nostalgia through none.
+- **The derived path still carries what the reports carry**: arousal r 0.57
+  against the reports, the best of the three -- the reports anchor on their
+  previous answer and so does the math.
+- **Unmeasured, not absent**: grief, disgust and jealousy did not vary in
+  these two stories, for Jev or the reader.
+- **Coordinates Jev reads together** (|r| >= 0.8 across beats): pleasure with
+  safety 0.88, openness 0.87, hope 0.83 and anger -0.82; playfulness with
+  amusement 0.87. In these stories they move together; whether any pair is
+  one axis needs a story where they part.
+- **The negativity bias was too strong**, as the owner judged ("I think
+  that's your negativity bias being way too strong"). The derived valence
+  against the reports, The Doctor and Mirelle: r 0.26 and 0.08 at a
+  negativity weight and negative-decay factor of 1.5 and 1.5; 0.33 and 0.11
+  at 1.0 and 1.0; 0.37 and 0.12 at 0.75 and 1.0. Both now default to 1.0.
+- **Own acts keep a self-serving tilt** with their own questions: the
+  strongest emotion of 459 acts is pride on 376, frustration on 82, shame on
+  1; the act eased the feeling 28% of the time and stoked it 41%.
+- **Concerns stopped discriminating.** Round one's concerns added a negative
+  feeling where none was reported on 16 of 66 beats; with the refined
+  questions ("what does this make likely ahead", "does it bear on a fear") a
+  line framed "Still unsettled for you" produces one on 65 of 66 -- and on 32
+  of the 32 beats that report one. They still name the undercurrent; they no
+  longer say when there is one. A concern needs its own gate: does it weigh
+  on you now.
+- **Events against the reader's labels**, 182 events: the same family 36%
+  (shuffled 23%), the same sign 87% (shuffled 69%).
+
 ## What Jev costs
 
 Measured from Jev's own response (`usage.cost`): one 64-question request,
