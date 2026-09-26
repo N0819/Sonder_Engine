@@ -600,8 +600,10 @@ blind and listed any mood no coordinate covers.
   rounds share, 0.62 against round two's 0.67, with memories now in both
   readers' context and 44 coordinates rated at once.
 - **Desire splits where it varies.** Sexual desire r 0.90 read directly, 0.86
-  derived; romance 0.39 (0.52 settled; the rater's own spread is small, sd
-  0.15); craving -0.32 read directly -- a wording fault (below).
+  derived; craving -0.32 read directly -- a wording fault (below). Romance
+  0.39 is not a measurement: neither story is a romance (the owner: "none of
+  our stories have been romance just yet") -- the rater gives the Doctor 0 on
+  all 38 beats and Mirelle at most "slightly".
 - **The new spectrums read weakly**: timid/bold 0.43, wanting company 0.34
   (derived 0.02 and 0.16).
 - **What an event stirs gives the derived mood coordinates OCC never
@@ -681,6 +683,28 @@ rater does. The pack now says "an appetite to have or consume something".
 Jev answered the unchanged round-three wording with round three's means
 exactly, so a one-question probe (98 questions) is enough to choose between
 wordings.
+
+**Romance's wording, checked on constructed contrasts** -- no captured story
+holds a romance, so eight short situations were written to part romance from
+its neighbours, and Jev graded romance under three wordings (56 questions).
+This tests where a wording draws its line, not how it reads play:
+
+| situation | "romantic longing or love" | "romantic love or infatuation" | "being in love, or falling for someone" |
+|---|---|---|---|
+| a year's unspoken love, at parting | 1.00 | 0.99 | 0.99 |
+| a new infatuation | 0.94 | 0.92 | 0.89 |
+| a long marriage, a small kindness | 0.63 | 0.57 | 0.66 |
+| a stranger desired for one night | 0.03 | 0.16 | 0.06 |
+| a dead brother's jacket | 0.31 | 0.00 | 0.00 |
+| a letter from a friend abroad | 0.20 | 0.02 | 0.04 |
+| a child asleep on your shoulder | 0.65 | 0.00 | 0.29 |
+| an errand | 0.00 | 0.00 | 0.00 |
+
+The pack's wording borrowed "longing" -- another standalone mood's own word
+-- and a bare "love", which a parent feels: 0.65 for the sleeping child.
+"Romantic love or infatuation" keeps the love scenes at 0.83 and the rest at
+0.04; the English pack now says that. (The Japanese, "恋心や恋愛感情", names
+romantic love alone and stays.)
 
 ## What Jev costs
 

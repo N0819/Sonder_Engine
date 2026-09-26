@@ -381,8 +381,10 @@ the pack's (`affect_appraisal.options`); the words below are its English.
 Cowen and Keltner (2017) found self-report keeps distinct that no spectrum
 already holds, then what their list lacks.
 
-- **Wanting** -- romance, sexual desire (worded "sexual desire or sexual
-  arousal": round one learned intimate moods need explicit words), craving
+- **Wanting** -- romance ("romantic love or infatuation": "romantic longing
+  or love" borrowed longing's word and a parent's love), sexual desire
+  (worded "sexual desire or sexual arousal": round one learned intimate moods
+  need explicit words), craving
   (the owner, "there is non romantic and sexual desire to consider": "an
   appetite to have or consume something" -- a desire of its own axis, so it
   can stand beside sexual desire or without it; worded after a one-question
@@ -463,9 +465,10 @@ and rounds two to four):
   feeling is about and carries the mood between readings; the reading is what
   says where it is.
 - **Desire in three works where it varies**: sexual desire r 0.90, craving
-  0.88 once worded as an appetite (a one-question probe chose the words);
-  romance 0.36-0.39 on a small spread. Nine moods did not vary in the two
-  stories measured (contempt, disgust, jealousy, envy, sadness, numbness,
+  0.88 once worded as an appetite (a one-question probe chose the words).
+  Romance is unmeasured -- neither story is a romance (the owner) -- and its
+  wording was chosen on constructed contrasts. Nine more moods did not vary
+  in the two stories (contempt, disgust, jealousy, envy, sadness, numbness,
   grief, regret, homesickness) -- unmeasured, not absent.
 - **Jev is read by its words**: a word in an option pulls toward what it
   names, even when it names what the option excludes, and a word with a

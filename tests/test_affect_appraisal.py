@@ -23,7 +23,7 @@ from __future__ import annotations
 import pytest
 
 from llm import decisions
-from llm.prompts import _prompt_card
+from llm.prompts import _prompt_card, affect_appraisal_options
 from mind import affect_appraisal as appraisal
 from mind import affect_mix as mix
 
@@ -57,7 +57,8 @@ def test_each_question_quotes_what_it_judges_and_leaves_no_placeholder():
     assert "Nothing of you is taken." in qs["act:s0:act_against_values"]["instructions"]
     assert "who opened the lock" in qs["con:c0:weight"]["instructions"]
     assert "unpleasant" in qs["dim:pleasure"]["instructions"] and "pleasant" in qs["dim:pleasure"]["criteria"]["s4"]
-    assert "romantic longing or love" in qs["mood:romance"]["instructions"]
+    # the pack's own phrase, whatever wording it has been refined to
+    assert affect_appraisal_options("standalone", "en")["romance"] in qs["mood:romance"]["instructions"]
     for q in qs.values():
         assert "{" not in q["instructions"] and q["type"] == "choice"
         assert all("{" not in label for label in q["criteria"].values())
