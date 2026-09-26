@@ -74,8 +74,66 @@ def _load(path):
     return json.loads(Path(path).read_text(encoding="utf-8")) if path else {}
 
 
+def card_block(sheet):
+    """A real card's psychology in full -- drive, values with what they
+    conflict with, traits, self-model, what makes the character proud or
+    ashamed, and the cues its learning has charged -- as the decision model
+    would read the character's own card."""
+    psy = (sheet or {}).get("psychology") or {}
+    drive = psy.get("drive") or {}
+    parts = []
+    if drive.get("essence"):
+        parts.append("WHAT DRIVES YOU: " + " ".join(str(drive[k]) for k in ("essence", "expression") if drive.get(k))
+                     + (f" What you will not do: {drive['taboo']}" if drive.get("taboo") else ""))
+    values = [v for v in psy.get("values") or [] if isinstance(v, dict) and v.get("name")]
+    if values:
+        parts.append("WHAT YOU VALUE, MOST FIRST: " + "; ".join(
+            f"{v['name']} -- {v.get('expression') or ''}".rstrip(" -")
+            + (f" (at odds with: {', '.join(v['conflicts_with'])})" if v.get("conflicts_with") else "")
+            for v in sorted(values, key=lambda v: -float(v.get("priority") or 0))))
+    traits = [t for t in psy.get("traits") or [] if isinstance(t, dict) and t.get("name")]
+    if traits:
+        parts.append("HOW YOU ARE: " + "; ".join(f"{t['name']} -- {t.get('expression') or ''}".rstrip(" -")
+                                                 for t in traits))
+    model = psy.get("self_model") or {}
+    if model.get("summary"):
+        parts.append("HOW YOU SEE YOURSELF: " + model["summary"]
+                     + (" What makes you proud: " + "; ".join(model["pride_triggers"]) + "."
+                        if model.get("pride_triggers") else "")
+                     + (" What shames you: " + "; ".join(model["shame_triggers"]) + "."
+                        if model.get("shame_triggers") else ""))
+    cues = [a for a in (psy.get("learning") or {}).get("associations") or [] if isinstance(a, dict) and a.get("cue")]
+    if cues:
+        parts.append("WHAT STIRS YOU, LEARNED: " + "; ".join(
+            f"{a['cue']} -> {a.get('appraisal_bias') or ''}".rstrip(" ->") for a in cues))
+    return "\n".join(parts)
+
+
+def resolve_persons(battery, results=None):
+    """The battery's persons, each with the text it is rendered as. A person
+    written as `{"card": "<name>"}` is that character's own card, read from
+    the database (`ENGINE_DB`) when one is open and otherwise from the block
+    a run stored with its results -- so a report needs no database."""
+    stored = (results or {}).get("_persons") or {}
+    out = {}
+    for pid, person in (battery.get("persons") or {}).items():
+        if "card" not in person:
+            out[pid] = dict(person, block=_person_block(person))
+            continue
+        block = stored.get(pid)
+        if block is None:
+            from core.db import q
+
+            row = q("SELECT sheet FROM characters WHERE name = ? ORDER BY id LIMIT 1", (person["card"],), one=True)
+            block = card_block(json.loads(row["sheet"] or "{}")) if row else ""
+        out[pid] = dict(person, block=block)
+    return out
+
+
 def _person_block(person):
     """A person's psychology, rendered the way a card's fields read."""
+    if "block" in person:
+        return person["block"]
     return "\n".join(p for p in (
         "WHAT DRIVES YOU: " + person["drive"] if person.get("drive") else "",
         "WHAT YOU VALUE: " + "; ".join(person.get("values") or []) if person.get("values") else "",
@@ -100,9 +158,11 @@ def _state(v, person=None):
     return "\n\n".join(parts)
 
 
-def _cells(battery):
+def _cells(battery, persons=None):
     """Every (cell id, situation, person) to ask: each situation alone, and
-    each situation a person test gives to a person."""
+    each situation a person test gives to a person. `persons` is
+    `resolve_persons`' answer; without it a card person renders empty."""
+    persons = persons or {pid: dict(p) for pid, p in (battery.get("persons") or {}).items()}
     situations = {v["id"]: v for v in battery["situations"]}
     cells = [(v["id"], v, None) for v in battery["situations"]]
     seen = set()
@@ -114,7 +174,7 @@ def _cells(battery):
             cid = f"{test['situation']}@{pid}"
             if cid not in seen:
                 seen.add(cid)
-                cells.append((cid, situations[test["situation"]], battery["persons"][pid]))
+                cells.append((cid, situations[test["situation"]], persons[pid]))
     return cells
 
 
@@ -156,8 +216,12 @@ def run(args):
     qs = _questions(_load(args.variants))
     out = Path(args.out)
     done = _load(out) if out.exists() else {}
+    # a card person is read fresh from the database, and the block it
+    # rendered is kept with the results so a report needs no database
+    persons = resolve_persons(battery)
+    done["_persons"] = {pid: p["block"] for pid, p in persons.items() if "card" in p}
     jobs = []
-    for cid, v, person in _cells(battery):
+    for cid, v, person in _cells(battery, persons):
         have = done.setdefault(cid, {})
         state = _state(v, person)
         todo = {k: q for k, q in qs.items() if _key(q, state) not in have}
@@ -250,7 +314,7 @@ def _person_report(battery, results, qs, only):
 
     right = total = 0
     by_person = {}
-    states = {cid: _state(v, person) for cid, v, person in _cells(battery)}
+    states = {cid: _state(v, person) for cid, v, person in _cells(battery, resolve_persons(battery, results))}
     print("\nperson tests (tiers: every person in an earlier tier should read higher)")
     for test in battery.get("person_tests") or []:
         for order in test["orders"]:
@@ -355,9 +419,10 @@ def show(args):
     from mind import affect_mix as mix
 
     battery = _load(args.battery)
-    cells = {cid: (v, person) for cid, v, person in _cells(battery)}
+    results = _load(args.results)
+    cells = {cid: (v, person) for cid, v, person in _cells(battery, resolve_persons(battery, results))}
     v, person = cells[args.id]
-    have = _load(args.results).get(args.id) or {}
+    have = results.get(args.id) or {}
     qs = _questions({})
     state = _state(v, person)
     print(state)

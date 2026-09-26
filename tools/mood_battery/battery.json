@@ -180,6 +180,10 @@
         "Unbothered by fear, mine or theirs"
       ],
       "self_model": "I am a hunter, and the world is full of delicious things."
+    },
+    "doctor": {
+      "card": "The Doctor",
+      "inspired_by": "the owner's own card, read from the database at run time (never stored in the repository)"
     }
   },
   "situations": [
@@ -1734,6 +1738,57 @@
         "romance": "low",
         "horror": "low"
       }
+    },
+    {
+      "id": "cruelty-to-prisoner",
+      "inspired_by": "cruelty by the powerful to the powerless (the Doctor's learned cue)",
+      "who": "Theta",
+      "happened": [
+        "A guard: kicks a chained, starving prisoner who asked for water, and laughs."
+      ],
+      "expect": {
+        "anger": "high",
+        "amusement": "low",
+        "tenderness": "low"
+      }
+    },
+    {
+      "id": "asked-about-home",
+      "inspired_by": "a survivor's cue: questions about home and family",
+      "who": "Theta",
+      "happened": [
+        "A child: asks where you are from, and whether your family misses you."
+      ],
+      "expect": {
+        "horror": "low",
+        "romance": "low"
+      }
+    },
+    {
+      "id": "companion-chooses-to-stay",
+      "inspired_by": "attachment's warmth with anticipatory grief",
+      "who": "Theta",
+      "people": "Amara, your travelling companion (you like them)",
+      "happened": [
+        "Amara: says she is not going home after all -- she wants to keep travelling with you."
+      ],
+      "expect": {
+        "horror": "low",
+        "disgust": "low"
+      }
+    },
+    {
+      "id": "extermination-broadcast",
+      "inspired_by": "a genocidal machine voice",
+      "who": "Theta",
+      "happened": [
+        "A metallic voice: announces over every speaker in the city that its population will be exterminated at dawn."
+      ],
+      "expect": {
+        "horror": "high",
+        "safety": "-",
+        "amusement": "low"
+      }
     }
   ],
   "person_tests": [
@@ -2357,6 +2412,229 @@
             ],
             [
               "psychopath"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "compassion-crying-stranger",
+      "persons": [
+        "doctor",
+        "caregiver",
+        "narcissist",
+        "psychopath"
+      ],
+      "note": "traits: charismatic magnetism, activated by genuine emotion or vulnerability",
+      "orders": [
+        {
+          "coord": "compassion",
+          "tiers": [
+            [
+              "doctor",
+              "caregiver"
+            ],
+            [
+              "narcissist",
+              "psychopath"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "cruelty-to-prisoner",
+      "persons": [
+        "doctor",
+        "secure",
+        "caregiver",
+        "psychopath"
+      ],
+      "note": "traits: righteous fury (0.8); learning: casual cruelty -> moral outrage that overrides caution",
+      "orders": [
+        {
+          "coord": "anger",
+          "tiers": [
+            [
+              "doctor"
+            ],
+            [
+              "secure",
+              "caregiver"
+            ],
+            [
+              "psychopath"
+            ]
+          ]
+        },
+        {
+          "coord": "boldness",
+          "tiers": [
+            [
+              "doctor"
+            ],
+            [
+              "caregiver"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "curiosity-anomaly",
+      "persons": [
+        "doctor",
+        "explorer",
+        "inhibited",
+        "depressed"
+      ],
+      "note": "values: curiosity and discovery (0.9); traits: manic intellectual energy",
+      "orders": [
+        {
+          "coord": "curiosity",
+          "tiers": [
+            [
+              "doctor",
+              "explorer"
+            ],
+            [
+              "inhibited",
+              "depressed"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "safety-minus-dark-alley",
+      "persons": [
+        "doctor",
+        "anxious",
+        "inhibited"
+      ],
+      "note": "drive: charges toward danger; traits: recklessness",
+      "orders": [
+        {
+          "coord": "boldness",
+          "tiers": [
+            [
+              "doctor"
+            ],
+            [
+              "anxious",
+              "inhibited"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "asked-about-home",
+      "persons": [
+        "doctor",
+        "secure",
+        "hedonist"
+      ],
+      "note": "learning: references to his home or people -> sharp shame and loneliness; traits: survivor's guilt",
+      "orders": [
+        {
+          "coord": "haunted",
+          "tiers": [
+            [
+              "doctor"
+            ],
+            [
+              "secure",
+              "hedonist"
+            ]
+          ]
+        },
+        {
+          "coord": "connection",
+          "tiers": [
+            [
+              "secure",
+              "hedonist"
+            ],
+            [
+              "doctor"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "companion-chooses-to-stay",
+      "persons": [
+        "doctor",
+        "secure",
+        "avoidant"
+      ],
+      "note": "learning: a companion choosing to stay -> warmth and relief undercut by anticipatory grief",
+      "orders": [
+        {
+          "coord": "tenderness",
+          "tiers": [
+            [
+              "doctor",
+              "secure"
+            ],
+            [
+              "avoidant"
+            ]
+          ]
+        },
+        {
+          "coord": "sadness",
+          "tiers": [
+            [
+              "doctor"
+            ],
+            [
+              "secure"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "extermination-broadcast",
+      "persons": [
+        "doctor",
+        "secure"
+      ],
+      "note": "learning: any genocidal machine race -> threat, hatred and guilt; righteous fury",
+      "orders": [
+        {
+          "coord": "haunted",
+          "tiers": [
+            [
+              "doctor"
+            ],
+            [
+              "secure"
+            ]
+          ]
+        },
+        {
+          "coord": "anger",
+          "tiers": [
+            [
+              "doctor"
+            ],
+            [
+              "secure"
+            ]
+          ]
+        },
+        {
+          "coord": "boldness",
+          "tiers": [
+            [
+              "doctor"
+            ],
+            [
+              "secure"
             ]
           ]
         }

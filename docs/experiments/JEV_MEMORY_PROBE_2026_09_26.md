@@ -790,6 +790,29 @@ dog stealing a sandwich (irritation 0.50).
   written it showed only fascination.
 - **The harness cached by question alone**, so rewording a situation served
   its old answers; the cache now keys the state asked as well.
+
+**The Doctor's own card** (the owner: "only the doctor"), read from the
+database at run time and rendered whole -- drive with its taboo, values most
+first with what each conflicts with, traits, self-model with what makes him
+proud or ashamed, and his learned cues -- against the typology profiles in
+seven situations whose orderings his card predicts, each naming the field it
+comes from. **19 of 19 pairs right**:
+
+| situation | coordinate | the Doctor against the others | from his card |
+|---|---|---|---|
+| a guard kicks a starving prisoner | anger | 1.00 > caregiver 0.59, secure 0.48 > psychopath 0.08 | righteous fury; cruelty -> outrage over caution |
+| the same | boldness | 0.98 > caregiver -0.24 | drive: steps in when no one else will |
+| an impossible signal | curiosity | 1.00, with the explorer > inhibited 0.32, depressed 0.17 | curiosity and discovery (0.9) |
+| a child asks about his home and family | haunted | 0.64 > secure 0.03, hedonist 0.02 | home or his people -> shame and loneliness |
+| the same | connection | -0.10 < secure 0.64, hedonist 0.85 | survivor's guilt: lonely, rarely admitted |
+| a companion chooses to stay | tenderness | 0.98, with the secure 0.66 > avoidant 0.23 | companions as his anchor |
+| the same | sadness | 0.43 > secure 0.01 | warmth undercut by anticipatory grief |
+| a machine voice announces an extermination | anger, haunted, boldness | 1.00, 0.65, 0.97 > secure 0.14, 0.01, 0.47 | genocidal machines -> hatred and guilt |
+
+The last two rows are the card's own learning read back: a companion's
+choice lands as warmth with an ache the secure profile does not have, which
+no appraisal of the event alone would give. With the Doctor the person tests
+stand at 110 of 112 (98%). His card's `capacity` is empty.
 - **Jev grades freely in constructed scenes**: surprise fires unasked in 43 of
   109, sadness in 31 -- mostly moods that plausibly co-occur. Selectivity in
   play (5.1 moods clearly or more per beat against the rater's 2.6) is the
