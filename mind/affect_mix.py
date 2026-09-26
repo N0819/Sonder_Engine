@@ -8,17 +8,27 @@ Designed with the owner on 2026-09-26 (`docs/design/DESIGN_JEV_CHARACTER_PASS.md
 - **Emotions** from appraisals by the OCC rules (Ortony, Clore and Collins,
   "The Cognitive Structure of Emotions", 1988), each with its object -- who
   or what it is about -- and OCC's compounds formed where both halves are
-  present (gratitude, anger, gratification, remorse). The character's own
-  acts, appraised after its turn, add pride, shame and the cost of restraint.
+  present (gratitude, anger, gratification, remorse). Beside them, each
+  standalone mood an event stirs, by how strongly it stirs the character and
+  which moods the model named. The character's own acts, appraised after its
+  turn, add pride, shame and the cost of restraint.
 - **Mood as a high-dimensional object** (the owner: "spectrums of moods as
-  coordinates as well as some moods that truly stand as their own"): twelve
-  bipolar spectrum coordinates in [-1, 1] and eleven standalone moods in
-  [0, 1], named by the language pack. Each emotion pushes the coordinates it
-  moves (`EMOTION_EFFECTS`); a beat's emotions average into a target per
-  coordinate, and the mood moves part of the way toward it -- the shape
-  measured to beat carrying the previous mood alone. Between beats spectrums
-  decay toward home and standalone moods fade. The decision model's direct
-  reading of the mood can settle it too (`settle`).
+  coordinates as well as some moods that truly stand as their own", and "We
+  are trying to cover all moods and make a coordinate system out of them"):
+  fourteen bipolar spectrum coordinates in [-1, 1] and thirty-one standalone
+  moods in [0, 1], named by the language pack. Each emotion pushes the
+  coordinates it moves (`EMOTION_EFFECTS`); a beat's emotions average into a
+  target per coordinate, and the mood moves part of the way toward it -- the
+  shape measured to beat carrying the previous mood alone. Between beats
+  spectrums decay toward home and standalone moods fade. The decision
+  model's direct reading of the mood can settle it too (`settle`).
+- **The layer beneath**: what a recalled memory or a standing concern stirs
+  is the undercurrent, what the present stirs the surface (the owner: some
+  moods "may be purely memory related ... or their undercurrents at least").
+  A memory stirs the standalone moods the model names for it -- nostalgia,
+  grief, regret and the rest -- and a plain pleasant or unpleasant feeling
+  for what none of them covers; a concern stirs what the event rules give it,
+  in proportion to how much it weighs on the character now.
 - **Habituation** of a memory's evoked feeling, the owner's model: full for a
   few recalls, less after, full again after a rest.
 
@@ -36,48 +46,112 @@ from dataclasses import dataclass, field
 #: language pack's `affect_appraisal.options.dimensions` and `.standalone`
 #: name. Grounded in the validated mood inventories: the Profile of Mood
 #: States, PANAS-X, Matthews' UWIST (energetic apart from tense arousal) and
-#: Fontaine et al. 2007 (valence, power, arousal, novelty); the standalone
-#: moods are categories Cowen and Keltner (2017) found self-report keeps
-#: distinct.
+#: Fontaine et al. 2007 (valence, power, arousal, novelty); approach against
+#: avoidance (`boldness`) is its own axis because anger approaches and fear
+#: withdraws at the same displeasure (Carver and Harmon-Jones, 2009), and
+#: wanting company is apart from feeling connected, which is how loneliness
+#: differs from a solitude one chose. The standalone moods cover every
+#: category Cowen and Keltner (2017) found self-report keeps distinct that no
+#: spectrum already holds -- desire in three (romance, sexual desire, and a
+#: craving that is neither: the owner, "there is non romantic and sexual
+#: desire to consider") -- then Plutchik's anticipation, the self-conscious
+#: and hostile moods their list lacks, numbness (which no point near neutral
+#: can tell from calm), and the moods whose object is the past, which memory
+#: stirs.
 SPECTRUMS = ("pleasure", "energy", "tension", "control", "clarity", "connection", "openness",
-             "playfulness", "hope", "self_regard", "safety", "engagement")
-STANDALONE = ("desire", "awe", "nostalgia", "grief", "disgust", "jealousy", "guilt", "tenderness",
-              "amusement", "anger", "compassion")
+             "playfulness", "hope", "self_regard", "safety", "engagement", "boldness", "sociability")
+STANDALONE = ("romance", "sexual_desire", "craving", "curiosity", "anticipation", "awe", "admiration",
+              "aesthetic", "amusement", "moved", "tenderness", "compassion", "gratitude", "anger",
+              "contempt", "disgust", "horror", "jealousy", "envy", "guilt", "embarrassment", "sadness",
+              "surprise", "resolve", "numbness", "nostalgia", "grief", "regret", "longing",
+              "homesickness", "haunted")
 
 #: How each emotion moves the mood: a value per coordinate it touches
-#: (spectrums in [-1, 1], standalone moods in [0, 1]). The OCC emotions, plus
-#: the engine's own `desire` (OCC has none) and `frustration` (the cost of a
-#: restraint the character's own act paid). Hand-set, coarse, the owner's.
+#: (spectrums in [-1, 1], standalone moods in [0, 1]). The OCC emotions and
+#: `frustration` (the cost of a restraint the character's own act paid), then
+#: one row per standalone mood -- itself in full and the spectrums it moves --
+#: which an event, a memory or a concern stirs by name. Three names are both
+#: (admiration, gratitude, anger): OCC's emotion and the standalone mood are
+#: one feeling. Hand-set, coarse, the owner's.
 EMOTION_EFFECTS = {
     "joy": {"pleasure": .8, "energy": .4, "tension": -.3, "hope": .3, "playfulness": .3,
-            "engagement": .3, "amusement": .3},
-    "distress": {"pleasure": -.7, "tension": .4, "control": -.3, "hope": -.3, "energy": -.2},
-    "hope": {"pleasure": .4, "hope": .8, "energy": .3, "engagement": .3},
+            "engagement": .3, "sociability": .2},
+    "distress": {"pleasure": -.7, "tension": .4, "control": -.3, "hope": -.3, "energy": -.2,
+                 "sadness": .3},
+    "hope": {"pleasure": .4, "hope": .8, "energy": .3, "engagement": .3, "boldness": .2},
     "fear": {"pleasure": -.6, "tension": .8, "safety": -.8, "control": -.5, "energy": .3,
-             "openness": -.3},
+             "openness": -.3, "boldness": -.6},
     "satisfaction": {"pleasure": .6, "tension": -.4, "hope": .3, "control": .3},
-    "disappointment": {"pleasure": -.5, "hope": -.5, "energy": -.3},
+    "disappointment": {"pleasure": -.5, "hope": -.5, "energy": -.3, "sadness": .4},
     "relief": {"pleasure": .5, "tension": -.6, "safety": .5},
     "fears_confirmed": {"pleasure": -.6, "safety": -.6, "hope": -.6, "tension": .5, "control": -.5},
-    "pride": {"pleasure": .5, "self_regard": .8, "control": .4, "energy": .3},
-    "shame": {"pleasure": -.5, "self_regard": -.8, "openness": -.4, "control": -.3, "guilt": .4},
-    "admiration": {"pleasure": .4, "connection": .4, "openness": .4, "engagement": .3, "awe": .3},
-    "reproach": {"pleasure": -.3, "openness": -.3, "connection": -.3, "anger": .5},
-    "gratitude": {"pleasure": .5, "connection": .6, "openness": .5, "tenderness": .3},
-    "anger": {"pleasure": -.6, "tension": .6, "energy": .5, "control": .3, "openness": -.4, "anger": 1.0},
+    "pride": {"pleasure": .5, "self_regard": .8, "control": .4, "energy": .3, "boldness": .3},
+    "shame": {"pleasure": -.5, "self_regard": -.8, "openness": -.4, "control": -.3, "boldness": -.4,
+              "sociability": -.4, "guilt": .4},
+    "reproach": {"pleasure": -.3, "openness": -.3, "connection": -.3, "anger": .5, "contempt": .3},
     "gratification": {"pleasure": .7, "self_regard": .6, "control": .4, "energy": .4},
-    "remorse": {"pleasure": -.5, "self_regard": -.7, "hope": -.3, "energy": -.3, "guilt": .8},
+    "remorse": {"pleasure": -.5, "self_regard": -.7, "hope": -.3, "energy": -.3, "guilt": .8,
+                "regret": .5},
     "happy_for": {"pleasure": .5, "connection": .5, "openness": .4, "tenderness": .3},
     "pity": {"pleasure": -.3, "connection": .3, "compassion": .8},
-    "resentment": {"pleasure": -.4, "connection": -.4, "openness": -.3, "anger": .4, "jealousy": .5},
-    "gloating": {"pleasure": .4, "self_regard": .3, "connection": -.3, "amusement": .3},
-    "desire": {"desire": 1.0, "energy": .5, "pleasure": .3, "engagement": .4, "tension": .2},
-    "frustration": {"pleasure": -.4, "tension": .5, "control": -.3},
+    "resentment": {"pleasure": -.4, "connection": -.4, "openness": -.3, "anger": .3, "envy": .6},
+    "gloating": {"pleasure": .4, "self_regard": .3, "connection": -.3, "amusement": .3, "contempt": .3},
+    "frustration": {"pleasure": -.4, "tension": .5, "control": -.3, "anger": .3},
+    # the standalone moods
+    "romance": {"romance": 1.0, "pleasure": .4, "connection": .5, "openness": .4, "energy": .2,
+                "sociability": .5},
+    "sexual_desire": {"sexual_desire": 1.0, "energy": .5, "engagement": .5, "tension": .2,
+                      "pleasure": .3, "boldness": .3, "sociability": .4},
+    "craving": {"craving": 1.0, "energy": .4, "engagement": .4, "tension": .3, "boldness": .3},
+    "curiosity": {"curiosity": 1.0, "engagement": .6, "openness": .4, "energy": .3, "boldness": .3},
+    "anticipation": {"anticipation": 1.0, "hope": .5, "energy": .4, "engagement": .5, "tension": .2,
+                     "pleasure": .3},
+    "awe": {"awe": 1.0, "engagement": .5, "openness": .4, "control": -.3, "clarity": -.2},
+    "admiration": {"admiration": 1.0, "pleasure": .4, "connection": .4, "openness": .4,
+                   "engagement": .3},
+    "aesthetic": {"aesthetic": 1.0, "pleasure": .5, "engagement": .4, "tension": -.3},
+    "amusement": {"amusement": 1.0, "pleasure": .6, "playfulness": .7, "tension": -.3},
+    "moved": {"moved": 1.0, "connection": .6, "openness": .5, "pleasure": .3},
+    "tenderness": {"tenderness": 1.0, "connection": .6, "pleasure": .4, "tension": -.2,
+                   "sociability": .4},
+    "compassion": {"compassion": 1.0, "connection": .4, "pleasure": -.3, "sociability": .3},
+    "gratitude": {"gratitude": 1.0, "pleasure": .5, "connection": .6, "openness": .5,
+                  "sociability": .3},
+    "anger": {"anger": 1.0, "pleasure": -.6, "tension": .6, "energy": .5, "control": .3,
+              "openness": -.4, "boldness": .6},
+    "contempt": {"contempt": 1.0, "pleasure": -.2, "self_regard": .3, "connection": -.5,
+                 "openness": -.3},
+    "disgust": {"disgust": 1.0, "pleasure": -.6, "openness": -.4, "boldness": -.3, "sociability": -.2},
+    "horror": {"horror": 1.0, "pleasure": -.8, "safety": -.8, "tension": .8, "control": -.5,
+               "clarity": -.3, "boldness": -.5},
+    "jealousy": {"jealousy": 1.0, "pleasure": -.5, "tension": .5, "safety": -.3, "connection": -.3,
+                 "self_regard": -.3},
+    "envy": {"envy": 1.0, "pleasure": -.4, "self_regard": -.4, "craving": .3},
+    "guilt": {"guilt": 1.0, "pleasure": -.5, "self_regard": -.5, "tension": .3},
+    "embarrassment": {"embarrassment": 1.0, "self_regard": -.4, "tension": .4, "openness": -.3,
+                      "boldness": -.3, "sociability": -.4},
+    "sadness": {"sadness": 1.0, "pleasure": -.7, "energy": -.5, "hope": -.3, "sociability": -.3},
+    "surprise": {"surprise": 1.0, "energy": .4, "clarity": -.4, "engagement": .4},
+    "resolve": {"resolve": 1.0, "energy": .4, "control": .4, "boldness": .6, "hope": .3, "clarity": .3},
+    "numbness": {"numbness": 1.0, "pleasure": -.2, "engagement": -.6, "energy": -.4,
+                 "connection": -.4, "openness": -.3},
+    "nostalgia": {"nostalgia": 1.0, "pleasure": .2, "connection": .3, "self_regard": .1, "hope": .1},
+    "grief": {"grief": 1.0, "sadness": .6, "pleasure": -.7, "energy": -.4, "hope": -.3,
+              "connection": -.3},
+    "regret": {"regret": 1.0, "pleasure": -.4, "self_regard": -.4, "hope": -.2},
+    "longing": {"longing": 1.0, "pleasure": -.2, "connection": -.3, "sociability": .4},
+    "homesickness": {"homesickness": 1.0, "longing": .5, "pleasure": -.3, "safety": -.3,
+                     "connection": -.4},
+    "haunted": {"haunted": 1.0, "pleasure": -.4, "tension": .5, "safety": -.5, "clarity": -.3},
 }
-#: A memory's evoked feeling moves the mood the way the emotion its tone
-#: resembles does: a remembered pleasure like joy, a remembered pain like
-#: distress.
+#: The part of a memory's evoked feeling that none of the standalone moods
+#: named moves the mood the way the emotion its tone resembles does: a
+#: remembered pleasure like joy, a remembered pain like distress.
 MEMORY_TONE_EMOTION = {True: "joy", False: "distress"}
+#: Where each source's feelings sit: the present -- a perceived event, the
+#: character's own act -- is the surface; the past and the unsettled -- a
+#: recalled memory, a standing concern -- the layer beneath.
+BENEATH = frozenset({"memory", "concern"})
 #: OCC's compounds, formed within one event where both halves are present.
 COMPOUNDS = {
     ("admiration", "joy"): "gratitude", ("reproach", "distress"): "anger",
@@ -135,6 +209,9 @@ HABITUATION_CEILING = 0.8
 HABITUATION_HALF_LIFE = 5.0
 #: Both halves of a compound must reach this before it forms.
 COMPOUND_FLOOR = 0.15
+#: A feeling beneath -- a memory's or a concern's -- must reach this to be
+#: named the undercurrent.
+UNDERCURRENT_FLOOR = 0.15
 #: Salience floors for `mood_profile`.
 PROFILE_SPECTRUM_FLOOR = 0.3
 PROFILE_STANDALONE_FLOOR = 0.25
@@ -196,8 +273,11 @@ def emotions_from_appraisal(appraisal, *, ref="", actor="", about="", liking=Non
     more frightening); what it does to a fear (relief, fears confirmed) or a
     hope (satisfaction, disappointment); the act of whoever did it (pride,
     shame, admiration, reproach); its consequences for people the character
-    has a standing with (happy-for, pity, resentment, gloating); desire --
-    then the compounds.
+    has a standing with (happy-for, pity, resentment, gloating) -- then the
+    compounds. Beside them, each standalone mood the event stirs: `stir`, how
+    strongly it stirs the character, times its share in `stirs`, the model's
+    distribution over which mood it stirs most (a share named as none of
+    them stirs none).
 
     `liking` maps each person's name to the character's liking of them in
     [-1, 1]; `actor` names the event's agent when it had one; `about` is what
@@ -231,9 +311,24 @@ def emotions_from_appraisal(appraisal, *, ref="", actor="", about="", liking=Non
                 ("pity", max(0.0, -f) * max(0.0, like), person),
                 ("resentment", max(0.0, f) * max(0.0, -like), person),
                 ("gloating", max(0.0, -f) * max(0.0, -like), person)]
-    raw.append(("desire", _clamp(a.get("desire"), 0.0, 1.0), about))
-    emotions = [Emotion(n, round(i, 4), obj, "event", ref) for n, i, obj in raw if i > 1e-4]
-    return form_compounds(emotions)
+    emotions = form_compounds([Emotion(n, round(i, 4), obj, "event", ref) for n, i, obj in raw if i > 1e-4])
+    # after the compounds, so a stirred mood never becomes half of one
+    return emotions + stirred(a.get("stir"), a.get("stirs"), ref=ref, about=about, source="event")
+
+
+def stirred(strength, shares, *, ref="", about="", source="event", multiplier=1.0):
+    """The standalone moods one item stirs: `strength` in [0, 1] -- how
+    strongly it stirs the character, scaled by `multiplier` -- times each
+    mood's share in `shares`, the model's distribution over which mood it
+    stirs most. Shares on anything but a standalone mood (the model's "none
+    of these") stir nothing."""
+    total = _clamp(strength, 0.0, 1.0) * _clamp(multiplier, 0.0, 1.0)
+    out = []
+    for name, share in (shares or {}).items():
+        i = round(total * _clamp(share, 0.0, 1.0), 4)
+        if name in STANDALONE and i > 1e-4:
+            out.append(Emotion(name, i, about, source, ref))
+    return out
 
 
 def emotions_from_act(appraisal, *, ref="", about=""):
@@ -276,15 +371,37 @@ def form_compounds(emotions):
     return [e for e in out if e.intensity > 1e-4]
 
 
-def memory_emotion(strength, tone, *, ref="", about="", multiplier=1.0):
-    """The feeling a recalled memory stirs: `strength` in [0, 1] (does it stir
-    something now), `tone` in [-1, 1] (pleasant or not), scaled by the
-    memory's habituation multiplier. None when nothing is stirred."""
+def memory_emotions(strength, tone, kinds=None, *, ref="", about="", multiplier=1.0):
+    """What a recalled memory stirs, all of it scaled by `strength` in [0, 1]
+    (does it stir something now) and the memory's habituation `multiplier`:
+    each standalone mood the model named in `kinds` -- its distribution over
+    which mood recalling it stirs most -- by its share, and the share that
+    none of them covers (all of it when `kinds` was not asked) as a plain
+    feeling in the direction of `tone` in [-1, 1]."""
+    out = stirred(strength, kinds, ref=ref, about=about, source="memory", multiplier=multiplier)
+    named = sum(_clamp(p, 0.0, 1.0) for k, p in (kinds or {}).items() if k in STANDALONE)
+    rest = max(0.0, 1.0 - named) if kinds else 1.0
     tone = _clamp(tone)
-    intensity = _clamp(strength, 0.0, 1.0) * abs(tone) * _clamp(multiplier, 0.0, 1.0)
-    if intensity <= 1e-4:
-        return None
-    return Emotion(MEMORY_TONE_EMOTION[tone >= 0], round(intensity, 4), about, "memory", ref)
+    plain = _clamp(strength, 0.0, 1.0) * _clamp(multiplier, 0.0, 1.0) * abs(tone) * rest
+    if plain > 1e-4:
+        out.append(Emotion(MEMORY_TONE_EMOTION[tone >= 0], round(plain, 4), about, "memory", ref))
+    return out
+
+
+def concern_emotions(appraisal, weight=None, *, ref="", about="", liking=None):
+    """What a standing concern -- something still unsettled, appraised each
+    beat (rumination) -- stirs: the event rules over its appraisal, each
+    feeling scaled by how much the concern weighs on the character now
+    (`weight` in [0, 1]; unasked, the concern passes whole) and tagged
+    `concern`. Ungated, round two's concerns named a negative feeling on 65
+    of 66 beats whose character reported none."""
+    w = 1.0 if weight is None else _clamp(weight, 0.0, 1.0)
+    out = []
+    for e in emotions_from_appraisal(appraisal, ref=ref, about=about, liking=liking):
+        i = round(e.intensity * w, 4)
+        if i > 1e-4:
+            out.append(Emotion(e.name, i, e.about, "concern", ref))
+    return out
 
 
 # --- the mood ----------------------------------------------------------------
@@ -435,16 +552,24 @@ def mood_name(mood):
 
 
 def surface_and_undercurrent(emotions, mood):
-    """The strongest emotion of the beat, and beneath it the strongest one of
-    the other pleasure sign -- or, where none was felt, the mood's most
-    salient part when its pleasure disagrees with the surface's. Either may
-    be None."""
+    """The surface: the strongest feeling the present stirred -- a perceived
+    event or the character's own act -- else the strongest felt at all. The
+    undercurrent: the strongest feeling the past or the unsettled stirred --
+    a recalled memory, a standing concern (`BENEATH`) -- that reaches
+    UNDERCURRENT_FLOOR; where nothing beneath does, the strongest other
+    feeling of the opposite pleasure sign, or the mood's most salient part
+    when its pleasure disagrees with the surface's. Either may be None."""
     felt = sorted((e for e in emotions if e.intensity > 0), key=lambda e: -e.intensity)
-    surface = felt[0] if felt else None
-    if surface is None:
+    if not felt:
         return None, None
+    present = [e for e in felt if e.source not in BENEATH]
+    surface = present[0] if present else felt[0]
+    beneath = next((e for e in felt if e.source in BENEATH and e is not surface
+                    and e.intensity >= UNDERCURRENT_FLOOR), None)
+    if beneath is not None:
+        return surface, beneath
     positive = surface.valence >= 0
-    other = next((e for e in felt[1:] if (e.valence >= 0) != positive), None)
+    other = next((e for e in felt if e is not surface and (e.valence >= 0) != positive), None)
     if other is not None:
         return surface, other
     if (mood.get("pleasure") >= 0) != positive and abs(mood.get("pleasure")) > 0.1:

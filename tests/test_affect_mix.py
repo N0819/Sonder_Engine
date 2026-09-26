@@ -1,22 +1,26 @@
 """Emotion and mood as arithmetic (mind/affect_mix.py).
 
 Designed with the owner on 2026-09-26: the decision model appraises what a
-character perceived and did, and code turns appraisals into emotions by the
-OCC rules and moves a high-dimensional mood -- twelve spectrum coordinates
-and eleven moods that stand on their own ("spectrums of moods as coordinates
-as well as some moods that truly stand as their own") -- part of the way
-toward the targets the beat's emotions set, decays it, eases or stokes it by
-the character's own acts, and habituates a memory's evoked feeling the
-owner's way.
+character perceived, did and recalled, and code turns appraisals into
+emotions by the OCC rules and moves a high-dimensional mood -- fourteen
+spectrum coordinates and thirty-one moods that stand on their own ("spectrums of
+moods as coordinates as well as some moods that truly stand as their own",
+"cover all moods") -- part of the way toward the targets the beat's emotions
+set, decays it, eases or stokes it by the character's own acts, and
+habituates a memory's evoked feeling the owner's way.
 
 Pinned here: each OCC rule produces its emotion with its object; compounds
-form only from both halves; own acts give pride, shame and frustration; a
-coordinate's target is a weighted average in which bad outweighs good and
-memories and concerns weigh less; the mood moves only the coordinates the
-beat touched, by a share, inside their bounds; decay, settling and easing
-move it the right way; habituation follows the owner's model; the code's
-coordinates are the pack's. The knob values are placeholders, so every test
-reads them from the module instead of restating numbers.
+form only from both halves, never from a stirred mood; every standalone mood
+can be stirred by name, desire as three; a memory's feeling splits between
+the moods named for it and a plain remainder by its tone; a concern stirs in
+proportion to its weight; own acts give pride, shame and frustration; a
+coordinate's target is a weighted average in which a negativity weight tilts
+toward bad and memories and concerns weigh less; the mood moves only the
+coordinates the beat touched, by a share, inside their bounds; decay,
+settling and easing move it the right way; habituation follows the owner's
+model; the undercurrent is what the past and the unsettled stirred; the
+code's coordinates are the pack's. The knob values are placeholders, so
+every test reads them from the module instead of restating numbers.
 """
 
 from __future__ import annotations
@@ -46,6 +50,17 @@ def test_every_emotion_moves_only_known_coordinates_within_their_bounds():
             assert coord in mix.SPECTRUMS or coord in mix.STANDALONE, (name, coord)
             lo, hi = (0.0, 1.0) if coord in mix.STANDALONE else (-1.0, 1.0)
             assert lo <= value <= hi, (name, coord)
+
+
+def test_every_standalone_mood_can_be_stirred_and_moves_itself_in_full():
+    for name in mix.STANDALONE:
+        assert mix.EMOTION_EFFECTS[name][name] == 1.0, name
+
+
+def test_desire_is_three_moods():
+    # the owner: "there is non romantic and sexual desire to consider"
+    assert {"romance", "sexual_desire", "craving"} <= set(mix.STANDALONE)
+    assert "desire" not in mix.STANDALONE and "desire" not in mix.EMOTION_EFFECTS
 
 
 # --- OCC: emotions from one perceived event -------------------------------------------
@@ -106,8 +121,20 @@ def test_fortunes_of_others_follow_liking():
     assert "gloating" not in named and "happy_for" not in named
 
 
-def test_desire_is_its_own_emotion():
-    assert _names(mix.emotions_from_appraisal({"desire": 0.9}, ref="h"))["desire"].intensity == pytest.approx(0.9)
+def test_what_an_event_stirs_is_its_share_of_how_strongly_it_stirs():
+    named = _names(mix.emotions_from_appraisal(
+        {"stir": 0.9, "stirs": {"sexual_desire": 0.6, "romance": 0.3, "none": 0.1}}, ref="h", about="the kiss"))
+    assert named["sexual_desire"].intensity == pytest.approx(0.54)
+    assert named["romance"].intensity == pytest.approx(0.27) and named["romance"].about == "the kiss"
+    assert "none" not in named and "craving" not in named
+
+
+def test_a_stirred_mood_never_becomes_half_of_a_compound():
+    # joy and a stirred admiration are not gratitude: only OCC's own halves compound
+    named = _names(mix.emotions_from_appraisal(
+        {"desirability": 0.8, "stir": 1.0, "stirs": {"admiration": 1.0}}, ref="i"))
+    assert "gratitude" not in named
+    assert named["joy"].intensity == pytest.approx(0.8) and named["admiration"].intensity == pytest.approx(1.0)
 
 
 # --- the character's own acts --------------------------------------------------------
@@ -131,12 +158,34 @@ def test_dissonance_takes_the_pride_out_of_an_act():
 
 # --- memories ---------------------------------------------------------------------------
 
-def test_a_memory_stirs_the_direction_of_its_tone_scaled_by_habituation():
-    warm, sore = mix.memory_emotion(0.8, 0.9, ref="m1"), mix.memory_emotion(0.8, -0.9, ref="m2")
-    dulled = mix.memory_emotion(0.8, 0.9, ref="m1", multiplier=0.5)
+def test_a_memory_without_kinds_stirs_the_direction_of_its_tone_scaled_by_habituation():
+    [warm], [sore] = mix.memory_emotions(0.8, 0.9, ref="m1"), mix.memory_emotions(0.8, -0.9, ref="m2")
+    [dulled] = mix.memory_emotions(0.8, 0.9, ref="m1", multiplier=0.5)
     assert warm.name == "joy" and sore.name == "distress" and warm.source == "memory"
     assert dulled.intensity == pytest.approx(warm.intensity * 0.5)
-    assert mix.memory_emotion(0.8, 0.0) is None
+    assert mix.memory_emotions(0.8, 0.0) == []
+
+
+def test_a_memory_stirs_the_moods_named_for_it_and_its_tone_carries_the_rest():
+    # the owner: some moods "may be purely memory related"
+    named = _names(mix.memory_emotions(1.0, -0.5, {"grief": 0.5, "regret": 0.3, "none": 0.2},
+                                       ref="m3", multiplier=0.8))
+    assert named["grief"].intensity == pytest.approx(0.4) and named["regret"].intensity == pytest.approx(0.24)
+    assert named["distress"].intensity == pytest.approx(1.0 * 0.8 * 0.5 * 0.2)
+    assert {e.source for e in named.values()} == {"memory"}
+    fully_named = _names(mix.memory_emotions(1.0, 0.9, {"nostalgia": 1.0}, ref="m4"))
+    assert set(fully_named) == {"nostalgia"}
+
+
+def test_a_concern_stirs_in_proportion_to_how_much_it_weighs_now():
+    worry = {"ahead": -0.8, "control": 0.0}
+    whole = _names(mix.concern_emotions(worry, 1.0, ref="c0"))
+    light = _names(mix.concern_emotions(worry, 0.25, ref="c0"))
+    assert whole["fear"].source == "concern"
+    assert light["fear"].intensity == pytest.approx(whole["fear"].intensity * 0.25)
+    assert mix.concern_emotions(worry, 0.0, ref="c0") == []
+    unasked = _names(mix.concern_emotions(worry, None, ref="c0"))
+    assert unasked["fear"].intensity == pytest.approx(whole["fear"].intensity)
 
 
 # --- the mood -----------------------------------------------------------------------------
@@ -271,6 +320,26 @@ def test_the_undercurrent_is_the_strongest_feeling_of_the_other_sign():
         [Emotion("joy", 0.8, about="the landing"), Emotion("fear", 0.4, about="the scar"),
          Emotion("hope", 0.3)], Mood())
     assert surface.name == "joy" and under.name == "fear" and under.about == "the scar"
+
+
+def test_what_the_past_or_the_unsettled_stirred_is_the_undercurrent():
+    beneath = mix.UNDERCURRENT_FLOOR + 0.1
+    surface, under = mix.surface_and_undercurrent(
+        [Emotion("nostalgia", 0.9, source="memory"), Emotion("joy", 0.5, about="the landing"),
+         Emotion("fear", 0.4), Emotion("grief", beneath, source="memory", about="Gallifrey")], Mood())
+    # the present is the surface even when a memory stirs harder; the
+    # strongest feeling beneath is the undercurrent, whatever its sign
+    assert surface.name == "joy" and under.name == "nostalgia"
+    surface, under = mix.surface_and_undercurrent(
+        [Emotion("joy", 0.5), Emotion("fear", 0.3, source="concern")], Mood())
+    assert under.name == "fear" and under.source == "concern"
+
+
+def test_a_faint_feeling_beneath_is_not_named():
+    faint = mix.UNDERCURRENT_FLOOR / 2
+    surface, under = mix.surface_and_undercurrent(
+        [Emotion("joy", 0.5), Emotion("regret", faint, source="memory"), Emotion("fear", 0.3)], Mood())
+    assert under.name == "fear"
 
 
 def test_a_mood_that_disagrees_with_the_surface_is_the_undercurrent():

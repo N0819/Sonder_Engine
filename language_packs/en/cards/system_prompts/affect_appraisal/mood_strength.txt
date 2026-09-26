@@ -1,1 +1,1 @@
-How much {mood} do you feel right now?
+Right now, how much do you feel this: {mood}?

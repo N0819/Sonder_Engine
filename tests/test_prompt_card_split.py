@@ -49,13 +49,16 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 222   # +18 (2026-09-26): `affect_appraisal.*`, the decision
+PART_COUNT = 225   # +18 (2026-09-26): `affect_appraisal.*`, the decision
                    # model's appraisal of an event, of the character's own
                    # act and of a recalled memory, and its direct reading of
                    # the mood (one `dimension` and one `mood_strength`
                    # template; mind/affect_appraisal.py); its answer labels,
                    # pole words and mood phrases stay inline under
-                   # `affect_appraisal.options`.
+                   # `affect_appraisal.options`. +3 the same day: which mood
+                   # an event stirs and how strongly, which mood a memory
+                   # stirs, and how much a concern weighs now, less the
+                   # single desire question the three desires replaced.
                    # +7 (2026-09-24/25): the encoder's check and repair pass
                    # -- `prose_contract.encoder_repair` (the repair call's
                    # section), the four decision-model checks

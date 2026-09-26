@@ -571,6 +571,117 @@ coordinates from the same state.
 - **Events against the reader's labels**, 182 events: the same family 36%
   (shuffled 23%), the same sign 87% (shuffled 69%).
 
+## The affect pass, round three: a coordinate system for every mood
+
+The owner: "Also I think there is non romantic and sexual desire to
+consider", "We are trying to cover all moods and make a coordinate system out
+of them", "some moods are really just spectrums some aren't, so there is some
+simplification but simplification is not the goal", "and some moods may be
+purely memory related", "or their undercurrents at least."
+
+Built (the design note, "The coordinate system"): fourteen spectrums -- the
+twelve plus timid/bold (approach against avoidance) and wanting to be
+alone/wanting company -- and thirty standalone moods: desire in three
+(romance, sexual desire, craving), the Cowen and Keltner categories no
+spectrum holds, the hostile and self-conscious moods, numbness, and six whose
+object is the past. Per event, "how strongly does this stir you" and "which
+of these does it stir most" (every standalone mood, or none of them) replace
+the single desire question; each recalled memory is asked the same "which of
+these"; each concern "how much is this weighing on you right now"; the
+undercurrent is what memories and concerns stirred.
+
+Same 98 beats. `V` now carries the memories today's recall delivered (554,
+on 91 beats) and the 274 concerns as items of their own: about 116 questions
+a request, 11,320 in all (about $0.09). The rater re-rated all 44 coordinates
+blind and listed any mood no coordinate covers.
+
+- **The direct reading still leads**: mean r 0.51 over the 35 coordinates
+  that varied (derived 0.27, settled 0.37); on the twelve spectrums both
+  rounds share, 0.62 against round two's 0.67, with memories now in both
+  readers' context and 44 coordinates rated at once.
+- **Desire splits where it varies.** Sexual desire r 0.90 read directly, 0.86
+  derived; romance 0.39 (0.52 settled; the rater's own spread is small, sd
+  0.15); craving -0.32 read directly -- a wording fault (below).
+- **The new spectrums read weakly**: timid/bold 0.43, wanting company 0.34
+  (derived 0.02 and 0.16).
+- **What an event stirs gives the derived mood coordinates OCC never
+  reached**: amusement 0.02 -> 0.27, engagement 0.11 -> 0.36, clarity none ->
+  0.41. Anger, guilt and embarrassment stay inverse derived, on references
+  that barely move (sd 0.05, 0.03, 0.06).
+- **Nine moods never varied** for either reader: contempt, disgust, jealousy,
+  envy, sadness, numbness, grief, regret, homesickness. These two stories
+  hold little loss, hostility or rivalry; unmeasured, not absent.
+- **Jev is twice as liberal as the rater**: 4.4 of 30 standalone moods graded
+  clearly or more per beat against 2.1 -- far from round one's 13-17 of 121
+  labels.
+- **Memories stir the scene's own moods, not the past's**: sexual desire 38%
+  of all memory feeling, curiosity 17%, tenderness 16%, amusement 9%, awe 7%,
+  resolve 6%; the unease of a past that will not let go 1%, and no other
+  past-directed mood in the top ten. "None of these" is never chosen (mean
+  share 0.00-0.01), so the plain remainder by tone never fires. Whether some
+  moods are memory's own (the owner) cannot be tested on a packet that holds
+  little past; that is the Jev packet's test.
+- **Today's packet repeats**: the owner's habituation at the placeholder knobs
+  dulls 287 of 554 recalls (mean multiplier 0.47), each a memory recalled on
+  most of the beats before it.
+- **Memory costs the derived mood a little**: valence r against the reports
+  0.26 from events alone, 0.23 with memories. Concerns change nothing there,
+  by design.
+- **The concern gate does not discriminate.** Jev weighs every concern --
+  mean 0.69 and 0.70 for the two characters, none under a third -- so gated
+  concerns still give a negative feeling beneath on 60 of the 66 beats whose
+  report carries no negative undercurrent (63 ungated; 32 of 32 where it
+  does). The reference cannot settle it: these are the concerns each
+  character listed itself as active, and a report names one undercurrent.
+  Nor is what they stir only negative -- the Doctor's most frequent
+  undercurrent is curiosity (24 beats).
+- **Coverage**: the rater named a mood no coordinate covers on 86 of 98
+  beats, nearly all flavoured compounds of coordinates that exist (a
+  practitioner's craft pride is proud, in command and absorbed). Two classes
+  recurred: anticipation or savouring, and an urge to reassure or ease
+  someone.
+- **Two wordings misfired.** "Being moved or touched" tracked sexual desire
+  at r 0.93 in the explicit story: "touched" read as physical. Craving, "a
+  strong want for something, other than romance or sex", took in the
+  Doctor's wanting to know: Jev 0.50 against the rater's 0.02, while the
+  rater's craving (26 of Mirelle's beats, a hunger to consume) Jev filed as
+  sexual desire.
+
+## Round four: the wording the data found
+
+Round three's faults, fixed and re-run on the same 98 beats by both readers:
+
+- **Being moved**, now "a swell of feeling at something tender or
+  meaningful": Jev's reading no longer moves with sexual desire (r 0.93 ->
+  0.58); against the rater 0.66 -> 0.67.
+- **Compassion**, now "feeling for someone's pain and wanting to ease it":
+  0.37 -> 0.55.
+- **Anticipation** added (thirty-one standalone moods): 0.55 read directly,
+  and it left the rater's uncovered list. That list still names something on
+  84 of 98 beats -- a practitioner's craft pride, watchfulness, and the urge
+  to reassure the compassion wording was meant to hold.
+- **The rest held**: mean r 0.50 over the 36 coordinates that varied; valence
+  against the reports 0.69; Jev grades 5.1 of 31 standalone moods clearly or
+  more per beat, the rater 2.6.
+
+**Craving took a probe of its own**: one question per beat under four
+wordings, against both raters' craving -- which barely moves with its own
+wording (The Doctor 0.02 and 0.00, Mirelle 0.39 and 0.38):
+
+| craving worded | The Doctor | Mirelle | r, round-three rater | r, round-four rater |
+|---|---|---|---|---|
+| "a strong want for something, other than romance or sex" | 0.51 | 0.31 | -0.36 | -0.34 |
+| the same, "(wanting to know is curiosity)" added | 0.74 | 0.30 | -0.39 | -0.38 |
+| "an appetite to have or consume something" | 0.20 | 0.72 | **0.88** | **0.88** |
+| "a hunger for something to have, take or consume" | 0.17 | 0.69 | **0.90** | **0.90** |
+
+Jev reads an option by its words. Naming what craving excludes pulled the
+Doctor's curiosity in further; naming only the appetite put craving where the
+rater does. The pack now says "an appetite to have or consume something".
+Jev answered the unchanged round-three wording with round three's means
+exactly, so a one-question probe (98 questions) is enough to choose between
+wordings.
+
 ## What Jev costs
 
 Measured from Jev's own response (`usage.cost`): one 64-question request,

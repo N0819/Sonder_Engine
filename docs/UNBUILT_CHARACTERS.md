@@ -1276,11 +1276,19 @@ still open:
 
 ### 6.15 Jev around the character call — [`DESIGN_JEV_CHARACTER_PASS.md`](design/DESIGN_JEV_CHARACTER_PASS.md)
 
-Proposal, 2026-09-26; nothing built. Open: the tracking pass before and after
-the character call; the memory packet (a fitted weighted-RRF net of 100 over
-new lanes, then Jev) with the moment tag written at commit; the fun sections;
-a ponder answered by Jev over the whole bank; same-beat recall. The note's nine
-owner decisions are the list. Measured in
+Proposal, 2026-09-26. Built but NOT WIRED: the affect pass --
+`mind/affect_appraisal.py` (the Jev questions) and `mind/affect_mix.py` (OCC
+emotions, the mood as fourteen spectrums and thirty-one standalone moods,
+habituation, the layer beneath); nothing in the turn calls them. Open: wiring
+them before and after the character call and retiring the prompt's affect
+paragraphs; every knob and every `EMOTION_EFFECTS` value (the owner's); a
+concern gate that discriminates (Jev weighs every listed concern about 0.7);
+own acts' pride tilt; naming the combinations the coverage table lists; the
+memory packet (a fitted weighted-RRF net of 100 over new lanes, then Jev) with
+the moment tag written at commit -- which the memory-born moods wait on, since
+today's packet stirs the scene's own moods; the fun sections; a ponder
+answered by Jev over the whole bank; same-beat recall. The note's nine owner
+decisions are the list. Measured in
 [`JEV_MEMORY_PROBE_2026_09_26.md`](experiments/JEV_MEMORY_PROBE_2026_09_26.md);
 instruments `tools/jev_*.py`.
 

@@ -300,12 +300,20 @@ of events and memories average into an overall mood with multiple
 dimensions." Built in `mind/affect_mix.py` (pure code) and
 `mind/affect_appraisal.py` (the Jev questions); not wired into the pipeline.
 
-- **The space.** A mood is a point `M = (P, A, D)` in pleasure, arousal and
-  dominance, each in [-1, 1] (Mehrabian's PAD). Temperament is a home point
-  `H` in the same space.
+- **The space.** A mood is a point `M` in forty-five coordinates: fourteen
+  bipolar spectrums in [-1, 1] and thirty-one standalone moods in [0, 1] (the
+  next section). It began as Mehrabian's three PAD axes; the owner widened
+  it ("mood has way more dimensions than what you have mentioned", "spectrums
+  of moods as coordinates as well as some moods that truly stand as their
+  own", "cover all moods"). Temperament is a home point `H` in the same
+  space; standalone moods' home is nothing.
 - **Emotions.** Each emotion `e` has an intensity `i` in [0, 1] and a
-  direction `v` in PAD -- ALMA's table for the OCC emotions (Gebhard, 2005),
-  and one row of the engine's own for desire, which OCC does not have.
+  direction `v`: the coordinates it moves (`EMOTION_EFFECTS`) -- one row per
+  OCC emotion, after ALMA's table (Gebhard, 2005), and one per standalone
+  mood, itself in full and the spectrums it moves. An event yields both: the
+  OCC emotions its appraisal gives, and each standalone mood it stirs (how
+  strongly it stirs the character times that mood's share of "which of these
+  does it stir most").
 - **Decay.** Between beats `M` returns toward `H` by `0.5^(dt / half_life)`
   per axis, `dt` in psych units; pleasure below home decays more slowly
   (bad is stronger than good -- Baumeister et al., 2001).
@@ -316,24 +324,166 @@ dimensions." Built in `mind/affect_mix.py` (pure code) and
 - **The push.** `S = 1 - prod(1 - i)`: several emotions push harder than one,
   never past 1. `M <- M + reactivity x S x (C - M)`: the mood moves toward
   the centre by a share -- the shape measured to beat persistence.
+- **The layer beneath.** The present -- a perceived event, the character's
+  own act -- is the surface; the past and the unsettled -- a recalled memory,
+  a standing concern -- are beneath (the owner: some moods "may be purely
+  memory related ... or their undercurrents at least"). A memory stirs the
+  standalone moods named for it ("which of these does recalling it stir
+  most"), the share none of them covers a plain pleasant or unpleasant
+  feeling by its tone, all of it dulled by habituation. A concern stirs what
+  the event rules give it, scaled by "how much is this weighing on you right
+  now", and does not push the surface (`CONCERN_WEIGHT = 0`).
 - **Names.** Mehrabian's eight octants (exuberant, relaxed, dependent,
-  docile, hostile, disdainful, anxious, bored) with slightly, moderately or
-  fully by distance from neutral; the surface is the strongest emotion of the
-  beat with its object; the undercurrent the strongest one of the other sign,
-  or the mood when it disagrees with the surface.
+  docile, hostile, disdainful, anxious, bored) for a compact label; the
+  surface is the strongest feeling the present stirred, with its object; the
+  undercurrent the strongest a memory or a concern stirred, when it reaches a
+  floor -- else the strongest feeling of the other sign, or the mood when it
+  disagrees with the surface.
 
 Knobs, all the owner's, none tuned: reactivity, half-life, negativity weight,
-negative decay factor, memory weight, concern weight, and habituation's step,
-grace, ceiling and half-life. The card's `stress_profile` can set reactivity
-and half-life per character once the defaults are chosen.
+negative decay factor, memory weight, concern weight, the undercurrent's
+floor, and habituation's step, grace, ceiling and half-life. The card's
+`stress_profile` can set reactivity and half-life per character once the
+defaults are chosen. Every value in `EMOTION_EFFECTS` is the owner's too.
 
-**Measured 2026-09-26** (the evidence doc, "The affect pass, built and run"):
+### The coordinate system
 
-- **Concerns are the layer beneath.** Appraising what is still unsettled for
-  the character (rumination) names the undercurrent its report carries on 32
-  of 32 beats where events alone named 11 -- but moving the surface mood with
-  them costs its tracking at every weight tried, so a concern names the
-  undercurrent and does not push the surface (`CONCERN_WEIGHT = 0`).
+The owner: "We are trying to cover all moods and make a coordinate system out
+of them", "some moods are really just spectrums some aren't, so there is some
+simplification but simplification is not the goal." The rule used here: a
+mood is a **point in spectrum space** when two people in it would agree on
+every spectrum and differ on nothing else; it is **standalone** when some
+mood at the same point is a different mood -- numbness and calm share a
+point, guilt and embarrassment do, jealousy and envy do -- or when it has an
+object the spectrums cannot carry (romance is toward someone). The keys are
+the pack's (`affect_appraisal.options`); the words below are its English.
+
+**Fourteen spectrums**, one five-step question each:
+
+| key | low -- high | why its own axis |
+|---|---|---|
+| pleasure | unpleasant -- pleasant | valence, in every inventory |
+| energy | drained -- energized | energetic arousal (UWIST, Matthews 1990) |
+| tension | calm -- tense | tense arousal, apart from energy (UWIST) |
+| control | powerless -- in command | PAD's dominance; Fontaine's potency |
+| clarity | bewildered -- clear-headed | confusion is its own POMS factor |
+| connection | alone -- connected | felt belonging |
+| openness | guarded -- open | self-disclosure and trust |
+| playfulness | serious -- playful | play as a state (the round-one probe needed it) |
+| hope | hopeless -- hopeful | the future's valence, apart from the present's |
+| self_regard | ashamed -- proud | the self's valence; shame lives here |
+| safety | threatened -- safe | fear's axis, apart from displeasure |
+| engagement | bored -- absorbed | interest and entrancement against boredom |
+| boldness | timid -- bold | approach against avoidance: anger approaches and fear withdraws at the same displeasure (Carver and Harmon-Jones, 2009) |
+| sociability | wanting to be alone -- wanting company | loneliness is the gap between wanted and felt connection (Perlman and Peplau, 1981), so wanting company is apart from feeling connected |
+
+**Thirty-one standalone moods**, one graded question each: every category
+Cowen and Keltner (2017) found self-report keeps distinct that no spectrum
+already holds, then what their list lacks.
+
+- **Wanting** -- romance, sexual desire (worded "sexual desire or sexual
+  arousal": round one learned intimate moods need explicit words), craving
+  (the owner, "there is non romantic and sexual desire to consider": "an
+  appetite to have or consume something" -- a desire of its own axis, so it
+  can stand beside sexual desire or without it; worded after a one-question
+  probe, since "a strong want for something" took in curiosity and naming
+  curiosity inside the option pulled it in further), curiosity (a want to
+  know; engagement is attention, not wanting), anticipation (Plutchik's
+  primary, eagerness for what is about to happen; the rater's most frequent
+  uncovered mood in round three).
+- **Appreciation** -- awe, admiration, aesthetic appreciation, amusement,
+  being moved (kama muta: Fiske, Seibt and Schubert, 2017; worded "a swell of
+  feeling at something tender or meaningful" -- "moved or touched" read as
+  physical in an explicit story). All sit near one pleasant, absorbed point.
+- **Toward someone** -- tenderness, compassion (feeling for someone's pain and
+  wanting to ease it), gratitude; anger, contempt,
+  disgust (the hostility triad, one unpleasant point split by what was
+  violated: Rozin et al., 1999); jealousy (fearing to lose someone) apart
+  from envy (wanting what someone has: Parrott and Smith, 1993).
+- **The self** -- guilt (about an act) and embarrassment (about being seen);
+  shame is the self_regard spectrum (Tangney and Dearing, 2002).
+- **Others** -- horror (threat with revulsion), sadness (loss, apart from fear
+  and anger at the same displeasure), surprise (Fontaine's novelty, as a
+  transient), resolve, numbness (emotional numbing, which no point near
+  neutral can tell from calm).
+- **Whose object is the past** -- nostalgia, grief, regret, longing,
+  homesickness, and the unease of a past that will not let go. Recall stirs
+  them; they are what sits beneath.
+
+**Coverage.** How moods with no coordinate of their own sit in the system --
+illustrations of the rule, not a list the engine matches against:
+
+| mood | where it sits |
+|---|---|
+| content, serene | pleasant, calm, safe |
+| excited | pleasant, energized, absorbed |
+| anxious, worried | tense, threatened; hopeless when the worry is about what comes |
+| afraid | threatened, tense, timid |
+| panicked | tense, threatened, bewildered, powerless |
+| overwhelmed | tense, powerless, bewildered |
+| restless | energized, bored, tense |
+| exhausted | drained |
+| confident | in command, proud, bold |
+| insecure | ashamed, threatened |
+| shy | timid, guarded, with embarrassment |
+| lonely | alone and wanting company, often with longing |
+| withdrawn | wanting to be alone, guarded |
+| suspicious | guarded, threatened |
+| vulnerable | open, threatened |
+| despairing | hopeless, unpleasant, drained |
+| apathetic | bored, drained, with numbness |
+| dominant | in command, bold; submissive or docile: pleasant, powerless, calm (Mehrabian's docile octant) |
+| defiant | bold, in command, with anger |
+| bittersweet | nostalgia with sadness |
+| wistful | nostalgia with longing |
+| schadenfreude | amusement with contempt (OCC's gloating) |
+| smug | proud, with contempt and amusement |
+| humiliated | ashamed, powerless, with embarrassment |
+| betrayed | anger with grief, alone |
+| heartbroken | grief with romance, alone |
+| infatuated, obsessed | romance with craving |
+| possessive | jealousy with craving |
+| protective | tenderness, bold |
+| predatory hunger | craving, bold, in command |
+| aroused by being watched or shamed | sexual desire with embarrassment |
+
+Code can name what the combinations make, as it names OCC's compounds (the
+owner: "code can combine moods into moods that are actually combos"); none of
+the rows above is built as a name yet. The blind rater in round three also
+lists any mood a beat holds that no coordinate covers (the evidence doc).
+
+**Measured 2026-09-26** (the evidence doc, "The affect pass, built and run"
+and rounds two to four):
+
+- **Read the mood directly; let the math attribute and carry it.** Against a
+  blind rater, Jev's direct reading of the coordinates leads -- mean r 0.64
+  over round two's twenty, 0.50 over the 36 of 45 that varied in round four
+  -- where the mood derived from the beat's emotions reaches 0.27-0.30 and the
+  direct reading settled with inertia 0.36-0.52. The math is what says what a
+  feeling is about and carries the mood between readings; the reading is what
+  says where it is.
+- **Desire in three works where it varies**: sexual desire r 0.90, craving
+  0.88 once worded as an appetite (a one-question probe chose the words);
+  romance 0.36-0.39 on a small spread. Nine moods did not vary in the two
+  stories measured (contempt, disgust, jealousy, envy, sadness, numbness,
+  grief, regret, homesickness) -- unmeasured, not absent.
+- **Jev is read by its words**: a word in an option pulls toward what it
+  names, even when it names what the option excludes, and a word with a
+  physical second sense reads physically in an explicit story. State each
+  mood's class alone, and probe a wording before adopting it.
+- **The memories today's recall delivers stir the scene's own moods** --
+  sexual desire, curiosity, tenderness -- and almost never the past-directed
+  ones; which moods are memory's own waits on a packet that holds some past.
+  Today's packet also repeats: habituation at the placeholder knobs dulls
+  about half of all recalls.
+- **Concerns are the layer beneath, and not yet gated.** Appraising what is
+  still unsettled for the character (rumination) names the undercurrent its
+  report carries on 32 of 32 beats where events alone named 11 -- but moving
+  the surface mood with them costs its tracking at every weight tried, so a
+  concern names the undercurrent and does not push the surface
+  (`CONCERN_WEIGHT = 0`). "How much is this weighing on you right now" does
+  not discriminate: Jev answers about 0.7 for every concern the character
+  listed.
 - **The pass after the turn** (the owner: "a pass after the character turn
   finishes to see how their actions speech and thoughts affect their mood")
   runs beside `director_resolve`, off the critical path, and carries its push

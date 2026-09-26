@@ -870,9 +870,6 @@
     "control": {
       "$text": "affect_appraisal/control.txt"
     },
-    "desire": {
-      "$text": "affect_appraisal/desire.txt"
-    },
     "fortune": {
       "$text": "affect_appraisal/fortune.txt"
     },
@@ -914,6 +911,18 @@
     },
     "mood_strength": {
       "$text": "affect_appraisal/mood_strength.txt"
+    },
+    "evoke_mood": {
+      "$text": "affect_appraisal/evoke_mood.txt"
+    },
+    "concern_weight": {
+      "$text": "affect_appraisal/concern_weight.txt"
+    },
+    "stir_strength": {
+      "$text": "affect_appraisal/stir_strength.txt"
+    },
+    "stir_mood": {
+      "$text": "affect_appraisal/stir_mood.txt"
     },
     "options": {
       "goodness": {
@@ -1039,20 +1048,51 @@
         "engagement": {
           "low": "退屈している",
           "high": "夢中になっている"
+        },
+        "boldness": {
+          "low": "臆している",
+          "high": "大胆"
+        },
+        "sociability": {
+          "low": "ひとりでいたい",
+          "high": "誰かといたい"
         }
       },
       "standalone": {
-        "desire": "恋愛的・性的な欲望",
+        "romance": "恋心や恋愛感情",
+        "sexual_desire": "性的な欲望や性的な興奮",
+        "craving": "渇望――何かを手に入れたい、味わいたいという欲求",
+        "curiosity": "好奇心――知りたい、確かめたいという気持ち",
+        "anticipation": "期待――これから起こることを待ちきれない気持ち",
         "awe": "畏敬の念や驚嘆",
-        "nostalgia": "懐かしさ――過ぎ去ったものへの憧れ",
-        "grief": "失ったものへの悲嘆",
-        "disgust": "嫌悪や不快感",
-        "jealousy": "嫉妬",
-        "guilt": "罪悪感",
-        "tenderness": "誰かへのいとおしさや守りたい気持ち",
+        "admiration": "誰かへの憧れや称賛",
+        "aesthetic": "美しさを味わう気持ち",
         "amusement": "おかしさ",
+        "moved": "感動――優しさや意味深いものに胸が熱くなる気持ち",
+        "tenderness": "誰かへのいとおしさや愛情、守りたい気持ち",
+        "compassion": "思いやり――誰かの痛みを感じ、和らげたいと思う気持ち",
+        "gratitude": "感謝",
         "anger": "怒りや苛立ち",
-        "compassion": "思いやり――誰かの痛みを感じる気持ち"
+        "contempt": "軽蔑",
+        "disgust": "嫌悪や不快感",
+        "horror": "戦慄",
+        "jealousy": "嫉妬――誰かを他の人に奪われる恐れ",
+        "envy": "羨望――他の人が持っているものを欲しがる気持ち",
+        "guilt": "罪悪感",
+        "embarrassment": "気恥ずかしさやばつの悪さ",
+        "sadness": "悲しみ",
+        "surprise": "驚き",
+        "resolve": "決意――何かをやり遂げようとする気持ち",
+        "numbness": "無感覚――ほとんど何も感じない状態",
+        "nostalgia": "懐かしさ――過ぎ去ったものへの温かな憧れ",
+        "grief": "失ったものへの悲嘆",
+        "regret": "したこと、あるいはしなかったことへの後悔",
+        "longing": "ここにいない誰かや何かへの恋しさ",
+        "homesickness": "郷愁",
+        "haunted": "離れてくれない過去がもたらす不安"
+      },
+      "stir": {
+        "none": "どれでもない。"
       }
     }
   }

@@ -870,9 +870,6 @@
     "control": {
       "$text": "affect_appraisal/control.txt"
     },
-    "desire": {
-      "$text": "affect_appraisal/desire.txt"
-    },
     "fortune": {
       "$text": "affect_appraisal/fortune.txt"
     },
@@ -914,6 +911,18 @@
     },
     "mood_strength": {
       "$text": "affect_appraisal/mood_strength.txt"
+    },
+    "evoke_mood": {
+      "$text": "affect_appraisal/evoke_mood.txt"
+    },
+    "concern_weight": {
+      "$text": "affect_appraisal/concern_weight.txt"
+    },
+    "stir_strength": {
+      "$text": "affect_appraisal/stir_strength.txt"
+    },
+    "stir_mood": {
+      "$text": "affect_appraisal/stir_mood.txt"
     },
     "options": {
       "goodness": {
@@ -1039,20 +1048,51 @@
         "engagement": {
           "low": "bored",
           "high": "absorbed"
+        },
+        "boldness": {
+          "low": "timid",
+          "high": "bold"
+        },
+        "sociability": {
+          "low": "wanting to be alone",
+          "high": "wanting company"
         }
       },
       "standalone": {
-        "desire": "romantic or sexual desire",
+        "romance": "romantic longing or love",
+        "sexual_desire": "sexual desire or sexual arousal",
+        "craving": "craving -- an appetite to have or consume something",
+        "curiosity": "curiosity, wanting to know or find out",
+        "anticipation": "anticipation, eagerness for what is about to happen",
         "awe": "awe or wonder",
-        "nostalgia": "nostalgia, a longing for something past",
-        "grief": "grief for something lost",
-        "disgust": "disgust or revulsion",
-        "jealousy": "jealousy",
-        "guilt": "guilt",
-        "tenderness": "tenderness or protectiveness toward someone",
+        "admiration": "admiration for someone",
+        "aesthetic": "appreciation of beauty",
         "amusement": "amusement",
+        "moved": "being moved -- a swell of feeling at something tender or meaningful",
+        "tenderness": "tenderness, affection or protectiveness toward someone",
+        "compassion": "compassion, feeling for someone's pain and wanting to ease it",
+        "gratitude": "gratitude",
         "anger": "anger or irritation",
-        "compassion": "compassion, feeling someone else's pain"
+        "contempt": "contempt",
+        "disgust": "disgust or revulsion",
+        "horror": "horror",
+        "jealousy": "jealousy, the fear of losing someone to another",
+        "envy": "envy, wanting what someone else has",
+        "guilt": "guilt",
+        "embarrassment": "embarrassment or awkwardness",
+        "sadness": "sadness",
+        "surprise": "surprise",
+        "resolve": "resolve, determination to see something through",
+        "numbness": "numbness, feeling little or nothing",
+        "nostalgia": "nostalgia, a warm longing for something past",
+        "grief": "grief for something lost",
+        "regret": "regret over something you did or failed to do",
+        "longing": "longing for someone or something absent",
+        "homesickness": "homesickness",
+        "haunted": "the unease of a past that will not let go"
+      },
+      "stir": {
+        "none": "None of these."
       }
     }
   }
