@@ -78,6 +78,42 @@ true -- the "is this already true?" weakness recorded for the Director, and the
 same shape as retrieval's superseded-belief problem (current row first 8/18).
 A "now" question needs code to prefer the newest of the relevant rows.
 
+## Refinement round (same day)
+
+**Graded questions beat yes/no.** Each channel asked as "how much ...?" on a
+four-step scale (not at all / slightly / clearly / strongly), read as the
+expected grade of the distribution Jev returns (`probabilities`, e.g.
+`{"central": 0.51, "clear": 0.48, "slight": 0.01, "none": 0}`). On beat 4482
+every channel spreads (p10 roughly halves: situation 0.45 -> 0.24, useful 0.32
+-> 0.16) while the top picks stay (top-8 overlap 5-7 of 8); `useful` goes from
+76 to 26 of 122 above 0.5. The counterfactual form "Would remembering this
+change what you do or say next?" compressed everything to 0.42-0.58 and
+drifted off topic -- not usable.
+
+**A "what just happened" lane does not reach the inferential misses.** The
+beat's own events as a separate aspect lane moved "The TARDIS flinched" from
+net rank 42 to 49; the six picks below rank 50 stayed below it. "Are we going
+to explode?" and the ship's damage share no surface; the link is inference.
+
+**Backstory memories carry prose where names belong.** The two crash memories
+come from the generated journey history, with `entities` "Just me and the
+TARDIS" / "Me and the TARDIS, alone together" and `location` "The TARDIS console
+room, caught in a vortex scar"; memories from play carry `["Hinami"]` and
+"TARDIS Console Room". An entity lane could not match them, and the existing
+exact-location "happened here" bonus already misses them. The fix belongs at
+ingest.
+
+**Breadth, graded (three more beats; a fourth, chat 120, was a sexual scene
+and is excluded).** 100-610 questions in 0.29-0.85 s; deliberate recall
+0.21-0.46 s. On The Doctor's "Where are we?" (154) the scar and the flinch lead
+at 0.99 (net 18 and 31) and "What have I promised to do?" finds his promise to
+take Hinami to Kyoto. On Sarah Moon's turn 1 (115, 20 memories) "What do I know
+about Hinami?" scores at most 0.22 -- she has not met her yet, an abstention the
+old score signal never gave (0 of 30); not yet calibrated, since a Doctor beat
+with no promise to find still peaked at 0.70. Overlap with today's packet: 3 of
+21 (154), 1 of 6 (122), 5 of 8 (115). Score levels vary by scene, so a packer
+should work from ranks and per-channel quotas, never fixed thresholds.
+
 ## Limits
 
 Two beats, one character, one story, 122-row banks: a direction, not a

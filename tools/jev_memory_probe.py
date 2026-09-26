@@ -50,6 +50,38 @@ CHANNELS = {
 }
 ASK = "Does this memory help answer the question: {question}"
 
+#: `--variants`: sharper forms of the situation question, measured beside it.
+#: `next` asks for consequence rather than topic; `graded` is a choice whose
+#: distribution is read as an expected grade (none 0 .. central 1).
+VARIANT_NEXT = "Would remembering this change what you do or say next?"
+VARIANT_GRADED = "How much does this memory bear on this moment?"
+GRADES = {
+    "none": ("It has nothing to do with this moment.", 0.0),
+    "slight": ("It touches this moment only in passing.", 1 / 3),
+    "clear": ("It clearly bears on this moment.", 2 / 3),
+    "central": ("It is what this moment is about.", 1.0),
+}
+
+#: `--graded`: every channel asked as "how much", answered on one neutral
+#: scale and read as the distribution's expected grade -- the form that spread
+#: the situation channel (p10 0.20 against 0.44 as a yes/no) on beat 4482.
+GRADED_CHANNELS = {
+    "situation": "How much does this memory bear on the situation you are in right now?",
+    "senses": ("How much does this memory share a particular sensation with this moment "
+               "-- something you perceive now that you also perceived then?"),
+    "mood_match": "How much did the moment in this memory feel the way you feel right now?",
+    "mood_contrast": ("How much did the moment in this memory feel the opposite of how "
+                      "you feel right now?"),
+    "useful": ("How much does this memory hold information that would help with what "
+               "you are trying to do right now?"),
+}
+SCALE = {
+    "not_at_all": ("Not at all.", 0.0),
+    "slightly": ("Slightly.", 1 / 3),
+    "clearly": ("Clearly.", 2 / 3),
+    "strongly": ("Strongly.", 1.0),
+}
+
 #: How much of the view and of each memory a question carries. The state is
 #: shared by every question in a request; the memory is per question.
 VIEW_CHARS = 3000
@@ -95,6 +127,12 @@ def beat_inputs(turn_id, char_id):
     concerns = " ".join(str(c.get("text") if isinstance(c, dict) else c) for c in concerns)
     psychology = self_.get("psychology") or {}
     drive = psychology.get("drive") or {}
+    # What happened THIS beat, apart from the standing scene the view also
+    # describes: the perception's own events, in order.
+    perception = _blob(q, hashes.get("perception")) if hashes.get("perception") else {}
+    events = sorted((e for e in (perception or {}).get("events") or [] if isinstance(e, dict)),
+                    key=lambda e: e.get("order") or 0)
+    happened = " ".join(str((e.get("observed") or {}).get("text") or "") for e in events).strip()
     return {
         "chat_id": turn["chat_id"], "turn_idx": turn["idx"], "char_id": char_id,
         "name": self_.get("name") or str(char_id),
@@ -103,6 +141,7 @@ def beat_inputs(turn_id, char_id):
         "mood": str(active.get("mood") or ""),
         "concerns": concerns,
         "drive": str(drive.get("essence") or "") if isinstance(drive, dict) else str(drive),
+        "happened": happened,
         "values": psychology.get("values") or [],
         # The packet labels rows per payload (`m9`), not by id, so a delivered
         # row is matched back to its memory by its own text.
@@ -156,22 +195,47 @@ def state_for(inputs):
     ) if part)
 
 
+def _expected_grade(answer):
+    """A graded `choice` read as its expected grade, from the distribution Jev
+    returns beside the chosen key (`probabilities`); the chosen key's grade
+    when no distribution is readable. None when nothing is. Reads either
+    scale -- `GRADES` or `SCALE` -- by key."""
+    if not isinstance(answer, dict):
+        return None
+    weights = {key: w for table in (GRADES, SCALE) for key, (_t, w) in table.items()}
+    dist = next((answer[k] for k in ("probabilities", "distribution", "scores")
+                 if isinstance(answer.get(k), dict)), None)
+    if dist:
+        total = sum(float(v) for k, v in dist.items()
+                    if k in weights and isinstance(v, (int, float)))
+        if total > 0:
+            return sum(weights[k] * float(v) for k, v in dist.items()
+                       if k in weights and isinstance(v, (int, float))) / total
+    choice = answer.get("choice")
+    return weights.get(choice)
+
+
 def ask_jev(state, questions):
-    """`{key: p or None}` -- None where Jev returned no readable answer, kept
-    apart from a real 0 (decisions.probability reads a missing answer as 0)."""
+    """`{key: value or None}` and the raw answers -- None where Jev returned no
+    readable answer, kept apart from a real 0 (decisions.probability reads a
+    missing answer as 0). A `noul` reads as its probability, a graded `choice`
+    as its expected grade."""
     from llm import decisions
 
     t0 = time.time()
     answers = decisions.decide(state, questions)
     out = {}
-    for key in questions:
+    for key, question in questions.items():
         answer = answers.get(key)
+        if question.get("type") == "choice":
+            out[key] = _expected_grade(answer)
+            continue
         value = answer.get("noul") if isinstance(answer, dict) else None
         try:
             out[key] = float(value) if value is not None else None
         except (TypeError, ValueError):
             out[key] = None
-    return out, round(time.time() - t0, 2)
+    return out, round(time.time() - t0, 2), answers
 
 
 def main():
@@ -181,6 +245,12 @@ def main():
     parser.add_argument("--pool", type=int, default=200)
     parser.add_argument("--ask", action="append", default=[])
     parser.add_argument("--ask-pool", type=int, default=50)
+    parser.add_argument("--events-lane", action="store_true",
+                        help="add this beat's events as their own aspect lane")
+    parser.add_argument("--variants", action="store_true",
+                        help="also ask the `next` and `graded` situation variants")
+    parser.add_argument("--graded", action="store_true",
+                        help="ask every channel as a graded choice (`GRADED_CHANNELS`)")
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
 
@@ -190,6 +260,8 @@ def main():
     aspects = [("what you are trying to do", inputs["goal"]),
                ("how you are feeling", inputs["mood"]),
                ("what is still unsettled", inputs["concerns"])]
+    if args.events_lane:
+        aspects.append(("what just happened", inputs["happened"]))
     rows = net(inputs, inputs["view"] or inputs["goal"], args.pool, aspects)
     def fold(text):
         return " ".join(str(text or "").split()).casefold()[:160]
@@ -203,11 +275,30 @@ def main():
     delivered = [by_text.get(fold(text)) for text in inputs["delivered_texts"]]
 
     state = state_for(inputs)
-    questions = {f"{channel}__{row['id']}": {
-        "type": "noul",
-        "instructions": text + "\n\n" + memory_text(row, inputs["turn_idx"])}
-        for channel, text in CHANNELS.items() for row in rows}
-    scores, seconds = ask_jev(state, questions)
+    channels = dict(GRADED_CHANNELS if args.graded else CHANNELS)
+    if args.graded:
+        questions = {f"{channel}__{row['id']}": {
+            "type": "choice",
+            "instructions": text + "\n\n" + memory_text(row, inputs["turn_idx"]),
+            "criteria": {key: label for key, (label, _w) in SCALE.items()}}
+            for channel, text in GRADED_CHANNELS.items() for row in rows}
+    else:
+        questions = {f"{channel}__{row['id']}": {
+            "type": "noul",
+            "instructions": text + "\n\n" + memory_text(row, inputs["turn_idx"])}
+            for channel, text in CHANNELS.items() for row in rows}
+    if args.variants:
+        channels["situation_next"] = VARIANT_NEXT
+        channels["situation_graded"] = VARIANT_GRADED
+        for row in rows:
+            body = "\n\n" + memory_text(row, inputs["turn_idx"])
+            questions[f"situation_next__{row['id']}"] = {
+                "type": "noul", "instructions": VARIANT_NEXT + body}
+            questions[f"situation_graded__{row['id']}"] = {
+                "type": "choice", "instructions": VARIANT_GRADED + body,
+                "criteria": {key: text for key, (text, _w) in GRADES.items()}}
+    scores, seconds, raw = ask_jev(state, questions)
+    sample_graded = next((raw.get(k) for k in questions if k.startswith("situation_graded__")), None)
 
     asked = []
     for question in args.ask:
@@ -216,7 +307,7 @@ def main():
             "type": "noul",
             "instructions": ASK.format(question=question) + "\n\n"
                             + memory_text(row, inputs["turn_idx"])} for row in pool_rows}
-        ask_scores, ask_seconds = ask_jev(state, ask_questions)
+        ask_scores, ask_seconds, _raw = ask_jev(state, ask_questions)
         asked.append({"question": question, "seconds": ask_seconds, "rows": [
             {"id": row["id"], "net_rank": row["net_rank"],
              "p": ask_scores.get(f"ask__{row['id']}"),
@@ -227,11 +318,13 @@ def main():
         "view_chars": len(inputs["view"]), "state_chars": len(state),
         "pool": len(rows), "questions": len(questions), "jev_seconds": seconds,
         "delivered_ids": delivered,
+        "aspects": [label for label, text in aspects if str(text or "").strip()],
+        "sample_graded_answer": sample_graded,
         "rows": [{"id": row["id"], "net_rank": row["net_rank"],
                   "score": row["score"], "reasons": row.get("retrieval_reasons"),
                   "text": memory_text(row, inputs["turn_idx"]),
                   "jev": {channel: scores.get(f"{channel}__{row['id']}")
-                          for channel in CHANNELS}} for row in rows],
+                          for channel in channels}} for row in rows],
         "asked": asked,
     }
     Path(args.out).write_text(json.dumps(result, indent=1), encoding="utf-8")
