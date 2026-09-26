@@ -859,5 +859,91 @@
     "weather": {
       "$text": "encoder/weather.txt"
     }
+  },
+  "affect_appraisal": {
+    "desirability": {
+      "$text": "affect_appraisal/desirability.txt"
+    },
+    "status": {
+      "$text": "affect_appraisal/status.txt"
+    },
+    "likelihood": {
+      "$text": "affect_appraisal/likelihood.txt"
+    },
+    "confirmation": {
+      "$text": "affect_appraisal/confirmation.txt"
+    },
+    "agency": {
+      "$text": "affect_appraisal/agency.txt"
+    },
+    "standards": {
+      "$text": "affect_appraisal/standards.txt"
+    },
+    "control": {
+      "$text": "affect_appraisal/control.txt"
+    },
+    "desire": {
+      "$text": "affect_appraisal/desire.txt"
+    },
+    "fortune": {
+      "$text": "affect_appraisal/fortune.txt"
+    },
+    "evoke_strength": {
+      "$text": "affect_appraisal/evoke_strength.txt"
+    },
+    "evoke_tone": {
+      "$text": "affect_appraisal/evoke_tone.txt"
+    },
+    "options": {
+      "goodness": {
+        "very_bad": "とても悪い。",
+        "bad": "悪い。",
+        "neutral": "良くも悪くもない。",
+        "good": "良い。",
+        "very_good": "とても良い。"
+      },
+      "status": {
+        "happened": "もう起きた。",
+        "might": "これから起こるかもしれない。"
+      },
+      "grade": {
+        "none": "まったくない。",
+        "slight": "少し。",
+        "clear": "はっきりと。",
+        "strong": "強く。"
+      },
+      "likelihood": {
+        "none": "まったく起こりそうにない。",
+        "slight": "少し起こりそう。",
+        "clear": "起こりそう。",
+        "strong": "ほぼ確実。"
+      },
+      "confirmation": {
+        "confirms_hope": "望んでいたことが叶う。",
+        "dashes_hope": "望んでいたことが断たれる。",
+        "confirms_fear": "恐れていたことが起きる。",
+        "averts_fear": "恐れていたことを免れる。",
+        "none": "望みにも恐れにも決着はつかない。"
+      },
+      "agency": {
+        "self": "あなた自身。",
+        "other": "ほかの誰か。",
+        "nobody": "誰でもない――ただ起きた。"
+      },
+      "standards": {
+        "very_wrong": "まったく間違っている。",
+        "wrong": "間違っている。",
+        "neither": "正しくも間違ってもいない。",
+        "right": "正しい。",
+        "very_right": "まったく正しい。"
+      },
+      "tone": {
+        "very_unpleasant": "とても不快。",
+        "unpleasant": "不快。",
+        "neither": "どちらでもない。",
+        "pleasant": "快い。",
+        "very_pleasant": "とても快い。"
+      }
+    }
   }
 }

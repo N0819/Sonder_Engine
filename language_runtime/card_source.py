@@ -130,8 +130,11 @@ def is_part_leaf(leaf_path: tuple) -> bool:
         # encoder's own card is `encoder.<name>`: the core, one chunk per
         # channel, and `<channel>__<part>` for a part of a big channel that
         # ships only when the decision model says the beat needs it.
+        # `affect_appraisal.<question>` is the decision model's appraisal of
+        # an event or a recalled memory (mind/affect_appraisal.py); its answer
+        # labels, `affect_appraisal.options.*`, are short and stay inline.
         if leaf_path[0] in ("prompts", "co_hands", "prose_contract",
-                            "jev_questions", "encoder"):
+                            "jev_questions", "encoder", "affect_appraisal"):
             return isinstance(leaf_path[1], str)
         return False
     if len(leaf_path) == 3:

@@ -436,6 +436,19 @@ def prose_contract_text(name, language=None):
     return str(_prompt_card(language)["prose_contract"][name])
 
 
+def affect_appraisal_text(name, language=None):
+    """One question of the decision model's affect appraisal
+    (`affect_appraisal.<name>`, see `mind/affect_appraisal.py`)."""
+    return str(_prompt_card(language)["affect_appraisal"][name])
+
+
+def affect_appraisal_options(option_set, language=None):
+    """The answer labels of one of the appraisal's option sets, `{key:
+    label}` in the card's order; the keys are protocol, the labels prose."""
+    return {str(k): str(v) for k, v in
+            _prompt_card(language)["affect_appraisal"]["options"][option_set].items()}
+
+
 #: The longest definition `encoder_definition` returns, cut back to a
 #: sentence end.
 ENCODER_DEFINITION_CHARS = 420

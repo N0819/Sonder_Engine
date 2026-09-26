@@ -1,0 +1,2 @@
+MEMORY: {memory}
+Does recalling this stir a feeling in you right now? How strongly?

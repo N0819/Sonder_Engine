@@ -1,0 +1,2 @@
+EVENT: {event}
+How good or bad is this for {person}?

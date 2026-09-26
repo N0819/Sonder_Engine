@@ -859,5 +859,91 @@
     "weather": {
       "$text": "encoder/weather.txt"
     }
+  },
+  "affect_appraisal": {
+    "desirability": {
+      "$text": "affect_appraisal/desirability.txt"
+    },
+    "status": {
+      "$text": "affect_appraisal/status.txt"
+    },
+    "likelihood": {
+      "$text": "affect_appraisal/likelihood.txt"
+    },
+    "confirmation": {
+      "$text": "affect_appraisal/confirmation.txt"
+    },
+    "agency": {
+      "$text": "affect_appraisal/agency.txt"
+    },
+    "standards": {
+      "$text": "affect_appraisal/standards.txt"
+    },
+    "control": {
+      "$text": "affect_appraisal/control.txt"
+    },
+    "desire": {
+      "$text": "affect_appraisal/desire.txt"
+    },
+    "fortune": {
+      "$text": "affect_appraisal/fortune.txt"
+    },
+    "evoke_strength": {
+      "$text": "affect_appraisal/evoke_strength.txt"
+    },
+    "evoke_tone": {
+      "$text": "affect_appraisal/evoke_tone.txt"
+    },
+    "options": {
+      "goodness": {
+        "very_bad": "Very bad.",
+        "bad": "Bad.",
+        "neutral": "Neither good nor bad.",
+        "good": "Good.",
+        "very_good": "Very good."
+      },
+      "status": {
+        "happened": "It has happened.",
+        "might": "It might still happen."
+      },
+      "grade": {
+        "none": "Not at all.",
+        "slight": "Slightly.",
+        "clear": "Clearly.",
+        "strong": "Strongly."
+      },
+      "likelihood": {
+        "none": "Not at all likely.",
+        "slight": "Somewhat likely.",
+        "clear": "Likely.",
+        "strong": "Almost certain."
+      },
+      "confirmation": {
+        "confirms_hope": "It brings about something you hoped for.",
+        "dashes_hope": "It ends something you hoped for.",
+        "confirms_fear": "It brings about something you feared.",
+        "averts_fear": "It spares you something you feared.",
+        "none": "It settles nothing you hoped for or feared."
+      },
+      "agency": {
+        "self": "You did.",
+        "other": "Someone else did.",
+        "nobody": "No one -- it just happened."
+      },
+      "standards": {
+        "very_wrong": "Very wrong.",
+        "wrong": "Wrong.",
+        "neither": "Neither right nor wrong.",
+        "right": "Right.",
+        "very_right": "Very right."
+      },
+      "tone": {
+        "very_unpleasant": "Very unpleasant.",
+        "unpleasant": "Unpleasant.",
+        "neither": "Neither.",
+        "pleasant": "Pleasant.",
+        "very_pleasant": "Very pleasant."
+      }
+    }
   }
 }

@@ -1,0 +1,2 @@
+EVENT: {event}
+By your own standards, was what was done here right or wrong?

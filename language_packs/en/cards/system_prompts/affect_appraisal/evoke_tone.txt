@@ -1,0 +1,2 @@
+MEMORY: {memory}
+Is the feeling it stirs pleasant or unpleasant?

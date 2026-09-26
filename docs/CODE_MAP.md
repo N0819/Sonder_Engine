@@ -51,12 +51,14 @@
 | `llm/decisions.py` | 151 |  | `core.db` |
 | `llm/llm_quality.py` | 1372 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
-| `llm/prompts.py` | 719 | Default system prompts and prompt preset access. | `core.db` |
+| `llm/prompts.py` | 732 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 4963 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
 | `llm/schemas.py` | 7845 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2538 |  | `mind.theory_of_mind` |
+| `mind/affect_appraisal.py` | 169 |  | `llm`, `llm.prompts` |
+| `mind/affect_mix.py` | 337 |  | — |
 | `mind/canon_provenance.py` | 398 |  | — |
 | `mind/knowledge_circles.py` | 134 |  | `core.db` |
 | `mind/memory.py` | 142 | Facade re-exporting every mind.memory_* name; holds no domain code of its own. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_context`, `mind.memory_inference`, `mind.memory_lore_entries`, `mind.memory_lorebooks`, `mind.memory_read`, `mind.memory_relationships`, `mind.memory_retrieval`, `mind.memory_snapshot`, `mind.memory_summaries`, `mind.memory_time`, `mind.memory_vectors`, `mind.memory_write`, `mind.theory_of_mind` |
@@ -727,9 +729,9 @@
 |---|---:|---:|
 | `preset_import_document()` | 276 | 51 lines |
 | `specialist_prompt()` | 340 | 38 lines |
-| `unified_specialist_prompt()` | 460 | 36 lines |
-| `_relocate_character_identity()` | 577 | 29 lines |
-| `character_prompt()` | 625 | 28 lines |
+| `unified_specialist_prompt()` | 473 | 36 lines |
+| `_relocate_character_identity()` | 590 | 29 lines |
+| `character_prompt()` | 638 | 28 lines |
 | `_assembled_sheets()` | 38 | 26 lines |
 | `normalize_preset()` | 126 | 26 lines |
 | `_preset_override()` | 223 | 22 lines |
@@ -784,6 +786,30 @@
 | `normalize_wants()` | 1011 | 118 lines |
 | `update_drive_strain()` | 2192 | 86 lines |
 | `validate_drive_shift()` | 2321 | 79 lines |
+
+### `mind/affect_appraisal.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `read()` | 106 | 52 lines |
+| `questions_for()` | 74 | 19 lines |
+| `appraise()` | 160 | 10 lines |
+| `_choice()` | 55 | 9 lines |
+| `_probabilities()` | 95 | 9 lines |
+| `event_line()` | 66 | 6 lines |
+
+### `mind/affect_mix.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `emotions_from_appraisal()` | 132 | 49 lines |
+| `form_compounds()` | 183 | 21 lines |
+| `centre()` | 232 | 20 lines |
+| `surface_and_undercurrent()` | 317 | 15 lines |
+| `recall_lands()` | 284 | 13 lines |
+| `mix()` | 254 | 12 lines |
+| `decay()` | 219 | 11 lines |
+| `memory_emotion()` | 206 | 9 lines |
 
 ### `mind/canon_provenance.py`
 

@@ -293,6 +293,40 @@ Psychology also describes a slower habituation that builds across repeated
 series and outlasts a rest; the owner's model recovers fully, so it is not
 part of this design.
 
+### The mood math
+
+The owner: "We can also probably do math with moods, the cumulative effects
+of events and memories average into an overall mood with multiple
+dimensions." Built in `mind/affect_mix.py` (pure code) and
+`mind/affect_appraisal.py` (the Jev questions); not wired into the pipeline.
+
+- **The space.** A mood is a point `M = (P, A, D)` in pleasure, arousal and
+  dominance, each in [-1, 1] (Mehrabian's PAD). Temperament is a home point
+  `H` in the same space.
+- **Emotions.** Each emotion `e` has an intensity `i` in [0, 1] and a
+  direction `v` in PAD -- ALMA's table for the OCC emotions (Gebhard, 2005),
+  and one row of the engine's own for desire, which OCC does not have.
+- **Decay.** Between beats `M` returns toward `H` by `0.5^(dt / half_life)`
+  per axis, `dt` in psych units; pleasure below home decays more slowly
+  (bad is stronger than good -- Baumeister et al., 2001).
+- **The centre.** This beat's emotions average into
+  `C = sum(w v) / sum(w)`, weighted `w = i x negativity (when v's pleasure is
+  below zero) x memory weight (when the emotion was evoked by a memory, already
+  scaled by that memory's habituation)`.
+- **The push.** `S = 1 - prod(1 - i)`: several emotions push harder than one,
+  never past 1. `M <- M + reactivity x S x (C - M)`: the mood moves toward
+  the centre by a share -- the shape measured to beat persistence.
+- **Names.** Mehrabian's eight octants (exuberant, relaxed, dependent,
+  docile, hostile, disdainful, anxious, bored) with slightly, moderately or
+  fully by distance from neutral; the surface is the strongest emotion of the
+  beat with its object; the undercurrent the strongest one of the other sign,
+  or the mood when it disagrees with the surface.
+
+Knobs, all the owner's, none tuned: reactivity, half-life, negativity weight,
+negative decay factor, memory weight, and habituation's step, grace, ceiling
+and half-life. The card's `stress_profile` can set reactivity and half-life
+per character once the defaults are chosen.
+
 This dulls a memory's FEELING, never its availability: the row stays in
 recall in full (the owner's goal is good memory, not forgetting). The surface
 habituation already in `mind/affect.py` recovers on its own half-life
