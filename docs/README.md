@@ -285,6 +285,11 @@ modes each one documents.
   — does a character act better for being handed its feelings: six replayed
   beats, three arms, two blind judges, split at chance; stopped there, with
   the pairs side by side.
+- [`AFFECT_TRACE_2026_09_26.md`](experiments/AFFECT_TRACE_2026_09_26.md)
+  — 16 character calls traced end to end (what reached the mind, Jev's
+  reading, the feelings handed over, the conduct, the pass after it) and
+  read as fiction: the moment is read apt, and frustration is what the story
+  keeps of 15 of the 16 beats.
 
 ## `archive/` — superseded
 
