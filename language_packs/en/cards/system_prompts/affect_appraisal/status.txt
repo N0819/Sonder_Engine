@@ -1,2 +1,0 @@
-EVENT: {event}
-Has this happened, or is it something that might still happen?

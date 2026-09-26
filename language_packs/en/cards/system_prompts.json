@@ -864,18 +864,6 @@
     "desirability": {
       "$text": "affect_appraisal/desirability.txt"
     },
-    "status": {
-      "$text": "affect_appraisal/status.txt"
-    },
-    "likelihood": {
-      "$text": "affect_appraisal/likelihood.txt"
-    },
-    "confirmation": {
-      "$text": "affect_appraisal/confirmation.txt"
-    },
-    "agency": {
-      "$text": "affect_appraisal/agency.txt"
-    },
     "standards": {
       "$text": "affect_appraisal/standards.txt"
     },
@@ -894,6 +882,39 @@
     "evoke_tone": {
       "$text": "affect_appraisal/evoke_tone.txt"
     },
+    "ahead": {
+      "$text": "affect_appraisal/ahead.txt"
+    },
+    "fear_change": {
+      "$text": "affect_appraisal/fear_change.txt"
+    },
+    "hope_change": {
+      "$text": "affect_appraisal/hope_change.txt"
+    },
+    "doer": {
+      "$text": "affect_appraisal/doer.txt"
+    },
+    "act_against_values": {
+      "$text": "affect_appraisal/act_against_values.txt"
+    },
+    "act_honors_values": {
+      "$text": "affect_appraisal/act_honors_values.txt"
+    },
+    "act_wanted_instead": {
+      "$text": "affect_appraisal/act_wanted_instead.txt"
+    },
+    "act_eased_or_stoked": {
+      "$text": "affect_appraisal/act_eased_or_stoked.txt"
+    },
+    "act_self_regard": {
+      "$text": "affect_appraisal/act_self_regard.txt"
+    },
+    "dimension": {
+      "$text": "affect_appraisal/dimension.txt"
+    },
+    "mood_strength": {
+      "$text": "affect_appraisal/mood_strength.txt"
+    },
     "options": {
       "goodness": {
         "very_bad": "Very bad.",
@@ -902,33 +923,11 @@
         "good": "Good.",
         "very_good": "Very good."
       },
-      "status": {
-        "happened": "It has happened.",
-        "might": "It might still happen."
-      },
       "grade": {
         "none": "Not at all.",
         "slight": "Slightly.",
         "clear": "Clearly.",
         "strong": "Strongly."
-      },
-      "likelihood": {
-        "none": "Not at all likely.",
-        "slight": "Somewhat likely.",
-        "clear": "Likely.",
-        "strong": "Almost certain."
-      },
-      "confirmation": {
-        "confirms_hope": "It brings about something you hoped for.",
-        "dashes_hope": "It ends something you hoped for.",
-        "confirms_fear": "It brings about something you feared.",
-        "averts_fear": "It spares you something you feared.",
-        "none": "It settles nothing you hoped for or feared."
-      },
-      "agency": {
-        "self": "You did.",
-        "other": "Someone else did.",
-        "nobody": "No one -- it just happened."
       },
       "standards": {
         "very_wrong": "Very wrong.",
@@ -943,6 +942,117 @@
         "neither": "Neither.",
         "pleasant": "Pleasant.",
         "very_pleasant": "Very pleasant."
+      },
+      "prospect": {
+        "much_worse": "It makes something bad much more likely.",
+        "worse": "It makes something bad more likely.",
+        "neither": "Neither.",
+        "better": "It makes something good more likely.",
+        "much_better": "It makes something good much more likely."
+      },
+      "fear_change": {
+        "much_less": "Much less likely.",
+        "less": "Less likely.",
+        "none": "No such fear.",
+        "more": "More likely.",
+        "much_more": "Much more likely."
+      },
+      "hope_change": {
+        "much_further": "Pushes it far away.",
+        "further": "Pushes it away.",
+        "none": "No such hope.",
+        "closer": "Brings it closer.",
+        "much_closer": "Brings it much closer."
+      },
+      "doer": {
+        "self": "Yours.",
+        "actor": "{actor}'s.",
+        "other": "Someone else's.",
+        "nobody": "Nobody's -- it just happened."
+      },
+      "ease": {
+        "eased_much": "It eased it a lot.",
+        "eased": "It eased it.",
+        "neither": "Neither.",
+        "stoked": "It stoked it.",
+        "stoked_much": "It stoked it a lot."
+      },
+      "regard": {
+        "much_worse": "Much worse about yourself.",
+        "worse": "Worse about yourself.",
+        "neither": "No different.",
+        "better": "Better about yourself.",
+        "much_better": "Much better about yourself."
+      },
+      "steps": {
+        "s0": "Entirely {low}.",
+        "s1": "Leaning {low}.",
+        "s2": "In between.",
+        "s3": "Leaning {high}.",
+        "s4": "Entirely {high}."
+      },
+      "dimensions": {
+        "pleasure": {
+          "low": "unpleasant",
+          "high": "pleasant"
+        },
+        "energy": {
+          "low": "drained",
+          "high": "energized"
+        },
+        "tension": {
+          "low": "calm",
+          "high": "tense"
+        },
+        "control": {
+          "low": "powerless",
+          "high": "in command"
+        },
+        "clarity": {
+          "low": "bewildered",
+          "high": "clear-headed"
+        },
+        "connection": {
+          "low": "alone",
+          "high": "connected"
+        },
+        "openness": {
+          "low": "guarded",
+          "high": "open"
+        },
+        "playfulness": {
+          "low": "serious",
+          "high": "playful"
+        },
+        "hope": {
+          "low": "hopeless",
+          "high": "hopeful"
+        },
+        "self_regard": {
+          "low": "ashamed",
+          "high": "proud"
+        },
+        "safety": {
+          "low": "threatened",
+          "high": "safe"
+        },
+        "engagement": {
+          "low": "bored",
+          "high": "absorbed"
+        }
+      },
+      "standalone": {
+        "desire": "romantic or sexual desire",
+        "awe": "awe or wonder",
+        "nostalgia": "nostalgia, a longing for something past",
+        "grief": "grief for something lost",
+        "disgust": "disgust or revulsion",
+        "jealousy": "jealousy",
+        "guilt": "guilt",
+        "tenderness": "tenderness or protectiveness toward someone",
+        "amusement": "amusement",
+        "anger": "anger or irritation",
+        "compassion": "compassion, feeling someone else's pain"
       }
     }
   }

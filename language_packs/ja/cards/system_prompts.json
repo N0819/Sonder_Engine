@@ -864,18 +864,6 @@
     "desirability": {
       "$text": "affect_appraisal/desirability.txt"
     },
-    "status": {
-      "$text": "affect_appraisal/status.txt"
-    },
-    "likelihood": {
-      "$text": "affect_appraisal/likelihood.txt"
-    },
-    "confirmation": {
-      "$text": "affect_appraisal/confirmation.txt"
-    },
-    "agency": {
-      "$text": "affect_appraisal/agency.txt"
-    },
     "standards": {
       "$text": "affect_appraisal/standards.txt"
     },
@@ -894,6 +882,39 @@
     "evoke_tone": {
       "$text": "affect_appraisal/evoke_tone.txt"
     },
+    "ahead": {
+      "$text": "affect_appraisal/ahead.txt"
+    },
+    "fear_change": {
+      "$text": "affect_appraisal/fear_change.txt"
+    },
+    "hope_change": {
+      "$text": "affect_appraisal/hope_change.txt"
+    },
+    "doer": {
+      "$text": "affect_appraisal/doer.txt"
+    },
+    "act_against_values": {
+      "$text": "affect_appraisal/act_against_values.txt"
+    },
+    "act_honors_values": {
+      "$text": "affect_appraisal/act_honors_values.txt"
+    },
+    "act_wanted_instead": {
+      "$text": "affect_appraisal/act_wanted_instead.txt"
+    },
+    "act_eased_or_stoked": {
+      "$text": "affect_appraisal/act_eased_or_stoked.txt"
+    },
+    "act_self_regard": {
+      "$text": "affect_appraisal/act_self_regard.txt"
+    },
+    "dimension": {
+      "$text": "affect_appraisal/dimension.txt"
+    },
+    "mood_strength": {
+      "$text": "affect_appraisal/mood_strength.txt"
+    },
     "options": {
       "goodness": {
         "very_bad": "とても悪い。",
@@ -902,33 +923,11 @@
         "good": "良い。",
         "very_good": "とても良い。"
       },
-      "status": {
-        "happened": "もう起きた。",
-        "might": "これから起こるかもしれない。"
-      },
       "grade": {
         "none": "まったくない。",
         "slight": "少し。",
         "clear": "はっきりと。",
         "strong": "強く。"
-      },
-      "likelihood": {
-        "none": "まったく起こりそうにない。",
-        "slight": "少し起こりそう。",
-        "clear": "起こりそう。",
-        "strong": "ほぼ確実。"
-      },
-      "confirmation": {
-        "confirms_hope": "望んでいたことが叶う。",
-        "dashes_hope": "望んでいたことが断たれる。",
-        "confirms_fear": "恐れていたことが起きる。",
-        "averts_fear": "恐れていたことを免れる。",
-        "none": "望みにも恐れにも決着はつかない。"
-      },
-      "agency": {
-        "self": "あなた自身。",
-        "other": "ほかの誰か。",
-        "nobody": "誰でもない――ただ起きた。"
       },
       "standards": {
         "very_wrong": "まったく間違っている。",
@@ -943,6 +942,117 @@
         "neither": "どちらでもない。",
         "pleasant": "快い。",
         "very_pleasant": "とても快い。"
+      },
+      "prospect": {
+        "much_worse": "悪いことがずっと起こりやすくなる。",
+        "worse": "悪いことが起こりやすくなる。",
+        "neither": "どちらでもない。",
+        "better": "良いことが起こりやすくなる。",
+        "much_better": "良いことがずっと起こりやすくなる。"
+      },
+      "fear_change": {
+        "much_less": "ずっと起こりにくくなる。",
+        "less": "起こりにくくなる。",
+        "none": "そんな恐れはない。",
+        "more": "起こりやすくなる。",
+        "much_more": "ずっと起こりやすくなる。"
+      },
+      "hope_change": {
+        "much_further": "ずっと遠ざける。",
+        "further": "遠ざける。",
+        "none": "そんな望みはない。",
+        "closer": "近づける。",
+        "much_closer": "ぐっと近づける。"
+      },
+      "doer": {
+        "self": "あなた自身。",
+        "actor": "{actor}。",
+        "other": "ほかの誰か。",
+        "nobody": "誰でもない――ただ起きた。"
+      },
+      "ease": {
+        "eased_much": "とても和らいだ。",
+        "eased": "和らいだ。",
+        "neither": "どちらでもない。",
+        "stoked": "煽られた。",
+        "stoked_much": "とても煽られた。"
+      },
+      "regard": {
+        "much_worse": "自分がずっと嫌になる。",
+        "worse": "自分が少し嫌になる。",
+        "neither": "変わらない。",
+        "better": "自分を少し誇らしく思う。",
+        "much_better": "自分をとても誇らしく思う。"
+      },
+      "steps": {
+        "s0": "まったく{low}。",
+        "s1": "どちらかといえば{low}。",
+        "s2": "そのあいだ。",
+        "s3": "どちらかといえば{high}。",
+        "s4": "まったく{high}。"
+      },
+      "dimensions": {
+        "pleasure": {
+          "low": "不快",
+          "high": "快い"
+        },
+        "energy": {
+          "low": "消耗している",
+          "high": "活力に満ちている"
+        },
+        "tension": {
+          "low": "落ち着いている",
+          "high": "張りつめている"
+        },
+        "control": {
+          "low": "無力",
+          "high": "主導権を握っている"
+        },
+        "clarity": {
+          "low": "混乱している",
+          "high": "頭が冴えている"
+        },
+        "connection": {
+          "low": "孤独",
+          "high": "つながっている"
+        },
+        "openness": {
+          "low": "身構えている",
+          "high": "心を開いている"
+        },
+        "playfulness": {
+          "low": "真剣",
+          "high": "遊び心がある"
+        },
+        "hope": {
+          "low": "希望がない",
+          "high": "希望に満ちている"
+        },
+        "self_regard": {
+          "low": "恥じている",
+          "high": "誇らしい"
+        },
+        "safety": {
+          "low": "脅かされている",
+          "high": "安全"
+        },
+        "engagement": {
+          "low": "退屈している",
+          "high": "夢中になっている"
+        }
+      },
+      "standalone": {
+        "desire": "恋愛的・性的な欲望",
+        "awe": "畏敬の念や驚嘆",
+        "nostalgia": "懐かしさ――過ぎ去ったものへの憧れ",
+        "grief": "失ったものへの悲嘆",
+        "disgust": "嫌悪や不快感",
+        "jealousy": "嫉妬",
+        "guilt": "罪悪感",
+        "tenderness": "誰かへのいとおしさや守りたい気持ち",
+        "amusement": "おかしさ",
+        "anger": "怒りや苛立ち",
+        "compassion": "思いやり――誰かの痛みを感じる気持ち"
       }
     }
   }

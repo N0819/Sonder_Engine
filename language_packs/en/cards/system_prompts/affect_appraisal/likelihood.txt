@@ -1,2 +1,0 @@
-EVENT: {event}
-If it has not happened yet: how likely is it to happen?

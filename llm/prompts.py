@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Mapping
 
 from core.db import get_setting
 from language_runtime import (
@@ -443,9 +444,14 @@ def affect_appraisal_text(name, language=None):
 
 
 def affect_appraisal_options(option_set, language=None):
-    """The answer labels of one of the appraisal's option sets, `{key:
-    label}` in the card's order; the keys are protocol, the labels prose."""
-    return {str(k): str(v) for k, v in
+    """One of the appraisal's option sets, `{key: value}` in the card's
+    order: the keys are protocol; a value is a label, or -- for the pole
+    words of `dimensions` -- a `{low, high}` mapping of labels."""
+    def plain(value):
+        if isinstance(value, Mapping):
+            return {str(k): plain(v) for k, v in value.items()}
+        return str(value)
+    return {str(k): plain(v) for k, v in
             _prompt_card(language)["affect_appraisal"]["options"][option_set].items()}
 
 

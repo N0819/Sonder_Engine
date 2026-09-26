@@ -1,0 +1,1 @@
+How much {mood} do you feel right now?

@@ -1,0 +1,2 @@
+EVENT: {event}
+Were you afraid of something this bears on? Does it make that more or less likely?

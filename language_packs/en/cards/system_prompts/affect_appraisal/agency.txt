@@ -1,2 +1,0 @@
-EVENT: {event}
-Who brought this about?

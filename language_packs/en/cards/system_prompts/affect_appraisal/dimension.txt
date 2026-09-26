@@ -1,0 +1,1 @@
+Right now, between {low} and {high}, where are you?
