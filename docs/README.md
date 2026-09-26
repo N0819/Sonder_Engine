@@ -279,7 +279,12 @@ modes each one documents.
 - [`JEV_MEMORY_PROBE_2026_09_26.md`](experiments/JEV_MEMORY_PROBE_2026_09_26.md)
   — Jev as a memory judge: probe beats, a 22-beat label set and a fitted net,
   71 ponders, and today's packet graded blind against Jev's (about 2.5 times
-  the relevant rows, by two judges).
+  the relevant rows, by two judges); then seven rounds on the affect pass,
+  scored against constructed batteries and two blind readers.
+- [`FEELINGS_AB_PILOT_2026_09_26.md`](experiments/FEELINGS_AB_PILOT_2026_09_26.md)
+  — does a character act better for being handed its feelings: six replayed
+  beats, three arms, two blind judges, split at chance; stopped there, with
+  the pairs side by side.
 
 ## `archive/` — superseded
 

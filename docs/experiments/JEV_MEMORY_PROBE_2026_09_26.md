@@ -1070,6 +1070,13 @@ each ranked as the readers rank it (r 0.69-0.91). Its four strongest moods
 already share as much with the readers' as theirs do with each other, so a
 wording has little left to find there.
 
+**Does it change what a character does?** A blind pilot on six replayed
+beats -- each answered with no feelings, the old naming and the new, judged
+two at a time by GLM and Gemini on conduct alone -- split at chance on every
+pair: the character's drive and situation carry its conduct and the feelings
+tint its lines, below the variation between two calls
+([`FEELINGS_AB_PILOT_2026_09_26.md`](FEELINGS_AB_PILOT_2026_09_26.md)).
+
 **Still open**: urgency reads 0.70-0.79 while waiting for tomorrow's results
 on every wording tried; vigilance and wariness, which both raters keep
 naming as uncovered, were dropped for leaking and have not been retried in

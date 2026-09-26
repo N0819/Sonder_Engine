@@ -1294,7 +1294,11 @@ battery (the wording that meets 20, "does what just happened bring this
 forward?", lets a worry go in an idle moment); longing, grief, dread and
 curiosity read "clearly" on more story beats than two blind readers read them
 (14, 13, 23 and 45 against 0, 4, 10 and 22), each ranked as they rank it;
-vigilance and wariness, which both
+whether a given feeling improves what a character does at all -- a six-beat
+blind pilot split at chance, below the variation between two calls
+(`docs/experiments/FEELINGS_AB_PILOT_2026_09_26.md`), and a design that could
+resolve it (a noise floor, several samples a beat) costs several times more,
+the owner's call; vigilance and wariness, which both
 blind readers still name as uncovered, not yet retried in narrower words;
 a memory-sourced feeling named by its scene text ("resolve (You are in the
 harbourmaster's shed...)"); naming the combinations the coverage table lists; the
