@@ -114,6 +114,39 @@ with no promise to find still peaked at 0.70. Overlap with today's packet: 3 of
 21 (154), 1 of 6 (122), 5 of 8 (115). Score levels vary by scene, so a packer
 should work from ranks and per-channel quotas, never fixed thresholds.
 
+## The net, measured on a big bank
+
+The owner: "I feel that our RRF MMR Lexical hybrid system might not be as good
+as it can be if we are shifting its role from primary recall to... recall net
+with filtering by jev." Instrument: `tools/jev_net_recall.py`. The Doctor,
+chat 63 turn idx 166 (evening at the shrine after Hinami has gone to rest),
+649 visible memories.
+
+Jev graded the WHOLE bank on `situation` and `useful` (graded form): **1,298
+questions in 1.06 s**. Its top 30 by the larger grade are the reference -- what
+the judge keeps. Share of the reference inside each net's first N:
+
+| net | @50 | @100 | @150 | @200 | @300 |
+|---|---|---|---|---|---|
+| today's fused RRF ranking (no diversity pass) | 23% | 40% | 70% | 87% | 97% |
+| union: round-robin over meaning, cue, keyword, recency, importance, goal/mood/unsettled aspects | 37% | 47% | 67% | 87% | 100% |
+
+- A 100-200 net keeps 40-87% of what Jev would; near-complete needs ~300 here.
+- The union helps most at small sizes. Every generator reached some pick first
+  (meaning 8, recency 6, mood 6, unsettled 6, cue 3, goal 1). The fused ranking
+  has no recency lane, so the character's own recent acts sat at 107-135, and
+  its impressions of Hinami at 148, 184 and 465; recency and cue reach them in
+  their first 6 and 43-77.
+- Jev's picks include many near-duplicate scene descriptions (the shrine
+  clearing, the hall): a packer's diversity pass is essential after the judge,
+  where it belongs, rather than in the net.
+- **Jev grading the whole bank took a second.** Up to around a thousand rows
+  the simplest net is none: the judge reads everything. A net matters above
+  that, and there the union of generators is the better shape.
+
+The reference is Jev's own judgement, so this measures whether a net keeps
+what the judge would keep, not whether the judge is right.
+
 ## Limits
 
 Two beats, one character, one story, 122-row banks: a direction, not a
