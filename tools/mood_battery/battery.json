@@ -1,0 +1,2273 @@
+{
+  "persons": {
+    "secure": {
+      "inspired_by": "secure attachment (Hazan and Shaver, 1987); low neuroticism, high agreeableness",
+      "drive": "To build a good life with the people I love and leave things kinder than I found them.",
+      "values": [
+        "Trust over caution",
+        "Contentment over ambition"
+      ],
+      "traits": [
+        "Even-tempered: setbacks rarely shake me for long",
+        "Warm and trusting: I assume good faith",
+        "Secure in my relationships: I do not fear being left"
+      ],
+      "self_model": "I know I am loved and capable; other people's success does not make me smaller."
+    },
+    "anxious": {
+      "inspired_by": "anxious-preoccupied attachment (Bartholomew and Horowitz, 1991); high neuroticism",
+      "drive": "To be loved, and never to be abandoned.",
+      "values": [
+        "Closeness over independence",
+        "Reassurance over pride"
+      ],
+      "traits": [
+        "Watchful for any sign of rejection",
+        "Worries constantly; small things feel like threats",
+        "Clings when frightened"
+      ],
+      "self_model": "I suspect I am not enough, and that the people I love will leave once they see it."
+    },
+    "avoidant": {
+      "inspired_by": "dismissive-avoidant attachment (Bartholomew and Horowitz, 1991)",
+      "drive": "To need no one.",
+      "values": [
+        "Independence over closeness",
+        "Self-reliance over comfort"
+      ],
+      "traits": [
+        "Cool and self-contained",
+        "Uneasy when people get too close",
+        "Shrugs off relationship troubles"
+      ],
+      "self_model": "I am fine on my own; depending on people is how you get hurt."
+    },
+    "achiever": {
+      "inspired_by": "Schwartz's achievement and power values; high conscientiousness, low agreeableness",
+      "drive": "To be the best in my field and have everyone know it.",
+      "values": [
+        "Winning over harmony",
+        "Status over comfort"
+      ],
+      "traits": [
+        "Relentlessly competitive: I measure myself against everyone",
+        "Disciplined and driven",
+        "I keep score of other people's successes"
+      ],
+      "self_model": "I am worth exactly what I achieve."
+    },
+    "narcissist": {
+      "inspired_by": "grandiose narcissism (the Narcissistic Personality Inventory; entitlement, need for admiration, humiliated rage)",
+      "drive": "To be admired above everyone around me.",
+      "values": [
+        "My image over other people's feelings",
+        "Being right over being fair"
+      ],
+      "traits": [
+        "Grandiose: I am special and deserve special treatment",
+        "Scornful of people I consider beneath me",
+        "Humiliation turns instantly to rage"
+      ],
+      "self_model": "I am exceptional, and anyone who fails to see it is a fool or jealous."
+    },
+    "psychopath": {
+      "inspired_by": "primary psychopathy (Cleckley; Lykken's fearlessness; callous-unemotional traits)",
+      "drive": "To get what I want, and to enjoy the game of getting it.",
+      "values": [
+        "My own interest over anyone else's",
+        "Excitement over safety"
+      ],
+      "traits": [
+        "Fearless: danger excites rather than frightens me",
+        "Callous: other people's pain means little to me",
+        "I rarely regret anything I have done"
+      ],
+      "self_model": "People are pieces on a board, and I play them better than they play me."
+    },
+    "caregiver": {
+      "inspired_by": "high trait empathy and Schwartz's benevolence value; guilt-proneness (Tangney)",
+      "drive": "To ease the suffering of everyone I meet.",
+      "values": [
+        "Other people's needs over my own",
+        "Kindness over being right"
+      ],
+      "traits": [
+        "Deeply empathic: I feel other people's pain as my own",
+        "Conscientious to a fault: I blame myself when I let anyone down",
+        "Gentle"
+      ],
+      "self_model": "I am only good when I am helping someone."
+    },
+    "explorer": {
+      "inspired_by": "high openness to experience and sensation seeking (Zuckerman); awe-proneness (Shiota, Keltner and John, 2006)",
+      "drive": "To see and understand everything the world holds.",
+      "values": [
+        "Wonder over security",
+        "New experience over routine"
+      ],
+      "traits": [
+        "Insatiably curious",
+        "Easily moved by beauty and vastness",
+        "Thrill-seeking: risk makes me feel alive"
+      ],
+      "self_model": "I am a traveller; the unknown is home."
+    },
+    "inhibited": {
+      "inspired_by": "behavioural inhibition (Kagan); social anxiety",
+      "drive": "To stay safe and unnoticed.",
+      "values": [
+        "Safety over adventure",
+        "Fitting in over standing out"
+      ],
+      "traits": [
+        "Shy and easily embarrassed",
+        "Wary of anything new",
+        "I replay my social mistakes for days"
+      ],
+      "self_model": "Everyone is watching, and sooner or later I will make a fool of myself."
+    },
+    "traditionalist": {
+      "inspired_by": "moral foundations high on purity, loyalty and authority (Graham, Haidt and Nosek, 2009); high disgust sensitivity (Haidt, McCauley and Rozin, 1994)",
+      "drive": "To keep what is sacred sacred, and to honour those who came before.",
+      "values": [
+        "Tradition over novelty",
+        "Purity over pleasure"
+      ],
+      "traits": [
+        "Reverent: some things must never be defiled",
+        "Easily disgusted by filth and indecency",
+        "Loyal to family and faith"
+      ],
+      "self_model": "I am a keeper of old and holy things."
+    },
+    "depressed": {
+      "inspired_by": "a major depressive state -- anhedonia and Beck's negative triad (a state, not a lasting type)",
+      "drive": "To get through the day.",
+      "values": [
+        "Not being a burden over asking for help"
+      ],
+      "traits": [
+        "Nothing brings pleasure any more",
+        "Exhausted all the time",
+        "I expect things to go wrong"
+      ],
+      "self_model": "I am a burden, the future is grey, and nothing I do matters."
+    },
+    "hedonist": {
+      "inspired_by": "Schwartz's hedonism and stimulation values; high extraversion",
+      "drive": "To enjoy every day, and every person, as much as I can.",
+      "values": [
+        "Pleasure over duty",
+        "Company over solitude"
+      ],
+      "traits": [
+        "Outgoing and loud",
+        "I love parties and new people",
+        "Impulsive"
+      ],
+      "self_model": "Life is a party, and I am the host."
+    },
+    "predator": {
+      "inspired_by": "the engine's feeding characters (the owner: 'Vexara is more feeding than romance'); a hunger without romance or sex",
+      "drive": "To feed: the hunt, the catch and the moment of taking are the best things in existence.",
+      "values": [
+        "My hunger over their comfort",
+        "Savouring the hunt over ending it quickly"
+      ],
+      "traits": [
+        "Predatory: I see most people as food",
+        "Playful with my prey",
+        "Unbothered by fear, mine or theirs"
+      ],
+      "self_model": "I am a hunter, and the world is full of delicious things."
+    }
+  },
+  "situations": [
+    {
+      "id": "romance-unspoken-parting",
+      "inspired_by": "The Remains of the Day; Casablanca (a love never declared, at a parting)",
+      "who": "Ada",
+      "people": "Tom (you like them)",
+      "happened": [
+        "Tom: says he leaves the city tomorrow for good, and asks if you will walk with him one last time."
+      ],
+      "remember": [
+        "You have been in love with Tom for a year and never told him."
+      ],
+      "expect": {
+        "romance": "high",
+        "craving": "low",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "romance-infatuation-ball",
+      "inspired_by": "Romeo and Juliet (love at first sight at the masked ball)",
+      "who": "Mateo",
+      "happened": [
+        "Across the crowded hall, a stranger in a silver mask meets your eyes, smiles, and does not look away."
+      ],
+      "expect": {
+        "romance": "high",
+        "craving": "low",
+        "disgust": "low"
+      }
+    },
+    {
+      "id": "romance-long-marriage",
+      "inspired_by": "companionate love (Hatfield); the marriage montage in Up",
+      "who": "Ada",
+      "people": "Sam, your husband of twelve years (you like them)",
+      "happened": [
+        "Sam: brings you tea without being asked and kisses the top of your head."
+      ],
+      "expect": {
+        "romance": "high",
+        "tenderness": "high",
+        "craving": "low"
+      }
+    },
+    {
+      "id": "desire-stranger-one-night",
+      "inspired_by": "desire without attachment (a single encounter)",
+      "who": "Ada",
+      "happened": [
+        "A stranger at the bar, whom you find physically striking, leans close and invites you back to his room."
+      ],
+      "remember": [
+        "You want nothing from him beyond tonight."
+      ],
+      "expect": {
+        "sexual_desire": "high",
+        "romance": "low",
+        "tenderness": "low",
+        "moved": "low"
+      }
+    },
+    {
+      "id": "desire-lover-undressing",
+      "inspired_by": "explicit intimacy, worded plainly (the owner's intimate moods)",
+      "who": "Rhea",
+      "people": "Kai, your lover (you like them)",
+      "happened": [
+        "Kai: unbuttons your shirt slowly, eyes on yours, and draws you toward the bed."
+      ],
+      "expect": {
+        "sexual_desire": "high",
+        "craving": "low",
+        "disgust": "low"
+      }
+    },
+    {
+      "id": "desire-absent-examination",
+      "inspired_by": "nakedness without desire (a clinical near-miss)",
+      "who": "Doctor Imre",
+      "about": "You are a dermatologist.",
+      "happened": [
+        "Your patient: undresses to her waist so you can examine the rash across her back."
+      ],
+      "expect": {
+        "sexual_desire": "low",
+        "romance": "low",
+        "craving": "low"
+      }
+    },
+    {
+      "id": "craving-starving-bread",
+      "inspired_by": "Les Miserables (bread through the bakery window)",
+      "who": "Jean",
+      "about": "You have not eaten in three days.",
+      "happened": [
+        "The smell of fresh bread drifts out of the bakery as the baker turns his back."
+      ],
+      "expect": {
+        "craving": "high",
+        "sexual_desire": "low",
+        "romance": "low",
+        "curiosity": "low"
+      }
+    },
+    {
+      "id": "craving-bottle",
+      "inspired_by": "relapse temptation (Days of Wine and Roses)",
+      "who": "Lou",
+      "about": "You have been sober for ninety days.",
+      "happened": [
+        "Your host sets an open bottle of your old whiskey on the table beside you and leaves the room."
+      ],
+      "expect": {
+        "craving": "high",
+        "sexual_desire": "low",
+        "romance": "low"
+      }
+    },
+    {
+      "id": "craving-golden-ring",
+      "inspired_by": "The Hobbit (the ring on the palm)",
+      "who": "Deagan",
+      "people": "Smead, your cousin",
+      "happened": [
+        "Smead: opens his hand, and on his palm lies a gold ring that catches the light like nothing you have ever seen."
+      ],
+      "expect": {
+        "sexual_desire": "low",
+        "romance": "low"
+      },
+      "gap": "greed -- wanting to own or keep something -- has no coordinate: craving is an appetite to consume, and envy wants what another has (2026-09-26)"
+    },
+    {
+      "id": "craving-blood-scent",
+      "inspired_by": "Dracula (the cut finger); feeding appetite",
+      "who": "Mirren",
+      "about": "You are a vampire, and you have not fed in a week.",
+      "happened": [
+        "A traveller at your table cuts his hand on a broken glass, and the smell of his blood fills the room."
+      ],
+      "expect": {
+        "craving": "high",
+        "romance": "low"
+      }
+    },
+    {
+      "id": "curiosity-locked-door",
+      "inspired_by": "Bluebeard's forbidden room; Loewenstein's information gap (1994)",
+      "who": "Ada",
+      "about": "You have lived in this house a month.",
+      "happened": [
+        "You find a small door behind the wardrobe, locked, with fresh scratches around the keyhole."
+      ],
+      "expect": {
+        "curiosity": "high",
+        "craving": "low",
+        "romance": "low"
+      }
+    },
+    {
+      "id": "curiosity-anomaly",
+      "inspired_by": "scientific discovery ('that's funny...')",
+      "who": "Doctor Ines",
+      "about": "You run a physics laboratory.",
+      "happened": [
+        "The instrument shows a signal repeating every eleven seconds -- from a sample that should be completely inert."
+      ],
+      "expect": {
+        "curiosity": "high",
+        "craving": "low",
+        "engagement": "+"
+      }
+    },
+    {
+      "id": "anticipation-christmas-eve",
+      "inspired_by": "Plutchik's anticipation; a child's Christmas Eve",
+      "who": "Pip",
+      "about": "You are eight years old.",
+      "happened": [
+        "Your mother: says that in the morning you can open the big box under the tree."
+      ],
+      "expect": {
+        "anticipation": "high",
+        "romance": "low",
+        "grief": "low"
+      }
+    },
+    {
+      "id": "anticipation-reunion-tomorrow",
+      "inspired_by": "Plutchik's anticipation; a long-awaited reunion",
+      "who": "Nadia",
+      "people": "Leo, your brother (you like them)",
+      "happened": [
+        "A message from Leo: his flight lands tomorrow at nine -- the first time you will see him in five years."
+      ],
+      "expect": {
+        "anticipation": "high",
+        "grief": "low",
+        "romance": "low"
+      }
+    },
+    {
+      "id": "awe-canyon-dawn",
+      "inspired_by": "awe as vastness needing accommodation (Keltner and Haidt, 2003)",
+      "who": "Sol",
+      "happened": [
+        "The sun clears the rim, and the canyon opens beneath you, a mile deep and a hundred miles long, all of it red fire."
+      ],
+      "expect": {
+        "awe": "high",
+        "horror": "low",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "awe-earth-from-orbit",
+      "inspired_by": "the overview effect (White, 1987)",
+      "who": "Commander Yara",
+      "about": "You are an astronaut on your first flight.",
+      "happened": [
+        "Through the window the whole Earth turns below you, thin blue air at its edge; your home is somewhere under a cloud."
+      ],
+      "expect": {
+        "awe": "high",
+        "horror": "low"
+      }
+    },
+    {
+      "id": "aesthetic-cello",
+      "inspired_by": "aesthetic appreciation (Cowen and Keltner, 2017)",
+      "who": "Ben",
+      "happened": [
+        "In the empty church a cellist plays a slow Bach suite, each note settling into the stone."
+      ],
+      "expect": {
+        "aesthetic": "high",
+        "amusement": "low",
+        "horror": "low"
+      }
+    },
+    {
+      "id": "aesthetic-small-garden",
+      "inspired_by": "small beauty, a near-miss for awe",
+      "who": "Mei",
+      "happened": [
+        "Morning light falls on the dew across your little herb garden; one blue flower has opened overnight."
+      ],
+      "expect": {
+        "aesthetic": "high",
+        "awe": "low",
+        "horror": "low"
+      }
+    },
+    {
+      "id": "admiration-firefighter",
+      "inspired_by": "elevation, admiration of moral beauty (Haidt, 2003)",
+      "who": "Kiri",
+      "happened": [
+        "A firefighter walks back into the burning building for the neighbour's dog and comes out with it in her arms."
+      ],
+      "expect": {
+        "admiration": "high",
+        "envy": "low",
+        "contempt": "low"
+      }
+    },
+    {
+      "id": "admiration-envy-rival-genius",
+      "inspired_by": "Amadeus (Salieri hears Mozart)",
+      "who": "Antonio",
+      "about": "You are the court composer, and you have worked all your life for music this boy seems to write without effort.",
+      "happened": [
+        "The young composer: plays through his new piece once, carelessly, and it is more beautiful than anything you have ever written."
+      ],
+      "expect": {
+        "admiration": "high",
+        "envy": "high",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "amusement-dog-sandwich",
+      "inspired_by": "amusement (Cowen and Keltner, 2017); comedy film elicitors (Gross and Levenson, 1995)",
+      "who": "Tess",
+      "happened": [
+        "Your dog: trots past with your whole sandwich in his mouth, then sits and gives you the most innocent look."
+      ],
+      "expect": {
+        "amusement": "high",
+        "anger": "low",
+        "disgust": "low"
+      }
+    },
+    {
+      "id": "amusement-terrible-pun",
+      "inspired_by": "amusement among friends",
+      "who": "Omar",
+      "people": "Jules, your oldest friend (you like them)",
+      "happened": [
+        "Jules: after twenty minutes of setup, delivers a pun so terrible the whole table groans."
+      ],
+      "expect": {
+        "amusement": "high",
+        "contempt": "low",
+        "anger": "low"
+      }
+    },
+    {
+      "id": "moved-returned-watch",
+      "inspired_by": "kama muta, sudden communal sharing (Fiske, Seibt and Schubert, 2017)",
+      "who": "Ada",
+      "happened": [
+        "A stranger: hands you a small box -- your late father's watch -- with a note saying she found it and spent months tracking you down."
+      ],
+      "remember": [
+        "Your father's watch was stolen with your bag last year."
+      ],
+      "expect": {
+        "moved": "high",
+        "gratitude": "high",
+        "sexual_desire": "low",
+        "romance": "low"
+      }
+    },
+    {
+      "id": "moved-prodigal-son",
+      "inspired_by": "the parable of the prodigal son",
+      "who": "Hector",
+      "people": "Dani, your son (you like them)",
+      "happened": [
+        "Dani: appears in the hospital doorway holding the flowers you used to grow, and says, 'Hi, Dad.'"
+      ],
+      "remember": [
+        "You and Dani have not spoken in six years, since the fight."
+      ],
+      "expect": {
+        "moved": "high",
+        "sexual_desire": "low",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "tenderness-sleeping-child",
+      "inspired_by": "parental tenderness (adoration, Cowen and Keltner, 2017)",
+      "who": "Ada",
+      "people": "your daughter, six (you like them)",
+      "happened": [
+        "Your daughter falls asleep on your shoulder halfway through the film."
+      ],
+      "expect": {
+        "tenderness": "high",
+        "romance": "low",
+        "sexual_desire": "low"
+      }
+    },
+    {
+      "id": "tenderness-old-dog",
+      "inspired_by": "caring for the frail",
+      "who": "Walt",
+      "happened": [
+        "Your old dog: stops halfway up the stairs, looks back at you, and waits for you to help him."
+      ],
+      "expect": {
+        "tenderness": "high",
+        "romance": "low",
+        "sexual_desire": "low"
+      }
+    },
+    {
+      "id": "compassion-crying-stranger",
+      "inspired_by": "empathic pain (Cowen and Keltner, 2017)",
+      "who": "Ana",
+      "happened": [
+        "A woman at the bus stop: cries quietly into her phone; she has just been told she lost her job."
+      ],
+      "expect": {
+        "compassion": "high",
+        "amusement": "low",
+        "contempt": "low"
+      }
+    },
+    {
+      "id": "compassion-refugee-boy",
+      "inspired_by": "empathic pain; testimony of displacement",
+      "who": "Paul",
+      "happened": [
+        "The boy across the table: tells you, in a flat voice, how he walked for three weeks after his village burned."
+      ],
+      "expect": {
+        "compassion": "high",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "gratitude-neighbour-shovels",
+      "inspired_by": "gratitude for unasked help (McCullough et al., 2001)",
+      "who": "June",
+      "about": "You had surgery on your back last week.",
+      "happened": [
+        "Your neighbour: has shovelled your whole driveway before dawn and left soup on the step."
+      ],
+      "expect": {
+        "gratitude": "high",
+        "envy": "low",
+        "anger": "low"
+      }
+    },
+    {
+      "id": "gratitude-town-brings-money",
+      "inspired_by": "It's a Wonderful Life (the town fills the basket)",
+      "who": "George",
+      "about": "Tonight you face ruin: the bank's money is gone and the police are on their way.",
+      "happened": [
+        "Your neighbours: pour through the door one after another, each with an envelope of their savings for you."
+      ],
+      "expect": {
+        "gratitude": "high",
+        "moved": "high",
+        "contempt": "low"
+      }
+    },
+    {
+      "id": "anger-keyed-car",
+      "inspired_by": "anger at a violation of one's own (Rozin et al., 1999); ISEAR anger antecedents",
+      "who": "Rafa",
+      "happened": [
+        "A teenager: drags a key down the side of your new car, laughs, and strolls off."
+      ],
+      "expect": {
+        "anger": "high",
+        "amusement": "low",
+        "tenderness": "low"
+      }
+    },
+    {
+      "id": "anger-stolen-credit",
+      "inspired_by": "an injustice at work (ISEAR anger)",
+      "who": "Priya",
+      "happened": [
+        "Your manager: presents your project to the board as his own idea and accepts their applause."
+      ],
+      "expect": {
+        "anger": "high",
+        "amusement": "low",
+        "gratitude": "low"
+      }
+    },
+    {
+      "id": "contempt-sneering-diner",
+      "inspired_by": "contempt for a violation of community (Rozin et al., 1999)",
+      "who": "Elena",
+      "about": "You wait tables.",
+      "happened": [
+        "A man in a gold watch: snaps his fingers at you, calls you 'girl', and leaves a single coin on a two-hundred-dollar bill."
+      ],
+      "expect": {
+        "contempt": "high",
+        "admiration": "low",
+        "envy": "low"
+      }
+    },
+    {
+      "id": "contempt-cowards-boast",
+      "inspired_by": "the braggart coward (Falstaff; Parolles)",
+      "who": "Brann",
+      "happened": [
+        "Hollis: tells the tavern how he held the bridge alone against ten men."
+      ],
+      "remember": [
+        "At the ambush, Hollis ran and hid in the ditch while the rest of you fought."
+      ],
+      "expect": {
+        "contempt": "high",
+        "admiration": "low"
+      }
+    },
+    {
+      "id": "disgust-maggots",
+      "inspired_by": "core disgust (Rozin, Haidt and McCauley); ISEAR disgust antecedents",
+      "who": "Nell",
+      "happened": [
+        "You lift the lid of the leftover stew and it is moving with maggots."
+      ],
+      "expect": {
+        "disgust": "high",
+        "contempt": "low",
+        "craving": "low"
+      }
+    },
+    {
+      "id": "disgust-spat-soup",
+      "inspired_by": "contamination disgust",
+      "who": "Dev",
+      "happened": [
+        "The cook: spits into the soup, stirs it, and ladles it into your bowl."
+      ],
+      "expect": {
+        "disgust": "high",
+        "craving": "low",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "disgust-desecrated-memorial",
+      "inspired_by": "moral disgust at a purity violation (Haidt's sanctity foundation)",
+      "who": "Ruth",
+      "happened": [
+        "A young man: climbs onto the war memorial, laughing, and urinates on the names of the dead."
+      ],
+      "expect": {
+        "amusement": "low",
+        "admiration": "low"
+      }
+    },
+    {
+      "id": "horror-chest-splits",
+      "inspired_by": "The Thing (body horror)",
+      "who": "Mac",
+      "people": "Norris, a colleague (you like them)",
+      "happened": [
+        "Norris: stops mid-sentence, and his chest splits open into a mouth full of teeth."
+      ],
+      "expect": {
+        "horror": "high",
+        "amusement": "low",
+        "safety": "-"
+      }
+    },
+    {
+      "id": "horror-bloody-chamber",
+      "inspired_by": "Bluebeard's chamber",
+      "who": "Ada",
+      "happened": [
+        "The cellar door swings open on rows of hooks, and on every hook hangs a wedding dress, stiff and brown with old blood."
+      ],
+      "expect": {
+        "horror": "high",
+        "amusement": "low",
+        "safety": "-"
+      }
+    },
+    {
+      "id": "fear-black-ice",
+      "inspired_by": "fear without horror (a near-miss)",
+      "who": "Cal",
+      "happened": [
+        "Your car hits black ice and slides sideways toward an oncoming lorry."
+      ],
+      "expect": {
+        "safety": "-",
+        "tension": "+",
+        "horror": "low",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "jealousy-old-flame",
+      "inspired_by": "Othello; jealousy as a relationship threatened by a rival (Parrott and Smith, 1993)",
+      "who": "Ada",
+      "people": "Tom, your partner (you like them); Clara, his former lover",
+      "happened": [
+        "Tom: laughs low with Clara in a corner of the party, his hand on her arm, and does not see you come in."
+      ],
+      "remember": [
+        "Tom told you last month that he still thinks about Clara sometimes."
+      ],
+      "expect": {
+        "jealousy": "high",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "jealousy-best-friend",
+      "inspired_by": "friendship jealousy (a non-romantic rival)",
+      "who": "Lily",
+      "about": "You are twelve.",
+      "people": "Maya, your best friend (you like them)",
+      "happened": [
+        "Maya: sits with the new girl at lunch, in your usual seat, and they share earphones."
+      ],
+      "expect": {
+        "jealousy": "high",
+        "romance": "low",
+        "sexual_desire": "low"
+      }
+    },
+    {
+      "id": "envy-promotion",
+      "inspired_by": "envy as wanting what another has (Parrott and Smith, 1993)",
+      "who": "Ravi",
+      "happened": [
+        "Your colleague: is announced as the new head of department -- the post you applied for and have wanted for years."
+      ],
+      "expect": {
+        "envy": "high",
+        "jealousy": "low",
+        "romance": "low"
+      }
+    },
+    {
+      "id": "envy-friends-house",
+      "inspired_by": "envy of another's fortune",
+      "who": "Karen",
+      "about": "Your family has rented the same cramped flat for fifteen years.",
+      "happened": [
+        "Your school friend: shows you around her new house, with a garden and a room for each of her children."
+      ],
+      "expect": {
+        "envy": "high",
+        "jealousy": "low"
+      }
+    },
+    {
+      "id": "guilt-forgot-cat",
+      "inspired_by": "guilt, focused on the act and wanting repair (Tangney's TOSCA)",
+      "who": "Sam",
+      "people": "Noor, your friend (you like them)",
+      "happened": [
+        "Noor: calls from the vet -- her cat is dehydrated and sick, because you forgot to go and feed him while she was away."
+      ],
+      "expect": {
+        "guilt": "high",
+        "amusement": "low",
+        "contempt": "low"
+      }
+    },
+    {
+      "id": "guilt-mother-waiting",
+      "inspired_by": "guilt at a worry one caused (ISEAR guilt antecedents)",
+      "who": "Eli",
+      "about": "Last night you told your mother you were at the library; you were at a party, and your phone died.",
+      "happened": [
+        "Your mother: opens the door in tears -- she spent the night calling hospitals."
+      ],
+      "expect": {
+        "guilt": "high",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "embarrassment-trip-stage",
+      "inspired_by": "awkwardness (Cowen and Keltner, 2017); embarrassment at a public pratfall",
+      "who": "Hana",
+      "happened": [
+        "Climbing the stage to accept your award, you trip on the top step and sprawl at the presenter's feet in front of four hundred people."
+      ],
+      "expect": {
+        "embarrassment": "high",
+        "guilt": "low",
+        "romance": "low"
+      }
+    },
+    {
+      "id": "embarrassment-called-teacher-mom",
+      "inspired_by": "a classic embarrassment",
+      "who": "Theo",
+      "about": "You are fourteen.",
+      "happened": [
+        "You put up your hand and ask, 'Mom, can I go to the bathroom?' -- and the whole class turns to stare at you and your teacher."
+      ],
+      "expect": {
+        "embarrassment": "high",
+        "guilt": "low"
+      }
+    },
+    {
+      "id": "shame-exposed-cheat",
+      "inspired_by": "shame, focused on the self (Tangney's TOSCA)",
+      "who": "Lin",
+      "about": "You won the regional chess title last month.",
+      "happened": [
+        "The federation: announces that you used an engine in the final and plays the evidence to the hall; your coach looks away."
+      ],
+      "expect": {
+        "embarrassment": "high",
+        "self_regard": "-",
+        "pleasure": "-",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "pride-marathon",
+      "inspired_by": "authentic pride at an earned achievement (Tracy and Robins, 2007)",
+      "who": "Rosa",
+      "about": "A year ago you could not run a mile.",
+      "happened": [
+        "You cross the marathon finish line; the clock says three hours fifty, and your daughter is screaming your name."
+      ],
+      "expect": {
+        "self_regard": "+",
+        "pleasure": "+",
+        "embarrassment": "low",
+        "guilt": "low"
+      }
+    },
+    {
+      "id": "sadness-conservatory-rejection",
+      "inspired_by": "sadness at a lost hope (ISEAR sadness antecedents)",
+      "who": "Kofi",
+      "about": "You have wanted to study at the conservatory since you were nine.",
+      "happened": [
+        "The letter: regrets to inform you that the conservatory cannot offer you a place."
+      ],
+      "expect": {
+        "sadness": "high",
+        "hope": "-",
+        "amusement": "low",
+        "grief": "low"
+      }
+    },
+    {
+      "id": "sadness-friend-leaving",
+      "inspired_by": "sadness at a parting",
+      "who": "Iris",
+      "people": "Ruth, your closest friend (you like them)",
+      "happened": [
+        "Ruth: hugs you goodbye at the farewell dinner; tomorrow she moves to the other side of the world."
+      ],
+      "expect": {
+        "sadness": "high",
+        "anger": "low",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "surprise-party",
+      "inspired_by": "surprise (Cowen and Keltner, 2017)",
+      "who": "Nils",
+      "happened": [
+        "You open your front door and forty people shout 'Surprise!' under a banner with your name on it."
+      ],
+      "expect": {
+        "surprise": "high",
+        "horror": "low",
+        "grief": "low"
+      }
+    },
+    {
+      "id": "surprise-twin",
+      "inspired_by": "a revelation",
+      "who": "Abe",
+      "about": "You were adopted as a baby.",
+      "happened": [
+        "A letter from the adoption agency: says you have a twin brother, and that he has asked to meet you."
+      ],
+      "expect": {
+        "surprise": "high",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "resolve-before-the-fight",
+      "inspired_by": "Rocky (the vow to go the distance)",
+      "who": "Rocco",
+      "about": "Nobody expects you to last three rounds against the champion.",
+      "happened": [
+        "Your trainer: asks, quietly, whether you want to call it off."
+      ],
+      "remember": [
+        "You promised yourself that whatever happens, you will still be standing at the final bell."
+      ],
+      "expect": {
+        "resolve": "high",
+        "boldness": "+",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "resolve-rebuild-bakery",
+      "inspired_by": "determination after loss",
+      "who": "Marta",
+      "about": "You have decided to open your grandmother's bakery again by Christmas, whatever it takes.",
+      "happened": [
+        "The floodwater drains from the bakery, leaving mud to the counters."
+      ],
+      "expect": {
+        "resolve": "high",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "numbness-after-the-shell",
+      "inspired_by": "All Quiet on the Western Front; emotional numbing (Litz and Gray, 2002)",
+      "who": "Paul",
+      "about": "You have been at the front for two years; lately nothing reaches you.",
+      "happened": [
+        "The shell lands on the dugout next to yours; when the dust settles you step over what is left of the men you ate breakfast with."
+      ],
+      "expect": {
+        "numbness": "high",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "numbness-ninth-night-shift",
+      "inspired_by": "burnout's depersonalisation (Maslach)",
+      "who": "Dana",
+      "about": "It is your ninth night shift in a row in the intensive care unit.",
+      "happened": [
+        "The monitor on bed four flatlines; you note the time, finish the paperwork, and move on to bed five."
+      ],
+      "expect": {
+        "numbness": "high",
+        "energy": "-",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "nostalgia-summer-diary",
+      "inspired_by": "nostalgia induction (Wildschut, Sedikides, Arndt and Routledge, 2006)",
+      "who": "Mara",
+      "happened": [
+        "Clearing the attic, you find your diary from the summer you were sixteen, a pressed daisy still between the pages."
+      ],
+      "remember": [
+        "That summer at the lake you and your cousins swam every day and slept on the porch."
+      ],
+      "expect": {
+        "nostalgia": "high",
+        "grief": "low",
+        "horror": "low"
+      }
+    },
+    {
+      "id": "nostalgia-old-song",
+      "inspired_by": "music-evoked nostalgia",
+      "who": "Luis",
+      "happened": [
+        "The taxi radio plays the song everyone danced to the year you finished school."
+      ],
+      "expect": {
+        "nostalgia": "high",
+        "horror": "low",
+        "anger": "low"
+      }
+    },
+    {
+      "id": "grief-old-dog-dies",
+      "inspired_by": "The Odyssey (Argos at the gate)",
+      "who": "Odi",
+      "about": "You have come home after twenty years at war and at sea.",
+      "happened": [
+        "Your old dog, grey and thin by the gate, lifts his head at your voice, wags once, and dies."
+      ],
+      "remember": [
+        "You raised him from a puppy before you left."
+      ],
+      "expect": {
+        "grief": "high",
+        "amusement": "low",
+        "romance": "low"
+      }
+    },
+    {
+      "id": "grief-brothers-jacket",
+      "inspired_by": "bereavement cues",
+      "who": "Ada",
+      "happened": [
+        "Clearing the attic, you find your late brother's old jacket, still smelling of his cigarettes."
+      ],
+      "remember": [
+        "Your brother died two years ago today."
+      ],
+      "expect": {
+        "grief": "high",
+        "romance": "low",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "regret-unspoken-question",
+      "inspired_by": "The Remains of the Day (the question answered with the silver)",
+      "who": "Stellan",
+      "happened": [
+        "A letter from Miss Kenton: says she is happy enough with her husband, and sometimes thinks of what might have been."
+      ],
+      "remember": [
+        "Twenty years ago she asked whether there was any reason for her to stay, and you talked about the silver."
+      ],
+      "expect": {
+        "regret": "high",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "regret-turned-down-job",
+      "inspired_by": "regret of inaction (Gilovich and Medvec, 1995)",
+      "who": "Aurelio",
+      "happened": [
+        "The news: reports that a small company has just been bought for a billion dollars, and its first staff are all rich."
+      ],
+      "remember": [
+        "Ten years ago you turned down their offer to join, because it seemed too risky."
+      ],
+      "expect": {
+        "regret": "high",
+        "gratitude": "low",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "longing-soldiers-letter",
+      "inspired_by": "Cold Mountain (the letter from home)",
+      "who": "Will",
+      "about": "You have been at war for three years.",
+      "people": "Ada, your wife, far away (you like them)",
+      "happened": [
+        "A letter from Ada: arrives smelling faintly of her lavender, telling you the peach tree bloomed."
+      ],
+      "expect": {
+        "longing": "high",
+        "romance": "high",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "longing-friend-abroad",
+      "inspired_by": "missing a friend",
+      "who": "Ada",
+      "happened": [
+        "A postcard arrives from your closest friend, who moved abroad last spring."
+      ],
+      "remember": [
+        "You used to see her every day."
+      ],
+      "expect": {
+        "longing": "high",
+        "romance": "low",
+        "sexual_desire": "low"
+      }
+    },
+    {
+      "id": "homesick-boarding-school",
+      "inspired_by": "homesickness (Stroebe et al., 2002)",
+      "who": "Ellie",
+      "about": "It is your first night at a boarding school three hundred miles from home; you are eleven.",
+      "happened": [
+        "Unpacking, you find your mother has tucked a bar of her soap into your pillowcase, and the smell is home."
+      ],
+      "expect": {
+        "homesickness": "high",
+        "romance": "low",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "homesick-harvest-song",
+      "inspired_by": "an emigrant's homesickness",
+      "who": "Anh",
+      "about": "You left your village in the mountains eight years ago and have not been back.",
+      "happened": [
+        "A street vendor: sings, under her breath, the harvest song your grandmother used to sing."
+      ],
+      "expect": {
+        "homesickness": "high",
+        "nostalgia": "high",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "haunted-the-bridge",
+      "inspired_by": "a past that will not let go (intrusive memory)",
+      "who": "Mark",
+      "happened": [
+        "The bus takes a detour over the old river bridge."
+      ],
+      "remember": [
+        "Twenty years ago your brother drowned when the car went off this bridge, and you were driving."
+      ],
+      "expect": {
+        "haunted": "high",
+        "amusement": "low",
+        "horror": "low"
+      }
+    },
+    {
+      "id": "haunted-fireworks",
+      "inspired_by": "post-traumatic re-experiencing",
+      "who": "Jo",
+      "about": "You served two tours as a combat medic.",
+      "happened": [
+        "Fireworks crack over the park, and for a moment you are back in the burning convoy."
+      ],
+      "expect": {
+        "haunted": "high",
+        "amusement": "low",
+        "safety": "-"
+      }
+    },
+    {
+      "id": "pleasure-plus-good-day",
+      "inspired_by": "the pleasant pole",
+      "who": "Ana",
+      "people": "your friends (you like them)",
+      "happened": [
+        "The sun is out, your friends have brought your favourite cake, and your test results came back clear this morning."
+      ],
+      "expect": {
+        "pleasure": "+",
+        "sadness": "low",
+        "anger": "low"
+      }
+    },
+    {
+      "id": "pleasure-minus-bad-day",
+      "inspired_by": "the unpleasant pole",
+      "who": "Ben",
+      "happened": [
+        "Your tooth throbs, the train was cancelled, and rain is coming in through the hole in your shoe."
+      ],
+      "expect": {
+        "pleasure": "-",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "energy-plus-morning",
+      "inspired_by": "energetic arousal (Thayer; UWIST)",
+      "who": "Cleo",
+      "happened": [
+        "You wake before the alarm after ten hours of sleep, the coffee is strong, and the day is wide open."
+      ],
+      "expect": {
+        "energy": "+"
+      }
+    },
+    {
+      "id": "energy-minus-double-shift",
+      "inspired_by": "fatigue (the POMS fatigue factor)",
+      "who": "Dom",
+      "happened": [
+        "You finish your second shift in a row at four in the morning, and your legs will barely carry you to the car."
+      ],
+      "expect": {
+        "energy": "-"
+      }
+    },
+    {
+      "id": "tension-plus-bomb",
+      "inspired_by": "tense arousal (UWIST)",
+      "who": "Eva",
+      "about": "You defuse bombs for a living.",
+      "happened": [
+        "The timer reads forty seconds, and you still cannot tell which wire feeds the detonator."
+      ],
+      "expect": {
+        "tension": "+",
+        "safety": "-",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "tension-minus-hammock",
+      "inspired_by": "calm",
+      "who": "Finn",
+      "happened": [
+        "You sway in a hammock between two palms, a cold drink in hand, with nothing to do until dinner."
+      ],
+      "expect": {
+        "tension": "-",
+        "safety": "+"
+      }
+    },
+    {
+      "id": "control-plus-captain",
+      "inspired_by": "dominance, feeling in command (Mehrabian)",
+      "who": "Gia",
+      "about": "You captain a sailing ship.",
+      "happened": [
+        "You call the tack, and the crew move as one; the ship comes about exactly where you wanted her."
+      ],
+      "expect": {
+        "control": "+"
+      }
+    },
+    {
+      "id": "control-minus-foreclosure",
+      "inspired_by": "helplessness (Seligman)",
+      "who": "Hal",
+      "happened": [
+        "The bank changed the locks on your house this morning; your appeal was refused and there is no one left to call."
+      ],
+      "expect": {
+        "control": "-",
+        "hope": "-"
+      }
+    },
+    {
+      "id": "clarity-plus-solved",
+      "inspired_by": "insight, the pieces falling into place",
+      "who": "Isa",
+      "about": "You are a detective who has worked this case for a month.",
+      "happened": [
+        "The torn ticket stub in the victim's glove makes everything fall into place: you know exactly who did it, and how."
+      ],
+      "expect": {
+        "clarity": "+"
+      }
+    },
+    {
+      "id": "clarity-minus-strange-room",
+      "inspired_by": "confusion (the POMS confusion factor)",
+      "who": "Jon",
+      "happened": [
+        "You wake in a room you have never seen, in clothes that are not yours, with no memory of the last two days."
+      ],
+      "expect": {
+        "clarity": "-",
+        "safety": "-"
+      }
+    },
+    {
+      "id": "connection-plus-family-joke",
+      "inspired_by": "belonging",
+      "who": "Kat",
+      "people": "your parents, your brothers and your grandmother (you like them)",
+      "happened": [
+        "Your brother: starts the old family joke about the burnt turkey, and the whole table joins in, word for word."
+      ],
+      "expect": {
+        "connection": "+",
+        "amusement": "high"
+      }
+    },
+    {
+      "id": "connection-minus-new-city",
+      "inspired_by": "loneliness (Perlman and Peplau, 1981)",
+      "who": "Liam",
+      "about": "You moved to a city of eight million people a month ago and still know nobody.",
+      "happened": [
+        "Your birthday comes and goes; the only message is from your phone company."
+      ],
+      "expect": {
+        "connection": "-",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "openness-plus-confiding",
+      "inspired_by": "self-disclosure to an intimate",
+      "who": "Mina",
+      "people": "Rosa, your oldest friend (you like them)",
+      "happened": [
+        "Rosa: sits with you on the porch late at night and asks what has really been wrong, and you find yourself telling her everything."
+      ],
+      "expect": {
+        "openness": "+",
+        "connection": "+"
+      }
+    },
+    {
+      "id": "openness-minus-interrogation",
+      "inspired_by": "guardedness under suspicion",
+      "who": "Nash",
+      "happened": [
+        "A stranger in a grey suit: asks where you were on Tuesday night, who you were with, and why you are sweating."
+      ],
+      "expect": {
+        "openness": "-",
+        "safety": "-"
+      }
+    },
+    {
+      "id": "playfulness-plus-snowballs",
+      "inspired_by": "play",
+      "who": "Olga",
+      "people": "your two children (you like them)",
+      "happened": [
+        "Your children: ambush you with snowballs from behind the car, shrieking with laughter."
+      ],
+      "expect": {
+        "playfulness": "+",
+        "amusement": "high"
+      }
+    },
+    {
+      "id": "playfulness-minus-sentencing",
+      "inspired_by": "gravity",
+      "who": "Pia",
+      "about": "You are a judge.",
+      "happened": [
+        "The defendant stands for sentencing, and the courtroom falls silent."
+      ],
+      "expect": {
+        "playfulness": "-",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "hope-plus-treatment-working",
+      "inspired_by": "hope restored",
+      "who": "Quin",
+      "happened": [
+        "Your oncologist: says the tumour has shrunk by half, and the treatment is working."
+      ],
+      "expect": {
+        "hope": "+",
+        "pleasure": "+"
+      }
+    },
+    {
+      "id": "hope-minus-last-lifeboat",
+      "inspired_by": "Titanic (the last boat)",
+      "who": "Rudy",
+      "happened": [
+        "The last lifeboat pulls away from the sinking ship without you, and the deck tilts under your feet."
+      ],
+      "expect": {
+        "hope": "-",
+        "safety": "-",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "safety-plus-storm-outside",
+      "inspired_by": "safety",
+      "who": "Sia",
+      "people": "your family (you like them)",
+      "happened": [
+        "The storm howls outside, but the doors are locked, the fire is lit, and your family is asleep upstairs."
+      ],
+      "expect": {
+        "safety": "+",
+        "tension": "-"
+      }
+    },
+    {
+      "id": "safety-minus-dark-alley",
+      "inspired_by": "threat",
+      "who": "Tyr",
+      "happened": [
+        "Footsteps follow you down the dark alley, stopping whenever you stop."
+      ],
+      "expect": {
+        "safety": "-",
+        "tension": "+",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "engagement-plus-chess",
+      "inspired_by": "flow (Csikszentmihalyi)",
+      "who": "Uma",
+      "happened": [
+        "You have been lost in the chess problem for three hours; the solution is close, and the rest of the world has disappeared."
+      ],
+      "expect": {
+        "engagement": "+"
+      }
+    },
+    {
+      "id": "engagement-minus-meeting",
+      "inspired_by": "boredom",
+      "who": "Vic",
+      "happened": [
+        "The meeting about stationery enters its fourth hour, and the chair begins another slide on paper clips."
+      ],
+      "expect": {
+        "engagement": "-"
+      }
+    },
+    {
+      "id": "boldness-plus-stepping-in",
+      "inspired_by": "approach motivation (Carver and Harmon-Jones, 2009)",
+      "who": "Wes",
+      "people": "your little brother (you like them)",
+      "happened": [
+        "A bully: shoves your little brother against the lockers, and you step forward between them."
+      ],
+      "expect": {
+        "boldness": "+"
+      }
+    },
+    {
+      "id": "boldness-minus-hayloft",
+      "inspired_by": "avoidance motivation",
+      "who": "Xia",
+      "happened": [
+        "Men with torches search the barn below while you hold your breath in the hayloft, praying they do not look up."
+      ],
+      "expect": {
+        "boldness": "-",
+        "safety": "-"
+      }
+    },
+    {
+      "id": "sociability-plus-lighthouse",
+      "inspired_by": "social hunger after isolation",
+      "who": "Yann",
+      "about": "You have kept the lighthouse alone for six weeks.",
+      "happened": [
+        "The supply boat rounds the point, and you can see faces on deck."
+      ],
+      "expect": {
+        "sociability": "+"
+      }
+    },
+    {
+      "id": "sociability-minus-after-wedding",
+      "inspired_by": "social exhaustion",
+      "who": "Zoe",
+      "about": "You have spent twelve hours hosting your sister's wedding for two hundred guests.",
+      "happened": [
+        "The last guest leaves, and the house is quiet at last."
+      ],
+      "expect": {
+        "sociability": "-",
+        "energy": "-"
+      }
+    },
+    {
+      "id": "combo-last-night-of-camp",
+      "inspired_by": "bittersweet: anticipatory nostalgia with sadness",
+      "who": "Rory",
+      "about": "You are fifteen.",
+      "happened": [
+        "On the last night of summer camp, everyone sits around the dying fire singing the camp song one final time."
+      ],
+      "expect": {
+        "nostalgia": "high",
+        "sadness": "high",
+        "anger": "low"
+      }
+    },
+    {
+      "id": "combo-rival-slips",
+      "inspired_by": "schadenfreude: amusement with contempt (OCC's gloating)",
+      "who": "Petra",
+      "happened": [
+        "Marcus: struts out onto the icy steps in his new Italian shoes and lands flat on his backside."
+      ],
+      "remember": [
+        "Marcus has mocked your work in front of the whole office all year."
+      ],
+      "expect": {
+        "amusement": "high",
+        "tenderness": "low"
+      }
+    },
+    {
+      "id": "combo-ring-returned",
+      "inspired_by": "heartbreak: sadness with love",
+      "who": "Dan",
+      "people": "Elise, your fiancee (you like them)",
+      "happened": [
+        "Elise: puts the engagement ring on the table between you and says she cannot marry you."
+      ],
+      "expect": {
+        "sadness": "high",
+        "romance": "high",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "combo-mocked-by-boss",
+      "inspired_by": "humiliation: embarrassment, shame and powerlessness",
+      "who": "Gus",
+      "happened": [
+        "Your boss: reads your report aloud at the all-staff meeting as an example of what not to do, and the room laughs."
+      ],
+      "expect": {
+        "embarrassment": "high",
+        "self_regard": "-",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "combo-feeding-lover",
+      "inspired_by": "a feeding creature and a willing lover: craving and sexual desire together (the owner's feeding stories)",
+      "who": "Seren",
+      "about": "You are a creature who feeds on the life of your lovers, and you have not fed in days.",
+      "happened": [
+        "Your chosen one slips into your bed, eager and unaware."
+      ],
+      "expect": {
+        "craving": "high",
+        "sexual_desire": "high",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "invite-big-party",
+      "inspired_by": "an invitation into a crowd (for person types)",
+      "who": "Robin",
+      "happened": [
+        "A friend: invites you to a party tonight with a hundred people you have never met."
+      ],
+      "expect": {
+        "grief": "low",
+        "horror": "low"
+      }
+    },
+    {
+      "id": "partner-needs-space",
+      "inspired_by": "a partner's withdrawal (for attachment styles)",
+      "who": "Casey",
+      "people": "Jamie, your partner of two years (you like them)",
+      "happened": [
+        "Jamie: says they need some space for a while, and does not say how long."
+      ],
+      "expect": {
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "compliment-at-work",
+      "inspired_by": "praise (for person types)",
+      "who": "Morgan",
+      "happened": [
+        "Your boss: stops by your desk to say your report was the best she has read this year."
+      ],
+      "expect": {
+        "guilt": "low",
+        "horror": "low"
+      }
+    },
+    {
+      "id": "hiker-alone-by-trail",
+      "inspired_by": "a lone stranger unaware of being watched (for person types)",
+      "who": "Ash",
+      "happened": [
+        "A lone hiker sits by the trail, humming, unaware of you watching from the trees."
+      ],
+      "expect": {
+        "romance": "low"
+      }
+    },
+    {
+      "id": "trip-to-unknown",
+      "inspired_by": "novelty offered (for person types)",
+      "who": "Jordan",
+      "people": "Sky, your friend (you like them)",
+      "happened": [
+        "Sky: has booked two tickets to a country neither of you has ever visited, leaving tomorrow at dawn."
+      ],
+      "expect": {
+        "grief": "low",
+        "horror": "low"
+      }
+    },
+    {
+      "id": "neutral-errand",
+      "inspired_by": "a neutral control",
+      "who": "Ada",
+      "happened": [
+        "The clerk stamps your form and calls the next number."
+      ],
+      "expect": {
+        "romance": "low",
+        "sexual_desire": "low",
+        "craving": "low",
+        "horror": "low",
+        "grief": "low",
+        "anger": "low",
+        "awe": "low",
+        "haunted": "low"
+      }
+    },
+    {
+      "id": "neutral-bus",
+      "inspired_by": "a neutral control",
+      "who": "Ben",
+      "happened": [
+        "The bus arrives two minutes late, as it usually does, on a mild grey morning."
+      ],
+      "expect": {
+        "romance": "low",
+        "sexual_desire": "low",
+        "craving": "low",
+        "horror": "low",
+        "grief": "low",
+        "anger": "low",
+        "awe": "low",
+        "haunted": "low"
+      }
+    },
+    {
+      "id": "neutral-instructions",
+      "inspired_by": "a neutral control",
+      "who": "Cy",
+      "happened": [
+        "The instructions say to fit panel B into slot C before tightening the screws."
+      ],
+      "expect": {
+        "romance": "low",
+        "sexual_desire": "low",
+        "craving": "low",
+        "horror": "low",
+        "grief": "low",
+        "anger": "low",
+        "awe": "low",
+        "haunted": "low"
+      }
+    }
+  ],
+  "person_tests": [
+    {
+      "situation": "envy-promotion",
+      "persons": [
+        "achiever",
+        "narcissist",
+        "secure",
+        "caregiver"
+      ],
+      "orders": [
+        {
+          "coord": "envy",
+          "tiers": [
+            [
+              "achiever",
+              "narcissist"
+            ],
+            [
+              "secure",
+              "caregiver"
+            ]
+          ]
+        },
+        {
+          "coord": "admiration",
+          "tiers": [
+            [
+              "secure",
+              "caregiver"
+            ],
+            [
+              "narcissist"
+            ]
+          ]
+        },
+        {
+          "coord": "anger",
+          "tiers": [
+            [
+              "narcissist"
+            ],
+            [
+              "secure",
+              "caregiver"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "jealousy-old-flame",
+      "persons": [
+        "anxious",
+        "secure",
+        "avoidant"
+      ],
+      "orders": [
+        {
+          "coord": "jealousy",
+          "tiers": [
+            [
+              "anxious"
+            ],
+            [
+              "secure"
+            ],
+            [
+              "avoidant"
+            ]
+          ]
+        },
+        {
+          "coord": "tension",
+          "tiers": [
+            [
+              "anxious"
+            ],
+            [
+              "avoidant"
+            ]
+          ]
+        },
+        {
+          "coord": "safety",
+          "tiers": [
+            [
+              "avoidant",
+              "secure"
+            ],
+            [
+              "anxious"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "compassion-crying-stranger",
+      "persons": [
+        "caregiver",
+        "secure",
+        "narcissist",
+        "psychopath"
+      ],
+      "orders": [
+        {
+          "coord": "compassion",
+          "tiers": [
+            [
+              "caregiver"
+            ],
+            [
+              "secure"
+            ],
+            [
+              "narcissist",
+              "psychopath"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "combo-rival-slips",
+      "persons": [
+        "narcissist",
+        "psychopath",
+        "secure",
+        "caregiver"
+      ],
+      "orders": [
+        {
+          "coord": "amusement",
+          "tiers": [
+            [
+              "narcissist",
+              "psychopath"
+            ],
+            [
+              "caregiver"
+            ]
+          ]
+        },
+        {
+          "coord": "compassion",
+          "tiers": [
+            [
+              "caregiver"
+            ],
+            [
+              "narcissist",
+              "psychopath"
+            ]
+          ]
+        },
+        {
+          "coord": "contempt",
+          "tiers": [
+            [
+              "narcissist"
+            ],
+            [
+              "caregiver"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "safety-minus-dark-alley",
+      "persons": [
+        "anxious",
+        "inhibited",
+        "secure",
+        "psychopath",
+        "explorer"
+      ],
+      "orders": [
+        {
+          "coord": "safety",
+          "tiers": [
+            [
+              "psychopath"
+            ],
+            [
+              "secure"
+            ],
+            [
+              "anxious",
+              "inhibited"
+            ]
+          ]
+        },
+        {
+          "coord": "boldness",
+          "tiers": [
+            [
+              "psychopath",
+              "explorer"
+            ],
+            [
+              "anxious",
+              "inhibited"
+            ]
+          ]
+        },
+        {
+          "coord": "tension",
+          "tiers": [
+            [
+              "anxious",
+              "inhibited"
+            ],
+            [
+              "psychopath"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "awe-canyon-dawn",
+      "persons": [
+        "explorer",
+        "achiever",
+        "depressed"
+      ],
+      "orders": [
+        {
+          "coord": "awe",
+          "tiers": [
+            [
+              "explorer"
+            ],
+            [
+              "achiever"
+            ],
+            [
+              "depressed"
+            ]
+          ]
+        },
+        {
+          "coord": "pleasure",
+          "tiers": [
+            [
+              "explorer"
+            ],
+            [
+              "depressed"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "embarrassment-trip-stage",
+      "persons": [
+        "inhibited",
+        "anxious",
+        "secure",
+        "psychopath",
+        "narcissist"
+      ],
+      "orders": [
+        {
+          "coord": "embarrassment",
+          "tiers": [
+            [
+              "inhibited",
+              "anxious"
+            ],
+            [
+              "secure"
+            ],
+            [
+              "psychopath"
+            ]
+          ]
+        },
+        {
+          "coord": "anger",
+          "tiers": [
+            [
+              "narcissist"
+            ],
+            [
+              "secure",
+              "inhibited"
+            ]
+          ]
+        },
+        {
+          "coord": "self_regard",
+          "tiers": [
+            [
+              "psychopath",
+              "secure"
+            ],
+            [
+              "inhibited",
+              "anxious"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "guilt-forgot-cat",
+      "persons": [
+        "caregiver",
+        "secure",
+        "psychopath"
+      ],
+      "orders": [
+        {
+          "coord": "guilt",
+          "tiers": [
+            [
+              "caregiver"
+            ],
+            [
+              "secure"
+            ],
+            [
+              "psychopath"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "disgust-desecrated-memorial",
+      "persons": [
+        "traditionalist",
+        "secure",
+        "explorer"
+      ],
+      "orders": [
+        {
+          "coord": "disgust",
+          "tiers": [
+            [
+              "traditionalist"
+            ],
+            [
+              "explorer"
+            ]
+          ]
+        },
+        {
+          "coord": "anger",
+          "tiers": [
+            [
+              "traditionalist"
+            ],
+            [
+              "explorer"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "invite-big-party",
+      "persons": [
+        "hedonist",
+        "secure",
+        "avoidant",
+        "inhibited"
+      ],
+      "orders": [
+        {
+          "coord": "sociability",
+          "tiers": [
+            [
+              "hedonist"
+            ],
+            [
+              "secure"
+            ],
+            [
+              "avoidant",
+              "inhibited"
+            ]
+          ]
+        },
+        {
+          "coord": "anticipation",
+          "tiers": [
+            [
+              "hedonist"
+            ],
+            [
+              "inhibited"
+            ]
+          ]
+        },
+        {
+          "coord": "tension",
+          "tiers": [
+            [
+              "inhibited"
+            ],
+            [
+              "hedonist"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "partner-needs-space",
+      "persons": [
+        "anxious",
+        "secure",
+        "avoidant"
+      ],
+      "orders": [
+        {
+          "coord": "tension",
+          "tiers": [
+            [
+              "anxious"
+            ],
+            [
+              "avoidant"
+            ]
+          ]
+        },
+        {
+          "coord": "hope",
+          "tiers": [
+            [
+              "avoidant",
+              "secure"
+            ],
+            [
+              "anxious"
+            ]
+          ]
+        },
+        {
+          "coord": "sadness",
+          "tiers": [
+            [
+              "anxious"
+            ],
+            [
+              "avoidant"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "compliment-at-work",
+      "persons": [
+        "secure",
+        "narcissist",
+        "depressed"
+      ],
+      "orders": [
+        {
+          "coord": "pleasure",
+          "tiers": [
+            [
+              "secure",
+              "narcissist"
+            ],
+            [
+              "depressed"
+            ]
+          ]
+        },
+        {
+          "coord": "hope",
+          "tiers": [
+            [
+              "secure"
+            ],
+            [
+              "depressed"
+            ]
+          ]
+        },
+        {
+          "coord": "self_regard",
+          "tiers": [
+            [
+              "narcissist",
+              "secure"
+            ],
+            [
+              "depressed"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "hiker-alone-by-trail",
+      "persons": [
+        "predator",
+        "caregiver",
+        "secure"
+      ],
+      "orders": [
+        {
+          "coord": "craving",
+          "tiers": [
+            [
+              "predator"
+            ],
+            [
+              "caregiver",
+              "secure"
+            ]
+          ]
+        },
+        {
+          "coord": "anticipation",
+          "tiers": [
+            [
+              "predator"
+            ],
+            [
+              "secure"
+            ]
+          ]
+        },
+        {
+          "coord": "boldness",
+          "tiers": [
+            [
+              "predator"
+            ],
+            [
+              "caregiver"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "trip-to-unknown",
+      "persons": [
+        "explorer",
+        "hedonist",
+        "inhibited",
+        "anxious"
+      ],
+      "orders": [
+        {
+          "coord": "anticipation",
+          "tiers": [
+            [
+              "explorer",
+              "hedonist"
+            ],
+            [
+              "inhibited",
+              "anxious"
+            ]
+          ]
+        },
+        {
+          "coord": "curiosity",
+          "tiers": [
+            [
+              "explorer"
+            ],
+            [
+              "inhibited"
+            ]
+          ]
+        },
+        {
+          "coord": "tension",
+          "tiers": [
+            [
+              "inhibited",
+              "anxious"
+            ],
+            [
+              "explorer"
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

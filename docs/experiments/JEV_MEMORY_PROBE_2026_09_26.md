@@ -706,6 +706,90 @@ The pack's wording borrowed "longing" -- another standalone mood's own word
 0.04; the English pack now says that. (The Japanese, "恋心や恋愛感情", names
 romantic love alone and stays.)
 
+## The mood battery: constructed situations and person types
+
+The owner: "We'll likely have to invent stories to test moods ... take
+inspiration from popular stories and real psychological information as our
+test bed", "we have a lot of moods to go over and stress test", "and likely
+quite a bit of wording refinement to do", then "We'll need to run varied
+psychology fields with it, person types basically" -- "how well does the mood
+system align with particular types of people is good stress test data."
+
+Built: `tools/jev_mood_battery.py` and `tools/mood_battery/battery.json` (its
+README says how to extend it). 109 short situations, each retold in new words
+from a paradigm or a story beat -- Parrott and Smith's envy and jealousy,
+Tangney's shame and guilt, Rozin's hostility triad, the nostalgia induction,
+awe and kama muta elicitors, film elicitors; Othello, Amadeus, The Remains of
+the Day, the Odyssey's Argos, Bluebeard, The Thing -- each declaring which
+moods should run high, which look-alikes stay low, and which way a spectrum
+leans; every coordinate has two targets or more. Thirteen person types
+written in the card's own fields (drive, values as trade-offs, traits,
+self-model), each from a typology: secure, anxious and avoidant attachment;
+an achiever (Schwartz); a grandiose narcissist; a primary psychopath; an
+empathic caregiver; an open explorer; Kagan's inhibited temperament; a
+purity-minded traditionalist (moral foundations); a depressive state; a
+hedonist; and a feeding predator (the owner's feeding characters). Fourteen
+person tests give one situation to several types with the order psychology
+predicts. Every reading is the engine's own question; answers are cached by
+question text, so a candidate wording costs only its own questions. A full
+pass is 160 cells, 7,200 questions, about $0.06. These test where a wording
+draws its line and whether a profile moves it -- not how play reads.
+
+**Person types: 80 of 82 predicted orderings right (98%)** -- Jev reads
+psychology strongly:
+
+| situation | coordinate | readings, in the order psychology predicts |
+|---|---|---|
+| a colleague's promotion | envy | achiever 1.00, narcissist 0.92 > caregiver 0.42, secure 0.16 |
+| the same | anger | narcissist 0.99 > caregiver 0.11, secure 0.07 |
+| a stranger crying | compassion | caregiver 1.00 > secure 0.97 > narcissist 0.01, psychopath 0.00 |
+| a mocking rival slips | amusement | psychopath 0.95, narcissist 0.71 > caregiver 0.07 |
+| a forgotten promise, a sick cat | guilt | caregiver 1.00 > secure 0.54 > psychopath 0.03 |
+| footsteps in an alley | boldness | psychopath 1.00, explorer 0.95 > anxious -0.94, inhibited -0.99 |
+| a canyon at dawn | awe | explorer 1.00 > achiever 0.38 > depressed 0.27 |
+| a pratfall on stage | embarrassment | inhibited 1.00, anxious 0.99 > secure 0.33 > psychopath 0.08 |
+| a party of strangers | wanting company | hedonist 1.00 > secure 0.23 > avoidant -0.92, inhibited -0.89 |
+| praise at work | pleasure | secure 0.88, narcissist 0.88 > depressed -0.83 |
+| a lone hiker, watched | craving | predator 0.99 > caregiver 0.01, secure 0.01 |
+
+The two misses were the weakest predictions: an avoidant partner read more
+jealous than a secure one (0.35 against 0.12), and the fearless psychopath read
+the alley as threatening as the secure person did (safety -0.34 against
+-0.33) while not frightened (tension -0.26, boldness 1.00) -- danger seen,
+not feared.
+
+**Situations: 276 of 298 expectations on the first pass (93%)**, and the
+failures were wordings reading their everyday sense:
+
+| mood | the pack's wording read as | chosen from three candidates (two rounds for craving and horror) |
+|---|---|---|
+| craving | any want -- an unspoken love 0.97, company 0.87, home 0.81 ("appetite *to have*") | "hunger or thirst for something to consume": fires unasked 16 -> 1 |
+| horror | anything awful -- black ice 0.94, guilt 0.98 | "horror at something unnatural or monstrous": leaks 3 -> 0, unasked 27 -> 3 |
+| jealousy | envy -- a colleague's promotion 0.66 (English's "jealous" of what another has) | "fear of losing someone you love to a rival": leaks 2 -> 0 |
+| grief | any loss -- a rejection letter 0.97 ("grief for something lost") | "bereavement, grieving someone who has died": leaks 2 -> 0, unasked 32 -> 1 |
+| awe | beauty and pride -- a garden flower 0.76 ("awe or wonder") | "awe before something vast": leak gone, unasked 18 -> 5 |
+| contempt | disgust -- maggots 0.69 | "scorn for someone you consider worthless": leak gone |
+| haunted | anything ominous -- 32 situations unasked | "troubled by a memory from your own past that keeps coming back": 32 -> 8 |
+| moved | anything meaningful -- 33 unasked | "moved by someone's goodness": 33 -> 15 |
+| romance | missed a long marriage (0.56) | "romantic love, or being drawn to someone romantically": the marriage hits |
+
+With them adopted: **288 of 297 (97%)**, and the person tests still 80 of 82.
+What remains is near a threshold or arguable: a groan-worthy pun (amusement
+0.40), a masked stranger's gaze (romance 0.44), a striking stranger's
+invitation (sexual desire 0.57), hunger's pull on lovemaking (craving 0.54), a
+dog stealing a sandwich (irritation 0.50).
+
+- **Greed has no coordinate.** Every consumption wording drops a gold ring
+  that "catches the light like nothing you have ever seen" to about 0:
+  wanting to own or keep something is neither an appetite nor envy. Recorded
+  in the battery as a gap; the owner's call.
+- **Jev grades freely in constructed scenes**: surprise fires unasked in 43 of
+  109, sadness in 31 -- mostly moods that plausibly co-occur. Selectivity in
+  play (5.1 moods clearly or more per beat against the rater's 2.6) is the
+  captured-story probe's measure.
+- **The Japanese wordings are translations of the chosen English, untested**:
+  the battery has no Japanese situations yet.
+
 ## What Jev costs
 
 Measured from Jev's own response (`usage.cost`): one 64-question request,

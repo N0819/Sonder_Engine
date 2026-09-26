@@ -381,36 +381,44 @@ the pack's (`affect_appraisal.options`); the words below are its English.
 Cowen and Keltner (2017) found self-report keeps distinct that no spectrum
 already holds, then what their list lacks.
 
-- **Wanting** -- romance ("romantic love or infatuation": "romantic longing
-  or love" borrowed longing's word and a parent's love), sexual desire
-  (worded "sexual desire or sexual arousal": round one learned intimate moods
-  need explicit words), craving
-  (the owner, "there is non romantic and sexual desire to consider": "an
-  appetite to have or consume something" -- a desire of its own axis, so it
-  can stand beside sexual desire or without it; worded after a one-question
-  probe, since "a strong want for something" took in curiosity and naming
-  curiosity inside the option pulled it in further), curiosity (a want to
+Each mood's wording is the pack's, and several were chosen by measurement --
+a one-question probe on captured beats, then the mood battery's constructed
+situations (the evidence doc, rounds three and four and "The mood
+battery"). Words in an option pull toward what they name, so a wording
+states its class alone.
+
+- **Wanting** -- romance ("romantic love, or being drawn to someone
+  romantically"), sexual desire ("sexual desire or sexual arousal": intimate
+  moods need explicit words), craving (the owner, "there is non romantic and
+  sexual desire to consider": "hunger or thirst for something to consume" --
+  an appetite on its own axis, beside sexual desire or without it; wordings
+  about wanting "to have" read every want as craving), curiosity (a want to
   know; engagement is attention, not wanting), anticipation (Plutchik's
-  primary, eagerness for what is about to happen; the rater's most frequent
-  uncovered mood in round three).
-- **Appreciation** -- awe, admiration, aesthetic appreciation, amusement,
-  being moved (kama muta: Fiske, Seibt and Schubert, 2017; worded "a swell of
-  feeling at something tender or meaningful" -- "moved or touched" read as
-  physical in an explicit story). All sit near one pleasant, absorbed point.
+  primary, eagerness for what is about to happen).
+- **Appreciation** -- awe ("awe before something vast": "awe or wonder" read
+  any beauty), admiration, aesthetic appreciation, amusement, being moved
+  ("moved by someone's goodness": kama muta, Fiske, Seibt and Schubert,
+  2017). All sit near one pleasant, absorbed point.
 - **Toward someone** -- tenderness, compassion (feeling for someone's pain and
-  wanting to ease it), gratitude; anger, contempt,
-  disgust (the hostility triad, one unpleasant point split by what was
-  violated: Rozin et al., 1999); jealousy (fearing to lose someone) apart
-  from envy (wanting what someone has: Parrott and Smith, 1993).
+  wanting to ease it), gratitude; anger, contempt ("scorn for someone you
+  consider worthless"), disgust -- the hostility triad, one unpleasant point
+  split by what was violated (Rozin et al., 1999); jealousy ("fear of losing
+  someone you love to a rival": English says "jealous" of what another has)
+  apart from envy (wanting what someone has: Parrott and Smith, 1993).
 - **The self** -- guilt (about an act) and embarrassment (about being seen);
   shame is the self_regard spectrum (Tangney and Dearing, 2002).
-- **Others** -- horror (threat with revulsion), sadness (loss, apart from fear
-  and anger at the same displeasure), surprise (Fontaine's novelty, as a
-  transient), resolve, numbness (emotional numbing, which no point near
-  neutral can tell from calm).
-- **Whose object is the past** -- nostalgia, grief, regret, longing,
-  homesickness, and the unease of a past that will not let go. Recall stirs
-  them; they are what sits beneath.
+- **Others** -- horror ("horror at something unnatural or monstrous": a bare
+  "horror" read anything awful), sadness (loss, apart from fear and anger at
+  the same displeasure), surprise (Fontaine's novelty, as a transient),
+  resolve, numbness (emotional numbing, which no point near neutral can tell
+  from calm).
+- **Whose object is the past** -- nostalgia, grief ("bereavement, grieving
+  someone who has died": "grief for something lost" read every loss), regret,
+  longing, homesickness, and being troubled by a memory from one's own past
+  that keeps coming back. Recall stirs them; they are what sits beneath.
+- **Not yet covered: greed** -- wanting to own or keep something. The
+  battery's gold ring reads about zero on every coordinate that wants: it is
+  neither an appetite nor envy. The owner's call whether it stands alone.
 
 **Coverage.** How moods with no coordinate of their own sit in the system --
 illustrations of the rule, not a list the engine matches against:
@@ -441,10 +449,10 @@ illustrations of the rule, not a list the engine matches against:
 | schadenfreude | amusement with contempt (OCC's gloating) |
 | smug | proud, with contempt and amusement |
 | humiliated | ashamed, powerless, with embarrassment |
-| betrayed | anger with grief, alone |
-| heartbroken | grief with romance, alone |
-| infatuated, obsessed | romance with craving |
-| possessive | jealousy with craving |
+| betrayed | anger with sadness, alone |
+| heartbroken | sadness with romance, alone (the battery reads both high when a ring is returned) |
+| infatuated, obsessed | romance, absorbed |
+| possessive | jealousy, in command |
 | protective | tenderness, bold |
 | predatory hunger | craving, bold, in command |
 | aroused by being watched or shamed | sexual desire with embarrassment |
@@ -473,7 +481,16 @@ and rounds two to four):
 - **Jev is read by its words**: a word in an option pulls toward what it
   names, even when it names what the option excludes, and a word with a
   physical second sense reads physically in an explicit story. State each
-  mood's class alone, and probe a wording before adopting it.
+  mood's class alone, and probe a wording before adopting it -- the mood
+  battery is the probe (`tools/jev_mood_battery.py`): nine wordings chosen
+  there took its situations from 93% to 97% of expectations met.
+- **The mood reads the person, not only the event.** Given one situation and
+  thirteen person types written in the card's fields, Jev orders 80 of 82
+  predicted pairs as psychology does -- envy for the achiever and the
+  narcissist over the secure, compassion and guilt for the caregiver over the
+  psychopath, awe for the explorer over the depressed. So the card's
+  psychology is what Jev needs in its state for the mood to be the
+  character's own.
 - **The memories today's recall delivers stir the scene's own moods** --
   sexual desire, curiosity, tenderness -- and almost never the past-directed
   ones; which moods are memory's own waits on a packet that holds some past.

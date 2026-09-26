@@ -1282,7 +1282,10 @@ emotions, the mood as fourteen spectrums and thirty-one standalone moods,
 habituation, the layer beneath); nothing in the turn calls them. Open: wiring
 them before and after the character call and retiring the prompt's affect
 paragraphs; every knob and every `EMOTION_EFFECTS` value (the owner's); a
-concern gate that discriminates (Jev weighs every listed concern about 0.7);
+coordinate for greed, which the mood battery found none holds; Japanese
+situations for the battery, since the Japanese wordings are untested
+translations; a concern gate that discriminates (Jev weighs every listed
+concern about 0.7);
 own acts' pride tilt; naming the combinations the coverage table lists; the
 memory packet (a fitted weighted-RRF net of 100 over new lanes, then Jev) with
 the moment tag written at commit -- which the memory-born moods wait on, since
