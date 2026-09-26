@@ -114,6 +114,105 @@ Stays in the character call: `sequence`, `effects`, `interaction`, `wants` +
 intention `add`/`abandon`, projects, drive shifts, belief revisions,
 reinterpretations, `ponder`.
 
+### The card as Jev's question bank
+
+The owner, 2026-09-26: "now look at the character prompt and theorize what we
+can reduce to jev questions (Fed with psychology fields from the character
+card) Before and after the character call."
+
+Most of a generated card's `psychology` is authored cue-to-response data, and
+today the character model reads all of it on every call to find what applies.
+"Is this present in what you perceive?", with the card's own words quoted, is
+the concrete judgement Jev is reliable at. One atomic question per card item;
+code composes the answers -- a trait is engaged when one of its cues is
+present and none of its inhibitors is, never asked as one compound question,
+which is where Jev is weak.
+
+| Card field | Asked before the call | Becomes | After the call |
+|---|---|---|---|
+| `traits[].activation_cues`, `inhibited_by` | per cue and inhibitor: present? | the traits engaged, each with the cue that engaged it | -- |
+| `values[]`, `conflicts_with` | per value: at stake? per pair: set against each other? | values at stake; the tension between two | -- |
+| `self_model.pride_triggers`, `shame_triggers` | per trigger: touched? | pride or shame pressure, feeding the affect choice | -- |
+| `self_model.protected_beliefs`, `beliefs` | per belief: challenged? | a threat to who they are | reinforce / weaken (the row above) |
+| `coping.strategies[].trigger` | one choice: which strategy the moment calls up, or none | `stress.coping_mode`, written by the model today | -- |
+| `coping.recovery_supports` | per support: present? | recovery this beat, applied by code | -- |
+| `stress_profile` numbers | one grade: how much the moment strains you | code applies `baseline_reactivity`, `overload_threshold` and `recovery_rate` to it; `recovery_rate` also carries mood from beat to beat | -- |
+| `stress_profile.somatic_signs`, `coping.under_stress` | one choice: which authored sign shows, or none | a tell the character may use | -- |
+| `learning.associations[].cue` | per cue: present? | the associations that fire, with their `appraisal_bias` | reinforced when fired (the row above) |
+| `drive` | a grade: does the moment touch the essence? a `noul`: does anything tempt toward the taboo? | drive pressure; a taboo alarm | a `noul`: did the conduct cross the taboo? It flags a rupture occasion; the drive shift stays the character's |
+
+The Doctor's card (chat 63): 24 activation cues, 12 inhibitors, 5 values and
+7 conflict pairs, 8 pride and shame triggers, 5 protected beliefs, 3
+strategies, 4 supports, 4 associations -- about 75 questions from the card,
+about 110 with the rows of the section above: two requests, well under a
+second, about $0.001 per character per beat. 33 of the 67 cards in the
+database carry these lists; a card without them gets fewer questions, and no
+new field is asked of an author.
+
+Code writes the answers as one block, "what presses on you", in the prompt's
+own terms ("Drives and traits are pressure, not premises"): the traits
+engaged and their cues, the values at stake, pride or shame touched, the
+coping pull, the associations that fire, drive and taboo pressure -- then how
+the beat lands, surface and undercurrent.
+
+After the call, beyond the section above:
+
+| Replaces | Question |
+|---|---|
+| `updates.memory.effects` | Per delivered memory the conduct could have drawn on: did it shape what you did -- integrated, resisted, dismissed, or no? |
+| `updates.people` on readings already held | Per held reading of someone present: did what they did support it, undercut it, or neither? New readings stay. |
+| `active_concerns` | Per held concern: is it settled now? New concerns stay. |
+| `hedonic.released` | Did the enacted sequence complete a release? |
+| `contact` removal | Per standing contact: does the sequence separate its endpoints? |
+| `salience` | How much will this beat stay with you? |
+
+### The prompt, paragraph by paragraph
+
+`character.txt` is 68 paragraphs, 22,840 characters. With the rows above
+moved out:
+
+- **Removed** (9 paragraphs, 2,518 characters): pain and pleasure, the
+  sustained drive's release, active hypotheses, sensation and thought, what
+  you keep, memory effects, associative learning, relationships, ending
+  contact.
+- **Cut to what stays with the character** (12 paragraphs, 6,717 -> about
+  3,490): current feelings becomes the explanation of the given block;
+  intention continuity keeps `add` and `abandon`; current evidence keeps its
+  rule without the `goal_impacts` schema; belief learning keeps `revise`;
+  theory of mind keeps new readings; unbidden memory, persist the reasoning,
+  attention under stress, earlier this beat, deliberation, the `updates`
+  paragraph and the JSON shape shrink with them.
+- **Untouched** (47 paragraphs): conduct -- sequences, speech budget, mouth,
+  field of view, interrupting, ponder, following, material, effects --
+  reading perception, the spatial frame and running, voice, self-repetition,
+  the waiting, project and fading decisions, and the memory-is-past rules.
+
+The instructions shrink by about a quarter, to roughly 17,500 characters with
+the new block's explanation. The larger saving is output: appraisal (25% of
+today's reply) goes whole, `updates` (29%) keeps only its rare rows,
+`state.active` keeps `wants` -- about 40% of today's reply remains, before the
+reasoning that planned the rest. The call is decode-bound, so that is the
+time; and the interaction loop, which rewrites the whole tracking block every
+round, stops rewriting it.
+
+What pushes back:
+
+- **Owner decision 3, and an audit.** The 2026-08-11 output audit
+  ([`UNBUILT_CHARACTERS.md`](../UNBUILT_CHARACTERS.md) §6.9) called "the
+  psychology division of labor (model authors appraisal, `psychology_runtime`/
+  `affect` own persistence) ... already right". It weighed the model against
+  code; a judge that is not the actor is a third option it did not have.
+  Appraisal theory sides with the proposal -- a feeling arrives from appraisal
+  before anyone chooses it, and agency is in what the character does with it
+  -- but it is a behaviour change to every character, so it waits for step 1
+  of the measurement below: Jev against the character's own answers on
+  captured payloads.
+- **The interaction loop.** Re-run the before-call questions per round only
+  for what reached the character since the last round; the after-call pass
+  runs once per beat.
+- **The firewall.** Every question reads only the character's own perception,
+  memories and card, one request per character (rule 3).
+
 ### The memory packet
 
 - **Candidates.** The fused (RRF) score already ranks the whole bank; take the
