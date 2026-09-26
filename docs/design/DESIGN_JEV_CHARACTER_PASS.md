@@ -140,7 +140,40 @@ reinterpretations, `ponder`.
 - **A fix it needs.** Batteries over 64 questions shard into threads that do
   not inherit the call-ledger context, so their usage is never recorded; the
   fix exists on `codex/jev-encoder-contract` (`copy_context`) and would be
-  ported, not merged.
+  ported, not merged. (Confirmed 2026-09-26: a sink set around a 970-question
+  pass recorded 0 of its 18 requests.)
+
+### The packet, as measured (2026-09-26)
+
+Evidence: [`JEV_MEMORY_PROBE_2026_09_26.md`](../experiments/JEV_MEMORY_PROBE_2026_09_26.md),
+22 beats of one character on banks of 308-649, and 71 questions. It replaces
+the first three bullets above.
+
+- **The net is a fitted weighted RRF, not the fused score.** Today's fused
+  ranking keeps 55% of Jev's topical top 30 inside 100 and 53% of a
+  five-channel packet. Weighted RRF over the generators plus four new lanes --
+  `primed` (last beat's packet), `primed_nb` (rows nearest it), `recency`,
+  `here` -- keeps 81% and, with the tag below, 79% of the packet (90% at
+  200). Today's fused ranking earned weight 0 in every fit.
+- **Tag each memory's moment once, at commit.** Mood-contrast picks were
+  invisible to every lane (15%): Jev reads them from what the moment
+  contained, while the stored affect is the character's own feeling at
+  encoding. One Jev choice per new row -- how did this moment feel -- makes
+  mood contrast 85% reachable alone, and the fun channels with it. It is a new
+  stored field, so it takes the schema checklist (`DATABASE.md`).
+- **No Jev feedback round.** Grading the first 30-60 and refilling around the
+  best added nothing over `primed_nb`.
+- **"Everything Jev would pick" is defined at 100, and reached at about 300.**
+  A reworded Jev keeps only 70-87% of its own top 30 but all of it inside its
+  top 100; holding every pick of one wording needs a median of 272-344 rows.
+- **A ponder reads the whole bank.** Retrieval hands a ponder about one of its
+  five best answers at k=8 and two at k=24; the best fitted pool of 50 holds
+  60%. A ponder fires about one beat in 332, and 650 rows cost $0.005, so the
+  judge reads everything and picks the five.
+- **The fun sections** (the owner's "ironic to bring up", "good teasing
+  material"): `callback` and the tact channel `sore` pick the right rows and
+  are reachable; `irony` is mixed and unreachable by any lane (22%); `tease`
+  is flat and needs a question about what was said or done.
 
 ## What it should save, and what it costs
 
@@ -151,6 +184,12 @@ Estimates to be measured, not results:
   memory battery run concurrently) and nothing after it.
 - A 26-30 row packet adds about 12-16 KB of uncached input over today's median
   of 4-8 rows.
+
+Measured 2026-09-26 (Jev's own `usage.cost`): **about $8 per million
+questions** once each carries a quoted memory -- 200 input and 58 output
+tokens a question, not the $0.00002 per 38 of a Director battery above. Per
+character per beat: a net of 100 on 5 channels $0.004, on 9 channels $0.007;
+the whole bank of 650 on 5 channels $0.026, about a character call's worth.
 
 ## How it will be measured
 
@@ -180,6 +219,14 @@ owner's replay route.
    deciding it.
 4. **Order.** Proposed: the memory packet first, then the pre-pass, then the
    post-pass.
+5. **The moment tag.** A new stored field on every memory, written by Jev at
+   commit (one question a row), with backfill for existing banks.
+6. **Which fun sections ship.** `callback` and `sore` are ready; `irony` and
+   `tease` are not. A section title is an affordance -- "good teasing material"
+   invites teasing -- so each would be capped at two or three rows and judged
+   for this character.
+7. **The weights.** Fitted to one story's character; a second story's label
+   set comes before any of them becomes a constant.
 
 ## Found on the way
 
@@ -188,3 +235,6 @@ owner's replay route.
   `_UPDATE_LANES` never compiles it: no character can give up on a promise.
 - `docs/guides/MEMORY.md` §3 and §5 say k=16 and that recall bumps the access
   count on the spot; the code uses 24 and writes at commit.
+- Memory `entities` hold the label a row was perceived under ("the beautiful
+  young woman", "the player") beside the name ("Hinami"), so no entity lane
+  can gather one person's rows; and witnessed scene rows carry none.

@@ -75,6 +75,20 @@ GRADED_CHANNELS = {
     "useful": ("How much does this memory hold information that would help with what "
                "you are trying to do right now?"),
 }
+#: What a memory is GOOD FOR socially, not what it is about (the owner,
+#: 2026-09-26: "These memories may be ironic to bring up", "Good teasing
+#: material"). Each would become a small packet section of its own; `sore` is
+#: the tact channel the fun ones need beside them. Judged for THIS character
+#: -- the state carries their drive and values -- not for anyone at all.
+SOCIAL_CHANNELS = {
+    "irony": "How ironic would it be to bring this memory up right now, given what is happening?",
+    "tease": ("How good is this memory as material for you to playfully tease someone who is "
+              "here with you right now?"),
+    "callback": ("How much does this memory hold a line, joke or moment you shared with someone "
+                 "here that would be fun to bring back now?"),
+    "sore": "How much would bringing this memory up now touch a sore spot for someone here with you?",
+}
+GRADED_CHANNELS.update(SOCIAL_CHANNELS)
 SCALE = {
     "not_at_all": ("Not at all.", 0.0),
     "slightly": ("Slightly.", 1 / 3),
