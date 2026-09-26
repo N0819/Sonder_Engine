@@ -1292,8 +1292,9 @@ Japanese situations for the battery, since the Japanese wordings are
 untested translations; the worry question's six misses of 21 on the concern
 battery (the wording that meets 20, "does what just happened bring this
 forward?", lets a worry go in an idle moment); longing, grief, dread and
-curiosity read "clearly" on more story beats than two blind readers read them
-(14, 13, 23 and 45 against 0, 4, 10 and 22), each ranked as they rank it;
+curiosity read "clearly" on more story beats than either blind reader reads
+them (14, 13, 23 and 45 against GLM's 5, 9, 15 and 39 and Gemini's 1, 5, 17
+and 24), and guilt, anticipation and nostalgia on fewer;
 whether a given feeling improves what a character does at all -- a six-beat
 blind pilot split at chance, below the variation between two calls
 (`docs/experiments/FEELINGS_AB_PILOT_2026_09_26.md`), and a design that could

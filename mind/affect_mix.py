@@ -296,8 +296,8 @@ def emotions_from_appraisal(appraisal, *, ref="", about=""):
     FULFILLED: 81 and 70 of the 264 events. Asked directly, the model's
     feeling shared the family 37% and 43%; a beat's feelings overlapped a
     rater's own strongest three 55% and 65% by family, against 58% between
-    the raters; the stir strength tracked the raters' strength at r 0.74
-    (0.63 between them); and the named feelings push the mood as well as the
+    the raters; the stir strength tracked each rater's strength at r 0.63
+    and 0.71 (0.63 between them); and the named feelings push the mood as well as the
     rules' did (spectrums r 0.44 against 0.40, standalone moods 0.46 against
     0.48, against the raters' reading of the mood)."""
     a = appraisal or {}

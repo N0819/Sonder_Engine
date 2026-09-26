@@ -970,17 +970,22 @@ reads (`jev_affect_probe.py dimlabel`); their mean is the consensus and
 their agreement with each other the ceiling. The stories are safe for work,
 so Gemini may grade them.
 
-- **Jev's mood reading sits at the ceiling**: r 0.65 against the consensus
-  over 53 coordinates, the raters 0.66 with each other; of the four moods
-  the consensus rates strongest at a beat, Jev's four share 2.72, the two
-  raters' 2.68 with each other.
-- **It reads too many moods "clearly"**: 5.6 per beat against the raters'
-  3.2. "Right now, how much do you feel this: {mood}?" is answered clearly
-  of nearly anything the beat touches. "Right now, is this one of the main
-  things you feel? How strongly: {mood}?" reads 4.7 per beat at r 0.67 and
-  top-four 2.78, and the battery still meets 403 of 414 expectations (97%)
-  and the persons 153 of 155 (99%). Adopted
-  (`tools/jev_mood_calibration.py`).
+- **Jev's mood reading sits a little under the ceiling.** Against each
+  rater alone, with the wording adopted below, r 0.64 (GLM) and 0.59
+  (Gemini), where the raters reach 0.66 with each other; of the four moods
+  a rater rates strongest at a beat, Jev's four share 2.50 and 2.41, the
+  raters' 2.68 with each other. (Against the raters' mean -- smoother than
+  either reader, so it flatters whoever is scored against it -- 0.67 and
+  2.78, and 0.65 and 2.72 with the old wording: the figures this section
+  first gave.)
+- **It read too many moods "clearly"**: 5.6 per beat, where GLM reads 4.8
+  and Gemini 3.9 (their mean, 3.2, smooths the extremes). "Right now, how
+  much do you feel this: {mood}?" is answered clearly of nearly anything
+  the beat touches. "Right now, is this one of the main things you feel?
+  How strongly: {mood}?" reads 4.7 per beat, between the two, with r and
+  top-four better against both raters' mean (0.67 and 2.78, from 0.65 and
+  2.72), and the battery still meets 403 of 414 expectations (97%) and the
+  persons 153 of 155 (99%). Adopted (`tools/jev_mood_calibration.py`).
 - **Two ideas rejected**: a per-mood linear calibration fitted on three
   stories and scored on the fourth lowered r to 0.50; one question asking
   which mood the character feels most read r 0.46.
@@ -1029,8 +1034,9 @@ fear COME TRUE and a hope FULFILLED -- 81 and 70 of the 264 events, where
 readers heard suspicion, curiosity, dread and anticipation. Read as asked
 (more likely is fear, closer is hope) they named nearly everything fear (110)
 or hope (95), because OCC's vocabulary has no suspicion, curiosity, urgency
-or protectiveness. Asked directly, the model names the feeling as well as
-the two readers name it for each other; every wording of the question is
+or protectiveness. Asked directly, the model names the feeling nearly as
+well as the two readers name it for each other (43% with Gemini, 37% with
+GLM, against their 44%); every wording of the question is
 within a point or two of the others, so the gain is in asking, not in the
 words. Two more checks before adopting it:
 
@@ -1042,14 +1048,16 @@ words. Two more checks before adopting it:
 - **As the mood's push**, the named feelings move a neutral mood toward the
   raters' reading as well as the rules' did: spectrums r 0.44 against 0.40,
   standalone moods 0.46 against 0.48 (pleasure 0.61 against 0.43, safety
-  0.15 against 0.34). And "How strongly does this stir you?" tracks the
-  raters' strength at r 0.74, above the raters' 0.63 with each other.
+  0.15 against 0.34). And "How strongly does this stir you?" tracks each
+  rater's strength at r 0.63 (GLM) and 0.71 (Gemini), where the raters
+  reach 0.63 with each other.
 
 A standing concern is named the same way, times its weight: over 279
 concerns both raters labelled, the family matched 46-47% and 56% on every
 wording tried (raters 54% with each other) against 20% and 28% by the rules,
 and the stir strength, the weight and their product track the raters'
-strength alike (r 0.68, 0.66, 0.67; raters 0.61). The engine now asks an
+mean strength alike (r 0.68, 0.66, 0.67; the raters 0.61 with each
+other). The engine now asks an
 event two questions where it asked nine plus one per person
 (`affect_appraisal.EVENT_QUESTIONS`), and OCC's rules, compounds and the
 fortunes-of-others questions are gone. On three beats of the stories, live:
@@ -1063,12 +1071,14 @@ the tide beneath.
 **Surprise is not over-read in play.** It reads high in 57 of the 152
 battery situations that do not name it, but most of those are surprising (a
 returned watch, a lunging dog, black ice); on the story beats Jev reads it
-clearly on 2 where the readers do on 3 (r 0.65). What Jev reads higher than
-the readers in play is longing (clearly on 14 beats, the readers on none),
-grief (13 against 4), dread (23 against 10) and curiosity (45 against 22),
-each ranked as the readers rank it (r 0.69-0.91). Its four strongest moods
-already share as much with the readers' as theirs do with each other, so a
-wording has little left to find there.
+clearly on 2, GLM on 3 and Gemini on 6. What Jev reads clearly more often
+than either rater in play is longing (on 14 beats; GLM 5, Gemini 1), grief
+(13; 9 and 5), dread (23; 15 and 17) and curiosity (45; 39 and 24), each
+ranked as the raters rank it (r 0.69-0.91 against their mean); it reads
+guilt (4; 10 and 9), anticipation (6; 13 and 12) and nostalgia (0; 6 and 3)
+less often than both. Its four strongest moods share 2.41-2.50 with each
+rater's, against 2.68 between the raters, so a wording has some room
+left.
 
 **Does it change what a character does?** A blind pilot on six replayed
 beats -- each answered with no feelings, the old naming and the new, judged

@@ -79,8 +79,8 @@ def test_an_event_stirs_what_was_named_for_it_by_share_of_its_strength():
     """Named, not derived (2026-09-26): OCC's rules read a fear made MORE
     LIKELY as a fear come true and a hope brought CLOSER as a hope
     fulfilled, and matched two blind raters' feeling family at chance; the
-    feeling named directly matched them as well as they matched each
-    other."""
+    feeling named directly matched them nearly as well as they matched
+    each other."""
     named = _names(mix.emotions_from_appraisal(
         {"stir": 0.9, "stirs": {"fears_confirmed": 0.5, "dread": 0.3, "none": 0.2}}, ref="o1", about="the letter"))
     assert named["fears_confirmed"].intensity == pytest.approx(0.45)

@@ -258,8 +258,8 @@ Jev job" on.
    disliked, how much the character can do -- Lazarus; Scherer's component
    process model) and step 3 OCC's rules over them, compounds included.
    Against two blind readers the rules named an event's feeling at chance,
-   and the direct question named it as well as the readers named it for each
-   other (the evidence doc, "Round seven"); the rules are retired.
+   and the direct question named it nearly as well as the readers named it
+   for each other (the evidence doc, "Round seven"); the rules are retired.
 4. Memory-evoked feeling: for the packet's charged rows, does recalling this
    stir something now? The moment tag gives the direction; Jev whether it
    lands. Recalling a feeling brings part of it back (autobiographical
@@ -772,9 +772,9 @@ beats (the evidence doc, "Round seven"):
   questions where it cost nine plus one per person.
 - **The mood's questions ask whether a mood is one of the main things felt**
   ("Right now, is this one of the main things you feel? How strongly:
-  {mood}?"): 4.7 moods read clearly per beat where the readers name 3.2 and
-  the old wording read 5.6, the reading's r against the readers 0.67 (their
-  own 0.66).
+  {mood}?"): 4.7 moods read clearly per beat, between GLM's 4.8 and
+  Gemini's 3.9, where the old wording read 5.6; against each reader alone
+  the reading reaches r 0.64 and 0.59, the readers 0.66 with each other.
 - **The worry question asks what a concern crowds out** ("In this moment,
   how much does this crowd out everything else?"): the concern battery's
   expectations met 15 of 21 where the old question met 9, and a worry still

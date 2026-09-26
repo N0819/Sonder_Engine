@@ -8,8 +8,8 @@ spectrums, one five-step question each, and forty moods that stand on their
 own, one graded question each. An event is asked how strongly it stirs the
 character and how it makes the character feel -- named, not derived: OCC's
 rules over nine appraisal questions named events at chance against two blind
-raters, and the direct question as well as the raters named them for each
-other (`tools/jev_event_feelings.py`).
+raters, and the direct question nearly as well as the raters named them for
+each other (`tools/jev_event_feelings.py`).
 
 Pinned here: every question quotes what it judges and leaves no placeholder
 behind, in its text or its answer labels; "how does this make you feel"
