@@ -213,6 +213,86 @@ What pushes back:
 - **The firewall.** Every question reads only the character's own perception,
   memories and card, one request per character (rule 3).
 
+### Emotion and mood, as designed with the owner
+
+The owner, 2026-09-26: "we might actually be able to remove mood handling
+entirely from the prompt. And code can combine moods into moods that are
+actually combos", "I still imagine jev needs event context to handle how
+events might change mood", "if we ask these questions after jev has crafted
+the memory packet ... can we factor memories into mood?", and "habituation
+should also have a decay rate." Measured so far: the evidence doc's "Mood as
+a Jev job". Nothing below is built.
+
+**Three layers** -- temperament, mood, emotion -- the structure of ALMA
+(Gebhard, "A Layered Model of Affect", 2005), built for virtual characters:
+
+- **Emotion** is fast, about something, caused by an event. Jev appraises;
+  code names it.
+- **Mood** is slow and diffuse, a point in pleasure-arousal-dominance space
+  that emotions push and that drifts home. Code owns it -- the measured
+  shape: carrying the mood and moving it part way toward Jev's reading beat
+  pure persistence on every axis.
+- **Temperament** is home and how easily the character is moved: the card's
+  `stress_profile` and traits. No new card field.
+
+**Order within the before-call pass:**
+
+1. The memory packet (net, then Jev).
+2. Each of the beat's events appraised with the packet in Jev's state --
+   desirability, happened or might, confirmation of a hope or fear, who
+   caused it, right or wrong by the character's standards, good or bad for
+   someone they like or dislike, how much they can do about it (Lazarus;
+   Scherer's component process model). Memory is the appraisal's context: a
+   third lie is not a first.
+3. Code turns appraisals into emotions by the OCC rules (Ortony, Clore and
+   Collins, 1988), whose compounds are the combinations the owner describes --
+   gratitude is admiration and joy, anger reproach and distress, remorse
+   shame and distress -- each with its object ("angry at Hinami, who lied
+   about the key before").
+4. Memory-evoked feeling: for the packet's charged rows, does recalling this
+   stir something now? The moment tag gives the direction; Jev whether it
+   lands. Recalling a feeling brings part of it back (autobiographical
+   recall is a standard mood induction), weaker than it was lived.
+5. Code moves the mood: event emotions at full weight, memory-evoked ones at
+   a fraction; decay toward temperament in psych units (story minutes where
+   the clock runs, turns where it does not), the unit every affect decay
+   already uses.
+
+The character receives one block -- emotions with their objects, the mood,
+the undercurrent -- and stops writing affect; the prompt's feelings, pain and
+pleasure, and hedonic paragraphs go.
+
+**Loop guards.** Mood chooses which memories surface (`mood_match`), and
+memories move the mood (Bower's associative network, 1981): unchecked, that
+is rumination. So memory's push per beat is capped relative to the events',
+the split between `mood_match` and `mood_contrast` rows follows temperament
+(a steady character repairs, a vulnerable one spirals), and a memory's pull
+habituates:
+
+**Habituation, with decay.** Habituation's defining properties (Thompson and
+Spencer, 1966; revised by Rankin et al., 2009) include spontaneous recovery
+when the stimulus is withheld, slower recovery after repeated series, and
+dishabituation by something new. Per memory, that is:
+
+- each time a memory lands, its habituation rises by a step;
+- it decays on TWO half-lives in psych units -- a short one (the same memory
+  resurfacing within a scene is blunted) and a long one that builds only
+  across repeated series (the tenth recall of a crash in a week stirs less
+  than the first, even after a rest, but never nothing);
+- the evoked push is scaled down by habituation up to a ceiling, so a
+  charged memory always keeps some bite;
+- new information about the memory -- a reinterpretation, or a new event of
+  the same kind -- resets it.
+
+This dulls a memory's FEELING, never its availability: the row stays in
+recall in full (the owner's goal is good memory, not forgetting). The surface
+habituation already in `mind/affect.py` recovers on its own half-life
+(`_HABITUATION_RECOVERY_HALF_LIFE`, 2.5 psych units) and ships off
+([`UNBUILT_CHARACTERS.md`](../UNBUILT_CHARACTERS.md) §1.41).
+
+Every step, half-life, cap and ceiling above is the owner's to set; none is
+chosen here.
+
 ### The memory packet
 
 - **Candidates.** The fused (RRF) score already ranks the whole bank; take the
