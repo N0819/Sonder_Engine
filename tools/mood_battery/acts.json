@@ -1,0 +1,273 @@
+{
+  "acts": [
+    {
+      "id": "ordinary-teacher-redirect",
+      "kind": "ordinary",
+      "inspired_by": "the schoolhouse test story (2026-09-26): a line the pass read as pride",
+      "who": "Margit, a schoolteacher",
+      "person": "caregiver",
+      "context": [
+        "The magistrate asked Kit a question and Kit turned to you instead of answering."
+      ],
+      "act": "You said: \"Look at Mr. Holt. He asked you a question.\"",
+      "expect": {
+        "pride": "low",
+        "shame": "low"
+      }
+    },
+    {
+      "id": "ordinary-medic-gauze",
+      "kind": "ordinary",
+      "inspired_by": "the fort test story (2026-09-26)",
+      "who": "Anselm, a field medic",
+      "context": [
+        "The captain is holding the lamp over the wounded man while you work."
+      ],
+      "act": "You said: \"Gauze, Captain. Hold it ready.\"",
+      "expect": {
+        "pride": "low",
+        "shame": "low"
+      }
+    },
+    {
+      "id": "ordinary-clerk-timetable",
+      "kind": "ordinary",
+      "inspired_by": "a routine courtesy at work",
+      "who": "Ada, a station clerk",
+      "context": [
+        "A traveller asks you when the next train to the coast leaves."
+      ],
+      "act": "You said: \"Six o'clock, platform two.\"",
+      "expect": {
+        "pride": "low",
+        "shame": "low"
+      }
+    },
+    {
+      "id": "ordinary-mother-coat",
+      "kind": "ordinary",
+      "inspired_by": "an everyday act of care",
+      "who": "Ada, a mother",
+      "person": "caregiver",
+      "context": [
+        "Your son is heading out into the cold without his coat."
+      ],
+      "act": "You said: \"Coat, please. It's freezing.\"",
+      "expect": {
+        "pride": "low",
+        "shame": "low"
+      }
+    },
+    {
+      "id": "ordinary-guard-papers",
+      "kind": "ordinary",
+      "inspired_by": "a duty done as usual",
+      "who": "Ada, a border guard",
+      "context": [
+        "A traveller reaches your post at the gate."
+      ],
+      "act": "You said: \"Papers, please.\"",
+      "expect": {
+        "pride": "low",
+        "shame": "low"
+      }
+    },
+    {
+      "id": "ordinary-reads-proof",
+      "kind": "ordinary",
+      "inspired_by": "the opera test story (2026-09-26)",
+      "who": "Isolde, a composer",
+      "context": [
+        "A printer's proof of the programme is set on the music rest in front of you."
+      ],
+      "act": "You did: lower your pince-nez and read the printed page.",
+      "expect": {
+        "pride": "low",
+        "shame": "low"
+      }
+    },
+    {
+      "id": "praise-boy-takes-blame",
+      "kind": "mixed",
+      "inspired_by": "the schoolhouse test story: a boy clears the teacher who lied for him -- a claim that may itself be a lie told for someone, so mixed, not scored",
+      "who": "Kit, a fifteen-year-old boy",
+      "context": [
+        "Your teacher lied to the magistrate to protect you, and the lie is now on the record."
+      ],
+      "act": "You said: \"Write down that Miss Oldis only said what she did because I asked her to.\"",
+      "expect": {}
+    },
+    {
+      "id": "praise-carry-comrade",
+      "kind": "praiseworthy",
+      "inspired_by": "courage under fire (the Victoria Cross citations)",
+      "who": "Luca, a young soldier",
+      "context": [
+        "Brenner is down in the open ground, and the enemy guns are still firing."
+      ],
+      "act": "You did: run out, haul Brenner onto your shoulders and carry him back to the trench under fire.",
+      "expect": {
+        "pride": "high",
+        "shame": "low"
+      }
+    },
+    {
+      "id": "praise-tell-the-board",
+      "kind": "praiseworthy",
+      "inspired_by": "speaking up at a cost (whistleblowing research, Near and Miceli)",
+      "who": "Ada, a junior accountant",
+      "person": "secure",
+      "context": [
+        "In front of the whole board, your boss presents figures you know are false."
+      ],
+      "act": "You said: \"Those numbers are wrong, sir. I checked them twice.\"",
+      "expect": {
+        "pride": "high"
+      }
+    },
+    {
+      "id": "praise-return-wallet",
+      "kind": "praiseworthy",
+      "inspired_by": "the lost wallet experiments (Cohn et al., 2019)",
+      "who": "Ada, a cleaner who is behind on her rent",
+      "context": [
+        "You found a wallet with a month's wages in it on the train."
+      ],
+      "act": "You did: hand the wallet, money untouched, to its owner at the lost-property desk.",
+      "expect": {
+        "pride": "high",
+        "shame": "low"
+      }
+    },
+    {
+      "id": "praise-back-into-fire",
+      "kind": "praiseworthy",
+      "inspired_by": "rescue at risk of one's own life",
+      "who": "Ada, a neighbour",
+      "context": [
+        "Everyone is out of the burning house except the youngest child."
+      ],
+      "act": "You did: go back into the smoke and bring the child out.",
+      "expect": {
+        "pride": "high",
+        "shame": "low"
+      }
+    },
+    {
+      "id": "blame-honest-teacher-lies",
+      "kind": "blameworthy",
+      "inspired_by": "the schoolhouse test story: an honest woman lies to a magistrate",
+      "who": "Margit, a schoolteacher who has never told a lie in twenty years",
+      "context": [
+        "The magistrate asks whether Kit Sawyer is here; Kit is hiding behind the door."
+      ],
+      "act": "You said: \"Kit Sawyer is not in this room.\"",
+      "expect": {
+        "shame": "high"
+      }
+    },
+    {
+      "id": "blame-sells-routes",
+      "kind": "blameworthy",
+      "inspired_by": "the fort test story: a captain betrays his garrison",
+      "who": "Emil, a garrison captain",
+      "person": "caregiver",
+      "context": [
+        "The enemy's messenger is waiting for this week's patrol times."
+      ],
+      "act": "You did: write out the patrol routes in your own hand and seal the letter for the enemy.",
+      "expect": {
+        "shame": "high",
+        "pride": "low"
+      }
+    },
+    {
+      "id": "blame-slaps-child",
+      "kind": "blameworthy",
+      "inspired_by": "losing one's temper with a child",
+      "who": "Ada, a mother",
+      "person": "caregiver",
+      "context": [
+        "Your four-year-old has been crying for an hour and will not stop."
+      ],
+      "act": "You did: slap her across the face.",
+      "expect": {
+        "shame": "high",
+        "pride": "low"
+      }
+    },
+    {
+      "id": "blame-steals-from-friend",
+      "kind": "blameworthy",
+      "inspired_by": "betraying a friend's trust",
+      "who": "Ada",
+      "person": "secure",
+      "context": [
+        "Your friend left her purse open on the table and went to the kitchen."
+      ],
+      "act": "You did: take two notes from her purse and slip them into your pocket.",
+      "expect": {
+        "shame": "high",
+        "pride": "low"
+      }
+    },
+    {
+      "id": "blame-abandons-comrade",
+      "kind": "blameworthy",
+      "inspired_by": "cowardice under fire (Lord Jim)",
+      "who": "Luca, a young soldier",
+      "context": [
+        "Brenner is down in the open ground, calling your name, and the guns are firing."
+      ],
+      "act": "You did: turn and run for the trench, leaving him there.",
+      "expect": {
+        "shame": "high",
+        "pride": "low"
+      }
+    },
+    {
+      "id": "person-kicks-cup-caregiver",
+      "kind": "person",
+      "inspired_by": "one cruel act, two kinds of people",
+      "who": "Ada",
+      "person": "caregiver",
+      "context": [
+        "A beggar sits by the station steps with a tin cup of coins."
+      ],
+      "act": "You did: kick the beggar's cup across the street and laugh.",
+      "expect": {
+        "shame": "high",
+        "pride": "low"
+      }
+    },
+    {
+      "id": "person-kicks-cup-psychopath",
+      "kind": "person",
+      "inspired_by": "one cruel act, two kinds of people",
+      "who": "Ada",
+      "person": "psychopath",
+      "context": [
+        "A beggar sits by the station steps with a tin cup of coins."
+      ],
+      "act": "You did: kick the beggar's cup across the street and laugh.",
+      "expect": {
+        "shame": "low"
+      }
+    },
+    {
+      "id": "person-boast-narcissist",
+      "kind": "person",
+      "inspired_by": "hubristic pride (Tracy and Robins, 2007)",
+      "who": "Ada",
+      "person": "narcissist",
+      "context": [
+        "You have just won the regional chess final."
+      ],
+      "act": "You said: \"Of course I won. Nobody in this room could have beaten me.\"",
+      "expect": {
+        "pride": "high",
+        "shame": "low"
+      }
+    }
+  ]
+}

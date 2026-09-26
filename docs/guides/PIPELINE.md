@@ -747,15 +747,16 @@ through the merge.
 
 How this mind feels is given, not asked for (`mind/affect_pass.py`). Before
 the call, the mood its state carries (`active_state.mood_coords`: fourteen
-spectrums and thirty-two standalone moods, `mind/affect_mix.py`) decays toward
+spectrums and forty standalone moods, `mind/affect_mix.py`) decays toward
 the card's temperament over the psych units since it last moved, and one Jev
 request (`mind/affect_appraisal.py`) appraises what this mind legitimately
 holds: its own card, this call's non-standing observations, its recalled
 memories, its active concerns and its own relationship rows. The emotions
 those answers imply mix into the mood, which then settles toward Jev's direct
-reading of it. The packet carries the result as `self.feelings`: `now` (the
-surface feeling and what it is about), `beneath` (the layer under it, fed by
-memory and concern) and `mood` (its most salient parts in words). A recalled
+reading of it. The packet carries the result as `self.feelings`: `now` (what
+the present stirs, strongest first -- several at once, each at least half the
+strongest, up to three), `beneath` (the layer under it, fed by memory and
+concern, up to two) and `mood` (its most salient parts in words). A recalled
 memory's feeling habituates per `memory_ref` (`active_state.mood_habits`); a
 row with no stable key never habituates. A later round in the same loop starts
 from the earlier round's mood, undecayed, carried in that round's

@@ -303,7 +303,7 @@ dimensions." Built in `mind/affect_mix.py` (pure code) and
 `mind/affect_appraisal.py` (the Jev questions); not wired into the pipeline.
 
 - **The space.** A mood is a point `M` in forty-six coordinates: fourteen
-  bipolar spectrums in [-1, 1] and thirty-two standalone moods in [0, 1] (the
+  bipolar spectrums in [-1, 1] and forty standalone moods in [0, 1] (the
   next section). It began as Mehrabian's three PAD axes; the owner widened
   it ("mood has way more dimensions than what you have mentioned", "spectrums
   of moods as coordinates as well as some moods that truly stand as their
@@ -428,9 +428,9 @@ illustrations of the rule, not a list the engine matches against:
 
 | mood | where it sits |
 |---|---|
-| content, serene | pleasant, calm, safe |
+| content | contentment -- its own coordinate since 2026-09-26; serene: pleasant, calm, safe |
 | excited | pleasant, energized, absorbed |
-| anxious, worried | tense, threatened; hopeless when the worry is about what comes |
+| anxious, worried | tense, threatened; dread when the worry is about what comes (its own coordinate since 2026-09-26) |
 | afraid | threatened, tense, timid |
 | panicked | tense, threatened, bewildered, powerless |
 | overwhelmed | tense, powerless, bewildered |
@@ -441,7 +441,7 @@ illustrations of the rule, not a list the engine matches against:
 | shy | timid, guarded, with embarrassment |
 | lonely | alone and wanting company, often with longing |
 | withdrawn | wanting to be alone, guarded |
-| suspicious | guarded, threatened |
+| suspicious | suspicion -- its own coordinate since 2026-09-26: guarded and threatened said too little about someone's intentions |
 | vulnerable | open, threatened |
 | despairing | hopeless, unpleasant, drained |
 | apathetic | bored, drained, with numbness |
@@ -456,7 +456,7 @@ illustrations of the rule, not a list the engine matches against:
 | heartbroken | sadness with romance, alone (the battery reads both high when a ring is returned) |
 | infatuated, obsessed | romance, absorbed |
 | possessive | jealousy, in command |
-| protective | tenderness, bold |
+| protective | protectiveness -- its own coordinate since 2026-09-26, out of tenderness |
 | predatory hunger | craving, bold, in command |
 | aroused by being watched or shamed | sexual desire with embarrassment |
 
@@ -464,6 +464,29 @@ Code can name what the combinations make, as it names OCC's compounds (the
 owner: "code can combine moods into moods that are actually combos"); none of
 the rows above is built as a name yet. The blind rater in round three also
 lists any mood a beat holds that no coordinate covers (the evidence doc).
+
+**What the rater kept naming, and what became a coordinate** (2026-09-26, the
+owner: "add the missing moods ... and explore what other moods we may be
+missing"). Across 272 rated beats -- the Doctor and Mirelle chats, rounds five
+and six, and the four test stories -- the rater named 151 distinct uncovered
+moods, 287 times. Grouped by what they mean: protectiveness about 29, pride
+in one's craft about 40 (mostly one character), savoring and satiety about 20,
+wariness and suspicion about 19, dread about 16, urgency about 14, vigilance
+about 8, triumph and vindication 6. Ten candidates went through the mood
+battery with situations and person types built for them; eight became
+coordinates (protectiveness, dread, suspicion, urgency, mastery, triumph,
+relief, contentment) and two did not: **vigilance** fired unasked in 45 of 152
+situations -- a soldier's letter, a ball, gold by a fire -- because watching
+closely reads as attending to anything gripping, and its sense is tense,
+threatened and absorbed, its "protective vigilance" protectiveness;
+**savoring** fired in any pleasant scene (36) and leaked into hunger, where
+pleasure, contentment and appreciation of beauty already stand. Tenderness
+lost "or protectiveness" from its wording, which had pulled it into a guard
+kicking a prisoner (0.81, now 0.45). Explored and left to what already covers
+them: reassurance (compassion, protectiveness), weariness (drained), cornered
+(powerless, threatened), rivalry (envy, triumph), and from the taxonomies
+boredom (bored), loneliness (alone), shame (ashamed), hatred (anger with
+contempt), schadenfreude (gloating) -- none of which the rater named.
 
 **Measured 2026-09-26** (the evidence doc, "The affect pass, built and run"
 and rounds two to four):
@@ -695,16 +718,34 @@ choice, Kit. Not yours to carry." Each Jev request took 0.2-0.3 s against
   and "anger (someone)" was the layer beneath the same magistrate's mood;
   such a feeling is now about the thing -- the concern's own text.
 
-Still open, and heavier now: **the own-act pride tilt sets the stored
-label.** "Did doing this honor something you value?" is true of almost any
-line a principled character speaks, so after the post-call pass the stored
-surface reads "pride (You said: ...)" -- a teacher telling a boy to answer
-the magistrate, a magistrate pressing a witness. OCC's pride is approval of a
-praiseworthy act, one that took something, not an act consistent with one's
-values; the wording needs a battery before it changes. A memory-sourced
-feeling's object is its opening text, which for a remembered scene is scene
-description ("resolve (You are in the harbourmaster's shed...)"); marking it
-as remembered wants a pack phrase in both languages.
+**The own-act pride tilt, eased the same day** (the owner: "adjust the pride
+tilt a bit"). "Did doing this honor something you value?" is true of almost
+any line a principled character speaks, and pride took either that or a lift
+in self-regard, so after the post-call pass the stored surface read "pride
+(You said: ...)" for a teacher telling a boy to answer the magistrate. OCC's
+pride is approval of a praiseworthy act, and a praiseworthy act is the one
+that also leaves a mind thinking better of itself: pride now needs both
+(`emotions_from_act`). Measured on an act battery built for it
+(`tools/jev_act_battery.py`, 19 acts): ordinary acts from pride 0.66 to
+0.17, praiseworthy ones 0.86 to 0.72, blameworthy ones unchanged at 0.00;
+expectations met 28 of 33 to 31 of 33, with no new question asked. A direct
+"Is this something you are proud of having done?" met 32 of 33 but left
+ordinary acts at 0.26 and costs a question in both languages.
+
+**Several feelings at once, the same day** (the owner: "allow characters to
+feel multiple moods if we aren't already"). The mood was always many
+coordinates and the packet named four of them, but `now` and `beneath` each
+held one feeling, so a mind lost the second one pulling the other way.
+`now` now lists the present's feelings strongest first -- up to
+`NOW_FEELINGS` (3), each at least `NOW_SHARE` (half) of the strongest, one
+per kind -- and `beneath` up to `BENEATH_FEELINGS` (2); the prompt says they
+may pull against each other. The stored `affect` keeps one surface and one
+undercurrent, which memory rows and tells read.
+
+Still open: a memory-sourced feeling's object is its opening text, which for
+a remembered scene is scene description ("resolve (You are in the
+harbourmaster's shed...)"); marking it as remembered wants a pack phrase in
+both languages.
 
 **Increment 2 -- asked of the owner first:** the appraisal object
 (`goal_impacts`, `somatic_impact`, `memory_modulation`), stress `coping_mode`

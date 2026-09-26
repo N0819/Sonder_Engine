@@ -214,7 +214,7 @@ archives and branches already carry the whole state, including:
   synthesis on that call, and omission -- a result with no given affect --
   runs the existing decay, relief and synthesis rules.
 - `active_state.mood_coords`, `mood_habits`, `mood_clock`: the engine's mood
-  between calls -- fourteen spectrums and thirty-two standalone moods (only
+  between calls -- fourteen spectrums and forty standalone moods (only
   the nonzero ones are kept), each recalled memory's habituation keyed by its
   copy-stable `event_key`, and the psych clock habituation is read against.
   Inside the state JSON, so rollback, branching and export carry them with no

@@ -15,7 +15,7 @@ Designed with the owner on 2026-09-26 (`docs/design/DESIGN_JEV_CHARACTER_PASS.md
 - **Mood as a high-dimensional object** (the owner: "spectrums of moods as
   coordinates as well as some moods that truly stand as their own", and "We
   are trying to cover all moods and make a coordinate system out of them"):
-  fourteen bipolar spectrum coordinates in [-1, 1] and thirty-two standalone
+  fourteen bipolar spectrum coordinates in [-1, 1] and forty standalone
   moods in [0, 1], named by the language pack. Each emotion pushes the
   coordinates it moves (`EMOTION_EFFECTS`); a beat's emotions average into a
   target per coordinate, and the mood moves part of the way toward it -- the
@@ -61,10 +61,11 @@ from dataclasses import dataclass, field
 SPECTRUMS = ("pleasure", "energy", "tension", "control", "clarity", "connection", "openness",
              "playfulness", "hope", "self_regard", "safety", "engagement", "boldness", "sociability")
 STANDALONE = ("romance", "sexual_desire", "craving", "greed", "curiosity", "anticipation", "awe",
-              "admiration", "aesthetic", "amusement", "moved", "tenderness", "compassion", "gratitude",
-              "anger", "contempt", "disgust", "horror", "jealousy", "envy", "guilt", "embarrassment",
-              "sadness", "surprise", "resolve", "numbness", "nostalgia", "grief", "regret", "longing",
-              "homesickness", "haunted")
+              "admiration", "aesthetic", "amusement", "moved", "tenderness", "compassion",
+              "gratitude", "anger", "contempt", "disgust", "horror", "jealousy", "envy", "guilt",
+              "embarrassment", "sadness", "surprise", "resolve", "numbness", "nostalgia", "grief",
+              "regret", "longing", "homesickness", "haunted", "protectiveness", "dread",
+              "suspicion", "urgency", "mastery", "triumph", "relief", "contentment")
 
 #: How each emotion moves the mood: a value per coordinate it touches
 #: (spectrums in [-1, 1], standalone moods in [0, 1]). The OCC emotions and
@@ -83,7 +84,7 @@ EMOTION_EFFECTS = {
              "openness": -.3, "boldness": -.6},
     "satisfaction": {"pleasure": .6, "tension": -.4, "hope": .3, "control": .3},
     "disappointment": {"pleasure": -.5, "hope": -.5, "energy": -.3, "sadness": .4},
-    "relief": {"pleasure": .5, "tension": -.6, "safety": .5},
+    "relief": {"relief": 1.0, "pleasure": .5, "tension": -.6, "safety": .5},
     "fears_confirmed": {"pleasure": -.6, "safety": -.6, "hope": -.6, "tension": .5, "control": -.5},
     "pride": {"pleasure": .5, "self_regard": .8, "control": .4, "energy": .3, "boldness": .3},
     "shame": {"pleasure": -.5, "self_regard": -.8, "openness": -.4, "control": -.3, "boldness": -.4,
@@ -145,6 +146,21 @@ EMOTION_EFFECTS = {
     "homesickness": {"homesickness": 1.0, "longing": .5, "pleasure": -.3, "safety": -.3,
                      "connection": -.4},
     "haunted": {"haunted": 1.0, "pleasure": -.4, "tension": .5, "safety": -.5, "clarity": -.3},
+    # added 2026-09-26 from what a blind rater kept naming as uncovered
+    # across 272 rated beats (docs/experiments/JEV_MEMORY_PROBE_2026_09_26.md)
+    "protectiveness": {"protectiveness": 1.0, "boldness": .5, "tension": .4, "connection": .4,
+                       "engagement": .4, "control": .2},
+    "dread": {"dread": 1.0, "pleasure": -.6, "tension": .7, "safety": -.6, "hope": -.5,
+              "control": -.4},
+    "suspicion": {"suspicion": 1.0, "openness": -.6, "connection": -.4, "tension": .4,
+                  "safety": -.3, "engagement": .3},
+    "urgency": {"urgency": 1.0, "tension": .6, "energy": .6, "engagement": .5, "boldness": .3},
+    "mastery": {"mastery": 1.0, "pleasure": .5, "self_regard": .5, "control": .6, "engagement": .6,
+                "clarity": .3},
+    "triumph": {"triumph": 1.0, "pleasure": .7, "self_regard": .6, "control": .5, "energy": .5,
+                "boldness": .4},
+    "contentment": {"contentment": 1.0, "pleasure": .6, "tension": -.5, "energy": -.2,
+                    "safety": .3, "hope": .2},
 }
 #: The part of a memory's evoked feeling that none of the standalone moods
 #: named moves the mood the way the emotion its tone resembles does: a
@@ -339,16 +355,26 @@ def stirred(strength, shares, *, ref="", about="", source="event", multiplier=1.
 
 def emotions_from_act(appraisal, *, ref="", about=""):
     """What the character's own act, appraised after its turn, makes it feel:
-    pride where the act honoured its values or left it thinking better of
+    pride where the act honoured its values AND left it thinking better of
     itself, shame where it went against them or left it thinking worse, and
     frustration for what it wanted to do instead. The act's easing or
-    stoking of the feeling is not an emotion; `ease` applies it."""
+    stoking of the feeling is not an emotion; `ease` applies it.
+
+    PRIDE NEEDS BOTH (2026-09-26, the owner: "adjust the pride tilt a
+    bit"). Almost anything a principled character says honours some value
+    -- "Papers, please." read 0.80 on that question, "Gauze, Captain. Hold
+    it ready." 0.74 -- so with either one enough, own acts on four test
+    stories read as pride 39 / 27 / 39 / 60 against shame 0 / 1 / 0 / 1 and
+    pride became the label a character carried after it spoke. Such acts
+    barely move what a mind thinks of itself; a praiseworthy one does. On
+    the act battery (`tools/jev_act_battery.py`) ordinary acts fell from
+    pride 0.66 to 0.17 while carrying a comrade under fire kept 0.85."""
     a = appraisal or {}
     against = _clamp(a.get("against_values"), 0.0, 1.0)
     honours = _clamp(a.get("honors_values"), 0.0, 1.0)
     regard = _clamp(a.get("self_regard"))
     wanted = _clamp(a.get("wanted_instead"), 0.0, 1.0)
-    raw = [("pride", max(honours, max(0.0, regard)) * (1 - against), about),
+    raw = [("pride", min(honours, max(0.0, regard)) * (1 - against), about),
            ("shame", max(against, max(0.0, -regard)), about),
            ("frustration", wanted, about)]
     return [Emotion(n, round(i, 4), obj, "act", ref) for n, i, obj in raw if i > 1e-4]

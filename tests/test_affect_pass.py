@@ -91,8 +91,30 @@ def test_what_the_call_brings_moves_the_mood_and_names_it(jev):
     assert under and set(under) == {"label", "valence", "arousal", "source", "serves"}
     assert under["source"].split(":")[0] in ("memory", "concern")
     block = ap.feelings_block(felt)
-    assert set(block) == {"now", "beneath", "mood"} and block["now"] == affect_now["surface"]["label"]
-    assert block["mood"]
+    assert set(block) == {"now", "beneath", "mood"} and block["now"][0] == affect_now["surface"]["label"]
+    assert block["beneath"][0] == under["label"] and block["mood"]
+
+
+def test_a_mind_is_given_what_it_feels_at_once_strongest_first():
+    """The owner, 2026-09-26: "allow characters to feel multiple moods". A
+    present feeling at least NOW_SHARE of the strongest is given beside it --
+    one per kind, at most NOW_FEELINGS -- and a faint one is not."""
+    from mind.affect_mix import Emotion, Mood
+
+    felt = ap.Felt(mood=Mood({}), home=Mood({}), habits={}, clock=0.0, language="en",
+                   emotions=[Emotion("relief", 0.9, "the scan was clear", "event", "o1"),
+                             Emotion("fear", 0.6, "what the doctor did not say", "event", "o2"),
+                             Emotion("relief", 0.8, "the waiting is over", "event", "o3"),
+                             Emotion("joy", 0.2, "the sun on the car park", "event", "o4"),
+                             Emotion("grief", 0.7, "mother's illness began like this", "memory", "m1")])
+    block = ap.feelings_block(felt)
+    assert [w.split(" (")[0] for w in block["now"]] == ["relief", "fear"]
+    assert block["now"][0].endswith("(the scan was clear)")
+    assert [w.split(" (")[0] for w in block["beneath"]] == ["grief"]
+    many = ap.Felt(mood=Mood({}), home=Mood({}), habits={}, clock=0.0, language="en",
+                   emotions=[Emotion(n, 0.9 - i * 0.05, "it", "event", f"o{i}")
+                             for i, n in enumerate(("anger", "fear", "distress", "hope", "joy"))])
+    assert len(ap.feelings_block(many)["now"]) == ap.NOW_FEELINGS
 
 
 def test_one_request_per_pass_from_this_characters_own_inputs(jev):

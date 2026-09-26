@@ -895,6 +895,63 @@ lines appraised again as events, blame toward nobody named landing on
 came to); the pride tilt, now the stored label after a character speaks, is
 open (`docs/design/DESIGN_JEV_CHARACTER_PASS.md`, "What increment 1 leaves").
 
+## Round six: the moods still missing, the pride tilt, several at once
+
+The owner, after round five: "add the missing moods adjust the pride tilt a
+bit, and explore what other moods we may be missing, Also allow characters to
+feel multiple moods if we aren't already."
+
+**What was missing.** Every rater "uncovered" answer kept in the job -- rounds
+five and six (the Doctor and Mirelle, 196 beats) and the four stories (76) --
+grouped by meaning: protectiveness about 29, pride in one's craft about 40
+(almost all Mirelle), savoring and satiety about 20 (Mirelle), wariness and
+suspicion about 19, dread about 16, urgency about 14, vigilance about 8,
+triumph and vindication 6, reassurance 5; weariness, "cornered" and rivalry
+two or three each. Ten candidates went into the mood battery with 24 new
+situations (each from a named paradigm) and eight person tests:
+
+| candidate (wording kept) | targets | look-alikes low | fires unasked | person test |
+|---|---|---|---|---|
+| protectiveness, the urge to shield someone from harm | 2/2 | 1/1 | 19 | caregiver 1.00, secure 0.99 > psychopath 0.71, narcissist 0.86 |
+| dread, fear of something bad that is coming | 2/2 | 10/10 | 26 | anxious 1.00, depressed 0.99 > secure 0.42 |
+| suspicion that someone is lying or means harm | 2/2 | 5/5 | 19 (25 as "distrust of someone's intentions") | avoidant 0.91 > secure 0.20, caregiver 0.32 |
+| urgency, a race against the clock | 2/2 | 7/8 | 30 (45 as "the need to act now") | -- |
+| mastery, the pleasure of doing well something you are skilled at | 2/2 | 1/1 | 9 | achiever 0.98 > depressed 0.14 |
+| triumph over a rival or over those who doubted you | 2/2 | 4/4 | 1 ("the fierce pleasure of winning" read a raffle win 0.61) | narcissist 0.93, achiever 0.97 > caregiver 0.12, depressed 0.01 |
+| relief, a weight lifting as a fear passes | 2/2 | 2/2 | 16 | anxious 0.65 > avoidant 0.58 |
+| contentment, wanting nothing more right now | 2/2 | 8/8 | 22 | secure 0.99, traditionalist 0.93 > anxious 0.30, achiever 0.05 |
+| vigilance -- dropped | 2/2 | 1/1 | 45: a soldier's letter, a ball, gold by a fire | -- |
+| savoring -- dropped | 2/2 | 1/2 | 36: any pleasant scene; leaked into hunger | -- |
+
+Tenderness lost "or protectiveness" ("tenderness, a gentle affection toward
+someone"): its leak into a guard kicking a prisoner fell from 0.81 to 0.45.
+Every candidate but urgency meets its expectations; urgency reads 0.70-0.79
+while waiting for tomorrow's scan results on every wording tried, so that is
+how the decision model hears a looming appointment. With the forty
+standalone moods the battery meets 402 of 414 expectations (97%) and the
+person tests 153 of 155 (99%), the two misses the same as before.
+
+**The pride tilt** (`tools/jev_act_battery.py`, 19 acts in
+`tools/mood_battery/acts.json`: ordinary, praiseworthy, blameworthy, one act
+two people do). Ordinary acts honoured a value at 0.66-0.84 ("Papers,
+please." 0.80) and moved self-regard 0.01-0.22 (a mother's "Coat, please."
+0.51); pride took either:
+
+| rule | ordinary | praiseworthy | blameworthy | met |
+|---|---|---|---|---|
+| either (as shipped) | 0.66 | 0.86 | 0.01 | 28/33 |
+| both -- adopted | 0.17 | 0.72 | 0.00 | 31/33 |
+| "proud of having done?" in its place | 0.26 | 0.83 | 0.00 | 32/33 |
+| "better than you usually expect of yourself?" | 0.10 | 0.71 | 0.00 | 31/33 -- a narcissist's boast 0.05 |
+
+Two cases were mine, not the model's, and were re-labelled: a boy's claim
+that his teacher lied "because I asked her to" is itself a lie told for
+someone, and an inhibited profile speaking up against its own value of
+keeping the peace. Adopting "both" asks nothing new of the decision model.
+
+**Several at once.** `now` lists up to three present feelings, each at least
+half the strongest, one per kind; `beneath` up to two.
+
 ## What Jev costs
 
 Measured from Jev's own response (`usage.cost`): one 64-question request,

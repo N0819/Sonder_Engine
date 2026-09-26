@@ -1070,7 +1070,7 @@
         "aesthetic": "appreciation of beauty",
         "amusement": "amusement",
         "moved": "moved by someone's goodness",
-        "tenderness": "tenderness, affection or protectiveness toward someone",
+        "tenderness": "tenderness, a gentle affection toward someone",
         "compassion": "compassion, feeling for someone's pain and wanting to ease it",
         "gratitude": "gratitude",
         "anger": "anger or irritation",
@@ -1090,7 +1090,15 @@
         "regret": "regret over something you did or failed to do",
         "longing": "longing for someone or something absent",
         "homesickness": "homesickness",
-        "haunted": "troubled by a memory from your own past that keeps coming back"
+        "haunted": "troubled by a memory from your own past that keeps coming back",
+        "protectiveness": "protectiveness, the urge to shield someone from harm",
+        "dread": "dread, fear of something bad that is coming",
+        "suspicion": "suspicion that someone is lying or means harm",
+        "urgency": "urgency, a race against the clock",
+        "mastery": "mastery, the pleasure of doing well something you are skilled at",
+        "triumph": "triumph over a rival or over those who doubted you",
+        "relief": "relief, a weight lifting as a fear passes",
+        "contentment": "contentment, wanting nothing more right now"
       },
       "stir": {
         "none": "None of these."
@@ -1147,7 +1155,15 @@
         "regret": "regret",
         "longing": "longing",
         "homesickness": "homesickness",
-        "haunted": "a past that will not let go"
+        "haunted": "a past that will not let go",
+        "protectiveness": "protectiveness",
+        "dread": "dread",
+        "suspicion": "suspicion",
+        "urgency": "urgency",
+        "mastery": "mastery",
+        "triumph": "triumph",
+        "relief": "relief",
+        "contentment": "contentment"
       }
     }
   }

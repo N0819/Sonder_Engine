@@ -42,3 +42,17 @@ cached by question text), and the report prints each candidate beside the
 pack's wording. The decision model grades an option by its words, so name
 the class alone -- naming what a mood excludes pulls it toward that -- and
 avoid words with a physical second sense.
+
+## `acts.json`
+
+The own-act half of the pass: does what a character just did make it feel
+pride, shame or neither where people would? Acts of four `kind`s -- ordinary
+acts that merely fit the character's values (pride should stay low),
+praiseworthy acts that cost something (pride high), blameworthy acts (shame
+high), and one act done by two kinds of people -- each with `who`, an
+optional `person` from `battery.json`, the `context` it happened in and the
+`act` in the pass's own words (`You said: "..."`, `You did: ...`). Run by
+[`tools/jev_act_battery.py`](../jev_act_battery.py), which scores pride and
+shame under the shipped rule and its alternatives, and any candidate pride
+question passed as a JSON list with `--variants`. It is what eased the pride
+tilt on 2026-09-26.

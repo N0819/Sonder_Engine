@@ -3,7 +3,7 @@
 Designed with the owner on 2026-09-26: the decision model appraises what a
 character perceived, did and recalled, and code turns appraisals into
 emotions by the OCC rules and moves a high-dimensional mood -- fourteen
-spectrum coordinates and thirty-two moods that stand on their own ("spectrums of
+spectrum coordinates and forty moods that stand on their own ("spectrums of
 moods as coordinates as well as some moods that truly stand as their own",
 "cover all moods") -- part of the way toward the targets the beat's emotions
 set, decays it, eases or stokes it by the character's own acts, and
@@ -141,9 +141,19 @@ def test_a_stirred_mood_never_becomes_half_of_a_compound():
 
 def test_an_act_against_ones_values_is_shame_and_one_that_honours_them_pride():
     against = _names(mix.emotions_from_act({"against_values": 0.8}, ref="s1"))
-    honours = _names(mix.emotions_from_act({"honors_values": 0.8}, ref="s2"))
+    honours = _names(mix.emotions_from_act({"honors_values": 0.8, "self_regard": 0.8}, ref="s2"))
     assert "shame" in against and "pride" not in against
     assert "pride" in honours and honours["pride"].source == "act"
+
+
+def test_an_act_that_only_fits_ones_values_is_not_pride():
+    """Pride needs the act to honour a value AND leave the mind thinking
+    better of itself: "Papers, please." honoured a guard's values at 0.80 and
+    moved his self-regard 0.01 (the act battery, 2026-09-26)."""
+    routine = _names(mix.emotions_from_act({"honors_values": 0.8, "self_regard": 0.01}, ref="s4"))
+    brave = _names(mix.emotions_from_act({"honors_values": 0.99, "self_regard": 0.88}, ref="s5"))
+    assert routine.get("pride") is None or routine["pride"].intensity <= 0.01
+    assert brave["pride"].intensity == pytest.approx(0.88)
 
 
 def test_what_was_wanted_instead_is_frustration():
@@ -151,8 +161,9 @@ def test_what_was_wanted_instead_is_frustration():
 
 
 def test_dissonance_takes_the_pride_out_of_an_act():
-    torn = _names(mix.emotions_from_act({"honors_values": 0.8, "against_values": 0.8}, ref="s3"))
-    clean = _names(mix.emotions_from_act({"honors_values": 0.8}, ref="s3"))
+    torn = _names(mix.emotions_from_act({"honors_values": 0.8, "self_regard": 0.8,
+                                         "against_values": 0.8}, ref="s3"))
+    clean = _names(mix.emotions_from_act({"honors_values": 0.8, "self_regard": 0.8}, ref="s3"))
     assert torn["pride"].intensity < clean["pride"].intensity
 
 

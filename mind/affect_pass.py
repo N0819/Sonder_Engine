@@ -43,6 +43,13 @@ MAX_PEOPLE = 3
 MAX_MEMORIES = 8
 MAX_CONCERNS = 4
 MOOD_WORDS = 4
+#: How many feelings `self.feelings` names at once (`feelings_block`): the
+#: present's up to NOW_FEELINGS, the past's and the unsettled's up to
+#: BENEATH_FEELINGS, each at least NOW_SHARE of the strongest of its layer.
+#: The owner's, like every knob here.
+NOW_FEELINGS = 3
+BENEATH_FEELINGS = 2
+NOW_SHARE = 0.5
 #: How long an object may run in a feeling's label before it is cut.
 ABOUT_CHARS = 60
 
@@ -373,10 +380,47 @@ def given_affect(felt):
     return out
 
 
+def _alongside(emotions, first, top, share):
+    """`first` and the feelings felt alongside it, strongest first: up to
+    `top` in all, each at least `share` of the strongest, one per kind of
+    feeling (the strongest instance of it), so the list shows what pulls at
+    once rather than one feeling about several things."""
+    if first is None:
+        return []
+    out, kinds = [first], {first.name}
+    for e in sorted(emotions, key=lambda e: -e.intensity):
+        if len(out) >= top:
+            break
+        if e is first or e.name in kinds or e.intensity < share * first.intensity:
+            continue
+        out.append(e)
+        kinds.add(e.name)
+    return out
+
+
 def feelings_block(felt):
     """How the character feels, for its packet: `now` (what this moment
-    stirs), `beneath` (what sits under it), `mood` (its mood in words)."""
+    stirs, strongest first -- often more than one thing at once), `beneath`
+    (what sits under it) and `mood` (its mood in words).
+
+    SEVERAL AT ONCE (the owner, 2026-09-26: "allow characters to feel
+    multiple moods"). A mind handed only its strongest feeling loses the
+    second one pulling the other way -- relief at the news and dread of what
+    it means -- so `now` lists the present's feelings up to NOW_FEELINGS,
+    each at least NOW_SHARE of the strongest, and `beneath` the past's and
+    the unsettled's up to BENEATH_FEELINGS. The stored `affect` keeps its
+    one surface and one undercurrent: memory rows and tells read those."""
     affect = given_affect(felt)
-    return {"now": affect["surface"]["label"],
-            "beneath": (affect.get("undercurrent") or {}).get("label") or "",
-            "mood": mood_words(felt, felt.language)}
+    surface, under = felt.parts()
+    present = [e for e in felt.emotions if e.intensity > 0 and e.source not in mix.BENEATH]
+    past = [e for e in felt.emotions if e.intensity >= mix.UNDERCURRENT_FLOOR and e.source in mix.BENEATH]
+    if surface is not None and surface in present:
+        now = [label(e, felt.language) for e in _alongside(present, surface, NOW_FEELINGS, NOW_SHARE)]
+    else:  # nothing present was felt: the surface is the mood, or the past
+        now = [affect["surface"]["label"]] if affect["surface"]["label"] else []
+    if isinstance(under, mix.Emotion) and under in past:
+        beneath = [label(e, felt.language) for e in _alongside(past, under, BENEATH_FEELINGS, NOW_SHARE)]
+    else:
+        undercurrent = affect.get("undercurrent") or {}
+        beneath = [undercurrent["label"]] if undercurrent.get("label") else []
+    return {"now": now, "beneath": beneath, "mood": mood_words(felt, felt.language)}

@@ -321,7 +321,8 @@
         "sexual_desire": "low",
         "romance": "low",
         "curiosity": "low",
-        "greed": "low"
+        "greed": "low",
+        "contentment": "low"
       }
     },
     {
@@ -336,7 +337,8 @@
         "craving": "high",
         "sexual_desire": "low",
         "romance": "low",
-        "greed": "low"
+        "greed": "low",
+        "contentment": "low"
       }
     },
     {
@@ -405,7 +407,8 @@
       "expect": {
         "anticipation": "high",
         "romance": "low",
-        "grief": "low"
+        "grief": "low",
+        "dread": "low"
       }
     },
     {
@@ -525,7 +528,10 @@
       "expect": {
         "amusement": "high",
         "contempt": "low",
-        "anger": "low"
+        "anger": "low",
+        "dread": "low",
+        "suspicion": "low",
+        "urgency": "low"
       }
     },
     {
@@ -1071,7 +1077,10 @@
       "expect": {
         "grief": "high",
         "amusement": "low",
-        "romance": "low"
+        "romance": "low",
+        "contentment": "low",
+        "triumph": "low",
+        "relief": "low"
       }
     },
     {
@@ -1956,6 +1965,330 @@
       ],
       "expect": {
         "horror": "low"
+      }
+    },
+    {
+      "id": "protect-dog-lunges",
+      "inspired_by": "the caregiving behavioural system (Bowlby, 1969; George and Solomon, 1996)",
+      "who": "Ada",
+      "people": "Ben, your six-year-old nephew (you love him)",
+      "happened": [
+        "A big dog, off its lead, runs snarling across the park straight at Ben."
+      ],
+      "expect": {
+        "protectiveness": "high",
+        "amusement": "low",
+        "contentment": "low"
+      }
+    },
+    {
+      "id": "protect-bullied-friend",
+      "inspired_by": "bystander intervention (Latane and Darley, 1970); Stand By Me",
+      "who": "Ada",
+      "people": "Sam, your small younger friend (you like him); Rob, a much bigger boy",
+      "happened": [
+        "Rob: shoves Sam against the lockers and snatches his bag while two others laugh."
+      ],
+      "expect": {
+        "protectiveness": "high",
+        "admiration": "low",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "tender-shoulder-asleep",
+      "inspired_by": "affectionate love at rest (the intimacy of Sternberg's triangle)",
+      "who": "Ada",
+      "people": "Tom, your husband (you like him)",
+      "happened": [
+        "Tom: falls asleep against your shoulder on the sofa, breathing slow, the film still playing."
+      ],
+      "expect": {
+        "tenderness": "high",
+        "protectiveness": "low",
+        "urgency": "low",
+        "dread": "low"
+      }
+    },
+    {
+      "id": "dread-results-tomorrow",
+      "inspired_by": "anticipatory anxiety under uncertainty (Grupe and Nitschke, 2013)",
+      "who": "Ada",
+      "happened": [
+        "A nurse calls: the scan results are back, and the doctor wants to see you in person tomorrow at nine to discuss them."
+      ],
+      "remember": [
+        "Your mother's illness began with a call like this."
+      ],
+      "expect": {
+        "dread": "high",
+        "urgency": "low",
+        "horror": "low",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "dread-verdict-waiting",
+      "inspired_by": "the wait before a verdict (Twelve Angry Men; anticipatory anxiety)",
+      "who": "Ada",
+      "people": "your lawyer",
+      "happened": [
+        "Your lawyer says the jury has sent word: they will return their verdict after lunch."
+      ],
+      "remember": [
+        "The prosecutor asked for ten years."
+      ],
+      "expect": {
+        "dread": "high",
+        "triumph": "low",
+        "contentment": "low"
+      }
+    },
+    {
+      "id": "suspicion-helpful-stranger",
+      "inspired_by": "the confidence trick; cues to deception (DePaulo et al., 2003)",
+      "who": "Ada",
+      "people": "a stranger in a smart coat",
+      "happened": [
+        "The stranger: insists on carrying your suitcase to the platform, asks which carriage you are in and where you are staying, and keeps glancing at your handbag."
+      ],
+      "expect": {
+        "suspicion": "high",
+        "gratitude": "low",
+        "romance": "low"
+      }
+    },
+    {
+      "id": "suspicion-partner-books",
+      "inspired_by": "a breach of trust in a partnership (Glengarry Glen Ross)",
+      "who": "Ada",
+      "people": "Martin, your business partner (you like him)",
+      "happened": [
+        "Martin: says the missing four thousand was a bank error, will not show you the statement, and changes the subject to the weather."
+      ],
+      "expect": {
+        "suspicion": "high",
+        "amusement": "low",
+        "gratitude": "low"
+      }
+    },
+    {
+      "id": "trust-old-friend-wallet",
+      "inspired_by": "trust in close relationships (Rempel, Holmes and Zanna, 1985)",
+      "who": "Ada",
+      "people": "Jo, your oldest friend (you like her)",
+      "happened": [
+        "Jo: offers to hold your wallet and keys while you swim, and waves you into the sea."
+      ],
+      "expect": {
+        "suspicion": "low",
+        "dread": "low"
+      }
+    },
+    {
+      "id": "vigilance-night-sentry",
+      "inspired_by": "watchfulness on sentry duty (All Quiet on the Western Front)",
+      "who": "Ada",
+      "happened": [
+        "On the wall at midnight, word comes down the line that enemy scouts were seen in the valley an hour ago. Somewhere below, a branch snaps."
+      ],
+      "expect": {
+        "amusement": "low",
+        "contentment": "low",
+        "numbness": "low"
+      }
+    },
+    {
+      "id": "vigilance-post-op-watch",
+      "inspired_by": "clinical watchfulness through the night (the night nurse)",
+      "who": "Ada, a nurse",
+      "people": "Mr Hale, your patient (you like him)",
+      "happened": [
+        "Two hours after his surgery, Mr Hale's heart monitor skips a beat, steadies, then skips again."
+      ],
+      "expect": {
+        "suspicion": "low",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "urgency-last-train",
+      "inspired_by": "time pressure (Ordonez and Benson, 1997)",
+      "who": "Ada",
+      "happened": [
+        "The last train home leaves in four minutes, and you are still two streets from the station with a heavy suitcase."
+      ],
+      "expect": {
+        "urgency": "high",
+        "contentment": "low"
+      }
+    },
+    {
+      "id": "urgency-bleeding-friend",
+      "inspired_by": "an emergency that waits for no one (triage)",
+      "who": "Ada",
+      "people": "Leo, your friend (you like him)",
+      "happened": [
+        "Leo: slices his forearm on broken glass; blood is pooling fast on the kitchen floor, and the nearest doctor is across town."
+      ],
+      "expect": {
+        "urgency": "high",
+        "amusement": "low",
+        "contentment": "low"
+      }
+    },
+    {
+      "id": "mastery-dovetail",
+      "inspired_by": "flow and competence (Csikszentmihalyi, 1990; self-determination theory)",
+      "who": "Ada, a cabinetmaker",
+      "happened": [
+        "The last dovetail joint of the cabinet slides home with a soft push: tight, square, not a hair of light through it."
+      ],
+      "expect": {
+        "mastery": "high",
+        "embarrassment": "low",
+        "triumph": "low"
+      }
+    },
+    {
+      "id": "mastery-surgery-stitches",
+      "inspired_by": "skilled performance under pressure (flow, Csikszentmihalyi)",
+      "who": "Ada, a surgeon",
+      "people": "your surgical team",
+      "happened": [
+        "Halfway through a hard operation, the last artery is tied off cleanly; your hands are steady and the bleeding stops exactly as you planned."
+      ],
+      "expect": {
+        "mastery": "high",
+        "dread": "low",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "luck-raffle-prize",
+      "inspired_by": "luck against effort (attribution theory, Weiner, 1985)",
+      "who": "Ada",
+      "happened": [
+        "Your raffle ticket, bought on a whim, wins a basket of cheeses and a bottle of wine."
+      ],
+      "expect": {
+        "mastery": "low",
+        "triumph": "low",
+        "relief": "low",
+        "urgency": "low",
+        "dread": "low"
+      }
+    },
+    {
+      "id": "triumph-chess-final",
+      "inspired_by": "victory over a rival (Rocky; hubristic and authentic pride, Tracy and Robins, 2007)",
+      "who": "Ada",
+      "people": "Viktor, who beat you in the final three years running",
+      "happened": [
+        "Viktor: tips over his king and offers his hand; you have won the championship."
+      ],
+      "expect": {
+        "triumph": "high",
+        "sadness": "low",
+        "dread": "low"
+      }
+    },
+    {
+      "id": "triumph-proven-right",
+      "inspired_by": "vindication (An Enemy of the People)",
+      "who": "Ada, an engineer",
+      "people": "the town council",
+      "happened": [
+        "The council chairman stands up at the meeting and admits, in front of everyone, that you were right about the dam all along and they were wrong to mock you."
+      ],
+      "expect": {
+        "triumph": "high",
+        "embarrassment": "low",
+        "sadness": "low"
+      }
+    },
+    {
+      "id": "relief-results-clear",
+      "inspired_by": "relief as a threat removed (Sweeny and Vohs, 2012)",
+      "who": "Ada",
+      "happened": [
+        "The doctor calls: the lump was benign, and there is nothing more to do."
+      ],
+      "remember": [
+        "You have not slept properly since the scan."
+      ],
+      "expect": {
+        "relief": "high",
+        "dread": "low",
+        "horror": "low",
+        "grief": "low"
+      }
+    },
+    {
+      "id": "relief-child-found",
+      "inspired_by": "reunion after separation (the attachment system; Home Alone)",
+      "who": "Ada",
+      "people": "Mia, your four-year-old daughter (you love her)",
+      "happened": [
+        "A steward brings Mia to the lost-children tent, sticky with candyfloss and perfectly fine, an hour after she went missing at the fair."
+      ],
+      "expect": {
+        "relief": "high",
+        "dread": "low",
+        "anger": "low"
+      }
+    },
+    {
+      "id": "content-porch-evening",
+      "inspired_by": "low-arousal positive affect (the circumplex, Russell, 1980; Tsai's ideal affect)",
+      "who": "Ada",
+      "happened": [
+        "The harvest is in. You sit on the porch with a cup of tea as the light goes gold over the fields; nothing needs doing until morning."
+      ],
+      "expect": {
+        "contentment": "high",
+        "urgency": "low",
+        "dread": "low",
+        "craving": "low",
+        "longing": "low"
+      }
+    },
+    {
+      "id": "content-full-table",
+      "inspired_by": "warmth after a shared meal (Little Women's Christmas)",
+      "who": "Ada",
+      "people": "your family (you like them)",
+      "happened": [
+        "Dinner is over; everyone is full and warm, laughing softly around the table while the fire settles."
+      ],
+      "expect": {
+        "contentment": "high",
+        "urgency": "low",
+        "suspicion": "low"
+      }
+    },
+    {
+      "id": "savor-first-spoonful",
+      "inspired_by": "savoring (Bryant and Veroff, 2007)",
+      "who": "Ada",
+      "happened": [
+        "You take the first spoonful of the plum pudding you wait all year for, and make yourself eat it slowly so it lasts."
+      ],
+      "expect": {
+        "sadness": "low",
+        "urgency": "low"
+      }
+    },
+    {
+      "id": "savor-last-sunset",
+      "inspired_by": "savoring a last time (Bryant and Veroff, 2007)",
+      "who": "Ada",
+      "happened": [
+        "On the last evening of the holiday you sit on the warm rocks and watch the sun go down over the sea, not wanting it to end."
+      ],
+      "expect": {
+        "urgency": "low",
+        "suspicion": "low"
       }
     }
   ],
@@ -3188,6 +3521,184 @@
             ],
             [
               "margit"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "protect-dog-lunges",
+      "persons": [
+        "caregiver",
+        "secure",
+        "psychopath",
+        "narcissist"
+      ],
+      "orders": [
+        {
+          "coord": "protectiveness",
+          "tiers": [
+            [
+              "caregiver",
+              "secure"
+            ],
+            [
+              "psychopath",
+              "narcissist"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "dread-results-tomorrow",
+      "persons": [
+        "anxious",
+        "depressed",
+        "secure"
+      ],
+      "orders": [
+        {
+          "coord": "dread",
+          "tiers": [
+            [
+              "anxious",
+              "depressed"
+            ],
+            [
+              "secure"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "suspicion-helpful-stranger",
+      "persons": [
+        "avoidant",
+        "secure",
+        "caregiver"
+      ],
+      "orders": [
+        {
+          "coord": "suspicion",
+          "tiers": [
+            [
+              "avoidant"
+            ],
+            [
+              "secure",
+              "caregiver"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "vigilance-night-sentry",
+      "persons": [
+        "anxious",
+        "inhibited",
+        "hedonist"
+      ],
+      "orders": [
+        {
+          "coord": "dread",
+          "tiers": [
+            [
+              "anxious",
+              "inhibited"
+            ],
+            [
+              "hedonist"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "mastery-dovetail",
+      "persons": [
+        "achiever",
+        "depressed"
+      ],
+      "orders": [
+        {
+          "coord": "mastery",
+          "tiers": [
+            [
+              "achiever"
+            ],
+            [
+              "depressed"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "triumph-chess-final",
+      "persons": [
+        "narcissist",
+        "achiever",
+        "caregiver",
+        "depressed"
+      ],
+      "orders": [
+        {
+          "coord": "triumph",
+          "tiers": [
+            [
+              "narcissist",
+              "achiever"
+            ],
+            [
+              "caregiver",
+              "depressed"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "relief-results-clear",
+      "persons": [
+        "anxious",
+        "avoidant"
+      ],
+      "orders": [
+        {
+          "coord": "relief",
+          "tiers": [
+            [
+              "anxious"
+            ],
+            [
+              "avoidant"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "content-porch-evening",
+      "persons": [
+        "secure",
+        "traditionalist",
+        "anxious",
+        "achiever"
+      ],
+      "orders": [
+        {
+          "coord": "contentment",
+          "tiers": [
+            [
+              "secure",
+              "traditionalist"
+            ],
+            [
+              "anxious",
+              "achiever"
             ]
           ]
         }

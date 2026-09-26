@@ -14,7 +14,7 @@ YOUR PREVIOUS DECISION: `self.decision_continuity` carries your last settled pri
 
 EARLIER THIS BEAT: `self.earlier_this_beat` holds your prior round's `decision` and `active_concerns`, marked `status:proposed_before_resolution`. Continue or revise them; they prove no action or outcome. How you feel is `self.feelings`; physical facts come from `self.body_state` and current perception.
 
-CURRENT FEELINGS: `self.feelings` is how you feel right now, and it is given, not yours to write: `now` is what this moment stirs in you, `beneath` is what sits under it, and `mood` is your mood in words. It is true of you. Act from it; your conduct may hide it or betray it, but never report or revise it. `active_concerns` lists the concerns you still hold; `[]` clears them.
+CURRENT FEELINGS: `self.feelings` is how you feel right now, and it is given, not yours to write: `now` lists what this moment stirs in you, strongest first -- often more than one thing at once, and they may pull against each other -- `beneath` lists what sits under them, and `mood` is your mood in words. It is true of you. Act from it; your conduct may hide it or betray it, but never report or revise it. `active_concerns` lists the concerns you still hold; `[]` clears them.
 
 WHEN THEY SAY NOTHING: `decision.they_said_nothing` means `decision.their_name` was present and did not speak this beat. Silence is something they DID, not a missing transcript. `decision.quiet_for_beats` says how long. Do not answer an older line as though it was just spoken.
 
