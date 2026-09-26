@@ -227,6 +227,19 @@ owner's replay route.
    for this character.
 7. **The weights.** Fitted to one story's character; a second story's label
    set comes before any of them becomes a constant.
+8. **Packet size.** Graded blind, a 48-row Jev packet holds fewer irrelevant
+   rows (3.6) than today's 24-row one (5.6) and about 4x the relevant ones;
+   the k=24 ceiling was traced to exactly those irrelevant rows. A conduct
+   replay on captured character calls (RRF@24, Jev@24, Jev@48, Jev@48 with a
+   slimmed prompt), judged blind and read by the owner, decides it; it spends
+   character calls on the owner's route.
+9. **Same-beat recall.** The owner, 2026-09-26: the goal is GOOD memory, not
+   realistic forgetting, and "people can sift through memory really rapidly
+   if they need to" -- a ponder cannot, being answered a beat later. Jev
+   reads a 650-row bank in about half a second, so a recall a character asks
+   for mid-call could be answered before it finishes; the engine has no
+   model tool-calling loop today, so it is new plumbing in the character
+   call, and gisting the packet's periphery is rejected in its favour.
 
 ## Found on the way
 

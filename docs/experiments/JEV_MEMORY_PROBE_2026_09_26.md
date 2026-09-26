@@ -319,6 +319,68 @@ answer the question you are asking your own memory"); 61 of 71 have a row at
   which are ROOMS (+0.09, +0.05); omitted here, and nothing in them resolves a
   description of a person to a name.
 
+## Graded blind: today's packet against Jev's
+
+The owner: "how would you grade how relevant the recall is now compared to
+what it was with the @100 filter vs the pure @24 rrf?" and "79% doesn't mean
+it's bad it may actually be a massive improvement." Instrument:
+`tools/jev_packet_compare.py`. For the 21 labelled beats with a previous
+beat, four packets, each excluding the recent buffer the character already
+gets (last 4 turns, up to 12 rows):
+
+- `old`: production recall as shipped, `search_memories(view, k=24)` with the
+  production aspects and diversity pass;
+- `new`: the fitted net of 100 (weights fitted without that beat, primed by
+  the previous beat's packet from the previous beat's own net), then Jev's top
+  24 by the larger of `situation` and `useful`;
+- `new_dedup`: the same without rows within cosine 0.90 of a kept row;
+- `ideal`: Jev's top 24 over the whole bank.
+
+The union of the four, shuffled under opaque ids, went to two judges that are
+not Jev, each grading every row 0-3 (0 nothing to do with this moment, 1
+loose background, 2 bears on what is happening or what they are trying to do,
+3 they would be poorer without it): the `utility` model (GLM 5.2), and seven
+Claude graders reading by hand, three beats each. Per beat:
+
+| judge | packet | mean | graded 2+ | graded 3 | graded 0 |
+|---|---|---|---|---|---|
+| GLM | old | 1.14 | 6.4 (28%) | 1.9 | 5.3 |
+| GLM | **new** | **1.84** | **15.5 (64%)** | **5.6** | **0.9** |
+| GLM | ideal | 1.75 | 14.2 (59%) | 5.0 | 1.3 |
+| Claude | old | 1.16 | 6.0 (26%) | 0.9 | 3.4 |
+| Claude | **new** | **1.74** | **15.1 (63%)** | **2.8** | **0.2** |
+| Claude | ideal | 1.66 | 14.2 (59%) | 2.5 | 0.9 |
+
+- The two judges agree within one grade on 98% of 1,052 rows (Spearman 0.69,
+  kappa 0.58 at 2+); both give the new packet about 2.5 times the relevant
+  rows and a fraction of the irrelevant ones.
+- **Both score the net-of-100 packet slightly above the whole-bank ideal.** The
+  21% of Jev's picks the net misses are mostly older rows Jev likes more than
+  either judge does; the new packet's median row is 20 beats old against 42
+  for the ideal and 35 for today's.
+- Old and new share 4.4 of 24 rows; dropping near-duplicates changed 0.4.
+
+**At 48 rows** (the owner: "as we start using jev to decrease the character
+prompt by offloading, we might be able to increase memory count without
+destroying coherency"). `RETRIEVAL_COST.md` section 6 found conduct peaks at
+k=24 and traced the decline to the rows past 24 -- "they compete for the
+attention the relevant ones need". Those were RRF rows. The same four packets
+at 48 (`build --size 48`), graded blind by GLM, per beat:
+
+| packet | rows | graded 2+ | graded 0 |
+|---|---|---|---|
+| today, first 24 | 23.1 | 5.2 | 5.6 |
+| today, rows 25-48 | 23.3 | 5.4 | 7.0 |
+| Jev, first 24 | 24 | 13.7 | 1.3 |
+| **Jev, rows 25-48** | 24 | **11.2** | **2.3** |
+| **Jev, all 48** | 48 | **24.9** | **3.6** |
+
+Jev's second 24 rows are more relevant than today's first 24, and a 48-row
+Jev packet carries fewer distractors than today's 24-row one. By section 6's
+own mechanism the knee should move out; only a conduct replay can say whether
+it does. (The same judge grades a little harder in the larger sheets: the
+new packet's first 24 earn 13.7 here against 15.5 among 24-row sheets.)
+
 ## What Jev costs
 
 Measured from Jev's own response (`usage.cost`): one 64-question request,
