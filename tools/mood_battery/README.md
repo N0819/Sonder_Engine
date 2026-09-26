@@ -22,7 +22,10 @@ system align with particular types of people is good stress test data."
   `inspired_by` names the paradigm or story beat, retold in new words.
 - **`persons`** -- psychology profiles in the card's own fields (`drive`,
   `values` as trade-offs, `traits`, `self_model`), each grounded in a
-  typology named in `inspired_by`.
+  typology named in `inspired_by`; or a whole card, rendered as the decision
+  model would read it -- `card_file` for a generated sheet kept in `cards/`,
+  `card` for a character read by name from the open database (the owner's own
+  cards stay there, never here).
 - **`person_tests`** -- one situation lived by several persons, with the
   order psychology predicts: `tiers`, every person in an earlier tier reading
   higher than every person in a later one.

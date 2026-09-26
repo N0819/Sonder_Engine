@@ -109,23 +109,30 @@ def card_block(sheet):
     return "\n".join(parts)
 
 
-def resolve_persons(battery, results=None):
+def resolve_persons(battery, results=None, fresh=False):
     """The battery's persons, each with the text it is rendered as. A person
-    written as `{"card": "<name>"}` is that character's own card, read from
-    the database (`ENGINE_DB`) when one is open and otherwise from the block
-    a run stored with its results -- so a report needs no database."""
+    written as `{"card": "<name>"}` is that character's own card: with
+    `fresh`, read from the open database (`ENGINE_DB`) and, when that
+    database does not hold the card, the block an earlier run stored; without
+    it, the stored block first -- so a report needs no database, and cards
+    kept in different databases can share one results file."""
     stored = (results or {}).get("_persons") or {}
     out = {}
     for pid, person in (battery.get("persons") or {}).items():
+        if "card_file" in person:
+            # an invented character's generated sheet, kept beside the battery
+            path = BATTERY.parent / person["card_file"]
+            out[pid] = dict(person, block=card_block(json.loads(path.read_text(encoding="utf-8"))))
+            continue
         if "card" not in person:
             out[pid] = dict(person, block=_person_block(person))
             continue
-        block = stored.get(pid)
+        block = None if fresh else stored.get(pid)
         if block is None:
             from core.db import q
 
             row = q("SELECT sheet FROM characters WHERE name = ? ORDER BY id LIMIT 1", (person["card"],), one=True)
-            block = card_block(json.loads(row["sheet"] or "{}")) if row else ""
+            block = card_block(json.loads(row["sheet"] or "{}")) if row else stored.get(pid, "")
         out[pid] = dict(person, block=block)
     return out
 
@@ -218,8 +225,8 @@ def run(args):
     done = _load(out) if out.exists() else {}
     # a card person is read fresh from the database, and the block it
     # rendered is kept with the results so a report needs no database
-    persons = resolve_persons(battery)
-    done["_persons"] = {pid: p["block"] for pid, p in persons.items() if "card" in p}
+    persons = resolve_persons(battery, done, fresh=True)
+    done["_persons"] = {pid: p["block"] for pid, p in persons.items() if "card" in p and p["block"]}
     jobs = []
     for cid, v, person in _cells(battery, persons):
         have = done.setdefault(cid, {})
