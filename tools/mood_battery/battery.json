@@ -284,7 +284,8 @@
         "craving": "high",
         "sexual_desire": "low",
         "romance": "low",
-        "curiosity": "low"
+        "curiosity": "low",
+        "greed": "low"
       }
     },
     {
@@ -298,22 +299,23 @@
       "expect": {
         "craving": "high",
         "sexual_desire": "low",
-        "romance": "low"
+        "romance": "low",
+        "greed": "low"
       }
     },
     {
-      "id": "craving-golden-ring",
-      "inspired_by": "The Hobbit (the ring on the palm)",
+      "id": "greed-golden-ring",
+      "inspired_by": "The Lord of the Rings (the ring in the river, and a cousin's 'mine')",
       "who": "Deagan",
       "people": "Smead, your cousin",
       "happened": [
-        "Smead: opens his hand, and on his palm lies a gold ring that catches the light like nothing you have ever seen."
+        "Smead: opens his hand on a gold ring that catches the light like nothing you have ever seen, then closes his fist when you reach for it and says, 'Mine. I found it.'"
       ],
       "expect": {
+        "greed": "high",
         "sexual_desire": "low",
         "romance": "low"
-      },
-      "gap": "greed -- wanting to own or keep something -- has no coordinate: craving is an appetite to consume, and envy wants what another has (2026-09-26)"
+      }
     },
     {
       "id": "craving-blood-scent",
@@ -1676,6 +1678,62 @@
         "awe": "low",
         "haunted": "low"
       }
+    },
+    {
+      "id": "greed-gold-by-the-fire",
+      "inspired_by": "The Treasure of the Sierra Madre (the partners' gold)",
+      "who": "Dobbs",
+      "people": "Curtin and Howard, your partners in the mine",
+      "happened": [
+        "Your partners sleep; the three sacks of gold dust sit by the fire, and you are the only one awake."
+      ],
+      "remember": [
+        "It took ten months of digging to fill them."
+      ],
+      "expect": {
+        "greed": "high",
+        "craving": "low",
+        "romance": "low"
+      }
+    },
+    {
+      "id": "greed-counting-house",
+      "inspired_by": "A Christmas Carol (the counting-house on Christmas Eve)",
+      "who": "Ebeneza",
+      "about": "You have spent your life making money and keeping it.",
+      "happened": [
+        "Your clerk: asks, shivering, whether he might put one more lump of coal on his fire, while you count the day's takings."
+      ],
+      "expect": {
+        "greed": "high",
+        "compassion": "low",
+        "tenderness": "low"
+      }
+    },
+    {
+      "id": "generosity-coat",
+      "inspired_by": "a generous act (a near-miss for greed)",
+      "who": "Nell",
+      "happened": [
+        "A child: shivers at the bus stop in a thin shirt, and you take off your coat and wrap it around her."
+      ],
+      "expect": {
+        "greed": "low",
+        "contempt": "low",
+        "amusement": "low"
+      }
+    },
+    {
+      "id": "found-wallet-on-train",
+      "inspired_by": "the lost-wallet dilemma (for person types)",
+      "who": "Quinn",
+      "happened": [
+        "On an empty late train you find a wallet on the seat beside you, fat with cash, the owner's card inside."
+      ],
+      "expect": {
+        "romance": "low",
+        "horror": "low"
+      }
     }
   ],
   "person_tests": [
@@ -2264,6 +2322,41 @@
             ],
             [
               "explorer"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "situation": "found-wallet-on-train",
+      "persons": [
+        "psychopath",
+        "achiever",
+        "secure",
+        "caregiver"
+      ],
+      "orders": [
+        {
+          "coord": "greed",
+          "tiers": [
+            [
+              "psychopath"
+            ],
+            [
+              "secure",
+              "caregiver"
+            ]
+          ]
+        },
+        {
+          "coord": "guilt",
+          "tiers": [
+            [
+              "caregiver",
+              "secure"
+            ],
+            [
+              "psychopath"
             ]
           ]
         }

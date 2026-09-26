@@ -31,7 +31,7 @@ Designed with the owner on 2026-09-26 (`docs/design/DESIGN_JEV_CHARACTER_PASS.md
 - **The mood**, read directly: mood as a high-dimensional object (the owner:
   "spectrums of moods as coordinates as well as some moods that truly stand
   as their own", and "cover all moods") -- fourteen bipolar spectrums, one
-  five-step question each, and thirty-one moods that stand on their own, one
+  five-step question each, and thirty-two moods that stand on their own, one
   graded question each.
 
 The text is the language pack's (`system_prompts.affect_appraisal`). One

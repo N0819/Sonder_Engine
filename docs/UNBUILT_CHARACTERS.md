@@ -1278,13 +1278,12 @@ still open:
 
 Proposal, 2026-09-26. Built but NOT WIRED: the affect pass --
 `mind/affect_appraisal.py` (the Jev questions) and `mind/affect_mix.py` (OCC
-emotions, the mood as fourteen spectrums and thirty-one standalone moods,
+emotions, the mood as fourteen spectrums and thirty-two standalone moods,
 habituation, the layer beneath); nothing in the turn calls them. Open: wiring
 them before and after the character call and retiring the prompt's affect
-paragraphs; every knob and every `EMOTION_EFFECTS` value (the owner's); a
-coordinate for greed, which the mood battery found none holds; Japanese
-situations for the battery, since the Japanese wordings are untested
-translations; a concern gate that discriminates (Jev weighs every listed
+paragraphs; every knob and every `EMOTION_EFFECTS` value (the owner's);
+Japanese situations for the battery, since the Japanese wordings are
+untested translations; a concern gate that discriminates (Jev weighs every listed
 concern about 0.7);
 own acts' pride tilt; naming the combinations the coverage table lists; the
 memory packet (a fitted weighted-RRF net of 100 over new lanes, then Jev) with

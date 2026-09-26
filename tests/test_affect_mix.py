@@ -3,7 +3,7 @@
 Designed with the owner on 2026-09-26: the decision model appraises what a
 character perceived, did and recalled, and code turns appraisals into
 emotions by the OCC rules and moves a high-dimensional mood -- fourteen
-spectrum coordinates and thirty-one moods that stand on their own ("spectrums of
+spectrum coordinates and thirty-two moods that stand on their own ("spectrums of
 moods as coordinates as well as some moods that truly stand as their own",
 "cover all moods") -- part of the way toward the targets the beat's emotions
 set, decays it, eases or stokes it by the character's own acts, and

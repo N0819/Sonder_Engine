@@ -29,8 +29,9 @@ wordings under test (`--variants`, a JSON map of coordinate to phrases; a
 spectrum's phrase is "low pole|high pole").
 
 `run` asks what is not cached yet -- answers are cached per situation (or
-situation@person) by the question's own text, so a re-run with one new
-wording asks only that wording; `report` scores each coordinate -- targets
+situation@person) by the question's own text and the state it was asked of,
+so a re-run with one new wording asks only that wording, and a reworded
+situation or person is asked again; `report` scores each coordinate -- targets
 reached, near-misses kept low, where it fires unasked -- and each person test
 by the share of predicted pairs Jev orders right. Jev is deterministic, so a
 wording's numbers reproduce exactly.
@@ -134,8 +135,11 @@ def _questions(variants, language="en"):
     return qs
 
 
-def _key(q):
-    return hashlib.sha1(json.dumps([q["instructions"], q["criteria"]], ensure_ascii=False,
+def _key(q, state):
+    """A cached answer's key: the question's own text AND the state it was
+    asked of, so rewording a situation or a person asks again rather than
+    reading an answer given to the old words."""
+    return hashlib.sha1(json.dumps([state, q["instructions"], q["criteria"]], ensure_ascii=False,
                                    sort_keys=True).encode("utf-8")).hexdigest()[:16]
 
 
@@ -155,19 +159,20 @@ def run(args):
     jobs = []
     for cid, v, person in _cells(battery):
         have = done.setdefault(cid, {})
-        todo = {k: q for k, q in qs.items() if _key(q) not in have}
+        state = _state(v, person)
+        todo = {k: q for k, q in qs.items() if _key(q, state) not in have}
         if todo:
-            jobs.append((cid, v, person, todo))
-    print(f"{len(done)} cells; {sum(len(j[3]) for j in jobs)} questions to ask")
+            jobs.append((cid, state, todo))
+    print(f"{len(done)} cells; {sum(len(j[2]) for j in jobs)} questions to ask")
 
     def ask(job):
-        cid, v, person, todo = job
-        answers = decisions.decide(_state(v, person), todo)
+        cid, state, todo = job
+        answers = decisions.decide(state, todo)
         got = {}
         for k, q in todo.items():
             value = appraisal._number(answers, k, "steps" if _coord(k) in mix.SPECTRUMS else "grade")
             if value is not None:
-                got[_key(q)] = round(value, 4)
+                got[_key(q, state)] = round(value, 4)
         return cid, got
 
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
@@ -197,12 +202,13 @@ def _situation_report(battery, results, qs, variants, only, unasked_n):
     from mind import affect_mix as mix
 
     totals, trouble = {"pass": 0, "fail": 0}, []
+    states = {v["id"]: _state(v) for v in battery["situations"]}
     for coord in only:
         for label, key in _readers(coord, variants, mix.SPECTRUMS):
             q = qs[key]
             hits, misses, kept, leaks, unasked = [], [], [], [], []
             for v in battery["situations"]:
-                value = (results.get(v["id"]) or {}).get(_key(q))
+                value = (results.get(v["id"]) or {}).get(_key(q, states[v["id"]]))
                 want = (v.get("expect") or {}).get(coord)
                 if want is None:
                     if coord in mix.STANDALONE and value is not None and value >= HIGH_AT:
@@ -244,6 +250,7 @@ def _person_report(battery, results, qs, only):
 
     right = total = 0
     by_person = {}
+    states = {cid: _state(v, person) for cid, v, person in _cells(battery)}
     print("\nperson tests (tiers: every person in an earlier tier should read higher)")
     for test in battery.get("person_tests") or []:
         for order in test["orders"]:
@@ -251,8 +258,10 @@ def _person_report(battery, results, qs, only):
             if coord not in only:
                 continue
             key = f"dim:{coord}" if coord in mix.SPECTRUMS else f"mood:{coord}"
-            value = {p: (results.get(f"{test['situation']}@{p}") or {}).get(_key(qs[key]))
-                     for tier in order["tiers"] for p in tier}
+            value = {}
+            for p in (p for tier in order["tiers"] for p in tier):
+                cid = f"{test['situation']}@{p}"
+                value[p] = (results.get(cid) or {}).get(_key(qs[key], states[cid]))
             pairs = ok = 0
             for i, j in product(range(len(order["tiers"])), repeat=2):
                 if j <= i:
@@ -350,9 +359,10 @@ def show(args):
     v, person = cells[args.id]
     have = _load(args.results).get(args.id) or {}
     qs = _questions({})
-    print(_state(v, person))
+    state = _state(v, person)
+    print(state)
     print("\nexpects:", v.get("expect"))
-    rows = [(_coord(k), have.get(_key(q))) for k, q in qs.items()]
+    rows = [(_coord(k), have.get(_key(q, state))) for k, q in qs.items()]
     spect = sorted((r for r in rows if r[0] in mix.SPECTRUMS and r[1] is not None), key=lambda r: -abs(r[1]))
     moods = sorted((r for r in rows if r[0] in mix.STANDALONE and r[1] is not None), key=lambda r: -r[1])
     print("spectrums:", ", ".join(f"{c} {x:+.2f}" for c, x in spect))

@@ -4,7 +4,7 @@ Designed with the owner on 2026-09-26: each event a character perceived,
 each standing concern and each of its own acts is appraised on its own,
 quoted in every question; each recalled memory is asked whether it stirs a
 feeling now and which mood; and the mood is read directly -- fourteen
-spectrums, one five-step question each, and thirty-one moods that stand on their
+spectrums, one five-step question each, and thirty-two moods that stand on their
 own, one graded question each.
 
 Pinned here: every question quotes what it judges and leaves no placeholder

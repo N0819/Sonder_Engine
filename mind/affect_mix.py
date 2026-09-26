@@ -15,7 +15,7 @@ Designed with the owner on 2026-09-26 (`docs/design/DESIGN_JEV_CHARACTER_PASS.md
 - **Mood as a high-dimensional object** (the owner: "spectrums of moods as
   coordinates as well as some moods that truly stand as their own", and "We
   are trying to cover all moods and make a coordinate system out of them"):
-  fourteen bipolar spectrum coordinates in [-1, 1] and thirty-one standalone
+  fourteen bipolar spectrum coordinates in [-1, 1] and thirty-two standalone
   moods in [0, 1], named by the language pack. Each emotion pushes the
   coordinates it moves (`EMOTION_EFFECTS`); a beat's emotions average into a
   target per coordinate, and the mood moves part of the way toward it -- the
@@ -60,10 +60,10 @@ from dataclasses import dataclass, field
 #: stirs.
 SPECTRUMS = ("pleasure", "energy", "tension", "control", "clarity", "connection", "openness",
              "playfulness", "hope", "self_regard", "safety", "engagement", "boldness", "sociability")
-STANDALONE = ("romance", "sexual_desire", "craving", "curiosity", "anticipation", "awe", "admiration",
-              "aesthetic", "amusement", "moved", "tenderness", "compassion", "gratitude", "anger",
-              "contempt", "disgust", "horror", "jealousy", "envy", "guilt", "embarrassment", "sadness",
-              "surprise", "resolve", "numbness", "nostalgia", "grief", "regret", "longing",
+STANDALONE = ("romance", "sexual_desire", "craving", "greed", "curiosity", "anticipation", "awe",
+              "admiration", "aesthetic", "amusement", "moved", "tenderness", "compassion", "gratitude",
+              "anger", "contempt", "disgust", "horror", "jealousy", "envy", "guilt", "embarrassment",
+              "sadness", "surprise", "resolve", "numbness", "nostalgia", "grief", "regret", "longing",
               "homesickness", "haunted")
 
 #: How each emotion moves the mood: a value per coordinate it touches
@@ -103,6 +103,8 @@ EMOTION_EFFECTS = {
     "sexual_desire": {"sexual_desire": 1.0, "energy": .5, "engagement": .5, "tension": .2,
                       "pleasure": .3, "boldness": .3, "sociability": .4},
     "craving": {"craving": 1.0, "energy": .4, "engagement": .4, "tension": .3, "boldness": .3},
+    "greed": {"greed": 1.0, "engagement": .4, "tension": .2, "boldness": .3, "connection": -.2,
+              "openness": -.2},
     "curiosity": {"curiosity": 1.0, "engagement": .6, "openness": .4, "energy": .3, "boldness": .3},
     "anticipation": {"anticipation": 1.0, "hope": .5, "energy": .4, "engagement": .5, "tension": .2,
                      "pleasure": .3},

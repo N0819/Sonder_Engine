@@ -300,8 +300,8 @@ of events and memories average into an overall mood with multiple
 dimensions." Built in `mind/affect_mix.py` (pure code) and
 `mind/affect_appraisal.py` (the Jev questions); not wired into the pipeline.
 
-- **The space.** A mood is a point `M` in forty-five coordinates: fourteen
-  bipolar spectrums in [-1, 1] and thirty-one standalone moods in [0, 1] (the
+- **The space.** A mood is a point `M` in forty-six coordinates: fourteen
+  bipolar spectrums in [-1, 1] and thirty-two standalone moods in [0, 1] (the
   next section). It began as Mehrabian's three PAD axes; the owner widened
   it ("mood has way more dimensions than what you have mentioned", "spectrums
   of moods as coordinates as well as some moods that truly stand as their
@@ -377,7 +377,7 @@ the pack's (`affect_appraisal.options`); the words below are its English.
 | boldness | timid -- bold | approach against avoidance: anger approaches and fear withdraws at the same displeasure (Carver and Harmon-Jones, 2009) |
 | sociability | wanting to be alone -- wanting company | loneliness is the gap between wanted and felt connection (Perlman and Peplau, 1981), so wanting company is apart from feeling connected |
 
-**Thirty-one standalone moods**, one graded question each: every category
+**Thirty-two standalone moods**, one graded question each: every category
 Cowen and Keltner (2017) found self-report keeps distinct that no spectrum
 already holds, then what their list lacks.
 
@@ -392,9 +392,13 @@ states its class alone.
   moods need explicit words), craving (the owner, "there is non romantic and
   sexual desire to consider": "hunger or thirst for something to consume" --
   an appetite on its own axis, beside sexual desire or without it; wordings
-  about wanting "to have" read every want as craving), curiosity (a want to
-  know; engagement is attention, not wanting), anticipation (Plutchik's
-  primary, eagerness for what is about to happen).
+  about wanting "to have" read every want as craving), greed ("a hunger for
+  wealth and things": wanting to own, which is neither an appetite nor envy
+  -- the battery found no coordinate held it, and the owner made it one;
+  "wanting to own or keep something for yourself" read a starving man's bread
+  as greed), curiosity (a want to know; engagement is attention, not
+  wanting), anticipation (Plutchik's primary, eagerness for what is about to
+  happen).
 - **Appreciation** -- awe ("awe before something vast": "awe or wonder" read
   any beauty), admiration, aesthetic appreciation, amusement, being moved
   ("moved by someone's goodness": kama muta, Fiske, Seibt and Schubert,
@@ -416,9 +420,6 @@ states its class alone.
   someone who has died": "grief for something lost" read every loss), regret,
   longing, homesickness, and being troubled by a memory from one's own past
   that keeps coming back. Recall stirs them; they are what sits beneath.
-- **Not yet covered: greed** -- wanting to own or keep something. The
-  battery's gold ring reads about zero on every coordinate that wants: it is
-  neither an appetite nor envy. The owner's call whether it stands alone.
 
 **Coverage.** How moods with no coordinate of their own sit in the system --
 illustrations of the rule, not a list the engine matches against:

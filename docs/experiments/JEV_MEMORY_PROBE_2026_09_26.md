@@ -779,10 +779,17 @@ What remains is near a threshold or arguable: a groan-worthy pun (amusement
 invitation (sexual desire 0.57), hunger's pull on lovemaking (craving 0.54), a
 dog stealing a sandwich (irritation 0.50).
 
-- **Greed has no coordinate.** Every consumption wording drops a gold ring
-  that "catches the light like nothing you have ever seen" to about 0:
-  wanting to own or keep something is neither an appetite nor envy. Recorded
-  in the battery as a gap; the owner's call.
+- **Greed had no coordinate**: every consumption wording dropped a gold ring
+  to about 0 -- wanting to own is neither an appetite nor envy. The owner made
+  it one. "Wanting to own or keep something for yourself" read the starving
+  man's bread as greed (0.94); of five wordings, "a hunger for wealth and
+  things" meets all six of its expectations with one unasked firing (envy
+  of a friend's house, 0.60), and a found wallet orders the psychopath 0.99
+  over the secure and the caregiver at 0.01 and 0.00. The ring situation was
+  rewritten to put possession at stake ("Mine. I found it."): as first
+  written it showed only fascination.
+- **The harness cached by question alone**, so rewording a situation served
+  its old answers; the cache now keys the state asked as well.
 - **Jev grades freely in constructed scenes**: surprise fires unasked in 43 of
   109, sadness in 31 -- mostly moods that plausibly co-occur. Selectivity in
   play (5.1 moods clearly or more per beat against the rater's 2.6) is the
