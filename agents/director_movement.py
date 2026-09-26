@@ -18,7 +18,7 @@ import re
 from story.character_schema import character_name_from_text
 from world.mechanics import UNCLAIMED_BEAT_SECONDS, read_time_diff, time_diff_claims
 from world.spatial import (
-    anchor_stand_cell, body_cell, free_cell_near, room_grid,
+    anchor_stand_cell, beside_named, body_cell, free_cell_near, room_grid,
     _ROUTE_MEMORY_BARRIERS,
     door_cell,
     egocentric_frame,
@@ -1313,6 +1313,16 @@ def walk_declared(ctx, scene, route_scene, sd, out, subject, mv, prev_room,
         if isinstance(_st, dict) and str(_st.get("at") or "").strip() \
                 and _st.get("cell") is None:
             mv = {**mv, "to_anchor": str(_st["at"]).strip()}
+        elif isinstance(_st, dict) and _st.get("near") and _st.get("cell") is None:
+            # A BODY NAMED IS A DESTINATION TOO, as it is for a walk within
+            # a room (`walk_within_room`): the hand said who the mover came
+            # to, and beside them is where it stops. The opera test story,
+            # 2026-09-26: "sets the proof on the music rest in front of her"
+            # ended one pace inside the stage door, 4.5 paces from her, and
+            # the stage's ring smeared everything she said to him.
+            beside = beside_named(route_scene, mv["to_room"], _st["near"], subject)
+            if beside is not None:
+                mv = {**mv, "to_cell": list(beside)}
     paces = paces_for(beat_seconds(ctx, sd), pace)
     # FROM WHERE THE BEAT BEGAN. `route_scene` carries this beat's diff, and
     # the diff already holds the declared destination as the body's room
@@ -1457,11 +1467,7 @@ def walk_within_room(ctx, scene, sd, out, *, exclude=()):
         if str(station.get("at") or "").strip():
             goal = anchor_stand_cell(scene, room, str(station["at"]).strip(), near=here)
         if goal is None and station.get("near"):
-            other = next((n for n in station["near"] if room_of(scene, n) == room
-                          and body_cell(scene, n) is not None), None)
-            if other:
-                beside = body_cell(scene, other)
-                goal = free_cell_near(scene, room, beside, subject)
+            goal = beside_named(scene, room, station["near"], subject)
         if goal is None and station.get("cell") is not None:
             try:
                 goal = room_grid(scene, room).nearest((int(station["cell"][0]), int(station["cell"][1])))

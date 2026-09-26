@@ -188,6 +188,20 @@ def test_a_concern_stirs_in_proportion_to_how_much_it_weighs_now():
     assert unasked["fear"].intensity == pytest.approx(whole["fear"].intensity)
 
 
+def test_a_feeling_toward_nobody_named_is_about_the_thing_itself():
+    """A concern has no actor, and its blame landed on the word "someone":
+    "anger (someone)" is what the magistrate in the lie test story was handed
+    as the layer beneath his mood (2026-09-26), which tells a mind nothing.
+    Where nobody is named the feeling is about the thing -- the concern's own
+    text; a named actor still takes it."""
+    lie = {"desirability": -0.8, "standards": -0.9, "doer": {"other": 1.0}}
+    felt = _names(mix.concern_emotions(lie, 1.0, ref="c0", about="she lied to him"))
+    blamed = felt.get("anger") or felt.get("reproach")
+    assert blamed is not None and blamed.about == "she lied to him", felt
+    named = _names(mix.emotions_from_appraisal(lie, ref="o1", actor="Margit", about="she lied"))
+    assert (named.get("anger") or named.get("reproach")).about == "Margit"
+
+
 # --- the mood -----------------------------------------------------------------------------
 
 def test_a_target_is_a_weighted_average_and_a_negativity_weight_tilts_it():

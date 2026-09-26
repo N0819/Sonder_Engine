@@ -18,7 +18,7 @@
 | `agents/director_fanout.py` | 1687 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 2271 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
-| `agents/director_movement.py` | 1853 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
+| `agents/director_movement.py` | 1859 |  | `agents.director_lingua`, `story.character_schema`, `world.mechanics`, `world.spatial` |
 | `agents/director_prose.py` | 1716 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts` |
 | `agents/director_reconcile.py` | 610 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `llm.schemas`, `story`, `world.spatial` |
 | `agents/director_repair.py` | 1543 |  | `core.db`, `llm`, `llm.prompts` |
@@ -58,8 +58,8 @@
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2538 |  | `mind.theory_of_mind` |
 | `mind/affect_appraisal.py` | 293 |  | `llm`, `llm.prompts` |
-| `mind/affect_mix.py` | 587 |  | — |
-| `mind/affect_pass.py` | 368 |  | `llm.prompts`, `mind` |
+| `mind/affect_mix.py` | 591 |  | — |
+| `mind/affect_pass.py` | 382 |  | `llm.prompts`, `mind` |
 | `mind/canon_provenance.py` | 398 |  | — |
 | `mind/knowledge_circles.py` | 134 |  | `core.db` |
 | `mind/memory.py` | 142 | Facade re-exporting every mind.memory_* name; holds no domain code of its own. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_context`, `mind.memory_inference`, `mind.memory_lore_entries`, `mind.memory_lorebooks`, `mind.memory_read`, `mind.memory_relationships`, `mind.memory_retrieval`, `mind.memory_snapshot`, `mind.memory_summaries`, `mind.memory_time`, `mind.memory_vectors`, `mind.memory_write`, `mind.theory_of_mind` |
@@ -218,7 +218,7 @@
 | `world/spatial_light.py` | 508 |  | `world.spatial_barriers`, `world.spatial_geometry`, `world.spatial_identity` |
 | `world/spatial_light_field.py` | 1246 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_lint.py` | 444 |  | `world.spatial_barriers`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_orientation` |
-| `world/spatial_merge.py` | 2641 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_orientation`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
+| `world/spatial_merge.py` | 2653 |  | `llm.schemas`, `world.spatial_barriers`, `world.spatial_contact_migration`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_levels`, `world.spatial_orientation`, `world.spatial_routing`, `world.spatial_senses`, `world.spatial_substance`, `world.spatial_transit` |
 | `world/spatial_orientation.py` | 398 | Bearing math and reciprocal spatial-edge normalization. | — |
 | `world/spatial_prose.py` | 410 |  | `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light` |
 | `world/spatial_routing.py` | 1257 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_light`, `world.spatial_orientation` |
@@ -227,7 +227,7 @@
 | `world/spatial_sound_field.py` | 3252 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light_field`, `world.spatial_senses` |
 | `world/spatial_substance.py` | 1138 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_transit.py` | 948 |  | `world.spatial_barriers`, `world.spatial_identity` |
-| `world/spatial_walk.py` | 423 |  | `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_routing` |
+| `world/spatial_walk.py` | 441 |  | `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_routing` |
 | `world/stimulation.py` | 239 |  | `story`, `world.spatial` |
 | `world/structure.py` | 1720 |  | `world.charter_model`, `world.regions`, `world.spatial` |
 | `world/subjects.py` | 505 |  | `core.db`, `mind.canon_provenance`, `world.spatial` |
@@ -378,12 +378,12 @@
 |---|---:|---:|
 | `_reconcile_near_group_positions()` | 307 | 284 lines |
 | `_apply_following_movement()` | 682 | 192 lines |
-| `_travel_continues()` | 1546 | 149 lines |
-| `walk_declared()` | 1290 | 124 lines |
-| `_guard_approach_is_not_arrival()` | 1697 | 96 lines |
+| `_travel_continues()` | 1552 | 149 lines |
+| `walk_declared()` | 1290 | 134 lines |
+| `_guard_approach_is_not_arrival()` | 1703 | 96 lines |
 | `_unreachable_position_writes()` | 875 | 82 lines |
-| `walk_within_room()` | 1425 | 68 lines |
-| `crossing_legs()` | 1795 | 59 lines |
+| `walk_within_room()` | 1435 | 64 lines |
+| `crossing_legs()` | 1801 | 59 lines |
 
 ### `agents/director_prose.py`
 
@@ -805,27 +805,27 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `emotions_from_appraisal()` | 271 | 48 lines |
-| `surface_and_undercurrent()` | 556 | 25 lines |
-| `form_compounds()` | 353 | 21 lines |
-| `decay()` | 411 | 18 lines |
-| `targets()` | 431 | 18 lines |
-| `emotions_from_act()` | 336 | 15 lines |
-| `memory_emotions()` | 376 | 15 lines |
-| `mix()` | 451 | 15 lines |
+| `emotions_from_appraisal()` | 271 | 52 lines |
+| `surface_and_undercurrent()` | 560 | 25 lines |
+| `form_compounds()` | 357 | 21 lines |
+| `decay()` | 415 | 18 lines |
+| `targets()` | 435 | 18 lines |
+| `emotions_from_act()` | 340 | 15 lines |
+| `memory_emotions()` | 380 | 15 lines |
+| `mix()` | 455 | 15 lines |
 
 ### `mind/affect_pass.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `before_call()` | 218 | 41 lines |
-| `psychology_text()` | 171 | 24 lines |
-| `after_call()` | 279 | 23 lines |
-| `given_affect()` | 341 | 19 lines |
+| `before_call()` | 232 | 41 lines |
+| `psychology_text()` | 185 | 24 lines |
+| `after_call()` | 293 | 23 lines |
+| `given_affect()` | 355 | 19 lines |
 | `carried()` | 81 | 17 lines |
-| `state_text()` | 197 | 17 lines |
-| `acts_from()` | 261 | 16 lines |
-| `memories_from()` | 127 | 14 lines |
+| `state_text()` | 211 | 17 lines |
+| `acts_from()` | 275 | 16 lines |
+| `memories_from()` | 141 | 14 lines |
 
 ### `mind/canon_provenance.py`
 
@@ -2685,12 +2685,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `merge_scene_with_diff()` | 1580 | 804 lines |
+| `merge_scene_with_diff()` | 1592 | 804 lines |
 | `_expire_transient_entity_state()` | 601 | 116 lines |
 | `_shield_standing_bearings()` | 883 | 107 lines |
 | `_merge_room()` | 189 | 99 lines |
 | `_shield_minted_edges()` | 1144 | 95 lines |
-| `beat_movement_cuts()` | 2512 | 94 lines |
+| `beat_movement_cuts()` | 2524 | 94 lines |
 | `sync_scene_passages()` | 1406 | 90 lines |
 | `_mirror_symmetric_barriers()` | 1054 | 88 lines |
 
@@ -2798,14 +2798,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `walk()` | 248 | 168 lines |
+| `walk()` | 265 | 168 lines |
 | `cell_path()` | 166 | 24 lines |
 | `door_cell()` | 114 | 19 lines |
 | `held_cells()` | 95 | 17 lines |
 | `inside_the_door()` | 149 | 15 lines |
+| `beside_named()` | 222 | 15 lines |
 | `free_cell_near()` | 206 | 14 lines |
-| `anchor_stand_cell()` | 222 | 14 lines |
-| `paces_for()` | 67 | 12 lines |
+| `anchor_stand_cell()` | 239 | 14 lines |
 
 ### `world/stimulation.py`
 

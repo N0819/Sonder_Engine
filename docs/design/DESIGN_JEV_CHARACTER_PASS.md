@@ -672,12 +672,39 @@ What increment 1 leaves, found while documenting it:
 - **The undercurrent synthesis is retired in effect.** The pass always
   writes the undercurrent key, so `resolve_affect`'s contradiction synthesis
   never fires on a given affect; the layer beneath is memory and concern.
-- **Latency is unmeasured.** Two Jev requests a character call, the first on
-  the critical path before the model call; each lands in the turn's call
-  records as `role: jev`.
+- **Latency, measured in play:** two Jev requests a character call, the
+  first on the critical path before the model call, each 0.2-0.3 s on the
+  test stories against 7-82 s character calls; each lands in the step's
+  call records as `role: jev`.
 - **A memory with no stable key never habituates** -- named by its place in
   the packet, it has nothing to habituate by (134 of 17,065 rows in the
   owner's database).
+
+Read live on the four test stories (2026-09-26, 11 turns on the new engine), the
+given feelings turned into conduct without being reported -- a traitor handed
+"a fear come true" and guilt beneath went into duty ("Pulse steady,
+Anselm?"); a teacher handed tenderness toward the boy said "That was my
+choice, Kit. Not yours to carry." Each Jev request took 0.2-0.3 s against
+7-82 s character calls. Fixed the same day:
+
+- **A mind's own earlier lines were felt twice.** A later round of a beat
+  hands a mind its own conduct back (`loops.self_micro_view`); the pass read
+  it again as a perceived event, and a magistrate's second round was given
+  "gratification (You said: ...)" as how he felt now. `events_from` skips it.
+- **Blame toward nobody named landed on "someone".** A concern has no actor,
+  and "anger (someone)" was the layer beneath the same magistrate's mood;
+  such a feeling is now about the thing -- the concern's own text.
+
+Still open, and heavier now: **the own-act pride tilt sets the stored
+label.** "Did doing this honor something you value?" is true of almost any
+line a principled character speaks, so after the post-call pass the stored
+surface reads "pride (You said: ...)" -- a teacher telling a boy to answer
+the magistrate, a magistrate pressing a witness. OCC's pride is approval of a
+praiseworthy act, one that took something, not an act consistent with one's
+values; the wording needs a battery before it changes. A memory-sourced
+feeling's object is its opening text, which for a remembered scene is scene
+description ("resolve (You are in the harbourmaster's shed...)"); marking it
+as remembered wants a pack phrase in both languages.
 
 **Increment 2 -- asked of the owner first:** the appraisal object
 (`goal_impacts`, `somatic_impact`, `memory_modulation`), stress `coping_mode`

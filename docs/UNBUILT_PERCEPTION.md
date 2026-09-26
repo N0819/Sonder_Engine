@@ -1604,8 +1604,15 @@ it (the Lombard rule), and his listener still stands under the other.
   clear one (the spatial hand writing `sound: null`) is the owner's call.
 - **Two distances for one pair.** Stations say two bodies are within reach
   and the field's cells put them 2.6 paces apart, so a normal line at arm's
-  length in a small stone room smears (the infirmary, 6 lines). The field
-  should place a `near` body beside the body it is near.
+  length in a small stone room smears (the infirmary, 6 lines). **The
+  arrival half is fixed (2026-09-26):** a body that walks into a room TO
+  someone -- the hand's station names them `near` -- now ends beside them
+  (`spatial_walk.beside_named`, in `walk_declared` and the merge's
+  `_seat_arrivals`), the sibling of the fixture a declared walk already ends
+  at; on the new engine the opera story's "sets the proof on the music rest
+  in front of her" had still ended one pace inside the stage door, 4.5 paces
+  off, and the stage's ring still smeared her answer. A pair near by station
+  and apart by cell for any other reason is open.
 - **A small hard room is priced as an empty one.** Sabine's rule here counts
   no absorption from the room's open doorways or the bodies standing in it,
   and a drip is steady noise where a real one is glimpsed between drops.

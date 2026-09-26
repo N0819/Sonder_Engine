@@ -303,7 +303,11 @@ def emotions_from_appraisal(appraisal, *, ref="", actor="", about="", liking=Non
     me = _clamp(doer.get("self"), 0.0, 1.0)
     other = _clamp(doer.get("actor", 0.0), 0.0, 1.0) + _clamp(doer.get("other", 0.0), 0.0, 1.0)
     praise, blame = max(0.0, standards), max(0.0, -standards)
-    who = actor or "someone"
+    # Toward the agent, when one is named; toward the thing itself when not.
+    # A concern has no actor, and its blame used to land on the bare word
+    # "someone" -- "anger (someone)" beneath a magistrate's mood in the lie
+    # test story (2026-09-26), which told the mind nothing it could act on.
+    who = actor or about or "someone"
     raw += [("pride", me * praise, about), ("shame", me * blame, about),
             ("admiration", min(1.0, other) * praise, who), ("reproach", min(1.0, other) * blame, who)]
     for person, fortune in (a.get("fortune") or {}).items():

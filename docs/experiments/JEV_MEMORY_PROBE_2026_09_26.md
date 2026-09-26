@@ -846,6 +846,55 @@ person tests: 133 of 135 (99%).
 - **The Japanese wordings are translations of the chosen English, untested**:
   the battery has no Japanese situations yet.
 
+## Round five: the four test stories
+
+The owner's "yes to all": four stories built to make unmeasured moods rise
+and fall, played through the real pipeline with capture on (GLM 5.2 on
+OpenRouter for every prose role, the specialists on Gemini 3.8 Flash with
+reasoning off), around the eight invented characters above -- an opera
+house's rivalry (Isolde, Celestine), a harbour leave-taking (Wren, Aldo), a
+besieged fort's traitor (Emil, Anselm), a schoolhouse lie (Margit, Aurel).
+The captured calls were probed exactly as rounds three and four were
+(`tools/jev_affect_probe.py`: collect, ask, `dimlabel` by the `utility`
+model -- GLM -- blind, score with `--post`), on the engine where the model
+still reported its own mood:
+
+| story | beats | Jev direct vs rater (mean r) | derived | settled | settled vs own report (valence / arousal) |
+|---|---|---|---|---|---|
+| opera | 21 | 0.64 (40 coordinates) | 0.28 | 0.46 | 0.91 / 0.63 |
+| harbour | 17 | 0.61 (35) | 0.25 | 0.45 | -0.18 / 0.60 |
+| fort | 16 | 0.45 (32) | 0.19 | 0.30 | 0.64 / 0.82 |
+| schoolhouse | 22 | 0.62 (29) | 0.36 | 0.48 | 0.09 / 0.25 |
+
+- **The direct reading holds up in play** (0.45-0.64 against a blind rater);
+  the settled mood carries earlier beats and agrees less with a rater who
+  sees one beat at a time, as in round four.
+- **The rater keeps naming three moods no coordinate covers**: dread (10
+  beats), wariness or vigilance (13), protectiveness (5). Horror is scoped to
+  the unnatural and anticipation to eagerness, so fear of what is coming has
+  no home; wariness sits between low safety and low openness and was never
+  named.
+- **Own acts tilt to pride**: pride 39 / 27 / 39 / 60 against shame 0 / 1 /
+  0 / 1 across the four. "Did doing this honor something you value?" is true
+  of nearly anything a principled character says.
+- **Memories stir the story's own moods**: grief 44% of memory feeling in the
+  fort (Pietro), jealousy 25% in the opera house, resolve and compassion in
+  the schoolhouse -- the memory-born moods track what each story is about.
+
+**Then the new engine** (the mood given, not reported; `mind/affect_pass.py`),
+on copies of the four at their last turn, 11 turns. The given feelings turned
+into conduct without being reported: Emil, handed "a fear come true (The
+letter contains patrol times in my own hand...)" with guilt, grief and "a
+past that will not let go", went into duty -- "Go. Now." "Pulse steady,
+Anselm?"; Margit, handed tenderness toward the boy and distress beneath about
+the magistrate, said "That was my choice, Kit. Not yours to carry. Look at
+Mr. Holt." Each Jev request took 0.2-0.3 s against 7-82 s character calls.
+Three defects surfaced and were fixed the same day (a mind's own earlier
+lines appraised again as events, blame toward nobody named landing on
+"someone", an arrival seated at the door instead of beside the person it
+came to); the pride tilt, now the stored label after a character speaks, is
+open (`docs/design/DESIGN_JEV_CHARACTER_PASS.md`, "What increment 1 leaves").
+
 ## What Jev costs
 
 Measured from Jev's own response (`usage.cost`): one 64-question request,

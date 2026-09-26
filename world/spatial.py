@@ -87,7 +87,7 @@ from world.spatial_walk import (
     BLOCKING_HEIGHT, DEFAULT_BEAT_SECONDS, PACES, PACES_PER_SECOND,
     RUN_PACES_PER_SECOND, blocked_cells, cell_path, door_cell, entry_cell,
     held_cells, inside_the_door, paces_for, standing_cell, walk,
-    free_cell_near, anchor_stand_cell, FLIGHT_PACES,
+    free_cell_near, beside_named, anchor_stand_cell, FLIGHT_PACES,
 )
 from world.spatial_levels import (  # noqa: E402
     WAYS, FLOOR_LOSS_DB, normalize_level, edge_way, declared_way, is_overlook, room_level,

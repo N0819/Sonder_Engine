@@ -1497,17 +1497,22 @@ def sync_scene_passages(scene: dict, prior_scene: dict = None) -> list:
 
 def _seat_arrivals(merged, positions_before, incoming_stations):
     """Give every body whose room changed this beat a cell in its new room:
-    the one the diff wrote, else one pace inside the door it came through.
+    the one the diff wrote, else beside the body the diff says it came to
+    (`near`, a body standing in that room -- `spatial_walk.beside_named`),
+    else one pace inside the door it came through.
     Returns [(name, room, cell)]; mutates `merged["stations"]`."""
     from world.spatial_geometry import normalize_cell
-    from world.spatial_walk import inside_the_door
+    from world.spatial_walk import beside_named, inside_the_door
     positions = merged.get("positions") or {}
     stations = merged.setdefault("stations", {})
     said = {}
+    came_to = {}
     for name, st in (incoming_stations or {}).items() if isinstance(
             incoming_stations, dict) else ():
         if isinstance(st, dict) and normalize_cell(st.get("cell")) is not None:
             said[str(name).strip().casefold()] = list(normalize_cell(st["cell"]))
+        elif isinstance(st, dict) and st.get("near"):
+            came_to[str(name).strip().casefold()] = list(st["near"])
     contained = merged.get("contained") or {}
     seated = []
     for name, now in positions.items():
@@ -1517,6 +1522,13 @@ def _seat_arrivals(merged, positions_before, incoming_stations):
         if isinstance(contained, dict) and _ci_get(contained, name):
             continue
         cell = said.get(str(name).strip().casefold())
+        if cell is None and came_to.get(str(name).strip().casefold()):
+            try:
+                beside = beside_named(merged, str(now), came_to[str(name).strip().casefold()], name)
+            except Exception:
+                beside = None
+            if beside is not None:
+                cell = list(beside)
         if cell is None:
             try:
                 from world.spatial_walk import free_cell_near

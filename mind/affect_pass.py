@@ -110,9 +110,23 @@ def _text(value, n=300):
     return text if len(text) <= n else text[:n] + "..."
 
 
+def _own_act(observation):
+    """A mind's own conduct handed back to it by a later round of its beat
+    (`loops.self_micro_view`): its id names the same body as perceiver and
+    as speaker (`current:<me>:micro:<round>:<me>:<n>`). Its feeling was
+    appraised once, after it acted (`after_call`); read again as a perceived
+    event it counted twice, and a magistrate's second round in the lie test
+    story was handed "gratification (You said: ...)" as how he felt NOW
+    (2026-09-26)."""
+    parts = str(observation.get("observation_id") or "").split(":")
+    return len(parts) >= 6 and parts[0] == "current" and parts[2] == "micro" \
+        and parts[1] == parts[4]
+
+
 def events_from(observations):
-    """This call's perceived events, as the model will quote them."""
-    rows = [o for o in (observations or []) if isinstance(o, dict)]
+    """This call's perceived events, as the model will quote them -- what
+    the world and the others did, never the mind's own earlier conduct."""
+    rows = [o for o in (observations or []) if isinstance(o, dict) and not _own_act(o)]
     rows.sort(key=lambda o: o.get("order") or 0)
     out = []
     for i, o in enumerate(rows):

@@ -219,6 +219,23 @@ def free_cell_near(scene: dict, room_id, cell, walker=None) -> tuple:
     return min(free, key=lambda c: ((c[0] - cell[0]) ** 2 + (c[1] - cell[1]) ** 2, c))
 
 
+def beside_named(scene: dict, room_id, names, walker=None) -> Optional[tuple]:
+    """The free cell beside the first of `names` standing in `room_id` on a
+    cell, or None when none of them does. A BODY NAMED IS A PLACE: where a
+    station says a body is `near` someone, beside them is where it stands --
+    the rule `walk_within_room` walks by, and what an arrival is seated by
+    when the hand said who it came to (an arrival near nobody in the room
+    still stands inside its door)."""
+    for other in names or ():
+        other = str(other or "").strip()
+        if not other or other == str(walker or "") or room_of(scene, other) != str(room_id):
+            continue
+        cell = body_cell(scene, other)
+        if cell is not None:
+            return free_cell_near(scene, room_id, cell, walker)
+    return None
+
+
 def anchor_stand_cell(scene: dict, room_id, anchor_id, near=None):
     """Where a body stands when it goes TO a fixture: the cells a station
     `at` it would seat a body on (`spatial_fov._anchor_stand_cells`), the
@@ -418,6 +435,7 @@ def walk(scene: dict, name: str, to_room, to_cell=None, *, paces,
 __all__ = [
     "BLOCKING_HEIGHT", "DEFAULT_BEAT_SECONDS", "PACES", "PACES_PER_SECOND",
     "RUN_PACES_PER_SECOND", "blocked_cells", "cell_path", "door_cell",
-    "entry_cell", "free_cell_near", "anchor_stand_cell", "held_cells", "FLIGHT_PACES",
+    "entry_cell", "free_cell_near", "beside_named", "anchor_stand_cell", "held_cells",
+    "FLIGHT_PACES",
     "inside_the_door", "paces_for", "standing_cell", "walk",
 ]

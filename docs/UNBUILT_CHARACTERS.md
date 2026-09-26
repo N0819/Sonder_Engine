@@ -1284,12 +1284,14 @@ which the prompt no longer asks for. Open: increment 2 -- the `appraisal`
 object, `stress.coping_mode` and `hedonic.released`, each needing a Jev
 question before its clause can leave the prompt (ask the owner first); the two
 records of one mood (`mood_coords` against the `affect.surface` that
-`resolve_affect` still blends); the latency of the two requests, unmeasured in
-play; every knob and every `EMOTION_EFFECTS` value (the owner's);
+`resolve_affect` still blends); every knob and every `EMOTION_EFFECTS` value
+(the owner's); the coordinates the test stories' rater kept naming as
+uncovered -- dread, wariness, protectiveness;
 Japanese situations for the battery, since the Japanese wordings are
 untested translations; a concern gate that discriminates (Jev weighs every listed
 concern about 0.7);
-own acts' pride tilt; naming the combinations the coverage table lists; the
+own acts' pride tilt, which since the wiring is the stored label after a
+character speaks ("pride (You said: ...)"); naming the combinations the coverage table lists; the
 memory packet (a fitted weighted-RRF net of 100 over new lanes, then Jev) with
 the moment tag written at commit -- which the memory-born moods wait on, since
 today's packet stirs the scene's own moods; the fun sections; a ponder

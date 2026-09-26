@@ -162,6 +162,23 @@ def test_a_memory_recalled_beat_after_beat_habituates(jev):
     assert strengths[0] == pytest.approx(strengths[1]) and strengths[-1] < strengths[0]
 
 
+def test_a_minds_own_earlier_lines_are_not_appraised_again_as_events():
+    """A later round of a beat hands a mind its own earlier conduct back
+    (`loops.self_micro_view`: "You said: ..."). Its feeling was appraised once,
+    after it acted; taken again as a perceived event it counted twice, and in
+    the lie test story a magistrate's second round was handed "gratification
+    (You said: ...)" as how he felt NOW (2026-09-26)."""
+    from agents.loops import _micro_observation, self_micro_view
+
+    mine = []
+    self_micro_view({"sequence": [{"type": "speech", "text": "Both are recorded."}]},
+                    observation_out=mine, observer_id="7", event_prefix="micro:1:7")
+    theirs = [_micro_observation("7", 'Kit Sawyer says: "Write it down."', event_prefix="micro:0:3",
+                                 event_index=0, kind="speech", channel="hearing", actor="Kit Sawyer")]
+    assert mine and theirs
+    assert [e["actor"] for e in ap.events_from(theirs + mine)] == ["Kit Sawyer"]
+
+
 def test_a_memory_without_a_stable_key_never_habituates(jev):
     # 134 of 17,065 rows in the owner's db carry no event_key; their only name
     # is their place in the packet, and a place is not a memory.
