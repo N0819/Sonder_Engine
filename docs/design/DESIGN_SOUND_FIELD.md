@@ -316,6 +316,19 @@ Neither is a constant; both are the same sentence in two places.
   ordinary voice in its own room and did nothing at all to a shout from three
   rooms away (`PLAY_2026_09_05_lighthouse.md` § PA5). A `vouched` channel is
   exempt: a voice on a live comm channel is not crossing this room's air.
+* **A beat's one-off sounds are moments, not a floor** (the owner,
+  2026-09-25: "sounds should be allowed to be transient mid beat. there are
+  types of sound after all."). The noise a line -- or any sound -- is heard
+  over is what sounds throughout it: standing sources, crowds, the room's own
+  sound and its ambient floor. A sound event (`sensory_events`: a creak, a
+  gasp, a shot) happens at some moment in the beat and is heard as itself;
+  it masks nothing. Counted as a floor, an instant sat on every line of its
+  beat at full power: on the owner's chat 155 turn 34 a listener's own
+  `audible` moan, placed at her own cell, read 58 dB in her ears and took a
+  line murmured by a face inches from hers to nothing, and a faint creak of
+  the table she lay on still held it to a fragment. A noise meant to drown
+  speech for as long as it lasts is a standing source (`sound_source` with
+  `state.running`), and it still does.
 * **A raised voice carries through an opening.** One passable edge away
   (`one_opening_away`: an edge sound walks through, after the material shift,
   declared from either side) a `loud` voice or a `shout` is at worst a

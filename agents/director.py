@@ -4361,7 +4361,11 @@ def _ground_public_evidence(out, view):
         quote = _quote_body(source.get("exact_quote") or "")
         folded_quote = quote.casefold()
         if source.get("kind") == "speech":
-            for raw in (semantic.get("speech_acts") or [])[:4]:
+            # EVERY ACT OF A LINE, NOT ITS FIRST FOUR. Each frame is admitted
+            # on its own exact-span grounding below; a count cap added nothing
+            # to that and cost a line's fifth act -- the promise that closes a
+            # long line never reached the ledgers of the people who heard it.
+            for raw in semantic.get("speech_acts") or []:
                 if not isinstance(raw, dict):
                     continue
                 kinds = _speech_act_kinds(raw.get("kind"))

@@ -1883,6 +1883,23 @@ class SoundField:
         overhead, both `loud`, both in the service spine, and the containment
         annex through the open door beside it heard neither -- while either
         one alone was `full` there.
+
+        A BEAT'S ONE-OFF SOUNDS ARE MOMENTS, NOT A FLOOR (the owner,
+        2026-09-25: "sounds should be allowed to be transient mid beat. there
+        are types of sound after all."). A sound event -- a creak, a clank, a
+        gasp, a shot (`sensory_events`) -- happens at some moment in the beat
+        and is heard as itself (`level_of`); what a line, or any other sound,
+        is heard over is what sounds THROUGHOUT it: standing sources, crowds,
+        the room's own sound and its ambient floor. Counted as a floor, an
+        instant sat on every line of the beat at full power. Measured on the
+        owner's chat 155 turn 34: a listener's own single `audible` moan,
+        placed at her own cell, read 58 dB in her ears and took a line
+        murmured by a face inches from hers to nothing; a faint creak of the
+        table she lay on still held it to a fragment. A noise that should
+        drown speech for as long as it lasts is the engine's other type of
+        sound, a standing source (`sound_source` with `state.running`). The
+        same-place rule above still holds for standing sources; the
+        event-on-event case it was measured on no longer arises.
         """
         cell = self.locate(listener, room)
         if cell is None:
@@ -1894,6 +1911,8 @@ class SoundField:
                    or source["id"].casefold().removeprefix("speech:") in skip}
         total = self.ambient.get(self.grid.inside[cell], AMBIENT["enclosed"])
         for source in self.sources:
+            if source.get("kind") == "event":
+                continue
             sid = source["id"].casefold()
             if sid in skip or sid.removeprefix("speech:") in skip:
                 continue

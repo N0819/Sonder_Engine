@@ -12,7 +12,7 @@
 | `agents/character_kernel.py` | 496 |  | — |
 | `agents/common.py` | 11808 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 5194 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
-| `agents/director.py` | 8418 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
+| `agents/director.py` | 8422 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 499 |  | `story.character_schema`, `world.spatial` |
 | `agents/director_evidence.py` | 3711 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
 | `agents/director_fanout.py` | 1687 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
@@ -221,7 +221,7 @@
 | `world/spatial_routing.py` | 1257 |  | `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_light`, `world.spatial_orientation` |
 | `world/spatial_scent_field.py` | 233 |  | `world.spatial_barriers` |
 | `world/spatial_senses.py` | 1894 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_contacts`, `world.spatial_containment`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light`, `world.spatial_orientation`, `world.spatial_routing` |
-| `world/spatial_sound_field.py` | 3172 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light_field`, `world.spatial_senses` |
+| `world/spatial_sound_field.py` | 3191 |  | `world.scene_memo`, `world.spatial_barriers`, `world.spatial_containment`, `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_light_field`, `world.spatial_senses` |
 | `world/spatial_substance.py` | 1138 |  | `world.spatial_contacts`, `world.spatial_identity` |
 | `world/spatial_transit.py` | 948 |  | `world.spatial_barriers`, `world.spatial_identity` |
 | `world/spatial_walk.py` | 423 |  | `world.spatial_fov`, `world.spatial_geometry`, `world.spatial_identity`, `world.spatial_routing` |
@@ -302,13 +302,13 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 5747 | 2638 lines |
+| `director_resolve()` | 5751 | 2638 lines |
 | `director_interpret()` | 1362 | 949 lines |
 | `_run_specialists()` | 3504 | 640 lines |
 | `_reconcile_resolution()` | 2735 | 558 lines |
 | `director_establish()` | 395 | 200 lines |
 | `_reconcile_interpretation()` | 2313 | 172 lines |
-| `mint_unreferenced_things()` | 5423 | 169 lines |
+| `mint_unreferenced_things()` | 5427 | 169 lines |
 | `_specialist_repairs()` | 2547 | 134 lines |
 
 ### `agents/director_contact.py`
@@ -2718,13 +2718,13 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `sound_sources()` | 1398 | 146 lines |
-| `stamp_sound_relation()` | 2199 | 94 lines |
-| `sound_shape()` | 3081 | 92 lines |
+| `stamp_sound_relation()` | 2218 | 94 lines |
+| `sound_shape()` | 3100 | 92 lines |
 | `spread()` | 1118 | 88 lines |
-| `room_sound_flood()` | 2739 | 73 lines |
-| `far_path_gain()` | 2110 | 66 lines |
-| `distant_sounds()` | 2890 | 59 lines |
-| `sound_field()` | 2040 | 44 lines |
+| `room_sound_flood()` | 2758 | 73 lines |
+| `far_path_gain()` | 2129 | 66 lines |
+| `distant_sounds()` | 2909 | 59 lines |
+| `sound_field()` | 2059 | 44 lines |
 
 ### `world/spatial_substance.py`
 

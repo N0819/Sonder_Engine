@@ -79,6 +79,44 @@ def test_semantic_roles_are_grounded_to_exact_utterance_spans():
     assert "secretly ill" not in str(evidence)
 
 
+def test_every_grounded_act_of_a_line_survives_not_only_the_first_four():
+    """A line's fifth act is as public as its first. The loop read
+    `speech_acts[:4]`, so a fifth frame the social hand grounded -- here the
+    promise that closes the line -- never reached the listeners' ledgers:
+    a commitment spoken aloud that nobody who heard it could hold anyone to.
+    Exact-span grounding is still the only admission test, so a frame whose
+    content was never said stays out wherever it falls."""
+    quote = ('"Good evening, Reeve. Meals and a bed while I work. '
+             'Which problem first? I will start at dawn."')
+    acts = [
+        {"kind": "greeting", "content": "Good evening, Reeve"},
+        {"kind": "request", "content": "Meals and a bed"},
+        {"kind": "offer", "content": "while I work"},
+        {"kind": "question", "content": "Which problem first?"},
+        {"kind": "promise", "content": "I will start at dawn"},
+        {"kind": "disclosure", "content": "the mayor is secretly ill"},
+    ]
+    out = {
+        "dialogue_log": [{"speaker": "Rowan", "exact_quote": quote,
+                          "intended_target": "Reeve Ysra", "volume": "normal"}],
+        "public_evidence": [{"source_id": "speech:0", "salience": 0.9,
+                             "speech_acts": acts}],
+    }
+    view = {"public_sources": [{
+        "source_id": "speech:0", "kind": "speech", "actor": "Rowan",
+        "exact_quote": quote, "target": "Reeve Ysra", "volume": "normal",
+        "visibility": "overt", "conceal_from": [],
+    }]}
+
+    _ground_public_evidence(out, view)
+
+    evidence = out["public_evidence"][0]
+    assert [frame["kind"] for frame in evidence["speech_acts"]] == [
+        "greeting", "request", "offer", "question", "promise"]
+    assert evidence["speech_acts"][-1]["content"] == "I will start at dawn"
+    assert "secretly ill" not in str(evidence)
+
+
 def test_a_failed_semantic_annotation_keeps_the_factual_source():
     out = {"dialogue_log": [], "public_evidence": []}
     view = {"public_sources": [{
