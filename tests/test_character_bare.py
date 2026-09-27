@@ -127,7 +127,7 @@ def test_every_question_reads_only_this_minds_own_holding():
     for q in questions.values():
         offered.update(q["criteria"].values())
     pack = set()
-    for name in ("volume", "yesno", "grade", "miss", "channel", "signed", "fit", "tone", "change_kind",
+    for name in ("volume", "yesno", "act_kind", "grade", "miss", "channel", "signed", "fit", "tone", "change_kind",
                  "reading_kind", "aim_moved", "belief_touched", "memory_shaped", "impact", "certain",
                  "agency", "ability", "choices"):
         pack.update(character_jev_options(name, "en").values())
@@ -172,7 +172,7 @@ def _answer(script):
 SCRIPT = [
     ("say:0:volume", "mutter"), ("say:0:to", "p0"), ("say:0:kept:1", "yes"), ("say:0:kept:0", "yes"),
     ("say:0:expects", "yes"),
-    ("do:1:seen", "no"), ("do:2:seen", "yes"), ("do:2:target", "p0"),
+    ("do:1:seen", "inner"), ("do:2:seen", "outward"), ("do:2:target", "p0"),
     ("want:serves", "a1"), ("want:urgency", "strong"), ("held_back:serves", "a0"),
     ("tell:0:channel", "seen"), ("tell:0:miss", "subtle"), ("tell:1:channel", "heard"),
     ("person:0:about", "p0"), ("person:0:kind", "goal"), ("person:0:sure", "clear"),

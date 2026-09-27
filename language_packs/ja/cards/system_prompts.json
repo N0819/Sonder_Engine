@@ -1316,6 +1316,9 @@
     "dispute": {
       "$text": "character_jev/dispute.txt"
     },
+    "act_private": {
+      "$text": "character_jev/act_private.txt"
+    },
     "options": {
       "volume": {
         "whisper": "ささやき声で、一人にだけ。",
@@ -1457,6 +1460,10 @@
         "fear": "恐れ",
         "respect": "尊敬",
         "suspicion": "疑い"
+      },
+      "act_kind": {
+        "outward": "体の動き：その場の誰もが見たり聞いたりできる。",
+        "inner": "内側だけのこと：考え、決心、気持ち。"
       }
     }
   }

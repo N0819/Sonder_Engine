@@ -257,11 +257,15 @@ def compile_bare(reply, answers, h):
             seen = jev.pick(answers, f"do:{index}:seen")
             target = jev.indexed(answers, f"do:{index}:target", "p", h.people)
             hidden = [p for p in _people_picked(answers, "do", h, index) if p != target]
+            if jev.yes(answers, f"do:{index}:private"):
+                warnings.append(f"an act's words carry what no watcher could see: {act[:100]!r}")
             sequence.append({
                 "type": "action", "attempt": act,
-                # An act no one watching could see or hear is an inner act,
-                # and an inner act is imperceptible (`observable: ''`).
-                "observable": "" if seen == "no" else act,
+                # An act that happens only inside the mind is imperceptible
+                # (`observable: ''`); the smoke replay's first draft asked
+                # "could someone watching see or hear it?" and a man entering
+                # an empty schoolhouse was read as unseen.
+                "observable": "" if seen == "inner" else act,
                 "visibility": "concealed" if hidden else "overt",
                 "conceal_from": hidden,
                 "targets": [target] if target else [],

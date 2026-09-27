@@ -268,7 +268,10 @@ def after_questions(h, reply):
         elif kind == "do":
             any_do = True
             act = _text(row["do"])
-            qs[f"do:{index}:seen"] = _choice("act_seen", lang, yesno, act=act)
+            qs[f"do:{index}:seen"] = _choice("act_seen", lang, _set("act_kind", lang), act=act)
+            # A measurement, not a gate: how often the act's own words carry
+            # what no watcher could see (the observable is the model's words).
+            qs[f"do:{index}:private"] = _choice("act_private", lang, yesno, act=act)
             if people:
                 qs[f"do:{index}:target"] = _choice("act_target", lang, _options(people, "no_target", lang, "p"),
                                                    act=act)

@@ -1316,6 +1316,9 @@
     "dispute": {
       "$text": "character_jev/dispute.txt"
     },
+    "act_private": {
+      "$text": "character_jev/act_private.txt"
+    },
     "options": {
       "volume": {
         "whisper": "In a whisper, for one listener.",
@@ -1457,6 +1460,10 @@
         "fear": "fear",
         "respect": "respect",
         "suspicion": "suspect"
+      },
+      "act_kind": {
+        "outward": "Something my body does: anyone present could see or hear it.",
+        "inner": "Something only inside me: a thought, a decision, a feeling."
       }
     }
   }
