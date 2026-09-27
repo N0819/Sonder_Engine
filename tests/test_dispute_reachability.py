@@ -337,3 +337,49 @@ class TestALaterMemoryMayOverturnAnEarlierOne:
             "evidence": [{"event_id": "event:never-mine", "fact": "hearsay"}]}])
         _ground_observation_citations(out, _observations(), _memory_context())
         assert out["memory_disputes"] == []
+
+
+class TestEveryDeliveredLaneGrounds:
+    """A memory the payload handed this mind is citable wherever it was
+    handed. Minting (`character_kernel.compact_character_evidence`) gives any
+    row carrying a `memory_ref` a handle, wherever it sits; the grounding
+    registry named its lanes, and `resurfaced_without_asking.episodes` was
+    not among them. Measured on 187 captured replies (2026-09-13 to
+    2026-09-26): 60 correct citations of delivered memories dropped as
+    ungrounded -- 27 memory echoes, 19 memory effects, 9 of the 44
+    re-readings and 5 readings of people -- and 14.6% of the memory handles
+    the model received sat in that lane. The lane exists to hand a mind
+    memories it may re-read."""
+
+    RESURFACED = {"resurfaced_without_asking": {
+        "subject": "the man in the grey coat",
+        "episodes": [{"memory_ref": MEMORY_REF, "gist": KIND_STRANGER}]}}
+
+    def test_a_resurfaced_memory_can_be_re_read(self):
+        out = _result()
+        _ground_observation_citations(out, _observations(), dict(self.RESURFACED))
+        assert out["memory_disputes"], "the row was delivered; its re-reading stands"
+        assert out["memory_disputes"][0]["memory_ref"] == MEMORY_REF
+
+    def test_a_resurfaced_memory_can_shape_conduct(self):
+        out = {"memory_effects": [{"memory_ref": MEMORY_REF, "use": "recognition",
+                                   "disposition": "integrated",
+                                   "changed": "I keep my hand on the purse"}]}
+        _ground_observation_citations(out, _observations(), dict(self.RESURFACED))
+        assert [e["memory_ref"] for e in out["memory_effects"]] == [MEMORY_REF]
+
+    def test_a_lane_nobody_has_named_yet_grounds_too(self):
+        """The registry walks what was delivered, as minting does, so the
+        next lane is covered without anybody remembering to list it."""
+        context = {"some_future_lane": {"rows": [
+            {"memory_ref": MEMORY_REF, "details": KIND_STRANGER}]}}
+        out = _result()
+        _ground_observation_citations(out, _observations(), context)
+        assert out["memory_disputes"]
+
+    def test_walking_does_not_widen_the_firewall(self):
+        out = _result(memory_disputes=[{
+            "memory_ref": "event:never-delivered", "now_reads": NOW_READS,
+            "evidence": [{"event_id": CURRENT_ID, "fact": "seen now"}]}])
+        _ground_observation_citations(out, _observations(), dict(self.RESURFACED))
+        assert out["memory_disputes"] == []

@@ -1661,6 +1661,47 @@ def _requested_present_lanes():
                  if _schema_offers(schema, lane))
 
 
+#: The lanes whose rows may name their memory by `event_key` alone -- author
+#: projections and older callers. Every other row is named by `memory_ref`.
+_LEGACY_EVENT_KEY_LANES = frozenset({
+    "recent_episodes", "recent_received_information", "recent_conclusions",
+    "recalled_old_memories"})
+
+
+def _delivered_memory_rows(memory_context):
+    """Every `(row, ref)` the memory context delivered, wherever it sits, and
+    every summary id in it.
+
+    WALKED, NOT LISTED. Minting (`character_kernel.compact_character_evidence`)
+    gives a `memory_ref` a handle wherever it appears, and a registry that
+    named its lanes one by one missed `resurfaced_without_asking.episodes`:
+    on 187 captured replies (2026-09-13 to 2026-09-26) 60 correct citations
+    of delivered memories were dropped as ungrounded -- 9 of them among the
+    44 re-readings the lane exists to invite. Walking what was delivered is
+    the same rule minting uses, so the two cannot disagree about what a mind
+    was handed, and the next lane is covered by construction. It widens
+    nothing: every row walked is this mind's own delivered context."""
+    rows, summaries = [], set()
+
+    def walk(node, legacy):
+        if isinstance(node, dict):
+            if node.get("summary_id"):
+                summaries.add(str(node["summary_id"]))
+            ref = str(node.get("memory_ref")
+                      or (node.get("event_key") if legacy else "") or "").strip()
+            if ref:
+                rows.append((node, ref))
+            for value in node.values():
+                walk(value, legacy)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item, legacy)
+
+    for key, value in memory_context.items():
+        walk(value, key in _LEGACY_EVENT_KEY_LANES)
+    return rows, summaries
+
+
 def _ground_observation_citations(out, observations, memory_context,
                                   memory_internal=None):
     """Make present and remembered evidence mechanically distinguishable.
@@ -1693,46 +1734,16 @@ def _ground_observation_citations(out, observations, memory_context,
     row_ids = dict((memory_internal or {}).get("row_ids") or {})
     summaries = set()
     if isinstance(memory_context, dict):
-        for field in ("recent_episodes", "recent_received_information",
-                      "recent_conclusions", "recalled_old_memories"):
-            for mem in memory_context.get(field) or []:
-                if not isinstance(mem, dict):
-                    continue
-                ref = str(mem.get("memory_ref") or
-                          mem.get("event_key") or "").strip()
-                if not ref:
-                    continue
-                memories[ref] = str(
-                    mem.get("gist") or mem.get("details") or "").strip()
-                # Unit/legacy callers may still hand this guard an author
-                # projection. Production model context contains no row id.
-                if mem.get("id") is not None:
-                    row_ids[str(mem["id"])] = ref
-        deliberate = memory_context.get("deliberate_recall") or {}
-        if isinstance(deliberate, dict):
-            for mem in deliberate.get("additional_episodes") or []:
-                if not isinstance(mem, dict):
-                    continue
-                ref = str(mem.get("memory_ref") or "").strip()
-                if ref:
-                    memories[ref] = str(
-                        mem.get("gist") or mem.get("details") or "").strip()
-        unbidden = memory_context.get("surfaces_unbidden") or {}
-        if isinstance(unbidden, dict):
-            ref = str(unbidden.get("memory_ref") or "").strip()
-            if ref:
-                memories[ref] = str(
-                    unbidden.get("it_comes_back_to_me") or "").strip()
-        for meta in (memory_context.get("summary_citations") or {}).values():
-            if isinstance(meta, dict) and meta.get("summary_id"):
-                summaries.add(str(meta["summary_id"]))
-        for field in ("earlier_in_my_life",):
-            for item in memory_context.get(field) or []:
-                if isinstance(item, dict) and item.get("summary_id"):
-                    summaries.add(str(item["summary_id"]))
-        origin = memory_context.get("where_i_came_from") or {}
-        if isinstance(origin, dict) and origin.get("summary_id"):
-            summaries.add(str(origin["summary_id"]))
+        rows, summaries = _delivered_memory_rows(memory_context)
+        for mem, ref in rows:
+            text = str(mem.get("gist") or mem.get("details")
+                       or mem.get("it_comes_back_to_me") or "").strip()
+            if text or ref not in memories:
+                memories[ref] = text
+            # Unit/legacy callers may still hand this guard an author
+            # projection. Production model context contains no row id.
+            if mem.get("id") is not None:
+                row_ids[str(mem["id"])] = ref
 
     warnings = []
     # Which lanes the answer put a DELIVERED PRESENT citation in. Collected
