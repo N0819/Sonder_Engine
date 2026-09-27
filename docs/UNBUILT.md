@@ -296,6 +296,7 @@ Not scheduled and not committed to a phase. See the
 - [§1.162 — The doorway cone reads no cell, so a body a pace from the door is a shape through it](UNBUILT_WORLD.md#unbuilt-1-162)
 - [§1.166 — `state_diff.time.mode` has two readers and no writer](UNBUILT_WORLD.md#unbuilt-1-166)
 - [§1.168 — A crossing written at the resolve was refused at every shut door — FIXED 2026-09-26, residuals open](UNBUILT_WORLD.md#unbuilt-1-168)
+- [§1.169 — A player one open stair away is neither seen nor seen to leave — a lead, unclassified](UNBUILT_WORLD.md#unbuilt-1-169)
 
 **2. Roadmap**
 

@@ -1901,6 +1901,27 @@ Residuals, from the same trace, not built:
   the crossing now lands and the door behind her still reads shut to
   everyone left in the dining room.
 
+<a id="unbuilt-1-169"></a>
+
+### 1.169 A player one open stair away is neither seen nor seen to leave — a lead, unclassified
+
+Found 2026-09-27 by the blind judges of the bare-card replay
+(`docs/experiments/BARE_CARD_REPLAY_2026_09_27.md`), on the `rival` test
+story, turn idx 16 (a copy of the story's database; the story itself lives
+in the job's scratch directory). Before the beat (checkpoint 15) the player,
+Tomas Rell, stood on the `stage` and Isolde in the `orchestra_pit`, the pit
+steps between them `open` (a stair, vertical up). After it (checkpoint 16)
+the player was in the `rehearsal_room`, behind the closed door off the
+stage. The player's input that beat was empty; `director_interpret` (474
+characters) names no one and `director_resolve` never names the rehearsal
+room. Isolde's perception carried two standing rows and no trace of him --
+neither standing above her nor leaving -- and every reply to it spoke to
+him from memory: the story's own full card, and three layouts of the bare
+card. Unclassified: which stage moved him, and whether a silent body across
+an open vertical connection should be perceived (§1.131's vertical
+residuals; the geometry note's "no elevation ... a pit ... not modelled").
+Read every stage of that turn before forming a view.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-6"></a>

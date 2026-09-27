@@ -1337,12 +1337,42 @@ instruments `tools/jev_*.py`.
 
 Built behind a setting 2026-09-27 (`character_contract: bare`;
 `agents/character_bare.py`, `mind/character_jev.py`,
-`tests/test_character_bare.py`). Open, in order: the replay comparison on
-the four test stories -- the full card against the bare card on the same
-payloads and the same model, read side by side, the owner's test being that
-it "still basically does the same thing"; then the default switched, and
-the full card, its kernel compiler and its prompt paragraphs deleted so two
-contracts do not linger. Not carried yet: adopting a project (it needs an end
+`tests/test_character_bare.py`). Replayed 2026-09-27 against the full card
+on 20 beats of the four test stories, six rounds
+(`docs/experiments/BARE_CARD_REPLAY_2026_09_27.md`): it does the same thing
+at a fifth of the call time, and reads as well or better. Open, in order:
+
+- **What `do` says, observers get.** `compile_bare` sets an act's
+  observable to the model's own `do` text unless the decision model judged
+  the whole act inner, and perception hands it to every observer, so a
+  motive or a piece of private knowledge written there reaches them as
+  something seen ("circles the junction ... -- the gap he knows the enemy
+  watches"; 4 of 20 replies in one layout, 0 in another, about a third of
+  round two's acts). The full card asks for `observable` as its own field;
+  the bare card merges the two, so the floor leans on the model. Proposed,
+  the owner's call: split `do` at its clause boundaries, ask the decision
+  model outward or inner of each clause (`act_seen`, which reads
+  correctly), give observers the outward ones, keep the whole text as
+  `attempt` for the Director.
+- **The layout.** The owner's order -- the sheet, then what the character
+  remembers and holds, then the moment with its feelings -- beat today's
+  layout under two pairs of blind judges; with the card left as the system
+  message ("sectioned") it kept the fewest faults of three layouts. To
+  build: the first request and its same-request re-asks take the rendered
+  sections as the user message; the repair and fallback rungs keep the
+  payload dict.
+- **A turn that loses its conduct** (2 of 70 why-last replies): an empty
+  sequence beside a note claiming a line never said (the note is kept and
+  shown next beat), or a step holding only a `why`. A card clause or a
+  repair check -- either guards an answer that is sometimes valid, so the
+  owner's call.
+- **Booking still heavier than the full card's**: beliefs touched 34-37
+  times in 20 beats against its 12 (held beliefs re-confirmed beat after
+  beat), intentions 22-30 against 15.
+- Then the default switched, and the full card, its kernel compiler and its
+  prompt paragraphs deleted so two contracts do not linger.
+
+Not carried yet: adopting a project (it needs an end
 criterion the bare reply has no field for; 2 of 161 measured replies wrote
 one) and material effects. Unmeasured: every question's wording (none has a
 battery yet, and the Japanese wordings are untested translations), every

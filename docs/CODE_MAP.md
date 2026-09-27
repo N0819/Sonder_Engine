@@ -9,7 +9,7 @@
 | `agents/__init__.py` | 100 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
 | `agents/background.py` | 2219 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
 | `agents/character.py` | 4824 | Private character decision agent. | `agents`, `agents.character_kernel`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
-| `agents/character_bare.py` | 514 |  | `core.db`, `llm.prompts`, `mind` |
+| `agents/character_bare.py` | 532 |  | `core.db`, `llm.prompts`, `mind` |
 | `agents/character_kernel.py` | 496 |  | — |
 | `agents/common.py` | 11816 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 5194 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
@@ -49,7 +49,7 @@
 | `dressing/ambience.py` | 2103 |  | `core`, `core.db`, `core.paths`, `dressing.backdrops`, `world.weather` |
 | `dressing/backdrops.py` | 1772 |  | `core`, `core.db`, `core.logging_utils`, `core.paths`, `persist.steps`, `world.day_cycle`, `world.spatial`, `world.weather` |
 | `llm/__init__.py` | 6 |  | — |
-| `llm/decisions.py` | 151 |  | `core.db` |
+| `llm/decisions.py` | 158 |  | `core.db` |
 | `llm/llm_quality.py` | 1372 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
 | `llm/prompts.py` | 764 | Default system prompts and prompt preset access. | `core.db` |
@@ -60,9 +60,9 @@
 | `mind/affect.py` | 2538 |  | `mind.theory_of_mind` |
 | `mind/affect_appraisal.py` | 282 |  | `llm`, `llm.prompts` |
 | `mind/affect_mix.py` | 639 |  | — |
-| `mind/affect_pass.py` | 425 |  | `llm.prompts`, `mind` |
+| `mind/affect_pass.py` | 430 |  | `llm.prompts`, `mind` |
 | `mind/canon_provenance.py` | 398 |  | — |
-| `mind/character_jev.py` | 464 |  | `llm`, `llm.prompts`, `mind.affect_appraisal` |
+| `mind/character_jev.py` | 473 |  | `llm`, `llm.prompts`, `mind.affect_appraisal` |
 | `mind/knowledge_circles.py` | 134 |  | `core.db` |
 | `mind/memory.py` | 142 | Facade re-exporting every mind.memory_* name; holds no domain code of its own. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_context`, `mind.memory_inference`, `mind.memory_lore_entries`, `mind.memory_lorebooks`, `mind.memory_read`, `mind.memory_relationships`, `mind.memory_retrieval`, `mind.memory_snapshot`, `mind.memory_summaries`, `mind.memory_time`, `mind.memory_vectors`, `mind.memory_write`, `mind.theory_of_mind` |
 | `mind/memory_common.py` | 293 | Leaf helpers shared by every memory domain: vocabularies, blob/vector codecs, FTS query, cosine. | `core.db` |
@@ -268,14 +268,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `compile_bare()` | 216 | 245 lines |
-| `_appraisal()` | 463 | 52 lines |
-| `holding_from()` | 93 | 46 lines |
-| `modules_for()` | 143 | 20 lines |
-| `_heard_lines()` | 62 | 14 lines |
-| `_delivered_memories()` | 78 | 13 lines |
-| `_named_here()` | 197 | 13 lines |
-| `_evidence()` | 185 | 10 lines |
+| `compile_bare()` | 227 | 252 lines |
+| `_appraisal()` | 481 | 52 lines |
+| `holding_from()` | 104 | 46 lines |
+| `modules_for()` | 154 | 20 lines |
+| `_heard_lines()` | 73 | 14 lines |
+| `_delivered_memories()` | 89 | 13 lines |
+| `_named_here()` | 208 | 13 lines |
+| `_evidence()` | 196 | 10 lines |
 
 ### `agents/character_kernel.py`
 
@@ -711,12 +711,12 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_post()` | 81 | 30 lines |
-| `decide()` | 113 | 29 lines |
-| `_provider()` | 51 | 10 lines |
-| `_url()` | 70 | 9 lines |
-| `probability()` | 144 | 8 lines |
-| `configured()` | 63 | 5 lines |
+| `decide()` | 114 | 35 lines |
+| `_post()` | 82 | 30 lines |
+| `_provider()` | 52 | 10 lines |
+| `_url()` | 71 | 9 lines |
+| `probability()` | 151 | 8 lines |
+| `configured()` | 64 | 5 lines |
 
 ### `llm/llm_quality.py`
 
@@ -834,7 +834,7 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `before_call()` | 239 | 39 lines |
-| `feelings_block()` | 400 | 26 lines |
+| `feelings_block()` | 400 | 31 lines |
 | `psychology_text()` | 192 | 24 lines |
 | `after_call()` | 299 | 23 lines |
 | `given_affect()` | 361 | 19 lines |
@@ -859,14 +859,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `after_questions()` | 234 | 176 lines |
-| `state_text()` | 149 | 44 lines |
-| `steps()` | 124 | 12 lines |
-| `indexed()` | 447 | 10 lines |
-| `before_questions()` | 214 | 9 lines |
-| `_evidence_questions()` | 412 | 8 lines |
-| `pick()` | 424 | 8 lines |
-| `read_before()` | 225 | 7 lines |
+| `after_questions()` | 237 | 182 lines |
+| `state_text()` | 152 | 44 lines |
+| `steps()` | 127 | 12 lines |
+| `indexed()` | 456 | 10 lines |
+| `before_questions()` | 217 | 9 lines |
+| `_evidence_questions()` | 421 | 8 lines |
+| `pick()` | 433 | 8 lines |
+| `read_before()` | 228 | 7 lines |
 
 ### `mind/knowledge_circles.py`
 

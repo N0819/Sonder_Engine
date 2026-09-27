@@ -301,6 +301,14 @@ modes each one documents.
   felt; found a narrator crash, the moment's lead feeling taken from the
   wrong event, the opening filing private card content as public knowledge,
   and a move between rooms resolved and then dropped.
+- [`BARE_CARD_REPLAY_2026_09_27.md`](experiments/BARE_CARD_REPLAY_2026_09_27.md)
+  — the bare character card against the full card on 20 replayed beats, six
+  rounds: as much conduct, read as well or better, at a fifth of the call
+  time; the why must come last; the owner's order (sheet, memories, the
+  moment) beats today's layout under four blind judges, and keeping the card
+  as the system message keeps the discipline. Found a feeling named twice
+  and decision shards missing from the call ledger (both fixed), and that a
+  motive written in `do` reaches observers.
 
 ## `archive/` — superseded
 

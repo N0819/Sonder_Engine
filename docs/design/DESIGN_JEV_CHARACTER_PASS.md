@@ -867,7 +867,8 @@ needs a Jev question before its clause can leave the prompt.
 **Status: BUILT behind a setting, 2026-09-27** (`character_contract: bare`;
 `agents/character_bare.py`, `mind/character_jev.py`,
 `tests/test_character_bare.py`). The full card stays the default until the
-replay comparison below has been read.
+owner has read the replay (below) and the observable floor is settled
+(UNBUILT §6.17).
 
 The owner, 2026-09-26, in order: "Observe what other fields from the
 character prompt can be handled by jev, one of my thoughts is memory
@@ -936,7 +937,12 @@ moves you, and the reply:
  "demeanor":"","tells":[],"people":[],"changes":[],"note":""}
 ```
 
-`do` is written as someone watching would see it, the motive in `why`.
+`do` is what the character tries, in a few plain words: only what a
+stranger watching could see or hear its body do, only up to where the world
+must answer whether it works, written without a subject (the renderer names
+the actor for each observer); what it means, notices, remembers or intends
+goes in `why`. Each step's `why` comes LAST: put first, it swallowed the
+turn on 7 of 20 replayed beats.
 `people` is what the character makes of anyone here, `changes` what changed
 in it, `note` a line to itself about what it is in the middle of -- kept as
 `my_notes`, the last `NOTES_KEPT` (5), and shown next beat beside the last
@@ -945,7 +951,8 @@ decision.
 **Gated sections** ship only when a detector calls for them, each a short
 paragraph with its payload section: `dispute` (the decision model, before
 the call: does what just happened change what a recalled memory meant? a
-yes-share of `DISPUTE_FLOOR` (0.5) adds the memory to
+yes-share of `DISPUTE_FLOOR` (0.7; no replayed share reached 0.8, and at
+0.5 the section shipped on 13 of 20 beats) adds the memory to
 `memory.may_mean_otherwise`), `drive_rupture` and its forced form,
 `project_review`, `still_waiting`, `impossible_knowledge`, `carried_reports`
 (code).
@@ -964,7 +971,7 @@ exactly where commit would have dropped the model's.
 |---|---|
 | volume, `conceal_from`, visibility | `line_volume`; `line_kept_from` per person here -- never the addressee |
 | `interaction.addresses`, `expects_response`, interrupts | `line_to`, `line_expects`, `line_interrupts` |
-| `observable` (and "an inner act has none") | `act_seen`: an act no one could see or hear is imperceptible |
+| `observable` (and "an inner act has none") | `act_seen`: an act no one could see or hear is imperceptible; otherwise the act's own `do` text is what observers get -- a motive written there reaches them (open, UNBUILT §6.17) |
 | `targets`, follow, ending a contact | `act_target`, `follow`, `contact_end` per standing contact |
 | wants' `serves` and `urgency`; enact/suppress ids | `want_serves`, `want_urgency`; the want is enacted, `held_back` suppressed |
 | tells' `channel`, `subtlety`; "at most two" | `tell_channel`, `tell_subtlety`; `MAX_TELLS` (2) in code |
@@ -997,18 +1004,34 @@ Speaking in a room is a channel, and voices lean toward carrying.
 reply has no field for; 2 of 161 measured replies wrote one), and material
 effects (the substance ledger's `release/deposit/add`).
 
-### How it will be measured
+### How it was measured
 
-On copies of the four test stories captured on the new engine
-(`betrayal`, `homecoming`, `lie`, `rival`): the same payloads, the full card
-against the bare card on the same model, both replies read side by side --
-the owner's test is that it "still basically does the same thing" -- with
-output length, time, the post-call pass's time, and where the two can be
-compared, the typed fields (addressee, volume, concealment, lanes filed).
-The instrument is `tools/character_bare_replay.py` (run on copies; it spends
-one character call per beat per arm on the story's route). Credit on
-2026-09-27: OpenRouter $5.29 remaining, NanoGPT $0.12 -- a 20-beat
-comparison is about $5 on GLM 5.2, so its route is the owner's call.
+`docs/experiments/BARE_CARD_REPLAY_2026_09_27.md`: 20 captured beats of the
+four test stories (`betrayal`, `homecoming`, `lie`, `rival`), replayed on
+GLM 5.2 thinking over the owner's NanoGPT subscription, one request at a
+time, with `tools/character_bare_replay.py`. Six rounds:
+
+- **Against the full card** (round one): as much conduct -- 1.2 lines and
+  1.5 acts a beat against 1.65 and 1.8, the same words spoken -- read as well
+  or better side by side, at a median 19.8 s against 88.6 s and 1,171 output
+  tokens against 6,616. The decision model's two passes: 0.4 s each.
+- **The booking** (rounds one and two): asked of each memory in turn, the
+  read-back filed 165 memory effects where the full card wrote 11; one
+  choice a beat brought it to 20. Intentions 57 to 22-30 (full card 15),
+  beliefs 41 to 34-37 (full card 12, still open).
+- **Where the why goes** (rounds three and four): first, it swallowed 7 of
+  20 turns; last, none.
+- **Time is a distribution on this route**: round four's exact condition
+  ran at a median 84 s on ten beats, and 17 s when run again.
+- **The layout** (rounds five and six): the owner's order -- the sheet, what
+  the character holds, the moment with its feelings -- beat today's layout
+  under two pairs of blind judges; putting the card last as well ran past
+  the turn and wrote inner states into acts twice as often, while keeping
+  it as the system message kept the fewest faults of the three.
+
+Found on the way and fixed: a feeling named twice in the feelings block
+(5d967d68), decision shards missing from the call ledger (c38ec2f6). Found
+and registered: what `do` says is what observers get (UNBUILT §6.17).
 
 ## Owner decisions
 
