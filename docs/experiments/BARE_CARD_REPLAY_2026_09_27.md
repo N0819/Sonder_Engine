@@ -84,6 +84,7 @@ there reaches them.
 | 5, today's layout | each beat's feelings given | 20 | 21.1 s | 36.6 s | 5 | 1,627 | 4,284 | 1.20 | 1.40 | 0.75 | 25.6 | 0 | 2 | 3 |
 | 5, sheet first | the owner's layout, feelings given | 20 | 24.0 s | 37.6 s | 4 | 1,734 | 4,800 | 1.60 | 1.20 | 0.80 | 37.1 | 1 | 1 | 4 |
 | 6, sectioned | the card as the system message, then the owner's order | 20 | 17.3 s | 28.3 s | 2 | 1,378 | 3,031 | 1.45 | 1.35 | 0.80 | 34.2 | 0 | 0 | 4 |
+| 7, notebook | sectioned, with the notebook | 20 | 31.3 s | 50.6 s | 4 | -- | -- | 1.05 | 1.20 | 0.85 | -- | 0 | -- | -- |
 
 Lines, acts, ponders and words are per beat; output tokens and reasoning
 characters are medians. Input stayed at 15-16k tokens in every bare round
@@ -257,6 +258,75 @@ while the repair and fallback rungs keep wrapping the payload dict as
 `original_request`; the section builder moves from the tool into
 `agents/character_bare.py`.
 
+## Round seven: the notebook
+
+The owner, the same day: "A hypothesis is basicaly a note that can be
+updated or refuted"; "I needs stable core where a characters keeps track of
+what it thinks about things and other people and how it thinks they think";
+"there should be a general note taking system for things the llm wishes to
+keep track of"; "There should also be an active concerns section that has a
+method of resolution". Built as the notebook (`mind/notebook.py`,
+`DESIGN_JEV_CHARACTER_PASS.md` § The notebook) and replayed on the same 20
+beats in the sectioned layout with feelings, each beat's notebook rebuilt
+from what its capture held (13 of the 20 held notes about people, 2-3
+subjects each; all 20 held 3-7 concerns; none a project).
+
+A network outage mid-run lost four `lie` beats to DNS failures and a
+stalled stream, and one `rival` beat took 340 s; the `lie` beats were run
+again and all 20 stand. What the characters wrote, and where it landed:
+
+| What | Count |
+|---|---|
+| New notes about people | 7 (6 of them what someone thinks: second-order) |
+| New notes about things | 1 |
+| Held notes revised by id | 10 |
+| Held notes nudged by what the beat bore out | 8 (all borne out) |
+| Held notes struck | 0 |
+| Concerns ended / new | 28 / 30 (mostly rewordings, now carrying what settles them) |
+| Reminders kept | 4 |
+| Intentions (commitments with no end to name) | 6 |
+| Projects adopted | 0 |
+
+The notes read as the characters' own. Aldo revises his three notes on
+Wren and the stranger ("She's confident and eager -- she read the tide
+right. She can handle the Tern. He needs to let her."); Anselm rewrites his
+on Varga ("not the action of a man who intends transparent investigation
+... I am not bound") and adds what he now thinks Varga is doing; Celestine
+revises her readings of the young composer and of Isolde and adds three of
+what Tomas is about ("too specific to be mere flattery; I mean to test
+every word of it"); Emil gives each worry what would end it ("until Anselm
+confronts him directly or the watching stops") and strikes the burial --
+"settled -- spoke at the grave".
+
+Three things needed fixing, all fixed before this was committed:
+
+- **The kind question read a plan as someone's goal.** "Must be seen at
+  the site before briefing" was filed as a forecast about "Pietro's death
+  and today's plan" at 0.9. The options named "someone", which took in the
+  character itself. Probed on Jev (`tmp` probes, 9 and then 13 notes with
+  their expected kinds): the old wording scored 4 of 9; naming ANOTHER
+  person for the person kinds, and saying what separates the rest -- a
+  worry is what the world will settle, a commitment what you will keep at
+  until it is done, a note to keep a fact or one errand of your own --
+  scored 11 of 13, where the next best scored 9.
+- **Concerns ballooned**: rewording a concern is how it carries what settles
+  it, and the characters wrote paragraphs, plans inside. Capped
+  (`CONCERN_CHARS` 240, `UNTIL_CHARS` 120).
+- **New entries came with invented ids** ("n5a1", "new1"): handled as new,
+  but one could have landed on a real reminder's `r1`. The card now says a
+  new entry has none.
+
+The payload got smaller: the notebook replaces four renderings of the same
+stores, a median 1,218 characters a beat (from 3,352 smaller to 1,028
+larger, the larger where there were no notes to replace and the concerns
+gained ids). The conduct was thinner than round six's on the same beats --
+21 lines and 24 acts against 29 and 29 -- inside the spread repeated runs
+of one condition have shown (1.0-1.8 lines a beat), so one run does not
+say whether the notebook costs conduct; the beats that wrote the most in
+their notebooks kept or gained conduct, and the largest drops came on beats
+that wrote nothing in it. Median 31.3 s, 4 beats past a minute, the
+outage's among them.
+
 ## What the replay found in the engine
 
 - **A feeling named twice** (fixed, 5d967d68). Where the moment stirred
@@ -293,6 +363,11 @@ while the repair and fallback rungs keep wrapping the payload dict as
   the story itself, and all three layouts here -- spoke to him from memory.
   One round-five judge and one round-six judge flagged it as speaking to
   someone absent.
+- **Concerns past the fourth were lost on every bare beat** (fixed with the
+  notebook). The holding kept four and the compiled state kept only those,
+  so a mind with seven concerns -- the replay's held three to seven -- lost
+  three each beat. Every concern is now kept; the six the notebook shows are
+  the ones checked.
 
 ## Open
 
@@ -310,7 +385,10 @@ while the repair and fallback rungs keep wrapping the payload dict as
   model touched them (34-37 against 12) -- held beliefs re-confirmed beat
   after beat -- and intentions 1.5-2 times (22-30 against 15).
 - Acts that state their own outcome, in both cards.
-- Not carried yet: adopting a project; material effects.
+- The notebook: whether it costs conduct (one run cannot say); no note was
+  struck in 20 beats and no project taken up -- both paths are tested, and
+  neither was exercised by these stories.
+- Not carried yet: material effects.
 - The default switch -- the owner's.
 
 ## Reproducing
@@ -319,7 +397,7 @@ The stories' databases live in the job's scratch directory and go with it;
 the instrument does not. On copies of any captured story:
 
     python tools/character_bare_replay.py --db COPY.db --beats 5 --arms bare \
-        --layout sectioned --feelings --out DIR
+        --layout sectioned --feelings --notebook --out DIR
 
 Route the story's `character_major` role to the model under test first, and
 check the decision model's credit.

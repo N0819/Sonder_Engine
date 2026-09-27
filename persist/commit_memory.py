@@ -1271,6 +1271,11 @@ def prepare_memory_commit(ctx, *, scene=None):
             # memory row's subject matches the key the hypothesis will live
             # under in mind_models.
             for update in _mm_updates:
+                # A struck note is no new inference, and a nudge restates a
+                # held one; the reconcile below moves the memories they
+                # already have (mind/memory_inference.py).
+                if str(update.get("op") or "") in ("strike", "nudge"):
+                    continue
                 confidence = _clamp(update.get("confidence", 0.5))
                 evidence = "; ".join(
                     str(item.get("fact") or "").strip()
@@ -1727,6 +1732,14 @@ def prepare_memory_commit(ctx, *, scene=None):
                     else:
                         _notes[-1] = {"turn": turn.idx, "note": _own_note[:NOTE_CHARS]}
                     st["my_notes"] = _notes[-NOTES_KEPT:]
+                # The notebook's reminders (mind/notebook.py): what this mind
+                # wants to keep track of, kept until it strikes them. What it
+                # thinks of people and things is merged below with the
+                # mind-model updates, by note id.
+                _nb_ops = own_result.get("notebook_ops") or []
+                if _nb_ops:
+                    from mind.notebook import apply_notebook_ops
+                    st = apply_notebook_ops(st, _nb_ops, turn.idx)
                 # --- Project service ledger + boundary review (Tier 1.5).
                 # A held project stopped failing by being outranked and
                 # started failing by being FORGOTTEN (A15 run 5: pa1 held at

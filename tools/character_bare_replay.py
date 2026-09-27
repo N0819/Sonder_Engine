@@ -106,7 +106,7 @@ MEMORY_KEYS = ("memory", "private_knowledge", "world_knowledge", "relationships"
                "active_hypotheses")
 HELD_SELF_KEYS = ("learned_beliefs", "learned_associations", "projects", "intentions", "steering_intention_ids",
                   "recent_self_lines", "recent_self_moves", "recent_self_refrain", "recent_tells",
-                  "tell_grounds", "decision_continuity", "my_notes")
+                  "tell_grounds", "decision_continuity", "notebook", "my_notes")
 
 
 def _sections(payload):
@@ -175,10 +175,35 @@ def _feelings(name, sheet, payload):
     return affect_pass.feelings_block(felt)
 
 
-def _bare_arm(name, sheet, payload, own, layout, feelings):
+#: The turn the replay's rebuilt notebook stands at: every held note is as
+#: fresh as the capture showed it (no fade between capture and replay).
+REPLAY_TURN = 1000
+
+
+def _stored_from_capture(payload):
+    """A stored state for the notebook, rebuilt from what the capture's
+    payload showed of it: the leading and competing readings per subject and
+    kind (`mind_models`, as `mind_models_for_payload` rendered them). The
+    captures predate the notebook; the reminders it keeps start empty."""
+    models = {}
+    for about, kinds in (payload.get("mind_models") or {}).items():
+        hyps = []
+        for kind, block in (kinds or {}).items():
+            for entry in [(block or {}).get("leading"), *((block or {}).get("competitors") or [])]:
+                if isinstance(entry, dict) and str(entry.get("claim") or "").strip():
+                    hyps.append({"about_entity": about, "kind": kind, "claim": entry["claim"],
+                                 "confidence": float(entry.get("confidence") or 0.5),
+                                 "last_updated_turn": REPLAY_TURN, "first_seen_turn": REPLAY_TURN})
+        if hyps:
+            models[about] = {"hypotheses": hyps}
+    return {"mind_models": models}
+
+
+def _bare_arm(name, sheet, payload, own, layout, feelings, notebook=False):
     """One beat under the bare card: the decision model before, the call in
     the chosen layout, the decision model after, compiled as the engine
-    compiles it."""
+    compiles it. `notebook`: the call shows the notebook (mind/notebook.py)
+    in place of the renderings it replaces, as the engine's bare path does."""
     from agents import character_bare
     from agents.character import character_temperature
     from agents.common import _agent_json
@@ -186,9 +211,11 @@ def _bare_arm(name, sheet, payload, own, layout, feelings):
     from mind import character_jev as jev
     from mind.affect_appraisal import _probabilities
 
+    view = (character_bare.notebook_for(_stored_from_capture(payload), payload, _observations(payload), name,
+                                        REPLAY_TURN) if notebook else None)
     h = character_bare.holding_from(
         name, sheet, payload, _observations(payload), payload.get("memory") or {},
-        (own.get("active_state") or {}), language="en")
+        (own.get("active_state") or {}), language="en", notebook_view=view)
     before, before_s = _timed(jev.ask, jev.state_text(h), jev.before_questions(h))
     disputed = jev.read_before(before, h)
     dispute_shares = [round(_probabilities(before.get(f"dispute:{i}")).get("yes", 0.0), 3)
@@ -199,6 +226,8 @@ def _bare_arm(name, sheet, payload, own, layout, feelings):
     if disputed:
         bare_payload["memory"] = {**(payload.get("memory") or {}),
                                   "may_mean_otherwise": [m["text"] for m in disputed]}
+    if notebook:
+        bare_payload = character_bare.with_notebook(bare_payload, view)
     modules = character_bare.modules_for(bare_payload, disputed=disputed)
     prompt = character_bare.prompt(name, modules, "en")
     if layout in ("sheet_first", "sectioned"):
@@ -217,10 +246,11 @@ def _bare_arm(name, sheet, payload, own, layout, feelings):
             "questions": len(questions), "reasoning_chars": len(h.reasoning),
             "reasoning": h.reasoning[:REASONING_KEPT],
             "prompt_chars": len(prompt), "layout": layout,
-            "feelings": (bare_payload.get("self") or {}).get("feelings")}
+            "feelings": (bare_payload.get("self") or {}).get("feelings"),
+            **({"notebook_shown": view, "payload_chars": len(_dump(bare_payload))} if notebook else {})}
 
 
-def replay(db_path, beats, arms, layout="system", feelings=False):
+def replay(db_path, beats, arms, layout="system", feelings=False, notebook=False):
     from core import db
     db.configure(str(db_path))
     from agents.character import character_temperature
@@ -252,7 +282,7 @@ def replay(db_path, beats, arms, layout="system", feelings=False):
                 ledger.clear()
             if arms in ("both", "bare"):
                 try:
-                    record["bare"] = _bare_arm(name, sheet, payload, own, layout, feelings)
+                    record["bare"] = _bare_arm(name, sheet, payload, own, layout, feelings, notebook=notebook)
                 except Exception as exc:  # noqa: BLE001 -- one failed beat is a finding, not the run's end
                     record["bare"] = {"error": f"{type(exc).__name__}: {str(exc)[:300]}", "seconds": None,
                                       "layout": layout}
@@ -346,12 +376,16 @@ def main():
                     help="system: the card as the system message, the payload as the user message; "
                          "sheet_first: the sheet, then memories, then what is happening now, then the card; "
                          "sectioned: the card as the system message, then the sheet, memories and now")
+    ap.add_argument("--notebook", action="store_true",
+                    help="show the notebook (mind/notebook.py), rebuilt from what each capture held, in place "
+                         "of mind_models, active_hypotheses, projects and concerns -- as the engine's bare path does")
     ap.add_argument("--feelings", action="store_true",
                     help="give each beat its feelings by the engine's affect pass (the captures predate it)")
     args = ap.parse_args()
     records = []
     for path in args.db:
-        records += replay(path, args.beats, args.arms, layout=args.layout, feelings=args.feelings)
+        records += replay(path, args.beats, args.arms, layout=args.layout, feelings=args.feelings,
+                          notebook=args.notebook)
     write(records, Path(args.out))
     print(f"wrote {len(records)} beats to {args.out}")
 

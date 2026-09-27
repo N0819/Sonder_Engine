@@ -1316,6 +1316,18 @@
     "dispute": {
       "$text": "character_jev/dispute.txt"
     },
+    "note_kind": {
+      "$text": "character_jev/note_kind.txt"
+    },
+    "note_about": {
+      "$text": "character_jev/note_about.txt"
+    },
+    "note_touched": {
+      "$text": "character_jev/note_touched.txt"
+    },
+    "strike_kind": {
+      "$text": "character_jev/strike_kind.txt"
+    },
     "options": {
       "volume": {
         "whisper": "ささやき声で、一人にだけ。",
@@ -1438,7 +1450,8 @@
         "follow_stop": "ついて行くのをやめた。",
         "follow_start": "{person}について行き始めた。",
         "not_stated": "書かれていない",
-        "situational": "この瞬間だけのため。"
+        "situational": "この瞬間だけのため。",
+        "something_else": "ここに挙がっていない誰か・何か。"
       },
       "aim_labels": {
         "drive": "あなたを駆り立てるもの: {text}",
@@ -1459,6 +1472,36 @@
       "shaped_labels": {
         "acted": "これに基づいて行動した: {memory}",
         "resisted": "これに逆らった: {memory}"
+      },
+      "note_kind": {
+        "emotion": "別の人が今感じていること。",
+        "goal": "別の人が望んでいること、しようとしていること。",
+        "trait": "別の人がどういう人か。",
+        "second_order": "別の人が誰か・何かをどう思っているか。",
+        "identity": "別の人が本当は何者か。",
+        "observation": "人や物について見て分かること。",
+        "stated_fact": "別の人がはっきり言ったこと。",
+        "what_it_is": "物や場所が何か、今どういう状態か。",
+        "what_happened": "何が起きたか、なぜ起きたか。",
+        "what_will_happen": "世の中や他の人たちが次にすること。",
+        "worry": "あなたの気にかかっていて、世の中がいずれ何らかの形で決着をつけること。",
+        "commitment": "自分で実現させるつもりで、終わるまで続けること。",
+        "keep": "覚えておく事実、または自分の用事ひとつ。"
+      },
+      "note_touched": {
+        "neither": "いいえ――はっきり関わることは何もない。",
+        "bore_out": "裏づけた。",
+        "doubted": "疑いを投げかけた。",
+        "contradicted": "反する証となった。"
+      },
+      "strike_kind": {
+        "done": "終わった。終わりとなるはずのことが起きた。",
+        "given_up": "手放す。"
+      },
+      "note_glue": {
+        "about": "{about}：{note}",
+        "until": "{text}（{until}まで）",
+        "concern": "{note}（{until}で落着）"
       }
     }
   }

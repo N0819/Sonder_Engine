@@ -6,7 +6,7 @@ The owner, 2026-09-26: "I truly want an as bare bones character prompt as
 possible. That still basically does the same thing thanks to jev... except
 the character is now mostly reasoning about being the character it's been
 given." Mind modelling and cross-turn notes stay the character's, in words
-(`people`, `note`); a short section of the card ships only when a detector
+(`notebook`, `note`; `mind/notebook.py`); a short section of the card ships only when a detector
 says the moment calls for it (the owner: "we can now gate parts of the
 prompts, Jev can detect a disput and insert the disput payload
 deterministically").
@@ -25,8 +25,8 @@ from __future__ import annotations
 import re
 
 from core.db import get_setting
-from llm.prompts import bare_character_prompt, character_bare_module
-from mind import affect_pass
+from llm.prompts import bare_character_prompt, character_bare_module, character_jev_options
+from mind import affect_pass, notebook
 from mind import character_jev as jev
 
 #: The setting that selects the contract, and the value that selects this one.
@@ -102,8 +102,10 @@ def _delivered_memories(memory_context):
 
 
 def holding_from(name, sheet, payload, observations, memory_context, active, *,
-                 language=None, rupture_open=False, reasoning=""):
-    """`jev.Holding` for one mind, read off its own payload only."""
+                 language=None, rupture_open=False, reasoning="", notebook_view=None):
+    """`jev.Holding` for one mind, read off its own payload only.
+    `notebook_view`: the notebook this call shows it (`mind.notebook.view`),
+    kinds included -- the payload carries it without them (`for_payload`)."""
     self_ = (payload or {}).get("self") or {}
     psy = (sheet or {}).get("psychology") or {}
     drive = psy.get("drive") or {}
@@ -135,7 +137,7 @@ def holding_from(name, sheet, payload, observations, memory_context, active, *,
                  if isinstance(b, dict) and str(b.get("belief") or "").strip()][:jev.MAX_BELIEFS],
         associations=[a for a in self_.get("learned_associations") or []
                       if isinstance(a, dict) and str(a.get("cue") or "").strip()][:jev.MAX_ASSOCIATIONS],
-        concerns=concerns[:jev.MAX_CONCERNS],
+        concerns=concerns,
         contacts=[{"ref": str(c.get("contact_ref") or ""), "text": _text(c.get("description"))}
                   for c in self_.get("standing_contacts") or [] if isinstance(c, dict)],
         promises=[p for p in self_.get("still_waiting_for") or [] if isinstance(p, dict)],
@@ -146,7 +148,55 @@ def holding_from(name, sheet, payload, observations, memory_context, active, *,
         charge=float(hedonic.get("charge") or 0.0),
         rupture_open=bool(rupture_open),
         reasoning=str(reasoning or ""),
+        notebook=dict(notebook_view or {}),
     )
+
+
+# --- the notebook this call shows ---------------------------------------------------
+
+def notebook_for(stored_state, payload, observations, name, turn_idx, *, absorption=0.0,
+                 elapsed_seconds=None):
+    """The notebook view this call shows (`mind.notebook.view`), built from
+    this mind's own stored state and its own payload. In play: the people it
+    perceives and the room it stands in, and anyone or anything named in
+    what reached it, in its latest running note, or in the recall it asked
+    for last beat -- so a note that is not shown is one `ponder` away."""
+    st = stored_state if isinstance(stored_state, dict) else {}
+    self_ = (payload or {}).get("self") or {}
+    room = ((payload or {}).get("perception") or {}).get("current_room")
+    present = _actor_labels(observations, name) + ([room] if isinstance(room, str) and room.strip() else [])
+    texts = []
+    for o in observations or []:
+        if isinstance(o, dict):
+            observed = o.get("observed")
+            texts.append((observed or {}).get("text") if isinstance(observed, dict) else o.get("text"))
+    notes = [n for n in st.get("my_notes") or [] if isinstance(n, dict)]
+    if notes:
+        texts.append(notes[-1].get("note"))
+    ponder = st.get("memory_ponder")
+    if isinstance(ponder, dict):
+        texts.append(ponder.get("query"))
+    active = self_.get("active_state") if isinstance(self_.get("active_state"), dict) else {}
+    return notebook.view(st, turn_idx, present=present, texts=[t for t in texts if t],
+                         absorption=absorption, elapsed_seconds=elapsed_seconds,
+                         concerns=active.get("active_concerns") or [], projects=self_.get("projects") or [])
+
+
+def with_notebook(payload, notebook_view):
+    """The payload this call sends, the notebook in place of the four
+    renderings it replaces -- `mind_models` and `active_hypotheses` (its
+    notes about people and things), `self.projects` and the concerns in
+    `self.active_state` (two of its sections): one view, not four copies."""
+    out = dict(payload or {})
+    self_ = dict(out.get("self") or {})
+    self_.pop("projects", None)
+    if isinstance(self_.get("active_state"), dict):
+        self_["active_state"] = {k: v for k, v in self_["active_state"].items() if k != "active_concerns"}
+    self_["notebook"] = notebook.for_payload(notebook_view)
+    out["self"] = self_
+    out.pop("mind_models", None)
+    out.pop("active_hypotheses", None)
+    return out
 
 
 # --- the card, with its gated sections --------------------------------------------
@@ -203,6 +253,106 @@ def _evidence(answers, prefix, h):
     if memory:
         out.append({"event_id": memory["ref"], "fact": _text(memory["text"], 240)})
     return out
+
+
+def _sure(entry):
+    """The character's own sureness as confidence (its kind caps it later)."""
+    return notebook.SURE_CONFIDENCE.get(entry.get("sure") or "", notebook.SURE_CONFIDENCE["likely"])
+
+
+def _mind_note(op, row, claim, confidence, evidence):
+    return {"op": op, "id": row["id"], "about_entity": row.get("about") or "",
+            "kind": row.get("kind") or "observation", "claim": claim,
+            "confidence": round(confidence, 3), "evidence": evidence, "alternatives": []}
+
+
+def _compile_notebook(reply, answers, h, out, warnings):
+    """The reply's notebook entries and the decision model's reading of them,
+    routed by what each is (`mind/notebook.py`):
+
+    - what the mind thinks of someone or something -- a new note, a change,
+      a strike, and the decision model's nudges on held notes this beat bore
+      on -- into `mind_model_updates` (by note id);
+    - a reminder into `notebook_ops`;
+    - a worry into the concerns, what would settle it carried in its words;
+    - a commitment into `project_ops` (adoption: an end outside the doing,
+      two at most, on trial until lived into) -- or, with no end to name,
+      an intention, because a commitment with no end is a task.
+
+    A note about someone or something needs a subject and rests on something
+    this mind was given, as every reading does; a thought with neither is not
+    lost -- it is kept as a reminder in its own words.
+    Returns `(notebook_ops, new_concerns, struck_concern_ids)`."""
+    shown = jev._view_entries(h)
+    subjects = jev.note_subjects(h)
+    glue = character_jev_options("note_glue", h.language)
+    ops, concerns, struck = [], [], set()
+    for j, entry in enumerate(jev.notebook_entries(reply)):
+        held = shown.get(entry["id"])
+        if held:
+            section, row = held
+            if entry["strike"]:
+                if section == "people_and_things":
+                    out["mind_model_updates"].append(_mind_note("strike", row, row.get("note") or "", 0.0, []))
+                elif section == "to_keep":
+                    ops.append({"op": "strike", "id": row["id"]})
+                elif section == "on_your_mind":
+                    struck.add(row["id"])
+                elif section == "what_you_are_about":
+                    done = jev.pick(answers, f"nb:{j}:strike") == "done"
+                    out["project_ops"].append({"op": "satisfy" if done else "displace", "id": row["id"],
+                                               "why": entry["strike"]})
+            elif section == "people_and_things":
+                evidence = _evidence(answers, f"nb:{j}", h)
+                if evidence:
+                    out["mind_model_updates"].append(_mind_note("revise", row, entry["note"], _sure(entry), evidence))
+                else:
+                    warnings.append(f"a changed note rests on nothing this mind was given: {entry['note'][:80]!r}")
+            elif section == "to_keep":
+                ops.append({"op": "change", "id": row["id"], "note": entry["note"]})
+            elif section == "on_your_mind":
+                struck.add(row["id"])
+                concerns.append(_fill_concern(glue, entry))
+            else:
+                warnings.append("a project is not reworded: strike it, and take up the one you mean now")
+            continue
+        kind = jev.pick(answers, f"nb:{j}:kind") or "keep"
+        about = (jev.resolve_about(entry["about"], subjects) or entry["about"]
+                 or jev.indexed(answers, f"nb:{j}:about", "p", subjects) or "")
+        evidence = _evidence(answers, f"nb:{j}", h)
+        if kind == "worry":
+            concerns.append(_fill_concern(glue, entry))
+        elif kind == "commitment":
+            if entry["until"]:
+                out["project_ops"].append({"op": "adopt", "project": entry["note"],
+                                           "satisfied_when": entry["until"], "about": ""})
+            else:
+                out["intent_ops"].append({"op": "add", "intent": entry["note"], "why": entry["note"],
+                                          "evidence": evidence})
+        elif kind == "keep" or not about or not evidence:
+            ops.append({"op": "add", "about": about, "note": entry["note"]})
+        else:
+            out["mind_model_updates"].append({
+                "about_entity": about, "kind": kind, "claim": entry["note"],
+                "confidence": round(_sure(entry), 3), "evidence": evidence, "alternatives": []})
+    for k, row in enumerate(jev.notes_held_to_check(h, reply)):
+        toward = notebook.NUDGE_TOWARD.get(jev.pick(answers, f"held:{k}:touched") or "")
+        evidence = _evidence(answers, f"held:{k}", h)
+        if toward is not None and evidence:
+            out["mind_model_updates"].append(_mind_note("nudge", row, row.get("note") or "", toward, evidence))
+    return ops, concerns, struck
+
+
+#: How long a concern's own words, and what would settle it, may run: the
+#: replay's characters wrote paragraphs, plans included, into a concern.
+CONCERN_CHARS = 240
+UNTIL_CHARS = 120
+
+
+def _fill_concern(glue, entry):
+    note = _text(entry.get("note"), CONCERN_CHARS)
+    until = _text(entry.get("until"), UNTIL_CHARS)
+    return jev._fill(glue["concern"], {"note": note, "until": until}) if until else note
 
 
 def _named_here(to_text, people):
@@ -312,16 +462,9 @@ def compile_bare(reply, answers, h):
            "memory_disputes": [], "memory_effects": [], "waiting_ops": [], "contact_ops": [],
            "project_ops": [], "material_effects": []}
     whom = list(dict.fromkeys(h.people + h.known))[:jev.MAX_PEOPLE * 2]
-    for j, line in enumerate(jev.lines_of(reply, "people", jev.MAX_READINGS)):
-        about = jev.indexed(answers, f"person:{j}:about", "p", whom)
-        evidence = _evidence(answers, f"person:{j}", h)
-        if not about or not evidence:
-            continue
-        out["mind_model_updates"].append({
-            "about_entity": about, "kind": jev.pick(answers, f"person:{j}:kind") or "observation",
-            "claim": line, "confidence": round(jev.graded(answers, f"person:{j}:sure", jev.GRADE) or 0.5, 3),
-            "evidence": evidence, "alternatives": []})
-    new_concerns, belief_targets = [], {}
+    notebook_ops, new_concerns, struck_concerns = _compile_notebook(reply, answers, h, out, warnings)
+    out["notebook_ops"] = notebook_ops
+    belief_targets = {}
     steering = [a for a in h.aims if a["kind"] == "intention"]
     hinge = " ".join(str(reply.get("hinge") or "").split())[:240]
     for j, line in enumerate(jev.lines_of(reply, "changes", jev.MAX_CHANGES)):
@@ -419,7 +562,12 @@ def compile_bare(reply, answers, h):
             out["relationship_updates"].append({
                 "target_entity": person, **deltas,
                 "trigger_event_ids": [e["event_id"] for e in trigger]})
-    kept_concerns = [c for k, c in enumerate(h.concerns) if not jev.yes(answers, f"concern:{k}")]
+    # A concern ends when what would settle it has happened (the decision
+    # model, reading its criterion in its own words) or when the character
+    # strikes or rewrites it.
+    kept_concerns = [c for k, c in enumerate(h.concerns)
+                     if not (k < jev.MAX_CONCERNS and jev.yes(answers, f"concern:{k}"))
+                     and notebook.concern_id(c) not in struck_concerns]
     for k, heard in enumerate(h.heard):
         if jev.yes(answers, f"keep:{k}"):
             out["remember_lines"].append({"quote": heard["text"], "why": hinge or heard["text"],

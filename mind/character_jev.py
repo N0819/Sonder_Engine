@@ -42,11 +42,17 @@ MAX_EVENTS = 8
 MAX_MEMORIES = 12
 MAX_BELIEFS = 8
 MAX_ASSOCIATIONS = 6
-MAX_CONCERNS = 4
+#: Concerns the decision model checks each beat (did what would settle it
+#: happen?) -- the ones the notebook shows (`mind.notebook.CONCERNS_SHOWN`).
+#: Those past it are kept untouched: this was a cut at four, and a mind with
+#: seven concerns lost three on every bare beat.
+MAX_CONCERNS = 6
 MAX_AIMS = 5
 MAX_HEARD_LINES = 8
 MAX_CHANGES = 6
 MAX_READINGS = 6
+#: Notebook entries a reply may write in one beat (adds, changes, strikes).
+MAX_NOTEBOOK_WRITES = 8
 MAX_STEPS = 8
 #: Tells a reply may carry -- the full card's "at most two", now enforced
 #: here instead of asked of the model.
@@ -115,6 +121,7 @@ class Holding:
     charge: float = 0.0
     rupture_open: bool = False
     reasoning: str = ""
+    notebook: dict = field(default_factory=dict)      # the view it was shown (mind.notebook.view)
 
 
 def _text(value, n=ITEM_CHARS):
@@ -142,6 +149,75 @@ def lines_of(reply, key, cap):
     return [_text(x) for x in ((reply or {}).get(key) or []) if str(x or "").strip()][:cap]
 
 
+# --- the notebook, as the reply writes in it ---------------------------------------
+
+_NOTE_FIELDS = ("id", "about", "note", "sure", "until", "strike")
+
+
+def notebook_entries(reply):
+    """The reply's notebook entries: `notebook` rows, then any lines in
+    `people` -- the field the notebook replaced -- as new notes. An entry
+    carrying nothing to do is left out."""
+    out = []
+    for row in (reply or {}).get("notebook") or []:
+        if not isinstance(row, dict):
+            row = {"note": row}
+        entry = {k: _text(row.get(k)) for k in _NOTE_FIELDS}
+        entry["sure"] = entry["sure"].casefold()
+        if entry["note"] or (entry["id"] and entry["strike"]):
+            out.append(entry)
+    for line in lines_of(reply, "people", MAX_READINGS):
+        out.append({**{k: "" for k in _NOTE_FIELDS}, "note": line})
+    return out[:MAX_NOTEBOOK_WRITES]
+
+
+def note_subjects(h):
+    """Who and what a new note may be about: the people here, the people this
+    mind has a standing with, and the subjects its notebook already holds."""
+    held = [e["about"] for e in (h.notebook or {}).get("people_and_things") or [] if e.get("about")]
+    return list(dict.fromkeys([*h.people, *h.known, *held]))[:MAX_PEOPLE * 3]
+
+
+def resolve_about(about, subjects):
+    """The subject a written `about` names: one given exactly, else the one
+    standing in it as a whole name; None when it names none of them (a new
+    subject in the character's own words)."""
+    from mind.notebook import named_in
+    text = " ".join(str(about or "").split())
+    if not text:
+        return None
+    exact = next((s for s in subjects if s.casefold() == text.casefold()), None)
+    if exact:
+        return exact
+    return next((s for s in sorted(subjects, key=len, reverse=True) if named_in(s, [text])), None)
+
+
+def note_text(entry, language):
+    """A written entry as the decision model reads it: who or what, the note,
+    and what would end it."""
+    glue = character_jev_options("note_glue", language)
+    text = (_fill(glue["about"], {"about": entry["about"], "note": entry["note"]})
+            if entry.get("about") else entry.get("note", ""))
+    if entry.get("until"):
+        text = _fill(glue["until"], {"text": text, "until": entry["until"]})
+    return text
+
+
+def notes_held_to_check(h, reply):
+    """The shown notes about people and things this beat may bear on: their
+    subject is here or named in what just reached this mind, and the reply
+    did not change or strike them itself. Asking only these keeps the check
+    bounded and keeps a note from being borne out by a beat about someone
+    else (held beliefs, asked every beat, were touched three times as often
+    as the full card's model touched them)."""
+    from mind.notebook import in_play
+    touched = {e["id"] for e in notebook_entries(reply) if e["id"]}
+    present = {p.casefold() for p in h.people}
+    texts = [e["text"] for e in h.events]
+    return [e for e in (h.notebook or {}).get("people_and_things") or []
+            if e.get("id") not in touched and in_play(e.get("about"), present, texts)]
+
+
 # --- the state every question reads -----------------------------------------------
 
 def _aim_label(aim, language):
@@ -159,8 +235,11 @@ def state_text(h, reply=None):
             f"- {_aim_label(a, h.language)}" for a in h.aims))
     if h.beliefs:
         parts.append("WHAT YOU BELIEVE:\n" + "\n".join(f"- {_text(b)}" for b in h.beliefs))
-    if h.concerns:
+    if h.concerns and not (h.notebook or {}).get("on_your_mind"):
         parts.append("WHAT IS ON YOUR MIND:\n" + "\n".join(f"- {_text(c)}" for c in h.concerns))
+    kept = _notebook_lines(h)
+    if kept:
+        parts.append("YOUR NOTEBOOK:\n" + kept)
     if h.people:
         parts.append("WHO IS HERE: " + ", ".join(h.people))
     if h.events:
@@ -184,6 +263,16 @@ def state_text(h, reply=None):
                 did.append(f"- You tried to remember: {_text(row['ponder'])}{why}")
         if did:
             parts.append("WHAT YOU DID:\n" + "\n".join(did))
+        wrote = []
+        for e in notebook_entries(reply):
+            if e["id"] and e["strike"]:
+                wrote.append(f"- You struck {e['id']}: {e['strike']}")
+            elif e["id"] and e["id"] in _view_ids(h):
+                wrote.append(f"- You changed {e['id']} to: {note_text(e, h.language)}")
+            else:
+                wrote.append(f"- You wrote: {note_text(e, h.language)}")
+        if wrote:
+            parts.append("WHAT YOU WROTE IN YOUR NOTEBOOK:\n" + "\n".join(wrote))
         choice = [f"{label}: {_text(reply.get(key))}" for key, label in (
             ("want", "WHAT YOU WENT FOR"), ("held_back", "WHAT YOU HELD BACK"),
             ("hinge", "WHY"), ("unsure", "WHAT IS UNSETTLED")) if str(reply.get(key) or "").strip()]
@@ -193,6 +282,33 @@ def state_text(h, reply=None):
             parts.append("YOUR OWN THINKING AS YOU WORKED IT OUT (some of it you set aside):\n"
                          + _text(h.reasoning, REASONING_CHARS))
     return "\n\n".join(p for p in parts if p)
+
+
+#: The notebook's sections, as the state names them for the decision model.
+_NOTEBOOK_SECTIONS = (("on_your_mind", "ON YOUR MIND"), ("what_you_are_about", "WHAT YOU ARE ABOUT"),
+                      ("people_and_things", "WHAT YOU MAKE OF PEOPLE AND THINGS"), ("to_keep", "TO KEEP"))
+
+
+def _view_entries(h):
+    """`{id: (section, entry)}` over the notebook this mind was shown."""
+    return {e["id"]: (section, e) for section, rows in (h.notebook or {}).items()
+            for e in rows or [] if isinstance(e, dict) and e.get("id")}
+
+
+def _view_ids(h):
+    return set(_view_entries(h))
+
+
+def _notebook_lines(h):
+    out = []
+    for section, label in _NOTEBOOK_SECTIONS:
+        rows = (h.notebook or {}).get(section) or []
+        if rows:
+            out.append(f"{label}:\n" + "\n".join(
+                f"- [{e['id']}] " + note_text({"about": e.get("about", ""), "note": e.get("note", ""),
+                                              "until": e.get("until", "")}, h.language)
+                for e in rows))
+    return "\n".join(out)
 
 
 # --- questions ----------------------------------------------------------------------
@@ -304,14 +420,35 @@ def after_questions(h, reply):
     qs["urgency"] = _choice("urgency", lang, grade)
     qs["salience"] = _choice("salience", lang, grade)
 
-    # --- readings of people, and what changed ---
+    # --- the notebook: what was written, and what it may bear on ---
+    shown = _view_entries(h)
+    subjects = note_subjects(h)
+    for j, entry in enumerate(notebook_entries(reply)):
+        held = shown.get(entry["id"])
+        text = note_text(entry, lang)
+        if held and entry["strike"]:
+            if held[0] == "what_you_are_about":
+                qs[f"nb:{j}:strike"] = _choice("strike_kind", lang, _set("strike_kind", lang),
+                                               project=_text(held[1].get("note")), why=entry["strike"])
+            continue
+        if held:
+            if held[0] == "people_and_things":
+                _evidence_questions(qs, f"nb:{j}", text, events, memories, lang)
+            continue
+        qs[f"nb:{j}:kind"] = _choice("note_kind", lang, _set("note_kind", lang), text=text)
+        if subjects and not entry["about"]:
+            qs[f"nb:{j}:about"] = _choice("note_about", lang, _options(subjects, "something_else", lang, "p"),
+                                          text=text)
+        _evidence_questions(qs, f"nb:{j}", text, events, memories, lang)
+    touched = dict(_set("note_touched", lang))
+    for k, entry in enumerate(notes_held_to_check(h, reply)):
+        note = note_text({"about": entry.get("about", ""), "note": entry.get("note", "")}, lang)
+        qs[f"held:{k}:touched"] = _choice("note_touched", lang, touched, note=note)
+        if events:
+            qs[f"held:{k}:now"] = _choice("based_now", lang, _options(events, "nothing_now", lang, "e"), text=note)
+
+    # --- what changed ---
     whom = list(dict.fromkeys(people + h.known))[:MAX_PEOPLE * 2]
-    for j, line in enumerate(lines_of(reply, "people", MAX_READINGS)):
-        if whom:
-            qs[f"person:{j}:about"] = _choice("about_whom", lang, _options(whom, "nobody", lang, "p"), text=line)
-        qs[f"person:{j}:kind"] = _choice("reading_kind", lang, _set("reading_kind", lang), text=line)
-        qs[f"person:{j}:sure"] = _choice("sure", lang, grade, text=line)
-        _evidence_questions(qs, f"person:{j}", line, events, memories, lang)
     kinds = dict(_set("change_kind", lang))
     if not h.rupture_open:
         kinds.pop("drive", None)
@@ -370,7 +507,7 @@ def after_questions(h, reply):
         if events:
             qs[f"rel:{p}:now"] = _choice("based_now", lang, _options(events, "nothing_now", lang, "e"),
                                          text=person)
-    for k, concern in enumerate(h.concerns):
+    for k, concern in enumerate(h.concerns[:MAX_CONCERNS]):
         qs[f"concern:{k}"] = _choice("concern_settled", lang, yesno, concern=_text(concern))
     for k, heard in enumerate(h.heard):
         qs[f"keep:{k}"] = _choice("keep_line", lang, yesno, person=heard.get("speaker") or "",

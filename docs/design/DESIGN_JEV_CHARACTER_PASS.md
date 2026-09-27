@@ -1000,9 +1000,101 @@ mood already fails open. A first draft re-asked the full card instead;
 to the call being replaced is what the owner ruled out for the Room.
 Speaking in a room is a channel, and voices lean toward carrying.
 
-**Not carried yet:** adopting a project (it needs an end criterion the bare
-reply has no field for; 2 of 161 measured replies wrote one), and material
-effects (the substance ledger's `release/deposit/add`).
+**Not carried yet:** material effects (the substance ledger's
+`release/deposit/add`). Adopting a project is carried by the notebook
+(below): an entry with `until` that the decision model reads as something
+the character means to see through.
+
+### The notebook
+
+**Status: BUILT behind the same setting, 2026-09-27** (`mind/notebook.py`,
+`tests/test_notebook.py`; the routing in `agents/character_bare.py`).
+
+The owner, 2026-09-27, in order: "A hypothesis is basicaly a note that can
+be updated or refuted an important piece of a characters mind model of other
+characters"; "hypothesis should be about anything in general I suppose but
+also about characters"; "I needs stable core where a characters keeps track
+of what it thinks about things and other people and how it thinks they
+think"; "there should be a general note taking system for things the llm
+wishes to keep track of"; "There should also be an active concerns section
+that has a method of resolution. Well I suppose that is projects under a
+different name"; "Lets not focus on minimal prompting, what do you think is
+best but not extremely large?"; and on the context: "making sure the llm
+still has acces to what it needs without letting it baloon".
+
+**What it holds.** One view, `self.notebook`, in four sections, over stores
+the engine already had or now has -- one store per kind of thing, no copies:
+
+- `on_your_mind` -- the concerns (`active_state.active_concerns`, still the
+  engine's plain strings). A worry the character raises carries what would
+  settle it in its own words ("whether Kit hangs (settled when: Wat
+  speaks)"), and the decision model's per-beat check (`concern_settled`)
+  reads the criterion with it.
+- `what_you_are_about` -- the projects (`affect.apply_project_ops`): an entry
+  the character means to see through, with `until` naming its end outside
+  the doing, is adopted -- two at most, on trial until lived into. One with
+  no end to name is a task, and becomes an intention. A project closes only
+  when the character strikes it (finished, or given up, with the reason).
+- `people_and_things` -- what the mind thinks of people, of places and
+  things, and what it thinks they think: the mind-model core
+  (`theory_of_mind`), with three kinds for things (`THING_KINDS`: what it
+  is, what happened, what will happen) beside the person kinds. Each note
+  has a stable id (`note_id`); the character adds, changes (`revise`: new
+  words, the same note) and strikes by it, and the decision model, asked of
+  each note about a subject in play whether this beat bore it out, cast
+  doubt on it or told against it, NUDGES its confidence -- never strikes
+  it. A mind may hold to what the evidence is against; only it lets go.
+- `to_keep` -- reminders (`state["notebook"]`, `apply_notebook_ops`): facts
+  and things to remember, kept until struck.
+
+**The reply** gains one field and loses one: `notebook` (entries with `id`,
+`about`, `note`, `sure`, `until`, `strike`) replaces `people`, whose lines
+are still read as new notes. A new entry's kind and, when it names no one,
+its subject are the decision model's; its sureness is the character's own
+(`SURE_CONFIDENCE`), capped by its kind. A note about someone or something
+rests on something this mind was given, as every reading does; one that
+names no subject or rests on nothing is not lost -- it is kept as a
+reminder in its own words.
+
+**Context.** The store keeps everything -- notes fade by their kind and are
+pruned below a floor, reminders are kept up to `REMINDERS_KEPT` (100) -- and
+the view is bounded and chosen for the moment: every note about who and
+what is in play first (the people perceived, the room, anyone or anything
+named in what reached the mind, in its latest running note or in the recall
+it asked for), then the strongest and most recently touched, at most
+`PER_SUBJECT_SHOWN` (3) about any one subject and `NOTES_SHOWN` (16) in all,
+narrowing to `NOTES_SHOWN_ABSORBED` (6) as the body takes the mind. A
+reminder untouched for `REMINDER_STALE_TURNS` (40) leaves the view unless it
+is in play. What is not shown is one `ponder` away. The view replaces four
+renderings of the same stores in the payload (`mind_models`,
+`active_hypotheses`, `self.projects`, the concerns), so the payload shrank:
+82.3k to 79.6k characters on a replayed beat with six concerns and six
+notes. The decision model's per-beat check runs only on shown notes about
+subjects in play, which keeps it bounded -- and keeps a note from being
+borne out by a beat about someone else, the way held beliefs, asked every
+beat, came to be touched three times as often as the full card touched them.
+
+**The knobs** (`mind/notebook.py`, the owner's): the view's sizes above,
+`CONCERNS_SHOWN` (6), `REMINDERS_SHOWN` (6), `RECENT_TURNS` (3),
+`SURE_CONFIDENCE` (certain 0.9, likely 0.65, guess 0.4), `NUDGE_TOWARD`
+(bore out 0.85, doubted 0.3, told against 0.1, each moved by the kind's
+plasticity), and the kinds for things' ceilings, plasticity and half-lives
+(`theory_of_mind`: what it is 0.8 / 0.4 / 400, what happened 0.7 / 0.35 /
+400, what will happen 0.6 / 0.5 / 45).
+
+**Found building it:** the bare path kept only the first four concerns
+(`MAX_CONCERNS`) and wrote back only those, so a mind with seven lost three
+on every bare beat. Every concern is now kept; the six shown are checked.
+
+**Measured** (`docs/experiments/BARE_CARD_REPLAY_2026_09_27.md`, round
+seven, 20 beats): 10 held notes revised by id, 8 new (6 of the 7 about
+people what someone thinks), 8 nudged, 4 reminders kept, concerns reworded
+to carry what settles them; no note struck and no project taken up. The
+kind question's first wording read the character's own plans as someone's
+goals (4 of 9 on a probe); naming ANOTHER person for the person kinds and
+saying what separates a worry, a commitment and a note to keep scored 11
+of 13. Concerns are capped (`CONCERN_CHARS` 240, `UNTIL_CHARS` 120) after
+the characters wrote paragraphs into them.
 
 ### How it was measured
 

@@ -1369,6 +1369,17 @@ at a fifth of the call time, and reads as well or better. Open, in order:
 - **Booking still heavier than the full card's**: beliefs touched 34-37
   times in 20 beats against its 12 (held beliefs re-confirmed beat after
   beat), intentions 22-30 against 15.
+- **The notebook** (built 2026-09-27, `mind/notebook.py`): concerns carrying
+  what settles them, projects, what the mind thinks of people and things
+  and what it thinks they think, and reminders, as one bounded view with
+  stable ids the character adds, changes and strikes by. Replayed on the 20
+  beats (round seven): 10 held notes revised by id, 8 new, 8 nudged, the
+  payload a median 1,218 characters smaller. Open: whether it costs conduct
+  (21 lines and 24 acts against 29 and 29 without it, inside the spread
+  between repeated runs -- a repeat would say); no note struck and no
+  project taken up in those beats, so both paths are tested but unexercised
+  by play; the knobs (`mind/notebook.py`, the kinds for things in
+  `theory_of_mind`) are the owner's.
 - Then the default switched, and the full card, its kernel compiler and its
   prompt paragraphs deleted so two contracts do not linger.
 

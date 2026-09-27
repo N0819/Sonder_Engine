@@ -18,7 +18,7 @@ from mind import character_jev as jev
 from tests.test_character_continuity import story  # noqa: F401 -- the fixture
 
 BARE_KEYS = ("want", "held_back", "hinge", "unsure", "sequence", "demeanor",
-             "tells", "people", "changes", "note")
+             "tells", "changes", "note", "notebook")
 
 
 def _dump(model):
@@ -110,7 +110,7 @@ def _reply():
             {"do": "steel myself", "why": "this is Mara"},
             {"do": "hold out my hand to Mara", "why": "the key is mine"}],
         "demeanor": "very still", "tells": ["a tight jaw", "a quick breath", "a third, dropped"],
-        "people": ["Mara is covering for someone."],
+        "notebook": [{"about": "Mara", "note": "Mara is covering for someone.", "sure": "likely"}],
         "changes": ["Mara is not honest with me.", "Her kindness in the rain was a way in.",
                     "I stop trying to recover the key.", "I stop waiting on Tomas's rope."],
         "note": "keeping the key from Tomas",
@@ -129,7 +129,7 @@ def test_every_question_reads_only_this_minds_own_holding():
     pack = set()
     for name in ("volume", "yesno", "act_kind", "grade", "miss", "channel", "signed", "fit", "tone", "change_kind",
                  "reading_kind", "aim_moved", "belief_touched", "impact", "certain",
-                 "agency", "ability", "choices"):
+                 "agency", "ability", "choices", "note_kind", "note_touched", "strike_kind"):
         pack.update(character_jev_options(name, "en").values())
     held = ({e["text"] for e in h.events} | {m["text"] for m in h.memories} | set(h.people) | set(h.known)
             | set(h.beliefs) | set(h.strategies) | {jev._aim_label(a, "en") for a in h.aims}
@@ -176,8 +176,7 @@ SCRIPT = [
     ("do:1:seen", "inner"), ("do:2:seen", "outward"), ("do:2:target", "p0"),
     ("want:serves", "a1"), ("want:urgency", "strong"), ("held_back:serves", "a0"),
     ("tell:0:channel", "seen"), ("tell:0:miss", "subtle"), ("tell:1:channel", "heard"),
-    ("person:0:about", "p0"), ("person:0:kind", "goal"), ("person:0:sure", "clear"),
-    ("person:0:now", "e0"),
+    ("nb:0:kind", "goal"), ("nb:0:now", "e0"),
     ("change:0:kind", "belief"), ("change:0:belief", "b0"), ("change:0:now", "e0"),
     ("belief:0:touched", "overturns"), ("belief:0:now", "e0"),
     ("change:1:kind", "rereading"), ("change:1:memory", "m0"), ("change:1:now", "e0"),
@@ -277,13 +276,17 @@ def test_the_compiled_beat_is_a_valid_character_output_and_its_citations_ground(
 
 def test_a_line_no_row_supports_is_dropped_where_the_models_was():
     """Commit drops a belief, a reading or a re-reading that cites nothing
-    this mind was given; asked of the decision model, "none" means the same."""
+    this mind was given; asked of the decision model, "none" means the same.
+    A notebook note resting on nothing is never filed as what the mind
+    thinks of someone -- it is kept as a reminder, in its own words, so the
+    thought is not lost (mind/notebook.py)."""
     h, reply = _holding(), _reply()
-    script = [("change:0:kind", "belief"), ("person:0:about", "p0"), ("change:1:kind", "rereading"),
+    script = [("change:0:kind", "belief"), ("nb:0:kind", "goal"), ("change:1:kind", "rereading"),
               ("change:1:memory", "m0")]
     out, _ = character_bare.compile_bare(reply, _answer(script)(jev.after_questions(h, reply)), h)
     assert out["belief_updates"] == [] and out["mind_model_updates"] == []
     assert out["memory_disputes"] == []
+    assert out["notebook_ops"] == [{"op": "add", "about": "Mara", "note": "Mara is covering for someone."}]
 
 
 # --- the step ------------------------------------------------------------------------
@@ -293,7 +296,7 @@ def _bare_reply():
             "hinge": "they may know something", "unsure": "whether it is true",
             "sequence": [{"say": "Tell me what happened.", "to": "the visitor", "how": "evenly",
                           "why": "I need to know"}],
-            "demeanor": "calm", "tells": [], "people": [], "changes": [],
+            "demeanor": "calm", "tells": [], "notebook": [], "changes": [],
             "note": "hearing the visitor out"}
 
 
@@ -329,6 +332,32 @@ def test_the_bare_contract_runs_the_step_and_its_note_reaches_the_next_call(stor
     monkeypatch.setattr(character, "_agent_json", model_again)
     character.character_step(context(state, 3), char_id, 1)
     assert captured["self"]["my_notes"] == [{"turn": 2, "note": "hearing the visitor out"}]
+
+
+def test_a_kept_note_is_committed_and_shown_in_the_next_calls_notebook(story, monkeypatch):
+    """The reminder a character keeps survives commit and comes back to it --
+    in the notebook, the one place the next payload carries what it keeps."""
+    import agents.character as character
+    char_id, context, commit = story
+    monkeypatch.setattr(character_bare, "enabled", lambda: True)
+    reply = {**_bare_reply(), "notebook": [{"about": "the visitor", "note": "ask where they came from"}]}
+    monkeypatch.setattr(decisions, "OVERRIDE", lambda state, questions: _answer([])(questions))
+    monkeypatch.setattr(character, "_agent_json", lambda *a, **k: deepcopy(reply))
+    result = character.character_step(context(), char_id, 1)
+    assert result["notebook_ops"] == [{"op": "add", "about": "the visitor", "note": "ask where they came from"}]
+    state, _ = commit(result, index=2)
+    assert [(r["id"], r["note"]) for r in state["notebook"]] == [("r1", "ask where they came from")]
+    captured = {}
+
+    def model_again(role, step_key, system, payload, **kwargs):
+        captured.update(deepcopy(payload))
+        return deepcopy(_bare_reply())
+
+    monkeypatch.setattr(character, "_agent_json", model_again)
+    character.character_step(context(state, 3), char_id, 1)
+    assert captured["self"]["notebook"]["to_keep"] == [
+        {"id": "r1", "about": "the visitor", "note": "ask where they came from"}]
+    assert "mind_models" not in captured and "active_hypotheses" not in captured
 
 
 def test_an_unread_reply_stands_on_code_alone_and_buys_no_second_call(story, monkeypatch):
@@ -370,3 +399,126 @@ def test_unread_the_addressee_is_the_one_the_line_names_here():
     reply["sequence"][0]["to"] = "the room"
     out, _ = character_bare.compile_bare(reply, {}, h)
     assert (out["sequence"][0]["targets"], out["sequence"][0]["volume"]) == ([], "normal")
+
+
+# --- the notebook: what the character keeps, and what it wrote in it -----------------
+#
+# The owner, 2026-09-27: "A hypothesis is basicaly a note that can be updated
+# or refuted"; "I needs stable core where a characters keeps track of what it
+# thinks about things and other people and how it thinks they think"; "there
+# should be a general note taking system for things the llm wishes to keep
+# track of"; "There should also be an active concerns section that has a
+# method of resolution" (mind/notebook.py).
+
+from mind import notebook  # noqa: E402
+
+_WORRY = "the key is missing"
+
+
+def _notebook_view():
+    return {
+        "on_your_mind": [{"id": notebook.concern_id(_WORRY), "note": _WORRY}],
+        "what_you_are_about": [{"id": "p1", "note": "keep the family together", "until": "the winter is over"}],
+        "people_and_things": [
+            {"id": "n1", "about": "Mara", "note": "Mara keeps secrets", "sure": "likely", "kind": "trait"},
+            {"id": "n2", "about": "Tomas", "note": "Tomas wants the key for himself", "sure": "guess",
+             "kind": "goal"}],
+        "to_keep": [{"id": "r1", "note": "check under the loose board"}],
+    }
+
+
+def _notebook_reply():
+    reply = _reply()
+    reply["notebook"] = [
+        {"id": "n1", "note": "Mara keeps secrets for someone she fears"},
+        {"id": "r1", "strike": "checked it"},
+        {"id": notebook.concern_id(_WORRY), "strike": "Mara has it"},
+        {"id": "p1", "strike": "the winter is over"},
+        {"note": "whether Tomas tells Father", "until": "Father comes home"},
+        {"note": "get the key back before dark", "until": "the key is in my hand"},
+        {"note": "learn the knot Mara ties"},
+        {"about": "the brass key", "note": "is the only copy", "sure": "certain"},
+    ]
+    return reply
+
+
+NOTEBOOK_SCRIPT = [
+    ("nb:0:now", "e0"), ("nb:3:strike", "done"),
+    ("nb:4:kind", "worry"), ("nb:5:kind", "commitment"), ("nb:6:kind", "commitment"),
+    ("nb:7:kind", "what_it_is"), ("nb:7:now", "e0"),
+    ("held:0:touched", "contradicted"), ("held:0:now", "e1"),
+]
+
+
+def test_what_the_character_writes_in_its_notebook_lands_where_it_belongs():
+    h = _holding(notebook=_notebook_view(), concerns=[_WORRY])
+    reply = _notebook_reply()
+    out, warnings = character_bare.compile_bare(reply, _answer(NOTEBOOK_SCRIPT)(jev.after_questions(h, reply)), h)
+    assert warnings == []
+    notes = {(u.get("op"), u.get("id")): u for u in out["mind_model_updates"]}
+    # A held note, changed in the character's words: the same note, revised.
+    revised = notes[("revise", "n1")]
+    assert (revised["claim"], revised["kind"], revised["about_entity"]) == (
+        "Mara keeps secrets for someone she fears", "trait", "Mara")
+    # A new note about a thing, filed under the thing, at the character's own sureness.
+    (thing,) = [u for u in out["mind_model_updates"] if not u.get("op")]
+    assert (thing["about_entity"], thing["kind"], thing["confidence"]) == ("the brass key", "what_it_is", 0.9)
+    # A held note this beat told against is moved down -- never struck.
+    nudged = notes[("nudge", "n2")]
+    assert nudged["confidence"] == notebook.NUDGE_TOWARD["contradicted"] and nudged["evidence"]
+    assert ("strike", "n2") not in notes
+    # A reminder struck; a concern struck, and a new one carrying what settles it.
+    assert out["notebook_ops"] == [{"op": "strike", "id": "r1"}]
+    assert out["active_state"]["active_concerns"] == [
+        "whether Tomas tells Father (settled when: Father comes home)"]
+    # A project finished; a commitment with an end is taken up as a project,
+    # and one with no end to name is an intention.
+    assert out["project_ops"] == [
+        {"op": "satisfy", "id": "p1", "why": "the winter is over"},
+        {"op": "adopt", "project": "get the key back before dark",
+         "satisfied_when": "the key is in my hand", "about": ""}]
+    assert any(op["op"] == "add" and op["intent"] == "learn the knot Mara ties" for op in out["intent_ops"])
+
+
+def test_a_struck_note_needs_no_evidence_and_survives_grounding():
+    h = _holding(notebook=_notebook_view())
+    reply = {**_reply(), "notebook": [{"id": "n2", "strike": "I was wrong about him"}]}
+    out, _ = character_bare.compile_bare(reply, _answer(SCRIPT)(jev.after_questions(h, reply)), h)
+    result, _ = validate_llm_output("character", deepcopy(out))
+    observations = [{"observation_id": e["ref"], "observed": {"text": e["text"]}} for e in h.events]
+    _ground_observation_citations(result, observations, {})
+    assert [(u["op"], u["id"]) for u in result["mind_model_updates"] if u.get("op")] == [("strike", "n2")]
+
+
+def test_lines_in_the_field_the_notebook_replaced_are_still_new_notes():
+    h = _holding()
+    reply = {k: v for k, v in _reply().items() if k != "notebook"}
+    reply["people"] = ["Mara is covering for someone."]
+    questions = jev.after_questions(h, reply)
+    assert "nb:0:kind" in questions and "nb:0:about" in questions
+    script = [("nb:0:kind", "goal"), ("nb:0:about", "p0"), ("nb:0:now", "e0")]
+    out, _ = character_bare.compile_bare(reply, _answer(script)(questions), h)
+    (reading,) = [u for u in out["mind_model_updates"] if not u.get("op")]
+    assert (reading["about_entity"], reading["claim"]) == ("Mara", "Mara is covering for someone.")
+
+
+def test_no_concern_is_lost_for_being_past_the_ones_checked():
+    """The holding kept four concerns and the compiled state kept only
+    those: a mind with seven lost three on every bare beat."""
+    worries = [f"worry number {i}" for i in range(jev.MAX_CONCERNS + 3)]
+    h = _holding(concerns=worries)
+    questions = jev.after_questions(h, _reply())
+    assert f"concern:{jev.MAX_CONCERNS - 1}" in questions and f"concern:{jev.MAX_CONCERNS}" not in questions
+    out, _ = character_bare.compile_bare(_reply(), _answer([("concern:0", "yes")])(questions), h)
+    assert out["active_state"]["active_concerns"] == worries[1:]
+
+
+def test_the_payload_carries_one_notebook_not_four_copies():
+    payload = {"self": {"projects": [{"id": "p1"}], "active_state": {"active_concerns": ["x"], "mood": "calm"}},
+               "mind_models": {"Mara": {}}, "active_hypotheses": [{}], "perception": {}}
+    sent = character_bare.with_notebook(payload, _notebook_view())
+    assert "mind_models" not in sent and "active_hypotheses" not in sent
+    assert "projects" not in sent["self"] and "active_concerns" not in sent["self"]["active_state"]
+    shown = sent["self"]["notebook"]["people_and_things"]
+    assert shown[0] == {"id": "n1", "about": "Mara", "note": "Mara keeps secrets", "sure": "likely"}
+    assert payload["mind_models"], "the payload assembled for the stage is not mutated"

@@ -1,0 +1,2 @@
+YOU WROTE IN YOUR NOTEBOOK: {text}
+What kind of note is it?

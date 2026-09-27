@@ -32,6 +32,7 @@ creating an import cycle.
 
 from __future__ import annotations
 
+import hashlib
 import re
 
 from language_runtime import linguistic
@@ -69,9 +70,22 @@ def _ling(name):
 
 _DEFAULT_KIND = "goal"
 
+# THE KINDS FOR THINGS (the owner, 2026-09-27: "hypothesis should be about
+# anything in general I suppose but also about characters"; "a stable core
+# where a characters keeps track of what it thinks about things and other
+# people and how it thinks they think"). A note about a letter, a fire or an
+# audition is not anybody's goal, and filed as one it took a goal's ceiling
+# and a goal's fade. Three, by what the note is about: what a thing IS (what
+# the letter says, what the shelf is like now), what HAPPENED and why (who
+# set the fire), and what WILL happen (the audition goes to her). The values
+# are the owner's knobs: a forecast is the least sure and goes stale fastest;
+# what a thing is holds longest.
+THING_KINDS = ("what_it_is", "what_happened", "what_will_happen")
+
 _TOM_CONFIDENCE_CAPS = {
     "observation": 1.0, "stated_fact": 0.9, "emotion": 0.8,
     "goal": 0.65, "trait": 0.45, "identity": 0.35, "second_order": 0.5,
+    "what_it_is": 0.8, "what_happened": 0.7, "what_will_happen": 0.6,
 }
 
 _TOM_PLASTICITY = {
@@ -82,6 +96,9 @@ _TOM_PLASTICITY = {
     "second_order": 0.35,
     "trait": 0.25,
     "identity": 0.2,
+    "what_it_is": 0.4,
+    "what_happened": 0.35,
+    "what_will_happen": 0.5,
 }
 
 _TOM_HALF_LIFE = {
@@ -92,6 +109,9 @@ _TOM_HALF_LIFE = {
     "second_order": 75,
     "trait": 400,
     "identity": 400,
+    "what_it_is": 400,
+    "what_happened": 400,
+    "what_will_happen": 45,
 }
 
 _SIMILARITY_THRESHOLD = 0.4
@@ -174,6 +194,12 @@ def effective_kind(declared, claim):
     only cost confidence, never grant it.
     """
     declared_kind = _kind_or_default(declared)
+    if declared_kind in THING_KINDS:
+        # The cue table reads PERSON language -- "thinks", "wants", "is a
+        # ..." -- and "the letter is a forgery" is not a trait. A thing's kind
+        # is the decision model's reading of what the note is about, never the
+        # character model's label, so there is no confidence to buy here.
+        return declared_kind
     inferred = _inferred_kind(claim)
     if inferred is None:
         return declared_kind
@@ -357,6 +383,89 @@ def rekey_place_claims(updates, place_names, protected=()):
     return out
 
 
+# ---- The notebook's handles, and the three things a mind does to a note ----
+#
+# The owner, 2026-09-27: "A hypothesis is basicaly a note that can be updated
+# or refuted". Until now a held hypothesis moved only when a new claim's
+# wording happened to sit close to it (`_same_belief`), was explained away by
+# a rival, or faded -- nothing could name it. A note has a stable id now, and
+# three operations take it by that id:
+#
+#   strike  the mind stops holding it: gone, its memories resting at the
+#           abandoned floor on the next reconcile (`memory_inference`)
+#   revise  the same note in new words: its id, first sighting and history
+#           kept, its confidence moved toward the revision's by the kind's
+#           plasticity
+#   nudge   what just happened bore it out or told against it: confidence
+#           moves toward the nudge's, the wording never does -- the decision
+#           model's evidence may shake a note, never strike it
+NOTE_OPS = ("strike", "revise", "nudge")
+
+
+def note_id(about, hypothesis):
+    """A note's stable handle: the id it was given when formed, or, for one
+    formed before notes had ids, one derived from what it says (and then
+    kept by whatever next touches it)."""
+    hyp = hypothesis or {}
+    held = str(hyp.get("id") or "").strip()
+    if held:
+        return held
+    key = hypothesis_key(about, _kind_or_default(hyp.get("kind")), str(hyp.get("claim") or ""))
+    return "n" + hashlib.sha1(key.encode("utf-8")).hexdigest()[:6]
+
+
+def find_note(mind_models, ref):
+    """`(about, index)` of the held note whose id is `ref`, or None."""
+    ref = str(ref or "").strip()
+    if not ref:
+        return None
+    for about, model in (mind_models or {}).items():
+        for index, hyp in enumerate((model or {}).get("hypotheses") or []):
+            if isinstance(hyp, dict) and note_id(about, hyp) == ref:
+                return about, index
+    return None
+
+
+def _apply_note_op(models, update, op, turn_idx, elapsed_seconds):
+    """One strike, revision or nudge, by the note's id. Returns "form" when a
+    revision names a note no longer held (faded, pruned): it is filed as a new
+    note in its new words. A strike or nudge of a note that is gone does
+    nothing."""
+    found = find_note(models, update.get("id"))
+    if found is None:
+        return "form" if op == "revise" else None
+    about, index = found
+    model = models[about]
+    hyps = model["hypotheses"]
+    held = hyps[index]
+    model["last_updated_turn"] = turn_idx
+    if op == "strike":
+        hyps.pop(index)
+        return None
+    kind = _kind_or_default(held.get("kind"))
+    decayed = _live_confidence(held, turn_idx, elapsed_seconds)
+    plasticity = _TOM_PLASTICITY.get(kind, _TOM_PLASTICITY[_DEFAULT_KIND])
+    target = _clamp01(update.get("confidence", decayed), fallback=decayed)
+    moved = decayed + (target - decayed) * plasticity
+    merged = dict(held)
+    merged["id"] = note_id(about, held)
+    # The reinforcement ceiling, as the merge's: a note may be moved down
+    # freely, and up only to its kind's cap (or where it already stands).
+    merged["confidence"] = max(0.0, min(max(_TOM_CONFIDENCE_CAPS.get(kind, 1.0), decayed), moved))
+    merged["last_updated_turn"] = turn_idx
+    if elapsed_seconds is not None:
+        merged["last_updated_seconds"] = float(elapsed_seconds)
+    if op == "revise":
+        claim = str(update.get("claim") or "").strip()
+        if claim:
+            merged["claim"] = claim
+        merged["revised_turn"] = turn_idx
+        if update.get("evidence"):
+            merged["evidence"] = update["evidence"]
+    hyps[index] = merged
+    return None
+
+
 def apply_mind_model_updates(state, updates, turn_idx, floor=0.05,
                              max_per_entity=30, elapsed_seconds=None,
                              absorption=0.0):
@@ -380,6 +489,11 @@ def apply_mind_model_updates(state, updates, turn_idx, floor=0.05,
     for update in updates or []:
         if not isinstance(update, dict):
             continue
+        op = str(update.get("op") or "").strip()
+        if op in NOTE_OPS:
+            if _apply_note_op(models, update, op, turn_idx, elapsed_seconds) != "form":
+                continue
+            update = {k: v for k, v in update.items() if k not in ("op", "id")}
         about = str(update.get("about_entity") or "unknown").strip() or "unknown"
         claim = str(update.get("claim") or "").strip()
         if not claim:
@@ -430,9 +544,13 @@ def apply_mind_model_updates(state, updates, turn_idx, floor=0.05,
             # belief reached in agony and merely restated became one that had
             # always been held calmly, and could never come up for review.
             for carried in ("first_seen_turn", "formed_under",
-                            "reappraised_turn"):
+                            "reappraised_turn", "revised_turn"):
                 if carried in existing and carried not in update:
                     merged[carried] = existing[carried]
+            # The note keeps its handle through a restatement -- including a
+            # note formed before notes had ids, whose derived id is taken
+            # from what it said BEFORE this restatement moved its wording.
+            merged["id"] = note_id(about, existing)
             merged["confidence"] = max(
                 0.0, min(max(reinforce_cap, decayed_old), new_conf))
             merged["last_updated_turn"] = turn_idx
@@ -461,6 +579,8 @@ def apply_mind_model_updates(state, updates, turn_idx, floor=0.05,
                 0.0, min(formation_cap, evidence_confidence))
             new_hyp["last_updated_turn"] = turn_idx
             new_hyp["first_seen_turn"] = turn_idx
+            new_hyp.pop("id", None)
+            new_hyp["id"] = note_id(about, new_hyp)
             if absorption > 0.0:
                 # Stamped rather than merely capped, so the belief can come
                 # back up for review once there is room to review it, instead
@@ -601,6 +721,7 @@ def belief_credence(state, about_entity, claim, turn_idx, elapsed_seconds=None):
 _ABSORPTION_CAP_EROSION = {
     "observation": 0.0, "stated_fact": 0.05, "emotion": 0.25,
     "goal": 0.45, "second_order": 0.75, "trait": 0.6, "identity": 0.6,
+    "what_it_is": 0.3, "what_happened": 0.5, "what_will_happen": 0.6,
 }
 
 # A NEW hypothesis has to clear this before it can be formed at all. Reinforcing

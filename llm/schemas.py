@@ -3623,6 +3623,11 @@ class MindHypothesis(LenientModel):
     kind: str
     claim: str
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    # A note's handle and what is done to it by that handle
+    # (`theory_of_mind.NOTE_OPS`: strike, revise, nudge); both empty for an
+    # ordinary new or restated claim.
+    id: str = ""
+    op: str = ""
     evidence: list[EvidenceRef] = Field(default_factory=list)
 
     _coerce_evidence = validator("evidence", pre=True, allow_reuse=True)(
@@ -4266,12 +4271,62 @@ class CharacterBareStep(LenientModel):
             lambda cls, value: _canonical_bare_step(value))
 
 
+#: A notebook entry's fields as a model may spell them otherwise.
+_BARE_NOTE_ALIASES = {
+    "note": ("text", "claim", "i_suspect", "reading", "line", "entry"),
+    "about": ("who", "what", "subject", "about_entity"),
+    "until": ("settled_when", "satisfied_when", "done_when", "settle_when"),
+    "strike": ("struck", "remove", "drop"),
+}
+
+
+def _canonical_bare_note(value):
+    """One notebook entry: a plain string is a new note; an id written as a
+    number is still the id."""
+    if isinstance(value, str):
+        return {"note": value} if value.strip() else {}
+    if not isinstance(value, dict):
+        return value
+    out = _canonical_character_row(value, _BARE_NOTE_ALIASES)
+    if out.get("id") is not None and not isinstance(out.get("id"), str):
+        out["id"] = str(out["id"])
+    if out.get("strike") is True:
+        out["strike"] = "struck"
+    return out
+
+
+class CharacterBareNote(LenientModel):
+    """One notebook entry in the bare reply: a new one (`about`, `note`,
+    `sure`, `until`), a change to one held (`id`, `note`), or a strike
+    (`id`, `strike`: why)."""
+    id: str = ""
+    about: str = ""
+    note: str = ""
+    sure: str = ""
+    until: str = ""
+    strike: str = ""
+
+    if _PYDANTIC_V2:
+        from pydantic import model_validator as _model_validator
+
+        _canonicalize = _model_validator(mode="before")(
+            classmethod(lambda cls, value: _canonical_bare_note(value)))
+    else:
+        from pydantic import root_validator as _root_validator
+
+        _canonicalize = _root_validator(pre=True, allow_reuse=True)(
+            lambda cls, value: _canonical_bare_note(value))
+
+
 class CharacterBareOutput(LenientModel):
     """The bare contract (`agents/character_bare.py`): only what a character
     can write. The decision model reads everything else back from it
     (`mind/character_jev.py`), and `compile_bare` expands both into
     `CharacterOutput`. `sequence` is the one required field, as it is the
-    kernel's: what the character did is what a beat cannot do without."""
+    kernel's: what the character did is what a beat cannot do without.
+
+    `notebook` is what the character keeps (`mind/notebook.py`); `people`,
+    the lines it replaced, is still read as new notes."""
     want: str = ""
     held_back: str = ""
     hinge: str = ""
@@ -4279,12 +4334,20 @@ class CharacterBareOutput(LenientModel):
     sequence: list[CharacterBareStep]
     demeanor: str = ""
     tells: list[str] = Field(default_factory=list)
+    notebook: list[CharacterBareNote] = Field(default_factory=list)
     people: list[str] = Field(default_factory=list)
     changes: list[str] = Field(default_factory=list)
     note: str = ""
 
     _coerce_lines = validator("tells", "people", "changes", pre=True, allow_reuse=True)(
         lambda cls, v: _bare_lines(v))
+    # Runs before the base class's catch-all coercion, which would otherwise
+    # make a bare string the entry's FIRST field (its `id`): a plain line in
+    # the notebook is a new note.
+    _coerce_notebook = validator("notebook", pre=True, allow_reuse=True)(
+        lambda cls, v: [_canonical_bare_note(row)
+                        for row in (v if isinstance(v, (list, tuple)) else ([] if v is None else [v]))
+                        if row not in (None, "", {})])
 
 
 class CharacterDecisionContinuity(LenientModel):
@@ -4382,6 +4445,11 @@ class CharacterOutput(LenientModel):
     # across turn"). Commit keeps the last few as `my_notes`; the next
     # payload shows them.
     note: str = ""
+    # The notebook's reminders -- what the character wants to keep track of
+    # (`mind.notebook.apply_notebook_ops`): `{op: add, about, note}`,
+    # `{op: change, id, note}`, `{op: strike, id}`. What it THINKS of people
+    # and things travels in `mind_model_updates`, by note id.
+    notebook_ops: list[dict] = Field(default_factory=list)
     manifest: dict = Field(default_factory=dict)
     # A drive rupture proposal -- only valid inside an engine-opened window;
     # commit (validate_drive_shift) decides whether it counts.

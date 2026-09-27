@@ -1196,6 +1196,10 @@ _MERGE_UNION_FIELDS = (
     # un-declare it. Each row names its own debt, so two rounds abandoning two
     # different things both land.
     "waiting_ops",
+    # The notebook's reminders: each op is its own add, change or strike, so
+    # a round that keeps something and a later round that strikes something
+    # else both land.
+    "notebook_ops",
 )
 
 #: Preserved when the later declaration is SILENT about them; a later explicit

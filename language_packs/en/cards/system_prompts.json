@@ -1316,6 +1316,18 @@
     "dispute": {
       "$text": "character_jev/dispute.txt"
     },
+    "note_kind": {
+      "$text": "character_jev/note_kind.txt"
+    },
+    "note_about": {
+      "$text": "character_jev/note_about.txt"
+    },
+    "note_touched": {
+      "$text": "character_jev/note_touched.txt"
+    },
+    "strike_kind": {
+      "$text": "character_jev/strike_kind.txt"
+    },
     "options": {
       "volume": {
         "whisper": "In a whisper, for one listener.",
@@ -1438,7 +1450,8 @@
         "follow_stop": "You stop following whoever you were following.",
         "follow_start": "You start following {person}.",
         "not_stated": "not stated",
-        "situational": "Only this moment."
+        "situational": "Only this moment.",
+        "something_else": "Someone or something not listed here."
       },
       "aim_labels": {
         "drive": "what drives you: {text}",
@@ -1459,6 +1472,36 @@
       "shaped_labels": {
         "acted": "You acted on this: {memory}",
         "resisted": "You pushed against this: {memory}"
+      },
+      "note_kind": {
+        "emotion": "What another person feels right now.",
+        "goal": "What another person wants or means to do.",
+        "trait": "What another person is like.",
+        "second_order": "What another person thinks of someone or something.",
+        "identity": "Who another person really is.",
+        "observation": "Something plain to see about a person or thing.",
+        "stated_fact": "Something another person said outright.",
+        "what_it_is": "What a thing or place is, or what it is like now.",
+        "what_happened": "What happened, or why.",
+        "what_will_happen": "What the world or other people will do next.",
+        "worry": "Something that weighs on you, and that the world will settle one way or the other.",
+        "commitment": "Something you mean to bring about yourself, and will keep at until it is done.",
+        "keep": "A fact to remember, or one errand of your own."
+      },
+      "note_touched": {
+        "neither": "No -- nothing here clearly bears on it.",
+        "bore_out": "It bore it out.",
+        "doubted": "It cast doubt on it.",
+        "contradicted": "It told against it."
+      },
+      "strike_kind": {
+        "done": "It is finished: what would end it has come.",
+        "given_up": "You are giving it up."
+      },
+      "note_glue": {
+        "about": "{about}: {note}",
+        "until": "{text} (until: {until})",
+        "concern": "{note} (settled when: {until})"
       }
     }
   }

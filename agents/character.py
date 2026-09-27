@@ -1829,6 +1829,12 @@ def _ground_observation_citations(out, observations, memory_context,
                   "mind_model_updates"):
         kept = []
         for index, update in enumerate(out.get(field) or []):
+            if isinstance(update, dict) and update.get("op") == "strike":
+                # A struck note (mind/notebook.py) cites nothing and needs
+                # nothing: it only removes what this mind itself held, so
+                # there is nothing it could carry in.
+                kept.append(update)
+                continue
             if isinstance(update, dict):
                 # Derived summary prose can support an answer, but may not be
                 # laundered into a durable belief as if it were a fresh source.
@@ -4577,9 +4583,17 @@ def character_step(ctx, cid, nonce):
     _bare = character_bare.enabled()
     _holding = None
     if _bare:
+        # THE NOTEBOOK (mind/notebook.py): what this mind keeps -- concerns,
+        # projects, what it makes of people and things, reminders -- as one
+        # bounded view chosen for the moment, in place of the four renderings
+        # of the same stores the full card's payload carries.
+        _nb_view = character_bare.notebook_for(
+            stored_state, payload, observations, character_name(sh), ctx.turn.idx,
+            absorption=absorption, elapsed_seconds=(_sim_clock or {}).get("elapsed_seconds"))
         _holding = character_bare.holding_from(
             character_name(sh), sh, payload, observations, memory_context, active,
-            language=ctx.language, rupture_open=_window_open)
+            language=ctx.language, rupture_open=_window_open, notebook_view=_nb_view)
+        payload = character_bare.with_notebook(payload, _nb_view)
         _disputed = []
         try:
             _disputed = character_jev.read_before(character_jev.ask(
