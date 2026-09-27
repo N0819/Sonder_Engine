@@ -1755,6 +1755,51 @@ word-anchored and pronoun-continuation-aware — but **not eliminated**.
 `agents/perception.py` and read nowhere — so the inconsistency it named with the
 title-tolerant `_recognizes` (`agents/common.py`) cannot be reached. See §1.45.)*
 
+<a id="unbuilt-3-9"></a>
+
+### 3.9 The opening files what is TRUE as what everyone KNOWS — a leak
+
+**Severity: leak.** Found 2026-09-26 in the expressive-cards stories
+([`experiments/FEELINGS_EXPRESSIVE_CARDS_2026_09_26.md`](experiments/FEELINGS_EXPRESSIVE_CARDS_2026_09_26.md)).
+Since 2026-09-14 the opening files each `world_fact` the establish stage
+states as a public `common` entry in the canon book, read by every cast
+member through `knowledge_for_character` (`persist/commit_mapping.py`,
+`_opening_premise` and `_file_opening_premise`), on the reasoning that those
+facts are "the scenario's own PREMISE, restated from what the author wrote".
+The establish Director sees every card and states more than the premise --
+what it states is true of the world, which is its office, and filing it as
+known to everyone is the leak:
+
+- both Bellandi openings filed "Lucia has written monthly letters to Marco
+  at his Genoa address for ten years" (her card: she never told anyone), and
+  it rode every one of the other two characters' 18 character calls;
+- the morning opening filed Lucia's private concern ("The fish supplier's
+  invoice is two weeks late, according to Lucia's ledger") and her
+  grandmother asked the delivery boy for the invoice a turn before anyone
+  mentioned it; it also filed a wife from one card and a private expectation
+  from another;
+- the lie story's filed a witness's hidden past ("She does not speak of it")
+  as public to the magistrate taking her statement;
+- the homecoming's filed a line spoken alone on a breakwater and another
+  spoken in a shed, each to the character who was not there.
+
+Four of six test openings filed something a card keeps private or a hearing
+gate would have held. The floor rests on the model stating only the premise,
+which by the firewall's own rule makes this an engine failure.
+
+**Fix -- the owner's call.** (a) Deliver what the author wrote, the
+scenario's own sentences, as the public premise, with no model in the loop,
+and treat every establish `world_fact` as a need only, as every later
+beat's already is; the Harrowell case this rule was built for is still met
+("the evening after the funeral" is the author's sentence). Residual: a
+scenario that itself states a secret files it, as today. (b) Deliver only
+the facts the Director cites to a verbatim span of the scenario, checked by
+code: narrower, but a loose citation still passes. Recommended: (a).
+
+**Test.** An opening whose card holds a private concern and whose scenario
+does not: no cast member but its holder receives it as world knowledge, and
+the scenario's own sentences reach every cast member.
+
 ## 5. Deferred backlog
 
 <a id="unbuilt-5-1"></a>

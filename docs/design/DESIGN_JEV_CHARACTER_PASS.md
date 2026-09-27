@@ -839,7 +839,8 @@ both languages.
 **The moment is what stirred most as a whole -- the same day, late.** A
 story played with characters written to show their feelings
 (`docs/experiments/FEELINGS_EXPRESSIVE_CARDS_2026_09_26.md`; they did, as
-openly as their cards say, and a reserved one did not) found the like-for-like
+plainly as their cards say, a reserved one did not, and how strong a feeling
+they displayed rose with how strongly it was felt) found the like-for-like
 rule taking "the moment's strongest item" as the item holding the largest
 single feeling. A mixed event splits its stir among names, so the moments
 that stir several things at once lost to a small gesture with one

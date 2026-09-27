@@ -190,6 +190,7 @@ Not scheduled and not committed to a phase. See the
 **3. Information-pipeline leaks still open**
 
 - [§3.1 — Prose matching as a boundary](UNBUILT_PIPELINE.md#unbuilt-3-1)
+- [§3.9 — The opening files what is TRUE as what everyone KNOWS — a leak](UNBUILT_PIPELINE.md#unbuilt-3-9)
 
 **5. Deferred backlog**
 

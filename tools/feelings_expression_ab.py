@@ -106,6 +106,20 @@ def _strengths(before):
     return out
 
 
+def moment_stir(before):
+    """How strongly the moment stirred this mind: the whole stir of the
+    perceived item that stirred it most -- the sum of that item's feelings,
+    what the block leads with (`affect_mix.surface_and_undercurrent`) --
+    whatever the block as handed in play led with."""
+    from mind import affect_mix as mix
+
+    items = {}
+    for e in before.get("emotions") or []:
+        if e["source"] not in mix.BENEATH and e["source"] != "act":
+            items[(e["source"], e["ref"])] = items.get((e["source"], e["ref"]), 0.0) + e["intensity"]
+    return min(1.0, max(items.values(), default=0.0))
+
+
 def with_strength(block, strengths):
     """The block with each feeling's strength in a word after its name."""
     out = dict(block or {})
@@ -167,7 +181,8 @@ def collect(args):
                               "name": before["name"], "system": _blob(con, system_hash), "payload": payload,
                               "sheet": _sheet(con, chat, (payload.get("self") or {}).get("entity_id")),
                               "block": (payload.get("self") or {}).get("feelings") or {},
-                              "strengths": _strengths(before), "reply_A": reply.get("sequence") or []})
+                              "strengths": _strengths(before), "moment": moment_stir(before),
+                              "reply_A": reply.get("sequence") or []})
     Path(args.out).write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
     print(f"{len(items)} calls")
 

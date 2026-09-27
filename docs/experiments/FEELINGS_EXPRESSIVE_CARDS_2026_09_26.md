@@ -10,19 +10,25 @@ is felt could not be seen at all. The owner said go ahead to a story played
 with characters written to show what they feel, beside one written to hold
 it in.
 
-**Answer.** The characters show what they feel as openly as their cards
-say, and the reserved one does not: a blind judge who sees neither card nor
-feelings rates the two open cards 2.0-2.5 of 3 and the reserved one 0-0.5,
-both judges alike, and both judge every one of the 13 replies to show about
-the right amount for that person. How openly a feeling shows rises with its
-strength for the open cards (pooled r +0.68 and +0.86 by the two judges) and,
-by one judge, falls with it for the reserved one (-0.97, n = 4) -- which is
-what her card says she does. The strength result is thin: the scene was
-built dramatic, 11 of the 13 beats were felt at 0.78 or more, and the rise
-rests mostly on one quiet beat. So the restrained register of the four
-stories was the cards'. Along the way the story found a narrator crash
-(fixed, 9d04e9a1) and a defect in how the affect pass picks the moment's
-lead feeling (fixed with this doc).
+**Answer.** The characters show what they feel as their cards say, and the
+strength of what they show follows the strength of what they feel. Over two
+stories and 26 replies, each rated blind by two judges who see neither card
+nor feelings: the two open cards show their feelings plainly at every
+strength (openness 1.9-2.75 of 3, the reserved card 0-0.5) -- how plainly is
+temperament -- while how STRONG a feeling their moves display rises with how
+strongly it is felt (rank correlation +0.72 and +0.63 by the two judges;
+2.3-2.7 of 3 where felt strongly, 1.0-1.7 where felt slightly or barely).
+The reserved card displays little whatever she feels (0.3-0.9 of 3 at dread
+felt 0.84-0.97), as written. Every reply but one was judged the right amount
+for its person. The first story alone, all drama, seemed to show openness
+rising with strength; the second, quiet one showed that was one beat, and
+that the scaling is in intensity, not in openness. So the restrained register
+of the four earlier stories was the cards'. The stories also found a narrator
+crash (fixed, 9d04e9a1), the moment's lead feeling taken from the wrong event
+(fixed, d657b949), a character's walk into the next room resolved and then
+refused at the shut door (fixed with this doc, register §1.168), and one
+engine defect left for the owner: the opening files private card content as
+public knowledge for the whole cast (§3.9).
 
 ## Setup
 
@@ -173,16 +179,79 @@ half-second too long").
    its person. The engine hands every character the same kind of block; the
    difference is the card, as it should be. The four stories' restraint was
    authored.
-2. **Strength: the right direction, thinly measured.** The open cards show
-   more the more they feel, the reserved card less, as written -- but most
-   of the open cards' rise is one quiet beat (Rosa at 0.48, open 0) against
-   the rest, and Gianni's four beats span 0.81-1.00. A proper test needs a
-   story with as many quiet and middling beats as dramatic ones.
+2. **Strength: superseded by the second story, below.** Here the open cards
+   seemed to show more the more they felt, the reserved card less -- but
+   most of the rise was one quiet beat (Rosa at 0.48, open 0) against the
+   rest, and Gianni's four beats span 0.81-1.00. The quiet story showed the
+   rise is in how strong a feeling is displayed, not in how openly.
 3. **The block's lead feeling was wrong where it mattered most** -- below.
    Rosa's strongest feeling at the announcement is recorded as anticipation
    at a cleared throat (0.70); read by the moment's whole stir it is dread
    at the announcement (0.99). Her open 3 / 2 there sits under the weaker
    number, so the fix would, if anything, steepen the rise.
+
+## The second story, for the quiet end
+
+The owner's go-ahead to a story with as many quiet and middling beats as
+dramatic ones. The same three cards on the morning of the same birthday, in
+a new chat: the player is Tomaso Ricci, the fish supplier's son on his daily
+delivery, and his five turns climb on purpose -- he brings in the anchovies
+("Buongiorno. Where do you want them today?"); asks Rosa through the
+dining-room door whether she wants the usual for Friday; hands over his
+father's invoice, two weeks behind, "today of all days"; gives Rosa a
+birthday parcel from his mother; and, at the door, says he saw Marco in
+Genoa on Sunday, asking whether the trattoria was still open. 13 more calls
+(Rosa 5, Gianni 4, Lucia 4); the moment's stir ran from 0.12 to 1.00.
+Strength is now how much the moment stirred the mind as a whole -- what the
+fixed block leads with -- or, where nothing happened in the moment (Gianni
+alone at his stove), the strongest feeling the character was handed.
+
+**The measure was wrong, and the quiet story showed it.** Pooled over both
+stories, openness no longer rises with strength for the open cards (rank
+correlation +0.42 and +0.39). Gianni greets the delivery boy, stirred 0.22:
+"Tomaso! Buongiorno, buongiorno. Là — the prep table, by the window. Set
+them down, let me see what my boys brought me this morning." Both judges
+rate it open 3, and they are right: a man who shows what he feels shows mild
+warmth plainly too. Openness measures how plainly a feeling shows --
+temperament -- not how strong a feeling is shown. So both judges were asked
+a third question, as blind as the first: how strong a feeling does the move
+display, whatever the feeling, from 0 (none) through 1 (mild) and 2 (marked)
+to 3 (intense)?
+
+The open cards' 18 replies, by how strongly they felt (GLM / Gemini):
+
+| felt | replies | strength displayed | openness |
+|---|---|---|---|
+| strongly | 9 | 2.67 / 2.33 | 2.67 / 2.67 |
+| clearly | 5 | 2.00 / 1.40 | 2.00 / 1.80 |
+| slightly | 3 | 1.33 / 1.67 | 2.00 / 2.00 |
+| barely | 1 | 1.00 / 1.00 | 2.00 / 2.00 |
+
+The strength displayed rises with the strength felt: rank correlation +0.72
+and +0.63 pooled over the open cards (Pearson +0.59 and +0.43), Rosa +0.87
+and +0.86, Gianni +0.76 and +0.54. Lucia (8 replies, 7 of them felt
+strongly) displays 0.88 and 0.25 whatever she feels (rank +0.41 and -0.13),
+as her card says. Beside Gianni's greeting: at 0.18 "Ah, bellissimo,
+bellissimo — look at these... My boys brought me the sea today." (displayed
+2, 2); Rosa at 0.12, shelling peas, "Buongiorno, Tomaso. The usual, yes. And
+something good for tonight — the whole family." (1, 1); Gianni at 0.82 on the
+invoice, "Ma — due settimane, Tomaso. Two weeks and nobody tells me. Give me
+that." (2, 2); Gianni at 1.00, "Still open. The name is still on the door, the
+stove is still lit, I am still —", arms locked flat on the prep table (3, 3);
+Rosa at 0.99, gripping Tomaso's forearm, "Tomaso. You saw my Marco... Every
+word he said — you give me every word." (3, 3); Lucia at 0.84 picks up her
+pencil and checks the fish supplier's column (0, 0).
+
+Fit, over all 26 replies: the right amount 26 of 26 by GLM and 25 of 26 by
+Gemini (its one "too little": Rosa's dry thanks for the parcel, her mind on
+what Gianni was keeping from her); believable 4.38-4.88 and 4.90-5.00.
+
+**What it says.** The character call scales what a character shows with what
+it is handed as felt, within the card's register: the open cards run from a
+warm word to tears and a grip on the arm, the reserved card stays at a
+pencil and a column. Two judges agree on the direction and differ on the
+size, and the open cards' low end is four replies; the four earlier stories'
+flat register was their cards'.
 
 ## Found along the way
 
@@ -245,6 +314,70 @@ Lucia, who "never adds to the noise", 0.46-0.64 -- so whether that is the
 restraint's feeling or the situation's is the owner's call, not a defect
 shown.
 
+### The opening files private card content as public knowledge (not fixed; register §3.9)
+
+In the morning story Rosa's first line to the delivery boy asked for an
+invoice nobody had mentioned: "The invoice, Tomaso. Two weeks. Bring it."
+Her payload carried it as world knowledge -- "The fish supplier's invoice is
+two weeks late, according to Lucia's ledger." -- and no premise says so;
+Lucia's card does ("The fish supplier's account is two weeks overdue and he
+is the kind who stops delivering before he complains"), and the opening
+Director's own `world_pressure` note repeats her words. Since 2026-09-14 the
+opening files each `world_fact` the establish stage states as a public
+`common` entry for the whole cast (`persist/commit_mapping.py`,
+`_file_opening_premise`), reasoning that they are "the scenario's own
+PREMISE, restated from what the author wrote". The establish Director states
+more than the premise:
+
+- both Bellandi openings filed "Lucia has written monthly letters to Marco
+  at his Genoa address for ten years" -- letters her card says she never told
+  anyone about -- and it was in every one of Rosa's and Gianni's 18 calls;
+- the morning opening also filed Gianni's wife, from his card, and Lucia's
+  private expectation that Vittorio will come in "with the smell of grappa
+  on his breath";
+- the lie story's filed "Margit Oldis's father, Anselm Oldis, was a mill
+  hand imprisoned for theft... She does not speak of it", public to the
+  magistrate taking her statement;
+- the homecoming's filed what Wren said alone on the breakwater and what
+  Aldo said in his shed, each to the other.
+
+Four of the six openings filed something a card keeps private or a hearing
+gate would have held; the other two filed backstory the cards do not mark
+secret. The floor rests on the model stating only the premise -- by the
+engine's own rule an engine failure, not a model's.
+
+### A move from one room to the next is resolved and then refused (fixed; register §1.168)
+
+In the morning story the page shows Gianni and nobody else. Tomaso asks Rosa
+"The usual for Friday?" from the dining-room door and she answers --
+"Buongiorno, Tomaso. The usual, yes." -- and the page never has it; he sets
+his mother's parcel on the table in front of her, she says "Tell your mother
+thank you, Tomaso", and the page says "No one answers."; she crosses into the
+kitchen, grips his arm and demands every word Marco said, and the page has
+only Gianni. `positions` was empty in all four turns from the second on,
+while four moves between the kitchen and the dining room were declared and
+resolved in the event text: Tomaso leaning into the doorway (resolved as a
+pose against the door, the door left shut), Tomaso setting the parcel in
+front of Rosa, Rosa "crosses the dining room, opens the kitchen door, and
+goes through", and Rosa stepping into the kitchen. In the last two the
+spatial specialist's own answer carried `"positions": {"Rosa Bellandi":
+"kitchen"}`; the merged `state_diff.positions` was `{}` both times and the
+committed scene kept her in the dining room, where her normal-volume lines
+did not carry through the shut door to the player. The Director resolved the
+moves; deterministic code dropped them. The resolve's warnings name it --
+"Unreachable position: nothing declared a move for Rosa Bellandi, and there is
+no passable route from 'dining_room' to 'kitchen'; position unchanged." --
+and the cause is a wiring slip: under the prose contract a crossing the
+encoder writes counts as declared, so a shut door is contested rather than a
+wall (`director_prose.declared_moves`), but `director_resolve` read its own
+stage's record off the context after `attach_record` had moved it into the
+stage's orchestration and cleared it. Every crossing written at the resolve
+was judged undeclared. The record is now read where it was moved; replayed on
+this story's own checkpoints and stored records, both refusals become
+crossings. Tomaso's own two moves are a different shape -- the Director
+resolved his lean into the doorway as a pose against the door, and his
+setting down the parcel moved nobody -- and are not answered by this.
+
 ### Collecting traced calls
 
 `tools/feelings_expression_ab.py collect` looked a played turn's captures up
@@ -254,9 +387,12 @@ name and the feelings block it carried, over the whole chat.
 
 ## Cost
 
-$0.12 for the three cards, $2.89 for the openings, the four turns (411-716 s
-each) and the 52 judge calls: about $3.01, inside the $2-4 estimated. The
-OpenRouter balance went from $12.08 to $9.07.
+The first story: $0.12 for the three cards, $2.89 for the openings, the four
+turns (411-716 s each) and the 52 judge calls -- about $3.01, inside the $2-4
+estimated; the OpenRouter balance went from $12.08 to $9.07. The second: $3.03
+for its opening, five turns (77-588 s each) and 104 judge calls (the new
+question asked of all 26 replies), against about $3.4 estimated; the balance
+went to $6.04.
 
 ## Reproduce
 
@@ -267,7 +403,10 @@ python tools/mood_story_drive.py start --name "The eightieth birthday" --scenari
     --known-player "Rosa Bellandi,Gianni Bellandi,Lucia Bellandi" \
     --known-cast "Rosa Bellandi,Gianni Bellandi,Lucia Bellandi" --opening "Marco Bellandi stops outside..."
 python tools/affect_trace.py play --chat 2 --inputs-file turns.txt --out $S/trace.jsonl
-python tools/feelings_expression_ab.py collect --story birthday:$S/trace.jsonl:$S/express.db --out $S/items.json
+# the second story: the same cast, start --name "The morning delivery" with its own premise, persona
+# and opening, then play its five turns into $S/morning.jsonl the same way
+python tools/feelings_expression_ab.py collect --out $S/items.json \
+    --story birthday:$S/trace.jsonl:$S/express.db morning:$S/morning.jsonl:$S/express.db
 ENGINE_DB=<GLM rater copy> python tools/feelings_expression_rate.py judge --items $S/items.json --out $S/v_glm.json
 ENGINE_DB=<Gemini rater copy> python tools/feelings_expression_rate.py judge --items $S/items.json --out $S/v_gemini.json
 python tools/feelings_expression_rate.py report --items $S/items.json \
@@ -276,5 +415,9 @@ python tools/feelings_expression_rate.py report --items $S/items.json \
 ```
 
 The cards, the story database and the traces lived in the job's scratch
-directory and are not kept; the briefs, the premise and the four turns are
-quoted above.
+directory and are not kept; the briefs, both premises and the turns are
+quoted above (the morning premise: the Bellandi trattoria on the morning of
+Rosa's eightieth birthday, closed for the family dinner, Gianni at the
+stove, Lucia over the ledger in the dining room, Rosa down for the first
+time in two days, shelling peas; the player the fish supplier's son, whose
+private history holds the overdue account and the sight of Marco in Genoa).

@@ -12,15 +12,23 @@ they feel beside one written to hold it in (`collect` is
 
 - `open` -- a BLIND judge sees the character's name, what just reached them
   and what they did, never their card or their feelings, and rates how
-  openly feelings show in it, 0 to 3;
+  openly feelings show in it, 0 to 3 -- how PLAINLY, which for a card
+  written to show its feelings is high at every strength (a warm greeting
+  to a delivery boy rates 3), so it measures temperament;
+- `shown` -- as blind: how STRONG a feeling the move displays, whatever the
+  feeling, 0 (none) to 3 (intense) -- the measure that can rise with how
+  strongly a feeling is felt;
 - `fit` -- a judge sees the card's psychology and voice, what reached them,
   what they feel and how strongly, and the reply, and says whether it is a
   believable response of this person (1 to 5) and whether it shows too
   little, about the right amount or too much for this person feeling this.
 
-`report` gives each character's openness per judge, its correlation with the
-strongest present feeling's strength within each temperament, and the fit
-verdicts, one judge at a time (never their mean).
+`report` gives each character's openness per judge, its correlation (Pearson
+and rank) with how strongly the moment stirred the mind -- the whole stir of
+what stirred it most -- within each character and each temperament, and the
+fit verdicts, one judge at a time (never their mean). Several stories pool:
+the same cards in a quiet scene and a dramatic one give each character the
+range one scene cannot.
 
 Usage:
     python tools/feelings_expression_ab.py collect --story name:trace.jsonl:story.db --out items.json
@@ -43,7 +51,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from feelings_expression_ab import RESTRAINED, _conduct, _load, _pearson, band, with_strength  # noqa: E402
+from feelings_expression_ab import (  # noqa: E402
+    RESTRAINED, STRENGTH, _conduct, _load, _pearson, band, with_strength)
 
 OPEN_SYSTEM = (
     "You read interactive fiction. Below are a character's name, what just reached them, and their next move: "
@@ -51,6 +60,12 @@ OPEN_SYSTEM = (
     "move, from 0 (not at all: nothing of what they feel shows) to 3 (fully: what they feel is plain in their "
     "words, their voice or their body). Rate what shows, not whether it suits them. Return JSON only: "
     "{\"open\": n, \"why\": \"one sentence\"}.")
+SHOWN_SYSTEM = (
+    "You read interactive fiction. Below are a character's name, what just reached them, and their next move: "
+    "what they say, how they say it, and what they do. How strong a feeling does this move display, whatever "
+    "the feeling is, from 0 (none shows) through 1 (mild) and 2 (marked) to 3 (intense)? Judge the strength of "
+    "what shows, not how plainly it shows and not what might be felt underneath. Return JSON only: "
+    "{\"shown\": n, \"why\": \"one sentence\"}.")
 FIT_SYSTEM = (
     "You judge interactive fiction for psychological realism. Below are one character -- who they are and how "
     "they speak -- what just reached them, what they feel right now and how strongly -- true of them, whatever "
@@ -97,6 +112,45 @@ def top_strength(item):
     return max(now, default=(0.0, ""))
 
 
+def strength(item):
+    """How strongly the mind felt: the whole stir of the item that stirred it
+    most where `collect` recorded it (`feelings_expression_ab.moment_stir`)
+    -- the strongest feeling in the block as handed could, before the moment
+    was led by what stirred most as a whole, be a gesture's beside an
+    announcement's -- and, where the moment stirred nothing (a man alone at
+    his stove), the strongest feeling handed, which is then what sits
+    beneath."""
+    return item.get("moment") or top_strength(item)[0]
+
+
+def _ranks(xs):
+    """Ranks from 0, ties sharing their mean rank."""
+    order = sorted(range(len(xs)), key=lambda i: xs[i])
+    ranks = [0.0] * len(xs)
+    i = 0
+    while i < len(order):
+        j = i
+        while j + 1 < len(order) and xs[order[j + 1]] == xs[order[i]]:
+            j += 1
+        for k in range(i, j + 1):
+            ranks[order[k]] = (i + j) / 2
+        i = j + 1
+    return ranks
+
+
+def _spearman(xs, ys):
+    """Rank correlation: openness is a 0-3 rating, not a measure."""
+    pairs = [(x, y) for x, y in zip(xs, ys) if x is not None and y is not None]
+    if len(pairs) < 4:
+        return None
+    x, y = zip(*pairs)
+    return _pearson(_ranks(list(x)), _ranks(list(y)))
+
+
+def _r(v):
+    return "--" if v is None else f"{v:+.2f}"
+
+
 def judge(args):
     from agents.common import jparse
     from llm.providers import chat_complete
@@ -104,11 +158,12 @@ def judge(args):
     items = _load(args.items)
     path = Path(args.out)
     done = _load(path) if path.exists() else {}
-    jobs = [(it, kind) for it in items for kind in ("open", "fit") if f"{it['id']}|{kind}" not in done]
+    jobs = [(it, kind) for it in items for kind in ("open", "shown", "fit") if f"{it['id']}|{kind}" not in done]
 
     def ask(job):
         item, kind = job
-        system, scene = (OPEN_SYSTEM, blind_scene(item)) if kind == "open" else (FIT_SYSTEM, fit_scene(item))
+        system, scene = {"open": (OPEN_SYSTEM, blind_scene(item)), "shown": (SHOWN_SYSTEM, blind_scene(item)),
+                         "fit": (FIT_SYSTEM, fit_scene(item))}[kind]
         move = "THEIR NEXT MOVE:\n" + _conduct(item["reply_A"])
         reply = jparse(chat_complete("utility", system, scene + "\n\n" + move, json_mode=True, temperature=0.0,
                                      max_tokens=600, reasoning_effort="off")) or {}
@@ -119,8 +174,8 @@ def judge(args):
             except (TypeError, ValueError):
                 return None
 
-        if kind == "open":
-            return f"{item['id']}|open", {"open": num(reply.get("open"), 3), "why": str(reply.get("why") or "")}
+        if kind in ("open", "shown"):
+            return f"{item['id']}|{kind}", {kind: num(reply.get(kind), 3), "why": str(reply.get("why") or "")}
         shows = str(reply.get("shows") or "").strip().lower()
         return f"{item['id']}|fit", {"believable": num(reply.get("believable"), 5),
                                      "shows": shows if shows in SHOWS else None, "why": str(reply.get("why") or "")}
@@ -137,7 +192,9 @@ def report(args):
     judges = [(s.split(":", 1)[0], _load(s.split(":", 1)[1])) for s in args.verdicts]
     temper = dict(pair.split("=", 1) for pair in args.temperament.split(",") if "=" in pair)
     names = list(dict.fromkeys(it["name"] for it in items))
-    print(f"{len(items)} replies: " + ", ".join(f"{n} {sum(1 for it in items if it['name'] == n)}" for n in names))
+    stories = list(dict.fromkeys(it["story"] for it in items))
+    print(f"{len(items)} replies: " + ", ".join(f"{n} {sum(1 for it in items if it['name'] == n)}" for n in names)
+          + "  (" + ", ".join(f"{s} {sum(1 for it in items if it['story'] == s)}" for s in stories) + ")")
     print("\nregister of the spoken lines (the tone the character gave each), as the four test stories were counted:")
     for name in names:
         lines = [s for it in items if it["name"] == name for s in it["reply_A"]
@@ -147,39 +204,43 @@ def report(args):
         words = sorted(len(str(s["text"]).split()) for s in lines) or [0]
         print(f"  {name:16} {len(lines):2} lines, restrained {restrained}, median {words[len(words) // 2]} words; "
               "tones: " + "; ".join(tones))
+    def rated(verdicts, it, kind):
+        return (verdicts.get(f"{it['id']}|{kind}") or {}).get(kind)
+
+    def mean(vals):
+        vals = [v for v in vals if v is not None]
+        return f"{statistics.fmean(vals):.2f}" if vals else "--"
+
     for jname, verdicts in judges:
         print(f"\n{jname}:")
         for name in names:
             mine = [it for it in items if it["name"] == name]
-            opens = [(verdicts.get(f"{it['id']}|open") or {}).get("open") for it in mine]
-            believ = [(verdicts.get(f"{it['id']}|fit") or {}).get("believable") for it in mine]
+            xs = [strength(it) for it in mine]
             shows = Counter((verdicts.get(f"{it['id']}|fit") or {}).get("shows") for it in mine)
-            r = _pearson([top_strength(it)[0] for it in mine], opens)
-            o = [v for v in opens if v is not None]
-            b = [v for v in believ if v is not None]
-            print(f"  {name:16} ({temper.get(name, '?'):8}) open {statistics.fmean(o) if o else float('nan'):.2f}"
-                  f"   r(open, strength) " + ("--" if r is None else f"{r:+.2f}")
-                  + f"   believable {statistics.fmean(b) if b else float('nan'):.2f}   shows "
+            line = f"  {name:16} ({temper.get(name, '?'):8})"
+            for kind in ("open", "shown"):
+                ys = [rated(verdicts, it, kind) for it in mine]
+                line += f"   {kind} {mean(ys)} (r {_r(_pearson(xs, ys))}, rho {_r(_spearman(xs, ys))})"
+            believable = [(verdicts.get(f"{it['id']}|fit") or {}).get("believable") for it in mine]
+            print(line + f"   believable {mean(believable)}   shows "
                   + ", ".join(f"{k} {shows[k]}" for k in SHOWS if shows[k]))
         for group in sorted(set(temper.values())):
             mine = [it for it in items if temper.get(it["name"]) == group]
-            r = _pearson([top_strength(it)[0] for it in mine],
-                         [(verdicts.get(f"{it['id']}|open") or {}).get("open") for it in mine])
-            by_band = {}
-            for it in mine:
-                v = (verdicts.get(f"{it['id']}|open") or {}).get("open")
-                if v is not None:
-                    by_band.setdefault(band(top_strength(it)[0]), []).append(v)
-            print(f"  {group} pooled: r(open, strength) " + ("--" if r is None else f"{r:+.2f}") + "   by strength: "
-                  + ", ".join(f"{b} {statistics.fmean(v):.2f} (n={len(v)})" for b, v in by_band.items()))
+            xs = [strength(it) for it in mine]
+            bands = [w for _f, w in STRENGTH if any(band(x) == w for x in xs)]  # strongest first
+            for kind in ("open", "shown"):
+                ys = [rated(verdicts, it, kind) for it in mine]
+                print(f"  {group} pooled, {kind}: r {_r(_pearson(xs, ys))}, rho {_r(_spearman(xs, ys))}   by strength: "
+                      + ", ".join(f"{b} {mean(y for x, y in zip(xs, ys) if band(x) == b)} "
+                                  f"(n={sum(1 for x in xs if band(x) == b)})" for b in bands))
     if args.table:
-        out = ["| call | character | strongest feeling now | strength | "
+        out = ["| call | character | strongest feeling handed | its strength | moment | "
                + " | ".join(f"open ({j})" for j, _ in judges) + " | "
                + " | ".join(f"fit ({j})" for j, _ in judges) + " |",
-               "|" + "---|" * (4 + 2 * len(judges))]
+               "|" + "---|" * (5 + 2 * len(judges))]
         for it in items:
             s, label = top_strength(it)
-            cells = [it["id"], it["name"], label or "-", f"{s:.2f}"]
+            cells = [it["id"], it["name"], label or "-", f"{s:.2f}", f"{strength(it):.2f}"]
             opens = [(v.get(it["id"] + "|open") or {}) for _j, v in judges]
             fits = [(v.get(it["id"] + "|fit") or {}) for _j, v in judges]
             cells += [str(o.get("open")) for o in opens]

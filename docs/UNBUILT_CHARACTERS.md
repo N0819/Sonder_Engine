@@ -1299,14 +1299,14 @@ whether a given feeling improves what a character does at all -- a six-beat
 blind pilot split at chance, below the variation between two calls
 (`docs/experiments/FEELINGS_AB_PILOT_2026_09_26.md`), and a design that could
 resolve it (a noise floor, several samples a beat) costs several times more,
-the owner's call; whether how openly a feeling shows rises with how strongly
-it is felt is measured only thinly -- on cards written to show their
-feelings expression follows the card (blind openness 2.0-2.5 of 3 against
-0-0.5 for a reserved card, both judges) and rises with strength for the open
-ones (pooled r +0.68 and +0.86), but 11 of the 13 beats were felt at 0.78 or
-more and the rise rests on one quiet beat
-(`docs/experiments/FEELINGS_EXPRESSIVE_CARDS_2026_09_26.md`); a story with as
-many quiet and middling beats as dramatic ones would settle it; a held-back
+the owner's call; how strongly a feeling shows now tracks how strongly it is
+felt on cards written to show their feelings (two stories, 26 replies, two
+blind judges: displayed strength rank-correlates +0.72 and +0.63 with felt
+strength for the open cards, while how plainly they show stays at their
+temperament's level at every strength and a reserved card displays little
+whatever she feels, `docs/experiments/FEELINGS_EXPRESSIVE_CARDS_2026_09_26.md`)
+-- but the open cards' low end is four replies, and the two judges agree on
+the direction and differ on the size; a held-back
 want's frustration still becomes the stored feeling where it outweighs the
 moment's most stirring item (4 of 29 traced calls, and 2 more where nothing
 happened), because "How much do you mind not having done it?" reads the
