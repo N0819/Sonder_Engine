@@ -294,6 +294,11 @@ modes each one documents.
   — does a character show a feeling as strongly as it feels it: strength
   words in the block and a sentence on expression, against the noise of two
   calls; nothing beats it, and the restrained register is the cards' own.
+- [`FEELINGS_EXPRESSIVE_CARDS_2026_09_26.md`](experiments/FEELINGS_EXPRESSIVE_CARDS_2026_09_26.md)
+  — a story played with two characters written to show their feelings and
+  one written to hold them in, rated blind: expression follows the card and
+  rises with strength for the open ones (thinly measured); found a narrator
+  crash and the moment's lead feeling taken from the wrong event.
 
 ## `archive/` — superseded
 

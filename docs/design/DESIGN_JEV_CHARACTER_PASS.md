@@ -836,6 +836,24 @@ a remembered scene is scene description ("resolve (You are in the
 harbourmaster's shed...)"); marking it as remembered wants a pack phrase in
 both languages.
 
+**The moment is what stirred most as a whole -- the same day, late.** A
+story played with characters written to show their feelings
+(`docs/experiments/FEELINGS_EXPRESSIVE_CARDS_2026_09_26.md`; they did, as
+openly as their cards say, and a reserved one did not) found the like-for-like
+rule taking "the moment's strongest item" as the item holding the largest
+single feeling. A mixed event splits its stir among names, so the moments
+that stir several things at once lost to a small gesture with one
+concentrated feeling: a grandson's announcement that he is emigrating stirred
+his grandmother 0.99 across dread, sadness, longing and distress, his
+straightening in his chair 0.62 as dread, and she was handed and stored
+dread about the chair. The strongest item is now the one that stirred most
+as a whole, the surface its strongest feeling, and an act weighed against
+that item's whole stir -- what the ruling's words said. Replayed over the 29
+traced calls, the block names the most stirring event first on 27 of 27
+(15 before) and the stored feeling is about a held-back want on 6 of 29
+(8 before); the `now` list still adds what else pulls at once by single
+feeling, one per kind.
+
 **Increment 2 -- asked of the owner first:** the appraisal object
 (`goal_impacts`, `somatic_impact`, `memory_modulation`), stress `coping_mode`
 and `hedonic.released` feed stress, drive strain and pain and pleasure; each

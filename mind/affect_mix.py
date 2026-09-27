@@ -591,7 +591,17 @@ def surface_and_undercurrent(emotions, mood):
     strong restraint was stored over the moment's guilt or dread
     (`docs/experiments/AFFECT_TRACE_2026_09_26.md`). An act's feeling now
     takes the surface only when it outweighs everything the moment's
-    strongest item stirred -- the sum of that item's feelings."""
+    strongest item stirred -- the sum of that item's feelings.
+
+    The moment's strongest item is the one that stirred most AS A WHOLE, and
+    the surface is its strongest feeling. Taken instead as the item holding
+    the largest single feeling, it passed over exactly the moments that
+    matter most, which stir several things at once: Marco's announcement
+    that he is emigrating stirred his grandmother 0.99 across dread,
+    sadness, longing and distress, his straightening in his chair 0.62 as
+    dread alone, and she was handed and stored dread about the chair; the
+    block named the most stirring event first in 15 of 27 traced calls
+    (`docs/experiments/FEELINGS_EXPRESSIVE_CARDS_2026_09_26.md`)."""
     felt = sorted((e for e in emotions if e.intensity > 0), key=lambda e: -e.intensity)
     if not felt:
         return None, None
@@ -599,8 +609,11 @@ def surface_and_undercurrent(emotions, mood):
     moment = [e for e in present if e.source != "act"]
     acts = [e for e in present if e.source == "act"]
     if moment:
-        surface = moment[0]
-        stirred = sum(e.intensity for e in moment if e.ref == surface.ref and e.source == surface.source)
+        items = {}
+        for e in moment:  # strongest first, so a tie goes to the item with the larger single feeling
+            items[(e.source, e.ref)] = items.get((e.source, e.ref), 0.0) + e.intensity
+        item, stirred = max(items.items(), key=lambda kv: kv[1])
+        surface = next(e for e in moment if (e.source, e.ref) == item)
         if acts and acts[0].intensity > stirred:
             surface = acts[0]
     else:

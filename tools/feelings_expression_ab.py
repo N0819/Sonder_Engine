@@ -134,28 +134,37 @@ def collect(args):
         recs = [json.loads(line) for line in Path(trace).read_text(encoding="utf-8").splitlines() if line.strip()]
         turn_ids = {r["turn"]: r["turn_id"] for r in recs if r["kind"] == "turn"}
         con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-        for n, tid in sorted(turn_ids.items()):
+        # Every character call of the chat, matched to a traced call by name
+        # and by the feelings block it carried, never by the played turn's
+        # id: a played turn can be followed by a beat the engine runs out of
+        # band (no input, no narration) whose calls the trace files under
+        # that played turn -- 2 of 13 calls in the 2026-09-26 birthday
+        # story -- and a call whose answer failed to parse (ok = 0) carried
+        # the same request its repair answered (1 of the 13), so it is used
+        # only when no answered capture matches.
+        chat = con.execute("SELECT chat_id FROM turns WHERE id = ?", (next(iter(turn_ids.values())),)).fetchone()[0]
+        caps = con.execute("SELECT c.system_hash, c.payload_hashes, t.idx FROM llm_capture c "
+                           "JOIN turns t ON t.id = c.turn_id WHERE t.chat_id = ? AND c.role = 'character_major' "
+                           "ORDER BY c.ok DESC, c.turn_id, c.seq", (chat,)).fetchall()
+        payloads = [({k: _value(_blob(con, h)) for k, h in json.loads(hashes or "{}").items()}, sh, idx)
+                    for sh, hashes, idx in caps]
+        used = set()
+        for n in sorted(turn_ids):
             befores = [r for r in recs if r["kind"] == "before" and r["turn"] == n]
             replies = [r for r in recs if r["kind"] == "reply" and r["turn"] == n]
-            caps = con.execute("SELECT c.system_hash, c.payload_hashes, t.chat_id FROM llm_capture c "
-                               "JOIN turns t ON t.id = c.turn_id WHERE c.turn_id = ? AND c.role = 'character_major' "
-                               "AND c.ok = 1 ORDER BY c.seq", (tid,)).fetchall()
-            payloads = [({k: _value(_blob(con, h)) for k, h in json.loads(hashes or "{}").items()}, sh, chat)
-                        for sh, hashes, chat in caps]
-            used = set()
             for k, before in enumerate(befores):
-                match = next((i for i, (p, _s, _c) in enumerate(payloads) if i not in used
-                              and (p.get("self") or {}).get("name") == before["name"]), None)
+                match = next((i for i, (p, _s, _x) in enumerate(payloads) if i not in used
+                              and (p.get("self") or {}).get("name") == before["name"]
+                              and (p.get("self") or {}).get("feelings") == before.get("block")), None)
                 reply = next((r for r in replies if r["name"] == before["name"]
-                              and r.get("given") == ((payloads[match][0].get("self") or {}).get("feelings")
-                                                     if match is not None else None)), None)
+                              and r.get("given") == before.get("block")), None)
                 if match is None or reply is None:
                     print(f"  {story} turn {n}: no capture for {before['name']}")
                     continue
                 used.add(match)
-                payload, system_hash, chat = payloads[match]
-                items.append({"id": f"{story}:{n}:{k}", "story": story, "turn": n, "name": before["name"],
-                              "system": _blob(con, system_hash), "payload": payload,
+                payload, system_hash, beat = payloads[match]
+                items.append({"id": f"{story}:{n}:{k}", "story": story, "turn": n, "beat": beat,
+                              "name": before["name"], "system": _blob(con, system_hash), "payload": payload,
                               "sheet": _sheet(con, chat, (payload.get("self") or {}).get("entity_id")),
                               "block": (payload.get("self") or {}).get("feelings") or {},
                               "strengths": _strengths(before), "reply_A": reply.get("sequence") or []})

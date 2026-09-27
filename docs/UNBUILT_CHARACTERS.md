@@ -1300,11 +1300,19 @@ blind pilot split at chance, below the variation between two calls
 (`docs/experiments/FEELINGS_AB_PILOT_2026_09_26.md`), and a design that could
 resolve it (a noise floor, several samples a beat) costs several times more,
 the owner's call; whether how openly a feeling shows rises with how strongly
-it is felt, untestable on the four stories because six of their seven cards
-write a restrained voice (strength words in the block and a sentence on
-expression moved nothing past the noise of two calls,
-`docs/experiments/FEELINGS_STRENGTH_AB_2026_09_26.md`) -- it needs
-characters written to show their feelings; falling short of oneself read faintly (0.3-0.4) of plain
+it is felt is measured only thinly -- on cards written to show their
+feelings expression follows the card (blind openness 2.0-2.5 of 3 against
+0-0.5 for a reserved card, both judges) and rises with strength for the open
+ones (pooled r +0.68 and +0.86), but 11 of the 13 beats were felt at 0.78 or
+more and the rise rests on one quiet beat
+(`docs/experiments/FEELINGS_EXPRESSIVE_CARDS_2026_09_26.md`); a story with as
+many quiet and middling beats as dramatic ones would settle it; a held-back
+want's frustration still becomes the stored feeling where it outweighs the
+moment's most stirring item (4 of 29 traced calls, and 2 more where nothing
+happened), because "How much do you mind not having done it?" reads the
+situation the want names as well as the restraint (0.93 for "keep watching
+the archway for Gianni -- she called and he has not answered") -- the
+owner's call whether that is the restraint's feeling; falling short of oneself read faintly (0.3-0.4) of plain
 acts such as turning one's head to watch someone, never the stored feeling
 on the traced beats but a residue to watch
 (`docs/experiments/AFFECT_TRACE_2026_09_26.md`); a card's standing feelings

@@ -389,6 +389,33 @@ def test_an_acts_feeling_is_the_surface_only_where_it_outweighs_the_moment():
     assert surface.name == "frustration"
 
 
+def test_the_moment_is_led_by_what_stirred_most_as_a_whole():
+    """The moment's strongest item is the one that stirred most as a whole,
+    not the one holding the largest single feeling: a mixed event splits
+    its stir among names. At the Bellandi birthday (2026-09-26) Marco's
+    announcement that he is emigrating stirred Rosa 0.99, spread over
+    dread, sadness, longing and distress; his straightening in his chair
+    stirred 0.62, nearly all dread -- and she was handed, and stored, dread
+    about the chair, with frustration at a held-back want (0.96) taking the
+    surface against the chair's 0.62 rather than the announcement's 0.99."""
+    announcement = [Emotion("dread", 0.23, "I'm leaving for Melbourne", "event", "o3"),
+                    Emotion("sadness", 0.15, "I'm leaving for Melbourne", "event", "o3"),
+                    Emotion("longing", 0.14, "I'm leaving for Melbourne", "event", "o3"),
+                    Emotion("distress", 0.14, "I'm leaving for Melbourne", "event", "o3"),
+                    Emotion("anger", 0.13, "I'm leaving for Melbourne", "event", "o3")]
+    chair = [Emotion("dread", 0.37, "He straightens in his chair", "event", "o2"),
+             Emotion("anticipation", 0.17, "He straightens in his chair", "event", "o2")]
+    surface, _under = mix.surface_and_undercurrent(chair + announcement, Mood())
+    assert surface.ref == "o3" and surface.name == "dread"
+    # an act is weighed against the announcement's whole stir (0.79)
+    minded = Emotion("frustration", 0.75, "You held back from: opening the box", "act", "held")
+    surface, _under = mix.surface_and_undercurrent(chair + announcement + [minded], Mood())
+    assert surface.ref == "o3"
+    surface, _under = mix.surface_and_undercurrent(
+        chair + announcement + [Emotion("shame", 0.85, "You said it", "act", "s0")], Mood())
+    assert surface.name == "shame"
+
+
 def test_a_faint_feeling_beneath_is_not_named():
     faint = mix.UNDERCURRENT_FLOOR / 2
     surface, under = mix.surface_and_undercurrent(

@@ -10,7 +10,7 @@
 | `agents/background.py` | 2219 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
 | `agents/character.py` | 4748 | Private character decision agent. | `agents.character_kernel`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
 | `agents/character_kernel.py` | 496 |  | — |
-| `agents/common.py` | 11811 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
+| `agents/common.py` | 11813 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 5194 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 8422 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 499 |  | `story.character_schema`, `world.spatial` |
@@ -58,7 +58,7 @@
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2538 |  | `mind.theory_of_mind` |
 | `mind/affect_appraisal.py` | 282 |  | `llm`, `llm.prompts` |
-| `mind/affect_mix.py` | 626 |  | — |
+| `mind/affect_mix.py` | 639 |  | — |
 | `mind/affect_pass.py` | 425 |  | `llm.prompts`, `mind` |
 | `mind/canon_provenance.py` | 398 |  | — |
 | `mind/knowledge_circles.py` | 134 |  | `core.db` |
@@ -281,12 +281,12 @@
 |---|---:|---:|
 | `norm_sequence()` | 4483 | 295 lines |
 | `presence_figures_for_room()` | 2233 | 268 lines |
-| `_check_narrator_fidelity()` | 10979 | 259 lines |
+| `_check_narrator_fidelity()` | 10981 | 259 lines |
 | `_unknown_actor_label()` | 5402 | 202 lines |
 | `_scrub_unknown_identities()` | 5827 | 187 lines |
 | `_scrub_invented_dialogue()` | 9492 | 151 lines |
 | `observer_body_regions()` | 1727 | 140 lines |
-| `_check_quote_attribution()` | 10542 | 139 lines |
+| `_check_quote_attribution()` | 10544 | 139 lines |
 
 ### `agents/composer.py`
 
@@ -806,7 +806,7 @@
 | Function | Start | Size |
 |---|---:|---:|
 | `emotions_from_act()` | 325 | 68 lines |
-| `surface_and_undercurrent()` | 578 | 42 lines |
+| `surface_and_undercurrent()` | 578 | 55 lines |
 | `emotions_from_appraisal()` | 283 | 25 lines |
 | `decay()` | 433 | 18 lines |
 | `targets()` | 453 | 18 lines |
