@@ -215,13 +215,15 @@ def notes_in_play(h):
     beat about someone else (held beliefs, asked every beat, were touched
     three times as often as the full card's model touched them).
 
-    ASKED BEFORE THE CALL (`before_questions`): what bears a note out is what
-    reached this mind, never the mind's own restating of it. Asked after,
-    with the reply and its reasoning in the state, 27 of the 29 nudges the
-    round-8 chains made were "bore it out" -- a man sitting down bore out an
-    accusation, a mutter too faint to make out bore out who brought the news
-    first (2026-09-27). A note the reply changes or strikes itself is not
-    nudged as well (`character_bare._compile_notebook`)."""
+    ASKED BEFORE THE CALL, AGAINST THE MOMENT ALONE (`note_check_questions`,
+    `moment_text`): what bears a note out is what reached this mind, never
+    the mind's own restating of it. Asked after the call, 27 of the 29 nudges
+    the round-8 chains made were "bore it out" -- a man sitting down bore out
+    an accusation, a mutter too faint to make out bore out who brought the
+    news first (2026-09-27). Moving it before the call was not enough (21 of
+    21 in round nine): the whole state still carried the note, in the
+    notebook, and the memories behind it. A note the reply changes or strikes
+    itself is not nudged as well (`character_bare._compile_notebook`)."""
     from mind.notebook import in_play
     present = {p.casefold() for p in h.people}
     texts = [e["text"] for e in h.events]
@@ -353,23 +355,65 @@ def _look_options(people, language):
 
 def before_questions(h):
     """Asked before the call, and only when something reached this mind:
-    does it change what a recalled memory meant (a yes gates the dispute
-    module and its payload section into this call), and does it bear out,
-    cast doubt on or tell against a note this mind holds about someone or
-    something in play (`notes_in_play`)."""
+    does it change what a recalled memory meant? A yes gates the dispute
+    module and its payload section into this call."""
+    if not (h.events and h.memories):
+        return {}
+    yesno = _set("yesno", h.language)
+    return {f"dispute:{i}": _choice("dispute", h.language, yesno, memory=_text(m["text"]))
+            for i, m in enumerate(h.memories)}
+
+
+def note_check_questions(h):
+    """Asked before the call, against the moment alone (`moment_text`): does
+    what just happened bear out, cast doubt on or tell against a note this
+    mind holds about someone or something in play (`notes_in_play`)?"""
     if not h.events:
         return {}
     lang = h.language
-    yesno = _set("yesno", lang)
-    qs = {f"dispute:{i}": _choice("dispute", lang, yesno, memory=_text(m["text"]))
-          for i, m in enumerate(h.memories)}
     touched = dict(_set("note_touched", lang))
     events = [e["text"] for e in h.events]
+    qs = {}
     for k, entry in enumerate(notes_in_play(h)):
         note = note_text({"about": entry.get("about", ""), "note": entry.get("note", "")}, lang)
         qs[f"held:{k}:touched"] = _choice("note_touched", lang, touched, note=note)
         qs[f"held:{k}:now"] = _choice("based_now", lang, _options(events, "nothing_now", lang, "e"), text=note)
     return qs
+
+
+def moment_text(h):
+    """The state the note check reads: who this mind is, who is here, and
+    what just reached it -- never its notebook, its memories or its aims.
+    The question asks about what just happened, and asked against the full
+    state the decision model read the notebook's own restating of a note,
+    and the memories that first supported it, as confirmation: on 56
+    hand-labelled checks from the round-9 chains (2026-09-27, one labeller),
+    beats that told the mind nothing new were called "bore it out" 28 times
+    of 34 against the full state and 9 of 34 against this one (agreement 24
+    and 40 of 56; 16 and 14 of the 16 real confirmations caught). The same
+    wording in both; two rewordings scored worse (33 and 30 of 56)."""
+    parts = [f"YOU ARE {h.name}."]
+    if h.people:
+        parts.append("WHO IS HERE: " + ", ".join(h.people))
+    parts.append("WHAT JUST REACHED YOU:\n" + "\n".join(
+        "- " + (f"{e['actor']}: " if e.get("actor") and not str(e["text"]).startswith(e["actor"]) else "")
+        + _text(e["text"]) for e in h.events))
+    return "\n\n".join(parts)
+
+
+def ask_before(h):
+    """Everything asked before the call, answers merged: the dispute check
+    against this mind's whole state, the note check against the moment alone
+    (`moment_text`). The engine's bare path and the replay tool both ask
+    through here, so they cannot drift apart."""
+    answers = {}
+    disputes = before_questions(h)
+    if disputes:
+        answers.update(ask(state_text(h), disputes) or {})
+    checks = note_check_questions(h)
+    if checks:
+        answers.update(ask(moment_text(h), checks) or {})
+    return answers
 
 
 def read_before(answers, h):
@@ -420,11 +464,16 @@ def after_questions(h, reply):
             # Where it turns the body and whose words it cuts off: the full
             # card's `look` and `interrupts`, which no bare reply carries. A
             # sweep of the room is asked alone too -- it is how a mind takes
-            # in an empty room.
+            # in an empty room. An interruption truncates the other's line in
+            # the interaction loop, so it is asked as what STOPS someone
+            # finishing, with a plain "No one.": on 27 replayed acts and 5
+            # made-up ones (2026-09-27) that wording wrongly flagged 6 real
+            # acts where "cut off what someone is saying" with "No one in
+            # particular." flagged 11; both caught the 4 real interruptions.
             qs[f"do:{index}:look"] = _choice("act_look", lang, _look_options(people, lang), act=act)
             if heard_speakers:
                 qs[f"do:{index}:interrupts"] = _choice(
-                    "act_interrupts", lang, _options(heard_speakers, "nobody", lang, "p"), act=act)
+                    "act_interrupts", lang, _options(heard_speakers, "no_target", lang, "p"), act=act)
             if people:
                 qs[f"do:{index}:target"] = _choice("act_target", lang, _options(people, "no_target", lang, "p"),
                                                    act=act)

@@ -122,6 +122,19 @@ def concern_id(text):
     return "c" + hashlib.sha1(norm.encode("utf-8")).hexdigest()[:5]
 
 
+def concern_text(concern):
+    """A concern's words, whole: a plain string, or a record's `text`; ""
+    for none. ONE READER for the view and the read-back
+    (`agents.character_bare.holding_from`), so the id each derives comes off
+    the same words. The read-back held a concern cut at 300 characters while
+    the view hashed it whole, so a longer one -- and "settled when" pushes
+    one past that -- could never be struck or rewritten by its own id: each
+    rewrite added a copy (the round-8 chains, 2026-09-27)."""
+    text = concern.get("text") if isinstance(concern, dict) else concern
+    text = " ".join(str(text or "").split())
+    return "" if text == "None" else text
+
+
 def view(state, turn_idx, *, present=(), texts=(), absorption=0.0, elapsed_seconds=None,
          concerns=(), projects=()):
     """The notebook as the character reads it this beat, in four sections --
@@ -142,8 +155,8 @@ def view(state, turn_idx, *, present=(), texts=(), absorption=0.0, elapsed_secon
     Every entry carries the `id` the character strikes and changes."""
     state = state or {}
     out = {}
-    minding = [{"id": concern_id(c), "note": _text(c)}
-               for c in list(concerns or [])[:CONCERNS_SHOWN] if str(c or "").strip()]
+    held = [t for t in (concern_text(c) for c in concerns or []) if t]
+    minding = [{"id": concern_id(t), "note": _text(t)} for t in held[:CONCERNS_SHOWN]]
     if minding:
         out["on_your_mind"] = minding
     about = [{"id": str(p.get("id") or ""), "note": _text(p.get("project")),

@@ -4599,9 +4599,7 @@ def character_step(ctx, cid, nonce):
         payload = character_bare.with_notebook(payload, _nb_view)
         _disputed = []
         try:
-            _before_answers = character_jev.ask(
-                character_jev.state_text(_holding),
-                character_jev.before_questions(_holding)) or {}
+            _before_answers = character_jev.ask_before(_holding)
             _disputed = character_jev.read_before(_before_answers, _holding)
         except Exception as _exc:  # noqa: BLE001 -- a check that cannot run gates nothing in
             ctx.add_warning(f"character {character_name(sh)}: no dispute or note check "

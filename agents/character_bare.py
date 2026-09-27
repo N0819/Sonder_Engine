@@ -119,11 +119,10 @@ def holding_from(name, sheet, payload, observations, memory_context, active, *,
     for row in self_.get("projects") or []:
         if isinstance(row, dict) and row.get("project"):
             aims.append({"kind": "project", "id": str(row.get("id") or ""), "text": row["project"]})
-    concerns = []
-    for c in (active or {}).get("active_concerns") or []:
-        text = c.get("text") if isinstance(c, dict) else c
-        if str(text or "").strip() and str(text) != "None":
-            concerns.append(_text(text))
+    # Whole, never cut: a concern is struck and rewritten by the id the view
+    # derived from its words (`notebook.concern_text`), and it is written back
+    # as it is held. Questions and the state cut it for display.
+    concerns = [t for t in (notebook.concern_text(c) for c in (active or {}).get("active_concerns") or []) if t]
     hedonic = (active or {}).get("hedonic") or {}
     return jev.Holding(
         name=name, language=language,
@@ -416,11 +415,13 @@ def _fill_concern(glue, entry):
 
 def _distinct_concerns(concerns):
     """Each concern once, by the notebook's own identity for it
-    (`notebook.concern_id`: the words, case and spacing aside), first kept.
-    A worry written in `changes` and again in the notebook arrived twice in
-    the round-8 chains. Words merely CLOSE to another's are kept apart: two
-    different worries scored 0.40-0.46 on the engine's similarity there, and
-    the one true paraphrase 0.455, so no threshold tells them apart."""
+    (`notebook.concern_id`: the words, case and spacing aside), first kept
+    -- a worry the reply files both as a `changes` line and as a notebook
+    entry is one worry. Words merely CLOSE to another's are kept apart: two
+    different worries scored 0.40-0.46 on the engine's similarity in the
+    round-8 chains, and the one true paraphrase 0.455, so no threshold tells
+    them apart. (The copies those chains showed were one concern cut at two
+    lengths, which `notebook.concern_text` ended.)"""
     out, seen = [], set()
     for c in concerns:
         key = notebook.concern_id(c.get("text") if isinstance(c, dict) else c)

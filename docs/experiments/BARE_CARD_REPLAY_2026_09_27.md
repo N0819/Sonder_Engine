@@ -358,21 +358,85 @@ one project. Four findings:
   "bore it out", several on beats that bore nothing out -- Kit sitting down
   and laying his hands on his knees bore out that Holt had accused Margit of
   lying; three unintelligible fragments of Luca's speech bore out that he
-  had brought the patrol news first. The check was asked after the call,
-  with the character's reply and reasoning in the state, where the
-  character restates what it holds. It is asked before the call now,
-  against what reached the mind; the tool records each check's
-  probabilities for the next run.
-- **A worry arrived twice**, written in `changes` and again in the notebook
-  (similarity 1.0). Concerns are kept once now, by the notebook's own
-  identity for one. Nothing close to a threshold would do: two different
-  worries scored 0.40-0.46 on the engine's similarity, and the one true
-  paraphrase 0.455.
+  had brought the patrol news first. First read as the reply's doing (the
+  check was asked after the call, with the character's reply and reasoning
+  in the state) and moved before the call; round nine showed that was not
+  the cause (below).
+- **One concern appeared twice, cut at two lengths** ("...he believes I
+  lied. I..." and "...he believes I lied. H..."). The notebook view derived a
+  concern's id from its whole words; the read-back held concerns cut at 300
+  characters -- and "settled when" pushes a concern past that -- so a longer
+  concern could never be struck or rewritten by its own id: each rewrite
+  added a copy and the held one came back cut. One reader of a concern's
+  words now (`notebook.concern_text`), and the concerns are held whole.
+  (Concerns are also kept once by the notebook's identity for one; nothing
+  close to a similarity threshold would do: two different worries scored
+  0.40-0.46 on the engine's similarity, and one true paraphrase 0.455.)
 - **A commitment adoption refused was lost**: Anselm's "count the hits" had
   a criterion restating it, which adoption refuses as a task, and nothing
   kept it. What adoption would refuse as circular or crowded out is kept as
   an intention now, what would finish it in its words
   (`affect.adoption_refusal`, the one reader adoption itself uses).
+
+## Round nine: the chains again, with the restorations
+
+The same two chains on fresh database copies, run from a snapshot of the
+code: the note check before the call, concerns kept once, a refused
+commitment kept as an intention, and the old card's restorations below.
+
+| Chain | Beats read back | Lines | Acts | New notes | Revised | Nudged (all "bore it out") |
+|---|---|---|---|---|---|---|
+| Margit, round eight | 16 of 18 | 19 | 16 | 20 | 21 | 21 (20) |
+| Margit, round nine | 10 of 18 | 15 | 11 | 9 | 5 | 7 (7) |
+| Anselm, round eight | 16 of 16 | 21 | 17 | 6 | 6 | 8 (7) |
+| Anselm, round nine | 16 of 16 | 28 | 19 | 7 | 14 | 14 (14) |
+
+- **The note check still confirmed everything**: 21 of 21 nudges, and 49 of
+  its 57 checks chose "bore it out", before the call. So the reply was not
+  the cause. Read against hand labels of those 57 checks (one labeller;
+  16 gave a new reason to believe the note, 34 told the mind nothing new, 6
+  gave a reason to doubt it, 1 unclear), the check agreed on 24 of 56 and
+  called 28 of the 34 nothing-new beats confirmation. Asked of the same
+  notes against the beat's events alone, the same wording agreed on 40 of
+  56 and called 9 of the 34 confirmation, catching 14 of the 16 real ones;
+  two rewordings -- "a new reason to believe this", "how sure are you now"
+  -- scored 33 and 30. The whole state carries the note itself, in the
+  notebook, and the memories that first supported it, and the decision
+  model reads them as confirmation. The check now reads the moment alone
+  (`moment_text`); not yet replayed in a chain.
+- **Margit's chain lost 8 of 18 beats** (round eight: 2): one provider
+  silence, and seven where GLM answered `{}` twice running after an ordinary
+  amount of reasoning (446-4,396 tokens), its thinking ending as the good
+  ones do ("Let me write the JSON."). Anselm's chain lost none. The replay
+  tool sends the reply's JSON schema, and on NanoGPT that path injects its
+  own instructions into the system prompt -- the model quoted them: "please
+  default to using {"answer":"$your_answer"}", "Ensure to always use
+  "```"" -- and on one beat's prompt the schema path also reasoned 3,000-7,200
+  tokens (38-94 s) where the same prompt without it took 1,000-1,900 (17-25
+  s). Whether the schema, the restored sections or the card's new line tips
+  GLM into `{}` is under test; the engine's own format is chosen per role
+  (`providers.response_format_for`).
+- **The restorations fired.** The speech budget shipped on every beat read
+  back, tell variety and tell payoff on 24 of 26, an owed answer on 6, a
+  silence on 3; offers and crisis never came up in these captures. Margit's
+  11 acts all turned her toward someone -- rightly: every one faces Kit or
+  Holt; Anselm's 19, mostly hands at a wound, turned him toward someone once
+  (a glance up at Luca) and "cut Luca off" twice, both times by turning and
+  walking away while Luca talked -- which does not stop anyone finishing,
+  and an interruption truncates the other's line. Probed on those 27 acts
+  plus five made-up ones, asking what STOPS someone finishing, with a plain
+  "No one.", wrongly flagged 6 real acts where today's wording flagged 11;
+  both caught the four made-up interruptions and both still read a
+  walk-away as one. Adopted. The body echo came out unpleasant
+  on 24 of 25 echoes (-0.16 to -0.93) and about nothing on the other; the
+  full card, which never explained the field, wrote small positive
+  strengths (0.01-0.4) on 129 of the 135 echoes in the four stories'
+  captures, 0 on the rest, whatever the memory.
+- **Notes still drift into a log** despite the card line: "Back from the
+  captain's quarters -- no iodine in his hands, a half-written letter
+  instead" was checked on six beats running.
+- No commitment was refused, so the intention fallback was not exercised;
+  no concern appeared twice.
 
 ## The old card, reviewed: what the bare card had dropped
 

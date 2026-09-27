@@ -1369,13 +1369,13 @@ at a fifth of the call time, and reads as well or better. Open, in order:
 - **Booking still heavier than the full card's**: beliefs touched 34-37
   times in 20 beats against its 12 (held beliefs re-confirmed beat after
   beat), intentions 22-30 against 15. The notes showed the likely cause
-  (below): a check asked AFTER the call reads the character's own
-  restating of what it holds as confirmation. The belief check
-  (`belief_touched`) has the same shape and is still asked after; moving it
-  needs the revise gate rethought first -- today a belief is revised only
-  when the decision model calls it overturned AND a `changes` line aims at
-  it, so a character's own inference would be lost if the verdict moved
-  before its reply. Measure the note check's move first.
+  (below): a check read against a state that already states the thing
+  checked -- the note in the notebook, the memories behind it -- calls
+  almost any beat confirmation. The belief check (`belief_touched`) is
+  asked against a state listing every held belief; asking it against the
+  moment alone (`moment_text`) is the candidate. It changes when a belief
+  can be revised -- today only when the decision model calls it overturned
+  AND a `changes` line aims at it -- so replay it before adopting it.
 - **The notebook** (built 2026-09-27, `mind/notebook.py`): concerns carrying
   what settles them, projects, what the mind thinks of people and things
   and what it thinks they think, and reminders, as one bounded view with
@@ -1384,17 +1384,21 @@ at a fifth of the call time, and reads as well or better. Open, in order:
   payload a median 1,218 characters smaller; conduct no different across two
   runs of each condition. Carried across each character's own captures
   (round eight, `--chain`): Margit wrote 20 notes and revised 21 by id in 16
-  beats, Anselm 6 and 6 in 16. Four findings, each changed 2026-09-27:
-  notes drifted into a log of what happened (a card line now says memory
-  keeps that); 27 of the 29 nudges confirmed, several on beats that bore
-  nothing out (the note check now runs before the call, against what reached
-  the mind); a worry written in `changes` and in the notebook arrived twice
-  (kept once); a commitment adoption refused as circular was lost (kept as
-  an intention, `affect.adoption_refusal`). Open: re-run the chains and
-  measure the confirmation share with the check before the call (the tool
-  now records its probabilities); no note struck in play yet; the knobs
-  (`mind/notebook.py`, the kinds for things in `theory_of_mind`) are the
-  owner's.
+  beats, Anselm 6 and 6 in 16. Findings, each changed 2026-09-27: 27 of
+  the 29 nudges confirmed, several on beats that bore nothing out -- moved
+  before the call it was still 21 of 21 (round nine), because the whole
+  state carried the note in the notebook and the memories behind it; the
+  check now reads the moment alone (`moment_text`), which on 56
+  hand-labelled checks called a beat that told nothing new "bore it out" 9
+  times of 34 instead of 28 (one labeller; not yet replayed in a chain); one
+  concern appeared twice, cut at two lengths, because the read-back held
+  concerns cut at 300 characters while the view derived their ids from the
+  whole words (`notebook.concern_text`, one reader now); a commitment
+  adoption refused as circular was lost (kept as an intention,
+  `affect.adoption_refusal`). Open: notes still drift into a log of what
+  happened in round nine despite a card line against it; no note struck in
+  play yet; the knobs (`mind/notebook.py`, the kinds for things in
+  `theory_of_mind`) are the owner's.
 - Then the default switched, and the full card, its kernel compiler and its
   prompt paragraphs deleted so two contracts do not linger.
 

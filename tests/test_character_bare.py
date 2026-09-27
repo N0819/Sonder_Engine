@@ -140,7 +140,7 @@ def test_every_question_reads_only_this_minds_own_holding():
     names is one this mind perceived, was given or already holds."""
     from llm.prompts import character_jev_options
     h = _holding(notebook=_notebook_view())
-    questions = {**jev.before_questions(h), **jev.after_questions(h, _reply())}
+    questions = {**jev.before_questions(h), **jev.note_check_questions(h), **jev.after_questions(h, _reply())}
     assert any(k.startswith("held:") for k in questions), "the note check is covered"
     offered = set()
     for q in questions.values():
@@ -473,9 +473,10 @@ NOTEBOOK_SCRIPT = [
 
 
 def _both_batteries(h, reply):
-    """What the engine reads back: the questions asked before the call and
-    those asked after it (`agents.character` merges the two answer sets)."""
-    return {**jev.before_questions(h), **jev.after_questions(h, reply)}
+    """What the engine reads back: the questions asked before the call (the
+    dispute check and the note check, `jev.ask_before`) and those asked
+    after it (`agents.character` merges the answer sets)."""
+    return {**jev.before_questions(h), **jev.note_check_questions(h), **jev.after_questions(h, reply)}
 
 
 def test_what_the_character_writes_in_its_notebook_lands_where_it_belongs():
@@ -563,7 +564,8 @@ def test_an_act_turns_the_body_and_can_cut_someone_off():
     h = _holding()
     questions = jev.after_questions(h, _reply())
     assert set(questions["do:2:look"]["criteria"]) == {"p0", "p1", "around", "no_target"}
-    assert set(questions["do:2:interrupts"]["criteria"]) == {"p0", "nobody"}, "only Tomas spoke"
+    assert set(questions["do:2:interrupts"]["criteria"]) == {"p0", "no_target"}, "only Tomas spoke"
+    assert "finishing" in questions["do:2:interrupts"]["instructions"]
     script = [("do:1:look", "around"), ("do:2:look", "p0"), ("do:2:interrupts", "p0")]
     out, _ = character_bare.compile_bare(_reply(), _answer(script)(questions), h)
     acts = [e for e in out["sequence"] if e["type"] == "action"]
@@ -670,16 +672,42 @@ def test_a_worry_written_twice_is_one_concern():
     assert out["active_state"]["active_concerns"] == ["whether Tomas tells Father"]
 
 
-def test_a_held_note_is_checked_before_the_call_against_what_reached_the_mind():
-    """Asked after the call, with the reply and its reasoning in the state,
-    27 of the 29 nudges in the round-8 chains were "bore it out"."""
-    h = _holding(notebook=_notebook_view())
-    before = jev.before_questions(h)
-    assert {k for k in before if k.startswith("held:")} == {
-        "held:0:touched", "held:0:now", "held:1:touched", "held:1:now"}
+def test_a_held_note_is_checked_against_the_moment_alone():
+    """Asked after the call, 27 of the 29 nudges in the round-8 chains were
+    "bore it out"; asked before it against the whole state, still 21 of 21.
+    Against the moment alone -- who is here and what just reached the mind --
+    beats that told the mind nothing new were called "bore it out" 9 times of
+    34 instead of 28 (56 hand-labelled checks, 2026-09-27)."""
+    h = _holding(notebook=_notebook_view(), beliefs=["Mara is honest with me."],
+                 reasoning="I think she lied.")
+    checks = jev.note_check_questions(h)
+    assert set(checks) == {"held:0:touched", "held:0:now", "held:1:touched", "held:1:now"}
+    assert not any(k.startswith("held:") for k in jev.before_questions(h))
     assert not any(k.startswith("held:") for k in jev.after_questions(h, _reply()))
-    assert "YOUR OWN THINKING" not in jev.state_text(h), "the state asked before carries no reply"
-    assert jev.before_questions(_holding(notebook=_notebook_view(), events=[])) == {}
+    moment = jev.moment_text(h)
+    assert "Mara pockets the brass key." in moment and "Mara, Tomas" in moment
+    for kept_out in ("Mara keeps secrets", "lent me her coat", "Mara is honest", "recover the key",
+                     "I think she lied", "HOW YOU ARE"):
+        assert kept_out not in moment, kept_out
+    assert jev.note_check_questions(_holding(notebook=_notebook_view(), events=[])) == {}
+
+
+def test_both_checks_before_the_call_are_asked_and_merged(monkeypatch):
+    """The engine and the replay tool ask through `ask_before`: the dispute
+    check against the whole state, the note check against the moment."""
+    h = _holding(notebook=_notebook_view())
+    asked = []
+
+    def fake_ask(state, questions):
+        asked.append((state, set(questions)))
+        return {k: {"type": "choice", "probabilities": {"no": 1.0}} for k in questions}
+
+    monkeypatch.setattr(jev, "ask", fake_ask)
+    answers = jev.ask_before(h)
+    (dispute_state, dispute_keys), (check_state, check_keys) = asked
+    assert dispute_keys == {"dispute:0", "dispute:1"} and dispute_state == jev.state_text(h)
+    assert check_keys == set(jev.note_check_questions(h)) and check_state == jev.moment_text(h)
+    assert set(answers) == dispute_keys | check_keys
 
 
 def test_striking_an_entry_the_mind_was_not_shown_files_nothing():
@@ -690,3 +718,31 @@ def test_striking_an_entry_the_mind_was_not_shown_files_nothing():
     out, warnings = character_bare.compile_bare(reply, _answer([])(questions), h)
     assert out["notebook_ops"] == [] and not any(u.get("op") for u in out["mind_model_updates"])
     assert any("'n99'" in w for w in warnings)
+
+
+def test_a_long_concern_is_struck_and_rewritten_by_its_own_id():
+    """Round 8 (2026-09-27): the view gave a concern its id from the whole
+    stored text, and the read-back held it cut at `ITEM_CHARS` -- so a
+    concern past that length could never be struck or rewritten by its id.
+    Each rewrite added a copy, the held one came back truncated, and the
+    chains showed the same worry twice, cut at two lengths."""
+    long = "Kit has told me: " + "the burns are from the rescue, " * 12 + "and I believe him."
+    assert len(long) > jev.ITEM_CHARS
+    view = notebook.view({}, 10, concerns=[long])
+    (shown,) = view["on_your_mind"]
+    h = character_bare.holding_from("Wren", {}, {"self": {}}, [], {}, {"active_concerns": [long]},
+                                    notebook_view=view)
+    assert h.concerns == [long], "held whole: the id is read off the words the view read"
+    reply = {**_reply(), "notebook": [{"id": shown["id"], "note": "Kit pulled Wat out of the fire",
+                                       "until": "the inquiry concludes"}]}
+    out, _ = character_bare.compile_bare(reply, _answer([])(_both_batteries(h, reply)), h)
+    assert out["active_state"]["active_concerns"] == [
+        "Kit pulled Wat out of the fire (settled when: the inquiry concludes)"]
+    # Left alone, it is written back whole, never cut.
+    untouched = {**_reply(), "notebook": []}
+    out, _ = character_bare.compile_bare(untouched, _answer([])(_both_batteries(h, untouched)), h)
+    assert out["active_state"]["active_concerns"] == [long]
+    # A concern kept as a record is read by its text, in the view as in the holding.
+    as_record = {"text": long, "since": 3}
+    (shown_record,) = notebook.view({}, 10, concerns=[as_record])["on_your_mind"]
+    assert shown_record["id"] == shown["id"] and "since" not in shown_record["note"]

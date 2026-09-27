@@ -234,7 +234,7 @@ def _bare_arm(name, sheet, payload, own, layout, feelings, notebook=False, store
     h = character_bare.holding_from(
         name, sheet, payload, _observations(payload), payload.get("memory") or {},
         (own.get("active_state") or {}), language="en", notebook_view=view)
-    before, before_s = _timed(jev.ask, jev.state_text(h), jev.before_questions(h))
+    before, before_s = _timed(jev.ask_before, h)
     disputed = jev.read_before(before, h)
     dispute_shares = [round(_probabilities(before.get(f"dispute:{i}")).get("yes", 0.0), 3)
                       for i in range(len(h.memories))] if before else []

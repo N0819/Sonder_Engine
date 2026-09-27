@@ -984,7 +984,7 @@ exactly where commit would have dropped the model's.
 | `interaction.addresses`, `expects_response`, interrupts | `line_to`, `line_expects`, `line_interrupts` |
 | `observable` (and "an inner act has none") | `act_seen`: an act no one could see or hear is imperceptible; otherwise the act's own `do` text is what observers get -- a motive written there reaches them (open, UNBUILT §6.17) |
 | `targets`, follow, ending a contact | `act_target`, `follow`, `contact_end` per standing contact |
-| an act's `look` (a body faced, or `around` for a sweep) and `interrupts` | `act_look` over the people here, all around, or no one -- asked alone too, since a sweep is how a mind takes in an empty room; `act_interrupts` over those who spoke (restored 2026-09-27) |
+| an act's `look` (a body faced, or `around` for a sweep) and `interrupts` | `act_look` over the people here, all around, or no one -- asked alone too, since a sweep is how a mind takes in an empty room; `act_interrupts` over those who spoke, asked as what stops someone finishing, with a plain "No one." (an interruption truncates the other's line; that wording wrongly flagged 6 of 27 replayed acts where "cut off what someone is saying" flagged 11, both catching 4 of 4 made-up interruptions; walking away while someone talks is still read as one). Restored 2026-09-27 |
 | wants' `serves` and `urgency`; enact/suppress ids | `want_serves`, `want_urgency`; the want is enacted, `held_back` suppressed |
 | tells' `channel`, `subtlety`; "at most two"; "no subtler than 0.4 in a crisis" | `tell_channel`, `tell_subtlety`; `MAX_TELLS` (2) and, under `self.crisis`, the 0.4 ceiling in code |
 | readings of people (`about_entity`, `kind`, `confidence`, evidence) | the character's notebook entries (below); `note_kind`, `note_about`, `based_now` / `based_memory` |
@@ -992,9 +992,9 @@ exactly where commit would have dropped the model's.
 | memory re-reading (`memory_ref`, evidence not the disputed row) | `which_memory` + evidence from anything else |
 | intentions add/abandon (the character's) and progress/block/satisfy/nonviable | add and give-up are `changes` lines; `aim_moved` per steering aim |
 | associations, relationships (+-0.05, +-0.2 on a real break) | `cue_present`; five `rel_axis` steps x `REL_STEP` (0.05), x `REL_BREAK_STEP` (0.2) when `rel_break` -- the card's rule, now code |
-| concerns, lines kept, memory effects, salience | new worries are `changes` lines or notebook entries, each once (`notebook.concern_id`: a worry written in both arrived twice in the round-8 chains); `concern_settled`, `keep_line`, `memory_shaped`, `salience` |
+| concerns, lines kept, memory effects, salience | new worries are `changes` lines or notebook entries, each kept once (`notebook.concern_id`) and held whole (`notebook.concern_text`); `concern_settled`, `keep_line`, `memory_shaped`, `salience` |
 | giving up a promise (`waiting_ops`, dead in the kernel) | a `changes` line and `which_promise` |
-| the appraisal: six axes, pain and pleasure with a named cause, goal impacts, the memory echo | `novelty`, `control`, `coping`, `norm`, `self_fit`, `pleasant`; `pain` / `body_pleasure` per event (the event is the cause); `impact`, `impact_certain`, `impact_agency` per live aim, the drive included; `echo` and its three grades, and `echo_body` for the signed `somatic_echo` (a tightening or a warmth; written as 0.0 on every bare beat until 2026-09-27) |
+| the appraisal: six axes, pain and pleasure with a named cause, goal impacts, the memory echo | `novelty`, `control`, `coping`, `norm`, `self_fit`, `pleasant`; `pain` / `body_pleasure` per event (the event is the cause); `impact`, `impact_certain`, `impact_agency` per live aim, the drive included; `echo` and its three grades, and `echo_body` for the signed `somatic_echo` (a tightening or a warmth; written as 0.0 on every bare beat until 2026-09-27). The full card never explained the field and its model wrote small positive strengths (0.01-0.4) on 129 of the 135 echoes in the four stories' captures, 0 on the rest, whatever the memory; `echo_body` came out unpleasant on 24 of round nine's 25 echoes in two grim stories (-0.16 to -0.93) and about nothing on the other -- unmeasured beyond that |
 | `stress.coping_mode`, `hedonic.released` | `coping_mode` over the card's strategies; `released`, asked only above `RELEASE_ASK_FLOOR` (0.3) of charge |
 
 **One behaviour change to watch:** the drive is now one of the aims every
@@ -1063,12 +1063,20 @@ the engine already had or now has -- one store per kind of thing, no copies:
   each note about a subject in play whether this beat bore it out, cast
   doubt on it or told against it, NUDGES its confidence -- never strikes
   it. A mind may hold to what the evidence is against; only it lets go.
-  That check is asked BEFORE the call, against what reached the mind: asked
-  after, with the reply and its reasoning in the state, 27 of the 29 nudges
-  in the round-8 chains were "bore it out" -- a man sitting down bore out an
-  accusation, a mutter too faint to make out bore out who brought the news
-  -- because the character's own restating of its note read as
-  confirmation. A note the reply changes or strikes itself is not nudged.
+  That check is asked before the call, in its own request, against the
+  moment alone (`moment_text`: who is here and what just reached the mind,
+  never its notebook, memories or aims). Asked after the call, 27 of the 29
+  nudges in the round-8 chains were "bore it out" -- a man sitting down bore
+  out an accusation, a mutter too faint to make out bore out who brought the
+  news. Moved before the call against the whole state it was still 21 of 21
+  in round nine: the question is about what just happened, and the decision
+  model read the notebook's own copy of the note, and the memories that
+  first supported it, as confirmation. On 56 hand-labelled checks (one
+  labeller), beats that told the mind nothing new were called "bore it out"
+  28 times of 34 against the whole state and 9 of 34 against the moment
+  (agreement 24 and 40 of 56, real confirmations caught 16 and 14 of 16);
+  the wording was not the cause (two rewordings scored 33 and 30). A note
+  the reply changes or strikes itself is not nudged.
 - `to_keep` -- reminders (`state["notebook"]`, `apply_notebook_ops`): facts
   and things to remember, kept until struck.
 
@@ -1128,12 +1136,16 @@ Margit (16 of 18 beats read back) wrote 20 new notes, revised 21 by id and
 had 21 nudged; Anselm (16 beats) wrote 6, revised 6, changed a reminder 12
 times and had 8 nudged. What it showed, and what changed for it: notes
 drifted into a log of what happened (the card now says a note is one line of
-what the character thinks, memory keeps what happened); 27 of the 29 nudges
-confirmed (the check moved before the call, above); a worry written in `changes` and
-again in the notebook arrived twice (concerns are kept once by
-`concern_id`); a commitment adoption refused as circular was lost (kept as
-an intention now). Conduct cost nothing measurable against the same beats
-without the notebook.
+what the character thinks, memory keeps what happened -- round nine still
+wrote logs, so this is not settled); 27 of the 29 nudges confirmed (the
+check now reads the moment alone, above); one concern appeared twice, cut at
+two lengths -- the view derived a concern's id from its whole words while
+the read-back held it cut at 300 characters, so a longer concern could never
+be struck or rewritten by its id and each rewrite added a copy
+(`notebook.concern_text` is now the one reader of a concern's words); a
+commitment adoption refused as circular was lost (kept as an intention
+now). Conduct cost nothing measurable against the same beats without the
+notebook.
 
 ### How it was measured
 
