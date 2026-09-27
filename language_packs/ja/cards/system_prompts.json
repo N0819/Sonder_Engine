@@ -17,6 +17,12 @@
   "senses_note": {
     "$text": "senses_note.txt"
   },
+  "premise_title": {
+    "$text": "premise_title.txt"
+  },
+  "premise_title_you": {
+    "$text": "premise_title_you.txt"
+  },
   "interior_note": {
     "$text": "interior_note.txt"
   },

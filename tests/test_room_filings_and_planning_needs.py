@@ -149,28 +149,35 @@ def test_a_containment_room_need_is_dropped_at_commit(temp_db, wired):
     assert [n["subject"] for n in opened] == ["drowned_chapel"]
 
 
-# ---- the opening's facts are the premise, and the cast holds it ----------
+# ---- the opening delivers the author's premise, never the Director's truths --
 #
 # Live, chat 3 "Harrowell House" (2026-09-14): the scenario said "the evening
 # after the funeral"; the opening commit recorded "Mr Harrowell's funeral took
 # place today" as a `setting_fact` need no plan answered, and no mind received
 # it. A character whose card said the funeral was this week played it as
-# tomorrow for three beats. What the establish stage states is the author's
-# premise, and everyone standing in the opening already knows it.
+# tomorrow for three beats. Everyone standing in the opening knows the
+# premise -- which is the scenario as its author wrote it. The establish
+# stage's world facts are what is TRUE, card secrets among them, and on
+# 2026-09-26 four of six test openings delivered one to the whole cast.
 
 FUNERAL = "Mr Harrowell's funeral took place today."
+PREMISE = ("Harrowell House, the evening after the funeral. The family has "
+           "gathered in the drawing room for the reading of the will.")
+SECRET = "Ysolde has written to her brother every month for ten years and told no one."
 
 
-def _cast_story(temp_db, *, opening, world_facts):
+def _cast_story(temp_db, *, opening, world_facts, scenario=""):
     """A story with two attached characters on default cards, whose Director
     stage asserted `world_facts` -- at the opening (`director_establish`,
-    turn 0, no resolve) or on a later beat (`director_resolve`)."""
+    turn 0, no resolve) or on a later beat (`director_resolve`) -- under
+    `scenario`."""
     from story.character_schema import default_character_data
     ctx, book = _story(temp_db)
     cid = ctx.chat.id
     # `_story` hands the book to the context alone; a real story's row names
     # its canon book too, and the premise is filed into that book.
-    temp_db.qi("UPDATE chats SET lorebook_id=? WHERE id=?", (book, cid))
+    temp_db.qi("UPDATE chats SET lorebook_id=?, scenario=? WHERE id=?", (book, scenario, cid))
+    ctx.chat.scenario = scenario
     for name in ("Ysolde", "Perrin"):
         char_id = temp_db.qi(
             "INSERT INTO characters(name,sheet,source,created,resource_uid) "
@@ -215,40 +222,63 @@ def _premise_rows(temp_db, cid):
         "JOIN chats c ON c.lorebook_id=e.lorebook_id WHERE c.id=?", (cid,))]
 
 
-def test_the_openings_facts_reach_every_cast_member(temp_db, wired):
-    """A fact the establish stage states is delivered through the one
-    channel a mind knows the world by standing: a `common`, explicitly
-    public entry in the story's canon book. Every attached character reads
-    it on the next beat."""
-    ctx, _ = _cast_story(temp_db, opening=True, world_facts=[
-        {"fact": FUNERAL, "source": {"kind": "scenario"}}])
+def test_the_premise_as_its_author_wrote_it_reaches_every_cast_member(temp_db, wired):
+    """The scenario is delivered whole through the one channel a mind knows
+    the world by standing: a `common`, explicitly public entry in the
+    story's canon book. Every attached character reads it on the next beat
+    -- the Harrowell case, met by the author's own sentence."""
+    ctx, _ = _cast_story(temp_db, opening=True, world_facts=[FUNERAL], scenario=PREMISE)
     prepared = cm.prepare_mapping_commit(ctx)
     assert prepared["mout"]["premise"] == 1
     cm.commit_mapping(ctx, "n", prepared=prepared)
     knowledge = _cast_knowledge(temp_db, ctx)
     assert set(knowledge) == {"Ysolde", "Perrin"}
     for name, held in knowledge.items():
-        assert FUNERAL in held, name
+        assert PREMISE in held, name
     (row,) = _premise_rows(temp_db, ctx.chat.id)
+    assert row["content"] == PREMISE
     assert row["knowledge_tag"] == cm.OPENING_PREMISE_KNOWLEDGE_TAG
     assert row["knowledge_range"] == "global"
     assert row["circles"] == "[]", "public by declaration, not by inheritance"
     assert row["source_notes"].startswith(cm.OPENING_PREMISE_SOURCE_PREFIX)
 
 
-def test_the_openings_need_is_still_recorded_and_names_the_entry(temp_db, wired):
-    """Delivery does not retire the Room's work: the `setting_fact` need is
-    recorded as before, and the need and the entry reference each other,
-    so the bible's filing can never disagree with what the cast was told."""
-    ctx, _ = _cast_story(temp_db, opening=True, world_facts=[FUNERAL])
+def test_a_truth_the_director_states_at_the_opening_reaches_no_one(temp_db, wired):
+    """The establish stage states what IS true -- a card's secret included --
+    and true is not known: 2026-09-26, a daughter's secret letters, filed
+    as the opening's world fact, rode every call of the two characters she
+    kept them from. Only the author's premise is delivered; the Director's
+    fact is a need, as on every beat, and names no entry."""
+    ctx, _ = _cast_story(temp_db, opening=True, world_facts=[SECRET], scenario=PREMISE)
     cm.commit_mapping(ctx, "n", prepared=cm.prepare_mapping_commit(ctx))
+    for name, held in _cast_knowledge(temp_db, ctx).items():
+        assert SECRET not in held, name
+    assert [r["content"] for r in _premise_rows(temp_db, ctx.chat.id)] == [PREMISE]
     (need,) = open_planning_needs(ctx.chat.id)
     assert (need["kind"], need["reason"]) == ("thing", "setting_fact")
-    assert need["surface"]["fact"] == FUNERAL
-    (row,) = _premise_rows(temp_db, ctx.chat.id)
-    assert need["surface"]["entry_uid"] == row["entry_uid"]
-    assert need["uid"] in row["source_notes"]
-    assert "delivered" in " ".join(ctx.warnings)
+    assert need["surface"]["fact"] == SECRET
+    assert "entry_uid" not in need["surface"]
+
+
+def test_a_premise_written_to_the_player_says_whom_you_means(temp_db, wired, monkeypatch):
+    """A scenario is often written to the player ("You are the new
+    deputy"), so the entry's title says whose "you" it is; with no player
+    to name it says only whose words these are."""
+    monkeypatch.setattr(cm, "_player_name_or_none", lambda ctx: "Tomaso Ricci")
+    ctx, _ = _cast_story(temp_db, opening=True, world_facts=[],
+                         scenario="You are the new deputy of Hollin Ford.")
+    (entry,) = cm.prepare_mapping_commit(ctx)["premise"]
+    assert entry["title"].count("Tomaso Ricci") == 2
+    monkeypatch.setattr(cm, "_player_name_or_none", lambda ctx: None)
+    (entry,) = cm.prepare_mapping_commit(ctx)["premise"]
+    assert "Tomaso" not in entry["title"] and entry["title"]
+
+
+def test_an_opening_with_no_scenario_delivers_nothing(temp_db, wired):
+    ctx, _ = _cast_story(temp_db, opening=True, world_facts=[FUNERAL])
+    cm.commit_mapping(ctx, "n", prepared=cm.prepare_mapping_commit(ctx))
+    assert _premise_rows(temp_db, ctx.chat.id) == []
+    assert all(held == [] for held in _cast_knowledge(temp_db, ctx).values())
 
 
 def test_a_later_beats_fact_is_a_need_and_no_entry(temp_db, wired):
@@ -266,9 +296,10 @@ def test_a_later_beats_fact_is_a_need_and_no_entry(temp_db, wired):
 
 
 def test_a_rerun_of_the_opening_files_the_premise_once(temp_db, wired):
-    """The entry uid is minted from the fact, so re-committing the opening
-    (a reroll, a rerun from stage) finds its own filing and writes nothing."""
-    ctx, _ = _cast_story(temp_db, opening=True, world_facts=[FUNERAL])
+    """The entry uid is minted from the premise's text, so re-committing the
+    opening (a reroll, a rerun from stage) finds its own filing and writes
+    nothing."""
+    ctx, _ = _cast_story(temp_db, opening=True, world_facts=[FUNERAL], scenario=PREMISE)
     cm.commit_mapping(ctx, "n", prepared=cm.prepare_mapping_commit(ctx))
     cm.commit_mapping(ctx, "n2", prepared=cm.prepare_mapping_commit(ctx))
     assert len(_premise_rows(temp_db, ctx.chat.id)) == 1

@@ -90,7 +90,7 @@
 | `persist/commit_destruction.py` | 414 | Single- and multi-book destruction cascades, retirement, and latency-gated news. | `core.db`, `mind.memory`, `persist.commit_common`, `world.mechanics`, `world.spatial`, `world.spatial_frames` |
 | `persist/commit_entities.py` | 576 | world_entities projection of the scene commit, awareness gate, disguise supersession. | `core.db`, `persist.commit_common`, `story.character_schema`, `story.scene`, `world.spatial` |
 | `persist/commit_ledgers.py` | 676 | Pending-obligation and world-pressure debt ledgers. | `core.db`, `core.pipeline_context`, `persist.commit_common` |
-| `persist/commit_mapping.py` | 914 | Lore/book mapping commit: book ops, lore ops, canon fallback ops, offscreen-event normaliser. | `core.db`, `core.frames`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.provenance_text`, `world.spatial` |
+| `persist/commit_mapping.py` | 918 | Lore/book mapping commit: book ops, lore ops, canon fallback ops, offscreen-event normaliser. | `core.db`, `core.frames`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.provenance_text`, `world.spatial` |
 | `persist/commit_mechanics.py` | 524 | Transit/news sweeps, the world-event spine, information carriers, cast changes. | `core.db`, `persist.commit_common`, `persist.commit_scene_state`, `story.character_schema`, `story.scene`, `world.mechanics` |
 | `persist/commit_memory.py` | 2113 | Pre-lock memory preparation: per-mind memories and the psychology deltas riding with them. | `core.db`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_background`, `persist.commit_common`, `persist.commit_place_graph`, `story.character_schema`, `world.charter`, `world.comfort`, `world.exposure`, `world.spatial`, `world.stimulation`, `world.survival` |
 | `persist/commit_memory_write.py` | 354 | The durable memory write and its out-of-band consolidation twin. | `core.db`, `mind.memory`, `persist.commit_memory`, `story.character_schema`, `story.scene` |
@@ -1171,14 +1171,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `commit_mapping()` | 667 | 223 lines |
-| `_apply_mapping_book_ops()` | 142 | 106 lines |
-| `_drop_needs_the_beat_answers()` | 543 | 83 lines |
-| `prepare_mapping_commit()` | 250 | 76 lines |
-| `_setting_fact_needs()` | 404 | 53 lines |
-| `_answering_bodies()` | 490 | 51 lines |
-| `_file_opening_premise()` | 355 | 47 lines |
-| `_attach_committed_surface()` | 628 | 37 lines |
+| `commit_mapping()` | 671 | 223 lines |
+| `_apply_mapping_book_ops()` | 147 | 106 lines |
+| `_drop_needs_the_beat_answers()` | 547 | 83 lines |
+| `prepare_mapping_commit()` | 255 | 73 lines |
+| `_answering_bodies()` | 494 | 51 lines |
+| `_setting_fact_needs()` | 412 | 49 lines |
+| `_file_opening_premise()` | 365 | 45 lines |
+| `_attach_committed_surface()` | 632 | 37 lines |
 
 ### `persist/commit_mechanics.py`
 

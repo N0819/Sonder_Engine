@@ -19,22 +19,27 @@ the engine already held or was not the Director's to author:
     physical seat is a SETTING fact, and the setting bible is the Writers'
     Room's to file with provenance and a knowledge gate (v2 § 9.4). It is
     recorded as a `setting_fact` need (`world/planning_needs.py`) when no
-    entry already covers it, and filed by nobody here -- EXCEPT AT THE
-    OPENING. The facts the establish stage states are the scenario's own
-    PREMISE, restated from what the author wrote as already so, and a
-    premise is public knowledge every cast member standing in that opening
-    holds. Until the Room files the bible, each one is delivered to the
-    cast through the one channel a mind already knows a thing by standing
-    rather than by living -- a `common`, explicitly public entry in the
-    story's canon book, read by `knowledge_for_character` -- and the need
-    is STILL recorded, carrying the entry's uid on its surface while the
-    entry's provenance names the need, so the two are one record seen from
-    two sides. A later beat's facts follow the need-only rule unchanged.
-    Live, chat 3 "Harrowell House" (2026-09-14): the scenario said "the
-    evening after the funeral", the opening recorded "Mr Harrowell's
-    funeral took place today" as a need no plan answered, no mind received
-    it, and a character whose card said the funeral was this week played it
-    as tomorrow for three beats.
+    entry already covers it, and filed by nobody here -- at every beat, the
+    opening included.
+  * THE PREMISE -- WHAT THE AUTHOR WROTE, AT THE OPENING. A premise is
+    public knowledge every cast member standing in the opening holds, and
+    until the Room files the bible it is delivered through the one channel
+    a mind already knows a thing by standing rather than by living: a
+    `common`, explicitly public entry in the story's canon book, read by
+    `knowledge_for_character`. The premise is the chat's SCENARIO as its
+    author wrote it, one entry titled to say whom its "you" means -- never
+    the establish stage's facts. Live, chat 3 "Harrowell House"
+    (2026-09-14): the scenario said "the evening after the funeral" and no
+    mind received it, so a character whose card said the funeral was this
+    week played it as tomorrow for three beats; the answer then delivered
+    the establish stage's world facts. Those are what IS TRUE, which is that
+    stage's office, and TRUE IS NOT KNOWN: measured 2026-09-26 on six test
+    openings (`docs/experiments/FEELINGS_EXPRESSIVE_CARDS_2026_09_26.md`),
+    four filed something a card keeps private or a hearing gate would have
+    held -- a daughter's secret letters, in every call of the two
+    characters she kept them from; a witness's hidden past, public to the
+    magistrate questioning her; a line spoken alone on a breakwater. The
+    author's own words decide it, with no model in the loop.
   * INTRODUCTIONS -- the Director's typed `introductions`, applied under
     the same presence and same-room gates the model's verdicts were
     (UNBUILT § 3.5 P7's "validated by model judgment", closed here).
@@ -73,11 +78,12 @@ GENERATED_SOURCE_PREFIX = "engine-generated"
 #: where the ledger caps a subject.
 SETTING_FACT_SUBJECT_CHARS = 120
 
-#: The provenance stamp on a premise entry: a fact the opening's establish
-#: stage stated, delivered to the cast as public knowledge until the Writers'
-#: Room files the setting bible. Greppable on `source_notes` the way
+#: The provenance stamp on a premise entry: the scenario as its author wrote
+#: it, delivered to the cast as public knowledge until the Writers' Room
+#: files the setting bible. Greppable on `source_notes` the way
 #: `GENERATED_SOURCE_PREFIX` is, and distinct from it: a premise is the
-#: AUTHOR'S fact, not one the engine invented.
+#: AUTHOR'S, not something the engine invented. (Entries filed before
+#: 2026-09-26 under this prefix hold the establish stage's world facts.)
 OPENING_PREMISE_SOURCE_PREFIX = "opening-premise"
 
 #: The depth tier a premise is filed at: what everybody standing in the
@@ -87,9 +93,8 @@ OPENING_PREMISE_KNOWLEDGE_TAG = "common"
 
 
 def premise_entry_uid(cid, fact):
-    """The uid of the premise entry for one fact, minted from the fact's own
-    normalized text so a rerun of the opening files the same fact once and
-    the need raised for it names the same entry."""
+    """The uid of the premise entry for one text, minted from its own
+    normalized form so a rerun of the opening files the premise once."""
     import hashlib
     material = "%s|%s" % (cid, _normalized_fact(fact))
     return "premise_" + hashlib.sha256(material.encode("utf-8")).hexdigest()[:16]
@@ -254,7 +259,7 @@ def prepare_mapping_commit(ctx):
     introductions, the compiler's planning needs, and the setting facts the
     Director asserted that no existing entry covers -- each a NEED for the
     Writers' Room, never a filing of its own -- and, at the opening alone,
-    the premise entries those facts are delivered to the cast as, embedded
+    the premise entry the scenario is delivered to the cast as, embedded
     here so the commit only writes.
     """
     chat = ctx.chat
@@ -280,18 +285,15 @@ def prepare_mapping_commit(ctx):
              if isinstance(n, dict)]
     seed = f"tick:{cid}:{turn.idx}"
 
-    # The opening is the one beat whose facts are the scenario's PREMISE
-    # rather than something the Director resolved: the establish stage
-    # restates what the author wrote as already so, and every cast member
-    # standing in it holds that. Delivered (module docstring); a later beat's
-    # facts follow the need-only rule unchanged.
+    # The opening delivers the scenario as its author wrote it -- the premise
+    # every cast member standing in it holds -- and its facts, like every
+    # beat's, are needs only (module docstring: true is not known).
     opening = not ctx.director_resolve and bool(ctx.director_establish)
-    fact_needs = _setting_fact_needs(ctx, res, world_facts, book_ids,
-                                     deliver=opening)
-    premise = _opening_premise(ctx, fact_needs) if opening else []
+    fact_needs = _setting_fact_needs(ctx, res, world_facts, book_ids)
+    premise = _opening_premise(ctx) if opening else []
     needs = needs + fact_needs
 
-    if not (introductions or needs):
+    if not (introductions or needs or premise):
         return {
             "skipped": True,
             "mout": {"skipped": "nothing new to commit"},
@@ -325,31 +327,39 @@ def prepare_mapping_commit(ctx):
     }
 
 
-def _opening_premise(ctx, fact_needs):
-    """The premise entries the opening's setting-fact needs are delivered
-    as, embedded HERE -- before the write lock, like every other slow
-    preparation -- so the commit only writes. One per need, keyed by the
-    entry uid the need already carries."""
-    out = []
-    for need in fact_needs:
-        surface = need.get("surface") or {}
-        fact = str(surface.get("fact") or "")
-        uid = str(surface.get("entry_uid") or "")
-        if not (fact and uid):
-            continue
-        try:
-            vec, model_key, dims, fell_back = _embed_lore_document("", fact)
-        except Exception as exc:  # the delivery does not wait on a provider
-            ctx.add_warning(f"premise fact not embedded, filed for repair: {exc}")
-            vec, model_key, dims, fell_back = None, None, None, True
-        out.append({
-            "entry_uid": uid, "fact": fact,
-            "title": str(need.get("subject") or fact)[:SETTING_FACT_SUBJECT_CHARS],
-            "need_uid": str(need.get("uid") or ""),
-            "_embedding": vec, "_embedding_model": model_key,
-            "_embedding_dim": dims, "_embedding_fell_back": bool(fell_back),
-        })
-    return out
+def _premise_title(ctx):
+    """What a mind reading the premise is told it is: the author's own words,
+    and -- because a scenario is often written to the player ("You are the
+    new deputy...", 32 of the owner's 132) -- whom its "you" means, so a
+    character does not read the player's role as its own."""
+    from language_runtime import story_language
+    from llm.prompts import prompt_fragment
+
+    language = story_language(ctx.chat.id)
+    player = _player_name_or_none(ctx)
+    if player:
+        return prompt_fragment("premise_title_you", language).strip().replace("{player}", player)
+    return prompt_fragment("premise_title", language).strip()
+
+
+def _opening_premise(ctx):
+    """The premise entry the opening delivers: the chat's scenario as its
+    author wrote it, whole, embedded HERE -- before the write lock, like
+    every other slow preparation -- so the commit only writes."""
+    text = str(getattr(ctx.chat, "scenario", "") or "").strip()
+    if not text:
+        return []
+    try:
+        vec, model_key, dims, fell_back = _embed_lore_document("", text)
+    except Exception as exc:  # the delivery does not wait on a provider
+        ctx.add_warning(f"premise not embedded, filed for repair: {exc}")
+        vec, model_key, dims, fell_back = None, None, None, True
+    return [{
+        "entry_uid": premise_entry_uid(ctx.chat.id, text), "fact": text,
+        "title": _premise_title(ctx),
+        "_embedding": vec, "_embedding_model": model_key,
+        "_embedding_dim": dims, "_embedding_fell_back": bool(fell_back),
+    }]
 
 
 def _file_opening_premise(ctx, book_id, premise):
@@ -372,10 +382,8 @@ def _file_opening_premise(ctx, book_id, premise):
             uid = entry["entry_uid"]
             if q("SELECT id FROM lore_entries WHERE entry_uid=?", (uid,), one=True):
                 continue
-            stamp = "%s: stated by director_establish at turn %s" % (
+            stamp = "%s: the scenario as its author wrote it, filed at turn %s" % (
                 OPENING_PREMISE_SOURCE_PREFIX, turn_idx)
-            if entry.get("need_uid"):
-                stamp += "; setting_fact need %s" % entry["need_uid"]
             vec = entry.get("_embedding")
             if vec is None:
                 # The preparation already tried the provider and failed;
@@ -401,15 +409,13 @@ def _file_opening_premise(ctx, book_id, premise):
     return filed
 
 
-def _setting_fact_needs(ctx, res, world_facts, book_ids, *, deliver=False):
+def _setting_fact_needs(ctx, res, world_facts, book_ids):
     """The Director's `world_facts` as `setting_fact` planning needs -- one
     per fact no existing entry already covers, none for a fact the Director
     itself sourced from lore. The Director may say what happened; what is
-    TRUE of the setting is the room's to file, with a gate.
-
-    With ``deliver`` (the opening), each need also names the premise entry
-    its fact is delivered to the cast as (`surface.entry_uid`), minted from
-    the fact so the need and the entry cannot disagree."""
+    TRUE of the setting is the room's to file, with a gate -- at the opening
+    as at any beat (the premise the cast holds is the author's scenario,
+    `_opening_premise`)."""
     if not world_facts:
         return []
     from world.planning_needs import planning_need
@@ -444,8 +450,6 @@ def _setting_fact_needs(ctx, res, world_facts, book_ids, *, deliver=False):
         if _fact_is_covered(text, existing):
             continue
         surface = {"fact": text, **({"source": source_kind} if source_kind else {})}
-        if deliver:
-            surface["entry_uid"] = premise_entry_uid(cid, text)
         try:
             needs.append(planning_need(
                 "thing", "setting_fact",

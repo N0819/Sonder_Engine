@@ -1757,15 +1757,15 @@ title-tolerant `_recognizes` (`agents/common.py`) cannot be reached. See §1.45.
 
 <a id="unbuilt-3-9"></a>
 
-### 3.9 The opening files what is TRUE as what everyone KNOWS — a leak
+### 3.9 The opening filed what is TRUE as what everyone KNOWS — FIXED 2026-09-26, residuals open
 
 **Severity: leak.** Found 2026-09-26 in the expressive-cards stories
 ([`experiments/FEELINGS_EXPRESSIVE_CARDS_2026_09_26.md`](experiments/FEELINGS_EXPRESSIVE_CARDS_2026_09_26.md)).
-Since 2026-09-14 the opening files each `world_fact` the establish stage
-states as a public `common` entry in the canon book, read by every cast
+From 2026-09-14 the opening filed each `world_fact` the establish stage
+stated as a public `common` entry in the canon book, read by every cast
 member through `knowledge_for_character` (`persist/commit_mapping.py`,
 `_opening_premise` and `_file_opening_premise`), on the reasoning that those
-facts are "the scenario's own PREMISE, restated from what the author wrote".
+facts were "the scenario's own PREMISE, restated from what the author wrote".
 The establish Director sees every card and states more than the premise --
 what it states is true of the world, which is its office, and filing it as
 known to everyone is the leak:
@@ -1784,21 +1784,32 @@ known to everyone is the leak:
   spoken in a shed, each to the character who was not there.
 
 Four of six test openings filed something a card keeps private or a hearing
-gate would have held. The floor rests on the model stating only the premise,
-which by the firewall's own rule makes this an engine failure.
+gate would have held. The floor rested on the model stating only the
+premise, which by the firewall's own rule made it an engine failure.
 
-**Fix -- the owner's call.** (a) Deliver what the author wrote, the
-scenario's own sentences, as the public premise, with no model in the loop,
-and treat every establish `world_fact` as a need only, as every later
-beat's already is; the Harrowell case this rule was built for is still met
-("the evening after the funeral" is the author's sentence). Residual: a
-scenario that itself states a secret files it, as today. (b) Deliver only
-the facts the Director cites to a verbatim span of the scenario, checked by
-code: narrower, but a loose citation still passes. Recommended: (a).
+**Fixed 2026-09-26 (the owner: "go ahead" to the recommendation).** The
+opening delivers the chat's scenario as its author wrote it -- one public
+entry, titled from the pack to say whom its "you" means, since 32 of the
+owner's 132 scenarios are written to the player -- and every establish
+`world_fact` is a need only, as every later beat's already was
+(`persist/commit_mapping._opening_premise`). No model is in the loop. None
+of the eight measured leaks is in its story's scenario; the Harrowell case
+the rule was built for is met by the author's own sentence.
+`tests/test_room_filings_and_planning_needs.py` holds it: the premise
+reaches every cast member, a card secret the Director states reaches none.
 
-**Test.** An opening whose card holds a private concern and whose scenario
-does not: no cast member but its holder receives it as world knowledge, and
-the scenario's own sentences reach every cast member.
+Residuals, not built:
+
+- **A secret the author writes into the scenario is delivered**, as it was
+  before: the scenario is the premise by the 2026-09-14 ruling, and nothing
+  separates an author's public frame from a note to the engine. The owner's
+  132 scenarios carry no author notes and three mention hiding.
+- **The seventeen chats opened since 2026-09-14 keep what was filed.** 68
+  entries under `opening-premise` in the owner's database hold establish
+  facts filed as public; the fix changes openings, not filings already made.
+- **A public fact the scenario does not state reaches no one at the
+  opening** until the Writers' Room files the bible -- a degradation where
+  the old rule leaked, and the need is still recorded for the Room.
 
 ## 5. Deferred backlog
 

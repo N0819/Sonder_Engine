@@ -26,9 +26,10 @@ that the scaling is in intensity, not in openness. So the restrained register
 of the four earlier stories was the cards'. The stories also found a narrator
 crash (fixed, 9d04e9a1), the moment's lead feeling taken from the wrong event
 (fixed, d657b949), a character's walk into the next room resolved and then
-refused at the shut door (fixed with this doc, register §1.168), and one
-engine defect left for the owner: the opening files private card content as
-public knowledge for the whole cast (§3.9).
+refused at the shut door (fixed, b0149d29, register §1.168), and the
+opening filing private card content as public knowledge for the whole cast
+(fixed on the owner's go-ahead: the opening now delivers the author's
+scenario, register §3.9).
 
 ## Setup
 
@@ -314,7 +315,7 @@ Lucia, who "never adds to the noise", 0.46-0.64 -- so whether that is the
 restraint's feeling or the situation's is the owner's call, not a defect
 shown.
 
-### The opening files private card content as public knowledge (not fixed; register §3.9)
+### The opening filed private card content as public knowledge (fixed; register §3.9)
 
 In the morning story Rosa's first line to the delivery boy asked for an
 invoice nobody had mentioned: "The invoice, Tomaso. Two weeks. Bring it."
@@ -344,7 +345,11 @@ more than the premise:
 Four of the six openings filed something a card keeps private or a hearing
 gate would have held; the other two filed backstory the cards do not mark
 secret. The floor rests on the model stating only the premise -- by the
-engine's own rule an engine failure, not a model's.
+engine's own rule an engine failure, not a model's. Fixed on the owner's
+go-ahead: the opening delivers the chat's scenario as its author wrote it,
+titled to say whom its "you" means, and the establish stage's facts are
+needs only, as every beat's are; none of the eight measured leaks is in its
+story's scenario.
 
 ### A move from one room to the next is resolved and then refused (fixed; register §1.168)
 

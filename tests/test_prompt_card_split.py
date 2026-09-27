@@ -49,7 +49,10 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 220   # +3 (2026-09-26, later still): an own act's guilt,
+PART_COUNT = 222   # +2 (2026-09-26, last): the opening's premise entry
+                   # titles, `premise_title` and `premise_title_you` -- the
+                   # scenario as its author wrote it, and whom its "you" means.
+                   # +3 (2026-09-26, later still): an own act's guilt,
                    # embarrassment and falling short -- did it hurt or wrong
                    # someone, did others see the character make a fool of
                    # itself, did it fall short of what it expects of itself.
