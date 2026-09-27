@@ -113,6 +113,45 @@ def test_resolve_runs_author_then_one_encoder(temp_db, monkeypatch,
     assert "answered_by" not in out["orchestration"]["specialists"]["body"]
 
 
+def _between_rooms(barrier):
+    """The base lighthouse with `barrier` on both sides of the one way from
+    the keeper's room up to the lamp room."""
+    from tests.test_director_orchestration import BASE_SCENE
+    import copy
+
+    scene = copy.deepcopy(BASE_SCENE)
+    scene["rooms"]["keeper_room"]["adjacent"] = [{"to": "lamp_room", "barrier": barrier}]
+    scene["rooms"]["lamp_room"]["adjacent"] = [{"to": "keeper_room", "barrier": barrier}]
+    return scene
+
+
+def test_a_crossing_the_resolve_encoder_wrote_takes_the_shut_door(
+        temp_db, monkeypatch, prose_contract):
+    """Under the prose contract a position the encoder writes is the prose's
+    own statement of a crossing, so a shut door on its way is contested and
+    asserted, never refused (`director_prose.declared_moves`, 6bcb76a9) -- at
+    the RESOLVE as at the interpret. The resolve's record was read off the
+    context after `attach_record` had moved it into the stage's orchestration
+    and cleared it, so every crossing written at the resolve was judged
+    undeclared and popped: in the 2026-09-26 morning story a grandmother
+    "crosses the dining room, opens the kitchen door, and goes through" twice,
+    the spatial answer said kitchen both times, the scene kept her in the
+    dining room, and her lines to the boy in the kitchen never reached him.
+    A wall still refuses."""
+    for barrier, lands in (("closed_door", True), ("wall", False)):
+        calls = []
+        monkeypatch.setattr(director, "_agent_json", _fake_agent(calls, {
+            "director_prose": {"prose": "Mara climbs the stair into the lamp "
+                                        "room. \"The lamp is cold,\" she calls down."},
+            "director_specialist": _walk_events(),
+        }))
+        ctx = _make_ctx(temp_db, scene=_between_rooms(barrier), interp=_action_interp())
+        out = director.director_resolve(ctx, nonce=0)
+        refused = [w for w in ctx.warnings if "Unreachable position" in w and "Mara" in w]
+        assert (out["state_diff"]["positions"].get("Mara") == "lamp_room") is lands, barrier
+        assert bool(refused) is not lands, (barrier, refused)
+
+
 def test_decision_model_failure_grants_every_channel(temp_db, monkeypatch):
     temp_db.set_setting("director_contract", "prose")
 

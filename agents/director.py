@@ -7640,10 +7640,14 @@ def director_resolve(ctx, nonce, _corrections=None):
     # each other. `_unreachable_position_writes` only reads it.
     # Under the prose contract every position the encoder wrote is the
     # prose's own statement of a crossing, so a shut door on its way is
-    # contested and asserted, never refused; a wall still is.
+    # contested and asserted, never refused; a wall still is. The resolve's
+    # record is read where `attach_record` moved it -- off the context it
+    # cleared, the resolve's own crossings were always judged undeclared
+    # (the 2026-09-26 morning story: a grandmother's walk into the kitchen,
+    # refused twice).
     _declared_moves = director_prose.declared_moves(
         (interp.get("orchestration") or {}).get("prose_contract"),
-        (ctx.get(director_prose.CTX_KEY) or {}).get("record"),
+        (out.get("orchestration") or {}).get("prose_contract"),
     ) if _prose_contract else None
     for _body, _from, _to in _unreachable_position_writes(
             _route_sc, route_scene_for(ctx, _route_sc, sd), sd["positions"],

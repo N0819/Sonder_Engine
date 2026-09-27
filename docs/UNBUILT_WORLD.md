@@ -1863,6 +1863,56 @@ door's own cell, which its stations chunk already asks for). Until both land,
 a cell-placed body in a large room is graded by the size fallback, which
 withholds and never grants.
 
+<a id="unbuilt-1-168"></a>
+
+### 1.168 A crossing written at the resolve was refused at every shut door — FIXED 2026-09-26, residuals open
+
+Under the prose contract every position the encoder writes is the prose's
+own statement of a crossing, so `_unreachable_position_writes` judges it as
+the declared mover's is -- a shut door on the way contested and asserted, a
+wall refused (`director_prose.declared_moves`, 6bcb76a9, for the owner's
+chat 126 idx 9). At the resolve that never happened: `director_resolve` read
+the stage's record off the context after `director_prose.attach_record` had
+moved it into `out["orchestration"]["prose_contract"]` and cleared it, so
+only the interpret's crossings counted as declared and every crossing the
+resolve wrote through a shut door was popped with "Unreachable position:
+nothing declared a move for ...". Found in the 2026-09-26 morning story
+(`docs/experiments/FEELINGS_EXPRESSIVE_CARDS_2026_09_26.md`): a grandmother
+"crosses the dining room, opens the kitchen door, and goes through" on two
+beats, the encoder wrote her into the kitchen both times, the scene kept her
+in the dining room, and her lines to the boy in the kitchen -- "Tomaso. You
+saw my Marco." -- never reached him, the page reading "No one answers." The
+record is now read from the stage's orchestration; replayed on the story's
+own checkpoints and records, both refusals become crossings, and
+`tests/test_prose_contract.py` holds it behaviourally (the old wiring test
+only read the source).
+
+Residuals, from the same trace, not built:
+
+- **The refusal reaches no Director.** The floor warns (`ctx.add_warning`)
+  and tells nobody (`ctx.tell_director`), so the next beat's author writes
+  the same crossing and is refused the same way; it repeated here.
+- **A refused crossing leaves its placement behind.** The floor writes no
+  `movement_refused` and does not strip the station and pose the hand wrote
+  for the destination (`_strip_unreached_placement`), so a body kept in the
+  dining room carried a kitchen-side pose.
+- **Declared keys are folded raw.** `declared_moves` casefolds the encoder's
+  own key; the floor folds the canonicalized `positions` key, so an encoder
+  key such as `character:<id>` would miss the declaration.
+- **The player's own reach into the next room moves nobody.** In the same
+  story the interpret recorded `movement: null` for "Tomaso leans into the
+  dining room doorway" (resolved as a pose against the door, the door left
+  shut) and for "Tomaso sets the small paper parcel on the table in front of
+  Rosa" -- a table in the room he was not in. An act whose object stands in
+  another room implies the walk to it; nothing reads it so, and the answers
+  from that room were lost to him ("No one answers.").
+- **The door the prose opened stays shut.** The resolve's own event said she
+  "opens the kitchen door, and goes through"; the encoder wrote the crossing
+  and no open edge, though its card asks for one when the prose opens a door
+  (`encoder/core.txt`), and nothing checks the two against each other -- so
+  the crossing now lands and the door behind her still reads shut to
+  everyone left in the dining room.
+
 ## 2. Roadmap
 
 <a id="unbuilt-2-6"></a>
