@@ -116,6 +116,22 @@ def test_a_mind_is_given_what_it_feels_at_once_strongest_first():
     assert len(ap.feelings_block(many)["now"]) == ap.NOW_FEELINGS
 
 
+def test_a_feeling_given_as_now_is_not_given_again_beneath():
+    """When the moment stirred nothing, `now` falls back to the strongest
+    past or unsettled feeling -- and `beneath`, listing what is felt
+    alongside the undercurrent, offered that same feeling a second time
+    (the bare-card replay, 2026-09-27: a jealousy about a rival stood in
+    both lists). What is named now is not named again beneath."""
+    from mind.affect_mix import Emotion, Mood
+
+    felt = ap.Felt(mood=Mood({}), home=Mood({}), habits={}, clock=0.0, language="en",
+                   emotions=[Emotion("jealousy", 0.8, "the rival at the director's elbow", "concern", "c0"),
+                             Emotion("anticipation", 0.6, "the season's casting", "concern", "c1")])
+    block = ap.feelings_block(felt)
+    assert [w.split(" (")[0] for w in block["now"]] == ["jealousy"]
+    assert [w.split(" (")[0] for w in block["beneath"]] == ["anticipation"]
+
+
 def test_one_request_per_pass_from_this_characters_own_inputs(jev):
     _before()
     assert len(jev) == 1

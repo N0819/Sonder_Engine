@@ -418,7 +418,12 @@ def feelings_block(felt):
     else:  # nothing present was felt: the surface is the mood, or the past
         now = [affect["surface"]["label"]] if affect["surface"]["label"] else []
     if isinstance(under, mix.Emotion) and under in past:
-        beneath = [label(e, felt.language) for e in _alongside(past, under, BENEATH_FEELINGS, NOW_SHARE)]
+        # What `now` names is not named again beneath. Where the moment
+        # stirred nothing, `now` is the strongest past or unsettled feeling,
+        # and it was listed a second time here, felt alongside the
+        # undercurrent (the bare-card replay, 2026-09-27).
+        others = [e for e in past if e is not surface]
+        beneath = [label(e, felt.language) for e in _alongside(others, under, BENEATH_FEELINGS, NOW_SHARE)]
     else:
         undercurrent = affect.get("undercurrent") or {}
         beneath = [undercurrent["label"]] if undercurrent.get("label") else []
