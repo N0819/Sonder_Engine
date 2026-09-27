@@ -24,6 +24,7 @@ providers row id; default: the first `openrouter`-kind row). A module-level
 
 from __future__ import annotations
 
+import contextvars
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -136,8 +137,14 @@ def decide(state, questions: dict) -> dict:
         return _post(prov, model, state, batches[0])
     out = {}
     with ThreadPoolExecutor(max_workers=len(batches)) as pool:
-        for answers in pool.map(lambda b: _post(prov, model, state, b), batches):
-            out.update(answers)
+        # Each shard runs in a copy of THIS thread's context, taken here: the
+        # call ledger is a ContextVar a worker does not inherit, and every
+        # shard of a large battery recorded into nothing (the bare-card
+        # replay, 2026-09-27: the after-call pass never reached the ledger).
+        futures = [pool.submit(contextvars.copy_context().run, _post, prov, model, state, b)
+                   for b in batches]
+        for future in futures:
+            out.update(future.result())
     return out
 
 
