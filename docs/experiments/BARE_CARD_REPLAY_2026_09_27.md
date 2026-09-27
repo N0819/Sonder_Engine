@@ -403,7 +403,7 @@ commitment kept as an intention, and the old card's restorations below.
   -- scored 33 and 30. The whole state carries the note itself, in the
   notebook, and the memories that first supported it, and the decision
   model reads them as confirmation. The check now reads the moment alone
-  (`moment_text`); not yet replayed in a chain.
+  (`moment_text`); round ten replays it.
 - **Margit's chain lost 8 of 18 beats** (round eight: 2): one provider
   silence, and seven where GLM answered `{}` twice running after an ordinary
   amount of reasoning (446-4,396 tokens), its thinking ending as the good
@@ -443,6 +443,44 @@ commitment kept as an intention, and the old card's restorations below.
   instead" was checked on six beats running.
 - No commitment was refused, so the intention fallback was not exercised;
   no concern appeared twice.
+
+## Round ten: the note check against the moment
+
+The chains again, from a snapshot of c64189f2: the note check in its own
+request against `moment_text`, concerns held whole, the interrupt question
+asking what stops someone finishing, and the tool making three attempts
+where the provider returns nothing.
+
+| | Margit (18) | Anselm (16) |
+|---|---|---|
+| Beats read back | 18 (round nine: 10) | 16 (16) |
+| Lines / acts | 24 / 19 | 19 / 19 |
+| New notes / revised by id | 17 / 12 | 8 / 4 |
+| Note checks answered "bore it out" | 26 of 60 (round nine: 18 of 20) | 10 of 24 (31 of 37) |
+| Nudges (toward "bore it out") | 21 (20) | 9 (7) |
+
+- **The check stopped confirming everything.** 36 of 84 checks answered
+  "bore it out" (43%), against 49 of 57 (86%) in round nine -- the probe
+  predicted 46% -- and six answered doubt or contradiction, three of them
+  moving a note down. By the probe's labels about half of what it still
+  calls confirmation is a beat that told the mind nothing new: better, not
+  settled.
+- **No concern appeared twice**: the most alike pair scored 0.62, two
+  different worries about Holt.
+- **No beat was lost**; the retries cost time (Margit's median 41.8 s).
+- **Misreads that remain.** One act read as an interruption of 38, again a
+  character walking away while someone talked -- in play that clips the
+  other's line; a rule that an act cuts off only the speaker it is aimed at
+  (its target or its look) would end it, and is a guard, so the owner's
+  call. A step aside read as a sweep of the room (harmless: the cone lifts
+  once). Anselm's "need to see the wound and find out what they walked
+  into" was taken up as a project with an external-sounding end ("the
+  wounded man is on my cot") and held a slot to the end -- the task-wearing-
+  the-word residue adoption leaves to probation. One note read as a
+  commitment was refused adoption and kept as an intention: the fallback
+  worked, on a note that was really an observation.
+- The body echo: unpleasant on 31 of 33 (-0.1 to -0.87), faintly pleasant
+  on 2.
 
 ## The old card, reviewed: what the bare card had dropped
 

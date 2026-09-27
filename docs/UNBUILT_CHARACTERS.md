@@ -1390,15 +1390,25 @@ at a fifth of the call time, and reads as well or better. Open, in order:
   state carried the note in the notebook and the memories behind it; the
   check now reads the moment alone (`moment_text`), which on 56
   hand-labelled checks called a beat that told nothing new "bore it out" 9
-  times of 34 instead of 28 (one labeller; not yet replayed in a chain); one
+  times of 34 instead of 28 (one labeller), and in the round-10 chains 43%
+  of checks answered "bore it out" against round nine's 86%; one
   concern appeared twice, cut at two lengths, because the read-back held
   concerns cut at 300 characters while the view derived their ids from the
   whole words (`notebook.concern_text`, one reader now); a commitment
   adoption refused as circular was lost (kept as an intention,
-  `affect.adoption_refusal`). Open: notes still drift into a log of what
-  happened in round nine despite a card line against it; no note struck in
-  play yet; the knobs (`mind/notebook.py`, the kinds for things in
-  `theory_of_mind`) are the owner's.
+  `affect.adoption_refusal`). Open: about half of what the check still
+  calls confirmation told the mind nothing new (by the probe's labels);
+  notes still drift into a log of what happened, less in round ten; an
+  errand can take a project slot when its end sounds external ("the
+  wounded man is on my cot" held one to the chain's end -- the residue
+  adoption leaves to probation); no note struck in play yet; the knobs
+  (`mind/notebook.py`, the kinds for things in `theory_of_mind`) are the
+  owner's.
+- **An act read as cutting someone off when it only walks away** (the
+  restored `act_interrupts`: 2 of 30 acts in round nine, 1 of 38 in round
+  ten after the rewording). In play that clips the other's line. Proposed,
+  the owner's call because it is a guard: an act cuts off only the speaker
+  it is aimed at -- its target or its look.
 - Then the default switched, and the full card, its kernel compiler and its
   prompt paragraphs deleted so two contracts do not linger.
 
