@@ -290,6 +290,10 @@ modes each one documents.
   reading, the feelings handed over, the conduct, the pass after it) and
   read as fiction: the moment is read apt, and frustration is what the story
   keeps of 15 of the 16 beats.
+- [`FEELINGS_STRENGTH_AB_2026_09_26.md`](experiments/FEELINGS_STRENGTH_AB_2026_09_26.md)
+  — does a character show a feeling as strongly as it feels it: strength
+  words in the block and a sentence on expression, against the noise of two
+  calls; nothing beats it, and the restrained register is the cards' own.
 
 ## `archive/` — superseded
 

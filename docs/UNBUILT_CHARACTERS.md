@@ -1299,7 +1299,12 @@ whether a given feeling improves what a character does at all -- a six-beat
 blind pilot split at chance, below the variation between two calls
 (`docs/experiments/FEELINGS_AB_PILOT_2026_09_26.md`), and a design that could
 resolve it (a noise floor, several samples a beat) costs several times more,
-the owner's call; falling short of oneself read faintly (0.3-0.4) of plain
+the owner's call; whether how openly a feeling shows rises with how strongly
+it is felt, untestable on the four stories because six of their seven cards
+write a restrained voice (strength words in the block and a sentence on
+expression moved nothing past the noise of two calls,
+`docs/experiments/FEELINGS_STRENGTH_AB_2026_09_26.md`) -- it needs
+characters written to show their feelings; falling short of oneself read faintly (0.3-0.4) of plain
 acts such as turning one's head to watch someone, never the stored feeling
 on the traced beats but a residue to watch
 (`docs/experiments/AFFECT_TRACE_2026_09_26.md`); a card's standing feelings
