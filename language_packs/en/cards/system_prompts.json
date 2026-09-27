@@ -1154,6 +1154,27 @@
     },
     "carried_reports": {
       "$text": "character_bare/carried_reports.txt"
+    },
+    "their_silence": {
+      "$text": "character_bare/their_silence.txt"
+    },
+    "answer_owed": {
+      "$text": "character_bare/answer_owed.txt"
+    },
+    "offers": {
+      "$text": "character_bare/offers.txt"
+    },
+    "speech_budget": {
+      "$text": "character_bare/speech_budget.txt"
+    },
+    "crisis": {
+      "$text": "character_bare/crisis.txt"
+    },
+    "tell_variety": {
+      "$text": "character_bare/tell_variety.txt"
+    },
+    "tell_payoff": {
+      "$text": "character_bare/tell_payoff.txt"
     }
   },
   "character_jev": {
@@ -1328,6 +1349,15 @@
     "strike_kind": {
       "$text": "character_jev/strike_kind.txt"
     },
+    "act_look": {
+      "$text": "character_jev/act_look.txt"
+    },
+    "act_interrupts": {
+      "$text": "character_jev/act_interrupts.txt"
+    },
+    "echo_body": {
+      "$text": "character_jev/echo_body.txt"
+    },
     "options": {
       "volume": {
         "whisper": "In a whisper, for one listener.",
@@ -1389,13 +1419,13 @@
         "other": "None of these."
       },
       "reading_kind": {
-        "emotion": "What they feel right now.",
-        "goal": "What they want or mean to do.",
-        "trait": "What they are like.",
-        "second_order": "What they think of someone or something.",
-        "identity": "Who they really are.",
-        "observation": "Something plain to see about them.",
-        "stated_fact": "Something they said outright."
+        "emotion": "What another person feels right now.",
+        "goal": "What another person wants or means to do.",
+        "trait": "What another person is like.",
+        "second_order": "What another person thinks of someone or something.",
+        "identity": "Who another person really is.",
+        "observation": "Something plain to see about a person or thing.",
+        "stated_fact": "Something another person said outright."
       },
       "aim_moved": {
         "nothing": "No -- nothing that changes where it stands.",
@@ -1451,7 +1481,8 @@
         "follow_start": "You start following {person}.",
         "not_stated": "not stated",
         "situational": "Only this moment.",
-        "something_else": "Someone or something not listed here."
+        "something_else": "Someone or something not listed here.",
+        "look_around": "All around you, taking in the room."
       },
       "aim_labels": {
         "drive": "what drives you: {text}",
@@ -1502,6 +1533,13 @@
         "about": "{about}: {note}",
         "until": "{text} (until: {until})",
         "concern": "{note} (settled when: {until})"
+      },
+      "echo_body": {
+        "hard_bad": "Yes, strongly, and it is unpleasant.",
+        "bad": "Yes, and it is unpleasant.",
+        "none": "No, it does not come back in your body.",
+        "good": "Yes, and it is pleasant.",
+        "hard_good": "Yes, strongly, and it is pleasant."
       }
     }
   }

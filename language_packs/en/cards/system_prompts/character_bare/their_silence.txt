@@ -1,0 +1,1 @@
+THEIR SILENCE: `decision.they_said_nothing` means `decision.their_name` was here and said nothing this beat -- silence is something they did (`decision.quiet_for_beats` says how long). Do not answer an older line as though it were just spoken.

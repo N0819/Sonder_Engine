@@ -92,6 +92,10 @@ TONE = {"very_unpleasant": -1.0, "unpleasant": -0.5, "neither": 0.0, "pleasant":
         "very_pleasant": 1.0}
 ABILITY = {"much_less": -1.0, "less": -0.5, "same": 0.0, "more": 0.5, "much_more": 1.0}
 IMPACT = {"hurts_badly": -1.0, "hurts": -0.5, "none": 0.0, "helps": 0.5, "helps_greatly": 1.0}
+#: How a remembered moment comes back in the body, as the engine's signed
+#: `memory_modulation.somatic_echo`: a tightening below zero, a warmth above
+#: (commit keeps a fifth of it, as a one-beat echo labelled remembered past).
+BODY_ECHO = {"hard_bad": -1.0, "bad": -0.5, "none": 0.0, "good": 0.5, "hard_good": 1.0}
 CERTAIN = {"done": 0.9, "may": 0.5, "unclear": 0.3}
 #: How hard a tell is to miss, as the engine's `subtlety` (a tell reaches an
 #: observer whose acuity, familiarity and attention reach this far).
@@ -120,6 +124,7 @@ class Holding:
     drive: dict = field(default_factory=dict)         # the card's drive
     charge: float = 0.0
     rupture_open: bool = False
+    crisis: bool = False                              # its composure is failing (`self.crisis`)
     reasoning: str = ""
     notebook: dict = field(default_factory=dict)      # the view it was shown (mind.notebook.view)
 
@@ -203,19 +208,25 @@ def note_text(entry, language):
     return text
 
 
-def notes_held_to_check(h, reply):
+def notes_in_play(h):
     """The shown notes about people and things this beat may bear on: their
-    subject is here or named in what just reached this mind, and the reply
-    did not change or strike them itself. Asking only these keeps the check
-    bounded and keeps a note from being borne out by a beat about someone
-    else (held beliefs, asked every beat, were touched three times as often
-    as the full card's model touched them)."""
+    subject is here or named in what just reached this mind. Asking only
+    these keeps the check bounded and keeps a note from being borne out by a
+    beat about someone else (held beliefs, asked every beat, were touched
+    three times as often as the full card's model touched them).
+
+    ASKED BEFORE THE CALL (`before_questions`): what bears a note out is what
+    reached this mind, never the mind's own restating of it. Asked after,
+    with the reply and its reasoning in the state, 27 of the 29 nudges the
+    round-8 chains made were "bore it out" -- a man sitting down bore out an
+    accusation, a mutter too faint to make out bore out who brought the news
+    first (2026-09-27). A note the reply changes or strikes itself is not
+    nudged as well (`character_bare._compile_notebook`)."""
     from mind.notebook import in_play
-    touched = {e["id"] for e in notebook_entries(reply) if e["id"]}
     present = {p.casefold() for p in h.people}
     texts = [e["text"] for e in h.events]
     return [e for e in (h.notebook or {}).get("people_and_things") or []
-            if e.get("id") not in touched and in_play(e.get("about"), present, texts)]
+            if in_play(e.get("about"), present, texts)]
 
 
 # --- the state every question reads -----------------------------------------------
@@ -330,15 +341,35 @@ def _options(items, none_key, language, prefix):
     return out
 
 
+def _look_options(people, language):
+    """Where an act may turn the body: toward one of the people here
+    (`p<i>`), all around (`around`, the engine's sweep), or toward no one."""
+    out = _options(people, None, language, "p")
+    choices = _set("choices", language)
+    out["around"] = choices["look_around"]
+    out["no_target"] = choices["no_target"]
+    return out
+
+
 def before_questions(h):
     """Asked before the call, and only when something reached this mind:
-    does it change what a recalled memory meant? A yes gates the dispute
-    module and its payload section into this call."""
-    if not (h.events and h.memories):
+    does it change what a recalled memory meant (a yes gates the dispute
+    module and its payload section into this call), and does it bear out,
+    cast doubt on or tell against a note this mind holds about someone or
+    something in play (`notes_in_play`)."""
+    if not h.events:
         return {}
-    yesno = _set("yesno", h.language)
-    return {f"dispute:{i}": _choice("dispute", h.language, yesno, memory=_text(m["text"]))
-            for i, m in enumerate(h.memories)}
+    lang = h.language
+    yesno = _set("yesno", lang)
+    qs = {f"dispute:{i}": _choice("dispute", lang, yesno, memory=_text(m["text"]))
+          for i, m in enumerate(h.memories)}
+    touched = dict(_set("note_touched", lang))
+    events = [e["text"] for e in h.events]
+    for k, entry in enumerate(notes_in_play(h)):
+        note = note_text({"about": entry.get("about", ""), "note": entry.get("note", "")}, lang)
+        qs[f"held:{k}:touched"] = _choice("note_touched", lang, touched, note=note)
+        qs[f"held:{k}:now"] = _choice("based_now", lang, _options(events, "nothing_now", lang, "e"), text=note)
+    return qs
 
 
 def read_before(answers, h):
@@ -386,6 +417,14 @@ def after_questions(h, reply):
             any_do = True
             act = _text(row["do"])
             qs[f"do:{index}:seen"] = _choice("act_seen", lang, _set("act_kind", lang), act=act)
+            # Where it turns the body and whose words it cuts off: the full
+            # card's `look` and `interrupts`, which no bare reply carries. A
+            # sweep of the room is asked alone too -- it is how a mind takes
+            # in an empty room.
+            qs[f"do:{index}:look"] = _choice("act_look", lang, _look_options(people, lang), act=act)
+            if heard_speakers:
+                qs[f"do:{index}:interrupts"] = _choice(
+                    "act_interrupts", lang, _options(heard_speakers, "nobody", lang, "p"), act=act)
             if people:
                 qs[f"do:{index}:target"] = _choice("act_target", lang, _options(people, "no_target", lang, "p"),
                                                    act=act)
@@ -435,17 +474,13 @@ def after_questions(h, reply):
             if held[0] == "people_and_things":
                 _evidence_questions(qs, f"nb:{j}", text, events, memories, lang)
             continue
+        if not entry["note"]:
+            continue  # a strike of an entry this mind was not shown
         qs[f"nb:{j}:kind"] = _choice("note_kind", lang, _set("note_kind", lang), text=text)
         if subjects and not entry["about"]:
             qs[f"nb:{j}:about"] = _choice("note_about", lang, _options(subjects, "something_else", lang, "p"),
                                           text=text)
         _evidence_questions(qs, f"nb:{j}", text, events, memories, lang)
-    touched = dict(_set("note_touched", lang))
-    for k, entry in enumerate(notes_held_to_check(h, reply)):
-        note = note_text({"about": entry.get("about", ""), "note": entry.get("note", "")}, lang)
-        qs[f"held:{k}:touched"] = _choice("note_touched", lang, touched, note=note)
-        if events:
-            qs[f"held:{k}:now"] = _choice("based_now", lang, _options(events, "nothing_now", lang, "e"), text=note)
 
     # --- what changed ---
     whom = list(dict.fromkeys(people + h.known))[:MAX_PEOPLE * 2]
@@ -550,6 +585,7 @@ def after_questions(h, reply):
                 qs[f"echo:{k}:familiar"] = _choice("echo_familiar", lang, grade, memory=_text(memory))
                 qs[f"echo:{k}:threat"] = _choice("echo_threat", lang, grade, memory=_text(memory))
                 qs[f"echo:{k}:coping"] = _choice("echo_coping", lang, _set("ability", lang), memory=_text(memory))
+                qs[f"echo:{k}:body"] = _choice("echo_body", lang, _set("echo_body", lang), memory=_text(memory))
         if h.strategies:
             qs["coping_mode"] = _choice("coping_mode", lang, _options(h.strategies, "no_strategy", lang, "s"))
     return qs

@@ -1,0 +1,1 @@
+相手の沈黙：`decision.they_said_nothing`は、`decision.their_name`がここにいて、この場面で何も言わなかったということです――沈黙は相手がしたことです（どれくらい続いているかは`decision.quiet_for_beats`）。前の言葉を、今言われたかのように答えないでください。

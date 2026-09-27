@@ -49,8 +49,11 @@ def test_the_reply_holds_only_what_a_character_writes():
 def test_the_bare_card_is_short_and_ends_on_its_reply(language):
     card = bare_character_prompt(language)
     # The full card is 22,853 characters of instructions; this one, with the
-    # universal language contract appended, is a tenth of that.
-    assert len(card) < 3500
+    # universal language contract appended and the notebook's paragraph, is a
+    # fifth of that. The owner, 2026-09-27, when the notebook came in: "Lets
+    # not focus on minimal prompting, what do you think is best but not
+    # extremely large?"
+    assert len(card) < 4500
     lines = card.split("\n")
     output = next(i for i, line in enumerate(lines) if '"want"' in line and '"sequence"' in line)
     identity = next(i for i, line in enumerate(lines) if "{name}" in line)
@@ -63,11 +66,26 @@ def test_a_section_ships_only_when_the_moment_calls_for_it():
     quiet = character_bare.modules_for({"self": {}, "perception": {}})
     assert quiet == []
     loud = character_bare.modules_for(
-        {"self": {"project_review": {"id": "p1"}, "still_waiting_for": [{"what": "rope"}]},
+        {"self": {"project_review": {"id": "p1"}, "still_waiting_for": [{"what": "rope"}],
+                  "crisis": True, "recent_tells": ["a swallow"],
+                  "tell_grounds": [{"cue": "a swallow", "because": "the key"}]},
+         "decision": {"they_said_nothing": True, "awaiting_your_answer": {"from": "Mara"},
+                      "comes_to_you": [{"offer": "x"}],
+                      "speech_budget": {"min_lines": 1, "suggested_lines": 2, "hard_max": 4}},
          "perception": {"impossible_knowledge": [{"line_ref": "o1"}]}, "carried_reports": [{}]},
         disputed=[{"ref": "event:a", "text": "x"}], rupture_open=True, rupture_forced=True)
-    assert loud == ["dispute", "drive_rupture", "drive_rupture_forced", "project_review",
-                    "still_waiting", "impossible_knowledge", "carried_reports"]
+    assert loud == ["their_silence", "answer_owed", "offers", "speech_budget", "crisis",
+                    "tell_variety", "tell_payoff", "dispute", "drive_rupture", "drive_rupture_forced",
+                    "project_review", "still_waiting", "impossible_knowledge", "carried_reports"]
+    # Each restored section is the old card's clause, said when it applies,
+    # and names the payload key it explains.
+    for module, key in (("their_silence", "decision.they_said_nothing"),
+                        ("answer_owed", "decision.awaiting_your_answer"),
+                        ("offers", "decision.comes_to_you"), ("speech_budget", "decision.speech_budget"),
+                        ("crisis", "self.crisis"), ("tell_variety", "self.recent_tells"),
+                        ("tell_payoff", "self.tell_grounds")):
+        for lang in ("en", "ja"):
+            assert f"`{key}`" in character_bare.prompt("Wren", [module], lang), (module, lang)
     card = character_bare.prompt("Wren", ["dispute"], "en")
     assert "may_mean_otherwise" in card and "{name}" not in card
     assert card.index("may_mean_otherwise") < card.index("You are Wren"), (
@@ -121,15 +139,16 @@ def test_every_question_reads_only_this_minds_own_holding():
     """The firewall by construction: every person, row and item a question
     names is one this mind perceived, was given or already holds."""
     from llm.prompts import character_jev_options
-    h = _holding()
-    questions = jev.after_questions(h, _reply())
+    h = _holding(notebook=_notebook_view())
+    questions = {**jev.before_questions(h), **jev.after_questions(h, _reply())}
+    assert any(k.startswith("held:") for k in questions), "the note check is covered"
     offered = set()
     for q in questions.values():
         offered.update(q["criteria"].values())
     pack = set()
     for name in ("volume", "yesno", "act_kind", "grade", "miss", "channel", "signed", "fit", "tone", "change_kind",
                  "reading_kind", "aim_moved", "belief_touched", "impact", "certain",
-                 "agency", "ability", "choices", "note_kind", "note_touched", "strike_kind"):
+                 "agency", "ability", "choices", "note_kind", "note_touched", "strike_kind", "echo_body"):
         pack.update(character_jev_options(name, "en").values())
     held = ({e["text"] for e in h.events} | {m["text"] for m in h.memories} | set(h.people) | set(h.known)
             | set(h.beliefs) | set(h.strategies) | {jev._aim_label(a, "en") for a in h.aims}
@@ -446,20 +465,31 @@ NOTEBOOK_SCRIPT = [
     ("nb:0:now", "e0"), ("nb:3:strike", "done"),
     ("nb:4:kind", "worry"), ("nb:5:kind", "commitment"), ("nb:6:kind", "commitment"),
     ("nb:7:kind", "what_it_is"), ("nb:7:now", "e0"),
-    ("held:0:touched", "contradicted"), ("held:0:now", "e1"),
+    # The notes in play, checked before the call: n1 (which the reply
+    # rewrites itself) and n2.
+    ("held:0:touched", "bore_out"), ("held:0:now", "e0"),
+    ("held:1:touched", "contradicted"), ("held:1:now", "e1"),
 ]
+
+
+def _both_batteries(h, reply):
+    """What the engine reads back: the questions asked before the call and
+    those asked after it (`agents.character` merges the two answer sets)."""
+    return {**jev.before_questions(h), **jev.after_questions(h, reply)}
 
 
 def test_what_the_character_writes_in_its_notebook_lands_where_it_belongs():
     h = _holding(notebook=_notebook_view(), concerns=[_WORRY])
     reply = _notebook_reply()
-    out, warnings = character_bare.compile_bare(reply, _answer(NOTEBOOK_SCRIPT)(jev.after_questions(h, reply)), h)
+    out, warnings = character_bare.compile_bare(reply, _answer(NOTEBOOK_SCRIPT)(_both_batteries(h, reply)), h)
     assert warnings == []
     notes = {(u.get("op"), u.get("id")): u for u in out["mind_model_updates"]}
-    # A held note, changed in the character's words: the same note, revised.
+    # A held note, changed in the character's words: the same note, revised --
+    # and not also nudged by the check made before the call.
     revised = notes[("revise", "n1")]
     assert (revised["claim"], revised["kind"], revised["about_entity"]) == (
         "Mara keeps secrets for someone she fears", "trait", "Mara")
+    assert ("nudge", "n1") not in notes
     # A new note about a thing, filed under the thing, at the character's own sureness.
     (thing,) = [u for u in out["mind_model_updates"] if not u.get("op")]
     assert (thing["about_entity"], thing["kind"], thing["confidence"]) == ("the brass key", "what_it_is", 0.9)
@@ -522,3 +552,141 @@ def test_the_payload_carries_one_notebook_not_four_copies():
     shown = sent["self"]["notebook"]["people_and_things"]
     assert shown[0] == {"id": "n1", "about": "Mara", "note": "Mara keeps secrets", "sure": "likely"}
     assert payload["mind_models"], "the payload assembled for the stage is not mutated"
+
+
+# --- what the old card said, restored (2026-09-27) ----------------------------------
+
+def test_an_act_turns_the_body_and_can_cut_someone_off():
+    """The full card's `look` and `interrupts`, which no bare reply carries,
+    read back from the act: toward someone here or all around, and whose
+    words it cuts off -- among those who spoke."""
+    h = _holding()
+    questions = jev.after_questions(h, _reply())
+    assert set(questions["do:2:look"]["criteria"]) == {"p0", "p1", "around", "no_target"}
+    assert set(questions["do:2:interrupts"]["criteria"]) == {"p0", "nobody"}, "only Tomas spoke"
+    script = [("do:1:look", "around"), ("do:2:look", "p0"), ("do:2:interrupts", "p0")]
+    out, _ = character_bare.compile_bare(_reply(), _answer(script)(questions), h)
+    acts = [e for e in out["sequence"] if e["type"] == "action"]
+    assert [(a["look"], a["interrupts"]) for a in acts] == [("around", ""), ("Mara", "Tomas")]
+    result, _ = validate_llm_output("character", deepcopy(out))
+    kept = [e for e in result["sequence"] if e["type"] == "action"]
+    assert [(a["look"], a["interrupts"]) for a in kept] == [("around", ""), ("Mara", "Tomas")]
+
+
+def test_a_remembered_moment_comes_back_in_the_body_with_its_sign():
+    """`memory_modulation.somatic_echo` is signed -- a tightening or a
+    warmth -- and was written as 0.0 on every bare beat."""
+    h = _holding()
+    questions = jev.after_questions(h, _reply())
+    assert set(questions["echo:1:body"]["criteria"]) == set(jev.BODY_ECHO)
+    for answer, expected in (("bad", -0.5), ("hard_good", 1.0), ("none", 0.0)):
+        script = [("echo", "m1"), ("echo:1:body", answer)]
+        out, _ = character_bare.compile_bare(_reply(), _answer(script)(questions), h)
+        assert out["appraisal"]["memory_modulation"]["somatic_echo"] == expected, answer
+
+
+def test_composure_failing_shows_in_every_tell():
+    """The full card asked for a tell no subtler than 0.4 under
+    `self.crisis`; the read-back holds it now."""
+    script = [("tell:0:miss", "hidden"), ("tell:1:miss", "plain")]
+    tells = {}
+    for crisis in (False, True):
+        h = _holding(crisis=crisis)
+        out, _ = character_bare.compile_bare(_reply(), _answer(script)(jev.after_questions(h, _reply())), h)
+        tells[crisis] = [t["subtlety"] for t in out["manifest"]["tells"]]
+    assert tells == {False: [jev.MISS["hidden"], jev.MISS["plain"]],
+                     True: [jev.MISS["noticeable"], jev.MISS["plain"]]}
+    shaken = character_bare.holding_from("Wren", {}, {"self": {"crisis": True}}, [], {}, {})
+    assert shaken.crisis and not character_bare.holding_from("Wren", {}, {"self": {}}, [], {}, {}).crisis
+
+
+def test_the_payload_gives_the_mood_once():
+    """`self.feelings` is the mood the bare card is given; the coordinates,
+    labels and ledgers behind it leave `self.active_state`."""
+    payload = {"self": {"feelings": {"surface": "uneasy"}, "active_state": {
+        "wants": [{"want": "the key"}], "enacted_want": 0, "affect": {"surface": {}}, "mood": "calm",
+        "valence": 0.1, "arousal": 0.2, "mood_coords": {}, "mood_habits": {}, "hedonic": {"charge": 0.4},
+        "stress": {"level": 0.3}, "memory_echo": {}, "affect_seconds": 4, "affect_turn": 3, "mood_clock": 1}},
+        "perception": {}}
+    sent = character_bare.with_notebook(payload, {})
+    assert sent["self"]["active_state"] == {"wants": [{"want": "the key"}], "enacted_want": 0}
+    assert sent["self"]["feelings"] == {"surface": "uneasy"}
+    assert payload["self"]["active_state"]["mood"] == "calm", "the stage's payload is not mutated"
+
+
+_TWO_PROJECTS = {"what_you_are_about": [
+    {"id": "p1", "note": "keep the family together", "until": "the winter is over"},
+    {"id": "p2", "note": "learn who took the key", "until": "someone confesses"}]}
+
+
+def test_a_commitment_adoption_would_refuse_is_kept_as_an_intention():
+    """Round 8 (2026-09-27): a commitment refused a project slot was lost.
+    What adoption refuses -- a criterion that restates the doing, or both
+    slots held -- is kept as an intention, what would finish it in its own
+    words; one a held project already says is not taken up twice."""
+    h = _holding(notebook=_TWO_PROJECTS)
+    reply = {**_reply(), "notebook": [
+        {"note": "count the hits", "until": "I have counted the hits"},
+        {"note": "find a new place to hide things", "until": "the thaw comes"},
+        {"note": "keep the family together", "until": "spring"}]}
+    script = [(f"nb:{j}:kind", "commitment") for j in range(3)]
+    out, warnings = character_bare.compile_bare(reply, _answer(script)(_both_batteries(h, reply)), h)
+    assert out["project_ops"] == []
+    assert [op["intent"] for op in out["intent_ops"] if op["op"] == "add"] == [
+        "count the hits (until: I have counted the hits)",
+        "find a new place to hide things (until: the thaw comes)"]
+    assert any("already held" in w for w in warnings)
+
+
+def test_a_slot_freed_in_the_same_beat_takes_the_new_project():
+    """Closures land before adoptions, so a project struck in the reply frees
+    its slot for one taken up beside it -- and adoption agrees."""
+    from mind import affect
+    h = _holding(notebook=_TWO_PROJECTS)
+    reply = {**_reply(), "notebook": [
+        {"id": "p1", "strike": "the winter is over"},
+        {"note": "find a new place to hide things", "until": "the thaw comes"}]}
+    script = [("nb:0:strike", "done"), ("nb:1:kind", "commitment")]
+    out, _ = character_bare.compile_bare(reply, _answer(script)(_both_batteries(h, reply)), h)
+    assert out["project_ops"] == [
+        {"op": "satisfy", "id": "p1", "why": "the winter is over"},
+        {"op": "adopt", "project": "find a new place to hide things", "satisfied_when": "the thaw comes",
+         "about": ""}]
+    held = [{"id": "p1", "project": "keep the family together", "satisfied_when": "the winter is over"},
+            {"id": "p2", "project": "learn who took the key", "satisfied_when": "someone confesses"}]
+    projects, _, project_warnings = affect.apply_project_ops(held, [], out["project_ops"], 10)
+    assert project_warnings == [] and [p["project"] for p in projects] == [
+        "learn who took the key", "find a new place to hide things"]
+
+
+def test_a_worry_written_twice_is_one_concern():
+    """A worry written in `changes` and again in the notebook arrived twice
+    in the round-8 chains."""
+    h = _holding(concerns=[])
+    reply = {**_reply(), "changes": ["Whether  Tomas tells father"],
+             "notebook": [{"note": "whether Tomas tells Father"}]}
+    script = [("change:0:kind", "worry"), ("nb:0:kind", "worry")]
+    out, _ = character_bare.compile_bare(reply, _answer(script)(_both_batteries(h, reply)), h)
+    assert out["active_state"]["active_concerns"] == ["whether Tomas tells Father"]
+
+
+def test_a_held_note_is_checked_before_the_call_against_what_reached_the_mind():
+    """Asked after the call, with the reply and its reasoning in the state,
+    27 of the 29 nudges in the round-8 chains were "bore it out"."""
+    h = _holding(notebook=_notebook_view())
+    before = jev.before_questions(h)
+    assert {k for k in before if k.startswith("held:")} == {
+        "held:0:touched", "held:0:now", "held:1:touched", "held:1:now"}
+    assert not any(k.startswith("held:") for k in jev.after_questions(h, _reply()))
+    assert "YOUR OWN THINKING" not in jev.state_text(h), "the state asked before carries no reply"
+    assert jev.before_questions(_holding(notebook=_notebook_view(), events=[])) == {}
+
+
+def test_striking_an_entry_the_mind_was_not_shown_files_nothing():
+    h = _holding(notebook=_notebook_view())
+    reply = {**_reply(), "notebook": [{"id": "n99", "strike": "I was wrong"}]}
+    questions = _both_batteries(h, reply)
+    assert not any(k.startswith("nb:0:") for k in questions)
+    out, warnings = character_bare.compile_bare(reply, _answer([])(questions), h)
+    assert out["notebook_ops"] == [] and not any(u.get("op") for u in out["mind_model_updates"])
+    assert any("'n99'" in w for w in warnings)

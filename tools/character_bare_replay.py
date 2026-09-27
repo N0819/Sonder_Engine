@@ -146,19 +146,32 @@ def _sectioned(payload, prompt):
     return prompt, user
 
 
+#: How many times a rearranged layout's request is sent when its reply does
+#: not validate -- the engine's own path would repair it; this stands in.
+LAYOUT_ATTEMPTS = 2
+
+
 def _ask_layout(layout, payload, prompt, temperature):
     """One call in a rearranged layout, validated as the engine validates a
-    bare reply (no repair: a failure is recorded, not retried)."""
+    bare reply; a reply that does not validate is asked once more (the
+    engine's path repairs), and a second failure is recorded."""
     from llm.llm_quality import _step_json_schema, strict_json_parse
     from llm.providers import chat_complete
     from llm.schemas import validate_llm_output_strict
     system, user = (_sheet_first if layout == "sheet_first" else _sectioned)(payload, prompt)
-    raw = chat_complete("character_major", system, user, temperature=temperature,
-                        json_schema=_step_json_schema("character_bare"))
-    report = validate_llm_output_strict("character_bare", strict_json_parse(raw))
-    if not report.valid:
-        raise ValueError(f"{layout} reply failed validation: {report.errors[:3]}")
-    return report.output
+    errors = []
+    for _attempt in range(LAYOUT_ATTEMPTS):
+        raw = chat_complete("character_major", system, user, temperature=temperature,
+                            json_schema=_step_json_schema("character_bare"))
+        try:
+            report = validate_llm_output_strict("character_bare", strict_json_parse(raw))
+        except Exception as exc:  # noqa: BLE001 -- unparseable is a failed attempt like any other
+            errors.append(f"{type(exc).__name__}: {str(exc)[:160]} -- reply began {str(raw)[:160]!r}")
+            continue
+        if report.valid:
+            return report.output
+        errors.append(f"{report.errors[:3]} -- reply began {str(raw)[:160]!r}")
+    raise ValueError(f"{layout} reply failed validation {len(errors)} times: {errors}")
 
 
 def _feelings(name, sheet, payload):
@@ -199,11 +212,13 @@ def _stored_from_capture(payload):
     return {"mind_models": models}
 
 
-def _bare_arm(name, sheet, payload, own, layout, feelings, notebook=False):
+def _bare_arm(name, sheet, payload, own, layout, feelings, notebook=False, stored=None, turn=None):
     """One beat under the bare card: the decision model before, the call in
     the chosen layout, the decision model after, compiled as the engine
     compiles it. `notebook`: the call shows the notebook (mind/notebook.py)
-    in place of the renderings it replaces, as the engine's bare path does."""
+    in place of the renderings it replaces, as the engine's bare path does --
+    rebuilt from the capture, or, in a chain, the character's own (`stored`,
+    at `turn`)."""
     from agents import character_bare
     from agents.character import character_temperature
     from agents.common import _agent_json
@@ -211,8 +226,11 @@ def _bare_arm(name, sheet, payload, own, layout, feelings, notebook=False):
     from mind import character_jev as jev
     from mind.affect_appraisal import _probabilities
 
-    view = (character_bare.notebook_for(_stored_from_capture(payload), payload, _observations(payload), name,
-                                        REPLAY_TURN) if notebook else None)
+    view = None
+    if notebook:
+        view = character_bare.notebook_for(
+            stored if stored is not None else _stored_from_capture(payload), payload, _observations(payload),
+            name, turn if turn is not None else REPLAY_TURN)
     h = character_bare.holding_from(
         name, sheet, payload, _observations(payload), payload.get("memory") or {},
         (own.get("active_state") or {}), language="en", notebook_view=view)
@@ -238,16 +256,116 @@ def _bare_arm(name, sheet, payload, own, layout, feelings, notebook=False):
     h.reasoning = str(providers.last_reasoning.get() or "")
     questions = jev.after_questions(h, raw)
     answers, after_s = _timed(jev.ask, jev.state_text(h, raw), questions)
-    compiled, warnings = character_bare.compile_bare(raw, answers, h)
+    # As the engine does: the note check asked before the call is read with
+    # the rest.
+    compiled, warnings = character_bare.compile_bare(raw, {**(before or {}), **answers}, h)
+    held_checks = [{"id": row.get("id"), "about": row.get("about"), "note": str(row.get("note") or "")[:200],
+                    "shares": {k: round(v, 3) for k, v in
+                               _probabilities((before or {}).get(f"held:{k_}:touched")).items()},
+                    "now": jev.pick(before or {}, f"held:{k_}:now")}
+                   for k_, row in enumerate(jev.notes_in_play(h))]
     return {"reply": raw, "compiled": compiled, "warnings": warnings,
             "modules": modules, "disputed": [m["text"] for m in disputed],
-            "dispute_shares": dispute_shares,
+            "dispute_shares": dispute_shares, "held_checks": held_checks,
             "seconds": call_s, "jev_before_s": before_s, "jev_after_s": after_s,
             "questions": len(questions), "reasoning_chars": len(h.reasoning),
             "reasoning": h.reasoning[:REASONING_KEPT],
             "prompt_chars": len(prompt), "layout": layout,
             "feelings": (bare_payload.get("self") or {}).get("feelings"),
             **({"notebook_shown": view, "payload_chars": len(_dump(bare_payload))} if notebook else {})}
+
+
+def chain(db_path, name, layout="sectioned", feelings=True, limit=None):
+    """ONE CHARACTER'S CAPTURES IN ORDER, ITS NOTEBOOK CARRIED FORWARD: the
+    story's captured moments reach the mind as they did, and what it keeps --
+    its notes about people and things, its concerns, its projects, its
+    reminders, its running notes and the recall it asked for -- is its own,
+    each beat's compiled output applied the way commit applies it
+    (`theory_of_mind.apply_mind_model_updates` after the kind caps,
+    `notebook.apply_notebook_ops`, the concerns the beat left,
+    `affect.apply_project_ops`). The first capture's readings seed it."""
+    from core import db
+    db.configure(str(db_path))
+    from llm import providers
+    from mind import affect
+    from mind import notebook as nb
+    from mind import theory_of_mind as tom
+
+    rows = db.q("SELECT id, turn_id, payload_hashes FROM llm_capture WHERE role='character_major' AND ok=1 "
+                "ORDER BY id")
+    sheet = _sheet(db, name)
+    state, out = None, []
+    for cap in rows:
+        if "original_request" in (cap["payload_hashes"] or ""):
+            continue
+        payload = _payload(db, cap["payload_hashes"])
+        own = dict(payload.get("self") or {})
+        if str(own.get("name") or "") != name:
+            continue
+        if limit is not None and len(out) >= limit:
+            break
+        turn_row = db.q("SELECT idx FROM turns WHERE id=?", (cap["turn_id"],), one=True)
+        turn_idx = int(turn_row["idx"]) if turn_row else len(out)
+        if state is None:
+            state = _stored_from_capture(payload)
+            for hyps in (m["hypotheses"] for m in state["mind_models"].values()):
+                for h in hyps:
+                    h["last_updated_turn"] = h["first_seen_turn"] = turn_idx
+            state["active_concerns"] = list((own.get("active_state") or {}).get("active_concerns") or [])
+            state["projects"] = [p for p in own.get("projects") or [] if isinstance(p, dict)]
+            state["former_projects"] = []
+            state["my_notes"] = []
+        # The chain's own keeping, in place of the capture's.
+        active = dict(own.get("active_state") or {})
+        active["active_concerns"] = list(state["active_concerns"])
+        own["active_state"] = active
+        own["projects"] = list(state["projects"])
+        if state["my_notes"]:
+            own["my_notes"] = list(state["my_notes"])
+        chained = {**payload, "self": own}
+        ledger = []
+        token = providers.call_ledger_sink.set(ledger.append)
+        try:
+            b = _bare_arm(name, sheet, chained, own, layout, feelings, notebook=True, stored=state,
+                          turn=turn_idx)
+        except Exception as exc:  # noqa: BLE001 -- one failed beat is a finding; the chain goes on
+            b = {"error": f"{type(exc).__name__}: {str(exc)[:300]}", "seconds": None}
+        finally:
+            providers.call_ledger_sink.reset(token)
+        b["calls"] = list(ledger)
+        record = {"db": Path(db_path).name, "capture": cap["id"], "turn_id": cap["turn_id"], "turn": turn_idx,
+                  "name": name,
+                  "situation": [str((r.get("observed") or {}).get("text") or "")[:300]
+                                for r in (payload.get("perception") or {}).get("events") or []
+                                if isinstance(r, dict)],
+                  "bare": b}
+        if "error" not in b:
+            compiled = b["compiled"] or {}
+            state = tom.apply_mind_model_updates(
+                state, tom.cap_mind_model_updates(compiled.get("mind_model_updates") or []), turn_idx)
+            state = nb.apply_notebook_ops(state, compiled.get("notebook_ops") or [], turn_idx)
+            state["active_concerns"] = list((compiled.get("active_state") or {}).get("active_concerns") or [])
+            projects, former, project_warnings = affect.apply_project_ops(
+                state["projects"], state["former_projects"], compiled.get("project_ops") or [], turn_idx)
+            state["projects"], state["former_projects"] = projects, former
+            note = " ".join(str(compiled.get("note") or "").split())
+            if note:
+                state["my_notes"] = (state["my_notes"] + [{"turn": turn_idx, "note": note[:300]}])[-5:]
+            ponder = compiled.get("ponder")
+            if isinstance(ponder, dict) and ponder.get("query"):
+                state["memory_ponder"] = {"query": ponder["query"], "set_turn": turn_idx}
+            record["chain"] = {
+                "notes": sum(len(m.get("hypotheses") or []) for m in state.get("mind_models", {}).values()),
+                "subjects": len(state.get("mind_models") or {}), "reminders": len(state.get("notebook") or []),
+                "concerns": len(state["active_concerns"]), "projects": [p.get("project") for p in projects],
+                "project_warnings": project_warnings}
+        out.append(record)
+        chain_line = record.get("chain") or {}
+        print(f"{record['db']} {name} capture {cap['id']} turn {turn_idx}: {b.get('seconds')}s; "
+              f"notes {chain_line.get('notes')} reminders {chain_line.get('reminders')} "
+              f"concerns {chain_line.get('concerns')} projects {chain_line.get('projects')}"
+              + (f"; FAILED {b['error'][:300]}" if "error" in b else ""), flush=True)
+    return out
 
 
 def replay(db_path, beats, arms, layout="system", feelings=False, notebook=False):
@@ -381,13 +499,65 @@ def main():
                          "of mind_models, active_hypotheses, projects and concerns -- as the engine's bare path does")
     ap.add_argument("--feelings", action="store_true",
                     help="give each beat its feelings by the engine's affect pass (the captures predate it)")
+    ap.add_argument("--chain", metavar="NAME",
+                    help="replay every capture of the character NAME in order, its notebook carried forward "
+                         "(the first --db only; --beats caps how many)")
     args = ap.parse_args()
+    if args.chain:
+        records = chain(args.db[0], args.chain, layout=args.layout, feelings=args.feelings,
+                        limit=args.beats if args.beats and args.beats > 2 else None)
+        write_chain(records, Path(args.out))
+        print(f"wrote {len(records)} chained beats to {args.out}")
+        return
     records = []
     for path in args.db:
         records += replay(path, args.beats, args.arms, layout=args.layout, feelings=args.feelings,
                           notebook=args.notebook)
     write(records, Path(args.out))
     print(f"wrote {len(records)} beats to {args.out}")
+
+
+def write_chain(records, out_dir):
+    """`replay.jsonl`, and `chain.md`: per beat, what reached the mind, what
+    it did, its notebook as shown, what it wrote there and where that landed."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with (out_dir / "replay.jsonl").open("w", encoding="utf-8") as fh:
+        for r in records:
+            fh.write(json.dumps(r, ensure_ascii=False, default=str) + "\n")
+    md = [f"# {records[0]['name'] if records else ''}: the notebook carried through the story\n"]
+    for r in records:
+        b = r["bare"]
+        md.append(f"## turn {r['turn']} (capture {r['capture']})\n")
+        md.append("\n".join(f"> {s}" for s in r["situation"][:4]) + "\n")
+        if "error" in b:
+            md.append(f"FAILED: {b['error']}\n")
+            continue
+        for s in b["reply"].get("sequence") or []:
+            for k in ("say", "do", "ponder"):
+                if str(s.get(k) or "").strip():
+                    md.append(f"- {k}: {s[k]}")
+        shown = b.get("notebook_shown") or {}
+        md.append("\nShown:")
+        for section, rows in shown.items():
+            for e in rows:
+                about = f"{e['about']}: " if e.get("about") else ""
+                md.append(f"- [{section} {e['id']}] {about}{e.get('note', '')}"
+                          + (f" ({e['sure']})" if e.get("sure") else "")
+                          + (f" (until: {e['until']})" if e.get("until") else ""))
+        md.append("\nWrote:")
+        for e in b["reply"].get("notebook") or []:
+            md.append("- " + json.dumps({k: v for k, v in e.items() if v}, ensure_ascii=False))
+        compiled = b.get("compiled") or {}
+        md.append("\nLanded:")
+        for u in compiled.get("mind_model_updates") or []:
+            md.append(f"- {u.get('op') or 'add'} [{u.get('kind')}] {u.get('about_entity')}: "
+                      f"{str(u.get('claim'))[:200]} ({u.get('confidence')})")
+        for op in compiled.get("notebook_ops") or []:
+            md.append(f"- reminder {op['op']} {op.get('id', '')} {op.get('note', '')}")
+        for op in compiled.get("project_ops") or []:
+            md.append(f"- project {json.dumps(op, ensure_ascii=False)}")
+        md.append(f"\nKept after: {json.dumps(r.get('chain') or {}, ensure_ascii=False)}\n")
+    (out_dir / "chain.md").write_text("\n".join(md), encoding="utf-8")
 
 
 if __name__ == "__main__":

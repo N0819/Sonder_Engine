@@ -26,7 +26,7 @@ import re
 
 from core.db import get_setting
 from llm.prompts import bare_character_prompt, character_bare_module, character_jev_options
-from mind import affect_pass, notebook
+from mind import affect, affect_pass, notebook
 from mind import character_jev as jev
 
 #: The setting that selects the contract, and the value that selects this one.
@@ -147,6 +147,7 @@ def holding_from(name, sheet, payload, observations, memory_context, active, *,
         drive=dict(drive),
         charge=float(hedonic.get("charge") or 0.0),
         rupture_open=bool(rupture_open),
+        crisis=bool(self_.get("crisis")),
         reasoning=str(reasoning or ""),
         notebook=dict(notebook_view or {}),
     )
@@ -182,16 +183,29 @@ def notebook_for(stored_state, payload, observations, name, turn_idx, *, absorpt
                          concerns=active.get("active_concerns") or [], projects=self_.get("projects") or [])
 
 
+#: What `self.active_state` carries of the mood as numbers and ledgers. The
+#: bare card gives the mood once, as `self.feelings` (`mind/affect_pass.py`),
+#: and calls it given; the same mood twice more, as coordinates and as a
+#: label, is two representations free to disagree. Measured on ten captured
+#: payloads (2026-09-27): 1.3k-2.7k characters a beat.
+MOOD_INTERNALS = frozenset(("affect", "mood", "valence", "arousal", "mood_coords", "mood_habits",
+                            "mood_clock", "memory_echo", "affect_seconds", "affect_turn", "hedonic",
+                            "stress"))
+
+
 def with_notebook(payload, notebook_view):
     """The payload this call sends, the notebook in place of the four
     renderings it replaces -- `mind_models` and `active_hypotheses` (its
     notes about people and things), `self.projects` and the concerns in
-    `self.active_state` (two of its sections): one view, not four copies."""
+    `self.active_state` (two of its sections): one view, not four copies.
+    The mood's internals leave `self.active_state` too (`MOOD_INTERNALS`):
+    `self.feelings` is the mood this card is given."""
     out = dict(payload or {})
     self_ = dict(out.get("self") or {})
     self_.pop("projects", None)
     if isinstance(self_.get("active_state"), dict):
-        self_["active_state"] = {k: v for k, v in self_["active_state"].items() if k != "active_concerns"}
+        self_["active_state"] = {k: v for k, v in self_["active_state"].items()
+                                 if k != "active_concerns" and k not in MOOD_INTERNALS}
     self_["notebook"] = notebook.for_payload(notebook_view)
     out["self"] = self_
     out.pop("mind_models", None)
@@ -202,10 +216,29 @@ def with_notebook(payload, notebook_view):
 # --- the card, with its gated sections --------------------------------------------
 
 def modules_for(payload, *, disputed=(), rupture_open=False, rupture_forced=False):
-    """The gated sections this beat's payload calls for, in the card's order."""
+    """The gated sections this beat's payload calls for, in the card's order:
+    each ships only when the payload carries what it explains."""
     self_ = (payload or {}).get("self") or {}
     perception = (payload or {}).get("perception") or {}
+    decision = (payload or {}).get("decision") or {}
     out = []
+    # What the old card said on every beat, now said when it applies: a
+    # silence that is someone's act, a turn owed, an offer about this mind,
+    # how much to say, composure failing, and the signs given lately.
+    if decision.get("they_said_nothing"):
+        out.append("their_silence")
+    if decision.get("awaiting_your_answer"):
+        out.append("answer_owed")
+    if decision.get("comes_to_you"):
+        out.append("offers")
+    if decision.get("speech_budget"):
+        out.append("speech_budget")
+    if self_.get("crisis"):
+        out.append("crisis")
+    if self_.get("recent_tells"):
+        out.append("tell_variety")
+    if self_.get("tell_grounds"):
+        out.append("tell_payoff")
     if disputed:
         out.append("dispute")
     if rupture_open:
@@ -277,7 +310,11 @@ def _compile_notebook(reply, answers, h, out, warnings):
     - a worry into the concerns, what would settle it carried in its words;
     - a commitment into `project_ops` (adoption: an end outside the doing,
       two at most, on trial until lived into) -- or, with no end to name,
-      an intention, because a commitment with no end is a task.
+      an intention, because a commitment with no end is a task. One that
+      adoption would refuse as circular or crowded out
+      (`affect.adoption_refusal`) is kept as an intention too, what would
+      finish it in its words: a commitment refused a slot was lost in the
+      round-8 chains, and adoption's own warning says to serve it as one.
 
     A note about someone or something needs a subject and rests on something
     this mind was given, as every reading does; a thought with neither is not
@@ -287,7 +324,14 @@ def _compile_notebook(reply, answers, h, out, warnings):
     subjects = jev.note_subjects(h)
     glue = character_jev_options("note_glue", h.language)
     ops, concerns, struck = [], [], set()
-    for j, entry in enumerate(jev.notebook_entries(reply)):
+    entries = jev.notebook_entries(reply)
+    # The projects adoption will weigh a new one against: those held, less
+    # any this reply strikes (closures land before adoptions).
+    freed = {e["id"] for e in entries if e["id"] and e["strike"]}
+    live = [{"id": row["id"], "project": row.get("note") or ""}
+            for row in (h.notebook or {}).get("what_you_are_about") or []
+            if isinstance(row, dict) and row.get("id") and row["id"] not in freed]
+    for j, entry in enumerate(entries):
         held = shown.get(entry["id"])
         if held:
             section, row = held
@@ -316,6 +360,9 @@ def _compile_notebook(reply, answers, h, out, warnings):
             else:
                 warnings.append("a project is not reworded: strike it, and take up the one you mean now")
             continue
+        if not entry["note"]:
+            warnings.append(f"struck {entry['id']!r}, which this mind was not shown")
+            continue
         kind = jev.pick(answers, f"nb:{j}:kind") or "keep"
         about = (jev.resolve_about(entry["about"], subjects) or entry["about"]
                  or jev.indexed(answers, f"nb:{j}:about", "p", subjects) or "")
@@ -323,11 +370,17 @@ def _compile_notebook(reply, answers, h, out, warnings):
         if kind == "worry":
             concerns.append(_fill_concern(glue, entry))
         elif kind == "commitment":
-            if entry["until"]:
+            refused = affect.adoption_refusal(live, entry["note"], entry["until"])
+            if entry["until"] and refused is None:
                 out["project_ops"].append({"op": "adopt", "project": entry["note"],
                                            "satisfied_when": entry["until"], "about": ""})
+                live.append({"id": "", "project": entry["note"]})
+            elif refused and refused[0] == "restates":
+                warnings.append(f"a commitment already held is not taken up again: {entry['note'][:80]!r}")
             else:
-                out["intent_ops"].append({"op": "add", "intent": entry["note"], "why": entry["note"],
+                intent = (jev._fill(glue["until"], {"text": entry["note"], "until": entry["until"]})
+                          if entry["until"] else entry["note"])
+                out["intent_ops"].append({"op": "add", "intent": intent, "why": entry["note"],
                                           "evidence": evidence})
         elif kind == "keep" or not about or not evidence:
             ops.append({"op": "add", "about": about, "note": entry["note"]})
@@ -335,7 +388,13 @@ def _compile_notebook(reply, answers, h, out, warnings):
             out["mind_model_updates"].append({
                 "about_entity": about, "kind": kind, "claim": entry["note"],
                 "confidence": round(_sure(entry), 3), "evidence": evidence, "alternatives": []})
-    for k, row in enumerate(jev.notes_held_to_check(h, reply)):
+    # The decision model's reading of the notes in play, asked BEFORE the
+    # call (`jev.before_questions`); a note the reply changed or struck
+    # itself is the reply's to move.
+    written = {e["id"] for e in entries if e["id"]}
+    for k, row in enumerate(jev.notes_in_play(h)):
+        if row.get("id") in written:
+            continue
         toward = notebook.NUDGE_TOWARD.get(jev.pick(answers, f"held:{k}:touched") or "")
         evidence = _evidence(answers, f"held:{k}", h)
         if toward is not None and evidence:
@@ -353,6 +412,22 @@ def _fill_concern(glue, entry):
     note = _text(entry.get("note"), CONCERN_CHARS)
     until = _text(entry.get("until"), UNTIL_CHARS)
     return jev._fill(glue["concern"], {"note": note, "until": until}) if until else note
+
+
+def _distinct_concerns(concerns):
+    """Each concern once, by the notebook's own identity for it
+    (`notebook.concern_id`: the words, case and spacing aside), first kept.
+    A worry written in `changes` and again in the notebook arrived twice in
+    the round-8 chains. Words merely CLOSE to another's are kept apart: two
+    different worries scored 0.40-0.46 on the engine's similarity there, and
+    the one true paraphrase 0.455, so no threshold tells them apart."""
+    out, seen = [], set()
+    for c in concerns:
+        key = notebook.concern_id(c.get("text") if isinstance(c, dict) else c)
+        if key not in seen:
+            seen.add(key)
+            out.append(c)
+    return out
 
 
 def _named_here(to_text, people):
@@ -384,6 +459,7 @@ def compile_bare(reply, answers, h):
 
     # --- conduct ---
     sequence, addresses, expects = [], [], False
+    speakers = sorted({x["speaker"] for x in h.heard if x.get("speaker")})
     for index, kind, row in jev.steps(reply):
         if kind == "say":
             if any(f"say:{index}:to:{p}" in answers for p in range(len(h.people))):
@@ -399,10 +475,7 @@ def compile_bare(reply, answers, h):
                     addresses.append(person)
             target = targets[0] if targets else None
             hidden = [p for p in _people_picked(answers, "say", h, index) if p not in targets]
-            interrupts = jev.pick(answers, f"say:{index}:interrupts")
-            speakers = sorted({x["speaker"] for x in h.heard if x.get("speaker")})
-            cut = (speakers[int(interrupts[1:])] if interrupts and interrupts.startswith("p")
-                   and interrupts[1:].isdigit() and int(interrupts[1:]) < len(speakers) else "")
+            cut = jev.indexed(answers, f"say:{index}:interrupts", "p", speakers) or ""
             expects = expects or jev.yes(answers, f"say:{index}:expects")
             sequence.append({
                 "type": "speech", "text": str(row["say"]).strip(),
@@ -420,6 +493,8 @@ def compile_bare(reply, answers, h):
             seen = jev.pick(answers, f"do:{index}:seen")
             target = jev.indexed(answers, f"do:{index}:target", "p", h.people)
             hidden = [p for p in _people_picked(answers, "do", h, index) if p != target]
+            faced = jev.indexed(answers, f"do:{index}:look", "p", h.people)
+            swept = jev.pick(answers, f"do:{index}:look") == "around"
             sequence.append({
                 "type": "action", "attempt": act,
                 # An act that happens only inside the mind is imperceptible
@@ -430,6 +505,12 @@ def compile_bare(reply, answers, h):
                 "visibility": "concealed" if hidden else "overt",
                 "conceal_from": hidden,
                 "targets": [target] if target else [],
+                # Where it turns the body (the commit sets the facing from
+                # it, `spatial_frames.look_bearing`; `around` is a sweep) and
+                # whose words it cuts off (resolved in the interaction loop
+                # against who has spoken -- a claim, not an outcome).
+                "look": faced or ("around" if swept else ""),
+                "interrupts": jev.indexed(answers, f"do:{index}:interrupts", "p", speakers) or "",
             })
         else:
             sequence.append({"type": "ponder", "query": str(row["ponder"]).strip(),
@@ -590,7 +671,7 @@ def compile_bare(reply, answers, h):
 
     # --- the appraisal the engine reads ---
     appraisal = _appraisal(answers, h, hinge)
-    active_state["active_concerns"] = kept_concerns + new_concerns
+    active_state["active_concerns"] = _distinct_concerns(kept_concerns + new_concerns)
     active_state["stress"] = {"coping_mode": (jev.indexed(answers, "coping_mode", "s", h.strategies) or "")}
     active_state["hedonic"] = {"released": jev.yes(answers, "released")}
 
@@ -598,9 +679,14 @@ def compile_bare(reply, answers, h):
     manifest = {"surface_demeanor": " ".join(str(reply.get("demeanor") or "").split())[:240], "tells": []}
     for j, tell in enumerate(jev.lines_of(reply, "tells", jev.MAX_TELLS)):
         subtlety = jev.graded(answers, f"tell:{j}:miss", jev.MISS)
+        subtlety = 0.5 if subtlety is None else subtlety
+        if h.crisis:
+            # COMPOSURE FAILING SHOWS: the full card asked the model for a
+            # tell no subtler than 0.4 under `self.crisis`; held here instead.
+            subtlety = min(subtlety, jev.MISS["noticeable"])
         manifest["tells"].append({
             "cue": tell, "channel": jev.pick(answers, f"tell:{j}:channel") or "seen",
-            "subtlety": round(0.5 if subtlety is None else subtlety, 3),
+            "subtlety": round(subtlety, 3),
             "betrays": "suppressed_want" if held_index is not None else "undercurrent",
             "because": ""})
     urgency = jev.graded(answers, "urgency", jev.GRADE)
@@ -675,6 +761,7 @@ def _appraisal(answers, h, hinge):
             "familiarity": round(jev.graded(answers, f"echo:{k}:familiar", jev.GRADE) or 0.0, 3),
             "threat_bias": round(jev.graded(answers, f"echo:{k}:threat", jev.GRADE) or 0.0, 3),
             "coping_effect": round(jev.graded(answers, f"echo:{k}:coping", jev.ABILITY) or 0.0, 3),
-            "somatic_echo": 0.0, "expectation": "", "anticipatory_emotion": "",
+            "somatic_echo": round(jev.graded(answers, f"echo:{k}:body", jev.BODY_ECHO) or 0.0, 3),
+            "expectation": "", "anticipatory_emotion": "",
             "why": _text(echoed["text"], 240)}
     return out

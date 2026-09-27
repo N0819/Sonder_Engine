@@ -4582,6 +4582,9 @@ def character_step(ctx, cid, nonce):
     # everything below consumes.
     _bare = character_bare.enabled()
     _holding = None
+    # Kept for the read-back: the notes in play are checked before the call,
+    # against what reached this mind, before its own reply can restate them.
+    _before_answers = {}
     if _bare:
         # THE NOTEBOOK (mind/notebook.py): what this mind keeps -- concerns,
         # projects, what it makes of people and things, reminders -- as one
@@ -4596,11 +4599,12 @@ def character_step(ctx, cid, nonce):
         payload = character_bare.with_notebook(payload, _nb_view)
         _disputed = []
         try:
-            _disputed = character_jev.read_before(character_jev.ask(
+            _before_answers = character_jev.ask(
                 character_jev.state_text(_holding),
-                character_jev.before_questions(_holding)), _holding)
+                character_jev.before_questions(_holding)) or {}
+            _disputed = character_jev.read_before(_before_answers, _holding)
         except Exception as _exc:  # noqa: BLE001 -- a check that cannot run gates nothing in
-            ctx.add_warning(f"character {character_name(sh)}: no dispute check "
+            ctx.add_warning(f"character {character_name(sh)}: no dispute or note check "
                             f"({type(_exc).__name__}: {str(_exc)[:120]})")
         if _disputed:
             # A copy: `memory_context` itself is what grounding reads.
@@ -4646,12 +4650,18 @@ def character_step(ctx, cid, nonce):
         if _answers is None:
             # NO SECOND CALL. The beat the character wrote stands, read by
             # code alone: each line goes to whoever its `to` names among the
-            # people here, at a voice pitched for them; acts stay visible;
-            # nothing is filed. Speaking in a room is a channel, and voices
-            # lean toward carrying (the owner, 2026-09-26).
+            # people here, at a voice pitched for them; acts stay visible.
+            # What the character wrote for itself is kept -- its running note
+            # and its notebook (new entries as reminders, its own strikes and
+            # rewrites) -- and the note check made before the call still
+            # moves the notes it read; nothing else is filed. Speaking in a
+            # room is a channel, and voices lean toward carrying (the owner,
+            # 2026-09-26).
             ctx.add_warning(f"character {character_name(sh)}: the reply was not read back "
-                            f"({_read_back_error}); the beat stands and files nothing")
-        out, _kernel_warnings = character_bare.compile_bare(out, _answers or {}, _holding)
+                            f"({_read_back_error}); the beat stands, and only what the "
+                            f"character wrote for itself is kept")
+        out, _kernel_warnings = character_bare.compile_bare(
+            out, {**_before_answers, **(_answers or {})}, _holding)
     else:
         out = expand_character_evidence(out, _evidence_handles)
         out, _kernel_warnings = compile_character_kernel(out)

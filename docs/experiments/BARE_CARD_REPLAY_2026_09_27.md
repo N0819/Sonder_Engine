@@ -327,6 +327,77 @@ their notebooks kept or gained conduct, and the largest drops came on beats
 that wrote nothing in it. Median 31.3 s, 4 beats past a minute, the
 outage's among them.
 
+## Round eight: the notebook carried forward, and the conduct question
+
+Two things round seven could not say. Whether the notebook costs conduct:
+each condition was run again on the same 20 beats (sectioned, feelings).
+
+| Run | Lines | Acts | Median call |
+|---|---|---|---|
+| Without the notebook (round six) | 29 | 29 | 17.3 s |
+| Without the notebook (again; 1 beat failed) | 29 | 23 | 35.9 s |
+| With the notebook (round seven) | 21 | 24 | 31.3 s |
+| With the notebook (again) | 31 | 31 | 37.6 s |
+
+The spread inside each condition is wider than the gap between them: no
+cost measured. (The slower medians are the provider's, as in round four.)
+
+And what a mind does with a notebook it keeps: the `--chain` replay walks
+one character's captures in order, each beat's compiled output applied the
+way commit applies it, so the notebook it reads is the one it wrote. Margit
+(`lie`, 18 captures, 16 read back -- two beats failed on the provider) wrote
+20 new notes, revised 21 by id and had 21 nudged; Anselm (`betrayal`, 16)
+wrote 6, revised 6, changed a reminder 12 times, had 8 nudged, and took up
+one project. Four findings:
+
+- **Notes drifted into a log.** "I released him and sent him out the back.
+  He did not answer about Wat..." is a record of what happened, which memory
+  already keeps; a note is what the character thinks. The card says so now,
+  in one line.
+- **The note check confirmed nearly everything**: 27 of the 29 nudges were
+  "bore it out", several on beats that bore nothing out -- Kit sitting down
+  and laying his hands on his knees bore out that Holt had accused Margit of
+  lying; three unintelligible fragments of Luca's speech bore out that he
+  had brought the patrol news first. The check was asked after the call,
+  with the character's reply and reasoning in the state, where the
+  character restates what it holds. It is asked before the call now,
+  against what reached the mind; the tool records each check's
+  probabilities for the next run.
+- **A worry arrived twice**, written in `changes` and again in the notebook
+  (similarity 1.0). Concerns are kept once now, by the notebook's own
+  identity for one. Nothing close to a threshold would do: two different
+  worries scored 0.40-0.46 on the engine's similarity, and the one true
+  paraphrase 0.455.
+- **A commitment adoption refused was lost**: Anselm's "count the hits" had
+  a criterion restating it, which adoption refuses as a task, and nothing
+  kept it. What adoption would refuse as circular or crowded out is kept as
+  an intention now, what would finish it in its words
+  (`affect.adoption_refusal`, the one reader adoption itself uses).
+
+## The old card, reviewed: what the bare card had dropped
+
+The owner: "review the old contract, what have we abandoned from it that
+might still be beneficial?" Read clause by clause against the bare path:
+
+| The full card | The bare path before | Now |
+|---|---|---|
+| silence as the other's act, an answer owed, offers, the speech budget, crisis, tell variety, tell payoff (said every beat) | the payload carried each key, unexplained | seven gated sections, each shipped when its key is present (129-243 characters) |
+| an act's `look` (the facing, or a sweep) | never set: facing came only from inference | `act_look`, asked of every act |
+| an act that cuts someone off (`interrupts`) | speech only | `act_interrupts` over those who spoke |
+| a recollection felt in the body (`somatic_echo`) | 0.0 on every beat | `echo_body`, signed |
+| a crisis tell no subtler than 0.4 | unenforced | the ceiling held in code |
+| mood as coordinates, labels and ledgers in `self.active_state` | sent beside `self.feelings` | stripped: the mood given once |
+| a commitment with no slot | lost | kept as an intention |
+| a reply the read-back could not read "files nothing" | untrue: the note and notebook writes are kept | the warning says what is kept |
+
+Left for the owner, each a behaviour the full card had and the bare card
+does not: navigation and spatial-frame guidance (the frame, exits and run
+offers reach the payload under engine key names with no section); learning
+an association's breaking (`extinguish`) or a new one -- the read-back only
+reinforces a held cue that fired; the self-repetition clause (recent lines
+and moves as continuity, "do not reset an offer, question, or conversational
+job"); and material effects. None of the restorations is replayed yet.
+
 ## What the replay found in the engine
 
 - **A feeling named twice** (fixed, 5d967d68). Where the moment stirred
@@ -383,12 +454,13 @@ outage's among them.
   an answer that is sometimes valid.
 - Beliefs are still touched about three times as often as the full card's
   model touched them (34-37 against 12) -- held beliefs re-confirmed beat
-  after beat -- and intentions 1.5-2 times (22-30 against 15).
+  after beat -- and intentions 1.5-2 times (22-30 against 15). The note
+  check's move before the call is the likely fix for beliefs too; the
+  belief revise gate needs rethinking first (register §6.17).
 - Acts that state their own outcome, in both cards.
-- The notebook: whether it costs conduct (one run cannot say); no note was
-  struck in 20 beats and no project taken up -- both paths are tested, and
-  neither was exercised by these stories.
-- Not carried yet: material effects.
+- The notebook: the confirmation share with the check before the call (re-run
+  the chains); no note struck in play yet.
+- The restorations above, unreplayed; and the four the owner decides.
 - The default switch -- the owner's.
 
 ## Reproducing
@@ -398,6 +470,11 @@ the instrument does not. On copies of any captured story:
 
     python tools/character_bare_replay.py --db COPY.db --beats 5 --arms bare \
         --layout sectioned --feelings --notebook --out DIR
+
+One character's captures in order, its notebook carried forward:
+
+    python tools/character_bare_replay.py --db COPY.db --chain "Margit Oldis" \
+        --layout sectioned --feelings --out DIR
 
 Route the story's `character_major` role to the model under test first, and
 check the decision model's credit.

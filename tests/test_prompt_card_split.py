@@ -49,7 +49,13 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 284   # +4 (2026-09-27, the notebook, mind/notebook.py):
+PART_COUNT = 294   # +10 (2026-09-27, what the old card said that the bare
+                   # card had dropped): seven gated `character_bare` sections
+                   # (`their_silence`, `answer_owed`, `offers`,
+                   # `speech_budget`, `crisis`, `tell_variety`,
+                   # `tell_payoff`) and three `character_jev` questions
+                   # (`act_look`, `act_interrupts`, `echo_body`).
+                   # +4 (2026-09-27, the notebook, mind/notebook.py):
                    # `character_jev.note_kind`, `note_about`, `note_touched`
                    # and `strike_kind`.
                    # +1 then -1 (2026-09-27): `character_jev.act_private`, retired

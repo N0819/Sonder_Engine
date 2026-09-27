@@ -1154,6 +1154,27 @@
     },
     "carried_reports": {
       "$text": "character_bare/carried_reports.txt"
+    },
+    "their_silence": {
+      "$text": "character_bare/their_silence.txt"
+    },
+    "answer_owed": {
+      "$text": "character_bare/answer_owed.txt"
+    },
+    "offers": {
+      "$text": "character_bare/offers.txt"
+    },
+    "speech_budget": {
+      "$text": "character_bare/speech_budget.txt"
+    },
+    "crisis": {
+      "$text": "character_bare/crisis.txt"
+    },
+    "tell_variety": {
+      "$text": "character_bare/tell_variety.txt"
+    },
+    "tell_payoff": {
+      "$text": "character_bare/tell_payoff.txt"
     }
   },
   "character_jev": {
@@ -1328,6 +1349,15 @@
     "strike_kind": {
       "$text": "character_jev/strike_kind.txt"
     },
+    "act_look": {
+      "$text": "character_jev/act_look.txt"
+    },
+    "act_interrupts": {
+      "$text": "character_jev/act_interrupts.txt"
+    },
+    "echo_body": {
+      "$text": "character_jev/echo_body.txt"
+    },
     "options": {
       "volume": {
         "whisper": "ささやき声で、一人にだけ。",
@@ -1389,13 +1419,13 @@
         "other": "どれでもない。"
       },
       "reading_kind": {
-        "emotion": "その人が今感じていること。",
-        "goal": "その人が望むこと、しようとしていること。",
-        "trait": "その人の人となり。",
-        "second_order": "その人が誰かや何かについて思っていること。",
-        "identity": "その人の本当の正体。",
-        "observation": "その人について見て明らかなこと。",
-        "stated_fact": "その人がはっきり言ったこと。"
+        "emotion": "別の人が今感じていること。",
+        "goal": "別の人が望んでいること、しようとしていること。",
+        "trait": "別の人がどういう人か。",
+        "second_order": "別の人が誰か・何かをどう思っているか。",
+        "identity": "別の人が本当は何者か。",
+        "observation": "人や物について見て分かること。",
+        "stated_fact": "別の人がはっきり言ったこと。"
       },
       "aim_moved": {
         "nothing": "いいえ――状況を変えることは何もない。",
@@ -1451,7 +1481,8 @@
         "follow_start": "{person}について行き始めた。",
         "not_stated": "書かれていない",
         "situational": "この瞬間だけのため。",
-        "something_else": "ここに挙がっていない誰か・何か。"
+        "something_else": "ここに挙がっていない誰か・何か。",
+        "look_around": "周り全体を見回し、部屋を見渡す。"
       },
       "aim_labels": {
         "drive": "あなたを駆り立てるもの: {text}",
@@ -1502,6 +1533,13 @@
         "about": "{about}：{note}",
         "until": "{text}（{until}まで）",
         "concern": "{note}（{until}で落着）"
+      },
+      "echo_body": {
+        "hard_bad": "はい、強く。不快な感覚です。",
+        "bad": "はい。不快な感覚です。",
+        "none": "いいえ、体にはよみがえりません。",
+        "good": "はい。心地よい感覚です。",
+        "hard_good": "はい、強く。心地よい感覚です。"
       }
     }
   }

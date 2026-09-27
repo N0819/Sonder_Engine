@@ -1,0 +1,1 @@
+どれだけ話すか：`decision.speech_budget`は`say`の数を数えます。話すなら、少なくとも`min_lines`、目安は`suggested_lines`、`hard_max`を超えないでください。`may_stay_silent: false`なら、わざと拒むのでない限り話してください。

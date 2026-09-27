@@ -1368,31 +1368,54 @@ at a fifth of the call time, and reads as well or better. Open, in order:
   owner's call.
 - **Booking still heavier than the full card's**: beliefs touched 34-37
   times in 20 beats against its 12 (held beliefs re-confirmed beat after
-  beat), intentions 22-30 against 15.
+  beat), intentions 22-30 against 15. The notes showed the likely cause
+  (below): a check asked AFTER the call reads the character's own
+  restating of what it holds as confirmation. The belief check
+  (`belief_touched`) has the same shape and is still asked after; moving it
+  needs the revise gate rethought first -- today a belief is revised only
+  when the decision model calls it overturned AND a `changes` line aims at
+  it, so a character's own inference would be lost if the verdict moved
+  before its reply. Measure the note check's move first.
 - **The notebook** (built 2026-09-27, `mind/notebook.py`): concerns carrying
   what settles them, projects, what the mind thinks of people and things
   and what it thinks they think, and reminders, as one bounded view with
   stable ids the character adds, changes and strikes by. Replayed on the 20
   beats (round seven): 10 held notes revised by id, 8 new, 8 nudged, the
-  payload a median 1,218 characters smaller. Open: whether it costs conduct
-  (21 lines and 24 acts against 29 and 29 without it, inside the spread
-  between repeated runs -- a repeat would say); no note struck and no
-  project taken up in those beats, so both paths are tested but unexercised
-  by play; the knobs (`mind/notebook.py`, the kinds for things in
-  `theory_of_mind`) are the owner's.
+  payload a median 1,218 characters smaller; conduct no different across two
+  runs of each condition. Carried across each character's own captures
+  (round eight, `--chain`): Margit wrote 20 notes and revised 21 by id in 16
+  beats, Anselm 6 and 6 in 16. Four findings, each changed 2026-09-27:
+  notes drifted into a log of what happened (a card line now says memory
+  keeps that); 27 of the 29 nudges confirmed, several on beats that bore
+  nothing out (the note check now runs before the call, against what reached
+  the mind); a worry written in `changes` and in the notebook arrived twice
+  (kept once); a commitment adoption refused as circular was lost (kept as
+  an intention, `affect.adoption_refusal`). Open: re-run the chains and
+  measure the confirmation share with the check before the call (the tool
+  now records its probabilities); no note struck in play yet; the knobs
+  (`mind/notebook.py`, the kinds for things in `theory_of_mind`) are the
+  owner's.
 - Then the default switched, and the full card, its kernel compiler and its
   prompt paragraphs deleted so two contracts do not linger.
 
-Not carried yet: adopting a project (it needs an end
-criterion the bare reply has no field for; 2 of 161 measured replies wrote
-one) and material effects. Unmeasured: every question's wording (none has a
-battery yet, and the Japanese wordings are untested translations), every
-knob in `mind/character_jev.py` (the owner's), and the drive's new place
-among the aims every impact is asked about -- 0 of 227 measured impacts
-ever served it, so drive strain and its rupture window have effectively not
-run. The payload still carries the engine's key names the full card used to
-explain (the spatial frame, the speech budget, silence, a busy mouth);
-rendering them in plain words is the other half of a bare card.
+Not carried yet: material effects. (Adopting a project is carried by the
+notebook's `until` since 2026-09-27.) Restored 2026-09-27 from what the full
+card said on every beat: seven gated sections (a silence that is someone's
+act, an answer owed, an offer, the speech budget, a crisis, tell variety,
+tell payoff), an act's `look` and `interrupts`, the signed `somatic_echo`,
+the crisis ceiling on a tell's subtlety, and the mood given once
+(`self.feelings`, its internals out of `self.active_state`); none is
+replayed yet. Unmeasured: every question's wording (none has a battery yet,
+and the Japanese wordings are untested translations), every knob in
+`mind/character_jev.py` (the owner's), and the drive's new place among the
+aims every impact is asked about -- 0 of 227 measured impacts ever served
+it, so drive strain and its rupture window have effectively not run. The
+payload still carries engine key names the full card used to explain and no
+section does yet (the spatial frame, a busy mouth); rendering them in plain
+words is the other half of a bare card. The owner's call, from the review
+of the old contract: whether to carry its navigation and spatial-frame
+guidance, association learning (new cues, extinction), its
+self-repetition clause, and material effects.
 
 <a id="unbuilt-6-18"></a>
 

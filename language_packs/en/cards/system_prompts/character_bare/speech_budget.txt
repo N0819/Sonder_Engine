@@ -1,0 +1,1 @@
+HOW MUCH YOU SAY: `decision.speech_budget` counts separate `say` steps. If you speak, say at least `min_lines`, about `suggested_lines`, never more than `hard_max`; `may_stay_silent: false` means you speak unless you deliberately refuse.

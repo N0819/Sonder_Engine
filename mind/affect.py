@@ -1738,6 +1738,58 @@ def _next_project_id(projects, former):
     return f"p{highest + 1}"
 
 
+def adoption_refusal(live, text, criterion):
+    """`(reason, warning)` when adopting `text`, ended by `criterion`, over
+    the held projects `live` would be refused -- else None. The reasons:
+    `empty`; `restates` (a held project already says it); `no_criterion`;
+    `circular` (the criterion restates the project, which is what a task
+    says); `full` (both slots held). ONE READER, so a caller that sends a
+    refused commitment somewhere else (`agents.character_bare`, which keeps
+    a circular or crowded-out one as an intention) refuses exactly what
+    adoption refuses."""
+    text = str(text or "").strip()
+    crit = str(criterion or "").strip()
+    if not text:
+        return "empty", "project adopt rejected: empty project text"
+    dup = next((p for p in live or [] if claim_similarity(
+        text, str(p.get("project") or "")) >= _PROJECT_SIMILARITY), None)
+    if dup is not None:
+        return "restates", (
+            f"project adopt rejected: restates {dup.get('id')!r} -- a "
+            "project is held, not re-adopted")
+    # THE DELIBERATION GATE. "Can a mind reliably deliberate that this
+    # is worthy as a project?" is answered by making the deliberation
+    # mechanical: state what would END this other than doing it once.
+    # A criterion that RESTATES the project is not a criterion --
+    # measured cleanly separable on real strings: circular criteria
+    # ("understand the symbols" -> "when I understand the symbols")
+    # score 0.5-0.75 against their project text, genuine external
+    # conditions ("the keepers withdraw the commission", "spring comes
+    # and the village still stands") score 0.125-0.25. The same gate
+    # catches a TASK wearing the word, because a task's completion
+    # restates the task ("fetch the physician" -> "the physician is
+    # here", 0.5). What it cannot catch is an insincere-but-external
+    # criterion; that residue is what probation below is for.
+    if not crit:
+        return "no_criterion", (
+            "project adopt rejected: adoption is a deliberation -- "
+            "state satisfied_when, what would end this project OTHER "
+            "than doing it once. No statable end beyond the doing "
+            "means it is a task or a fascination, not a project")
+    if claim_similarity(text, crit) >= _CRITERION_RESTATES_SIM:
+        return "circular", (
+            "project adopt rejected: satisfied_when restates the "
+            "project, which is circular -- 'done when I have done it' "
+            "is what a TASK says. Name the condition OUTSIDE the doing "
+            "that would end it, or serve it as an intention instead")
+    if len(live or []) >= PROJECT_CAP:
+        return "full", (
+            "project adopt rejected: both slots full -- adopting a "
+            "third requires displacing one by name, with the reason "
+            "stated (a displace op in the same beat frees the slot)")
+    return None
+
+
 def apply_project_ops(projects, former, ops, turn_idx):
     """Apply a turn's project operations under the cap and the legibility
     floor. Returns (projects, former, warnings).
@@ -1812,49 +1864,10 @@ def apply_project_ops(projects, former, ops, turn_idx):
             warnings.append(f"unknown project op {kind!r}")
             continue
         text = str(op.get("project") or "").strip()
-        if not text:
-            warnings.append("project adopt rejected: empty project text")
-            continue
-        dup = next((p for p in live if claim_similarity(
-            text, str(p.get("project") or "")) >= _PROJECT_SIMILARITY), None)
-        if dup is not None:
-            warnings.append(
-                f"project adopt rejected: restates {dup.get('id')!r} -- a "
-                "project is held, not re-adopted")
-            continue
-        # THE DELIBERATION GATE. "Can a mind reliably deliberate that this
-        # is worthy as a project?" is answered by making the deliberation
-        # mechanical: state what would END this other than doing it once.
-        # A criterion that RESTATES the project is not a criterion --
-        # measured cleanly separable on real strings: circular criteria
-        # ("understand the symbols" -> "when I understand the symbols")
-        # score 0.5-0.75 against their project text, genuine external
-        # conditions ("the keepers withdraw the commission", "spring comes
-        # and the village still stands") score 0.125-0.25. The same gate
-        # catches a TASK wearing the word, because a task's completion
-        # restates the task ("fetch the physician" -> "the physician is
-        # here", 0.5). What it cannot catch is an insincere-but-external
-        # criterion; that residue is what probation below is for.
         crit = str(op.get("satisfied_when") or "").strip()
-        if not crit:
-            warnings.append(
-                "project adopt rejected: adoption is a deliberation -- "
-                "state satisfied_when, what would end this project OTHER "
-                "than doing it once. No statable end beyond the doing "
-                "means it is a task or a fascination, not a project")
-            continue
-        if claim_similarity(text, crit) >= _CRITERION_RESTATES_SIM:
-            warnings.append(
-                "project adopt rejected: satisfied_when restates the "
-                "project, which is circular -- 'done when I have done it' "
-                "is what a TASK says. Name the condition OUTSIDE the doing "
-                "that would end it, or serve it as an intention instead")
-            continue
-        if len(live) >= PROJECT_CAP:
-            warnings.append(
-                "project adopt rejected: both slots full -- adopting a "
-                "third requires displacing one by name, with the reason "
-                "stated (a displace op in the same beat frees the slot)")
+        refused = adoption_refusal(live, text, crit)
+        if refused:
+            warnings.append(refused[1])
             continue
         about = str(op.get("about") or "").strip().casefold()
         live.append({
