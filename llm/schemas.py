@@ -313,8 +313,8 @@ def list_shaped_fields(model_cls):
     the point: that flag drives the wrap-a-single-item coercion, which needs a
     known item type, so a bare `list` is excluded there on purpose. Channel
     SHAPE is a different question -- "does this field hold a sequence" -- and
-    `StateDiff.world_facts` is annotated bare. Reading it through `is_list`
-    dropped exactly that one channel.
+    a channel annotated bare (`StateDiff.world_facts` was, until the channel's
+    retirement on 2026-09-26) read through `is_list` was dropped as no list.
 
     Here rather than in the caller because this module already owns the
     Pydantic-major branch; a caller reading `outer_type_` for itself is how a
@@ -2194,7 +2194,6 @@ class DirectorEstablish(LenientModel):
     # Separate from contact (bodies touching) and inventory (discrete objects).
     substance_ops: list[dict] = Field(default_factory=list)
     sensory_events: list[dict] = Field(default_factory=list)
-    world_facts: list = Field(default_factory=list)
     # WHAT THE PASSAGE SHOWS PEOPLE SAYING AND DOING, in its order:
     # `{who, type: 'speech', text, volume?, to?}` or `{who, type: 'action',
     # act}`. TRANSCRIBED, never invented -- the establish tail keeps a line
@@ -2663,7 +2662,6 @@ class StateDiff(LenientModel):
     # ("departed", "arrived") onto those two and WARNS on anything else rather
     # than dropping it; see `scene.cast_change_status`.
     cast_changes: list[dict] = Field(default_factory=list)
-    world_facts: list = Field(default_factory=list)
     introductions: list[dict] = Field(default_factory=list)
     # Names/details a background presence asserted on an earlier beat that this
     # resolution ADOPTS as true (background_claims.py). Ratifying is the
@@ -3211,7 +3209,6 @@ class DirectorSocialSpecialist(LenientModel):
     StateDiff's own shapes (same contract as DirectorBodySpecialist)."""
     cast_changes: list[dict] = Field(default_factory=list)
     introductions: list[dict] = Field(default_factory=list)
-    world_facts: list = Field(default_factory=list)
     obligations: list[dict] = Field(default_factory=list)
     public_evidence: list[CharterPublicEvidence] = Field(default_factory=list)
     # The world's traffic, carried by this hand since the offscreen hand's
@@ -4892,7 +4889,7 @@ _STATE_DIFF_DICT_FIELDS = (
 #: agents/director.SPECIALISTS level with this map.
 SPECIALIST_CHANNELS = {
     "director_body": ("attire", "conditions", "vitals", "overlays"),
-    "director_social": ("cast_changes", "introductions", "world_facts",
+    "director_social": ("cast_changes", "introductions",
                         "public_evidence", "crowd_ops", "courier_ops",
                         "telling_ops", "ratified_claims", "contradicted_claims",
                         "charter_ops", "claim_dispositions", "consequences", "obligations"),
@@ -4949,7 +4946,7 @@ _STATE_DIFF_SIBLING_FIELDS = (
     "contact_action_ops", "substance_ops", "stations", "poses", "scales", "containment",
     "vitals", "overlays",
     "attire", "cast_changes",
-    "world_facts", "introductions", "time", "claim_dispositions",
+    "introductions", "time", "claim_dispositions",
 )
 
 def _non_entity_field_keys():
@@ -6241,7 +6238,6 @@ OUTPUT_EXAMPLES = {
         "attire": {},
         "entity_states": {},
         "sensory_events": [],
-        "world_facts": [],
         "sequence": [],
         # The sky the story opens under -- worked, like the rest of this
         # example, because the scene above is fog off the water and an
@@ -6567,7 +6563,6 @@ OUTPUT_EXAMPLES = {
             "overlays": {},
             "attire": {},
             "cast_changes": [],
-            "world_facts": [],
             "introductions": [],
             # THE SHAPE, NOT A PLACEHOLDER. This was `None`, and the resolve
             # prompt describes the field in prose two thousand lines away

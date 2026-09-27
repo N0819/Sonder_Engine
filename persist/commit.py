@@ -121,13 +121,12 @@ from persist.commit_ledgers import (OBLIGATION_OVERDUE_AGE, OBLIGATION_CAP,
     pending_obligation_view, _find_obligation, causal_obligation_ops, commit_obligations,
     _demand_unheard_by, _zip_rows,
     WORLD_PRESSURE_STALL_AGE, WORLD_PRESSURE_CAP, world_pressure_view,
-    _find_pressure, commit_world_pressure,
-    WORLD_FACTS_CAP, WORLD_FACT_CHARS, commit_world_facts)
+    _find_pressure, commit_world_pressure)
 from persist.commit_mapping import (
     _apply_mapping_book_ops, prepare_mapping_commit, commit_mapping, _lore_for,
-    _fact_is_covered, _setting_fact_needs, _attach_committed_surface,
+    _attach_committed_surface,
     GENERATED_SOURCE_PREFIX, _file_engine_provenance,
-    SETTING_FACT_SUBJECT_CHARS, _describe_need,
+    _describe_need,
     OPENING_PREMISE_SOURCE_PREFIX, OPENING_PREMISE_KNOWLEDGE_TAG,
     premise_entry_uid, _premise_title, _opening_premise, _file_opening_premise,
     NEED_SUBJECT_WORDS, _need_words, _reads_as_prose, _answering_bodies,
@@ -589,13 +588,6 @@ def _commit_all_locked(ctx, nonce):
             _commit_domain(
                 ctx, results, "world_pressure",
                 lambda: commit_world_pressure(ctx, nonce),
-            )
-            # What the beat established about the world, recorded rather than
-            # filed as something the beat reached for and did not find (PS18).
-            # Beside the other two world-KV ledgers because it is one.
-            _commit_domain(
-                ctx, results, "world_facts",
-                lambda: commit_world_facts(ctx, nonce),
             )
             _commit_domain(
                 ctx, results, "authored_events",

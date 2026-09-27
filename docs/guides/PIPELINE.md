@@ -395,13 +395,14 @@ reactor set, deterministic spatial reach supplies the present cast members who
 can perceive the onset; awareness and presence gates still remove minds that
 cannot act.
 
-A spoken proposition is not an objective setting fact. With an exact causal
-row join, `compile_transforms` rejects and reports `world_facts` emitted from a
-typed speech/communication row, while preserving its speech, public evidence,
-and other social operations. World-author permission establishes that a quote
+A spoken proposition is not an objective setting fact. A typed
+speech/communication row keeps its speech, public evidence and other social
+operations, and there is no channel in which what it claims could land as
+true: `world_facts`, which `compile_transforms` guarded against speech rows,
+was retired on 2026-09-26. World-author permission establishes that a quote
 was spoken, not that the quote is true. An independently authored or mechanical
-event can establish the fact on its own non-speech row. Archived transforms
-without exact typed speech provenance retain their existing read behavior.
+event changes the world on its own non-speech row, in the channel that owns
+what changed.
 
 Specialists run inside this stage for asserted changes that must exist in the
 onset preview. Their transforms land in `state_assertions` (contact in
@@ -1293,7 +1294,7 @@ an otherwise verified act. Local destruction requires proof of scene removal;
 its registry/book effects remain pending, and regional cascades cannot be
 certified from a local scene snapshot. Unknown channels never gain this exemption.
 
-`commit_all` first prepares the exact post-turn scene, the beat's typed records, its memory mutations (embeddings included) and its background claims without holding SQLite's write lock (`_prepare_turn_commit`). No LORE is prepared or embedded here: the mapping domain has filed none since 2026-09-03 (`persist/commit_mapping.py`). It then invokes twenty-one durable domains inside one outer transaction under a per-turn idempotency lock, in this order:
+`commit_all` first prepares the exact post-turn scene, the beat's typed records, its memory mutations (embeddings included) and its background claims without holding SQLite's write lock (`_prepare_turn_commit`). No LORE is prepared or embedded here: the mapping domain has filed none since 2026-09-03 (`persist/commit_mapping.py`). It then invokes twenty durable domains inside one outer transaction under a per-turn idempotency lock, in this order:
 
 1. transit sweep — first, because it mutates the prepared scene (timed
    arrivals, engine notices) that the scene domain then persists
@@ -1318,7 +1319,7 @@ certified from a local scene snapshot. Unknown channels never gain this exemptio
 5. cast status/state
 6. paradox checks
 7. spatial-frame reconciliation
-8. typed records: the Director's typed introductions; the beat's planning needs onto the frame's ledger with the committed surface attached, a containment room's need dropped; the Director's `world_facts` as `setting_fact` needs. No lore is filed here since 2026-09-03 -- the room `layout` filing is retired and the fallback fact writer with it (`persist/commit_mapping.py`, no model) -- with one exception: at the OPENING, the chat's scenario as its author wrote it is delivered to the cast as a `common`, explicitly public entry in the story's canon book, titled to say whom its "you" means (`_opening_premise`, `_file_opening_premise`, 2026-09-26), because everyone standing in the opening holds the premise. The establish stage's own `world_facts` are what is TRUE, card secrets among them, and stay need-only like every beat's (from 2026-09-14 they were delivered instead, and leaked)
+8. typed records: the Director's typed introductions; the beat's planning needs onto the frame's ledger with the committed surface attached, a containment room's need dropped. No lore is filed here since 2026-09-03 -- the room `layout` filing is retired and the fallback fact writer with it (`persist/commit_mapping.py`, no model) -- with one exception: at the OPENING, the chat's scenario as its author wrote it is delivered to the cast as a `common`, explicitly public entry in the story's canon book, titled to say whom its "you" means (`_opening_premise`, `_file_opening_premise`, 2026-09-26), because everyone standing in the opening holds the premise. The Director's `world_facts` channel is retired (2026-09-26): rooms, bodies and things carry what IS, the Writers' Room keeps the facts not yet in play, and the charter moves the ones that are. It had been filed as `setting_fact` needs, and at the opening from 2026-09-14 delivered to the cast -- card secrets among what it stated, which leaked
 9. off-screen plan ops — Director-adjudicated, character-grounded reactive plans
 10. crowd ops, then every crowd that has somewhere to be. After the scene
     domain, so a crowd op naming a room this beat created finds it in the
@@ -1342,10 +1343,8 @@ certified from a local scene snapshot. Unknown channels never gain this exemptio
 16. narration person
 17. obligations
 18. world pressure
-19. world facts — what the beat established about the world, from the establish's
-    diff as readily as the resolve's
-20. authored events
-21. pending-state clear
+19. authored events
+20. pending-state clear
 
 Then, still inside the transaction: the charter registry lands ONCE
 (`flush_registry_session` — every domain above mutated one shared private

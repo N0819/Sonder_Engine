@@ -65,6 +65,8 @@ NOT_CHANNEL_CONTENT = frozenset({"resolved_events", "phase_sources", "notes"})
 
 # The channels the ledger would route into: `StateDiff`, plus `public_evidence`,
 # which is step metadata the social hand owns rather than a StateDiff field.
+# `world_facts` was retired from `StateDiff` on 2026-09-26; it stays here
+# because the captures this measured (2026-09-09) carry it.
 #
 # Scoping matters more than it looks. A captured response also carries the
 # CHARACTER stage's own shapes -- `appraisal`, `sequence`, `active_state`,

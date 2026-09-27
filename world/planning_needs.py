@@ -62,13 +62,12 @@ NEED_REASONS = (
     # ceiling, so a dwelling is owed (`charter_enrol.enrol_person`).
     "berth_ceiling",
     # The Director asserted a SETTING fact with no physical seat -- how a
-    # thing works, what a people hold true -- in `state_diff.world_facts`.
-    # The Director owns causality, not the setting bible: the fact is a
-    # need for the Writers' Room to file with provenance and a gate, and it
-    # is filed by nobody else (`persist/commit_mapping`) -- except that at
-    # the OPENING the fact is the scenario's premise, which every cast
-    # member already holds, so it is delivered to them as public knowledge
-    # and the need's `surface.entry_uid` names the entry it was delivered as.
+    # thing works, what a people hold true -- in `state_diff.world_facts`,
+    # for the Writers' Room to file with provenance and a gate. The channel
+    # was RETIRED 2026-09-26 (`persist/commit_mapping`'s docstring): a
+    # setting truth not yet in play is the Room's to keep in its lorebooks,
+    # and one in motion the charter's. Nothing raises this reason now; the
+    # needs stored under it (95 in the owner's database) keep it readable.
     "setting_fact",
     # A vehicle set moving with an ETA and no destination room is a journey
     # to nowhere: `mechanics._schedule_new_arrivals` schedules an arrival

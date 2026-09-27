@@ -221,7 +221,6 @@ def test_a_verdict_or_a_prose_field_is_not_a_reference():
                                 "status": "realized"}],
         "consequences": [{"what": "the vault door is found open",
                           "where": "quay_road"}],
-        "world_facts": ["the vault door has always stuck in winter"],
     })
     assert not _omission_subject_encoded(sd, "vault_door")
     assert not _omission_subject_encoded(sd, "vault door")

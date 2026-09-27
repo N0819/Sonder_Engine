@@ -481,7 +481,7 @@ def delegated_channels() -> list[str]:
 
 
 class TestEveryDelegatedChannelIsNamedAsDelegated:
-    def test_the_engine_owns_thirty_eight(self):
+    def test_the_engine_owns_thirty_seven(self):
         """Bounds the tests below: a specialist that gains a channel moves
         this count, and the sheet has to move in the same commit. 31 until
         2026-09-04, when `offscreen_plan_ops` left the Director's diff with
@@ -502,8 +502,13 @@ class TestEveryDelegatedChannelIsNamedAsDelegated:
         times in 3,000 resolve variants. The beat's span is now engine
         arithmetic over the author's per-row `seconds`
         (`world.mechanics.beat_time_from_spans`) -- the one channel here with
-        no model owner, and the count says so."""
-        assert len(delegated_channels()) == 38
+        no model owner, and the count says so.
+        37 on 2026-09-26: `world_facts` left the social hand with the channel
+        itself (the owner: everything is recorded onto rooms, and the
+        Writers' Room reads the lorebooks). Its ledger held 87 facts across
+        25 chats that no payload read, and its needs were 95 of the 102 on
+        record."""
+        assert len(delegated_channels()) == 37
 
     @pytest.mark.parametrize("stage", sorted(DELEGATIONS))
     @pytest.mark.parametrize("language", LANGUAGES)

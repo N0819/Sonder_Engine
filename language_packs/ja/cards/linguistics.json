@@ -2056,8 +2056,6 @@
       "claim": "artifacts",
       "introduction": "introductions",
       "name_exchange": "introductions",
-      "world_fact": "world_facts",
-      "fact": "world_facts",
       "部屋": "rooms",
       "場所": "rooms",
       "扉": "adjacency",

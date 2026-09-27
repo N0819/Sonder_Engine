@@ -72,7 +72,7 @@ BEATS = [
     "I bring the hammer down on the cracked hinge until it comes apart.",
     # conditions: a hurt taken to the body
     "I burn my palm on the quench tongs and swear at it.",
-    # stations / world_facts: something fixed in place and legible
+    # stations: something fixed in place and legible
     "I nail the notice about the wells to the post outside the door.",
     # a CONTESTED act -- the manifest should not claim this one
     "I try to take the ledger out of the reeve's hands before he can read it.",

@@ -36,7 +36,7 @@ resolution_notes は各手順の直後の結果を記し、必要な解放、保
 - 音源の音量変化は entities に送ります。
 - ability と difficulty は contestable な出来事が必要とする場合だけです。
 - resolution_notes：上記のとおり、この手順の直後の因果的結果。
-- categories：下記の振り分け名をゼロ個以上。台帳を変えない出来事は []。表面の外見は body、その他の変更は正確な channel 名を指定します。発話は必ず speech を指定し、発話内容の主張を world_facts にしません。実際の社会的行為は担当 channel に送ります。
+- categories：下記の振り分け名をゼロ個以上。台帳を変えない出来事は []。表面の外見は body、その他の変更は正確な channel 名を指定します。発話は必ず speech を指定し、発話内容の主張は客観的な事実ではありません。実際の社会的行為は担当 channel に送ります。
 
 動詞でなく効果を担当へ送る
 変更が必要な記録に応じて channel を選びます。contact_ops は物の差し込みや引き抜きも含め、物理的接触の開始・変更・終了です。contact_action_ops は持続する振動、吸引、圧力の脈動など、接触を通して続く触覚効果だけを表します。触れる行為全般の分類ではありません。差し込み、引き抜き、回そうとして失敗したことだけでは、その追加の持続効果は成立しません。物への働きかけはその物を変え、物を読む行為はその物から答えを得ます：他に何も起こらなくても次の beat でその物が違っているとき、または span の結果が物が身体に告げることであってその記録がまだそれを持っていないとき、接触と並べてその物自身の channel（entities）にも送ってください。物を変えもせず何も問いもしない span は event と observable を保ち、categories:[] を取り、channel を得るための状態変化を創作しません。body の姿勢、握り、立ち位置は、働きかけていた物の記録では決してありません。
@@ -48,7 +48,7 @@ entities は物の状態です。容器の蓋・ハッチは内部の部屋が�
 body: body (表面の外見), attire, conditions, vitals
 contact: contact_ops, contact_action_ops, substance_ops, containment, scales
 objects: entities, remove_entities, inventory_ops, artifact_ops, destruction, sensory_events
-social: cast_changes, introductions, world_facts, public_evidence, crowd_ops, courier_ops, telling_ops, charter_ops, ratified_claims, contradicted_claims, claim_dispositions, consequences, obligations
+social: cast_changes, introductions, public_evidence, crowd_ops, courier_ops, telling_ops, charter_ops, ratified_claims, contradicted_claims, claim_dispositions, consequences, obligations
 spatial: positions, rooms, remove_rooms, remove_adjacent, stations, poses, comms_ops, following_ops, location, weather
 engine: speech, attention
 

@@ -48,11 +48,6 @@ def _story(temp_db, *, frame_id=None):
     return ctx, book
 
 
-@pytest.fixture
-def wired(monkeypatch):
-    monkeypatch.setattr(cm, "search_lore", lambda *a, **k: [])
-
-
 def _entries(temp_db, book):
     return [dict(r) for r in temp_db.q(
         "SELECT keys, content, category, knowledge_locations, source_notes "
@@ -68,15 +63,15 @@ def test_prepare_consults_no_model(monkeypatch):
     assert "get_prompt" not in src
 
 
-def test_a_quiet_beat_is_skipped(temp_db, wired):
+def test_a_quiet_beat_is_skipped(temp_db):
     ctx, _ = _story(temp_db)
     prepared = cm.prepare_mapping_commit(ctx)
     assert prepared["skipped"] is True and prepared["ops"] == []
 
 
-# ---- room filings are RETIRED; world facts are needs -------------------------
+# ---- room filings and world facts are RETIRED --------------------------------
 
-def test_a_described_room_files_no_lore(temp_db, wired):
+def test_a_described_room_files_no_lore(temp_db):
     """Until 2026-09-03 every described room became a `layout` lore entry --
     a second representation of the scene, kept so a model stage could
     retrieve it. The registry and the scene are the record of a room; the
@@ -94,41 +89,27 @@ def test_a_described_room_files_no_lore(temp_db, wired):
     assert "'layout'" not in src and '"layout"' not in src, "no writer files layout"
 
 
-def test_a_setting_fact_is_a_planning_need_not_a_filing(temp_db, wired):
-    """The Director's `world_facts` used to file through a fallback writer.
-    A fact with no physical seat is the setting bible's, and the bible is
-    the Writers' Room's to file with provenance and a gate: the commit
-    records a `setting_fact` need and writes no entry."""
+def test_a_stale_world_fact_files_nothing_and_asks_for_nothing(temp_db):
+    """`world_facts` is retired (2026-09-26): rooms, bodies and things carry
+    what IS, the Writers' Room keeps the facts not yet in play, and the
+    charter moves the ones that are. It had filed through a fallback writer,
+    then as `setting_fact` needs -- 95 of the owner's 102 needs, 67 of them
+    never answered. A variant written before the retirement still carries
+    the key, and a rerun from stage hands it here, where nothing reads it:
+    no entry, and no need for the Room."""
     ctx, book = _story(temp_db)
     ctx.director_resolve["state_diff"]["world_facts"] = [
         {"fact": "Iron burns the fae.", "source": {"kind": "resolved"}},
-        {"fact": "From the lore.", "source": {"kind": "lore"}},
         "Salt keeps a door shut.",
     ]
     prepared = cm.prepare_mapping_commit(ctx)
-    assert prepared["skipped"] is False and prepared["ops"] == []
-    assert prepared["mout"]["facts"] == 2
-    kinds = [(n["kind"], n["reason"], n["subject"]) for n in prepared["needs"]]
-    assert ("thing", "setting_fact", "Iron burns the fae.") in kinds
-    assert ("thing", "setting_fact", "Salt keeps a door shut.") in kinds
-    assert all(n["subject"] != "From the lore." for n in prepared["needs"])
+    assert prepared["skipped"] is True
     cm.commit_mapping(ctx, "n", prepared=prepared)
     assert _entries(temp_db, book) == []
-    opened = open_planning_needs(ctx.chat.id)
-    assert {n["reason"] for n in opened} == {"setting_fact"}
-    assert opened[0]["surface"]["fact"] == "Iron burns the fae."
+    assert open_planning_needs(ctx.chat.id) == []
 
 
-def test_a_setting_fact_an_entry_already_covers_raises_no_need(temp_db, monkeypatch):
-    ctx, _ = _story(temp_db)
-    monkeypatch.setattr(cm, "search_lore", lambda *a, **k: [
-        {"content": "Iron burns the fae, as every smith knows."}])
-    ctx.director_resolve["state_diff"]["world_facts"] = [
-        {"fact": "Iron burns the fae.", "source": {"kind": "resolved"}}]
-    assert cm.prepare_mapping_commit(ctx)["skipped"] is True
-
-
-def test_a_containment_room_need_is_dropped_at_commit(temp_db, wired):
+def test_a_containment_room_need_is_dropped_at_commit(temp_db):
     """Where a body walks is its own; where the world puts it is the
     Director's. A room-need whose committed record carries `parent_entity`
     is a containment room the spatial hand minted the moment a body went
@@ -157,19 +138,19 @@ def test_a_containment_room_need_is_dropped_at_commit(temp_db, wired):
 # it. A character whose card said the funeral was this week played it as
 # tomorrow for three beats. Everyone standing in the opening knows the
 # premise -- which is the scenario as its author wrote it. The establish
-# stage's world facts are what is TRUE, card secrets among them, and on
-# 2026-09-26 four of six test openings delivered one to the whole cast.
+# stage's world facts were what is TRUE, card secrets among them; on
+# 2026-09-26 four of six test openings delivered one to the whole cast, and
+# the channel was retired the same day.
 
-FUNERAL = "Mr Harrowell's funeral took place today."
 PREMISE = ("Harrowell House, the evening after the funeral. The family has "
            "gathered in the drawing room for the reading of the will.")
 SECRET = "Ysolde has written to her brother every month for ten years and told no one."
 
 
-def _cast_story(temp_db, *, opening, world_facts, scenario=""):
+def _cast_story(temp_db, *, opening, scenario="", state_diff=None):
     """A story with two attached characters on default cards, whose Director
-    stage asserted `world_facts` -- at the opening (`director_establish`,
-    turn 0, no resolve) or on a later beat (`director_resolve`) -- under
+    stage -- the opening's (`director_establish`, turn 0, no resolve) or a
+    later beat's (`director_resolve`) -- committed `state_diff` under
     `scenario`."""
     from story.character_schema import default_character_data
     ctx, book = _story(temp_db)
@@ -186,7 +167,7 @@ def _cast_story(temp_db, *, opening, world_facts, scenario=""):
              "{}", time.time(), "char_" + name.casefold()))
         temp_db.qi("INSERT INTO chat_chars(chat_id,char_id,status,state) "
                    "VALUES(?,?,?,?)", (cid, char_id, "active", "{}"))
-    diff = {"world_facts": list(world_facts)}
+    diff = dict(state_diff or {})
     if opening:
         ctx.turn.idx = 0
         ctx.director_resolve = None
@@ -222,12 +203,12 @@ def _premise_rows(temp_db, cid):
         "JOIN chats c ON c.lorebook_id=e.lorebook_id WHERE c.id=?", (cid,))]
 
 
-def test_the_premise_as_its_author_wrote_it_reaches_every_cast_member(temp_db, wired):
+def test_the_premise_as_its_author_wrote_it_reaches_every_cast_member(temp_db):
     """The scenario is delivered whole through the one channel a mind knows
     the world by standing: a `common`, explicitly public entry in the
     story's canon book. Every attached character reads it on the next beat
     -- the Harrowell case, met by the author's own sentence."""
-    ctx, _ = _cast_story(temp_db, opening=True, world_facts=[FUNERAL], scenario=PREMISE)
+    ctx, _ = _cast_story(temp_db, opening=True, scenario=PREMISE)
     prepared = cm.prepare_mapping_commit(ctx)
     assert prepared["mout"]["premise"] == 1
     cm.commit_mapping(ctx, "n", prepared=prepared)
@@ -243,29 +224,29 @@ def test_the_premise_as_its_author_wrote_it_reaches_every_cast_member(temp_db, w
     assert row["source_notes"].startswith(cm.OPENING_PREMISE_SOURCE_PREFIX)
 
 
-def test_a_truth_the_director_states_at_the_opening_reaches_no_one(temp_db, wired):
+def test_a_truth_the_director_states_at_the_opening_reaches_no_one(temp_db):
     """The establish stage states what IS true -- a card's secret included --
     and true is not known: 2026-09-26, a daughter's secret letters, filed
     as the opening's world fact, rode every call of the two characters she
-    kept them from. Only the author's premise is delivered; the Director's
-    fact is a need, as on every beat, and names no entry."""
-    ctx, _ = _cast_story(temp_db, opening=True, world_facts=[SECRET], scenario=PREMISE)
+    kept them from. Only the author's premise is delivered. The channel
+    that carried the Director's fact is retired, and a stale one -- an old
+    variant rerun from stage -- reaches no one and asks the Room for
+    nothing."""
+    ctx, _ = _cast_story(temp_db, opening=True, scenario=PREMISE,
+                         state_diff={"world_facts": [SECRET]})
     cm.commit_mapping(ctx, "n", prepared=cm.prepare_mapping_commit(ctx))
     for name, held in _cast_knowledge(temp_db, ctx).items():
         assert SECRET not in held, name
     assert [r["content"] for r in _premise_rows(temp_db, ctx.chat.id)] == [PREMISE]
-    (need,) = open_planning_needs(ctx.chat.id)
-    assert (need["kind"], need["reason"]) == ("thing", "setting_fact")
-    assert need["surface"]["fact"] == SECRET
-    assert "entry_uid" not in need["surface"]
+    assert open_planning_needs(ctx.chat.id) == []
 
 
-def test_a_premise_written_to_the_player_says_whom_you_means(temp_db, wired, monkeypatch):
+def test_a_premise_written_to_the_player_says_whom_you_means(temp_db, monkeypatch):
     """A scenario is often written to the player ("You are the new
     deputy"), so the entry's title says whose "you" it is; with no player
     to name it says only whose words these are."""
     monkeypatch.setattr(cm, "_player_name_or_none", lambda ctx: "Tomaso Ricci")
-    ctx, _ = _cast_story(temp_db, opening=True, world_facts=[],
+    ctx, _ = _cast_story(temp_db, opening=True,
                          scenario="You are the new deputy of Hollin Ford.")
     (entry,) = cm.prepare_mapping_commit(ctx)["premise"]
     assert entry["title"].count("Tomaso Ricci") == 2
@@ -274,78 +255,50 @@ def test_a_premise_written_to_the_player_says_whom_you_means(temp_db, wired, mon
     assert "Tomaso" not in entry["title"] and entry["title"]
 
 
-def test_a_greeting_launch_files_no_premise(temp_db, wired):
+def test_a_greeting_launch_files_no_premise(temp_db):
     """A story launched from a card's greeting stores the greeting as its
     scenario, and the greeting is the SCENE, not a premise: its lines reach
     minds through the opening's perception and its own conduct as the card
     character's memory. Filed whole as common knowledge, every aside and
     every line would reach any figure promoted later."""
-    ctx, _ = _cast_story(temp_db, opening=True, world_facts=[],
+    ctx, _ = _cast_story(temp_db, opening=True,
                          scenario='"You came back," she says, and sets down the cup.')
     wset(ctx.chat.id, "greeting_minds", {"extractor_version": 3, "minds": {}})
     cm.commit_mapping(ctx, "n", prepared=cm.prepare_mapping_commit(ctx))
     assert _premise_rows(temp_db, ctx.chat.id) == []
 
 
-def test_an_opening_with_no_scenario_delivers_nothing(temp_db, wired):
-    ctx, _ = _cast_story(temp_db, opening=True, world_facts=[FUNERAL])
+def test_an_opening_with_no_scenario_delivers_nothing(temp_db):
+    ctx, _ = _cast_story(temp_db, opening=True)
     cm.commit_mapping(ctx, "n", prepared=cm.prepare_mapping_commit(ctx))
     assert _premise_rows(temp_db, ctx.chat.id) == []
     assert all(held == [] for held in _cast_knowledge(temp_db, ctx).values())
 
 
-def test_a_later_beats_fact_is_a_need_and_no_entry(temp_db, wired):
-    """Only the opening states a premise. A fact the Director establishes in
-    play follows the need-only rule unchanged: no entry, and a need that
-    names none."""
-    ctx, _ = _cast_story(temp_db, opening=False, world_facts=[FUNERAL])
+def test_only_the_opening_states_a_premise(temp_db):
+    """A later beat under the same scenario files no premise: the premise is
+    the opening's, filed once, when the story begins."""
+    ctx, _ = _cast_story(temp_db, opening=False, scenario=PREMISE)
     prepared = cm.prepare_mapping_commit(ctx)
     assert prepared["premise"] == [] and "premise" not in prepared["mout"]
     cm.commit_mapping(ctx, "n", prepared=prepared)
     assert _premise_rows(temp_db, ctx.chat.id) == []
-    (need,) = open_planning_needs(ctx.chat.id)
-    assert need["reason"] == "setting_fact" and "entry_uid" not in need["surface"]
     assert all(held == [] for held in _cast_knowledge(temp_db, ctx).values())
 
 
-def test_a_rerun_of_the_opening_files_the_premise_once(temp_db, wired):
+def test_a_rerun_of_the_opening_files_the_premise_once(temp_db):
     """The entry uid is minted from the premise's text, so re-committing the
     opening (a reroll, a rerun from stage) finds its own filing and writes
     nothing."""
-    ctx, _ = _cast_story(temp_db, opening=True, world_facts=[FUNERAL], scenario=PREMISE)
+    ctx, _ = _cast_story(temp_db, opening=True, scenario=PREMISE)
     cm.commit_mapping(ctx, "n", prepared=cm.prepare_mapping_commit(ctx))
     cm.commit_mapping(ctx, "n2", prepared=cm.prepare_mapping_commit(ctx))
     assert len(_premise_rows(temp_db, ctx.chat.id)) == 1
-    assert len(open_planning_needs(ctx.chat.id)) == 1
-
-
-def test_a_fact_the_director_sourced_from_lore_is_not_a_premise(temp_db, wired):
-    """A fact that came FROM the lore is already the lore's; restating it
-    would be a second representation and it raises no need either."""
-    ctx, _ = _cast_story(temp_db, opening=True, world_facts=[
-        {"fact": FUNERAL, "source": {"kind": "lore"}}])
-    cm.commit_mapping(ctx, "n", prepared=cm.prepare_mapping_commit(ctx))
-    assert _premise_rows(temp_db, ctx.chat.id) == []
-    assert open_planning_needs(ctx.chat.id) == []
-
-
-def test_a_fact_an_entry_already_covers_is_not_refiled_at_the_opening(
-        temp_db, monkeypatch):
-    """The coverage rule is the same at the opening as on any beat: the
-    need and the delivery are one record, so a fact lore already states
-    gets neither."""
-    monkeypatch.setattr(cm, "search_lore", lambda *a, **k: [
-        {"content": "Mr Harrowell's funeral took place today, at noon."}])
-    ctx, _ = _cast_story(temp_db, opening=True, world_facts=[FUNERAL])
-    prepared = cm.prepare_mapping_commit(ctx)
-    assert prepared["skipped"] is True
-    cm.commit_mapping(ctx, "n", prepared=prepared)
-    assert _premise_rows(temp_db, ctx.chat.id) == []
 
 
 # ---- introductions are the Director's typed rows --------------------------
 
-def test_an_untyped_introduction_is_ignored_and_a_typed_one_read(temp_db, wired):
+def test_an_untyped_introduction_is_ignored_and_a_typed_one_read(temp_db):
     ctx, _ = _story(temp_db)
     ctx.director_resolve["state_diff"]["introductions"] = [
         "Alice meets Bob", {"who": "Alice"}, {"who": "Alice", "learns": "Bob"}]
@@ -355,7 +308,7 @@ def test_an_untyped_introduction_is_ignored_and_a_typed_one_read(temp_db, wired)
 
 # ---- planning needs reach the ledger with the committed surface -----------
 
-def test_a_need_is_recorded_at_commit_with_the_rendered_stub(temp_db, wired):
+def test_a_need_is_recorded_at_commit_with_the_rendered_stub(temp_db):
     ctx, _ = _story(temp_db)
     need = planning_need("room", "declared_destination_unplanned",
                          subject="drowned_chapel", surface={"why": "the bell"},
@@ -372,7 +325,7 @@ def test_a_need_is_recorded_at_commit_with_the_rendered_stub(temp_db, wired):
     assert any("planning need" in w for w in ctx.warnings)
 
 
-def test_a_rerun_of_the_beat_records_the_need_once(temp_db, wired):
+def test_a_rerun_of_the_beat_records_the_need_once(temp_db):
     ctx, _ = _story(temp_db)
     need = planning_need("room", "location_query_unmatched", subject="customs house")
     ctx.compile_world_context["planning_needs"] = [need]
@@ -517,7 +470,7 @@ def test_a_beat_that_files_nothing_new_writes_nothing(temp_db):
 
 
 def test_the_ledgers_a_beat_re_derives_are_written_only_when_they_move(
-        temp_db, wired):
+        temp_db):
     """`known`, `lore_cache` and `active_books` are rebuilt from the same
     inputs every beat and were written byte-identical every beat -- 3,186
     bytes per beat on chat 114, none of it a change (C20)."""

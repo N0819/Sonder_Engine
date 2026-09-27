@@ -1,6 +1,6 @@
 """Lore/book filing commit: what a beat established, as typed records --
 no model in the loop, and since 2026-09-03 no LORE either, with one
-exception since 2026-09-14: the opening's premise (WORLD FACTS below).
+exception since 2026-09-14: the opening's premise (THE PREMISE below).
 
 Extracted verbatim from commit.py in the 2026-08 split, which re-exports
 every name here (see docs/experiments/AUDIT_COMMIT.md). Rewritten 2026-09-04
@@ -15,20 +15,25 @@ the engine already held or was not the Director's to author:
     them for a model stage that no longer exists. Room notes are read from
     the scene (`agents.common._room_notes_from_lore`). Existing layout
     entries stay readable and age out unrefreshed; nothing files new ones.
-  * WORLD FACTS -- A PLANNING NEED. A Director `world_fact` with no
-    physical seat is a SETTING fact, and the setting bible is the Writers'
-    Room's to file with provenance and a knowledge gate (v2 § 9.4). It is
-    recorded as a `setting_fact` need (`world/planning_needs.py`) when no
-    entry already covers it, and filed by nobody here -- at every beat, the
-    opening included.
+  * WORLD FACTS -- RETIRED (2026-09-26, the owner: "world facts is
+    basically a dead field now that we record everthing onto rooms and have
+    writers room reading lorebooks"). The channel was the Director saying
+    what is TRUE of the world; it reached no mind after 2026-09-03, its
+    ledger was read only by the Director (87 facts across 25 of the owner's
+    chats), and the `setting_fact` needs it raised were 95 of the Writers'
+    Room's 102, 67 of them still open -- while it was the drawer models
+    parked secrets and spoken lines in. Physical truth lives on rooms and
+    entities; a setting truth not yet in play is the Writers' Room's to keep
+    in its lorebooks, and one in motion the charter's. Stored ledgers and
+    needs stay readable; nothing writes new ones.
   * THE PREMISE -- WHAT THE AUTHOR WROTE, AT THE OPENING. A premise is
     public knowledge every cast member standing in the opening holds, and
     until the Room files the bible it is delivered through the one channel
     a mind already knows a thing by standing rather than by living: a
     `common`, explicitly public entry in the story's canon book, read by
     `knowledge_for_character`. The premise is the chat's SCENARIO as its
-    author wrote it, one entry titled to say whom its "you" means -- never
-    the establish stage's facts. Live, chat 3 "Harrowell House"
+    author wrote it, one entry titled to say whom its "you" means. Live,
+    chat 3 "Harrowell House"
     (2026-09-14): the scenario said "the evening after the funeral" and no
     mind received it, so a character whose card said the funeral was this
     week played it as tomorrow for three beats; the answer then delivered
@@ -54,8 +59,8 @@ the engine already held or was not the Director's to author:
 
 import json, re
 from core.db import q, qi, transaction, wget, wset, wset_if_changed
-from mind.memory import (search_lore, add_lore, update_lore, LORE_CATEGORIES,
-                    LOREBOOK_TYPES, chat_lorebook_ids, chat_lorebook_weights,
+from mind.memory import (add_lore, update_lore, LORE_CATEGORIES,
+                    LOREBOOK_TYPES, chat_lorebook_ids,
                     ensure_chat_canon_book, _embed_lore_document,
                     note_failed_embedding_write)
 from story.character_schema import character_name_from_text, new_uid, persona_name
@@ -73,10 +78,6 @@ from persist.commit_common import (_address_index, _canonical_anchor,
 # source_notes LIKE 'engine-generated%'` is how anyone finds every description
 # the engine invented for a place canon had not described.
 GENERATED_SOURCE_PREFIX = "engine-generated"
-
-#: A setting fact's subject on the need it raises: the fact itself, capped
-#: where the ledger caps a subject.
-SETTING_FACT_SUBJECT_CHARS = 120
 
 #: The provenance stamp on a premise entry: the scenario as its author wrote
 #: it, delivered to the cast as public knowledge until the Writers' Room
@@ -256,11 +257,10 @@ def prepare_mapping_commit(ctx):
     """Resolve the beat's typed records without mutating durable state.
 
     No model is consulted: what this prepares is the Director's typed
-    introductions, the compiler's planning needs, and the setting facts the
-    Director asserted that no existing entry covers -- each a NEED for the
-    Writers' Room, never a filing of its own -- and, at the opening alone,
-    the premise entry the scenario is delivered to the cast as, embedded
-    here so the commit only writes.
+    introductions, the planning needs the compiler raised for the Writers'
+    Room -- never a filing of their own -- and, at the opening alone, the
+    premise entry the scenario is delivered to the cast as, embedded here
+    so the commit only writes.
     """
     chat = ctx.chat
     turn = ctx.turn
@@ -277,8 +277,6 @@ def prepare_mapping_commit(ctx):
             "Narrator-originated specifics were excluded from canon: "
             + "; ".join(map(str, narrator_specificity_flags[:8]))
         )
-    world_facts = [f for f in (diff.get("world_facts") or [])
-                   if isinstance(f, (dict, str)) and f]
     introductions = [i for i in (diff.get("introductions") or [])
                      if isinstance(i, dict) and i.get("who") and i.get("learns")]
     needs = [n for n in (ctx.world_context().get("planning_needs") or [])
@@ -286,12 +284,9 @@ def prepare_mapping_commit(ctx):
     seed = f"tick:{cid}:{turn.idx}"
 
     # The opening delivers the scenario as its author wrote it -- the premise
-    # every cast member standing in it holds -- and its facts, like every
-    # beat's, are needs only (module docstring: true is not known).
+    # every cast member standing in it holds (module docstring).
     opening = not ctx.director_resolve and bool(ctx.director_establish)
-    fact_needs = _setting_fact_needs(ctx, res, world_facts, book_ids)
     premise = _opening_premise(ctx) if opening else []
-    needs = needs + fact_needs
 
     if not (introductions or needs or premise):
         return {
@@ -309,7 +304,6 @@ def prepare_mapping_commit(ctx):
     return {
         "skipped": False,
         "mout": {
-            "facts": len(fact_needs),
             "introductions": len(introductions),
             "planning_needs": len(needs),
             **({"premise": len(premise)} if premise else {}),
@@ -417,57 +411,6 @@ def _file_opening_premise(ctx, book_id, premise):
                 note_failed_embedding_write("lore_entries", [entry_id])
             filed += 1
     return filed
-
-
-def _setting_fact_needs(ctx, res, world_facts, book_ids):
-    """The Director's `world_facts` as `setting_fact` planning needs -- one
-    per fact no existing entry already covers, none for a fact the Director
-    itself sourced from lore. The Director may say what happened; what is
-    TRUE of the setting is the room's to file, with a gate -- at the opening
-    as at any beat (the premise the cast holds is the author's scenario,
-    `_opening_premise`)."""
-    if not world_facts:
-        return []
-    from world.planning_needs import planning_need
-    chat = ctx.chat
-    cid = chat.id
-    frame_id = getattr(ctx.turn, "frame_id", None)
-    turn_idx = getattr(ctx.turn, "idx", 0) or 0
-    texts = []
-    for world_fact in world_facts:
-        if isinstance(world_fact, dict):
-            text = str(world_fact.get("fact") or "")
-            source_kind = (world_fact.get("source") or {}).get("kind")
-        else:
-            text = str(world_fact)
-            source_kind = None
-        text = " ".join(text.split())
-        if not text or source_kind == "lore":
-            continue
-        texts.append((text, source_kind))
-    if not texts:
-        return []
-    try:
-        existing = search_lore(
-            chat_lorebook_weights(cid),
-            res.get("summary") or " ".join(t for t, _k in texts)[:400],
-            k=10, chat_id=cid, frame_id=frame_id)
-    except Exception as exc:  # a retrieval outage is not a reason to invent
-        ctx.add_warning(f"setting facts not checked against lore: {exc}")
-        existing = []
-    needs = []
-    for text, source_kind in texts:
-        if _fact_is_covered(text, existing):
-            continue
-        surface = {"fact": text, **({"source": source_kind} if source_kind else {})}
-        try:
-            needs.append(planning_need(
-                "thing", "setting_fact",
-                subject=text[:SETTING_FACT_SUBJECT_CHARS],
-                surface=surface, turn_idx=turn_idx, frame_id=frame_id))
-        except ValueError as exc:
-            ctx.add_warning(f"setting fact not recorded: {exc}")
-    return needs
 
 
 #: How many words a NAME runs to. A subject longer than this is a sentence,
@@ -906,23 +849,3 @@ def commit_mapping(ctx, nonce, *, prepared=None):
 
 def _lore_for(ctx):
     return ctx.world_context().get("relevant_lore") or []
-
-
-def _fact_is_covered(fact, existing_lore):
-    normalized = _normalized_fact(fact)
-    if not normalized:
-        return True
-    fact_tokens = set(normalized.split())
-    for entry in existing_lore or []:
-        candidate = _normalized_fact(entry.get("content") or "")
-        if not candidate:
-            continue
-        if normalized in candidate or candidate in normalized:
-            return True
-        candidate_tokens = set(candidate.split())
-        union = fact_tokens | candidate_tokens
-        if union:
-            similarity = len(fact_tokens & candidate_tokens) / len(union)
-            if similarity >= 0.72:
-                return True
-    return False

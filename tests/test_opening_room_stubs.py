@@ -217,12 +217,14 @@ def test_only_an_unambiguous_misplacement_is_lifted():
     disagreement and stays one."""
     # A thing legitimately keyed by a field name, written as a record, stays.
     raw = dict(_opening())
-    raw["entities"] = {"world_facts": {"name": "The Ledger", "kind": "object"}}
+    raw["entities"] = {"sequence": {"name": "The Ledger", "kind": "object"}}
     out, _ = validate_llm_output("director_establish", raw)
-    assert "world_facts" in out["entities"]
+    assert "sequence" in out["entities"]
     # A real top-level answer is never overwritten by a stray one.
     raw = dict(_opening())
-    raw["world_facts"] = ["Mirelle rose from the bench."]
-    raw["entities"] = {"world_facts": ["something else"]}
+    rose = {"who": "Mirelle", "type": "action", "act": "rose from the bench"}
+    raw["sequence"] = [rose]
+    raw["entities"] = {"sequence": [{"who": "Mirelle", "type": "action",
+                                     "act": "something else"}]}
     out, _ = validate_llm_output("director_establish", raw)
-    assert out["world_facts"] == ["Mirelle rose from the bench."]
+    assert out["sequence"] == [rose]

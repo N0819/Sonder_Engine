@@ -113,7 +113,7 @@ SPECIALISTS = {
         # a body walking a route with news, so both are charter's to SIMULATE;
         # the OPS that raise, send, tell and adjudicate are speech and roster
         # work, and this is the hand that owns speech consequences.
-        "channels": ("cast_changes", "introductions", "world_facts",
+        "channels": ("cast_changes", "introductions",
                      "public_evidence", "crowd_ops", "courier_ops",
                      "telling_ops", "ratified_claims", "contradicted_claims",
                      "charter_ops", "claim_dispositions", "consequences", "obligations"),
@@ -168,9 +168,8 @@ RETIRED_HANDS = {"offscreen": "social"}
 
 #: Channels an ACT OF SPEECH can write. Saying a thing is not a physical
 #: action, so for most channels a line of dialogue is material a hand cannot
-#: act on and can only restate; for these it is the act itself. Objective
-#: world_facts need independent events: an assertion spoken aloud is a claim,
-#: and the causal compiler refuses to promote it into a world fact.
+#: act on and can only restate; for these it is the act itself. An
+#: assertion spoken aloud is a claim, never an objective fact.
 SPEECH_WRITTEN_CHANNELS = frozenset((
     "obligations",           # explicit requests, promises, answers and refusals
     "introductions",         # a name is given by being said
@@ -256,7 +255,6 @@ _CATEGORY_CHANNELS = {
     "destruction": "destruction",
     "artifacts": "artifact_ops",
     "introductions": "introductions",
-    "world_facts": "world_facts",
     "obligations": "obligations",
 }
 
@@ -357,7 +355,6 @@ _CHANNEL_GATES = {
     "overlays": lambda f: f["physical_beat"] or f["overlays_present"],
     "cast_changes": lambda f: f["physical_beat"],
     "introductions": lambda f: f["speech_present"],
-    "world_facts": lambda f: f["speech_present"] or f["physical_beat"],
     "obligations": lambda f: f["speech_present"] or f["physical_beat"],
     # Evidence describes only a FINISHED beat.  Interpret serves the same
     # specialists but has not adjudicated attempts yet, so granting it there

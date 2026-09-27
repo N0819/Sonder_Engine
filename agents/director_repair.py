@@ -382,8 +382,6 @@ def native_failures(events, scene, payload):
                         errors = _native_errors(step, channel, value)
                         if errors:
                             detail = "the engine's schema would discard it: " + "; ".join(errors)
-                if channel == "world_facts" and value and row["speech"]:
-                    detail = "a spoken line does not establish objective world_facts"
                 if detail:
                     failures.append({"ref": row["ref"], "index": row["transform_index"],
                                      "channel": channel, "detail": detail[:400]})

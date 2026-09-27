@@ -602,7 +602,7 @@ class TestAWordedRowReachesTheChannelEvenUnnamed:
         from llm.prompts import get_prompt_body
         sheet = get_prompt_body("director_resolve_lean", "en")
         assert "Speech names speech" in sheet
-        assert "claims are not world_facts" in sheet
+        assert "a claim is not an objective fact" in sheet
 
 
 class TestARowBelongsToWhoseConductItIs:

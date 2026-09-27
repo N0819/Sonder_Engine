@@ -50,7 +50,7 @@ def _empty_sd(**over):
     sd = {"positions": {}, "rooms": {}, "entities": {}, "conditions": {},
           "attire": {}, "overlays": {}, "remove_rooms": [],
           "remove_entities": [], "remove_adjacent": [], "inventory_ops": [],
-          "cast_changes": [], "world_facts": [], "introductions": [],
+          "cast_changes": [], "introductions": [],
           "claim_dispositions": [], "time": None, "destruction": None}
     sd.update(over)
     return sd

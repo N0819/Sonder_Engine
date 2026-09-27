@@ -125,7 +125,6 @@ LEDGERS = {
     # --- social -----------------------------------------------------------
     "cast_changes": (None, "the roster is chat_chars; the hand gets `cast`"),
     "introductions": (None, "the recognition ledger is a table"),
-    "world_facts": (None, "the world store, not the scene"),
     "obligations": (None, "the world store; delivered as pending_obligations "
                            "at both Director stages; covered by test_causal_obligations"),
     # Compiled by the ENGINE, not by any hand (`ENGINE_CATEGORIES`), so no

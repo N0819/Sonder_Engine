@@ -1230,7 +1230,8 @@ three times of four and never wrong: it keeps `tool belt`, refuses the
 population, and the identical-looking guard would have been WRONG on the
 other reason code: `setting_fact` needs are sentences BY CONSTRUCTION -- a
 fact is a sentence -- and all twelve in the corpus (chats 115/116/117, 8 to
-21 words) are correct as filed. A word rule applied to `thing` needs at
+21 words) are correct as filed (nothing raises one since `world_facts` was
+retired on 2026-09-26; the stored ones remain). A word rule applied to `thing` needs at
 large would refuse every one of them. So any refusal here must be scoped to
 `generation_request` specifically, and that scoping is the part worth
 getting a second opinion on before it ships.
@@ -1826,7 +1827,9 @@ opening delivers the chat's scenario as its author wrote it -- one public
 entry, titled from the pack to say whom its "you" means, since 32 of the
 owner's 132 scenarios are written to the player -- and every establish
 `world_fact` is a need only, as every later beat's already was
-(`persist/commit_mapping._opening_premise`). No model is in the loop. None
+(`persist/commit_mapping._opening_premise`); the same day the owner retired
+the channel itself, so the establish stage states no `world_facts` at all.
+No model is in the loop. None
 of the eight measured leaks is in its story's scenario; the Harrowell case
 the rule was built for is met by the author's own sentence.
 `tests/test_room_filings_and_planning_needs.py` holds it: the premise
@@ -1847,7 +1850,10 @@ Residuals, not built:
   facts filed as public; the fix changes openings, not filings already made.
 - **A public fact the scenario does not state reaches no one at the
   opening** until the Writers' Room files the bible -- a degradation where
-  the old rule leaked, and the need is still recorded for the Room.
+  the old rule leaked. Since the channel's retirement no need is recorded
+  for it either: what the opening establishes is carried by the rooms,
+  bodies and things it writes, and a setting fact not yet in play is the
+  Writers' Room's to keep (the owner, 2026-09-26).
 
 ## 5. Deferred backlog
 

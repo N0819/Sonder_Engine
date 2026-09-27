@@ -1253,9 +1253,10 @@ object nor standing in its room is refused (`_refuse_unheld_transfers`); a
 mint the same diff moves between itself and its match is no longer folded
 into it; a wardrobe's opening statement takes nothing off; a garment put back
 on consumes the object it became; the sanitiser refuses a thing for what it
-IS rather than for a word inside its name; the beat's `world_facts` are
-recorded in a chat-scoped ledger; and a dialogue memory names the addressee
-only by a label its owner holds. Four residues:
+IS rather than for a word inside its name; the beat's `world_facts` were
+recorded in a chat-scoped ledger (retired with the channel, 2026-09-26); and a
+dialogue memory names the addressee only by a label its owner holds. Two
+residues (two more closed when the channel was retired):
 
 1. **A posture that MEANS carried, with no bearer named.** PS3's own live case
    is not reached. The establish wrote `poses: {canteen: {posture: "slung"},
@@ -1272,20 +1273,7 @@ only by a label its owner holds. Four residues:
    through the `world/spatial.py` facade (`posture_class` cannot serve: it
    answers "standing" for `upright` and for an unknown word alike). Until
    then the Director must name the bearer, and no prompt says so.
-2. **A setting fact the beat supplies is still filed as a need.**
-   `commit_mapping._setting_fact_needs` is untouched, so the ledger and the
-   `setting_fact` planning need now both exist for the same sentence. That is
-   defensible -- filing a fact into the setting bible with a citation is work
-   only the Writers' Room can do -- but PS18 asked for the other reading, and
-   the masque run shows the cost of leaving it: planning needs are citable
-   rows, so the Room cited the player's own cover story as established fact
-   (PX24). Owner's call.
-3. **Nothing READS the `world_facts` ledger.** It is recorded, archived and
-   checkpointed, and no payload carries it. § 1's `established_facts` entry
-   above is the same mechanism from the other end and states what the reader
-   should be: the recent N into every co-present character payload, with the
-   rule *settled on-page facts may be disputed, never forgotten*.
-4. **PM23's refusal-without-routing.** Nine `Resolve reconciliation` warnings
+2. **PM23's refusal-without-routing.** Nine `Resolve reconciliation` warnings
    in one run, five in turn 20 alone, for a document three people signed in
    the prose and nobody signed in the state. Both specialists refused with a
    correct destination ("unindexed held item belongs to objects", "target

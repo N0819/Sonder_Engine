@@ -2093,7 +2093,7 @@ def test_social_specialist_owns_the_roster_channels(temp_db, monkeypatch):
         "director_social": {
             "cast_changes": [],
             "introductions": [{"who": "The Stranger", "learns": "Mara"}],
-            "world_facts": [], "notes": [],
+            "notes": [],
         },
     }
     monkeypatch.setattr(director, "_agent_json",
@@ -2270,7 +2270,7 @@ def test_the_traffic_channels_dispatch_through_the_social_hand(temp_db, monkeypa
             "state_diff": {}, **_ruling("social"),
         },
         "director_social": {
-            "cast_changes": [], "introductions": [], "world_facts": [],
+            "cast_changes": [], "introductions": [],
             "crowd_ops": [{"op": "move", "crowd_id": "crowd_1",
                            "room": "lamp_room", "heading": "keeper_room"}],
             "courier_ops": [], "telling_ops": [],
@@ -3583,7 +3583,7 @@ def test_channel_ownership_is_disjoint_within_a_span():
     # Op lists whose appliers read no other delegated channel's
     # mid-application state (commit-side ledgers of their own).
     independent_ops = {
-        "cast_changes", "introductions", "world_facts", "remove_entities",
+        "cast_changes", "introductions", "remove_entities",
         "inventory_ops", "artifact_ops", "remove_rooms", "remove_adjacent",
         "crowd_ops", "courier_ops", "telling_ops",
         # An order lands on the REGISTRY, not the scene: it is routed
@@ -4184,7 +4184,7 @@ def test_interpret_drops_a_resolve_only_channel_and_says_so(temp_db,
                      "resolution_flags": {}, "fiction_frame": {}},
         },
         "director_social": {
-            "cast_changes": [], "introductions": [], "world_facts": [],
+            "cast_changes": [], "introductions": [],
             "public_evidence": [
                 {"source_id": "invented", "speech_act": "greeting"}],
             "notes": [],
@@ -4483,7 +4483,7 @@ def test_resolve_still_fails_open_on_a_genuine_under_grant(temp_db,
         },
         "director_social": {
             "cast_changes": [{"name": "Mara", "change": "present"}],
-            "introductions": [], "world_facts": [], "notes": [],
+            "introductions": [], "notes": [],
         },
     }
     monkeypatch.setattr(director, "_agent_json",

@@ -601,8 +601,9 @@ Two things remain, and they are the ones with teeth:
   to `spatial_generation` on the ruling stage's authority before it is filed.
   What remains of this gap: background claims still take their own path
   (`settle_claims` → `write_canon`, keyed by content hash) rather than this
-  module's shape, and world facts file through the fallback writer with no
-  disposition at all. §3.5's P6 (the knowledge-tag door) is untouched.
+  module's shape. (World facts, which filed through a fallback writer with
+  no disposition at all, are retired: as filings 2026-09-03, as a channel
+  2026-09-26.) §3.5's P6 (the knowledge-tag door) is untouched.
 
 <a id="unbuilt-4-4"></a>
 
@@ -664,10 +665,10 @@ cap, mirroring `commit_obligations`; inject the recent N into every co-present
 character payload alongside `world_knowledge`, with a prompt rule: *settled
 on-page facts may be disputed, never forgotten or contradicted.*
 
-Note the `world_facts` path feeds neither lore nor character payloads since
-2026-09-03: a Director world fact is a `setting_fact` planning need for the
-Writers' Room (`persist/commit_mapping._setting_fact_needs`). This ledger
-would still be separate.
+Note there is no `world_facts` path to build on: it fed neither lore nor
+character payloads after 2026-09-03 and was retired on 2026-09-26 (the owner:
+rooms, bodies and things carry what is, and the Writers' Room keeps the facts
+not yet in play). This ledger would be new.
 
 **Test.** Establish a fact at turn N; assert it appears in a later turn's
 character payload and that the prompt carries the no-contradict rule.

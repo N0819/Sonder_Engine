@@ -1727,9 +1727,7 @@
       "notice": "artifacts",
       "claim": "artifacts",
       "introduction": "introductions",
-      "name_exchange": "introductions",
-      "world_fact": "world_facts",
-      "fact": "world_facts"
+      "name_exchange": "introductions"
     }
   },
   "agents.character": {

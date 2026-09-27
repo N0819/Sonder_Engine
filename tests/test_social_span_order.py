@@ -14,7 +14,7 @@ def test_addressed_speech_and_reply_precede_later_explicit_social_work():
         {"chrono_id": 2, "event_id": 2, "type": "action", "actor": "Barkeep",
          "categories": ["inventory_ops"], "event": "puts water on the counter"},
         {"chrono_id": 3, "event_id": 3, "type": "action", "actor": "Mara",
-         "categories": ["world_facts"], "event": "names the new room"},
+         "categories": ["introductions"], "event": "gives the barkeep her name"},
         {"chrono_id": 4, "event_id": 4, "type": "speech", "actor": "Mara",
          "targets": ["Another patron"], "categories": ["speech"],
          "event": "Is that yours?"},
@@ -31,7 +31,7 @@ def test_addressed_speech_and_reply_precede_later_explicit_social_work():
 def test_legacy_social_rows_without_chrono_keep_their_original_order():
     view = {"addressed_figures": ["Barkeep"], "spans": [
         {"type": "speech", "targets": ["Barkeep"], "categories": ["speech"]},
-        {"type": "action", "categories": ["world_facts"]},
+        {"type": "action", "categories": ["introductions"]},
     ]}
     assert _specialist_span_slice("social", view) == view["spans"]
 

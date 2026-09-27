@@ -99,7 +99,7 @@ def test_outer_public_evidence_channel_counts_as_an_owned_write():
 
 def test_patch_validator_keeps_outer_and_state_channels_together():
     patch = {"public_evidence": [{"source_id": "line:1", "salience": 0.5}],
-             "world_facts": ["The gate is open."]}
+             "introductions": [{"who": "Sera", "learns": "Tomas"}]}
     clean, dropped = validated_specialist_patch_channels("director_social", patch)
     assert not dropped
     assert clean == patch
@@ -108,10 +108,10 @@ def test_patch_validator_keeps_outer_and_state_channels_together():
 def test_patch_validator_prunes_bad_outer_channel_without_losing_state():
     clean, dropped = validated_specialist_patch_channels("director_social", {
         "public_evidence": 23,
-        "world_facts": ["The gate is open."],
+        "introductions": [{"who": "Sera", "learns": "Tomas"}],
     })
     assert dropped == ["public_evidence"]
-    assert clean == {"world_facts": ["The gate is open."]}
+    assert clean == {"introductions": [{"who": "Sera", "learns": "Tomas"}]}
 
 
 @pytest.mark.parametrize("patch", [

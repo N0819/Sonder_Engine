@@ -199,7 +199,6 @@
       "order": [
         "cast_changes",
         "introductions",
-        "world_facts",
         "public_evidence",
         "crowd_ops",
         "courier_ops",
@@ -217,9 +216,6 @@
         },
         "introductions": {
           "$text": "specialists/social/chunks/introductions.txt"
-        },
-        "world_facts": {
-          "$text": "specialists/social/chunks/world_facts.txt"
         },
         "public_evidence": {
           "$text": "specialists/social/chunks/public_evidence.txt"
@@ -596,9 +592,6 @@
     "introductions": {
       "$text": "jev_questions/introductions.txt"
     },
-    "world_facts": {
-      "$text": "jev_questions/world_facts.txt"
-    },
     "public_evidence": {
       "$text": "jev_questions/public_evidence.txt"
     },
@@ -750,9 +743,6 @@
     },
     "introductions": {
       "$text": "encoder/introductions.txt"
-    },
-    "world_facts": {
-      "$text": "encoder/world_facts.txt"
     },
     "public_evidence": {
       "$text": "encoder/public_evidence.txt"

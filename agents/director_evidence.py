@@ -420,8 +420,6 @@ _NON_SUBSTANTIVE_CHANNELS = {
     "following_ops": "projected deterministically from the interpretation and "
                      "the character decisions -- the resolve does not author "
                      "it, so it cannot show that the resolve encoded anything",
-    "world_facts": "a lore sentence records what the world IS, not what this "
-                   "beat DID",
     "introductions": "a name learned; whatever physical act carried it is in "
                      "the counted channels",
     "ratified_claims": "a verdict on an EARLIER beat's hearsay",
@@ -438,8 +436,8 @@ _SUBSTANTIVE_CHANNELS = frozenset(
 
 
 # WHERE A SUBJECT'S IDENTITY CAN SIT, per channel. Identity keys only: a prose
-# field (`consequences.what`, an op's `detail` or `reason`, a world_fact
-# sentence) is deliberately not searched, because this check's answer decides
+# field (`consequences.what`, an op's `detail` or `reason`) is deliberately
+# not searched, because this check's answer decides
 # whether the Director is asked to repair, and a subject that merely appears
 # as a substring of prose would acquit the omission the check exists to find.
 
@@ -520,8 +518,6 @@ _SUBJECTLESS_CHANNELS = {
                      "subject they name is already read in that channel",
     "time": "a clock reading",
     "weather": "one sky over the whole scene, keyed by nothing",
-    "world_facts": "prose, or {fact, source} around prose -- see the "
-                   "identity-only rule above",
     "ratified_claims": "claim references, in the claims namespace rather than "
                        "the world's",
     "contradicted_claims": "the same claim references, rejected instead of "

@@ -72,7 +72,6 @@ class TestTheSameAuthorityAsResolve:
         ("positions", {"Hinami": "room_a"}),
         ("stations", {"Hinami": {"at": "treatment_platform"}}),
         ("conditions", {"Hinami": [{"name": "winded"}]}),
-        ("world_facts", ["The lamp is lit."]),
         ("inventory_ops", [{"op": "add", "owner": "Hinami", "item": "torch"}]),
     ])
     def test_every_state_diff_channel_is_assertable(self, channel, payload):
@@ -86,7 +85,7 @@ class TestTheSameAuthorityAsResolve:
         from llm.schemas import DirectorInterpret, StateDiff
         assert "state_assertions" in DirectorInterpret.__fields__
         for channel in ("rooms", "entities", "poses", "attire", "destruction",
-                        "world_facts", "containment", "overlays"):
+                        "containment", "overlays"):
             assert channel in StateDiff.__fields__
 
     def test_several_channels_travel_as_one_payload(self):
@@ -115,7 +114,7 @@ class TestItValidatesShapeAndNothingElse:
     def test_empty_channels_are_dropped(self):
         """An empty dict is the model saying nothing, and saying nothing must
         not cost a scene merge."""
-        got, _ = _said({"poses": {}, "rooms": {}, "world_facts": []})
+        got, _ = _said({"poses": {}, "rooms": {}, "inventory_ops": []})
         assert got == {}
 
     def test_a_position_cannot_create_a_place(self):

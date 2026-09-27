@@ -1882,7 +1882,7 @@ PE10). A person- or thing-need answered by what the beat was already holding
 is no longer filed: a thing the scene places in the room the need names, or a
 `present_figures` body sharing two or more content words with the subject.
 
-Two things are registered rather than solved. **The threshold is a
+One thing is registered rather than solved. **The threshold is a
 judgement**: a body and a subject are matched on words in common, which is
 exactly the guard family that failed four times on 2026-08-29, so it fails
 toward FILING -- one shared word is a coincidence between any two English
@@ -1890,9 +1890,8 @@ nouns, and a need wrongly dropped is a body nobody plans. A structural answer
 exists in principle (`charter_surface.surface_of` is a per-axis store and
 `charter_crowd.member_noun` is what a body IS, so the subject could be matched
 against closed per-axis vocabularies rather than a bag of words) and was not
-built here. **And the `setting_fact` half of PB11 is untouched**: a fact the
-scenario text already states still files a need that reads as a missing
-object, which is F4's legibility class and is registered with it.
+built here. (The `setting_fact` half of PB11 closed on 2026-09-26, when
+`world_facts` was retired: nothing raises that need any more.)
 
 <a id="unbuilt-1-123"></a>
 

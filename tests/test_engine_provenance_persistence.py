@@ -137,9 +137,8 @@ def test_a_staged_layout_entry_does_not_put_bookkeeping_in_the_room(temp_db):
 
 # ---- the lore-commit route: nothing is filed about a room any more -------
 
-def _filing_ctx(temp_db, room_desc, monkeypatch, *, world_facts=()):
-    """A beat whose Director described a room and asserted facts."""
-    import persist.commit_mapping as cm
+def _filing_ctx(temp_db, room_desc):
+    """A beat whose Director described a room."""
     ctx, char_id = _mk(temp_db, "")
     book_id = temp_db.qi(
         "INSERT INTO lorebooks(name) VALUES(?)", ("B",))
@@ -152,10 +151,8 @@ def _filing_ctx(temp_db, room_desc, monkeypatch, *, world_facts=()):
         "state_diff": {
             "rooms": {"back_office": {"name": "Back Office", "desc": room_desc,
                                       "adjacent": []}},
-            "world_facts": list(world_facts),
         },
         "resolved_event": "", "summary": "s", "dialogue_log": []}
-    monkeypatch.setattr(cm, "search_lore", lambda *a, **k: [])
     return ctx, book_id
 
 
@@ -165,29 +162,13 @@ def _rows(temp_db, book_id):
         "WHERE lorebook_id=?", (book_id,))]
 
 
-def test_a_described_room_writes_no_lore_row(temp_db, monkeypatch):
+def test_a_described_room_writes_no_lore_row(temp_db):
     """The room filing (a `layout` entry per described room, promoted to
     `spatial_generation`) is retired: the scene is the record of a room, so
     a diagnostic the Director wrote into a room's prose has no lore row to
     be moved onto. It is stripped where the room is delivered
     (`_room_notes_from_lore`), which the stage tests above cover."""
     from persist.commit import prepare_mapping_commit, commit_mapping
-    ctx, book_id = _filing_ctx(temp_db, ROOM_NOTES, monkeypatch)
+    ctx, book_id = _filing_ctx(temp_db, ROOM_NOTES)
     commit_mapping(ctx, "n0", prepared=prepare_mapping_commit(ctx))
     assert _rows(temp_db, book_id) == []
-
-
-def test_a_world_fact_is_a_need_and_never_a_row(temp_db, monkeypatch):
-    """The fallback fact writer is retired with the filing: a Director
-    `world_fact` becomes a `setting_fact` planning need for the room to
-    file with provenance and a gate, and no entry is written here."""
-    from persist.commit import prepare_mapping_commit, commit_mapping
-    from world.planning_needs import open_planning_needs
-    ctx, book_id = _filing_ctx(
-        temp_db, "", monkeypatch,
-        world_facts=[{"fact": "The ferry runs at dawn.", "source": {"kind": "resolved"}}])
-    commit_mapping(ctx, "n0", prepared=prepare_mapping_commit(ctx))
-    assert _rows(temp_db, book_id) == []
-    (need,) = open_planning_needs(ctx.chat.id)
-    assert (need["kind"], need["reason"]) == ("thing", "setting_fact")
-    assert need["surface"]["fact"] == "The ferry runs at dawn."

@@ -444,9 +444,10 @@ def test_list_shaped_fields_reads_the_same_shapes_on_either_pydantic():
     `list_shaped_fields` is deliberately WIDER than `_declared(f).is_list`,
     which counts only a parametrized list because it drives the
     wrap-a-single-item coercion and that needs a known item type. Channel
-    shape asks a different question, and `StateDiff.world_facts` is annotated
-    bare -- reading it through `is_list` dropped exactly that one channel, so
-    the fix for an empty set nearly shipped as a set missing one.
+    shape asks a different question, and `StateDiff.world_facts` (retired
+    2026-09-26) was annotated bare -- reading it through `is_list` dropped
+    exactly that one channel, so the fix for an empty set nearly shipped as a
+    set missing one.
     """
     from typing import Optional
 
@@ -471,7 +472,7 @@ def test_every_list_valued_director_channel_is_registered_as_one():
     from llm.schemas import StateDiff, list_shaped_fields
 
     expected = {
-        "cast_changes", "introductions", "world_facts", "contact_ops",
+        "cast_changes", "introductions", "contact_ops",
         "substance_ops", "remove_entities", "inventory_ops", "artifact_ops",
         "remove_rooms", "remove_adjacent", "crowd_ops", "courier_ops",
         "telling_ops", "ratified_claims",

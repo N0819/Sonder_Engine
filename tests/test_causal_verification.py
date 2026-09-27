@@ -200,7 +200,8 @@ def test_phase_sources_never_counts_as_an_effect_or_a_pending_channel():
 
 def test_non_scene_channels_stay_explicitly_unverified_and_inputs_are_unchanged():
     initial = _scene()
-    patch = {"world_facts": ["The bell rang."], "public_evidence": [{"kind": "promise"}]}
+    patch = {"introductions": [{"who": "Sera", "learns": "Tomas"}],
+             "public_evidence": [{"kind": "promise"}]}
     saved = deepcopy((initial, patch))
     receipts = verify_patch(initial, initial, patch)
     assert _statuses(receipts) == ["unresolved", "unresolved"]

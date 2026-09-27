@@ -14,7 +14,7 @@ from world.causal_verification import TRANSIENT_EVENT
 # Physical channels, unknown channels, and mixed scene/commit domains are not
 # exempt merely because a particular specialist owns them.
 DEFERRED_NONPHYSICAL_CHANNELS = frozenset({
-    "world_facts", "public_evidence", "introductions", "ratified_claims",
+    "public_evidence", "introductions", "ratified_claims",
     "contradicted_claims", "claim_dispositions", "obligations", "telling_ops",
 })
 

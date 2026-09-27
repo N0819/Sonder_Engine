@@ -31,25 +31,23 @@ def test_prior_work_keeps_owned_transfer_and_drops_unowned_contact():
 def test_prior_work_omits_encoded_row_when_its_only_write_is_rejected():
     assert _prior("objects", [{"contact_ops": [{"op": "clear", "actor": "Mara"}]}],
                   categories=["inventory_ops"]) == []
-    assert _prior("social", [{"world_facts": ["No train arrives before noon"]}],
-                  categories=["speech", "world_facts"]) == []
 
 
-def test_prior_speech_claim_rejection_preserves_its_public_evidence():
+def test_a_rejected_write_beside_public_evidence_leaves_the_evidence():
     prior = _prior("social", [{
-        "world_facts": ["No train arrives before noon"],
+        "contact_ops": [{"op": "clear", "actor": "Mara"}],
         "public_evidence": [{"source_id": "speech:1", "salience": 0.5}],
-    }], categories=["speech", "world_facts", "public_evidence"])
+    }], categories=["speech", "public_evidence"])
     assert prior[0]["result"]["transforms"] == [{"item": "Cup", "patch": {
         "public_evidence": [{"source_id": "speech:1", "salience": 0.5}],
     }}]
 
 
 def test_prior_independent_fact_remains_but_unverified_completion_does_not():
-    prior = _prior("social", [{"world_facts": ["The railway is closed."]}],
-                   categories=["world_facts"])
+    prior = _prior("social", [{"cast_changes": [{"name": "Sera", "status": "dormant"}]}],
+                   categories=["cast_changes"])
     assert prior[0]["result"]["transforms"][0]["patch"] == {
-        "world_facts": ["The railway is closed."]}
+        "cast_changes": [{"name": "Sera", "status": "dormant"}]}
     prior = _prior("objects", [], categories=["inventory_ops"], status="already_true",
                    settled={"Cup": "already_true", "Unknown person": "already_true"})
     assert prior == []
