@@ -147,22 +147,30 @@ def _sectioned(payload, prompt):
 
 
 #: How many times a rearranged layout's request is sent when its reply does
-#: not validate -- the engine's own path would repair it; this stands in.
-LAYOUT_ATTEMPTS = 2
+#: not validate, or whose provider returns nothing -- the engine's own path
+#: would repair it; this stands in. Three since round nine (2026-09-27): GLM
+#: thinking on NanoGPT ended after its reasoning with no answer, or went
+#: silent, on 10 of 16 re-sends of one of Margit's prompts, whatever the card.
+LAYOUT_ATTEMPTS = 3
 
 
 def _ask_layout(layout, payload, prompt, temperature):
     """One call in a rearranged layout, validated as the engine validates a
-    bare reply; a reply that does not validate is asked once more (the
-    engine's path repairs), and a second failure is recorded."""
+    bare reply; a reply that does not validate, or a provider that returns
+    nothing, is asked again (the engine's path repairs), and a last failure
+    is recorded."""
     from llm.llm_quality import _step_json_schema, strict_json_parse
-    from llm.providers import chat_complete
+    from llm.providers import LLMError, chat_complete
     from llm.schemas import validate_llm_output_strict
     system, user = (_sheet_first if layout == "sheet_first" else _sectioned)(payload, prompt)
     errors = []
     for _attempt in range(LAYOUT_ATTEMPTS):
-        raw = chat_complete("character_major", system, user, temperature=temperature,
-                            json_schema=_step_json_schema("character_bare"))
+        try:
+            raw = chat_complete("character_major", system, user, temperature=temperature,
+                                json_schema=_step_json_schema("character_bare"))
+        except LLMError as exc:  # a silent provider is a failed attempt like an empty answer
+            errors.append(f"{type(exc).__name__}: {str(exc)[:160]}")
+            continue
         try:
             report = validate_llm_output_strict("character_bare", strict_json_parse(raw))
         except Exception as exc:  # noqa: BLE001 -- unparseable is a failed attempt like any other

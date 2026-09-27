@@ -407,15 +407,21 @@ commitment kept as an intention, and the old card's restorations below.
 - **Margit's chain lost 8 of 18 beats** (round eight: 2): one provider
   silence, and seven where GLM answered `{}` twice running after an ordinary
   amount of reasoning (446-4,396 tokens), its thinking ending as the good
-  ones do ("Let me write the JSON."). Anselm's chain lost none. The replay
-  tool sends the reply's JSON schema, and on NanoGPT that path injects its
-  own instructions into the system prompt -- the model quoted them: "please
-  default to using {"answer":"$your_answer"}", "Ensure to always use
-  "```"" -- and on one beat's prompt the schema path also reasoned 3,000-7,200
-  tokens (38-94 s) where the same prompt without it took 1,000-1,900 (17-25
-  s). Whether the schema, the restored sections or the card's new line tips
-  GLM into `{}` is under test; the engine's own format is chosen per role
-  (`providers.response_format_for`).
+  ones do ("Let me write the JSON."). Anselm's chain lost none. **Not the
+  card**: the exact prompt that came back `{}` was sent four times under
+  each condition -- as sent: 2 answered, 2 provider silences; without the
+  JSON schema: 1 answered, 2 empty, 1 silence; without the restored
+  sections: 2 answered, 1 empty, 1 silence; round eight's card exactly: 3
+  answered, 1 empty. GLM thinking on NanoGPT sometimes ends after its
+  reasoning with no answer -- `{}` under the schema, nothing without it --
+  the same failure as its silences, and on that payload it failed 10 of 16
+  calls in every condition. (The schema path injects instructions of its
+  own into the system prompt, which the model quoted -- "please default to
+  using {"answer":"$your_answer"}", "Ensure to always use "```"" -- and it
+  reasoned longer with them on one beat's prompt, 928-7,198 tokens over 5
+  calls against 1,024-1,864 over 2 without: too few to say.) The replay
+  tool now counts a provider that returns nothing as a failed attempt and
+  makes three.
 - **The restorations fired.** The speech budget shipped on every beat read
   back, tell variety and tell payoff on 24 of 26, an owed answer on 6, a
   silence on 3; offers and crisis never came up in these captures. Margit's
