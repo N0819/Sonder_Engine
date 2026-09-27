@@ -1,0 +1,2 @@
+MEMORY: {memory}
+Does what just happened change what it meant?

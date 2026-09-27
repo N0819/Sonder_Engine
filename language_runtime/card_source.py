@@ -133,8 +133,14 @@ def is_part_leaf(leaf_path: tuple) -> bool:
         # `affect_appraisal.<question>` is the decision model's appraisal of
         # an event or a recalled memory (mind/affect_appraisal.py); its answer
         # labels, `affect_appraisal.options.*`, are short and stay inline.
+        # The bare character contract's families (agents/character_bare.py):
+        # `character_bare.<module>`, a short section of the card shipped only
+        # when a detector says the moment calls for it, and
+        # `character_jev.<question>`, what the decision model asks around the
+        # character call; its labels, `character_jev.options.*`, stay inline.
         if leaf_path[0] in ("prompts", "co_hands", "prose_contract",
-                            "jev_questions", "encoder", "affect_appraisal"):
+                            "jev_questions", "encoder", "affect_appraisal",
+                            "character_bare", "character_jev"):
             return isinstance(leaf_path[1], str)
         return False
     if len(leaf_path) == 3:

@@ -1,0 +1,4 @@
+YOU SAID: {line}
+HOW YOU SAID IT: {how}
+WHY: {why}
+Did you mean {person} not to hear it?

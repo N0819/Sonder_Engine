@@ -1,0 +1,2 @@
+MEMORY: {memory}
+Does it leave you more able, or less, to handle this?

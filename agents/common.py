@@ -1204,6 +1204,9 @@ _MERGE_UNION_FIELDS = (
 _MERGE_PRESERVE_FIELDS = (
     "active_state",
     "decision_continuity",
+    # The bare contract's note to self: the last round that wrote one is the
+    # beat's; a round that wrote none has not retracted it.
+    "note",
     "ponder",
     # No-op/null means preserve the prior micro-round's explicit decision;
     # start/stop are both truthy dicts and the later explicit one wins.

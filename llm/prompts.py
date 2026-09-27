@@ -455,6 +455,33 @@ def affect_appraisal_options(option_set, language=None):
             _prompt_card(language)["affect_appraisal"]["options"][option_set].items()}
 
 
+def character_jev_text(name, language=None):
+    """One question the decision model asks around a bare character call
+    (`character_jev.<name>`, see `mind/character_jev.py`)."""
+    return str(_prompt_card(language)["character_jev"][name])
+
+
+def character_jev_options(option_set, language=None):
+    """One of those questions' option sets, `{key: label}` in the card's
+    order: the keys are protocol, the labels are what the model reads."""
+    return {str(k): str(v) for k, v in
+            _prompt_card(language)["character_jev"]["options"][option_set].items()}
+
+
+def character_bare_module(name, language=None):
+    """One gated section of the bare character card (`character_bare.<name>`):
+    shipped only when a detector says the moment calls for it."""
+    return str(_prompt_card(language)["character_bare"][name])
+
+
+def bare_character_prompt(language=None):
+    """The bare character card, its identity line placed just before the
+    output shape as the full card's is (`_relocate_character_identity`)."""
+    return _relocate_character_identity(
+        get_prompt("character_bare", language=language),
+        anchors=('"want"', '"sequence"'))
+
+
 #: The longest definition `encoder_definition` returns, cut back to a
 #: sentence end.
 ENCODER_DEFINITION_CHARS = 420
@@ -593,7 +620,7 @@ def _payload_node(payload, path):
     return node
 
 
-def _relocate_character_identity(text):
+def _relocate_character_identity(text, anchors=('"state"', '"sequence"')):
     """Move the name-bearing line behind the stable character contract.
 
     The authored sentence is preserved byte-for-byte.  Only its position
@@ -616,8 +643,7 @@ def _relocate_character_identity(text):
     # protocol keys remain English in every translated pack.
     output_index = next(
         (index for index, line in enumerate(lines)
-         if '"state"' in line
-         and '"sequence"' in line),
+         if all(anchor in line for anchor in anchors)),
         len(lines),
     )
     lines.insert(output_index, identity)

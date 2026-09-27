@@ -8,9 +8,10 @@
 |---|---:|---|---|
 | `agents/__init__.py` | 100 | Backward-compatible facade for the role-specific agent package. | `agents.background`, `agents.character`, `agents.common`, `agents.director`, `agents.loops`, `agents.mapping`, `agents.narration`, `agents.perception`, `agents.runtime`, `agents.storage`, `story.scene` |
 | `agents/background.py` | 2219 |  | `agents.common`, `core.db`, `llm.prompts`, `llm.schemas`, `persist.commit`, `story.character_schema`, `story.scene`, `world.background_claims`, `world.spatial` |
-| `agents/character.py` | 4748 | Private character decision agent. | `agents.character_kernel`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
+| `agents/character.py` | 4824 | Private character decision agent. | `agents`, `agents.character_kernel`, `agents.common`, `agents.impossible_knowledge`, `core.db`, `core.frames`, `llm.prompts`, `llm.schemas`, `mind`, `mind.affect`, `mind.memory`, `mind.memory_judge`, `mind.psychology_runtime`, `mind.theory_of_mind`, `story`, `story.character_schema`, `story.scene`, `world.gaps`, `world.place_purpose`, `world.spatial`, `world.survival` |
+| `agents/character_bare.py` | 514 |  | `core.db`, `llm.prompts`, `mind` |
 | `agents/character_kernel.py` | 496 |  | — |
-| `agents/common.py` | 11813 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
+| `agents/common.py` | 11816 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 5194 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
 | `agents/director.py` | 8447 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 499 |  | `story.character_schema`, `world.spatial` |
@@ -51,16 +52,17 @@
 | `llm/decisions.py` | 151 |  | `core.db` |
 | `llm/llm_quality.py` | 1372 | Strict JSON parsing, schema validation, and model-assisted repair. | `core.pipeline_context`, `llm.prompts`, `llm.providers`, `llm.schemas` |
 | `llm/prompt_cache.py` | 79 | Provider-specific prompt-cache helpers. | `llm.providers` |
-| `llm/prompts.py` | 738 | Default system prompts and prompt preset access. | `core.db` |
+| `llm/prompts.py` | 764 | Default system prompts and prompt preset access. | `core.db` |
 | `llm/providers.py` | 4963 | Provider selection, retries, streaming, cancellation, model listing, and embeddings. | `core.db`, `core.logging_utils` |
 | `llm/research_providers.py` | 247 |  | `core.db` |
-| `llm/schemas.py` | 7855 | Pydantic output contracts and semantic validation for agent payloads. | — |
+| `llm/schemas.py` | 7945 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2538 |  | `mind.theory_of_mind` |
 | `mind/affect_appraisal.py` | 282 |  | `llm`, `llm.prompts` |
 | `mind/affect_mix.py` | 639 |  | — |
 | `mind/affect_pass.py` | 425 |  | `llm.prompts`, `mind` |
 | `mind/canon_provenance.py` | 398 |  | — |
+| `mind/character_jev.py` | 464 |  | `llm`, `llm.prompts`, `mind.affect_appraisal` |
 | `mind/knowledge_circles.py` | 134 |  | `core.db` |
 | `mind/memory.py` | 142 | Facade re-exporting every mind.memory_* name; holds no domain code of its own. | `core`, `core.db`, `core.logging_utils`, `llm.prompts`, `llm.providers`, `mind.memory_common`, `mind.memory_context`, `mind.memory_inference`, `mind.memory_lore_entries`, `mind.memory_lorebooks`, `mind.memory_read`, `mind.memory_relationships`, `mind.memory_retrieval`, `mind.memory_snapshot`, `mind.memory_summaries`, `mind.memory_time`, `mind.memory_vectors`, `mind.memory_write`, `mind.theory_of_mind` |
 | `mind/memory_common.py` | 293 | Leaf helpers shared by every memory domain: vocabularies, blob/vector codecs, FTS query, cosine. | `core.db` |
@@ -92,7 +94,7 @@
 | `persist/commit_ledgers.py` | 585 | Pending-obligation and world-pressure debt ledgers. | `core.db`, `core.pipeline_context`, `persist.commit_common` |
 | `persist/commit_mapping.py` | 851 | Lore/book mapping commit: book ops, lore ops, canon fallback ops, offscreen-event normaliser. | `core.db`, `core.frames`, `mind.memory`, `persist.commit_common`, `story.character_schema`, `story.provenance_text`, `world.spatial` |
 | `persist/commit_mechanics.py` | 524 | Transit/news sweeps, the world-event spine, information carriers, cast changes. | `core.db`, `persist.commit_common`, `persist.commit_scene_state`, `story.character_schema`, `story.scene`, `world.mechanics` |
-| `persist/commit_memory.py` | 2151 | Pre-lock memory preparation: per-mind memories and the psychology deltas riding with them. | `core.db`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_background`, `persist.commit_common`, `persist.commit_place_graph`, `story.character_schema`, `world.charter`, `world.comfort`, `world.exposure`, `world.spatial`, `world.stimulation`, `world.survival` |
+| `persist/commit_memory.py` | 2164 | Pre-lock memory preparation: per-mind memories and the psychology deltas riding with them. | `core.db`, `mind`, `mind.memory`, `mind.theory_of_mind`, `persist.commit_background`, `persist.commit_common`, `persist.commit_place_graph`, `story.character_schema`, `world.charter`, `world.comfort`, `world.exposure`, `world.spatial`, `world.stimulation`, `world.survival` |
 | `persist/commit_memory_write.py` | 354 | The durable memory write and its out-of-band consolidation twin. | `core.db`, `mind.memory`, `persist.commit_memory`, `story.character_schema`, `story.scene` |
 | `persist/commit_place_graph.py` | 336 | Per-mind durable place graph and per-beat spatial experience. | `world.spatial` |
 | `persist/commit_room_registry.py` | 581 | Room identity across frames: registry projection, mint dedup, renames, retirement, exit pruning. | `core.db`, `persist.commit_common`, `story.character_schema`, `world.spatial` |
@@ -253,14 +255,27 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `character_step()` | 3463 | 1286 lines |
-| `_annotate_known_exits()` | 2695 | 469 lines |
-| `_ground_observation_citations()` | 1664 | 328 lines |
-| `_unanswered_question_note()` | 563 | 237 lines |
-| `_destination_from_goals()` | 2261 | 109 lines |
-| `_recent_self_moves()` | 281 | 98 lines |
-| `sprint_offers()` | 3199 | 97 lines |
-| `_impossible_knowledge()` | 902 | 89 lines |
+| `character_step()` | 3482 | 1343 lines |
+| `_annotate_known_exits()` | 2707 | 469 lines |
+| `_ground_observation_citations()` | 1706 | 298 lines |
+| `_unanswered_question_note()` | 564 | 237 lines |
+| `_destination_from_goals()` | 2273 | 109 lines |
+| `_recent_self_moves()` | 282 | 98 lines |
+| `sprint_offers()` | 3211 | 97 lines |
+| `_impossible_knowledge()` | 903 | 89 lines |
+
+### `agents/character_bare.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `compile_bare()` | 216 | 245 lines |
+| `_appraisal()` | 463 | 52 lines |
+| `holding_from()` | 93 | 46 lines |
+| `modules_for()` | 143 | 20 lines |
+| `_heard_lines()` | 62 | 14 lines |
+| `_delivered_memories()` | 78 | 13 lines |
+| `_named_here()` | 197 | 13 lines |
+| `_evidence()` | 185 | 10 lines |
 
 ### `agents/character_kernel.py`
 
@@ -279,14 +294,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `norm_sequence()` | 4483 | 295 lines |
-| `presence_figures_for_room()` | 2233 | 268 lines |
-| `_check_narrator_fidelity()` | 10981 | 259 lines |
-| `_unknown_actor_label()` | 5402 | 202 lines |
-| `_scrub_unknown_identities()` | 5827 | 187 lines |
-| `_scrub_invented_dialogue()` | 9492 | 151 lines |
-| `observer_body_regions()` | 1727 | 140 lines |
-| `_check_quote_attribution()` | 10544 | 139 lines |
+| `norm_sequence()` | 4486 | 295 lines |
+| `presence_figures_for_room()` | 2236 | 268 lines |
+| `_check_narrator_fidelity()` | 10984 | 259 lines |
+| `_unknown_actor_label()` | 5405 | 202 lines |
+| `_scrub_unknown_identities()` | 5830 | 187 lines |
+| `_scrub_invented_dialogue()` | 9495 | 151 lines |
+| `observer_body_regions()` | 1730 | 140 lines |
+| `_check_quote_attribution()` | 10547 | 139 lines |
 
 ### `agents/composer.py`
 
@@ -730,9 +745,9 @@
 |---|---:|---:|
 | `preset_import_document()` | 277 | 51 lines |
 | `specialist_prompt()` | 341 | 38 lines |
-| `unified_specialist_prompt()` | 479 | 36 lines |
-| `_relocate_character_identity()` | 596 | 29 lines |
-| `character_prompt()` | 644 | 28 lines |
+| `unified_specialist_prompt()` | 506 | 36 lines |
+| `_relocate_character_identity()` | 623 | 28 lines |
+| `character_prompt()` | 670 | 28 lines |
 | `_assembled_sheets()` | 39 | 26 lines |
 | `normalize_preset()` | 127 | 26 lines |
 | `_preset_override()` | 224 | 22 lines |
@@ -766,14 +781,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `semantic_output_errors()` | 6873 | 589 lines |
-| `preprocess_llm_output()` | 5782 | 357 lines |
+| `semantic_output_errors()` | 6959 | 593 lines |
+| `preprocess_llm_output()` | 5868 | 357 lines |
 | `_lenient_coerce()` | 864 | 159 lines |
-| `validate_llm_output_strict()` | 7717 | 139 lines |
-| `_causal_patch_errors()` | 6741 | 130 lines |
-| `canonicalize_prose_markup()` | 5352 | 102 lines |
+| `validate_llm_output_strict()` | 7807 | 139 lines |
+| `_causal_patch_errors()` | 6827 | 130 lines |
+| `canonicalize_prose_markup()` | 5438 | 102 lines |
 | `_coerce_station_table()` | 85 | 81 lines |
-| `_uncross_concealed_speech()` | 5476 | 69 lines |
+| `_uncross_concealed_speech()` | 5562 | 69 lines |
 
 ### `mind/affect.py`
 
@@ -839,6 +854,19 @@
 | `may_assert_consequence()` | 156 | 15 lines |
 | `is_node_id()` | 139 | 9 lines |
 | `is_canon()` | 150 | 4 lines |
+
+### `mind/character_jev.py`
+
+| Function | Start | Size |
+|---|---:|---:|
+| `after_questions()` | 234 | 176 lines |
+| `state_text()` | 149 | 44 lines |
+| `steps()` | 124 | 12 lines |
+| `indexed()` | 447 | 10 lines |
+| `before_questions()` | 214 | 9 lines |
+| `_evidence_questions()` | 412 | 8 lines |
+| `pick()` | 424 | 8 lines |
+| `read_before()` | 225 | 7 lines |
 
 ### `mind/knowledge_circles.py`
 
@@ -1194,7 +1222,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `prepare_memory_commit()` | 601 | 1551 lines |
+| `prepare_memory_commit()` | 601 | 1564 lines |
 | `_cited_memory_ids()` | 83 | 76 lines |
 | `_interior_relations_of()` | 506 | 55 lines |
 | `_own_sequence_memory()` | 382 | 49 lines |

@@ -1,0 +1,3 @@
+YOU SAID: {line}
+HOW YOU SAID IT: {how}
+How loudly did you say it?

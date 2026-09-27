@@ -41,6 +41,7 @@
   "nsfw_prompt_ids": [
     "background_react",
     "character",
+    "character_bare",
     "director_body",
     "director_contact",
     "director_establish",
@@ -62,6 +63,9 @@
     },
     "character": {
       "$text": "prompts/character.txt"
+    },
+    "character_bare": {
+      "$text": "prompts/character_bare.txt"
     },
     "background_react": {
       "$text": "prompts/background_react.txt"
@@ -1126,6 +1130,333 @@
         "triumph": "triumph",
         "relief": "relief",
         "contentment": "contentment"
+      }
+    }
+  },
+  "character_bare": {
+    "dispute": {
+      "$text": "character_bare/dispute.txt"
+    },
+    "drive_rupture": {
+      "$text": "character_bare/drive_rupture.txt"
+    },
+    "drive_rupture_forced": {
+      "$text": "character_bare/drive_rupture_forced.txt"
+    },
+    "project_review": {
+      "$text": "character_bare/project_review.txt"
+    },
+    "still_waiting": {
+      "$text": "character_bare/still_waiting.txt"
+    },
+    "impossible_knowledge": {
+      "$text": "character_bare/impossible_knowledge.txt"
+    },
+    "carried_reports": {
+      "$text": "character_bare/carried_reports.txt"
+    }
+  },
+  "character_jev": {
+    "line_volume": {
+      "$text": "character_jev/line_volume.txt"
+    },
+    "line_to": {
+      "$text": "character_jev/line_to.txt"
+    },
+    "line_kept_from": {
+      "$text": "character_jev/line_kept_from.txt"
+    },
+    "line_expects": {
+      "$text": "character_jev/line_expects.txt"
+    },
+    "line_interrupts": {
+      "$text": "character_jev/line_interrupts.txt"
+    },
+    "act_seen": {
+      "$text": "character_jev/act_seen.txt"
+    },
+    "act_kept_from": {
+      "$text": "character_jev/act_kept_from.txt"
+    },
+    "act_target": {
+      "$text": "character_jev/act_target.txt"
+    },
+    "follow": {
+      "$text": "character_jev/follow.txt"
+    },
+    "contact_end": {
+      "$text": "character_jev/contact_end.txt"
+    },
+    "want_serves": {
+      "$text": "character_jev/want_serves.txt"
+    },
+    "want_urgency": {
+      "$text": "character_jev/want_urgency.txt"
+    },
+    "tell_channel": {
+      "$text": "character_jev/tell_channel.txt"
+    },
+    "tell_subtlety": {
+      "$text": "character_jev/tell_subtlety.txt"
+    },
+    "done_talking": {
+      "$text": "character_jev/done_talking.txt"
+    },
+    "urgency": {
+      "$text": "character_jev/urgency.txt"
+    },
+    "salience": {
+      "$text": "character_jev/salience.txt"
+    },
+    "change_kind": {
+      "$text": "character_jev/change_kind.txt"
+    },
+    "belief_target": {
+      "$text": "character_jev/belief_target.txt"
+    },
+    "sure": {
+      "$text": "character_jev/sure.txt"
+    },
+    "about_whom": {
+      "$text": "character_jev/about_whom.txt"
+    },
+    "reading_kind": {
+      "$text": "character_jev/reading_kind.txt"
+    },
+    "which_memory": {
+      "$text": "character_jev/which_memory.txt"
+    },
+    "which_aim": {
+      "$text": "character_jev/which_aim.txt"
+    },
+    "which_promise": {
+      "$text": "character_jev/which_promise.txt"
+    },
+    "based_now": {
+      "$text": "character_jev/based_now.txt"
+    },
+    "based_memory": {
+      "$text": "character_jev/based_memory.txt"
+    },
+    "aim_moved": {
+      "$text": "character_jev/aim_moved.txt"
+    },
+    "belief_touched": {
+      "$text": "character_jev/belief_touched.txt"
+    },
+    "cue_present": {
+      "$text": "character_jev/cue_present.txt"
+    },
+    "rel_axis": {
+      "$text": "character_jev/rel_axis.txt"
+    },
+    "rel_break": {
+      "$text": "character_jev/rel_break.txt"
+    },
+    "concern_settled": {
+      "$text": "character_jev/concern_settled.txt"
+    },
+    "keep_line": {
+      "$text": "character_jev/keep_line.txt"
+    },
+    "memory_shaped": {
+      "$text": "character_jev/memory_shaped.txt"
+    },
+    "released": {
+      "$text": "character_jev/released.txt"
+    },
+    "novelty": {
+      "$text": "character_jev/novelty.txt"
+    },
+    "control": {
+      "$text": "character_jev/control.txt"
+    },
+    "coping": {
+      "$text": "character_jev/coping.txt"
+    },
+    "norm": {
+      "$text": "character_jev/norm.txt"
+    },
+    "self_fit": {
+      "$text": "character_jev/self_fit.txt"
+    },
+    "pleasant": {
+      "$text": "character_jev/pleasant.txt"
+    },
+    "pain": {
+      "$text": "character_jev/pain.txt"
+    },
+    "body_pleasure": {
+      "$text": "character_jev/body_pleasure.txt"
+    },
+    "impact": {
+      "$text": "character_jev/impact.txt"
+    },
+    "impact_certain": {
+      "$text": "character_jev/impact_certain.txt"
+    },
+    "impact_agency": {
+      "$text": "character_jev/impact_agency.txt"
+    },
+    "echo": {
+      "$text": "character_jev/echo.txt"
+    },
+    "echo_familiar": {
+      "$text": "character_jev/echo_familiar.txt"
+    },
+    "echo_threat": {
+      "$text": "character_jev/echo_threat.txt"
+    },
+    "echo_coping": {
+      "$text": "character_jev/echo_coping.txt"
+    },
+    "coping_mode": {
+      "$text": "character_jev/coping_mode.txt"
+    },
+    "dispute": {
+      "$text": "character_jev/dispute.txt"
+    },
+    "options": {
+      "volume": {
+        "whisper": "In a whisper, for one listener.",
+        "mutter": "Under your breath.",
+        "normal": "In an ordinary voice.",
+        "loud": "Loudly.",
+        "shout": "Shouting."
+      },
+      "yesno": {
+        "yes": "Yes.",
+        "no": "No."
+      },
+      "grade": {
+        "none": "Not at all.",
+        "slight": "Slightly.",
+        "clear": "Clearly.",
+        "strong": "Strongly."
+      },
+      "miss": {
+        "plain": "It is plain to see.",
+        "noticeable": "Someone paying attention would catch it.",
+        "subtle": "Only a close observer would catch it.",
+        "hidden": "Almost no one would catch it."
+      },
+      "channel": {
+        "seen": "By sight.",
+        "heard": "By sound."
+      },
+      "signed": {
+        "much_less": "Much less.",
+        "less": "Less.",
+        "same": "No change.",
+        "more": "More.",
+        "much_more": "Much more."
+      },
+      "fit": {
+        "against_all": "It goes against it completely.",
+        "against": "It goes against it.",
+        "neither": "Neither.",
+        "fits": "It fits it.",
+        "fits_all": "It fits it completely."
+      },
+      "tone": {
+        "very_unpleasant": "Very unpleasant.",
+        "unpleasant": "Unpleasant.",
+        "neither": "Neither.",
+        "pleasant": "Pleasant.",
+        "very_pleasant": "Very pleasant."
+      },
+      "change_kind": {
+        "belief": "Something you now believe or doubt about yourself or the world.",
+        "reading": "What you now make of someone.",
+        "rereading": "A memory you now see differently.",
+        "worry": "Something that now worries you.",
+        "aim": "Something you now mean to do.",
+        "give_up": "An aim you give up.",
+        "stop_waiting": "Something promised to you that you stop waiting for.",
+        "drive": "What drives you, changed at the core.",
+        "other": "None of these."
+      },
+      "reading_kind": {
+        "emotion": "What they feel right now.",
+        "goal": "What they want or mean to do.",
+        "trait": "What they are like.",
+        "second_order": "What they think of someone or something.",
+        "identity": "Who they really are.",
+        "observation": "Something plain to see about them.",
+        "stated_fact": "Something they said outright."
+      },
+      "aim_moved": {
+        "nothing": "Nothing.",
+        "progress": "Moved it forward, not yet done.",
+        "blocked": "Set it back.",
+        "done": "Achieved it.",
+        "impossible": "Showed it can no longer be done."
+      },
+      "belief_touched": {
+        "neither": "No.",
+        "confirms": "It bore it out.",
+        "doubts": "It cast doubt on it.",
+        "overturns": "It overturned it."
+      },
+      "memory_shaped": {
+        "no": "No.",
+        "integrated": "You acted on it.",
+        "resisted": "You pushed against it.",
+        "dismissed": "You set it aside."
+      },
+      "impact": {
+        "hurts_badly": "It badly hurts it.",
+        "hurts": "It hurts it.",
+        "none": "It does not bear on it.",
+        "helps": "It helps it.",
+        "helps_greatly": "It greatly helps it."
+      },
+      "certain": {
+        "done": "It has already happened.",
+        "may": "It may still happen.",
+        "unclear": "Hard to say."
+      },
+      "agency": {
+        "self": "Yours.",
+        "other": "Someone else's.",
+        "world": "Circumstance's.",
+        "none": "No one's."
+      },
+      "ability": {
+        "much_less": "Much less able.",
+        "less": "Less able.",
+        "same": "No different.",
+        "more": "More able.",
+        "much_more": "Much more able."
+      },
+      "choices": {
+        "nobody": "No one in particular.",
+        "everyone": "Everyone here.",
+        "nothing_now": "Nothing that just reached you.",
+        "nothing_remembered": "Nothing you remember.",
+        "no_memory": "None of these memories.",
+        "no_belief": "None: it is new.",
+        "no_aim": "None of these.",
+        "no_promise": "None of these.",
+        "no_strategy": "None of these.",
+        "no_target": "No one.",
+        "follow_neither": "Neither.",
+        "follow_stop": "You stop following whoever you were following.",
+        "follow_start": "You start following {person}.",
+        "not_stated": "not stated",
+        "situational": "Only this moment."
+      },
+      "aim_labels": {
+        "drive": "what drives you: {text}",
+        "intention": "your aim: {text}",
+        "project": "your life's work: {text}"
+      },
+      "rel_axes": {
+        "trust": "trust",
+        "warmth": "feel warmly toward",
+        "fear": "fear",
+        "respect": "respect",
+        "suspicion": "suspect"
       }
     }
   }

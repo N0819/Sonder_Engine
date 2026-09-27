@@ -1,0 +1,2 @@
+PERSON: {person}
+Was this moment a real break, rescue or betrayal between you?

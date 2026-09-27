@@ -1,0 +1,2 @@
+{person} SAID: {line}
+Will you still be carrying this line a hundred beats from now?

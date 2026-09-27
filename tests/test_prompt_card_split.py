@@ -49,7 +49,13 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 219   # -3 (2026-09-26, retiring `world_facts`): the social
+PART_COUNT = 280   # +61 (2026-09-27, the bare character contract,
+                   # agents/character_bare.py): the bare card
+                   # (`prompts/character_bare.txt`), its seven gated sections
+                   # (`character_bare.*`) and the decision model's 53
+                   # questions around the call (`character_jev.*`, their
+                   # labels inline under `character_jev.options`).
+                   # -3 (2026-09-26, retiring `world_facts`): the social
                    # hand's chunk, the prose contract's Jev question and
                    # its encoder tool.
                    # +2 (2026-09-26, last): the opening's premise entry
@@ -233,7 +239,8 @@ def test_the_card_still_loads_and_publishes_every_prompt(language):
 
     pack = installed_language_packs()[language]
     card = pack.card(CARD)
-    assert len(card["prompts"]) == 37
+    # 38 since 2026-09-27: `character_bare`, the bare character card.
+    assert len(card["prompts"]) == 38
     assert len(card["specialists"]) == 5
     assert len(card["prose_author_sheet"]) == 1
     # Fragments resolve AFTER assembly, so the loaded card must carry none.

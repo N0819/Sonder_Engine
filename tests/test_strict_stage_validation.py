@@ -204,7 +204,9 @@ _AGENTS_DIR = Path(__file__).resolve().parents[1] / "agents"
 _STAGE_STEP_KEYS = {
     "director.py": ["director_establish", "director_interpret",
                     "director_resolve"],
-    "character.py": ["character_kernel"],
+    # One call site for both contracts (a beat makes one model call):
+    # `"character_bare" if _bare else "character_kernel"`.
+    "character.py": ["character_kernel", "character_bare"],
     "background.py": ["background_react"],
     "narration.py": ["narrator"],
 }
@@ -220,8 +222,11 @@ def test_stage_modules_stay_on_strict_path(filename, step_keys):
         f"{filename} must not call chat_complete directly")
 
     for key in step_keys:
+        # The step-key argument names the key -- as a literal, or as one
+        # branch of a choice between literal step keys.
         assert re.search(
-            rf'_agent_json\(\s*[^,]+,\s*"{key}"', src), (
+            rf'_agent_json\(\s*[^,]+,\s*(?:"[a-z_]+"\s+if\s+[^,]+?\s+else\s+)?"{key}"'
+            rf'|_agent_json\(\s*[^,]+,\s*"{key}"\s+if\s', src), (
             f"{filename} must route step '{key}' through _agent_json")
 
 

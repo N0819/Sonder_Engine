@@ -41,6 +41,7 @@
   "nsfw_prompt_ids": [
     "background_react",
     "character",
+    "character_bare",
     "director_body",
     "director_contact",
     "director_establish",
@@ -62,6 +63,9 @@
     },
     "character": {
       "$text": "prompts/character.txt"
+    },
+    "character_bare": {
+      "$text": "prompts/character_bare.txt"
     },
     "background_react": {
       "$text": "prompts/background_react.txt"
@@ -1126,6 +1130,333 @@
         "triumph": "勝利の高揚",
         "relief": "安堵",
         "contentment": "満ち足りた気持ち"
+      }
+    }
+  },
+  "character_bare": {
+    "dispute": {
+      "$text": "character_bare/dispute.txt"
+    },
+    "drive_rupture": {
+      "$text": "character_bare/drive_rupture.txt"
+    },
+    "drive_rupture_forced": {
+      "$text": "character_bare/drive_rupture_forced.txt"
+    },
+    "project_review": {
+      "$text": "character_bare/project_review.txt"
+    },
+    "still_waiting": {
+      "$text": "character_bare/still_waiting.txt"
+    },
+    "impossible_knowledge": {
+      "$text": "character_bare/impossible_knowledge.txt"
+    },
+    "carried_reports": {
+      "$text": "character_bare/carried_reports.txt"
+    }
+  },
+  "character_jev": {
+    "line_volume": {
+      "$text": "character_jev/line_volume.txt"
+    },
+    "line_to": {
+      "$text": "character_jev/line_to.txt"
+    },
+    "line_kept_from": {
+      "$text": "character_jev/line_kept_from.txt"
+    },
+    "line_expects": {
+      "$text": "character_jev/line_expects.txt"
+    },
+    "line_interrupts": {
+      "$text": "character_jev/line_interrupts.txt"
+    },
+    "act_seen": {
+      "$text": "character_jev/act_seen.txt"
+    },
+    "act_kept_from": {
+      "$text": "character_jev/act_kept_from.txt"
+    },
+    "act_target": {
+      "$text": "character_jev/act_target.txt"
+    },
+    "follow": {
+      "$text": "character_jev/follow.txt"
+    },
+    "contact_end": {
+      "$text": "character_jev/contact_end.txt"
+    },
+    "want_serves": {
+      "$text": "character_jev/want_serves.txt"
+    },
+    "want_urgency": {
+      "$text": "character_jev/want_urgency.txt"
+    },
+    "tell_channel": {
+      "$text": "character_jev/tell_channel.txt"
+    },
+    "tell_subtlety": {
+      "$text": "character_jev/tell_subtlety.txt"
+    },
+    "done_talking": {
+      "$text": "character_jev/done_talking.txt"
+    },
+    "urgency": {
+      "$text": "character_jev/urgency.txt"
+    },
+    "salience": {
+      "$text": "character_jev/salience.txt"
+    },
+    "change_kind": {
+      "$text": "character_jev/change_kind.txt"
+    },
+    "belief_target": {
+      "$text": "character_jev/belief_target.txt"
+    },
+    "sure": {
+      "$text": "character_jev/sure.txt"
+    },
+    "about_whom": {
+      "$text": "character_jev/about_whom.txt"
+    },
+    "reading_kind": {
+      "$text": "character_jev/reading_kind.txt"
+    },
+    "which_memory": {
+      "$text": "character_jev/which_memory.txt"
+    },
+    "which_aim": {
+      "$text": "character_jev/which_aim.txt"
+    },
+    "which_promise": {
+      "$text": "character_jev/which_promise.txt"
+    },
+    "based_now": {
+      "$text": "character_jev/based_now.txt"
+    },
+    "based_memory": {
+      "$text": "character_jev/based_memory.txt"
+    },
+    "aim_moved": {
+      "$text": "character_jev/aim_moved.txt"
+    },
+    "belief_touched": {
+      "$text": "character_jev/belief_touched.txt"
+    },
+    "cue_present": {
+      "$text": "character_jev/cue_present.txt"
+    },
+    "rel_axis": {
+      "$text": "character_jev/rel_axis.txt"
+    },
+    "rel_break": {
+      "$text": "character_jev/rel_break.txt"
+    },
+    "concern_settled": {
+      "$text": "character_jev/concern_settled.txt"
+    },
+    "keep_line": {
+      "$text": "character_jev/keep_line.txt"
+    },
+    "memory_shaped": {
+      "$text": "character_jev/memory_shaped.txt"
+    },
+    "released": {
+      "$text": "character_jev/released.txt"
+    },
+    "novelty": {
+      "$text": "character_jev/novelty.txt"
+    },
+    "control": {
+      "$text": "character_jev/control.txt"
+    },
+    "coping": {
+      "$text": "character_jev/coping.txt"
+    },
+    "norm": {
+      "$text": "character_jev/norm.txt"
+    },
+    "self_fit": {
+      "$text": "character_jev/self_fit.txt"
+    },
+    "pleasant": {
+      "$text": "character_jev/pleasant.txt"
+    },
+    "pain": {
+      "$text": "character_jev/pain.txt"
+    },
+    "body_pleasure": {
+      "$text": "character_jev/body_pleasure.txt"
+    },
+    "impact": {
+      "$text": "character_jev/impact.txt"
+    },
+    "impact_certain": {
+      "$text": "character_jev/impact_certain.txt"
+    },
+    "impact_agency": {
+      "$text": "character_jev/impact_agency.txt"
+    },
+    "echo": {
+      "$text": "character_jev/echo.txt"
+    },
+    "echo_familiar": {
+      "$text": "character_jev/echo_familiar.txt"
+    },
+    "echo_threat": {
+      "$text": "character_jev/echo_threat.txt"
+    },
+    "echo_coping": {
+      "$text": "character_jev/echo_coping.txt"
+    },
+    "coping_mode": {
+      "$text": "character_jev/coping_mode.txt"
+    },
+    "dispute": {
+      "$text": "character_jev/dispute.txt"
+    },
+    "options": {
+      "volume": {
+        "whisper": "ささやき声で、一人にだけ。",
+        "mutter": "つぶやくように。",
+        "normal": "ふつうの声で。",
+        "loud": "大きな声で。",
+        "shout": "叫ぶように。"
+      },
+      "yesno": {
+        "yes": "はい。",
+        "no": "いいえ。"
+      },
+      "grade": {
+        "none": "まったくない。",
+        "slight": "少し。",
+        "clear": "はっきりと。",
+        "strong": "強く。"
+      },
+      "miss": {
+        "plain": "はっきり見て取れる。",
+        "noticeable": "注意している人なら気づく。",
+        "subtle": "よく見ている人だけが気づく。",
+        "hidden": "ほとんど誰も気づかない。"
+      },
+      "channel": {
+        "seen": "目で。",
+        "heard": "耳で。"
+      },
+      "signed": {
+        "much_less": "ずっと少なく。",
+        "less": "少なく。",
+        "same": "変わらない。",
+        "more": "多く。",
+        "much_more": "ずっと多く。"
+      },
+      "fit": {
+        "against_all": "まったく反している。",
+        "against": "反している。",
+        "neither": "どちらでもない。",
+        "fits": "合っている。",
+        "fits_all": "完全に合っている。"
+      },
+      "tone": {
+        "very_unpleasant": "とても不快。",
+        "unpleasant": "不快。",
+        "neither": "どちらでもない。",
+        "pleasant": "快い。",
+        "very_pleasant": "とても快い。"
+      },
+      "change_kind": {
+        "belief": "自分や世界について、今信じていること、または疑っていること。",
+        "reading": "誰かについて、今思っていること。",
+        "rereading": "今は違って見える記憶。",
+        "worry": "今気にかかっていること。",
+        "aim": "今しようと決めたこと。",
+        "give_up": "あきらめる目標。",
+        "stop_waiting": "約束されたものを待つのをやめること。",
+        "drive": "核から変わった、あなたを駆り立てるもの。",
+        "other": "どれでもない。"
+      },
+      "reading_kind": {
+        "emotion": "その人が今感じていること。",
+        "goal": "その人が望むこと、しようとしていること。",
+        "trait": "その人の人となり。",
+        "second_order": "その人が誰かや何かについて思っていること。",
+        "identity": "その人の本当の正体。",
+        "observation": "その人について見て明らかなこと。",
+        "stated_fact": "その人がはっきり言ったこと。"
+      },
+      "aim_moved": {
+        "nothing": "何も。",
+        "progress": "前に進めたが、まだ終わっていない。",
+        "blocked": "後退させた。",
+        "done": "成し遂げた。",
+        "impossible": "もう成し遂げられないと分かった。"
+      },
+      "belief_touched": {
+        "neither": "いいえ。",
+        "confirms": "裏づけた。",
+        "doubts": "疑いを投げかけた。",
+        "overturns": "覆した。"
+      },
+      "memory_shaped": {
+        "no": "いいえ。",
+        "integrated": "それに基づいて行動した。",
+        "resisted": "それに逆らった。",
+        "dismissed": "それを脇に置いた。"
+      },
+      "impact": {
+        "hurts_badly": "ひどく損なう。",
+        "hurts": "損なう。",
+        "none": "関わらない。",
+        "helps": "助ける。",
+        "helps_greatly": "大いに助ける。"
+      },
+      "certain": {
+        "done": "もう起きた。",
+        "may": "これから起こりうる。",
+        "unclear": "何とも言えない。"
+      },
+      "agency": {
+        "self": "あなた。",
+        "other": "ほかの誰か。",
+        "world": "成り行き。",
+        "none": "誰でもない。"
+      },
+      "ability": {
+        "much_less": "ずっと対処できない気がする。",
+        "less": "対処できない気がする。",
+        "same": "変わらない。",
+        "more": "対処できる気がする。",
+        "much_more": "ずっと対処できる気がする。"
+      },
+      "choices": {
+        "nobody": "特に誰にでもない。",
+        "everyone": "ここにいる全員。",
+        "nothing_now": "今届いたものには何も基づいていない。",
+        "nothing_remembered": "覚えていることには何も基づいていない。",
+        "no_memory": "どの記憶でもない。",
+        "no_belief": "どれでもない。新しい信念だ。",
+        "no_aim": "どれでもない。",
+        "no_promise": "どれでもない。",
+        "no_strategy": "どれでもない。",
+        "no_target": "誰でもない。",
+        "follow_neither": "どちらでもない。",
+        "follow_stop": "ついて行くのをやめた。",
+        "follow_start": "{person}について行き始めた。",
+        "not_stated": "書かれていない",
+        "situational": "この瞬間だけのため。"
+      },
+      "aim_labels": {
+        "drive": "あなたを駆り立てるもの: {text}",
+        "intention": "あなたの目標: {text}",
+        "project": "あなたの取り組み: {text}"
+      },
+      "rel_axes": {
+        "trust": "信頼",
+        "warmth": "親しみ",
+        "fear": "恐れ",
+        "respect": "尊敬",
+        "suspicion": "疑い"
       }
     }
   }

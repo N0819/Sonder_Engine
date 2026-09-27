@@ -1,8 +1,10 @@
 # Jev around the character call: the tracking pass and the memory packet
 
-**Status: PARTLY BUILT, 2026-09-26, branch `worktree-jev-character-tracking`.**
+**Status: PARTLY BUILT, 2026-09-27, branch `worktree-jev-character-tracking`.**
 The affect pass is wired (increment 1, "Wiring the affect pass" below); the
-memory packet and everything else here is a proposal. The survey numbers come
+bare contract is built behind a setting ("The bare contract" below), which
+carries increment 2 and everything the full card's bookkeeping asked for; the
+memory packet is a proposal. The survey numbers come
 from four read-only surveys of the code and of `engine.db`
 (`llm_capture`/`llm_blobs`, `variants._engine_notes`) over the ten days to
 2026-09-26, spot-checked by hand.
@@ -859,6 +861,154 @@ feeling, one per kind.
 (`goal_impacts`, `somatic_impact`, `memory_modulation`), stress `coping_mode`
 and `hedonic.released` feed stress, drive strain and pain and pleasure; each
 needs a Jev question before its clause can leave the prompt.
+
+## The bare contract
+
+**Status: BUILT behind a setting, 2026-09-27** (`character_contract: bare`;
+`agents/character_bare.py`, `mind/character_jev.py`,
+`tests/test_character_bare.py`). The full card stays the default until the
+replay comparison below has been read.
+
+The owner, 2026-09-26, in order: "Observe what other fields from the
+character prompt can be handled by jev, one of my thoughts is memory
+citation can be handled by jev the llm need only output a why"; "I thought I
+told you to remove emotion completely from the llm and just handle before
+and after with jev. The LLM just getting told it's mood at the start of it's
+turn"; "The goal is to remove as much as possible and move it to jev so the
+character is more focused on being a character"; "Can we also include the
+models reasoning block in the jev post run?"; "the models still output some
+whys, but jev can still likely find which memory that why and
+action/thought/speech refrenced"; "I truly want an as bare bones character
+prompt as possible. That still basically does the same thing thanks to
+jev... except the character is now mostly reasoning about being the
+character it's been given"; "Mind modeling and cross turn [note] taking so
+the character knows roughly what it's been doing across turn and changes
+what it thinks of other people are probably needed in some capacity still
+insdie the turn. The good news is we can now gate parts of the prompts, Jev
+can detect a disput and insert the disput payload deterministically".
+
+### What was measured first
+
+Three read-only surveys (2026-09-26, the code and 187 captured
+`character_major` replies from 2026-09-13 to 2026-09-26 -- 2 distinct
+characters across 14 branched chats, so indicative, not a population):
+
+- **Where the reply goes.** Appraisal 25.3% of the visible reply, the
+  update lanes 28.4% (readings of people 9.1%, intentions 5.6%), the rest of
+  `state` 18.7% (wants 4.9%, decision 3.8%), sequence 16.0%, manifest 8.9%,
+  citations inside all of it 7.4%.
+- **Citations are gates, not data.** All 3,794 cited handles were rows the
+  call delivered. What a citation does is mostly decide whether a value
+  survives: no present row cited zeroes pain and pleasure, a goal impact,
+  and trust/warmth/fear; no row drops a belief, an association or a reading.
+  A few ids are read: a belief, reading or memory effect citing a memory
+  raises its importance once; `reinterpret` picks the disputed row;
+  `effects` feeds the unbidden-recall ledger; an intention's transition
+  keeps its evidence for display.
+- **No reader at all:** appraisal `goal_relevance / expectation / emotion /
+  uncertainty`, `goal_impacts[].intentionality`,
+  `memory_modulation.expectation / anticipatory_emotion`,
+  `memory.effects[].use`, `people[].alternatives`, `interaction.yields_floor`,
+  and `waiting_ops`, which is not in the kernel schema and never compiled --
+  no character could give up on a promise. Read back only by the same model
+  next beat: the decision's hinge and uncertainty, the coping mode, the
+  memory echo's why, a belief's emotional charge, association texts, a
+  tell's reason.
+- **Reached only through the Director:** where a character looks, the room
+  it walks to and its pace -- the Director reads the act's text and decides
+  them. So the bare reply types none of them.
+- **Repairs:** 9 of 186 first attempts failed, none on a citation -- belief
+  target rules (since non-fatal), malformed JSON, a missing field.
+- **Reasoning:** 143 of 187 calls returned a trace (the Claude route none),
+  1.7x the reply's length; under 6% of it concerns citations.
+
+### The card and the reply
+
+The card is six paragraphs (2.6k characters in English with the universal
+language contract, against the full card's 22.8k of instructions): who you
+are, what you have (`self`, `self.feelings` given and never reported,
+`perception`, `memory` all past), where your turn ends, how you act, what
+moves you, and the reply:
+
+```json
+{"want":"","held_back":"","hinge":"","unsure":"",
+ "sequence":[{"say":"","to":"","how":"","why":""},{"do":"","why":""},{"ponder":"","why":""}],
+ "demeanor":"","tells":[],"people":[],"changes":[],"note":""}
+```
+
+`do` is written as someone watching would see it, the motive in `why`.
+`people` is what the character makes of anyone here, `changes` what changed
+in it, `note` a line to itself about what it is in the middle of -- kept as
+`my_notes`, the last `NOTES_KEPT` (5), and shown next beat beside the last
+decision.
+
+**Gated sections** ship only when a detector calls for them, each a short
+paragraph with its payload section: `dispute` (the decision model, before
+the call: does what just happened change what a recalled memory meant? a
+yes-share of `DISPUTE_FLOOR` (0.5) adds the memory to
+`memory.may_mean_otherwise`), `drive_rupture` and its forced form,
+`project_review`, `still_waiting`, `impossible_knowledge`, `carried_reports`
+(code).
+
+### What the decision model reads back
+
+One request after the call (sharded at 64 questions, concurrently), one
+state per mind: its card psychology, what it is after and believes, who is
+here, what reached it, what it remembers, what it did with its whys, and its
+reasoning trace when the provider returned one (`REASONING_CHARS`, 6000).
+Every option is a row this mind was given or an item it holds, and "none" is
+always one -- so a citation cannot be invented, and "none" drops a lane
+exactly where commit would have dropped the model's.
+
+| The full card asked the model for | Now |
+|---|---|
+| volume, `conceal_from`, visibility | `line_volume`; `line_kept_from` per person here -- never the addressee |
+| `interaction.addresses`, `expects_response`, interrupts | `line_to`, `line_expects`, `line_interrupts` |
+| `observable` (and "an inner act has none") | `act_seen`: an act no one could see or hear is imperceptible |
+| `targets`, follow, ending a contact | `act_target`, `follow`, `contact_end` per standing contact |
+| wants' `serves` and `urgency`; enact/suppress ids | `want_serves`, `want_urgency`; the want is enacted, `held_back` suppressed |
+| tells' `channel`, `subtlety`; "at most two" | `tell_channel`, `tell_subtlety`; `MAX_TELLS` (2) in code |
+| readings of people (`about_entity`, `kind`, `confidence`, evidence) | the character's `people` lines; `about_whom`, `reading_kind`, `sure`, `based_now` / `based_memory` |
+| beliefs: acquire, reinforce, weaken, revise with exact held text | a `changes` line sorted by `change_kind`; per held belief `belief_touched` (bore out, doubt, overturned); an overturned belief takes the line aimed at it (`belief_target`) as its new wording |
+| memory re-reading (`memory_ref`, evidence not the disputed row) | `which_memory` + evidence from anything else |
+| intentions add/abandon (the character's) and progress/block/satisfy/nonviable | add and give-up are `changes` lines; `aim_moved` per steering aim |
+| associations, relationships (+-0.05, +-0.2 on a real break) | `cue_present`; five `rel_axis` steps x `REL_STEP` (0.05), x `REL_BREAK_STEP` (0.2) when `rel_break` -- the card's rule, now code |
+| concerns, lines kept, memory effects, salience | new worries are `changes` lines; `concern_settled`, `keep_line`, `memory_shaped`, `salience` |
+| giving up a promise (`waiting_ops`, dead in the kernel) | a `changes` line and `which_promise` |
+| the appraisal: six axes, pain and pleasure with a named cause, goal impacts, the memory echo | `novelty`, `control`, `coping`, `norm`, `self_fit`, `pleasant`; `pain` / `body_pleasure` per event (the event is the cause); `impact`, `impact_certain`, `impact_agency` per live aim, the drive included; `echo` and its three grades |
+| `stress.coping_mode`, `hedonic.released` | `coping_mode` over the card's strategies; `released`, asked only above `RELEASE_ASK_FLOOR` (0.3) of charge |
+
+**One behaviour change to watch:** the drive is now one of the aims every
+impact is asked about. In the measured replies no impact ever served the
+drive (0 of 227, owner decision 2 above), so drive strain -- and the
+rupture window it opens -- had effectively never run.
+
+**No second call.** When the reply cannot be read back
+(`READ_BACK_ATTEMPTS`, 2), the beat the character wrote stands on code alone
+and says so: a line goes to whoever its `to` names among the people here (a
+set the engine owns, matched whole-word) at `pitched` volume -- loud enough
+for them and no louder -- acts stay visible, and nothing is filed, as the
+mood already fails open. A first draft re-asked the full card instead;
+`test_no_quality_redo` held the line (one model call a beat), and a fallback
+to the call being replaced is what the owner ruled out for the Room.
+Speaking in a room is a channel, and voices lean toward carrying.
+
+**Not carried yet:** adopting a project (it needs an end criterion the bare
+reply has no field for; 2 of 161 measured replies wrote one), and material
+effects (the substance ledger's `release/deposit/add`).
+
+### How it will be measured
+
+On copies of the four test stories captured on the new engine
+(`betrayal`, `homecoming`, `lie`, `rival`): the same payloads, the full card
+against the bare card on the same model, both replies read side by side --
+the owner's test is that it "still basically does the same thing" -- with
+output length, time, the post-call pass's time, and where the two can be
+compared, the typed fields (addressee, volume, concealment, lanes filed).
+The instrument is `tools/character_bare_replay.py` (run on copies; it spends
+one character call per beat per arm on the story's route). Credit on
+2026-09-27: OpenRouter $5.29 remaining, NanoGPT $0.12 -- a 20-beat
+comparison is about $5 on GLM 5.2, so its route is the owner's call.
 
 ## Owner decisions
 

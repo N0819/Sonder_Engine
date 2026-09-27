@@ -1,0 +1,1 @@
+NEWS YOU CARRY: `carried_reports` is news you carry -- seen yourself, or told by someone, perhaps retold and stale. Nobody else learns it unless you tell them.

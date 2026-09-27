@@ -1280,9 +1280,10 @@ Proposal, 2026-09-26. Increment 1 WIRED 2026-09-26: the affect pass
 (`mind/affect_pass.py`, over `mind/affect_appraisal.py` and
 `mind/affect_mix.py`) runs before and after every character call, the packet
 carries `self.feelings`, and the engine writes `active_state.affect`/`mood`,
-which the prompt no longer asks for. Open: increment 2 -- the `appraisal`
-object, `stress.coping_mode` and `hedonic.released`, each needing a Jev
-question before its clause can leave the prompt (ask the owner first); the two
+which the prompt no longer asks for. Increment 2 -- the `appraisal`
+object, `stress.coping_mode` and `hedonic.released` -- is built behind a
+setting as the bare contract (§6.17) and open until that card is the
+default. Open besides: the two
 records of one mood (`mood_coords` against the `affect.surface` that
 `resolve_affect` still blends); every knob and every `EMOTION_EFFECTS` value
 (the owner's, the eight rows added 2026-09-26 included); urgency reading
@@ -1329,6 +1330,60 @@ answered by Jev over the whole bank; same-beat recall. The note's nine owner
 decisions are the list. Measured in
 [`JEV_MEMORY_PROBE_2026_09_26.md`](experiments/JEV_MEMORY_PROBE_2026_09_26.md);
 instruments `tools/jev_*.py`.
+
+<a id="unbuilt-6-17"></a>
+
+### 6.17 The bare character contract — [`DESIGN_JEV_CHARACTER_PASS.md`](design/DESIGN_JEV_CHARACTER_PASS.md)
+
+Built behind a setting 2026-09-27 (`character_contract: bare`;
+`agents/character_bare.py`, `mind/character_jev.py`,
+`tests/test_character_bare.py`). Open, in order: the replay comparison on
+the four test stories -- the full card against the bare card on the same
+payloads and the same model, read side by side, the owner's test being that
+it "still basically does the same thing"; then the default switched, and
+the full card, its kernel compiler and its prompt paragraphs deleted so two
+contracts do not linger. Not carried yet: adopting a project (it needs an end
+criterion the bare reply has no field for; 2 of 161 measured replies wrote
+one) and material effects. Unmeasured: every question's wording (none has a
+battery yet, and the Japanese wordings are untested translations), every
+knob in `mind/character_jev.py` (the owner's), and the drive's new place
+among the aims every impact is asked about -- 0 of 227 measured impacts
+ever served it, so drive strain and its rupture window have effectively not
+run. The payload still carries the engine's key names the full card used to
+explain (the spatial frame, the speech budget, silence, a busy mouth);
+rendering them in plain words is the other half of a bare card.
+
+<a id="unbuilt-6-18"></a>
+
+### 6.18 What the character-reply survey found in the full card's path
+
+Found 2026-09-26 by the read-only surveys behind §6.17, not fixed (the bare
+contract does not have them, which is its own argument for the switch):
+
+- **Respect and suspicion move without evidence.** A relationship update
+  whose trigger ids cite nothing delivered has trust, warmth and fear
+  zeroed (`_ground_observation_citations`) and keeps the other two.
+- **The card's +-0.05 relationship rule has no code enforcement**; commit
+  clamps at +-0.2.
+- **No character can give up on a promise.** `waiting_ops` is taught
+  (STILL WAITING) and read at commit, but it is not a field of
+  `CharacterKernelOutput` and `compile_character_kernel` never copies it.
+- **The citation registry is wider than the view.** It is built from every
+  observation, while `perception_packet` can leave out a row whose text is
+  not in the admitted view; such a row has no handle, so only a
+  canonical-id citation could reach it.
+- **A reaction-loop character's demeanour and tells are recorded as shown
+  and never delivered**: `_delivered_manifest` reads only
+  `ctx.character_results`, while commit files the tells as shown.
+- **A non-numeric tell `subtlety` becomes 0.5**, which passes for an
+  ordinary observer; the card's example writes `"subtlety":""` with no
+  scale.
+- **The wire grammar still advertises `state.active.affect`**
+  (`llm_quality._step_json_schema`), which the card no longer asks for and
+  the engine overwrites.
+- By reading, not run: the commit rebind of current-beat ids
+  (`commit_memory.py`) may change `ctx.character_results` in place, because
+  merging into nothing returns the same object.
 
 <a id="unbuilt-6-16"></a>
 

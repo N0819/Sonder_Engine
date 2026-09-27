@@ -1714,6 +1714,19 @@ def prepare_memory_commit(ctx, *, scene=None):
                         st["decision_continuity"] = {"turn": turn.idx, **_note}
                     else:
                         st.pop("decision_continuity", None)
+                # The bare contract's note to self, kept as a short running
+                # log so the next beats know roughly what this mind has been
+                # doing (the owner, 2026-09-26). Newest last; the last
+                # NOTES_KEPT survive.
+                _own_note = " ".join(str(own_result.get("note") or "").split())
+                if _own_note:
+                    from mind.character_jev import NOTE_CHARS, NOTES_KEPT
+                    _notes = [n for n in st.get("my_notes") or [] if isinstance(n, dict)]
+                    if not (_notes and _notes[-1].get("turn") == turn.idx):
+                        _notes.append({"turn": turn.idx, "note": _own_note[:NOTE_CHARS]})
+                    else:
+                        _notes[-1] = {"turn": turn.idx, "note": _own_note[:NOTE_CHARS]}
+                    st["my_notes"] = _notes[-NOTES_KEPT:]
                 # --- Project service ledger + boundary review (Tier 1.5).
                 # A held project stopped failing by being outranked and
                 # started failing by being FORGOTTEN (A15 run 5: pa1 held at

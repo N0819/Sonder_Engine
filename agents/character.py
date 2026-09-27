@@ -8,7 +8,7 @@ from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
 
-from mind import affect, affect_pass
+from mind import affect, affect_pass, character_jev
 from mind.affect import (CRISIS_STRAIN_MIN, INTENT_DORMANT_AFTER,
                     RUPTURE_FORCE_AFTER, ground_tells)
 from core.db import q, wget
@@ -83,6 +83,7 @@ from mind.theory_of_mind import mind_models_for_payload, sheet_capacity
 
 from .impossible_knowledge import (aired_in_story, folded_tokens,
                                    impossible_knowledge_cues)
+from . import character_bare
 from .character_kernel import (
     compact_character_evidence,
     compile_character_kernel,
@@ -3451,6 +3452,13 @@ def _private_continuity(ctx, cid, stored_state):
         choice = note(previous)
         if any(choice.values()):
             out["decision_continuity"] = {**choice, "turn": previous.get("turn")}
+    # The notes this mind kept for itself, newest last (the bare contract's
+    # `note`; commit keeps `mind.character_jev.NOTES_KEPT` of them).
+    notes = [{"turn": n.get("turn"), "note": str(n.get("note") or "")}
+             for n in stored_state.get("my_notes") or []
+             if isinstance(n, dict) and str(n.get("note") or "").strip()]
+    if notes:
+        out["my_notes"] = notes
     declared = ctx.get("beat_declared", {}) or {}
     earlier = declared.get(cid, declared.get(str(cid)))
     if not isinstance(earlier, dict):
@@ -4559,6 +4567,37 @@ def character_step(ctx, cid, nonce):
     # context and echoed in the turn's commit results.
     payload = _extension_character_payload(ctx, cid, payload, sh)
 
+    # THE BARE CONTRACT (agents/character_bare.py, selected by the
+    # `character_contract` setting). A card about being the character, a
+    # reply that carries only what a character can write, and the decision
+    # model for the rest -- before the call it asks whether the moment casts
+    # a recalled memory in a new light, which gates the dispute section and
+    # its payload in; after it, it reads the reply back into the shape
+    # everything below consumes.
+    _bare = character_bare.enabled()
+    _holding = None
+    if _bare:
+        _holding = character_bare.holding_from(
+            character_name(sh), sh, payload, observations, memory_context, active,
+            language=ctx.language, rupture_open=_window_open)
+        _disputed = []
+        try:
+            _disputed = character_jev.read_before(character_jev.ask(
+                character_jev.state_text(_holding),
+                character_jev.before_questions(_holding)), _holding)
+        except Exception as _exc:  # noqa: BLE001 -- a check that cannot run gates nothing in
+            ctx.add_warning(f"character {character_name(sh)}: no dispute check "
+                            f"({type(_exc).__name__}: {str(_exc)[:120]})")
+        if _disputed:
+            # A copy: `memory_context` itself is what grounding reads.
+            payload["memory"] = {**(payload.get("memory") or {}),
+                                 "may_mean_otherwise": [m["text"] for m in _disputed]}
+        _cprompt = character_bare.prompt(
+            character_name(sh),
+            character_bare.modules_for(payload, disputed=_disputed, rupture_open=_window_open,
+                                       rupture_forced=_rupture_forced),
+            language=ctx.language)
+
     # The model needs the evidence rows and their provenance, not database- or
     # observer-sized identifiers.  Short handles are private to this call and
     # restored before any existing grounding, repetition, or commit reader
@@ -4568,14 +4607,40 @@ def character_step(ctx, cid, nonce):
 
     out = _agent_json(
         role,
-        "character_kernel",
+        "character_bare" if _bare else "character_kernel",
         _cprompt,
         _wire_payload,
         temperature=character_temperature(sh),
         sampler=character_sampler(sh) or None,
     )
-    out = expand_character_evidence(out, _evidence_handles)
-    out, _kernel_warnings = compile_character_kernel(out)
+    if _bare:
+        from llm.providers import last_reasoning
+        # The model's own thinking, when its provider returned it, is read by
+        # this mind's decision-model request and by nothing else: it never
+        # reaches another mind or the page, and only typed answers -- choices
+        # among rows this mind was given, and grades -- leave it.
+        _holding.reasoning = str(last_reasoning.get() or "")
+        _answers = None
+        for _attempt in range(character_bare.READ_BACK_ATTEMPTS):
+            try:
+                _answers = character_jev.ask(
+                    character_jev.state_text(_holding, out),
+                    character_jev.after_questions(_holding, out))
+                break
+            except Exception as _exc:  # noqa: BLE001 -- the beat stands, below
+                _read_back_error = f"{type(_exc).__name__}: {str(_exc)[:120]}"
+        if _answers is None:
+            # NO SECOND CALL. The beat the character wrote stands, read by
+            # code alone: each line goes to whoever its `to` names among the
+            # people here, at a voice pitched for them; acts stay visible;
+            # nothing is filed. Speaking in a room is a channel, and voices
+            # lean toward carrying (the owner, 2026-09-26).
+            ctx.add_warning(f"character {character_name(sh)}: the reply was not read back "
+                            f"({_read_back_error}); the beat stands and files nothing")
+        out, _kernel_warnings = character_bare.compile_bare(out, _answers or {}, _holding)
+    else:
+        out = expand_character_evidence(out, _evidence_handles)
+        out, _kernel_warnings = compile_character_kernel(out)
     for _warning in _kernel_warnings:
         ctx.add_warning(f"character {character_name(sh)}: {_warning}")
 

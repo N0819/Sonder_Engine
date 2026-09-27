@@ -1,0 +1,2 @@
+MEMORY: {memory}
+Did it shape what you just did?

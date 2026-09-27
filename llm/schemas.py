@@ -4208,6 +4208,85 @@ class CharacterKernelOutput(LenientModel):
         _canonicalize = _root_validator(pre=True, allow_reuse=True)(
             lambda cls, value: _canonical_character_kernel_output(value))
 
+def _canonical_bare_step(value):
+    """A bare step written in the full card's spelling -- `{type:'speech',
+    text}`, `{type:'action', attempt|observable}`, `{type:'ponder', query}`
+    -- is read as the bare one it means."""
+    if not isinstance(value, dict):
+        return {"say": value} if isinstance(value, str) and value.strip() else value
+    out = dict(value)
+    kind = str(out.get("type") or "").strip().casefold()
+    if not any(str(out.get(k) or "").strip() for k in ("say", "do", "ponder")):
+        if kind == "speech" and out.get("text"):
+            out["say"] = out["text"]
+        elif kind == "ponder" and out.get("query"):
+            out["ponder"] = out["query"]
+        elif out.get("attempt") or out.get("observable"):
+            out["do"] = out.get("observable") or out.get("attempt")
+    if not out.get("how") and out.get("tone"):
+        out["how"] = out["tone"]
+    return out
+
+
+def _bare_lines(value):
+    """A bare line list: plain strings, and from an object the one text it
+    carries -- a tell written in the full card's `{cue, ...}` shape is its
+    cue, not its JSON."""
+    rows = value if isinstance(value, (list, tuple)) else ([] if value is None else [value])
+    out = []
+    for row in rows:
+        if isinstance(row, dict):
+            row = next((row[k] for k in ("cue", "text", "line", "claim", "change", "note")
+                        if str(row.get(k) or "").strip()), "")
+        text = " ".join(str(row or "").split())
+        if text:
+            out.append(text)
+    return out
+
+
+class CharacterBareStep(LenientModel):
+    """One thing the character does: one of `say`, `do` or `ponder`, with
+    `to` and `how` for a line and a short `why` for each."""
+    say: str = ""
+    to: str = ""
+    how: str = ""
+    do: str = ""
+    ponder: str = ""
+    why: str = ""
+
+    if _PYDANTIC_V2:
+        from pydantic import model_validator as _model_validator
+
+        _canonicalize = _model_validator(mode="before")(
+            classmethod(lambda cls, value: _canonical_bare_step(value)))
+    else:
+        from pydantic import root_validator as _root_validator
+
+        _canonicalize = _root_validator(pre=True, allow_reuse=True)(
+            lambda cls, value: _canonical_bare_step(value))
+
+
+class CharacterBareOutput(LenientModel):
+    """The bare contract (`agents/character_bare.py`): only what a character
+    can write. The decision model reads everything else back from it
+    (`mind/character_jev.py`), and `compile_bare` expands both into
+    `CharacterOutput`. `sequence` is the one required field, as it is the
+    kernel's: what the character did is what a beat cannot do without."""
+    want: str = ""
+    held_back: str = ""
+    hinge: str = ""
+    unsure: str = ""
+    sequence: list[CharacterBareStep]
+    demeanor: str = ""
+    tells: list[str] = Field(default_factory=list)
+    people: list[str] = Field(default_factory=list)
+    changes: list[str] = Field(default_factory=list)
+    note: str = ""
+
+    _coerce_lines = validator("tells", "people", "changes", pre=True, allow_reuse=True)(
+        lambda cls, v: _bare_lines(v))
+
+
 class CharacterDecisionContinuity(LenientModel):
     """One private choice and its reason, never an action outcome."""
     chosen: str = ""
@@ -4297,6 +4376,12 @@ class CharacterOutput(LenientModel):
     # equipment, ontology, or current state; the host supplies `source` and
     # projects these through the objective substance ledger.
     material_effects: list[dict] = Field(default_factory=list)
+    # A line the character keeps for itself about what it is in the middle
+    # of -- the bare contract's cross-turn note (the owner, 2026-09-26: "cross
+    # turn note taking so the character knows roughly what it's been doing
+    # across turn"). Commit keeps the last few as `my_notes`; the next
+    # payload shows them.
+    note: str = ""
     manifest: dict = Field(default_factory=dict)
     # A drive rupture proposal -- only valid inside an engine-opened window;
     # commit (validate_drive_shift) decides whether it counts.
@@ -4675,6 +4760,7 @@ SCHEMA_MAP = {
     "interpret_repair": InterpretRepairOutput,
     "narrator": NarratorOutput,
     "character_kernel": CharacterKernelOutput,
+    "character_bare": CharacterBareOutput,
     "character": CharacterOutput,
     "background_react": BackgroundReactOutput,
     "scene_life": SceneLifeOutput,
@@ -7408,6 +7494,10 @@ def semantic_output_errors(
                     errors.append(
                         f"results.{index} creates an interior for {entity_id} "
                         f"but does not place {mover or 'the mover'} inside it")
+
+    elif step_key == "character_bare":
+        if not isinstance(output.get("sequence"), list):
+            errors.append("sequence must be an array")
 
     elif step_key in {"character", "character_kernel"}:
         if not isinstance(output.get("sequence"), list):
