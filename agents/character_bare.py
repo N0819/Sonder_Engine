@@ -270,8 +270,6 @@ def compile_bare(reply, answers, h):
             seen = jev.pick(answers, f"do:{index}:seen")
             target = jev.indexed(answers, f"do:{index}:target", "p", h.people)
             hidden = [p for p in _people_picked(answers, "do", h, index) if p != target]
-            if jev.yes(answers, f"do:{index}:private"):
-                warnings.append(f"an act's words carry what no watcher could see: {act[:100]!r}")
             sequence.append({
                 "type": "action", "attempt": act,
                 # An act that happens only inside the mind is imperceptible

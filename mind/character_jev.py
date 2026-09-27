@@ -58,8 +58,11 @@ ITEM_CHARS = 300
 #: The carried charge below which a release is not asked about.
 RELEASE_ASK_FLOOR = 0.3
 #: The yes-share at which a recalled memory is shown as one the moment may
-#: cast in a new light (`memory.may_mean_otherwise`).
-DISPUTE_FLOOR = 0.5
+#: cast in a new light (`memory.may_mean_otherwise`). Measured on the bare
+#: replay (2026-09-27, 20 beats, 152 memories asked): no share reached 0.8
+#: (the highest 0.77); at 0.5 the section shipped on 13 beats and one
+#: re-reading followed; at 0.7 it ships on 4.
+DISPUTE_FLOOR = 0.7
 #: A relationship moves by REL_STEP per step on its five-step scale -- the
 #: full card's "within +-0.05" -- and by REL_BREAK_STEP when the beat was a
 #: real break, rescue or betrayal between the two (the code clamp is 0.2).
@@ -267,9 +270,6 @@ def after_questions(h, reply):
             any_do = True
             act = _text(row["do"])
             qs[f"do:{index}:seen"] = _choice("act_seen", lang, _set("act_kind", lang), act=act)
-            # A measurement, not a gate: how often the act's own words carry
-            # what no watcher could see (the observable is the model's words).
-            qs[f"do:{index}:private"] = _choice("act_private", lang, yesno, act=act)
             if people:
                 qs[f"do:{index}:target"] = _choice("act_target", lang, _options(people, "no_target", lang, "p"),
                                                    act=act)

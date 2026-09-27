@@ -1316,9 +1316,6 @@
     "dispute": {
       "$text": "character_jev/dispute.txt"
     },
-    "act_private": {
-      "$text": "character_jev/act_private.txt"
-    },
     "options": {
       "volume": {
         "whisper": "ささやき声で、一人にだけ。",

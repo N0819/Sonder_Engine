@@ -49,7 +49,9 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 281   # +1 (2026-09-27, the bare replay smoke): `character_jev.act_private`.
+PART_COUNT = 280   # +1 then -1 (2026-09-27): `character_jev.act_private`, retired
+                   # the same day -- it flagged 27 of 27 replayed acts where
+                   # about a third carried a motive or an inner state.
                    # +61 (2026-09-27, the bare character contract,
                    # agents/character_bare.py): the bare card
                    # (`prompts/character_bare.txt`), its seven gated sections
