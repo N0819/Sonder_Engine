@@ -48,13 +48,24 @@ def _text(value, n=jev.ITEM_CHARS):
     return jev._text(value, n)
 
 
+#: The label perception gives the observer itself (`agents/composer.py`: "the
+#: observer -> 'you'"). A mind is never one of the people it is with: the
+#: bare replay had two lines addressed "to you".
+SELF_LABEL = "you"
+
+
+def _not_self(label, own):
+    folded = label.casefold()
+    return folded not in (own.casefold(), SELF_LABEL)
+
+
 def _actor_labels(observations, own):
     out = []
     for o in observations or []:
         if not isinstance(o, dict):
             continue
         label = str(o.get("actor") or "").strip()
-        if label and label.casefold() != own.casefold() and label not in out:
+        if label and _not_self(label, own) and label not in out:
             out.append(label)
     return out[:jev.MAX_PEOPLE]
 
@@ -69,7 +80,7 @@ def _heard_lines(observations, own):
         speaker = str(o.get("actor") or "").strip()
         text = ((o.get("observed") or {}).get("text") if isinstance(o.get("observed"), dict)
                 else o.get("text"))
-        if speaker.casefold() == own.casefold() or not str(text or "").strip():
+        if not _not_self(speaker, own) or not str(text or "").strip():
             continue
         out.append({"ref": str(o.get("observation_id") or ""), "text": _text(text), "speaker": speaker})
     return out[:jev.MAX_HEARD_LINES]
@@ -225,17 +236,19 @@ def compile_bare(reply, answers, h):
     sequence, addresses, expects = [], [], False
     for index, kind, row in jev.steps(reply):
         if kind == "say":
-            to = jev.pick(answers, f"say:{index}:to")
-            if to is None:
+            if any(f"say:{index}:to:{p}" in answers for p in range(len(h.people))):
+                targets = [person for p, person in enumerate(h.people)
+                           if jev.yes(answers, f"say:{index}:to:{p}")]
+            else:
                 # Not read back: the line's own `to`, matched against the
                 # people here -- a set the engine owns, never a vocabulary.
-                target = _named_here(row.get("to"), h.people)
-            else:
-                target = (h.people[int(to[1:])] if to.startswith("p") and to[1:].isdigit()
-                          and int(to[1:]) < len(h.people) else None)
-            if target and target not in addresses:
-                addresses.append(target)
-            hidden = [p for p in _people_picked(answers, "say", h, index) if p != target]
+                named = _named_here(row.get("to"), h.people)
+                targets = [named] if named else []
+            for person in targets:
+                if person not in addresses:
+                    addresses.append(person)
+            target = targets[0] if targets else None
+            hidden = [p for p in _people_picked(answers, "say", h, index) if p not in targets]
             interrupts = jev.pick(answers, f"say:{index}:interrupts")
             speakers = sorted({x["speaker"] for x in h.heard if x.get("speaker")})
             cut = (speakers[int(interrupts[1:])] if interrupts and interrupts.startswith("p")
@@ -249,7 +262,7 @@ def compile_bare(reply, answers, h):
                 "tone": str(row.get("how") or "").strip(),
                 "visibility": "concealed" if hidden else "overt",
                 "conceal_from": hidden,
-                "targets": [target] if target else [],
+                "targets": targets,
                 "interrupts": cut,
             })
         elif kind == "do":
@@ -365,8 +378,11 @@ def compile_bare(reply, answers, h):
         moved = jev.pick(answers, f"aim:{k}:moved")
         op = {"progress": "progress", "blocked": "block", "done": "satisfy",
               "impossible": "nonviable"}.get(moved or "")
-        if op:
-            evidence = _evidence(answers, f"aim:{k}", h)
+        evidence = _evidence(answers, f"aim:{k}", h)
+        # A change in where an aim stands rests on something that just
+        # happened: with nothing cited, it is not filed (the replay filed
+        # 57 intention ops in 20 beats where the full card wrote 15).
+        if op and evidence:
             out["intent_ops"].append({"op": op, "id": aim["id"], "why": hinge or _text(aim["text"]),
                                       "evidence": evidence})
     for k, belief in enumerate(h.beliefs):
@@ -411,11 +427,11 @@ def compile_bare(reply, answers, h):
             out["remember_lines"].append({"quote": heard["text"], "why": hinge or heard["text"],
                                           "evidence": [{"event_id": heard["ref"],
                                                         "fact": _text(heard["text"], 240)}]})
-    for k, memory in enumerate(h.memories):
-        shaped = jev.pick(answers, f"mem:{k}:shaped")
-        if shaped in ("integrated", "resisted", "dismissed"):
-            out["memory_effects"].append({"memory_ref": memory["ref"], "use": "",
-                                          "disposition": shaped, "changed": hinge})
+    shaped = jev.pick(answers, "mem:shaped") or ""
+    if shaped[:1] in ("a", "r") and shaped[1:].isdigit() and int(shaped[1:]) < len(h.memories):
+        out["memory_effects"].append({
+            "memory_ref": h.memories[int(shaped[1:])]["ref"], "use": "",
+            "disposition": "integrated" if shaped[0] == "a" else "resisted", "changed": hinge})
     if jev.pick(answers, "follow"):
         follow = jev.pick(answers, "follow")
         if follow == "stop":

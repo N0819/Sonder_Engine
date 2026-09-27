@@ -1389,23 +1389,17 @@
         "stated_fact": "Something they said outright."
       },
       "aim_moved": {
-        "nothing": "Nothing.",
-        "progress": "Moved it forward, not yet done.",
-        "blocked": "Set it back.",
-        "done": "Achieved it.",
-        "impossible": "Showed it can no longer be done."
+        "nothing": "No -- nothing that changes where it stands.",
+        "progress": "It moved forward in a way that lasts -- something is now different -- but it is not finished.",
+        "blocked": "It was set back.",
+        "done": "It is achieved.",
+        "impossible": "It can no longer be done."
       },
       "belief_touched": {
-        "neither": "No.",
+        "neither": "No -- nothing here clearly bears on it.",
         "confirms": "It bore it out.",
         "doubts": "It cast doubt on it.",
         "overturns": "It overturned it."
-      },
-      "memory_shaped": {
-        "no": "No.",
-        "integrated": "You acted on it.",
-        "resisted": "You pushed against it.",
-        "dismissed": "You set it aside."
       },
       "impact": {
         "hurts_badly": "It badly hurts it.",
@@ -1464,6 +1458,10 @@
       "act_kind": {
         "outward": "Something my body does: anyone present could see or hear it.",
         "inner": "Something only inside me: a thought, a decision, a feeling."
+      },
+      "shaped_labels": {
+        "acted": "You acted on this: {memory}",
+        "resisted": "You pushed against this: {memory}"
       }
     }
   }

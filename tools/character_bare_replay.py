@@ -107,8 +107,11 @@ def replay(db_path, beats, arms):
                 h = character_bare.holding_from(
                     name, sheet, payload, _observations(payload), payload.get("memory") or {},
                     (own.get("active_state") or {}), language="en")
-                disputed, before_s = _timed(lambda: jev.read_before(
-                    jev.ask(jev.state_text(h), jev.before_questions(h)), h))
+                from mind.affect_appraisal import _probabilities
+                before, before_s = _timed(jev.ask, jev.state_text(h), jev.before_questions(h))
+                disputed = jev.read_before(before, h)
+                dispute_shares = [round(_probabilities(before.get(f"dispute:{i}")).get("yes", 0.0), 3)
+                                  for i in range(len(h.memories))] if before else []
                 bare_payload = dict(payload)
                 if disputed:
                     bare_payload["memory"] = {**(payload.get("memory") or {}),
@@ -123,6 +126,7 @@ def replay(db_path, beats, arms):
                 compiled, warnings = character_bare.compile_bare(raw, answers, h)
                 record["bare"] = {"reply": raw, "compiled": compiled, "warnings": warnings,
                                   "modules": modules, "disputed": [m["text"] for m in disputed],
+                                  "dispute_shares": dispute_shares,
                                   "seconds": call_s, "jev_before_s": before_s, "jev_after_s": after_s,
                                   "questions": len(questions), "reasoning_chars": len(h.reasoning),
                                   "prompt_chars": len(prompt), "calls": list(ledger)}
@@ -154,7 +158,11 @@ def _conduct_full(reply):
 
 def _conduct_bare(reply, compiled):
     lines = []
-    for s, typed in zip(reply.get("sequence") or [], (compiled or {}).get("sequence") or []):
+    # The compiled sequence holds the reply's NON-EMPTY steps, in order (an
+    # element carrying none of say/do/ponder is skipped), so pair with those.
+    steps = [s for s in reply.get("sequence") or []
+             if isinstance(s, dict) and any(str(s.get(k) or "").strip() for k in ("say", "do", "ponder"))]
+    for s, typed in zip(steps, (compiled or {}).get("sequence") or []):
         why = f" -- why: {s.get('why')}" if s.get("why") else ""
         if s.get("say"):
             hidden = f", hidden from {', '.join(typed.get('conceal_from') or [])}" if typed.get("conceal_from") else ""

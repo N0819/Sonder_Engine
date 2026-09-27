@@ -253,14 +253,12 @@ def after_questions(h, reply):
             line, how = _text(row["say"]), _text(row.get("how")) or none_str
             to = _text(row.get("to")) or none_str
             qs[f"say:{index}:volume"] = _choice("line_volume", lang, _set("volume", lang), line=line, how=how)
-            if people:
-                criteria = _options(people, None, lang, "p")
-                criteria["everyone"] = _set("choices", lang)["everyone"]
-                criteria["nobody"] = _set("choices", lang)["nobody"]
-                qs[f"say:{index}:to"] = _choice("line_to", lang, criteria, line=line, to=to)
-                for p, person in enumerate(people):
-                    qs[f"say:{index}:kept:{p}"] = _choice(
-                        "line_kept_from", lang, yesno, line=line, how=how, why=why, person=person)
+            # Asked per person: one line may be said to several people at
+            # once ("Luca -- with me. Anselm, go.", the bare replay).
+            for p, person in enumerate(people):
+                qs[f"say:{index}:to:{p}"] = _choice("line_to", lang, yesno, line=line, to=to, person=person)
+                qs[f"say:{index}:kept:{p}"] = _choice(
+                    "line_kept_from", lang, yesno, line=line, how=how, why=why, person=person)
             qs[f"say:{index}:expects"] = _choice("line_expects", lang, yesno, line=line)
             if heard_speakers:
                 qs[f"say:{index}:interrupts"] = _choice(
@@ -377,9 +375,17 @@ def after_questions(h, reply):
     for k, heard in enumerate(h.heard):
         qs[f"keep:{k}"] = _choice("keep_line", lang, yesno, person=heard.get("speaker") or "",
                                   line=_text(heard["text"]))
-    shaped = _set("memory_shaped", lang)
-    for k, memory in enumerate(memories):
-        qs[f"mem:{k}:shaped"] = _choice("memory_shaped", lang, shaped, memory=_text(memory))
+    # ONE memory at most: asked of each memory in turn, the model found one
+    # that shaped the act in 8 of the 16 a beat offered (165 in 20 replayed
+    # beats, where the full card's model wrote 11).
+    if memories:
+        labels = _set("shaped_labels", lang)
+        criteria = {}
+        for k, memory in enumerate(memories):
+            criteria[f"a{k}"] = _fill(labels["acted"], {"memory": _text(memory, 160)})
+            criteria[f"r{k}"] = _fill(labels["resisted"], {"memory": _text(memory, 160)})
+        criteria["no_memory"] = _set("choices", lang)["no_memory"]
+        qs["mem:shaped"] = _choice("memory_shaped", lang, criteria)
     if h.charge >= RELEASE_ASK_FLOOR and (any_do or any_say):
         qs["released"] = _choice("released", lang, yesno)
 

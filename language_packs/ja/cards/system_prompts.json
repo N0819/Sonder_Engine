@@ -1389,23 +1389,17 @@
         "stated_fact": "その人がはっきり言ったこと。"
       },
       "aim_moved": {
-        "nothing": "何も。",
-        "progress": "前に進めたが、まだ終わっていない。",
-        "blocked": "後退させた。",
-        "done": "成し遂げた。",
-        "impossible": "もう成し遂げられないと分かった。"
+        "nothing": "いいえ――状況を変えることは何もない。",
+        "progress": "後に残る形で前に進んだ――何かが変わった――が、まだ終わっていない。",
+        "blocked": "後退した。",
+        "done": "成し遂げられた。",
+        "impossible": "もう成し遂げられない。"
       },
       "belief_touched": {
-        "neither": "いいえ。",
+        "neither": "いいえ――はっきり関わることは何もない。",
         "confirms": "裏づけた。",
         "doubts": "疑いを投げかけた。",
         "overturns": "覆した。"
-      },
-      "memory_shaped": {
-        "no": "いいえ。",
-        "integrated": "それに基づいて行動した。",
-        "resisted": "それに逆らった。",
-        "dismissed": "それを脇に置いた。"
       },
       "impact": {
         "hurts_badly": "ひどく損なう。",
@@ -1464,6 +1458,10 @@
       "act_kind": {
         "outward": "体の動き：その場の誰もが見たり聞いたりできる。",
         "inner": "内側だけのこと：考え、決心、気持ち。"
+      },
+      "shaped_labels": {
+        "acted": "これに基づいて行動した: {memory}",
+        "resisted": "これに逆らった: {memory}"
       }
     }
   }

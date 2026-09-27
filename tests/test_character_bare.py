@@ -128,14 +128,15 @@ def test_every_question_reads_only_this_minds_own_holding():
         offered.update(q["criteria"].values())
     pack = set()
     for name in ("volume", "yesno", "act_kind", "grade", "miss", "channel", "signed", "fit", "tone", "change_kind",
-                 "reading_kind", "aim_moved", "belief_touched", "memory_shaped", "impact", "certain",
+                 "reading_kind", "aim_moved", "belief_touched", "impact", "certain",
                  "agency", "ability", "choices"):
         pack.update(character_jev_options(name, "en").values())
     held = ({e["text"] for e in h.events} | {m["text"] for m in h.memories} | set(h.people) | set(h.known)
             | set(h.beliefs) | set(h.strategies) | {jev._aim_label(a, "en") for a in h.aims}
             | {a["text"] for a in h.aims}
             | {f"{p['what']} ({p['from']})" for p in h.promises}
-            | {f"You start following {p}." for p in h.people})
+            | {f"You start following {p}." for p in h.people}
+            | {f"You {verb} this: {m['text']}" for m in h.memories for verb in ("acted on", "pushed against")})
     assert offered <= pack | held, sorted(offered - pack - held)
     # Every evidence choice carries a way to say "none".
     for key, q in questions.items():
@@ -170,7 +171,7 @@ def _answer(script):
 
 
 SCRIPT = [
-    ("say:0:volume", "mutter"), ("say:0:to", "p0"), ("say:0:kept:1", "yes"), ("say:0:kept:0", "yes"),
+    ("say:0:volume", "mutter"), ("say:0:to:0", "yes"), ("say:0:kept:1", "yes"), ("say:0:kept:0", "yes"),
     ("say:0:expects", "yes"),
     ("do:1:seen", "inner"), ("do:2:seen", "outward"), ("do:2:target", "p0"),
     ("want:serves", "a1"), ("want:urgency", "strong"), ("held_back:serves", "a0"),
@@ -187,7 +188,7 @@ SCRIPT = [
     ("cue:0", "yes"), ("cue:0:now", "e0"),
     ("rel:0:trust", "much_less"), ("rel:0:break", "yes"), ("rel:0:now", "e0"),
     ("rel:1:warmth", "more"),
-    ("concern:0", "yes"), ("keep:0", "yes"), ("mem:1:shaped", "integrated"),
+    ("concern:0", "yes"), ("keep:0", "yes"), ("mem:shaped", "a1"),
     ("follow", "start0"), ("contact:0", "yes"), ("released", "yes"),
     ("novelty", "strong"), ("control", "slight"), ("coping", "slight"), ("norm", "against"),
     ("pain:0", "none"), ("pleasure:0", "none"), ("pain:1", "clear"),

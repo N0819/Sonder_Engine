@@ -1,2 +1,1 @@
-MEMORY: {memory}
-Did it shape what you just did?
+Which memory, if any, shaped what you just did -- and did you act on it or push against it?
