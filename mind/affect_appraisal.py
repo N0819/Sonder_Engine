@@ -19,10 +19,12 @@ Designed with the owner on 2026-09-26 (`docs/design/DESIGN_JEV_CHARACTER_PASS.md
   the event questions and one more: how much it weighs on the character now.
 - **The character's own acts**, after its turn (the owner: "a pass after the
   character turn finishes to see how their actions speech and thoughts
-  affect their mood"): did it go against something the character values
-  (dissonance), honour something it values, ease the feeling or stoke it,
-  and how does it leave the character feeling about itself -- and, of the
-  want the character held back alone, how much it minds not having done it.
+  affect their mood"): did it go against what the character believes is
+  right, honour something it values, hurt or wrong someone, let others see
+  it make a fool of itself, fall short of what it expects of itself, ease
+  the feeling or stoke it, and how does it leave the character feeling
+  about itself -- and, of the want the
+  character held back alone, how much it minds not having done it.
   Until 2026-09-26 every act was asked whether there was something else the
   character wanted to do instead, and with the held-back want listed beside
   it every act said yes: frustration was what the story kept of 15 of 16
@@ -56,7 +58,8 @@ from llm.prompts import affect_appraisal_options, affect_appraisal_text
 OPTION_SET = {
     "stir_strength": "grade", "feel": "feel",
     "concern_weight": "grade",
-    "act_against_values": "grade", "act_honors_values": "grade", "act_held_back": "grade",
+    "act_against_values": "grade", "act_honors_values": "grade", "act_hurt_someone": "grade",
+    "act_looked_foolish": "grade", "act_fell_short": "grade", "act_held_back": "grade",
     "act_eased_or_stoked": "ease", "act_self_regard": "regard",
     "evoke_strength": "grade", "evoke_tone": "tone", "evoke_mood": "stir",
     "dimension": "steps", "mood_strength": "grade",
@@ -66,8 +69,13 @@ OPTION_SET = {
 EVENT_QUESTIONS = ("stir_strength", "feel")
 #: The questions asked of each recalled memory, and the key each reads into.
 MEMORY_QUESTIONS = {"evoke_strength": "strength", "evoke_tone": "tone", "evoke_mood": "kinds"}
-#: The questions asked of each of the character's own acts.
-ACT_QUESTIONS = ("act_against_values", "act_honors_values", "act_eased_or_stoked", "act_self_regard")
+#: The questions asked of each of the character's own acts: did it go
+#: against what the character believes is right, honour something it
+#: values, hurt or wrong someone, let others see it make a fool of itself,
+#: fall short of what it expects of itself, ease or stoke the feeling, and
+#: how does it leave it about itself.
+ACT_QUESTIONS = ("act_against_values", "act_honors_values", "act_hurt_someone", "act_looked_foolish",
+                 "act_fell_short", "act_eased_or_stoked", "act_self_regard")
 #: Asked of the want the character held back alone (an act marked `held`,
 #: quoted by its `want`): how much it minds not having done it. On the
 #: restraint battery (`tools/jev_restraint_battery.py`) it met 14 of 16
@@ -218,7 +226,8 @@ def read(answers, events=(), memories=(), acts=(), mood=False, language=None, co
       `stirs`, the distribution over what it makes the character feel --
       OCC's event emotions, the standalone moods and `none`;
     - per concern: the same, and `weight` in [0, 1];
-    - per act: `against_values`, `honors_values` in [0, 1]; `eased_or_stoked`,
+    - per act: `against_values`, `honors_values`, `hurt_someone`,
+      `looked_foolish`, `fell_short` in [0, 1]; `eased_or_stoked`,
       `self_regard` in [-1, 1]; of the held-back want, `held_back` in [0, 1];
     - per memory: `strength` in [0, 1], `tone` in [-1, 1], `kinds` as a
       distribution over the standalone moods and `none`;

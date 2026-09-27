@@ -57,8 +57,8 @@
 | `llm/schemas.py` | 7848 | Pydantic output contracts and semantic validation for agent payloads. | — |
 | `mind/__init__.py` | 6 |  | — |
 | `mind/affect.py` | 2538 |  | `mind.theory_of_mind` |
-| `mind/affect_appraisal.py` | 273 |  | `llm`, `llm.prompts` |
-| `mind/affect_mix.py` | 573 |  | — |
+| `mind/affect_appraisal.py` | 282 |  | `llm`, `llm.prompts` |
+| `mind/affect_mix.py` | 626 |  | — |
 | `mind/affect_pass.py` | 425 |  | `llm.prompts`, `mind` |
 | `mind/canon_provenance.py` | 398 |  | — |
 | `mind/knowledge_circles.py` | 134 |  | `core.db` |
@@ -792,27 +792,27 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `read()` | 214 | 49 lines |
-| `questions_for()` | 139 | 36 lines |
-| `_labels()` | 107 | 9 lines |
-| `_probabilities()` | 177 | 9 lines |
-| `_read_event()` | 203 | 9 lines |
-| `appraise()` | 265 | 9 lines |
-| `_number()` | 188 | 7 lines |
-| `_choice()` | 118 | 6 lines |
+| `read()` | 222 | 50 lines |
+| `questions_for()` | 147 | 36 lines |
+| `_labels()` | 115 | 9 lines |
+| `_probabilities()` | 185 | 9 lines |
+| `_read_event()` | 211 | 9 lines |
+| `appraise()` | 274 | 9 lines |
+| `_number()` | 196 | 7 lines |
+| `_choice()` | 126 | 6 lines |
 
 ### `mind/affect_mix.py`
 
 | Function | Start | Size |
 |---|---:|---:|
-| `emotions_from_act()` | 322 | 35 lines |
-| `emotions_from_appraisal()` | 280 | 25 lines |
-| `surface_and_undercurrent()` | 542 | 25 lines |
-| `decay()` | 397 | 18 lines |
-| `targets()` | 417 | 18 lines |
-| `concern_emotions()` | 376 | 17 lines |
-| `memory_emotions()` | 359 | 15 lines |
-| `mix()` | 437 | 15 lines |
+| `emotions_from_act()` | 325 | 68 lines |
+| `surface_and_undercurrent()` | 578 | 42 lines |
+| `emotions_from_appraisal()` | 283 | 25 lines |
+| `decay()` | 433 | 18 lines |
+| `targets()` | 453 | 18 lines |
+| `concern_emotions()` | 412 | 17 lines |
+| `memory_emotions()` | 395 | 15 lines |
+| `mix()` | 473 | 15 lines |
 
 ### `mind/affect_pass.py`
 

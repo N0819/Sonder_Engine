@@ -67,8 +67,10 @@ STANDALONE = ("romance", "sexual_desire", "craving", "greed", "curiosity", "anti
               "suspicion", "urgency", "mastery", "triumph", "relief", "contentment")
 
 #: How each emotion moves the mood: a value per coordinate it touches
-#: (spectrums in [-1, 1], standalone moods in [0, 1]). The OCC emotions and
-#: `frustration` (the cost of a restraint the character's own act paid), then
+#: (spectrums in [-1, 1], standalone moods in [0, 1]). The OCC emotions,
+#: `frustration` (the cost of a restraint the character's own act paid) and
+#: `falling_short` (an own act below what the character expects of itself,
+#: neither wrong nor seen), then
 #: one row per standalone mood -- itself in full and the spectrums it moves.
 #: An event or a concern stirs any of them by name, a memory the standalone
 #: moods. Four names are both (admiration, gratitude, anger, relief): OCC's
@@ -98,6 +100,7 @@ EMOTION_EFFECTS = {
     "resentment": {"pleasure": -.4, "connection": -.4, "openness": -.3, "anger": .3, "envy": .6},
     "gloating": {"pleasure": .4, "self_regard": .3, "connection": -.3, "amusement": .3, "contempt": .3},
     "frustration": {"pleasure": -.4, "tension": .5, "control": -.3, "anger": .3},
+    "falling_short": {"pleasure": -.4, "self_regard": -.6, "hope": -.2, "energy": -.2, "boldness": -.2},
     # the standalone moods
     "romance": {"romance": 1.0, "pleasure": .4, "connection": .5, "openness": .4, "energy": .2,
                 "sociability": .5},
@@ -322,10 +325,35 @@ def stirred(strength, shares, *, ref="", about="", source="event", multiplier=1.
 def emotions_from_act(appraisal, *, ref="", about=""):
     """What the character's own act, appraised after its turn, makes it feel:
     pride where the act honoured its values AND left it thinking better of
-    itself, shame where it went against them or left it thinking worse, and
-    -- of the want it held back (`held_back`) -- frustration, by how much it
-    minds not having done it. The act's easing or stoking of the feeling is
-    not an emotion; `ease` applies it.
+    itself; shame where it went against what the character believes is
+    right; guilt where it did that AND hurt or wronged someone;
+    embarrassment where others saw the character make a fool of itself;
+    falling short of itself where the act was below what it expects of
+    itself and neither wrong nor seen; and -- of the want it held back
+    (`held_back`) -- frustration, by how much it minds not having done it.
+    The act's easing or stoking of the feeling is not an emotion; `ease`
+    applies it.
+
+    SHAME, GUILT AND EMBARRASSMENT APART (2026-09-26, the owner: shame from
+    the value alone, and "add embarrassment and related fields"). Shame was
+    any act that went against a value OR left the mind thinking worse of
+    itself, so reading one's own name in print, a fumble alone and a
+    pratfall on stage were all shame; and the values question itself --
+    "something you value or believe" -- read a stumble on stage 0.77,
+    because a violinist values her composure. Asked whether the act went
+    against what the character believes is right, social mishaps read 0.28
+    and wrongs 0.93 (22 of 23 on the act battery,
+    `tools/jev_act_battery.py`). Guilt needs both halves as pride does: "did
+    this hurt or wrong someone?" alone read a psychopath's kicked cup 0.65
+    (it did hurt), and with the values question it met 26 of 27. "Did
+    others see you make a fool of yourself?" named embarrassment 25 of 28,
+    where "how embarrassed are you?" read every bad act as embarrassing.
+    What the shame rule no longer counted -- an act below what the mind
+    expects of itself, alone and wronging no one, a composer fumbling her
+    own passage -- is falling short: "did doing this fall short of what you
+    expect of yourself?" reads it 0.75, but reads wrongs, hurts and
+    pratfalls 0.78-0.90 too, so it keeps only the part that neither shame
+    nor embarrassment names.
 
     FRUSTRATION IS THE RESTRAINT'S, ONCE (2026-09-26). It was asked of every
     act -- "was there something else you wanted to do or say instead?" --
@@ -349,9 +377,17 @@ def emotions_from_act(appraisal, *, ref="", about=""):
     against = _clamp(a.get("against_values"), 0.0, 1.0)
     honours = _clamp(a.get("honors_values"), 0.0, 1.0)
     regard = _clamp(a.get("self_regard"))
+    hurt = _clamp(a.get("hurt_someone"), 0.0, 1.0)
+    foolish = _clamp(a.get("looked_foolish"), 0.0, 1.0)
+    short = _clamp(a.get("fell_short"), 0.0, 1.0)
     held_back = _clamp(a.get("held_back"), 0.0, 1.0)
     raw = [("pride", min(honours, max(0.0, regard)) * (1 - against), about),
-           ("shame", max(against, max(0.0, -regard)), about),
+           ("shame", against, about),
+           ("guilt", min(hurt, against), about),
+           ("embarrassment", foolish, about),
+           # what falling short leaves once shame and embarrassment have
+           # named what was wrong or seen: the fumble alone
+           ("falling_short", short * (1 - max(against, foolish)), about),
            ("frustration", held_back, about)]
     return [Emotion(n, round(i, 4), obj, "act", ref) for n, i, obj in raw if i > 1e-4]
 
@@ -541,17 +577,34 @@ def mood_name(mood):
 
 def surface_and_undercurrent(emotions, mood):
     """The surface: the strongest feeling the present stirred -- a perceived
-    event or the character's own act -- else the strongest felt at all. The
-    undercurrent: the strongest feeling the past or the unsettled stirred --
-    a recalled memory, a standing concern (`BENEATH`) -- that reaches
-    UNDERCURRENT_FLOOR; where nothing beneath does, the strongest other
-    feeling of the opposite pleasure sign, or the mood's most salient part
-    when its pleasure disagrees with the surface's. Either may be None."""
+    event, or the character's own act where it outweighs the moment -- else
+    the strongest felt at all. The undercurrent: the strongest feeling the
+    past or the unsettled stirred -- a recalled memory, a standing concern
+    (`BENEATH`) -- that reaches UNDERCURRENT_FLOOR; where nothing beneath
+    does, the strongest other feeling of the opposite pleasure sign, or the
+    mood's most salient part when its pleasure disagrees with the surface's.
+    Either may be None.
+
+    LIKE FOR LIKE (2026-09-26, the owner). A moment's feelings split one
+    stir among names by share, where an own act's feeling is whole, so the
+    largest single feeling was an act's by construction: after the call a
+    strong restraint was stored over the moment's guilt or dread
+    (`docs/experiments/AFFECT_TRACE_2026_09_26.md`). An act's feeling now
+    takes the surface only when it outweighs everything the moment's
+    strongest item stirred -- the sum of that item's feelings."""
     felt = sorted((e for e in emotions if e.intensity > 0), key=lambda e: -e.intensity)
     if not felt:
         return None, None
     present = [e for e in felt if e.source not in BENEATH]
-    surface = present[0] if present else felt[0]
+    moment = [e for e in present if e.source != "act"]
+    acts = [e for e in present if e.source == "act"]
+    if moment:
+        surface = moment[0]
+        stirred = sum(e.intensity for e in moment if e.ref == surface.ref and e.source == surface.source)
+        if acts and acts[0].intensity > stirred:
+            surface = acts[0]
+    else:
+        surface = acts[0] if acts else felt[0]
     beneath = next((e for e in felt if e.source in BENEATH and e is not surface
                     and e.intensity >= UNDERCURRENT_FLOOR), None)
     if beneath is not None:

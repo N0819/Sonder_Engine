@@ -873,6 +873,15 @@
     "act_honors_values": {
       "$text": "affect_appraisal/act_honors_values.txt"
     },
+    "act_hurt_someone": {
+      "$text": "affect_appraisal/act_hurt_someone.txt"
+    },
+    "act_looked_foolish": {
+      "$text": "affect_appraisal/act_looked_foolish.txt"
+    },
+    "act_fell_short": {
+      "$text": "affect_appraisal/act_fell_short.txt"
+    },
     "act_held_back": {
       "$text": "affect_appraisal/act_held_back.txt"
     },
@@ -1059,7 +1068,8 @@
         "pity": "憐れみ",
         "resentment": "恨み",
         "gloating": "他人の不幸を喜ぶ気持ち",
-        "frustration": "もどかしさ"
+        "frustration": "もどかしさ",
+        "falling_short": "自分への不甲斐なさ"
       },
       "event_emotions": {
         "joy": "喜び――何か良いことが起きた嬉しさ",

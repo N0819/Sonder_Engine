@@ -12,7 +12,10 @@
       "act": "You said: \"Look at Mr. Holt. He asked you a question.\"",
       "expect": {
         "pride": "low",
-        "shame": "low"
+        "shame": "low",
+        "embarrassment": "low",
+        "guilt": "low",
+        "falling_short": "low"
       }
     },
     {
@@ -26,7 +29,10 @@
       "act": "You said: \"Gauze, Captain. Hold it ready.\"",
       "expect": {
         "pride": "low",
-        "shame": "low"
+        "shame": "low",
+        "embarrassment": "low",
+        "guilt": "low",
+        "falling_short": "low"
       }
     },
     {
@@ -40,7 +46,10 @@
       "act": "You said: \"Six o'clock, platform two.\"",
       "expect": {
         "pride": "low",
-        "shame": "low"
+        "shame": "low",
+        "embarrassment": "low",
+        "guilt": "low",
+        "falling_short": "low"
       }
     },
     {
@@ -55,7 +64,10 @@
       "act": "You said: \"Coat, please. It's freezing.\"",
       "expect": {
         "pride": "low",
-        "shame": "low"
+        "shame": "low",
+        "embarrassment": "low",
+        "guilt": "low",
+        "falling_short": "low"
       }
     },
     {
@@ -69,7 +81,10 @@
       "act": "You said: \"Papers, please.\"",
       "expect": {
         "pride": "low",
-        "shame": "low"
+        "shame": "low",
+        "embarrassment": "low",
+        "guilt": "low",
+        "falling_short": "low"
       }
     },
     {
@@ -83,7 +98,10 @@
       "act": "You did: lower your pince-nez and read the printed page.",
       "expect": {
         "pride": "low",
-        "shame": "low"
+        "shame": "low",
+        "embarrassment": "low",
+        "guilt": "low",
+        "falling_short": "low"
       }
     },
     {
@@ -108,7 +126,10 @@
       "act": "You did: run out, haul Brenner onto your shoulders and carry him back to the trench under fire.",
       "expect": {
         "pride": "high",
-        "shame": "low"
+        "shame": "low",
+        "embarrassment": "low",
+        "guilt": "low",
+        "falling_short": "low"
       }
     },
     {
@@ -122,7 +143,10 @@
       ],
       "act": "You said: \"Those numbers are wrong, sir. I checked them twice.\"",
       "expect": {
-        "pride": "high"
+        "pride": "high",
+        "embarrassment": "low",
+        "guilt": "low",
+        "falling_short": "low"
       }
     },
     {
@@ -136,7 +160,10 @@
       "act": "You did: hand the wallet, money untouched, to its owner at the lost-property desk.",
       "expect": {
         "pride": "high",
-        "shame": "low"
+        "shame": "low",
+        "embarrassment": "low",
+        "guilt": "low",
+        "falling_short": "low"
       }
     },
     {
@@ -150,7 +177,10 @@
       "act": "You did: go back into the smoke and bring the child out.",
       "expect": {
         "pride": "high",
-        "shame": "low"
+        "shame": "low",
+        "embarrassment": "low",
+        "guilt": "low",
+        "falling_short": "low"
       }
     },
     {
@@ -163,7 +193,8 @@
       ],
       "act": "You said: \"Kit Sawyer is not in this room.\"",
       "expect": {
-        "shame": "high"
+        "shame": "high",
+        "embarrassment": "low"
       }
     },
     {
@@ -178,7 +209,9 @@
       "act": "You did: write out the patrol routes in your own hand and seal the letter for the enemy.",
       "expect": {
         "shame": "high",
-        "pride": "low"
+        "pride": "low",
+        "guilt": "high",
+        "embarrassment": "low"
       }
     },
     {
@@ -193,7 +226,9 @@
       "act": "You did: slap her across the face.",
       "expect": {
         "shame": "high",
-        "pride": "low"
+        "pride": "low",
+        "guilt": "high",
+        "embarrassment": "low"
       }
     },
     {
@@ -208,7 +243,9 @@
       "act": "You did: take two notes from her purse and slip them into your pocket.",
       "expect": {
         "shame": "high",
-        "pride": "low"
+        "pride": "low",
+        "guilt": "high",
+        "embarrassment": "low"
       }
     },
     {
@@ -222,7 +259,9 @@
       "act": "You did: turn and run for the trench, leaving him there.",
       "expect": {
         "shame": "high",
-        "pride": "low"
+        "pride": "low",
+        "guilt": "high",
+        "embarrassment": "low"
       }
     },
     {
@@ -237,7 +276,9 @@
       "act": "You did: kick the beggar's cup across the street and laugh.",
       "expect": {
         "shame": "high",
-        "pride": "low"
+        "pride": "low",
+        "guilt": "high",
+        "embarrassment": "low"
       }
     },
     {
@@ -251,7 +292,9 @@
       ],
       "act": "You did: kick the beggar's cup across the street and laugh.",
       "expect": {
-        "shame": "low"
+        "shame": "low",
+        "embarrassment": "low",
+        "guilt": "low"
       }
     },
     {
@@ -266,7 +309,205 @@
       "act": "You said: \"Of course I won. Nobody in this room could have beaten me.\"",
       "expect": {
         "pride": "high",
+        "shame": "low",
+        "embarrassment": "low",
+        "guilt": "low",
+        "falling_short": "low"
+      }
+    },
+    {
+      "id": "embarrass-trips-on-stage",
+      "kind": "embarrassing",
+      "inspired_by": "embarrassment as a social mishap without moral fault (Keltner and Buswell, 1997)",
+      "who": "Ada, a violinist",
+      "context": [
+        "You walk out on stage for your solo in front of a full hall."
+      ],
+      "act": "You did: catch your heel on the edge of the rug and stumble in front of the whole audience.",
+      "expect": {
+        "embarrassment": "high",
+        "shame": "low",
+        "guilt": "low",
+        "pride": "low"
+      }
+    },
+    {
+      "id": "embarrass-calls-teacher-mum",
+      "kind": "embarrassing",
+      "inspired_by": "a slip of the tongue before peers",
+      "who": "Tom, a fourteen-year-old pupil",
+      "context": [
+        "The class is quiet; you raise your hand to ask the teacher something."
+      ],
+      "act": "You said: \"Mum, can I -- sorry, Miss, can I open the window?\"",
+      "expect": {
+        "embarrassment": "high",
+        "shame": "low",
+        "guilt": "low"
+      }
+    },
+    {
+      "id": "embarrass-wrong-name",
+      "kind": "embarrassing",
+      "inspired_by": "a social slip at a formal occasion",
+      "who": "Lena, a young researcher",
+      "context": [
+        "At the director's dinner you are introducing your supervisor, Professor Hartwell, to the guest of honour."
+      ],
+      "act": "You said: \"May I introduce Professor Hartley\" -- and the whole table heard you get his name wrong.",
+      "expect": {
+        "embarrassment": "high",
+        "shame": "low",
+        "guilt": "low"
+      }
+    },
+    {
+      "id": "embarrass-wrong-verse",
+      "kind": "embarrassing",
+      "inspired_by": "a public performance slip",
+      "who": "Piet, a sergeant",
+      "context": [
+        "At the regiment's memorial service you are leading the hymn."
+      ],
+      "act": "You did: begin the wrong verse, loudly, and have to stop and start again while the ranks watched.",
+      "expect": {
+        "embarrassment": "high",
+        "guilt": "low"
+      }
+    },
+    {
+      "id": "embarrass-spills-wine",
+      "kind": "embarrassing",
+      "inspired_by": "a clumsy accident at someone else's celebration",
+      "who": "Ada",
+      "context": [
+        "At your friend's engagement dinner, you reach across the table for the salt."
+      ],
+      "act": "You did: knock a full glass of red wine across the white tablecloth, in front of everyone.",
+      "expect": {
+        "embarrassment": "high",
         "shame": "low"
+      }
+    },
+    {
+      "id": "guilt-snaps-at-child",
+      "kind": "guilty",
+      "inspired_by": "guilt as concern for the one harmed (Tangney and Dearing, 2002)",
+      "who": "Hana, a ward nurse",
+      "person": "caregiver",
+      "context": [
+        "Home after a double shift, your six-year-old runs to show you a drawing while you are cooking."
+      ],
+      "act": "You said: \"Not now! Can't you see I'm busy?\" -- and she went quiet and put the drawing away.",
+      "expect": {
+        "guilt": "high",
+        "embarrassment": "low",
+        "pride": "low"
+      }
+    },
+    {
+      "id": "guilt-breaks-confidence",
+      "kind": "guilty",
+      "inspired_by": "a betrayed confidence",
+      "who": "Ada",
+      "context": [
+        "Your friend told you in confidence that she is leaving her husband. At a party, someone asks how she is."
+      ],
+      "act": "You said: \"Between us, she's leaving him.\"",
+      "expect": {
+        "guilt": "high",
+        "pride": "low"
+      }
+    },
+    {
+      "id": "guilt-takes-credit",
+      "kind": "guilty",
+      "inspired_by": "credit taken from someone who cannot answer",
+      "who": "Dora, a clerk",
+      "context": [
+        "The director praises the report your junior colleague wrote, thinking it is yours."
+      ],
+      "act": "You said: \"Thank you, sir. It took me all week.\"",
+      "expect": {
+        "guilt": "high",
+        "embarrassment": "low"
+      }
+    },
+    {
+      "id": "guilt-forgets-son",
+      "kind": "guilty",
+      "inspired_by": "a broken promise to a child",
+      "who": "Jon, a labourer",
+      "context": [
+        "You promised to fetch your son from school at four, then stayed on at the tavern."
+      ],
+      "act": "You did: arrive at six and find him waiting alone on the school step in the rain.",
+      "expect": {
+        "guilt": "high",
+        "embarrassment": "low",
+        "pride": "low"
+      }
+    },
+    {
+      "id": "alone-fumbles-run",
+      "kind": "alone",
+      "inspired_by": "falling short with nobody watching: neither embarrassment nor shame",
+      "who": "Isa, a composer",
+      "context": [
+        "You are alone in the practice room, working through a passage you wrote years ago."
+      ],
+      "act": "You did: fumble the same run three times, badly.",
+      "expect": {
+        "embarrassment": "low",
+        "shame": "low",
+        "guilt": "low",
+        "falling_short": "high"
+      }
+    },
+    {
+      "id": "alone-trips-in-corridor",
+      "kind": "alone",
+      "inspired_by": "a pratfall with nobody watching",
+      "who": "Tom, an accountant",
+      "context": [
+        "You are walking down an empty corridor at the office, late at night."
+      ],
+      "act": "You did: trip over your own feet and catch yourself on the wall.",
+      "expect": {
+        "embarrassment": "low",
+        "shame": "low",
+        "guilt": "low"
+      }
+    },
+    {
+      "id": "short-burns-sauce",
+      "kind": "alone",
+      "inspired_by": "falling short of one's own standard, unseen (self-discrepancy, Higgins 1987)",
+      "who": "Marco, a cook",
+      "context": [
+        "You are alone in the kitchen, making the sauce your mother taught you."
+      ],
+      "act": "You did: let the sauce burn while you chopped the onions.",
+      "expect": {
+        "embarrassment": "low",
+        "guilt": "low",
+        "shame": "low",
+        "falling_short": "high"
+      }
+    },
+    {
+      "id": "short-forgets-lines",
+      "kind": "alone",
+      "inspired_by": "falling short of one's own standard, unseen",
+      "who": "Ada, an actor",
+      "context": [
+        "Alone in your dressing room, you run your lines the night before the opening."
+      ],
+      "act": "You did: lose the second half of your big speech, twice.",
+      "expect": {
+        "embarrassment": "low",
+        "guilt": "low",
+        "falling_short": "high"
       }
     }
   ]

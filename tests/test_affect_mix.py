@@ -132,6 +132,44 @@ def test_frustration_is_what_holding_back_costs_and_an_act_alone_has_none():
     assert "frustration" not in spoken
 
 
+def test_shame_is_going_against_what_one_believes_right_not_feeling_worse():
+    """An act that leaves the mind thinking worse of itself without breaking
+    what it believes right -- reading one's own name in print, a fumble
+    alone -- is not shame; one that goes against it is."""
+    worse_only = _names(mix.emotions_from_act({"self_regard": -0.6, "against_values": 0.05}, ref="s0"))
+    wrong = _names(mix.emotions_from_act({"self_regard": -0.6, "against_values": 0.9}, ref="s1"))
+    assert worse_only.get("shame") is None or worse_only["shame"].intensity <= 0.05
+    assert wrong["shame"].intensity == pytest.approx(0.9)
+
+
+def test_guilt_needs_the_act_to_have_hurt_someone_and_to_be_wrong():
+    """A psychopath's kicked cup hurt someone and read 0.65 on the harm
+    question alone; guilt needs the mind to hold the act wrong too."""
+    callous = _names(mix.emotions_from_act({"hurt_someone": 0.7, "against_values": 0.0}, ref="s0"))
+    snapped = _names(mix.emotions_from_act({"hurt_someone": 0.9, "against_values": 0.8}, ref="s1"))
+    assert "guilt" not in callous
+    assert snapped["guilt"].intensity == pytest.approx(0.8) and snapped["guilt"].source == "act"
+
+
+def test_embarrassment_is_being_seen_a_fool_and_needs_no_wrong():
+    tripped = _names(mix.emotions_from_act({"looked_foolish": 0.85, "against_values": 0.1}, ref="s0"))
+    assert tripped["embarrassment"].intensity == pytest.approx(0.85)
+    assert tripped["shame"].intensity == pytest.approx(0.1)
+    assert "guilt" not in tripped
+
+
+def test_falling_short_is_what_neither_shame_nor_embarrassment_names():
+    """Below what one expects of oneself, alone and wronging no one -- the
+    fumble in an empty practice room -- is falling short; the same answer
+    beside a wrong or an audience is left to shame and embarrassment."""
+    alone = _names(mix.emotions_from_act({"fell_short": 0.75}, ref="s0"))
+    seen = _names(mix.emotions_from_act({"fell_short": 0.8, "looked_foolish": 0.9}, ref="s1"))
+    wrong = _names(mix.emotions_from_act({"fell_short": 0.9, "against_values": 0.95}, ref="s2"))
+    assert alone["falling_short"].intensity == pytest.approx(0.75)
+    assert seen["falling_short"].intensity == pytest.approx(0.08) and seen["embarrassment"].intensity == 0.9
+    assert wrong["falling_short"].intensity == pytest.approx(0.045, abs=1e-3)
+
+
 def test_dissonance_takes_the_pride_out_of_an_act():
     torn = _names(mix.emotions_from_act({"honors_values": 0.8, "self_regard": 0.8,
                                          "against_values": 0.8}, ref="s3"))
@@ -329,6 +367,26 @@ def test_what_the_past_or_the_unsettled_stirred_is_the_undercurrent():
     surface, under = mix.surface_and_undercurrent(
         [Emotion("joy", 0.5), Emotion("fear", 0.3, source="concern")], Mood())
     assert under.name == "fear" and under.source == "concern"
+
+
+def test_an_acts_feeling_is_the_surface_only_where_it_outweighs_the_moment():
+    """Like for like: a moment's feelings split one stir among names, an
+    act's feeling is whole. At "Go on, then", Wren's guilt (0.62, of a stir
+    whose named feelings sum to 0.84) was stored under minding her words
+    (0.67) until an act had to outweigh everything the moment stirred."""
+    moment = [Emotion("guilt", 0.62, "Go on, then", "event", "o1"),
+              Emotion("resolve", 0.12, "Go on, then", "event", "o1"),
+              Emotion("moved", 0.10, "Go on, then", "event", "o1"),
+              Emotion("dread", 0.30, "the coach", "event", "o2")]
+    minded = Emotion("frustration", 0.67, "You held back from: saying nothing", "act", "held")
+    surface, _under = mix.surface_and_undercurrent(moment + [minded], Mood())
+    assert surface.name == "guilt" and surface.source == "event"
+    overwhelming = Emotion("shame", 0.95, "You said it", "act", "s0")
+    surface, _under = mix.surface_and_undercurrent(moment + [minded, overwhelming], Mood())
+    assert surface.name == "shame"
+    # with nothing from the moment, the act is the surface as before
+    surface, _under = mix.surface_and_undercurrent([minded], Mood())
+    assert surface.name == "frustration"
 
 
 def test_a_faint_feeling_beneath_is_not_named():

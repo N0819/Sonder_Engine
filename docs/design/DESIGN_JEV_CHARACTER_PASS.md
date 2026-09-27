@@ -794,12 +794,42 @@ now asked "How much do you mind not having done it?"
 (`affect_appraisal.HELD_QUESTION`): 14 of 16 on a restraint battery,
 costly restraints 0.89 against cheap ones 0.25, where the old question met
 10. On the traced beats frustration is stored on 10 of 16 -- the restraint
-each was about. Open for the owner: a moment's feelings are its stir split
-by share while an act's are whole, so a strong restraint still outweighs
-the moment's guilt or dread in the stored feeling; and shame is any act
-that leaves the mind thinking worse of itself (`max(against, -regard)`),
-the mirror of the pride rule, so an act like reading one's own name in
-print can be stored as shame.
+each was about.
+
+**The moment against the act, and the self-conscious feelings apart -- the
+owner's rulings, the same day.** Two things remained, and the owner took
+the recommendation on both ("Go ahead. also add embarrasment and related
+fields"):
+
+- **Like for like.** A moment's feelings split one stir among names by
+  share, an act's feeling is whole, so the largest single feeling was an
+  act's by construction. An act's feeling now becomes the stored one only
+  where it outweighs everything the moment's strongest item stirred
+  (`affect_mix.surface_and_undercurrent`); the `now` list and the mood's
+  push are unchanged.
+- **Shame, guilt, embarrassment and falling short, apart.** Shame is an act
+  going against what the character believes is right -- the values
+  question reworded from "something you value or believe", which read a
+  violinist's stumble on stage 0.77, to right and wrong, which reads social
+  mishaps 0.28 and wrongs 0.93. Guilt needs that AND the act having hurt or
+  wronged someone, as pride needs both halves (a psychopath's kicked cup
+  hurt someone, and is not his guilt). Embarrassment is others having seen
+  the character make a fool of itself. Falling short of oneself is what an
+  act below what the character expects of itself leaves once shame and
+  embarrassment have named what was wrong or seen -- the fumble alone. On
+  the act battery (32 acts: ordinary, praiseworthy, blameworthy, social
+  mishaps, acts that hurt someone, fumbles with nobody watching) the
+  shipped rules meet pride 18 of 20, shame 22 of 24, guilt 28 of 29,
+  embarrassment 27 of 30 and falling short 12 of 14. Humiliation was not
+  added as a mood: the coverage table has it as ashamed, powerless and
+  embarrassed, and no rater named it uncovered.
+
+The 16 traced beats, their after-call pass asked again with all of it,
+store suspicion on 4, protectiveness on 3, dread, guilt, grief and
+frustration on 2 each and a fear come true on 1: Wren keeps guilt at "Go
+on, then", the captain dread at the letter; frustration stays where a
+restraint outweighed a quiet moment (the captain walking out, unable to
+learn what the medic understood, 0.94).
 
 Still open: a memory-sourced feeling's object is its opening text, which for
 a remembered scene is scene description ("resolve (You are in the

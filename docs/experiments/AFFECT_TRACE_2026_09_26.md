@@ -115,6 +115,30 @@ feel?" shared more of each rater's four strongest (2.57 and 2.51 against
 is: a card's standing feelings are not separated from the present by the
 question's words.
 
+**The owner's rulings, applied** ("Go ahead. also add embarrasment and
+related fields"). An act's feeling becomes the stored one only where it
+outweighs everything the moment's strongest item stirred; shame is an act
+going against what the character believes is right (the values question
+reworded from "something you value or believe", which read a violinist's
+stumble on stage 0.77, to right and wrong); guilt needs that and the act
+having hurt or wronged someone; embarrassment is others having seen the
+character make a fool of itself; falling short of oneself is what an act
+below one's own expectations leaves once shame and embarrassment have
+named what was wrong or seen. Chosen on the act battery, 32 acts:
+
+| feeling | question | met | the alternatives |
+|---|---|---|---|
+| shame | "Did doing this go against what you believe is right?" | 22/24 | "think less of yourself as a person" 20/23; "feel like a bad person" 19/23 |
+| guilt | "Did doing this hurt or wrong someone?" with the shame question | 28/29 | the harm question alone 23/27 (a psychopath's kicked cup 0.65); "let down someone who counted on you" 24/27 |
+| embarrassment | "Did others see you make a fool of yourself?" | 27/30 | "How embarrassed are you by doing this?" 15/28 (every bad act read embarrassing) |
+| falling short | "Did doing this fall short of what you expect of yourself?", less what is wrong or seen | 12/14 | the question alone read wrongs and pratfalls 0.78-0.90 |
+
+The 16 beats asked again with all of it store suspicion on 4,
+protectiveness on 3, dread, guilt, grief and frustration on 2 each and a
+fear come true on 1 -- the moment's feeling, except where a restraint
+outweighed a quiet one. Falling short reads 0.3-0.4 of a few plain acts,
+never stored.
+
 ## The traces
 
 Each call: what reached the mind and Jev's reading (how strongly it stirs,

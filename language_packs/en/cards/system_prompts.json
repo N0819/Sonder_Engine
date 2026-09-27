@@ -873,6 +873,15 @@
     "act_honors_values": {
       "$text": "affect_appraisal/act_honors_values.txt"
     },
+    "act_hurt_someone": {
+      "$text": "affect_appraisal/act_hurt_someone.txt"
+    },
+    "act_looked_foolish": {
+      "$text": "affect_appraisal/act_looked_foolish.txt"
+    },
+    "act_fell_short": {
+      "$text": "affect_appraisal/act_fell_short.txt"
+    },
     "act_held_back": {
       "$text": "affect_appraisal/act_held_back.txt"
     },
@@ -1059,7 +1068,8 @@
         "pity": "pity",
         "resentment": "resentment",
         "gloating": "gloating",
-        "frustration": "frustration"
+        "frustration": "frustration",
+        "falling_short": "falling short of yourself"
       },
       "event_emotions": {
         "joy": "joy, gladness at something good happening",
