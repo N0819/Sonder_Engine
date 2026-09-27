@@ -9943,10 +9943,12 @@ def _check_pronoun_fidelity(prose, cast_pronouns):
             # their clauses rather than burn a rewrite on "Will you hand him the padd".
             if token.lower() in _ling("_AMBIGUOUS_NAME_WORDS"):
                 continue
-            if token in token_owner and token_owner[token][0] != canonical:
-                token_owner[token] = None
-            elif token not in token_owner:
+            # None marks a token already shared: it stays dropped for a third
+            # holder and every one after (a family under one surname).
+            if token not in token_owner:
                 token_owner[token] = (canonical, group)
+            elif token_owner[token] and token_owner[token][0] != canonical:
+                token_owner[token] = None
     token_owner = {t: v for t, v in token_owner.items() if v}
     if not token_owner:
         return []

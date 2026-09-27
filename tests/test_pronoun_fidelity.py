@@ -119,6 +119,19 @@ def test_name_shared_by_two_cast_members_is_dropped():
         {"Kel Vorne": HE, "Ria Vorne": SHE}) == []
 
 
+def test_name_shared_by_three_cast_members_is_dropped_not_fatal():
+    """A family under one surname. The third holder of a token already
+    marked shared read the mark as an owner and raised TypeError, failing
+    the narrator stage -- fatally -- on every turn of a story with three or
+    more people of one surname (a birthday at the Bellandi trattoria,
+    2026-09-26, stopped at its opening). The shared token stays dropped and
+    each first name still identifies its holder."""
+    cast = {"Rosa Bellandi": SHE, "Gianni Bellandi": HE, "Lucia Bellandi": SHE, "Marco Bellandi": HE}
+    assert _check_pronoun_fidelity("Bellandi raised her hand.", cast) == []
+    warnings = _check_pronoun_fidelity("Gianni wiped her hands on the apron.", cast)
+    assert len(warnings) == 1 and "Gianni" in warnings[0]
+
+
 def test_name_that_is_an_ordinary_word_is_not_scored():
     assert _check_pronoun_fidelity(
         "Will you hand him the padd?", {"Will": SHE}) == []
