@@ -5612,6 +5612,44 @@ def _composer_establish(ctx, sc, *args, **kwargs):
         return _composer_establish_views(ctx, sc, *args, **kwargs)
 
 
+def _opening_line_percept(ctx, sc, p, pid, name, entry, order, *, field,
+                          recognized, display_map, bodies_by_name,
+                          appearances, aliases):
+    """One line the opening's passage quotes, for one observer, or None.
+
+    The outcome pass's speech branch on a beat with one moment: the relation
+    from where each stands at the opening, the concealment and hearing gates
+    `composer.speech_percept` applies, and a mind's OWN line left out -- it
+    is filed as that mind's own conduct (`persist/commit_memory.py`), the
+    firewall's usual split. The lines are the establish tail's transcription
+    (`agents.director._opening_conduct`)."""
+    speaker = str(entry.get("speaker") or "").strip()
+    if not speaker or _is_the_observer(sc, speaker, name, aliases.get(name) or ()):
+        return None
+    if pid == "player" and is_player_speaker(speaker, ctx.chat):
+        return None
+    speaker_room = room_of(sc, speaker)
+    rel = spatial_rel_between(sc, name, speaker, observer_room=p.get("room"),
+                              target_room=speaker_room, sound=field)
+    if rel is None:
+        return None
+    senses = p.get("sense_card")
+    can_see = _in_plain_view(rel, composer._sense_graded(
+        visual_level_between(sc, name, speaker, senses), "sight", senses) != "none")
+    display = _attributed_label(
+        speaker, name, recognized=recognized, display_map=display_map,
+        bodies_by_name=bodies_by_name, can_see=can_see, unseen="a voice",
+        appearances=appearances, cast_aliases=aliases)
+    return composer.speech_percept(
+        entry, _with_comm_channel(sc, rel, speaker=speaker, observer=name,
+                                  observer_room=p.get("room"),
+                                  speaker_room=speaker_room),
+        name, display=display, can_see=can_see,
+        proximity=measured_proximity_rel(sc, name, speaker),
+        order_key=order, observer_id=pid, senses=senses,
+        voice=_voice_register_for(ctx, speaker))
+
+
 def _composer_establish_views(ctx, sc, perceivers, known, p_name,
                               p_appearance, entity_states, sensory_events,
                               presence_bodies=()):
@@ -5653,6 +5691,12 @@ def _composer_establish_views(ctx, sc, perceivers, known, p_name,
     cast_parts = _composer_extra_parts(ctx, p_name)
     body_scents = _body_scents(ctx)
     body_descriptions = _body_descriptions(ctx, sc)
+    # What the passage shows people saying (the establish tail's transcribed
+    # `dialogue_log`), heard below as any beat's lines are.
+    opening_lines = [d for d in ((ctx.director_establish or {}).get("dialogue_log") or [])
+                     if isinstance(d, dict)]
+    appearances = {b["name"]: b.get("appearance") or "" for b in bodies if b.get("name")}
+    body_aliases = {b["name"]: b.get("aliases") or [] for b in bodies if b.get("name")}
     clean_views, observations, ledger, company = {}, {}, {}, {}
     for p in perceivers:
         pid = str(p["id"])
@@ -5718,6 +5762,21 @@ def _composer_establish_views(ctx, sc, perceivers, known, p_name,
                     gate, [{**event, "room": here, "room_id": here,
                             "source_room": here} for event, _level in afar],
                     p.get("room")))
+            # THE OPENING'S LINES, heard as any beat's are: nothing said at an
+            # opening reached anyone before 2026-09-26 -- a greeting's words
+            # included -- because the establish stage kept no log.
+            if opening_lines:
+                recognized, _unknown = _composer_unknown_sources(
+                    name, known, roster, bodies_by_name)
+                field = _sound_field_for(ctx, sc, name, p.get("room"))
+                for n, entry in enumerate(opening_lines):
+                    percept = _opening_line_percept(
+                        ctx, sc, p, pid, name, entry, n, field=field,
+                        recognized=recognized, display_map=display_map,
+                        bodies_by_name=bodies_by_name,
+                        appearances=appearances, aliases=body_aliases)
+                    if percept:
+                        percepts.append(percept)
             company[pid] = _composer_company(others, display_map, percepts)
         # A scene opening is the one beat where everything is legitimately
         # new: full render for every mind, and the ledger starts here.

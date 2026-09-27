@@ -274,6 +274,19 @@ def test_a_premise_written_to_the_player_says_whom_you_means(temp_db, wired, mon
     assert "Tomaso" not in entry["title"] and entry["title"]
 
 
+def test_a_greeting_launch_files_no_premise(temp_db, wired):
+    """A story launched from a card's greeting stores the greeting as its
+    scenario, and the greeting is the SCENE, not a premise: its lines reach
+    minds through the opening's perception and its own conduct as the card
+    character's memory. Filed whole as common knowledge, every aside and
+    every line would reach any figure promoted later."""
+    ctx, _ = _cast_story(temp_db, opening=True, world_facts=[],
+                         scenario='"You came back," she says, and sets down the cup.')
+    wset(ctx.chat.id, "greeting_minds", {"extractor_version": 3, "minds": {}})
+    cm.commit_mapping(ctx, "n", prepared=cm.prepare_mapping_commit(ctx))
+    assert _premise_rows(temp_db, ctx.chat.id) == []
+
+
 def test_an_opening_with_no_scenario_delivers_nothing(temp_db, wired):
     ctx, _ = _cast_story(temp_db, opening=True, world_facts=[FUNERAL])
     cm.commit_mapping(ctx, "n", prepared=cm.prepare_mapping_commit(ctx))

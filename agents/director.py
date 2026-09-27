@@ -567,7 +567,13 @@ def director_establish(ctx, nonce):
     }
     out["resolved_event"] = out.get("scene_description", "")
     out["summary"] = "Scene established: " + (out.get("location") or "")
-    out["dialogue_log"] = []
+    # WHAT THE PASSAGE SHOWS PEOPLE SAY AND DO, transcribed: its lines become
+    # the `dialogue_log` every reader keys on (the opening's perception hears
+    # them, the commit learns names by them), and the sequence stays for the
+    # commit's own-conduct rows. This was `[]` unconditionally from the first
+    # commit, so nothing said at an opening -- a greeting's own words
+    # included -- ever reached a mind.
+    out["dialogue_log"], out["sequence"] = _opening_conduct(ctx, out, player_name)
     # THE OPENING BEAT BINDS LIKE ANY OTHER. The identity floor ran only in
     # resolve, so a person the opening minted beside the charter body
     # holding that post was a second copy from the story's first line
@@ -866,6 +872,67 @@ def _present_figure_rows(figures, answers=None, cap=24):
         if len(rows) >= cap:
             break
     return rows
+
+
+def _opening_conduct(ctx, out, player_name):
+    """The opening's on-page conduct as `(dialogue_log, sequence)`, from the
+    Director's `sequence` -- TRANSCRIBED, never invented.
+
+    A line stands only where the passage quotes its words: the scenario (a
+    greeting launch's scenario is the greeting) or the turn-0 input, folded
+    as the echo floor folds (`_fold_line`) and matched on word boundaries; a
+    line the passage splits around a speaking verb ("Welcome," she says,
+    "sit.") stands if it is in the passage's quotations read together. A
+    line is a person's own words, which the Director never authors: measured
+    2026-09-26, a harbour opening whose passage quoted nobody gave both of
+    its characters a line ("If that's you, Jonah, I'm not in the mood to
+    talk about the keel."), filed as a world fact. An act stands as written
+    -- the passage's conduct is objective, and the opening has always
+    resolved what it left standing (poses, stations, contacts). Each `who`
+    and `to` is spelled as the cast and the player are spelled everywhere
+    (`canonicalize_positions`); a figure off the cast keeps its own name."""
+    from llm.schemas import normalize_speech_volume
+
+    passage = "\n".join(str(part or "") for part in (
+        (ctx.chat.get("scenario") if ctx.chat is not None else ""), ctx.get("input")))
+    said = " %s " % _fold_line(passage)
+    quoted = " %s " % " ".join(
+        _fold_line(words) for _s, _e, words in director_prose._quotations(passage))
+
+    def spelled(name):
+        name = str(name or "").strip()
+        if not name:
+            return ""
+        return next(iter(canonicalize_positions({name: ""}, ctx.cast, player_name=player_name)), name)
+
+    log, seq = [], []
+    for item in out.get("sequence") or []:
+        if not isinstance(item, dict):
+            continue
+        who = spelled(item.get("who") or item.get("speaker") or item.get("actor"))
+        kind = str(item.get("type") or "").strip().casefold()
+        if not who:
+            continue
+        if kind == "speech":
+            text = str(item.get("text") or item.get("exact_quote") or "").strip().strip("\"“”「」『』").strip()
+            folded = _fold_line(text)
+            if not folded or (" %s " % folded not in said and " %s " % folded not in quoted):
+                if text:
+                    ctx.add_warning(
+                        f"opening line not quoted by the passage, not transcribed: {who}: {text[:80]!r}")
+                continue
+            volume = normalize_speech_volume(item.get("volume"))
+            to = spelled(item.get("to") or item.get("intended_target")) or None
+            seq.append({"who": who, "type": "speech", "text": text, "volume": volume,
+                        **({"to": to} if to else {})})
+            log.append({"speaker": who, "exact_quote": '"%s"' % text, "volume": volume,
+                        "intended_target": to, "tone": str(item.get("tone") or ""),
+                        "visibility": "overt", "conceal_from": [], "source": "opening"})
+        elif kind == "action":
+            act = str(item.get("act") or item.get("attempt") or "").strip()
+            if act:
+                seq.append({"who": who, "type": "action", "attempt": act})
+    return log, seq
 
 
 def _establish_identity_floor(ctx, out, player_name):

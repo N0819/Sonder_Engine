@@ -52,6 +52,18 @@ Deterministic (`agents/mapping.py`; no model role, and one provider round trip -
 
 Creates the initial objective scene and actor state. This is privileged objective setup, not player-facing prose.
 
+What the passage shows people SAYING AND DOING is transcribed, never
+invented, into `sequence` -- `{who, type:'speech', text, volume, to}` or
+`{who, type:'action', act}`, in the passage's order (2026-09-26). The tail
+(`agents.director._opening_conduct`) keeps a line only where the scenario or
+the turn-0 input quotes its words, spells each `who` as the cast is spelled,
+and derives the stage's `dialogue_log` from the lines -- the log every reader
+keys on, which had been `[]` unconditionally. `perception_establish` hears
+those lines; the commit files each mind's own lines and acts as its own
+conduct (`category: self`), which turn 0 had no other way to do, since no
+character step runs. A greeting launch's greeting is the scenario, so a card
+character's greeting reaches its own memory this way.
+
 The opening is handed the PLAN when the story has one: `planned_rooms` is the
 brief (`world.structure.planned_room_brief`) for EVERY planned room, uncapped
 (measured 63,544 bytes for chat 114's 49 rooms), under the same key interpret
@@ -79,6 +91,11 @@ but never replaces an existing `scene.attire` entry.
 ### `perception_establish`
 
 Builds the player’s opening view from the established scene and spatial/perceptual constraints.
+Every observer also HEARS the opening's lines (the establish stage's
+transcribed `dialogue_log`) through the same gates any beat's lines pass
+(`agents.perception._opening_line_percept` over `composer.speech_percept`:
+concealment, then audibility from where each stands); a mind's own line is
+left to its own-conduct memory row.
 Attire/body detail reaches a model only through the observer-scoped
 `scene.body_regions` projection. It previews commit's canonical attire change
 on a copy, applies derived region visibility, and exposes only the outer surface

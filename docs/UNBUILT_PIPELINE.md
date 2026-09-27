@@ -1500,6 +1500,40 @@ clause, the page clause and the `planned`/`purpose` tokens on the shape line
 exist in English only. `tools/project_check.DEFERRED_PACK_PARITY` is what
 keeps that green; a Japanese opening cannot write a stub until the pass ends.
 
+**On-page conduct reaches minds (2026-09-26).** The opening had no channel
+for what its passage shows people saying and doing: the sheet sent a quoted
+line to `world_facts`, `DirectorEstablish` declared no log, the tail set
+`dialogue_log = []`, the opening's perception composed only the standing
+scene, and the commit filed a mind's own conduct only from a character step
+-- so nothing said at an opening, a card character's own greeting included,
+reached any memory (the owner: "it is not correctly commiting intro dialogu
+and actions to character memoreis esepcailly in greetings"). The stage now
+writes `sequence`, TRANSCRIBED (a line stands only where the scenario or the
+turn-0 input quotes it -- a harbour opening had invented two lines for
+characters the passage never quoted), the tail derives the log, perception
+hears it through the ordinary gates, and the commit files each mind's own
+lines and acts as `category: self` (`tests/test_opening_conduct.py`). Live,
+on one opening: the Director transcribed the grandmother's "You came back.
+Sit. You are thin." into `sequence`, the player's page carried it, and her
+turn-0 memories gained "I tried to wipe hands on the apron and turn from the
+stove to look at the doorway. Then I said 'You came back. Sit. You are
+thin.'". Both packs' sheets carry the clauses. Residuals:
+
+- **An act at the opening reaches OTHERS only as the state it leaves**
+  (poses, stations, entity states). The outcome pass's act percepts need a
+  beat's mid-moment machinery; the opening delivers lines, not acts.
+- **The greeting quick start still overwrites the narrator after the
+  commit** (`story.greetings._override_narrator`), so the page is the
+  greeting verbatim and the narrator's rendering of a heard line is
+  discarded -- harmless to memory, which the commit already filed.
+- **`greeting_interpret` may seed a knowledge memory for something the
+  greeting shows the card character doing**, beside the new self row: a
+  duplicate, not a loss; telling the extractor to leave on-page conduct to
+  the opening would remove it.
+- **A real greeting launch was not replayed** for the live check (it costs
+  the extraction and the opening plan besides); the scenario-with-a-line
+  opening above runs the same establishment plan.
+
 <a id="unbuilt-1-164"></a>
 ### 1.164 The Director's doctrine moved to the hands and what did not move was dropped
 
@@ -1803,7 +1837,11 @@ Residuals, not built:
 - **A secret the author writes into the scenario is delivered**, as it was
   before: the scenario is the premise by the 2026-09-14 ruling, and nothing
   separates an author's public frame from a note to the engine. The owner's
-  132 scenarios carry no author notes and three mention hiding.
+  132 scenarios carry no author notes and three mention hiding. A greeting
+  launch is the exception: its scenario IS the greeting, the scene itself,
+  and files no premise (`greeting_minds` marks the launch); its lines reach
+  minds through the opening's perception and the card character's own
+  conduct (§1.163).
 - **The seventeen chats opened since 2026-09-14 keep what was filed.** 68
   entries under `opening-premise` in the owner's database hold establish
   facts filed as public; the fix changes openings, not filings already made.

@@ -362,6 +362,23 @@ def _continues_a_clause(text):
     return text[0].lower() + text[1:]
 
 
+def _opening_own_sequence(est, name):
+    """This mind's own lines and acts in the opening's transcribed `sequence`
+    (`agents.director._opening_conduct`), in the shape `_own_sequence_memory`
+    reads. The tail spelled each `who` as the cast is spelled everywhere, so
+    the match is the name itself."""
+    me = str(name or "").strip().casefold()
+    out = []
+    for item in (est or {}).get("sequence") or []:
+        if not isinstance(item, dict) or str(item.get("who") or "").strip().casefold() != me:
+            continue
+        if item.get("type") == "speech" and str(item.get("text") or "").strip():
+            out.append({"type": "speech", "text": str(item["text"]).strip()})
+        elif item.get("type") == "action" and str(item.get("attempt") or "").strip():
+            out.append({"type": "action", "attempt": str(item["attempt"]).strip()})
+    return out
+
+
 def _own_sequence_memory(seq):
     """Render a character's own conduct as grammatical, chronological first
     person: ``I said 'X.' Then I tried to Y.``
@@ -1108,6 +1125,27 @@ def prepare_memory_commit(ctx, *, scene=None):
                 _episode_row["gist"] = _episode_gist
             pending_memories.append(_episode_row)
         pending_memories.extend(side_memories)
+
+        # THE OPENING'S OWN CONDUCT. Turn 0 runs no character step, so what the
+        # passage shows this mind saying and doing arrives from the establish
+        # stage's transcribed `sequence`, filed as the row a beat's own
+        # sequence makes (below) and under the same key. Without it a card
+        # character could not remember its own greeting: 2026-09-26, the only
+        # turn-0 row any mind had was its view of the room.
+        if est and not ctx.director_resolve and not own_result.get("sequence"):
+            _opening_own = _opening_own_sequence(est, cname)
+            _self_content, _self_gist = _own_sequence_memory(_opening_own)
+            if _self_content:
+                pending_memories.append({
+                    "chat_id": cid, "char_id": ccid, "turn_id": turn.id,
+                    "turn_idx": turn.idx, "kind": "episodic", "category": "self",
+                    # The floor a beat's own row has (`max(0.5, own_salience)`).
+                    "provenance": "remembered", "salience": 0.5,
+                    "content": _self_content, "gist": _self_gist,
+                    "location": room_name, "emotional_context": mood,
+                    "valence": _mem_valence, "arousal": _mem_arousal,
+                    "event_key": _stable_event_key(turn.id, ccid, "own_acts"),
+                })
 
         # Observation ids exist only for the character call.  Once this same
         # witnessed material becomes an episode, the durable consequences of

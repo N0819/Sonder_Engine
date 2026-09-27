@@ -349,6 +349,16 @@ def _opening_premise(ctx):
     text = str(getattr(ctx.chat, "scenario", "") or "").strip()
     if not text:
         return []
+    # A GREETING IS THE SCENE, NOT A PREMISE. A story launched from a card's
+    # greeting stores the greeting as its scenario (`story.greetings.
+    # start_story`, which records every launch in `greeting_minds`). What it
+    # shows reaches minds the way any scene does -- its lines through the
+    # opening's perception, the card character's own words and acts as its
+    # own conduct, its minds through their seeds -- and never as knowledge
+    # every cast member holds: filed whole, every aside and every line would
+    # reach any figure promoted later.
+    if wget(ctx.chat.id, "greeting_minds", None):
+        return []
     try:
         vec, model_key, dims, fell_back = _embed_lore_document("", text)
     except Exception as exc:  # the delivery does not wait on a provider

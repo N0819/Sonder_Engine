@@ -2195,6 +2195,17 @@ class DirectorEstablish(LenientModel):
     substance_ops: list[dict] = Field(default_factory=list)
     sensory_events: list[dict] = Field(default_factory=list)
     world_facts: list = Field(default_factory=list)
+    # WHAT THE PASSAGE SHOWS PEOPLE SAYING AND DOING, in its order:
+    # `{who, type: 'speech', text, volume?, to?}` or `{who, type: 'action',
+    # act}`. TRANSCRIBED, never invented -- the establish tail keeps a line
+    # only when the passage quotes its words -- and the opening's one account
+    # of on-page conduct: the tail derives the `dialogue_log` every reader
+    # keys on from its lines, the opening's perception hears them, and the
+    # commit files each person's own as their memory. Declared 2026-09-26:
+    # with no field for it, a greeting's own words went to `world_facts` (the
+    # prompt said so), were filed as what the whole cast knew, and reached
+    # no memory at all -- a card character could not remember its greeting.
+    sequence: list[dict] = Field(default_factory=list)
     fiction_frame: dict[str, Any] = Field(default_factory=dict)
     simulation_clock: dict[str, Any] = Field(default_factory=dict)
     # World-pressure openers (F5): scenario objects/processes established
@@ -6231,6 +6242,7 @@ OUTPUT_EXAMPLES = {
         "entity_states": {},
         "sensory_events": [],
         "world_facts": [],
+        "sequence": [],
         # The sky the story opens under -- worked, like the rest of this
         # example, because the scene above is fog off the water and an
         # opening that names weather in its prose and not in its channels
