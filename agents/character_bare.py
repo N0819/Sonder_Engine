@@ -257,6 +257,10 @@ def modules_for(payload, *, disputed=(), rupture_open=False, rupture_forced=Fals
         out.append("impossible_knowledge")
     if (payload or {}).get("carried_reports") or self_.get("carried_reports"):
         out.append("carried_reports")
+    # Finding the way: the full card's spatial-frame, places and en-route
+    # clauses as one class -- the frame rides on nearly every payload.
+    if perception.get("spatial_frame"):
+        out.append("ways_on")
     return out
 
 
@@ -451,6 +455,22 @@ def _named_here(to_text, people):
     return None
 
 
+def _outward_part(act, answers, index):
+    """What of an act others are given (the observable floor,
+    `jev.act_parts`): the parts someone watching could tell, in order. An act
+    in one part is given whole. Unread -- the read-back failed -- only its
+    first part, where the act's own doing stands and not what it is for: the
+    floor must not lean on the model's cooperation, and a motive written in
+    `do` sat after the act it explained in every leak measured."""
+    parts = jev.act_parts(act)
+    if len(parts) < 2:
+        return act
+    keys = [f"do:{index}:part:{q}" for q in range(len(parts))]
+    if not any(k in answers for k in keys):
+        return parts[0]
+    return ", ".join(part for part, key in zip(parts, keys) if jev.pick(answers, key) != "inner")
+
+
 def _people_picked(answers, prefix, h, reply_index):
     return [person for p, person in enumerate(h.people) if jev.yes(answers, f"{prefix}:{reply_index}:kept:{p}")]
 
@@ -506,8 +526,10 @@ def compile_bare(reply, answers, h):
                 # An act that happens only inside the mind is imperceptible
                 # (`observable: ''`); the smoke replay's first draft asked
                 # "could someone watching see or hear it?" and a man entering
-                # an empty schoolhouse was read as unseen.
-                "observable": "" if seen == "inner" else act,
+                # an empty schoolhouse was read as unseen. What others are
+                # given of an outward act is only what a watcher could tell
+                # (`_outward_part`); the Director reads the whole attempt.
+                "observable": "" if seen == "inner" else _outward_part(act, answers, index),
                 "visibility": "concealed" if hidden else "overt",
                 "conceal_from": hidden,
                 "targets": [target] if target else [],

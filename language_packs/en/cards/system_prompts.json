@@ -1178,6 +1178,9 @@
     },
     "repetition": {
       "$text": "character_bare/repetition.txt"
+    },
+    "ways_on": {
+      "$text": "character_bare/ways_on.txt"
     }
   },
   "character_jev": {
@@ -1363,6 +1366,9 @@
     },
     "cue_held": {
       "$text": "character_jev/cue_held.txt"
+    },
+    "act_part_seen": {
+      "$text": "character_jev/act_part_seen.txt"
     },
     "options": {
       "volume": {
@@ -1551,6 +1557,10 @@
         "neither": "Nothing just now shows it either way.",
         "bore_out": "It proved true this time.",
         "belied": "This time it proved untrue."
+      },
+      "part_seen": {
+        "outward": "Yes -- anyone watching could tell it.",
+        "inner": "No -- only you could know it."
       }
     }
   }

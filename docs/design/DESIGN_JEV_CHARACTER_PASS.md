@@ -969,7 +969,12 @@ present every beat, as the full card's clause was), `crisis`
 (`self.tell_grounds`), 129-243 characters each in English -- and
 `repetition`, the full card's self-repetition clause, shipped only when the
 engine's own detector finds a shape the recent lines keep reusing
-(`self.recent_self_refrain`).
+(`self.recent_self_refrain`), and `ways_on`, the full card's
+spatial-frame, places and en-route clauses as one class, shipped with the
+spatial frame: what the frame is, that a missing key means it cannot be
+told from here, to name the place a walk is for rather than its first
+step (the Director writes the walk from the act's words and carries it
+across beats), and that a journey under way can be kept, stopped or left.
 
 ### What the decision model reads back
 
@@ -985,7 +990,7 @@ exactly where commit would have dropped the model's.
 |---|---|
 | volume, `conceal_from`, visibility | `line_volume`; `line_kept_from` per person here -- never the addressee |
 | `interaction.addresses`, `expects_response`, interrupts | `line_to`, `line_expects`, `line_interrupts` |
-| `observable` (and "an inner act has none") | `act_seen`: an act no one could see or hear is imperceptible; otherwise the act's own `do` text is what observers get -- a motive written there reaches them (open, UNBUILT §6.17) |
+| `observable` (and "an inner act has none") | `act_seen`: an act no one could see or hear is imperceptible; otherwise observers get the parts of the act someone watching could tell -- THE OBSERVABLE FLOOR (2026-09-27): `do` split at its punctuation (`act_parts`), `act_part_seen` asked of each part, the Director given the whole attempt, and unread, only the first part. A motive written into `do` reached observers before it (probe: 8 of 8 inner parts caught, 19 of 23 visible kept); one with no punctuation around it still rides with its act |
 | `targets`, follow, ending a contact | `act_target`, `follow`, `contact_end` per standing contact |
 | an act's `look` (a body faced, or `around` for a sweep) and `interrupts` | `act_look` over the people here, all around, or no one -- asked alone too, since a sweep is how a mind takes in an empty room; `act_interrupts` over those who spoke, asked as what stops someone finishing, with a plain "No one." (an interruption truncates the other's line; that wording wrongly flagged 6 of 27 replayed acts where "cut off what someone is saying" flagged 11, both catching 4 of 4 made-up interruptions; walking away while someone talks is still read as one). Restored 2026-09-27 |
 | wants' `serves` and `urgency`; enact/suppress ids | `want_serves`, `want_urgency`; the want is enacted, `held_back` suppressed |
@@ -1018,8 +1023,11 @@ full card instead;
 to the call being replaced is what the owner ruled out for the Room.
 Speaking in a room is a channel, and voices lean toward carrying.
 
-**Not carried yet:** material effects (the substance ledger's
-`release/deposit/add`). Adopting a project is carried by the notebook
+**Not carried, by measurement:** material effects (the substance ledger's
+`release/deposit/add` from a character's own body). The Director's hands
+own substances; the character's lane was a backstop for the Director
+omitting one, and in the owner's database the Director's own resolve named
+the same body for 61 of the 62 emissions full-card characters declared. Adopting a project is carried by the notebook
 (below): an entry with `until` that the decision model reads as something
 the character means to see through. One that adoption would refuse --
 circular, or both slots held (`affect.adoption_refusal`, the one reader

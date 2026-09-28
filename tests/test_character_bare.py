@@ -73,19 +73,21 @@ def test_a_section_ships_only_when_the_moment_calls_for_it():
          "decision": {"they_said_nothing": True, "awaiting_your_answer": {"from": "Mara"},
                       "comes_to_you": [{"offer": "x"}],
                       "speech_budget": {"min_lines": 1, "suggested_lines": 2, "hard_max": 4}},
-         "perception": {"impossible_knowledge": [{"line_ref": "o1"}]}, "carried_reports": [{}]},
+         "perception": {"impossible_knowledge": [{"line_ref": "o1"}], "spatial_frame": {"ahead": [{"room": "Hall"}]}},
+         "carried_reports": [{}]},
         disputed=[{"ref": "event:a", "text": "x"}], rupture_open=True, rupture_forced=True)
     assert loud == ["their_silence", "answer_owed", "offers", "speech_budget", "crisis",
                     "tell_variety", "tell_payoff", "repetition", "dispute", "drive_rupture",
                     "drive_rupture_forced", "project_review", "still_waiting", "impossible_knowledge",
-                    "carried_reports"]
+                    "carried_reports", "ways_on"]
     # Each restored section is the old card's clause, said when it applies,
     # and names the payload key it explains.
     for module, key in (("their_silence", "decision.they_said_nothing"),
                         ("answer_owed", "decision.awaiting_your_answer"),
                         ("offers", "decision.comes_to_you"), ("speech_budget", "decision.speech_budget"),
                         ("crisis", "self.crisis"), ("tell_variety", "self.recent_tells"),
-                        ("tell_payoff", "self.tell_grounds"), ("repetition", "self.recent_self_refrain")):
+                        ("tell_payoff", "self.tell_grounds"), ("repetition", "self.recent_self_refrain"),
+                        ("ways_on", "perception.spatial_frame")):
         for lang in ("en", "ja"):
             assert f"`{key}`" in character_bare.prompt("Wren", [module], lang), (module, lang)
     card = character_bare.prompt("Wren", ["dispute"], "en")
@@ -151,7 +153,7 @@ def test_every_question_reads_only_this_minds_own_holding():
     for name in ("volume", "yesno", "act_kind", "grade", "miss", "channel", "signed", "fit", "tone", "change_kind",
                  "reading_kind", "aim_moved", "belief_touched", "impact", "certain",
                  "agency", "ability", "choices", "note_kind", "note_touched", "strike_kind", "echo_body",
-                 "cue_held"):
+                 "cue_held", "part_seen"):
         pack.update(character_jev_options(name, "en").values())
     held = ({e["text"] for e in h.events} | {m["text"] for m in h.memories} | set(h.people) | set(h.known)
             | set(h.beliefs) | set(h.strategies) | {jev._aim_label(a, "en") for a in h.aims}
@@ -798,3 +800,46 @@ def test_a_mind_changes_its_own_belief_and_the_moment_only_nudges():
     bare = [("change:0:kind", "belief"), ("change:0:belief", "b0")]
     out, warnings = character_bare.compile_bare(reply, _answer(bare)(questions), h)
     assert out["belief_updates"] == [] and any("rests on nothing" in w for w in warnings)
+
+
+def test_an_act_splits_at_its_own_punctuation_and_never_inside_a_number():
+    assert jev.act_parts("circles the junction -- the gap he knows the enemy watches") == [
+        "circles the junction", "the gap he knows the enemy watches"]
+    assert jev.act_parts("pockets the letter, meaning to burn it tonight; turns away") == [
+        "pockets the letter", "meaning to burn it tonight", "turns away"]
+    assert jev.act_parts("counts out 1,000 marks at 10:00 — slowly") == [
+        "counts out 1,000 marks at 10:00", "slowly"]
+    assert jev.act_parts("lifts the latch") == ["lifts the latch"]
+    many = jev.act_parts(", ".join(f"step {i}" for i in range(9)))
+    assert len(many) == jev.MAX_ACT_PARTS and many[-1] == "step 5, step 6, step 7, step 8"
+
+
+def test_observers_get_only_what_a_watcher_could_tell():
+    """The observable floor: a bare `do` is what observers get, and a plan
+    or private knowledge written into it reached them as something seen.
+    Only the parts someone watching could tell are given; the Director
+    still reads the whole attempt; unread, only the act's first part."""
+    h = _holding()
+    act = "pockets the letter, meaning to burn it tonight, and turns to Mara"
+    reply = {**_reply(), "notebook": [], "sequence": [{"do": act, "why": "no one may read it"}]}
+    questions = _both_batteries(h, reply)
+    assert {k for k in questions if k.startswith("do:0:part:")} == {"do:0:part:0", "do:0:part:1", "do:0:part:2"}
+    assert "watching" in questions["do:0:part:1"]["instructions"]
+    script = [("do:0:seen", "outward"), ("do:0:part:0", "outward"), ("do:0:part:1", "inner"),
+              ("do:0:part:2", "outward")]
+    out, _ = character_bare.compile_bare(reply, _answer(script)(questions), h)
+    (element,) = out["sequence"]
+    assert element["attempt"] == act
+    assert element["observable"] == "pockets the letter, and turns to Mara"
+    # Every part only in the mind: nothing is given.
+    inner = [("do:0:seen", "outward")] + [(f"do:0:part:{q}", "inner") for q in range(3)]
+    out, _ = character_bare.compile_bare(reply, _answer(inner)(questions), h)
+    assert out["sequence"][0]["observable"] == ""
+    # Unread: the act's first part, not the whole text.
+    out, _ = character_bare.compile_bare(reply, {}, h)
+    assert out["sequence"][0]["observable"] == "pockets the letter"
+    # One part: asked as a whole, given whole.
+    single = {**reply, "sequence": [{"do": "lifts the latch", "why": "to go in"}]}
+    assert not any(k.startswith("do:0:part:") for k in _both_batteries(h, single))
+    out, _ = character_bare.compile_bare(single, _answer([("do:0:seen", "outward")])(_both_batteries(h, single)), h)
+    assert out["sequence"][0]["observable"] == "lifts the latch"

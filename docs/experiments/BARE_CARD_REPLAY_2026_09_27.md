@@ -513,6 +513,31 @@ first; and drop the interrupt rule -- tested, it would have kept both
 walk-away misreads, because Jev reads turning away from someone as an act
 at them.
 
+Built the same day: association breaking (`cue_held`), the repetition
+section, beliefs by the notebook's rule, the `ways_on` section and the
+observable floor. Two of the plan's premises changed on reading the code.
+**A character never declared a destination as a field**: the Director
+writes a walk from the act's own words and carries it across beats, so
+what the bare card lacked was the full card's guidance -- name the place,
+not the first step -- and `ways_on` says it; no read-back was needed.
+**Material effects were measured, not built**: in the owner's database the
+Director's resolve named the same body as the source for 61 of the 62
+emissions full-card characters declared from their own bodies.
+
+The observable floor, probed before it was built (30 parts of replayed
+acts, 6 made-up leaks, one reader's labels), three wordings of the question
+asked of each part:
+
+| Question asked of each part | Inner caught (of 8) | Visible kept (of 23) |
+|---|---|---|
+| "something your body does ... or something only inside you?" | 5 -- every purpose missed | 22 |
+| "does it say only what anyone present could see or hear?" | 8 | 15 |
+| "could someone watching you tell this part?" -- adopted | 8 | 19 |
+
+The four visible parts the adopted wording dropped are ones a watcher could
+not tell either ("heading for the infirmary", "feeling for the fragment's
+edge"); the Director still reads the whole attempt.
+
 ## What the replay found in the engine
 
 - **A feeling named twice** (fixed, 5d967d68). Where the moment stirred

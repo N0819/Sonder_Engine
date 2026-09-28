@@ -1342,18 +1342,20 @@ on 20 beats of the four test stories, six rounds
 (`docs/experiments/BARE_CARD_REPLAY_2026_09_27.md`): it does the same thing
 at a fifth of the call time, and reads as well or better. Open, in order:
 
-- **What `do` says, observers get.** `compile_bare` sets an act's
-  observable to the model's own `do` text unless the decision model judged
-  the whole act inner, and perception hands it to every observer, so a
-  motive or a piece of private knowledge written there reaches them as
-  something seen ("circles the junction ... -- the gap he knows the enemy
-  watches"; 4 of 20 replies in one layout, 0 in another, about a third of
-  round two's acts). The full card asks for `observable` as its own field;
-  the bare card merges the two, so the floor leans on the model. Proposed,
-  the owner's call: split `do` at its clause boundaries, ask the decision
-  model outward or inner of each clause (`act_seen`, which reads
-  correctly), give observers the outward ones, keep the whole text as
-  `attempt` for the Director.
+- **What `do` says, observers get -- the floor is built (2026-09-27, the
+  owner's word), not yet replayed.** A motive or a piece of private
+  knowledge written into `do` reached every observer as something seen
+  ("circles the junction ... -- the gap he knows the enemy watches"; 4 of 20
+  replies in one layout, 0 in another, about a third of round two's acts).
+  Now an act is split at its punctuation (`jev.act_parts`: dashes,
+  semicolons, commas not inside a number) and each part asked whether
+  someone watching could tell it; observers get those parts, the Director
+  the whole attempt; unread, only the first part. Probed on 30 parts of
+  replayed acts and 6 made-up leaks: 8 of 8 inner parts caught (a plan,
+  private knowledge, a memory, a purpose) and 19 of 23 visible ones kept;
+  the 4 dropped are ones a watcher could not tell either ("heading for the
+  infirmary", "feeling for the fragment's edge"). A motive with no
+  punctuation around it rides with its act.
 - **The layout.** The owner's order -- the sheet, then what the character
   remembers and holds, then the moment with its feelings -- beat today's
   layout under two pairs of blind judges; with the card left as the system
@@ -1426,13 +1428,24 @@ and the Japanese wordings are untested translations), every knob in
 `mind/character_jev.py` (the owner's), and the drive's new place among the
 aims every impact is asked about -- 0 of 227 measured impacts ever served
 it, so drive strain and its rupture window have effectively not run. The
-payload still carries engine key names the full card used to explain and no
-section does yet (the spatial frame, a busy mouth); rendering them in plain
-words is the other half of a bare card. From the review of the old
-contract, the owner chose (2026-09-27): association breaking, the
-self-repetition clause (gated on the refrain detector) and beliefs under
-the notebook's rule are built; navigation is next; material effects wait
-on a measurement (does the Director alone keep a body's own emissions?).
+payload still carries one engine key name the full card explained and no
+section does (a busy mouth). From the review of the old contract, the
+owner chose (2026-09-27): association breaking, the self-repetition clause
+(gated on the refrain detector), beliefs under the notebook's rule and the
+navigation section (`ways_on`) are built, none replayed in play yet.
+Material effects are left to the Director: in the owner's database, of 62
+distinct emissions full-card characters declared from their own bodies,
+the Director's own resolve named the same body as the source for 61 (the
+other turn had no substance ops at all). It saw those declarations, which
+also open its substance channel on a beat that is not physical, so whether
+it writes one unprompted there is untested -- the channel opens on every
+physical beat regardless. Watch for a lost emission when an explicit chat
+first runs under the bare card. A character never declared a destination as a
+field: the Director writes a walk from the act's own words and carries it
+across beats, so what the bare card lacked was the full card's guidance --
+name the place, not the first step. Whether a walk carries under the bare
+card needs a full-turn replay with the Director; the four test stories
+barely travel and no captured chat of the owner's has a journey under way.
 
 <a id="unbuilt-6-18"></a>
 

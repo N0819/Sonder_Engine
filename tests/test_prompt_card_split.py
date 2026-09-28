@@ -49,7 +49,11 @@ LANGUAGES = ("en", "ja")
 #: BOTH lost the same file. It moves when a prompt or fragment is added, and
 #: the move belongs in the same commit as the addition.
 #: 111 at the split (2026-08-29); 112 since `card_person_note` (2026-08-30).
-PART_COUNT = 296   # +2 (2026-09-27): the `character_bare` `repetition`
+PART_COUNT = 298   # +2 (2026-09-27): the `character_bare` `ways_on` section
+                   # (finding the way, shipped with the spatial frame) and
+                   # the `character_jev` `act_part_seen` question (the
+                   # observable floor).
+                   # +2 (2026-09-27): the `character_bare` `repetition`
                    # section (shipped when the engine's refrain detector
                    # fires) and the `character_jev` `cue_held` question (a
                    # learned association breaks when its reading proves

@@ -30,6 +30,7 @@ Every limit below is named, and every one is the owner's.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from llm import decisions
@@ -54,6 +55,10 @@ MAX_READINGS = 6
 #: Notebook entries a reply may write in one beat (adds, changes, strikes).
 MAX_NOTEBOOK_WRITES = 8
 MAX_STEPS = 8
+#: How many parts of one act are asked about, each on its own, for the
+#: observable floor (`act_parts`); an act of more is asked as this many, the
+#: last carrying the rest, so nothing goes unasked.
+MAX_ACT_PARTS = 6
 #: Tells a reply may carry -- the full card's "at most two", now enforced
 #: here instead of asked of the model.
 MAX_TELLS = 2
@@ -152,6 +157,28 @@ def steps(reply):
 
 def lines_of(reply, key, cap):
     return [_text(x) for x in ((reply or {}).get(key) or []) if str(x or "").strip()][:cap]
+
+
+#: The punctuation that separates the parts of one act: dashes, semicolons,
+#: a spaced hyphen, and commas not inside a number (a digit follows a comma
+#: only there: "1,000"). A closed set of marks the engine owns -- never
+#: words -- and no colon, which a time uses.
+_ACT_PART_SPLIT = re.compile(r"\s*(?:--|—|–|;|\s-\s|,(?!\d))\s*")
+
+
+def act_parts(act):
+    """An act's parts, split at its punctuation, at most `MAX_ACT_PARTS`
+    (the last carrying the rest). THE OBSERVABLE FLOOR asks of each whether
+    someone watching could tell it: a bare `do` is what observers get, and a
+    motive, a plan, private knowledge or a memory written into it reached
+    them as something seen ("circles the junction -- the gap he knows the
+    enemy watches"). The card asks for them in `why`; this holds when it is
+    not heeded."""
+    text = " ".join(str(act or "").split())
+    parts = [p.strip() for p in _ACT_PART_SPLIT.split(text) if p and p.strip()]
+    if len(parts) > MAX_ACT_PARTS:
+        parts = parts[:MAX_ACT_PARTS - 1] + [", ".join(parts[MAX_ACT_PARTS - 1:])]
+    return parts
 
 
 # --- the notebook, as the reply writes in it ---------------------------------------
@@ -481,6 +508,20 @@ def after_questions(h, reply):
             any_do = True
             act = _text(row["do"])
             qs[f"do:{index}:seen"] = _choice("act_seen", lang, _set("act_kind", lang), act=act)
+            # THE OBSERVABLE FLOOR (`act_parts`): of an act in several parts,
+            # which could someone watching tell? Probed 2026-09-27 on 30 parts
+            # of replayed acts and 6 made-up leaks (one reader's labels):
+            # asked this way, 8 of 8 inner parts were caught -- a plan, private
+            # knowledge, a memory, a purpose ("so Varga cannot see the
+            # letter") -- and 19 of 23 visible ones kept; the whole-act
+            # question's wording kept 22 of 23 and caught 5 of 8, missing
+            # every purpose; "only what could be seen or heard" caught 8 and
+            # kept 15.
+            parts = act_parts(row["do"])
+            if len(parts) > 1:
+                for q, part in enumerate(parts):
+                    qs[f"do:{index}:part:{q}"] = _choice("act_part_seen", lang, _set("part_seen", lang),
+                                                         act=act, part=_text(part))
             # Where it turns the body and whose words it cuts off: the full
             # card's `look` and `interrupts`, which no bare reply carries. A
             # sweep of the room is asked alone too -- it is how a mind takes
