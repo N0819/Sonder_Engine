@@ -23,7 +23,7 @@
 | `agents/director_prose.py` | 1716 |  | `agents.director_fanout`, `agents.director_scopes`, `core.db`, `llm`, `llm.prompts` |
 | `agents/director_reconcile.py` | 610 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `llm.schemas`, `story`, `world.spatial` |
 | `agents/director_repair.py` | 1541 |  | `core.db`, `llm`, `llm.prompts` |
-| `agents/director_rooms.py` | 425 |  | — |
+| `agents/director_rooms.py` | 1099 |  | — |
 | `agents/director_scopes.py` | 1243 |  | `agents.director_lingua`, `agents.director_views`, `core.db`, `world.survival` |
 | `agents/director_views.py` | 706 |  | `agents.common`, `story.character_schema`, `story.scene`, `world.background_claims` |
 | `agents/dramaturge.py` | 348 |  | `core.db`, `core.logging_utils` |
@@ -444,14 +444,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `schedule_room_predevelopment()` | 350 | 76 lines |
-| `design_rooms()` | 248 | 73 lines |
-| `render_room()` | 121 | 51 lines |
-| `_check()` | 194 | 31 lines |
-| `_merge_room()` | 87 | 22 lines |
-| `_inspect()` | 174 | 18 lines |
-| `_shown()` | 234 | 12 lines |
-| `prepared_rooms()` | 336 | 12 lines |
+| `design_rooms()` | 813 | 182 lines |
+| `schedule_room_predevelopment()` | 1024 | 76 lines |
+| `_doorways_that_fit()` | 488 | 62 lines |
+| `render_room()` | 175 | 51 lines |
+| `_check()` | 248 | 49 lines |
+| `_groundwork()` | 603 | 43 lines |
+| `_finished()` | 770 | 41 lines |
+| `_agree_sizes()` | 695 | 40 lines |
 
 ### `agents/director_scopes.py`
 

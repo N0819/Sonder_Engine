@@ -306,6 +306,7 @@ Not scheduled and not committed to a phase. See the
 - [§2.27 — Room geometry and occlusion — PROTOTYPE, on `main`](UNBUILT_WORLD.md#unbuilt-2-27)
 - [§2.28 — The day cycle's residuals](UNBUILT_WORLD.md#unbuilt-2-28)
 - [§2.37 — Room fidelity — what the 2026-09-04 prototype left](UNBUILT_WORLD.md#unbuilt-2-37)
+- [§2.38 — The room designer's shortcuts: what they leave (2026-09-27)](UNBUILT_WORLD.md#unbuilt-2-38)
 
 **4. Architecture gaps**
 

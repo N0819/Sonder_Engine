@@ -575,6 +575,12 @@
     },
     "check_which_event": {
       "$text": "prose_contract/check_which_event.txt"
+    },
+    "room_done_missing": {
+      "$text": "prose_contract/room_done_missing.txt"
+    },
+    "room_done_unlisted": {
+      "$text": "prose_contract/room_done_unlisted.txt"
     }
   },
   "jev_questions": {

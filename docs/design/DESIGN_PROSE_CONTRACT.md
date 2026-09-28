@@ -225,7 +225,11 @@ transcript. Its tools:
   what the engine made of every fixture, and collisions shown;
 - `check`: the real merge plus `room_layout_lint`, owed rooms, unplaced and
   overlapping fixtures;
-- `submit`: refused while the check fails and steps remain.
+- `submit`: refused while the check fails and steps remain. `done` is held
+  to the same rule since 2026-09-27.
+
+`draft_room` merges; an `adjacent` entry `{"to": ..., "drop": true}` takes a
+doorway out of the DRAFT and never out of the world.
 
 It works to the engine's own division of labour:
 - **Planned rooms.** The Writers' Room plans a room. A beat that enters it has
@@ -249,6 +253,65 @@ It works to the engine's own division of labour:
   plan's wall. It also showed two fixtures hidden under others, which is why
   collisions are now drawn and checked.
 - Caps are `MAX_ROOM_STEPS = 8` and `MAX_ROOM_SECONDS = 150` (named).
+
+### What a model step is no longer spent on (2026-09-27)
+
+Traced whole on the betrayal replay's yard (plain GLM 5.2 on NanoGPT,
+reasoning off), the designer took 42-48 s and all eight steps: two
+inspecting the rooms around the yard, one looking again at a plan it had
+just been shown, and three on contradictions the check would have named the
+step the yard was drafted -- a size word its extent disagreed with, a
+doorway on a wall another doorway held, and a placement that laid the yard
+over the barracks. The step cap stopped it, "clean" only because the engine
+had dropped the bearing from both doorways on that wall. None of that needs
+a model, so code and the decision model take it:
+- **`surroundings`**: the standing rooms around the places being designed,
+  handed over already inspected -- plan exits, rooms with a doorway into the
+  place, the rooms the beat's bodies stand in and their neighbours past
+  anything but a wall (`ROOM_SURROUNDINGS = 6`). A plan's stub nobody has
+  entered is not drawn (shown empty it reads as work: one run developed
+  seven of them in its first step) but still counts as space below.
+- **`placing`**, for each place the Director invented: the floor area its
+  size word covers, and `doorways_that_fit` -- every free wall of those
+  rooms where the place's doorway joins the world, tried by merging it there
+  and asking `room_layout_lint`, at the size's square and its two longest
+  shapes, rejecting any try that loses a bearing anywhere (the silent drop
+  above). A wall with any neighbour on it is never offered, a solid one
+  included: the lint lays out only what a body can pass through, so a room
+  behind a wall is invisible to it (`ROOM_PLACEMENT_SECONDS = 1.5`). The
+  offer is where the place CAN join those rooms, never where it must: told
+  to take "one of" them, a designer hung a harbour café off the theatre's
+  stage-door vestibule because that is where the cast had been standing.
+- **The check runs itself** after every step that changes the draft, and
+  every check first sets each size word to the one its extent measures (the
+  extent decides; the word is only ever its label). When the check says a
+  new place stands where it cannot, it hands back the `doorways_that_fit`
+  the place **as drafted**; when a drafted wall is overfull, its arithmetic
+  (`crowded_walls`: the wall's length, which side of the extent that is, the
+  paces each fixture on it takes -- "needs 7, has 5" had a designer widen
+  the wrong side twice). Calls past a step's cap are named back as not run.
+  And it names a new place the DRAFT joins to nothing (`no_way_in`: no
+  doorway but a wall, no `parent_entity`, no `zone`): the merge would open
+  it onto the room the bodies stood in (`connect_orphan_new_rooms`), which
+  is the engine's floor and usually the wrong street -- a harbour café
+  would have opened onto a theatre's rehearsal room.
+- **The ids given are fixed**: a new id whose name folds to an owed place's
+  name (accents off, case folded) is drafted as that place -- `harbour_cafe`
+  against the reserved `harbour_caf` built the café twice. A standing room
+  is never taken over this way.
+- **Jev says when it is finished.** With the check clean and a description
+  on every owed room, two questions per room against the prose and the
+  room's record (`prose_contract.room_done_missing`: a part of the place the
+  record never mentions; `room_done_unlisted`: someone placed at a feature
+  that is not a fixture). Under both bars (`ROOM_DONE_BARS`: 0.5 and 0.6)
+  the design is finished and no step is spent saying so; a prepared design
+  can finish before the first step. Otherwise what may be missing comes
+  back ONCE, saying to submit if the record already holds it -- a note
+  repeated every step was chased: the designer wrote "this is where Luca
+  stands" into a fixture to satisfy a reading the grave already answered.
+
+Measured on the yard and five recorded cases from three other stories,
+old loop against new: [`ROOM_DESIGNER_SPEED_2026_09_27.md`](../experiments/ROOM_DESIGNER_SPEED_2026_09_27.md).
 
 
 ## Playerless bubbles (2026-09-23, `tools/two_lives_drive.py`, rounds 2–8)

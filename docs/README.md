@@ -309,6 +309,12 @@ modes each one documents.
   as the system message keeps the discipline. Found a feeling named twice
   and decision shards missing from the call ledger (both fixed), and that a
   motive written in `do` reaches observers.
+- [`ROOM_DESIGNER_SPEED_2026_09_27.md`](experiments/ROOM_DESIGNER_SPEED_2026_09_27.md)
+  — what the room designer's steps were spent on, and the loop again once
+  code hands over the rooms around a place and where its doorway fits, the
+  check runs itself, and Jev says when a design is finished: the yard and
+  five recorded cases from three stories, old loop against new, with the
+  question probes and the rooms' detail compared.
 
 ## `archive/` — superseded
 

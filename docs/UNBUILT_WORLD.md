@@ -2141,6 +2141,53 @@ merge's `sync_scene_passages`, the doorways routes; `tests/test_passages.py`,
   picture; the proximity ladder does not. If `near`/`across` should read the
   long side for a corridor, that is a `proximity_rel` change, not a size one.
 
+<a id="unbuilt-2-38"></a>
+
+### 2.38 The room designer's shortcuts: what they leave (2026-09-27)
+
+Built on `worktree-jev-character-tracking`
+([`DESIGN_PROSE_CONTRACT.md`](design/DESIGN_PROSE_CONTRACT.md) § The room
+designer; measured in
+[`ROOM_DESIGNER_SPEED_2026_09_27.md`](experiments/ROOM_DESIGNER_SPEED_2026_09_27.md)):
+the standing rooms and the doorways that fit arrive before the first step,
+the check runs itself, the extent sets the size word, a doorway can be
+dropped from the draft, and Jev says when a design is finished. Left:
+
+- **Jev's stop reads only the rooms the designer OWES.** A designer that
+  chose to build a further place in the same beat -- an inside, a second
+  room the prose opened -- is stopped as soon as the owed ones pass. Not
+  seen in the measured runs; watch for a beat whose prose builds two places
+  and reserves one.
+- **`doorways_that_fit` is one doorway at a time.** A place joined to two
+  rooms must fit both at once, which only the check says; the second run on
+  the yard spent five steps on exactly that before `drop` and the re-fit
+  existed. A pair search is not built.
+- **The layout lint does not lay out a neighbour behind a solid wall**, so
+  a room placed on that side overlaps it unseen. The offered doorways never
+  use a wall with any neighbour on it; the check itself still cannot see
+  the overlap. The fix is the lint's (lay a `wall` edge's room out for the
+  collision test and for nothing else), and it would add rows to standing
+  scenes, so it wants a measurement first.
+- **One false hold remains**: `room_done_missing` reads 0.50-0.54 on the
+  finished osteria (one step). Its bar is the owner's to move.
+- **The rooms chunk still tells the designer to furnish planned rooms "in
+  view".** Written for the spatial hand ("the first time a body enters it
+  or has it in view"), it ships verbatim in the designer's sheet, while the
+  designer owes only the planned rooms the beat ENTERS (Jev's `enter__`
+  questions). One run on the lighthouse rail developed seven unentered
+  stubs and redrafted the designed harbour wall whole -- 81.7 s for its
+  first step, then the wall, unclean. Stubs are no longer drawn in
+  `surroundings`, which removes the loudest invitation; the chunk's clause
+  is the owner's to narrow for the designer (a room in view but not entered
+  could stay a stub until someone goes in, or be prepared between turns by
+  `schedule_room_predevelopment`, which exists for exactly that).
+- **Predevelopment never gets the stop**: with no prose there is nothing to
+  read the room against, so a prepared room still ends on the model's own
+  submit -- out of band, off the turn's clock.
+- **The route is the owner's.** On the owner's NanoGPT `z-ai/glm-5.2:thinking`
+  at `medium`, one loop took 162-174 s and met the 150 s wall; every
+  measurement here is plain `z-ai/glm-5.2` with `reasoning_effort` `off`.
+
 ## 4. Architecture gaps
 
 <a id="unbuilt-4-7"></a>
