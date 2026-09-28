@@ -618,13 +618,16 @@ class TestANonEventIsNotARow:
         """`Sera is the intended recipient of Corin's directive` is not an
         event; it is the addressee, which `targets` already carries. The
         encoder's core and the decision model's `entities` question since
-        2026-09-27. (The sibling that named absence -- silence, stillness,
-        nothing changed -- has no prose-path sheet: UNBUILT_PIPELINE §1.1.)"""
+        2026-09-27; and the sibling that names absence -- silence, stillness,
+        nothing changed -- is back in the core since 2026-09-28, the causal
+        sheet's own rule (UNBUILT_PIPELINE §1.1 item 4)."""
         from llm.prompts import jev_channel_questions, unified_specialist_prompt
         sheet = unified_specialist_prompt([], "en", [])
         assert "a step that changes no record has none" in sheet
-        assert ("Answer no when objects are only described as they already "
-                "are.") in jev_channel_questions(["entities"], "en")["entities"]
+        assert ("silence, stillness or a statement that nothing changed makes "
+                "no event") in sheet
+        assert "described as they already are." in jev_channel_questions(
+            ["entities"], "en")["entities"]
 
 
 class TestTheCoverageDetectorNoLongerBuysARepairCall:

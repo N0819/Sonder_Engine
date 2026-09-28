@@ -1,1 +1,1 @@
-天気：記述がシーン全体の空を変えたときだけ weather を書きます。`sky` と `precipitation` は舞台固有の名前で、動作の軸は air, cloud, electrical, precipitation_kind, intensity, wind, temperature です。省けば変わりません。
+天気：記述がシーン全体の空を変えたときだけ weather を書きます。`sky` と `precipitation` は舞台固有の名前で、動作の軸は air, cloud, electrical, precipitation_kind, intensity, wind, temperature です。省けば変わりません。部屋に閃光と雷鳴を届けるのは electrical だけです：記述の空が閃くときにだけ設定してください――どんな名前もそれを含意せず、どんな降るものもそれを妨げません――それなしに記述された稲妻は、誰にも見えない嵐です。

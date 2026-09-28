@@ -51,41 +51,45 @@ of these things; nothing on the prose path does yet.
    awareness condition, so there is nothing yet to measure a false-positive
    rate on. Enable them on the first corpus that exercises them, and keep
    the model repair off for beats with rows.
-4. **Rules the deleted sheets taught that no prose card carries:**
-   - the movement row's fields: the encoder core lists
-     `{to_room, why, mover, arrives, to_anchor?, pace?}` and never says that
-     `arrives` means the beat ends there, that `to_anchor` is the destination
-     feature named, or that `pace` is a run when the step runs; and never
-     that a target is not the row's own source;
-   - dwelling entry: the resolve payload carries `dwellings` and each
-     figure's `home`, and the rule that adjudicated entry (leave is a line
-     the resident speaks; a request ends at the threshold; forcing the way is
-     an act) was a prose-author clause (`Design.md`, "A room someone sleeps
-     in is theirs");
-   - dealing answers: `present_figures[].answers` reaches the resolve, and
-     "rule the outcome to match; the words, manner and cost are yours" was
-     the prose-author sheet's (`Design.md`, "The Director is shown what a
-     townsperson's ledgers answer");
+4. **Rules the deleted sheets taught that no prose card carries.** The
+   encoder's half landed 2026-09-28, en and ja, from the deleted sheets' own
+   wording: the movement fields (`arrives`, `to_anchor`, `pace`) and a
+   target never being the event's own source (core); a line is said, not
+   done -- a claim is not a fact, a plan or an order not its execution
+   (core); absence makes no event (core); what work leaves behind is the
+   thing's state and never the worker's posture, grip or place (entities);
+   and A88's sky -- `electrical` alone puts a flash and a clap into a room
+   (weather). Replayed on the five resolve encoder calls the chat 154 and
+   122 lanes hold, twice under each sheet: same channel sets, event counts
+   within each sheet's own spread, one malformed answer in 14 new-sheet
+   calls against none in 10 (re-sent four times clean). What remains is the
+   AUTHOR's half, and it is not a prompt edit alone: the prose author's
+   payload is the lean one -- `event_inputs`, the indexes, `standing_
+   relations`, `paradox`, `already_happened`, `pronouns` (checked on 40 of
+   the owner's resolve calls) -- and carries none of `dwellings`,
+   `present_figures` (so no `answers`), `planning_needs` or `author_notes`.
+   `planning_needs`, `author_notes` and `present_figures` without `answers`
+   reach the encoder only; `dwellings` and `answers` reach no call. So each
+   rule below needs its field handed to the author with it, which widens the
+   Director's input on every beat that has one -- proposed shape: a sheet
+   section per field, added only when the field is present, as the narrator's
+   sheet already is (`narrator_prompt(payload keys)`). The owner's capture
+   holds no encoder payloads to size those fields from.
+   - dwelling entry: the rule that adjudicated entry (leave is a line the
+     resident speaks; a request ends at the threshold; forcing the way is an
+     act) was a prose-author clause (`Design.md`, "A room someone sleeps in
+     is theirs"; the text is `prose_author_sheet/17_approach.txt` before
+     c452a50d);
+   - dealing answers: "rule the outcome to match; the words, manner and cost
+     are yours" was the prose-author sheet's (`Design.md`, "The Director is
+     shown what a townsperson's ledgers answer"; same file);
    - an unplanned place: "A PLACE NOBODY PLANNED" is on the opening's sheet
-     only (it was already absent from a later beat's sheet before the
-     causal Director went);
-   - a claim is not an objective fact: the causal sheet said so, and the
-     prose cards keep only the interpret sheet's "speech about a plan, a
-     wish or a command is something said, not something done";
-   - absence makes no row: "silence, stillness and a bare statement that
-     nothing changed do not create extra rows" (the encoder core keeps "a
-     step that changes no record has none", which is about writes, not
-     events);
-   - work on a thing changes it: the causal sheet's "WORK ON A THING CHANGES
-     IT, AND A READ OF IT ANSWERS FROM IT" (route the thing's own channel
-     when it would be different next beat) and "A body's posture, grip and
-     place are never the record of its work";
-   - and two lost on 2026-09-12, when the prose-author sheet became the
-     causal one, on both contracts since: the resolve-time author-notes duty
-     ("AN AUTHOR'S NOTE SAYS WHAT THE PLAN MEANS" is on the opening's sheet
-     alone, while `author_notes` rides every resolve payload), and A88's
-     "a sky flashes when `electrical` says so, and no name implies it".
-   Each is a prompt edit to every story, which is the owner's to make.
+     only (`prose_author_sheet/11_planning_need.txt` before c452a50d);
+   - the resolve-time author-notes duty, lost on 2026-09-12: "AN AUTHOR'S
+     NOTE SAYS WHAT THE PLAN MEANS" is on the opening's sheet alone
+     (`prose_author_sheet/27_author_notes.txt` before c452a50d).
+   Each is a payload field and a prompt edit to every story, which is the
+   owner's to make.
 5. **Tooling.** `tools/contract_bench.py` benches no prose Director step (its
    causal steps went with it).
 6. **The Director's authority limits warn and never correct.** A character
@@ -123,12 +127,22 @@ of these things; nothing on the prose path does yet.
     couriers, carried reports, unratified claims): the decision model's
     candidates are read from the same facts before it answers, so the C8
     saving (48 ms of 205 ms on a 307-body town) is gone.
-10. **Card findings, each a prompt edit and so the owner's:** the encoder's
-    `contact_ops` chunk (en and ja) names `item_matches` and
-    `target_matches`, which no payload carries; `entities__examined` ships
-    only with its channel, and the `entities` question answers no for a
-    thing "only described as it already is", so a pure read may never reach
-    the part; and `jev_questions/entities.txt` enumerates verbs.
+10. *Card findings closed 2026-09-28.* The `contact_ops` chunk no longer
+    names `item_matches`/`target_matches`. The `entities` question lost its
+    verb list and now asks about a close examination, so a pure read reaches
+    `entities__examined`: probed 3x on 16 labelled English passages, the
+    shipped wording 46-47 of 48 against the verb list's 42 (the coin
+    inscription 0.87 and the scanner read 0.85, where the list gave 0.24 and
+    0.39; every "no" at or under 0.27). Japanese kept its own measured best
+    -- an "any of these" form, 25 of 27 against the old 24 -- because the
+    English form's structure, translated, lost the plain state changes
+    (21 of 27). A code rule that a part's yes selects its channel was
+    measured and NOT built: over 68 distinct stage records a part was yes
+    with its channel unselected 37 times, 25 of them `contact_ops__interior`
+    on beats with no contact at all -- doors swinging shut, a time rotor
+    rising in its column, a body at a threshold (0.57-0.72). That part's
+    question over-fires; it costs nothing while it cannot ship alone, and it
+    is why the rule would have been wrong.
 11. **Dead code the deletion left.** `_note_for`, `_SPECIALIST_DICT_CHANNELS`
     / `_SPECIALIST_LIST_CHANNELS`, the `required_channels` and verdict
     branches, `pressure_ticks`, `MINTED_THING_NAME_WORDS`, and
