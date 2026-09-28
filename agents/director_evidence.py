@@ -35,6 +35,7 @@ from .common import (
     _dict,
     _dict_list,
     _list,
+    _quote_body,
     character_scene_keys,
 )
 from .director_lingua import _ling
@@ -1211,6 +1212,22 @@ def beat_timeline(resolved, interp, declarations, *, identity_index=None):
         onset.sort(key=lambda element: int(element.get("chrono_id") or 0))
         onset_ids = {str(element.get("event_id")) for element in onset
                      if element.get("event_id")}
+
+        def _spoken(element):
+            actor = str(element.get("actor")
+                        or element.get("source_entity_id") or "")
+            text = _quote_body(str(element.get("text") or ""))
+            if element.get("type") != "speech" or not actor or not text:
+                return None
+            return str(identities.get(actor) or actor).casefold(), text
+
+        # THE SAME RULE FOR THE LINE ITSELF. The prose Director's resolve
+        # account quotes a line the player already said at interpret, and its
+        # encoder files it again -- with no citation to match on, and with
+        # whatever tags it wrote. It is one utterance, not two: the onset
+        # occurrence keeps its own tags, and the transcription's overt,
+        # unaddressed copy of a whisper never reaches a view (2026-09-28).
+        onset_lines = {key for key in map(_spoken, onset) if key}
         timeline, seen = [], set()
         for stage, elements in (("interpret", onset),
                                 ("resolve", (resolved or {}).get("sequence") or [])):
@@ -1222,6 +1239,8 @@ def beat_timeline(resolved, interp, declarations, *, identity_index=None):
                 # assertion. Keep its first, onset occurrence. Contestable
                 # declarations were excluded above and reach only this pass.
                 if stage == "resolve" and cited in onset_ids:
+                    continue
+                if stage == "resolve" and _spoken(element) in onset_lines:
                     continue
                 event_id = str(element.get("event_id") or "").strip()
                 span = element.get("chrono_id") or event_id or at

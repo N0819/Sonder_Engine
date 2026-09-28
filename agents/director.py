@@ -6968,6 +6968,20 @@ def director_resolve(ctx, nonce, _corrections=None):
             for field in ("volume", "tone", "visibility", "conceal_from"):
                 if field in tags:
                     line[field] = tags[field]
+            # A DECLARED LINE'S TAGS ARE THE DECLARATION'S. A resolve moment
+            # is the encoder's transcription of the line -- for a character's
+            # own declaration, which reaches only the resolve, the only
+            # occurrence there is -- and a transcription may leave the tags off
+            # or write them wrong. The re-stamp above protects the log's own
+            # entries; this protects the occurrence that replaces them.
+            # Measured 2026-09-28: an echo filed `overt` carried a declared
+            # whisper into the view of the mind it was concealed from.
+            stage = (moment.get("event_key") or ("",))[0]
+            if (stage == "resolve" and cited.get("type") != "speech"
+                    and key in speech_concealment):
+                visibility, conceal_from, volume = speech_concealment[key]
+                line.update(visibility=visibility,
+                            conceal_from=list(conceal_from), volume=volume)
             aimed = tags.get("intended_target") or (tags.get("targets") or [None])[0]
             line["intended_target"] = aimed
             occurrences.append(line)

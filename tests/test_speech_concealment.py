@@ -445,11 +445,6 @@ def test_perception_outcome_does_not_inject_concealed_dialogue(temp_db, monkeypa
 # line the Director genuinely originates still carries its own tags.
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="the encoder's echo of a declared line is filed with its own tags, "
-           "or the defaults, instead of being re-stamped from the declaration "
-           "(UNBUILT_PIPELINE §1.1)")
 def test_a_declared_whisper_survives_the_model_omitting_volume_entirely(temp_db, prose_director, monkeypatch):
     """The trimmed contract invites the model to leave volume out. If the
     re-stamp did not cover omission as well as mis-transcription, the trim
@@ -458,8 +453,9 @@ def test_a_declared_whisper_survives_the_model_omitting_volume_entirely(temp_db,
     an optimization.
 
     Ported 2026-09-27: the model that may leave the tags off is now the
-    encoder, which files the declared line back as a speech event. Held as a
-    strict xfail: the echo is not re-stamped (UNBUILT_PIPELINE §1.1).
+    encoder, which files the declared line back as a speech event -- and its
+    transcription took the defaults, overt and normal, until the declared
+    line's tags were made to win (2026-09-28).
     """
     ctx, char_id = _make_director_ctx(temp_db)
     ctx.director_interpret["sequence"][0]["volume"] = "whisper"
@@ -476,6 +472,95 @@ def test_a_declared_whisper_survives_the_model_omitting_volume_entirely(temp_db,
         assert entry["volume"] == "whisper", entry
         assert entry["visibility"] == "concealed", entry
         assert char_id in entry["conceal_from"], entry
+
+
+def _echo_overt(text, source):
+    """The encoder filing a declared line back with its tags WRONG, which is
+    worse than leaving them off: an explicit overt, normal, concealed from
+    nobody."""
+    return encoder_event(text, source=source, speech=True, volume="normal",
+                         visibility="overt", conceal_from=[])
+
+
+def test_a_declared_line_the_encoder_files_back_overt_keeps_its_declared_tags(
+        temp_db, prose_director, monkeypatch):
+    """The declaration's volume, visibility and conceal_from win over the
+    transcription's, whatever the transcription says."""
+    ctx, char_id = _make_director_ctx(temp_db)
+    ctx.director_interpret["sequence"][0]["volume"] = "whisper"
+
+    out = _prose_resolve(ctx, monkeypatch, events=[
+        _echo_overt("The shipment arrives at midnight.", "persona:primary")])
+
+    entries = [d for d in out["dialogue_log"] if "midnight" in d["exact_quote"]]
+    assert len(entries) == 1, entries
+    assert entries[0]["volume"] == "whisper"
+    assert entries[0]["visibility"] == "concealed"
+    assert char_id in entries[0]["conceal_from"]
+
+
+def test_a_characters_declared_line_filed_back_overt_keeps_its_declared_tags(
+        temp_db, prose_director, monkeypatch):
+    """A character's own declaration reaches only the resolve, so the
+    encoder's transcription is the only occurrence of the line there is -- and
+    its tags must still be the declaration's."""
+    ctx, _char_id = _make_director_ctx(
+        temp_db,
+        character_results={
+            "name": "Reya", "speech": None, "action": None,
+            "sequence": [{"type": "speech", "text": "Don't tell the Doctor.",
+                          "volume": "whisper", "tone": "low",
+                          "visibility": "concealed", "conceal_from": ["the_doctor"]}],
+        },
+    )
+
+    out = _prose_resolve(ctx, monkeypatch, prose="Reya murmurs something.",
+                         events=[_echo_overt("Don't tell the Doctor.",
+                                             f"character:{_char_id}")])
+
+    entries = [d for d in out["dialogue_log"] if "tell the Doctor" in d["exact_quote"]]
+    assert len(entries) == 1, entries
+    assert entries[0]["volume"] == "whisper"
+    assert entries[0]["visibility"] == "concealed"
+    assert "the_doctor" in entries[0]["conceal_from"]
+
+
+def test_an_echo_of_an_executed_line_is_not_a_second_utterance(
+        temp_db, prose_director, monkeypatch):
+    """The player's line was asserted at interpret; the resolve's account
+    quotes it again and the encoder files it again. That is ONE utterance:
+    the onset occurrence stands with its own tags and the echo adds nothing --
+    the rule `beat_timeline` already applied to a re-filed citation, applied
+    to the line itself. Two occurrences would render the whisper twice."""
+    ctx, char_id = _make_director_ctx(temp_db)
+    ctx.director_interpret["sequence"][0].update(
+        volume="whisper", actor="persona:primary", chrono_id=1, event_id="e1")
+
+    out = _prose_resolve(ctx, monkeypatch, events=[
+        _echo_overt("The shipment arrives at midnight.", "persona:primary")])
+
+    entries = [d for d in out["dialogue_log"] if "midnight" in d["exact_quote"]]
+    assert len(entries) == 1, entries
+    assert entries[0]["volume"] == "whisper"
+    assert entries[0]["visibility"] == "concealed"
+    assert char_id in entries[0]["conceal_from"]
+
+
+def test_the_concealed_line_reaches_no_view_of_the_mind_it_is_concealed_from(
+        temp_db, prose_director, monkeypatch):
+    """What the tags are FOR. With the transcription's tags winning, the
+    outcome pass's dialogue backstop carried the whisper into the view of the
+    very mind it was declared concealed from."""
+    import agents.perception as perception
+
+    ctx, char_id = _make_director_ctx(temp_db)
+    ctx.director_interpret["sequence"][0]["volume"] = "whisper"
+    ctx.director_resolve = _prose_resolve(ctx, monkeypatch, events=[
+        _echo_overt("The shipment arrives at midnight.", "persona:primary")])
+
+    result = perception.perception_outcome(ctx, nonce=0)
+
+    assert "midnight" not in (result["views"].get(str(char_id)) or "")
 
 
 def _voiceable_creature(temp_db, ctx):

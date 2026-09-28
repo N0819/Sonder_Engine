@@ -13,9 +13,9 @@
 | `agents/character_evidence.py` | 146 |  | — |
 | `agents/common.py` | 11820 | Shared normalization, lore, delivery, and perception helpers. | `core.db`, `core.pipeline_context`, `llm.llm_quality`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `mind.theory_of_mind`, `persist.commit`, `story`, `story.character_schema`, `story.provenance_text`, `story.scene`, `world`, `world.spatial` |
 | `agents/composer.py` | 5194 |  | `agents.common`, `core.pipeline_context`, `story.provenance_text`, `story.scene`, `world.spatial` |
-| `agents/director.py` | 7197 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
+| `agents/director.py` | 7211 | Scene establishment, player interpretation, and objective resolution. | `agents`, `agents.common`, `agents.director_contact`, `agents.director_evidence`, `agents.director_fanout`, `agents.director_floors`, `agents.director_lingua`, `agents.director_movement`, `agents.director_reconcile`, `agents.director_scopes`, `agents.director_views`, `core.db`, `llm`, `llm.prompts`, `llm.providers`, `llm.schemas`, `mind.memory`, `story`, `story.attire`, `story.character_schema`, `story.scene`, `world.causality`, `world.mechanics`, `world.paradox`, `world.spatial`, `world.survival` |
 | `agents/director_contact.py` | 499 |  | `story.character_schema`, `world.spatial` |
-| `agents/director_evidence.py` | 3708 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
+| `agents/director_evidence.py` | 3727 |  | `agents.common`, `agents.director_lingua`, `agents.director_scopes`, `llm`, `story.character_schema`, `world.spatial` |
 | `agents/director_fanout.py` | 1138 |  | `agents.common`, `agents.director_evidence`, `agents.director_scopes`, `core.db`, `story.character_schema`, `world.spatial`, `world.survival` |
 | `agents/director_floors.py` | 2271 |  | `agents.common`, `agents.director_lingua`, `agents.director_movement`, `story.character_schema`, `story.scene`, `world.mechanics`, `world.spatial` |
 | `agents/director_lingua.py` | 29 |  | — |
@@ -317,7 +317,7 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `director_resolve()` | 4759 | 2405 lines |
+| `director_resolve()` | 4759 | 2419 lines |
 | `director_interpret()` | 1364 | 920 lines |
 | `_reconcile_resolution()` | 2572 | 540 lines |
 | `_run_specialists()` | 3144 | 425 lines |
@@ -343,14 +343,14 @@
 
 | Function | Start | Size |
 |---|---:|---:|
-| `_evidence_present()` | 2055 | 359 lines |
-| `normalize_causal_ledger()` | 2630 | 265 lines |
-| `causal_world_index()` | 2935 | 176 lines |
-| `beat_event_ledger()` | 1268 | 123 lines |
-| `beat_timeline()` | 1173 | 93 lines |
-| `_fold_derived_manifest_events()` | 3620 | 89 lines |
-| `_span_items()` | 3247 | 86 lines |
-| `span_slices()` | 1903 | 85 lines |
+| `_evidence_present()` | 2074 | 359 lines |
+| `normalize_causal_ledger()` | 2649 | 265 lines |
+| `causal_world_index()` | 2954 | 176 lines |
+| `beat_event_ledger()` | 1287 | 123 lines |
+| `beat_timeline()` | 1174 | 111 lines |
+| `_fold_derived_manifest_events()` | 3639 | 89 lines |
+| `_span_items()` | 3266 | 86 lines |
+| `span_slices()` | 1922 | 85 lines |
 
 ### `agents/director_fanout.py`
 
