@@ -93,11 +93,11 @@ from mind.memory_summaries import (  # noqa: F401
     save_memory_summary, search_memory_summaries, summary_support,
 )
 from mind.memory_context import (  # noqa: F401
-    _origin_on_drift, _summary_id, _with_reading,
+    RECENT_TURNS, _origin_on_drift, _summary_id, _with_reading,
     build_character_memory_context,
 )
 from mind.memory_jev import (  # noqa: F401
-    jev_memory_packet, memory_line, memory_net, memory_state,
+    NET_SIZE, jev_memory_packet, memory_line, memory_net, memory_state,
 )
 from mind.memory_time import (  # noqa: F401
     JUST_NOW, MemoryClock, UNIT_LADDER, WHEN_BEFORE_RECORD, WHEN_UNPLACEABLE,

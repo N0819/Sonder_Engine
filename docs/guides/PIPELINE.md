@@ -824,9 +824,12 @@ and worked out, in the order it happened, each row saying which it is in
 `epistemic_origin` (`what_i_experienced` / `what_i_was_told` /
 `what_i_concluded`). It was three lanes by kind, told and concluded kept out
 of the chronology as annotations, until the owner's ruling of 2026-09-28:
-chronological order, the kind on every entry. The payload the model reads
-ends with `perception` (`character_bare.perception_last`), what reached the
-mind just now being the most immediate thing it answers.
+chronological order, the kind on every entry. The window is the last 8 turns,
+chosen by code and kept out of the decision model's recall net, which grades
+100 older rows and keeps 30. The payload the model reads ends with the past
+running up to the present (`character_bare.reading_order`): the recalled
+older memories, then the recent turns, then `perception` last, what reached
+the mind just now being the most immediate thing it answers.
 
 Dialogue continuity is tracked at two levels. `recent_self_lines` retains a
 short verbatim window for exact reissues and repeated sentence shapes;

@@ -369,27 +369,46 @@ def test_the_bare_contract_runs_the_step_and_its_note_reaches_the_next_call(stor
     assert captured["self"]["my_notes"] == [{"turn": 2, "note": "hearing the visitor out"}]
 
 
-def test_perception_is_the_last_thing_the_character_reads(story, monkeypatch):
+def test_the_past_runs_up_to_the_present_and_perception_is_read_last(story, monkeypatch):
     """The owner, 2026-09-28: "Perception should be the very last as it is
-    the most imediate concern." Checked on what the model is actually sent,
-    after every late key is in; the order is the only change."""
+    the most imediate concern", and 8 turns of recent memories "and before
+    that in the payload 30 recalled older memories". Checked on what the
+    model is actually sent, after every late key is in; order only."""
     import agents.character as character
-    from agents.character_bare import perception_last
+    from agents.character_bare import reading_order
     char_id, context, _commit = story
     sent = []
 
     def model(role, step_key, system, payload, **kwargs):
-        sent.append(list(payload))
+        sent.append(deepcopy(payload))
         return deepcopy(_bare_reply())
 
     monkeypatch.setattr(decisions, "OVERRIDE", lambda state, questions: _answer([])(questions))
     monkeypatch.setattr(character, "_agent_json", model)
     character.character_step(context(), char_id, 1)
-    assert sent and sent[0][-1] == "perception", sent
-    assert sent[0][0] == "self"
-    reordered = perception_last({"self": 1, "perception": 2, "memory": 3, "decision": 4})
-    assert list(reordered) == ["self", "memory", "decision", "perception"]
-    assert perception_last({"self": 1}) == {"self": 1}
+    assert sent and list(sent[0])[-2:] == ["memory", "perception"], list(sent[0])
+    assert list(sent[0])[0] == "self"
+    assert list(sent[0]["memory"])[-2:] == ["recalled_old_memories", "recent_memories"]
+    reordered = reading_order({"self": 1, "perception": 2, "memory": {
+        "recent_memories": [], "recalled_old_memories": [], "unresolved_from_past": {},
+        "may_mean_otherwise": []}, "decision": 4})
+    assert list(reordered) == ["self", "decision", "memory", "perception"]
+    assert list(reordered["memory"]) == ["unresolved_from_past", "may_mean_otherwise",
+                                         "recalled_old_memories", "recent_memories"]
+    assert reading_order({"self": 1}) == {"self": 1}
+
+
+def test_the_emotional_pass_feels_the_recalled_and_the_recent_memories():
+    """The owner, 2026-09-28: the recent memories "should remain in the jev
+    emotional run alongside the 30 recalled older memories". The pass read
+    the recalled lane alone, and its best eight."""
+    from mind import affect_pass
+    recalled = [{"memory_ref": f"old{i}", "details": f"older memory {i}"} for i in range(30)]
+    recent = [{"memory_ref": f"new{i}", "details": f"recent memory {i}"} for i in range(20)]
+    context = {"recalled_old_memories": recalled, "recent_memories": recent + [recalled[0]],
+               "_internal": {"recalled_by_grade": [m["memory_ref"] for m in reversed(recalled)]}}
+    refs = [m["ref"] for m in affect_pass.memories_from(context)]
+    assert refs == [f"old{i}" for i in reversed(range(30))] + [f"new{i}" for i in range(20)]
 
 
 def test_a_kept_note_is_committed_and_shown_in_the_next_calls_notebook(story, monkeypatch):

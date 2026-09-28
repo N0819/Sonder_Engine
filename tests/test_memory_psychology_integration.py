@@ -213,6 +213,33 @@ def test_recent_memory_is_one_chronological_stream_each_row_saying_its_kind(
         assert lane not in context
 
 
+def test_the_recent_window_is_eight_whole_turns_and_recall_is_only_older(temp_db):
+    """The owner, 2026-09-28: "8 turns worth of recent memories", sent by
+    code, "with the recent memories excluded from the RRF search". Every row
+    of the window is delivered (it was the newest 12 of 4 turns), and the
+    decision model's net never sees one of them."""
+    chat_id, char_id = _chat_and_char(temp_db)
+    for turn in range(12):
+        memory.add_memory(chat_id, char_id, None, "episode", "witnessed", .8,
+                          f"The bell rang at turn {turn}.", turn_idx=turn,
+                          event_key=f"event:episode:{turn}")
+        memory.add_memory(chat_id, char_id, None, "dialogue", "heard", .8,
+                          f"Mara said the bell rang at turn {turn}.", turn_idx=turn,
+                          event_key=f"event:line:{turn}")
+
+    context = memory.build_character_memory_context(
+        chat_id, char_id, 12, "The bell rings again.", {})
+
+    def turns(rows):
+        return {int(m["memory_ref"].rsplit(":", 1)[1]) for m in rows}
+
+    assert memory.RECENT_TURNS == 8
+    assert turns(context["recent_memories"]) == set(range(4, 12))
+    assert len(context["recent_memories"]) == 16
+    assert context["recalled_old_memories"], "the older turns are recallable"
+    assert turns(context["recalled_old_memories"]) <= set(range(4))
+
+
 def test_encoding_affect_round_trips_through_snapshot_restore(temp_db):
     chat_id, char_id = _chat_and_char(temp_db)
     memory.add_memory(

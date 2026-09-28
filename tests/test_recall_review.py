@@ -449,8 +449,10 @@ class TestAMindIsToldWhyItWentLooking:
             memory.add_memory(chat_id, char_id, None, "episodic", "witnessed",
                               0.6, "The ledger was ruined in the flood, %d." % i,
                               turn_idx=i + 1)
+        # Past the recent window (`memory.RECENT_TURNS`), so the four rows are
+        # older memories and recall can reach them.
         ctx = memory.build_character_memory_context(
-            chat_id, char_id, current_turn_idx=9,
+            chat_id, char_id, current_turn_idx=5 + memory.RECENT_TURNS,
             current_view="the ledger was ruined in the flood",
             active_state={}, ponder_query="the ledger in the flood",
             ponder_why="Tom keeps asking and I cannot say")

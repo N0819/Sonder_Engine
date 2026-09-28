@@ -40,7 +40,6 @@ from mind.affect_appraisal import _fill, _probabilities
 #: How much of what this mind holds is offered, per call.
 MAX_PEOPLE = 6
 MAX_EVENTS = 8
-MAX_MEMORIES = 12
 MAX_BELIEFS = 8
 MAX_ASSOCIATIONS = 6
 #: Concerns the decision model checks each beat (did what would settle it

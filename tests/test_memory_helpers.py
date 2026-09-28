@@ -294,7 +294,7 @@ class TestHowManyMemoriesReachACharacter:
 
     def test_the_limit_is_the_one_that_was_measured(self):
         from mind import memory
-        assert memory._RECALL_LIMIT == 24
+        assert memory._RECALL_LIMIT == 30
 
     def test_the_default_is_taken_from_the_constant(self):
         """So tuning it is one edit, not a hunt through call sites."""
@@ -324,9 +324,13 @@ class TestHowManyMemoriesReachACharacter:
         unbounded payload is not the conclusion. 32 and 48 are measured on
         retrieval alone and have no conduct arm, which is why they are not
         here.
+
+        Raised 24 -> 30 on 2026-09-28 by the owner's design: the decision
+        model grades a net of 100 and keeps its top 30. The curve above ranked
+        by similarity; 30 under the decision model's grades is unmeasured.
         """
         from mind import memory
-        assert 16 < memory._RECALL_LIMIT <= 24
+        assert 16 < memory._RECALL_LIMIT <= 30 < memory.NET_SIZE
 
     def test_the_abstention_statistic_does_not_ride_the_payload_size(self):
         """These answer different questions and were the same number by

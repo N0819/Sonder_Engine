@@ -231,17 +231,34 @@ unresolved_from_past:      the ONE list of what is still open -- live
                            concerns and dangling summary threads, interleaved
                            so neither source's length crowds out the other,
                            deduped (≤6)
-recent_memories:           the last 4 turns as ONE chronological stream, oldest
-                           first, each row carrying its kind in
-                           `epistemic_origin` (what_i_experienced /
-                           what_i_was_told / what_i_concluded) -- three
-                           lanes by kind until the owner's 2026-09-28 ruling
+recent_memories:           every row of the last 8 turns (`RECENT_TURNS`),
+                           chosen by code and never graded, as ONE
+                           chronological stream, oldest first, each row
+                           carrying its kind in `epistemic_origin`
+                           (what_i_experienced / what_i_was_told /
+                           what_i_concluded); absorption cuts it to the newest
+                           8 or 4 rows. The whole window stays out of recall.
+                           (Three lanes by kind, 4 turns, newest 12, until the
+                           owner's 2026-09-28 rulings.)
 recalled_old_memories:     the decision model's pick (mind/memory_jev.py): a
                            net of 100 by equal-weight RRF over thirteen lanes,
-                           each row graded by Jev for the moment and for what
-                           the mind is trying to do, best 24 (absorption
-                           narrows it), a reworded belief kept once, minus
-                           anything already recent; listed oldest first
+                           over everything OLDER than the recent window, each
+                           row graded by Jev for the moment and for what the
+                           mind is trying to do, best 30 (absorption narrows
+                           it to 8 or 4), a reworded belief kept once; listed
+                           oldest first
+```
+
+On the wire (`character_bare.reading_order`) the payload ends with `memory`
+then `perception`, and the memory block ends with `recalled_old_memories`
+then `recent_memories`: the past runs up to the present, which is read last.
+The emotional pass (`mind/affect_pass.memories_from`) and the read-back
+(`agents/character_bare._delivered_memories`) read every memory the payload
+carries -- the recalled ones and the recent ones -- with no cap of their own
+(they took the best 8 recalled, and the first 12 delivered, until
+2026-09-28).
+
+```
 autobiographical_summary:  first-hand only — the LATEST window (§8)
 summary_key_phrases
 summary_citations:         typed past ids/when/epistemic origin for summaries

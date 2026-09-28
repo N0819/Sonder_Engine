@@ -78,21 +78,38 @@ def _heard_lines(observations, own):
     return out[:jev.MAX_HEARD_LINES]
 
 
-def perception_last(payload):
-    """The payload with `perception` moved to the very end.
+#: The payload's closing keys, in the order they are read, and the memory
+#: block's own (owner, 2026-09-28).
+PAYLOAD_CLOSES_WITH = ("memory", "perception")
+MEMORY_CLOSES_WITH = ("recalled_old_memories", "recent_memories")
 
-    WHAT REACHED THE MIND JUST NOW IS READ LAST, nearest the reply, because it
-    is the most immediate thing the character has to answer (owner,
-    2026-09-28: "Perception should be the very last as it is the most
-    imediate concern"). Who they are and what they remember come first, as in
-    the order the blind judges preferred in round six of the bare-card replay
+
+def _closing(mapping, last):
+    out = {key: value for key, value in mapping.items() if key not in last}
+    out.update((key, mapping[key]) for key in last if key in mapping)
+    return out
+
+
+def reading_order(payload):
+    """The payload as the character reads it: everything else, then what it
+    remembers -- the recalled older memories, then the recent turns -- and
+    what reached it just now at the very end.
+
+    THE PRESENT IS READ LAST, nearest the reply, because it is the most
+    immediate thing the character has to answer, and the past runs up to it
+    in order (owner, 2026-09-28: "Perception should be the very last as it is
+    the most imediate concern"; 8 turns of recent memories "and before that
+    in the payload 30 recalled older memories"). The order the blind judges
+    preferred in round six of the bare-card replay had the moment last too
     (`docs/experiments/BARE_CARD_REPLAY_2026_09_27.md`). Applied to the wire
-    payload, after every key is in -- the late ones included -- so nothing
-    lands after it. Order only: no key is added, dropped or changed."""
-    if not isinstance(payload, dict) or "perception" not in payload:
+    payload after every key is in -- the late ones and the dispute section
+    included -- so nothing lands after them. Order only: no key is added,
+    dropped or changed."""
+    if not isinstance(payload, dict):
         return payload
-    out = {key: value for key, value in payload.items() if key != "perception"}
-    out["perception"] = payload["perception"]
+    out = _closing(payload, PAYLOAD_CLOSES_WITH)
+    if isinstance(out.get("memory"), dict):
+        out["memory"] = _closing(out["memory"], MEMORY_CLOSES_WITH)
     return out
 
 
@@ -108,7 +125,13 @@ def _delivered_memories(memory_context):
             continue
         seen.add(ref)
         out.append({"ref": ref, "text": _text(text)})
-    return out[:jev.MAX_MEMORIES]
+    # EVERY DELIVERED MEMORY, not the first twelve. The walk meets the lanes in
+    # the payload's order, and with the recent turns ahead of recall the
+    # twelve were the recent rows alone: the recalled memories never reached
+    # a dispute, an echo or a read-back (owner, 2026-09-28: the recent
+    # memories belong in the decision model's run "alongside the 30 recalled
+    # older memories").
+    return out
 
 
 def holding_from(name, sheet, payload, observations, memory_context, active, *,

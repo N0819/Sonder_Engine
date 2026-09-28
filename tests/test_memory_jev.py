@@ -129,7 +129,7 @@ def test_a_silent_decision_model_leaves_the_nets_order(_bank, monkeypatch):
 
     monkeypatch.setattr(decisions, "OVERRIDE", down)
     ctx = _context(chat_id, char_id, person=PERSON)
-    assert len(ctx["recalled_old_memories"]) == 24
+    assert len(ctx["recalled_old_memories"]) == memory._RECALL_LIMIT
     assert "DecisionError" in ctx["_internal"]["picker"]["unasked"]
 
 

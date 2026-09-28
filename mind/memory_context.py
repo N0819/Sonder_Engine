@@ -254,8 +254,15 @@ def _origin_on_drift(chat_id, char_id, current_turn_idx, active_state, *,
     }}
 
 
+#: How many turns back the recent memories reach: all of them, chosen by code
+#: alone and never graded (owner, 2026-09-28: "I say we should have 8 turns
+#: worth of recent memories"). The whole window stays out of the decision
+#: model's recall net -- recall is for what is older.
+RECENT_TURNS = 8
+
+
 def build_character_memory_context(chat_id, char_id, current_turn_idx, current_view, active_state, *,
-                                   recent_turns=4, recall_limit=_RECALL_LIMIT, here=None,
+                                   recent_turns=RECENT_TURNS, recall_limit=_RECALL_LIMIT, here=None,
                                    in_sight=None, absorption=0.0,
                                    ponder_query="", ponder_why="",
                                    resurfaced_subject="", bank=None,
@@ -296,11 +303,18 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
     elif absorption >= 0.35:
         recent_limit, recall_limit, summary_limit = 8, min(recall_limit, 8), 1
     else:
-        recent_limit, summary_limit = 12, _SUMMARY_RECALL_LIMIT
-    recent = recent_memory_buffer(
+        # The whole window, however many rows its turns hold (the owner's
+        # "8 turns worth"); it was the newest 12 of 4 turns.
+        recent_limit, summary_limit = None, _SUMMARY_RECALL_LIMIT
+    window = recent_memory_buffer(
         chat_id, char_id, current_turn_idx, turns=recent_turns,
-        limit=recent_limit, bank=bank)
-    recent_ids = {m["id"] for m in recent}
+        limit=None, bank=bank)
+    recent = window if recent_limit is None else window[-recent_limit:]
+    # THE WHOLE WINDOW IS KEPT OUT OF RECALL, whatever absorption delivers of
+    # it (owner, 2026-09-28: "with the recent memories excluded from the RRF
+    # search"): recall is for what is older than the recent turns, so a row
+    # the narrowed buffer did not deliver does not come back as "recalled".
+    recent_ids = {m["id"] for m in window}
     summary = get_memory_summary(
         chat_id, char_id, before_turn_idx=current_turn_idx)
     # WHAT IS STILL UNSETTLED, COMPUTED ONCE. Two things leave a question
@@ -705,8 +719,6 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
             "temporal_status": "remembered_past",
             "items": list(unresolved_items),
         },
-        "recent_memories": recent_memories,
-        "recalled_old_memories": recalled_projected,
         # First-hand only. What reached this character through someone else's
         # account, and what they worked out for themselves, are carried
         # separately below and must not be folded in here.
@@ -719,6 +731,12 @@ def build_character_memory_context(chat_id, char_id, current_turn_idx, current_v
         **ponder_payload,
         **resurfaced_payload,
         **provenance_summaries,
+        # OLDER, THEN RECENT, LAST (owner, 2026-09-28: the 30 recalled older
+        # memories, "and before that in the payload", ahead of the recent
+        # turns; perception after all of it -- `character_bare.reading_order`
+        # keeps both ends in place on the wire).
+        "recalled_old_memories": recalled_projected,
+        "recent_memories": recent_memories,
     }
 
 # Views that record no perceptible event. Matched on the engine's OWN

@@ -4493,7 +4493,7 @@ def character_step(ctx, cid, nonce):
     # model maps its lines to the rows afterwards -- so the handles are not
     # read back.
     _wire_payload, _handles = compact_character_evidence(payload)
-    _wire_payload = character_bare.perception_last(_wire_payload)
+    _wire_payload = character_bare.reading_order(_wire_payload)
 
     out = _agent_json(
         role,

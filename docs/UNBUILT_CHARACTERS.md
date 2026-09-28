@@ -1365,10 +1365,11 @@ at a fifth of the call time, and reads as well or better. Open, in order:
   remembers and holds, then the moment with its feelings -- beat today's
   layout under two pairs of blind judges; with the card left as the system
   message ("sectioned") it kept the fewest faults of three layouts. Built
-  2026-09-28, the owner's ruling that day: `perception` is the very last key
-  of the payload the model reads (`character_bare.perception_last`), and the
-  recent memories are one chronological stream with each row's kind
-  (`recent_memories`). Still to build: the feelings ride in `self.feelings`
+  2026-09-28, the owner's rulings that day: the payload the model reads ends
+  with the past running up to the present (`character_bare.reading_order`)
+  -- the 30 recalled older memories, then every row of the last 8 turns as
+  one chronological stream with each row's kind (`recent_memories`), then
+  `perception` last. Still to build: the feelings ride in `self.feelings`
   at the front, not with the moment; and the sectioned rendering -- the
   first request and its same-request re-asks take the rendered sections as
   the user message, the repair and fallback rungs keep the payload dict.

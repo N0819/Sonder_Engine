@@ -40,7 +40,8 @@ from mind import affect_mix as mix
 #: buried: every one is the owner's.
 MAX_EVENTS = 8
 MAX_PEOPLE = 3
-MAX_MEMORIES = 8
+#: (No memory cap: every memory the payload carries is felt -- the recalled
+#: 30 and the recent turns, `memories_from`. It was 8, owner 2026-09-28.)
 MAX_CONCERNS = 4
 MOOD_WORDS = 4
 #: How many feelings `self.feelings` names at once (`feelings_block`): the
@@ -146,29 +147,40 @@ def events_from(observations):
 
 
 def memories_from(memory_context):
-    """The memories recall delivered to this call, the decision model's best
-    first. The payload lists them oldest first, and reading its head took
-    the eight OLDEST of a 24-row pick; `_internal.recalled_by_grade` is the
-    pick's own order (`mind/memory_jev.py`)."""
-    rows = [m for m in (memory_context or {}).get("recalled_old_memories") or []
-            if isinstance(m, dict)]
-    order = ((memory_context or {}).get("_internal") or {}).get("recalled_by_grade") or []
+    """Every memory this call's payload carries for the mind to feel: the
+    recalled older ones, the decision model's best first, then the recent
+    ones in the order they happened.
+
+    ALL OF THEM (owner, 2026-09-28: the recent memories "should remain in the
+    jev emotional run alongside the 30 recalled older memories"). This read
+    the recalled lane alone and the eight best of it, so the recent turns --
+    the memories nearest to what the mind is feeling -- were never appraised
+    and 16 of a 24-row pick were never felt. The payload lists the recalled
+    rows oldest first; `_internal.recalled_by_grade` is the pick's own order
+    (`mind/memory_jev.py`). A row delivered in both lanes is felt once."""
+    context = memory_context or {}
+    rows = [m for m in context.get("recalled_old_memories") or [] if isinstance(m, dict)]
+    order = (context.get("_internal") or {}).get("recalled_by_grade") or []
     if order:
         rank = {str(key): i for i, key in enumerate(order)}
         rows = sorted(rows, key=lambda m: rank.get(
             str(m.get("event_key") or m.get("memory_ref") or ""), len(rank)))
-    out = []
+    rows += [m for m in context.get("recent_memories") or [] if isinstance(m, dict)]
+    out, seen = [], set()
     for i, m in enumerate(rows):
         if not isinstance(m, dict):
             continue
         text = m.get("details") or m.get("gist") or m.get("text")
         if str(text or "").strip():
             key = str(m.get("event_key") or m.get("memory_ref") or m.get("id") or "")
+            if key and key in seen:
+                continue
+            seen.add(key)
             # `keyed` gates habituation: a row with no stable key is named by
             # its place in this packet, and a place is not a memory -- keying
             # habits by it would tire whichever row lands there next.
             out.append({"ref": key or f"m{i}", "keyed": bool(key), "text": _text(text)})
-    return out[:MAX_MEMORIES]
+    return out
 
 
 def concerns_from(active):

@@ -321,7 +321,13 @@ _RRF_SCALE = 12.0
 #
 # And the owner accepted the token cost explicitly when shown it, which is the
 # half of this decision that was never mine to make.
-_RECALL_LIMIT = 24
+#
+# THIRTY, THE OWNER'S DESIGN (2026-09-28): "RRF returns 100 potential entries
+# to be sorted by jev into a top 30 relevancy" -- the net is
+# `memory_jev.NET_SIZE` and this is how many of it the decision model keeps.
+# The curve above was measured on SIMILARITY ranking, before the decision
+# model graded the net; 30 under its grades is unmeasured.
+_RECALL_LIMIT = 30
 
 # How many EARLIER summary windows travel beside the current one. Two, for the
 # same attention-budget reason the number above stops at 16 -- and because the
