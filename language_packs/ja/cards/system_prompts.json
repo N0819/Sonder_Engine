@@ -1370,6 +1370,9 @@
     "act_part_seen": {
       "$text": "character_jev/act_part_seen.txt"
     },
+    "belief_replaces": {
+      "$text": "character_jev/belief_replaces.txt"
+    },
     "options": {
       "volume": {
         "whisper": "ささやき声で、一人にだけ。",
@@ -1561,6 +1564,10 @@
       "part_seen": {
         "outward": "はい――見ている人なら誰でも分かる。",
         "inner": "いいえ――あなたにしか分からない。"
+      },
+      "belief_replaces": {
+        "changes": "その信念が変わったもの。",
+        "separate": "別の考え。"
       }
     }
   }

@@ -1,0 +1,3 @@
+YOU HELD: {belief}
+YOU NOW THINK: {line}
+Is this new thought that belief changed -- said another way, doubted, or found wrong -- or a different thought?

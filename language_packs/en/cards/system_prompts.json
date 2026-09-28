@@ -1370,6 +1370,9 @@
     "act_part_seen": {
       "$text": "character_jev/act_part_seen.txt"
     },
+    "belief_replaces": {
+      "$text": "character_jev/belief_replaces.txt"
+    },
     "options": {
       "volume": {
         "whisper": "In a whisper, for one listener.",
@@ -1561,6 +1564,10 @@
       "part_seen": {
         "outward": "Yes -- anyone watching could tell it.",
         "inner": "No -- only you could know it."
+      },
+      "belief_replaces": {
+        "changes": "It is that belief, changed.",
+        "separate": "It is a different thought."
       }
     }
   }

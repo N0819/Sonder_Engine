@@ -582,7 +582,11 @@ def compile_bare(reply, answers, h):
         sure = jev.graded(answers, f"change:{j}:sure", jev.GRADE)
         if kind == "belief":
             held = jev.indexed(answers, f"change:{j}:belief", "b", h.beliefs)
-            if held is not None:
+            # A held belief is rewritten only when the pair check says this
+            # line IS that belief, changed (`jev.belief_pair_questions`);
+            # otherwise -- a different thought, or no check -- the line is a
+            # belief of its own and overwrites nothing.
+            if held is not None and jev.pick(answers, f"change:{j}:replaces") == "changes":
                 belief_targets.setdefault(held, (line, evidence, sure))
             elif evidence:
                 out["belief_updates"].append({

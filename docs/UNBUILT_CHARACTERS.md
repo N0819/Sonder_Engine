@@ -1377,7 +1377,14 @@ at a fifth of the call time, and reads as well or better. Open, in order:
   beliefs follow the notebook's rule: the mind revises one in its own words
   (a `changes` line aimed at it, resting on something given), and the check,
   asked against the moment alone, only moves the ones the reply left alone.
-  Not yet replayed.
+  Replayed in round eleven, it rewrote convictions with unrelated lines --
+  which held belief a line aims at is the decision model's guess, and the
+  dropped "overturned" gate had been catching the bad guesses -- so a
+  revision now also needs the pair check (`belief_replaces`: 7 of 8
+  unrelated pairs read as a different thought, 2 of 3 real changes as a
+  change, on that round's 15). Belief touches fell from 54 to 40 on
+  Margit's chain and held at 17-18 on Anselm's (the full card's 12 in 20
+  beats is a different sample).
 - **The notebook** (built 2026-09-27, `mind/notebook.py`): concerns carrying
   what settles them, projects, what the mind thinks of people and things
   and what it thinks they think, and reminders, as one bounded view with

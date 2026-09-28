@@ -4639,9 +4639,7 @@ def character_step(ctx, cid, nonce):
         _answers = None
         for _attempt in range(character_bare.READ_BACK_ATTEMPTS):
             try:
-                _answers = character_jev.ask(
-                    character_jev.state_text(_holding, out),
-                    character_jev.after_questions(_holding, out))
+                _answers = character_jev.ask_after(_holding, out)
                 break
             except Exception as _exc:  # noqa: BLE001 -- the beat stands, below
                 _read_back_error = f"{type(_exc).__name__}: {str(_exc)[:120]}"

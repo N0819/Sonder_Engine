@@ -202,6 +202,7 @@ SCRIPT = [
     ("tell:0:channel", "seen"), ("tell:0:miss", "subtle"), ("tell:1:channel", "heard"),
     ("nb:0:kind", "goal"), ("nb:0:now", "e0"),
     ("change:0:kind", "belief"), ("change:0:belief", "b0"), ("change:0:now", "e0"),
+    ("change:0:replaces", "changes"),
     ("belief:0:touched", "overturns"), ("belief:0:now", "e0"),
     ("change:1:kind", "rereading"), ("change:1:memory", "m0"), ("change:1:now", "e0"),
     ("change:1:remembered", "m0"),
@@ -224,7 +225,7 @@ SCRIPT = [
 
 def test_the_reply_and_the_answers_compile_into_the_engine_shape():
     h, reply = _holding(), _reply()
-    answers = _answer(SCRIPT)(_both_batteries(h, reply))
+    answers = _read_back(h, reply, SCRIPT)
     out, warnings = character_bare.compile_bare(reply, answers, h)
     assert warnings == []
     speech, inner, act = out["sequence"]
@@ -482,6 +483,14 @@ def _both_batteries(h, reply):
     dispute check and the note check, `jev.ask_before`) and those asked
     after it (`agents.character` merges the answer sets)."""
     return {**jev.before_questions(h), **jev.moment_questions(h), **jev.after_questions(h, reply)}
+
+
+def _read_back(h, reply, script):
+    """Answers as the engine gets them: both batteries, then the belief pair
+    check the first answers call for (`jev.ask_after`)."""
+    answers = _answer(script)(_both_batteries(h, reply))
+    answers.update(_answer(script)(jev.belief_pair_questions(h, reply, answers)))
+    return answers
 
 
 def test_what_the_character_writes_in_its_notebook_lands_where_it_belongs():
@@ -784,11 +793,11 @@ def test_a_mind_changes_its_own_belief_and_the_moment_only_nudges():
     reply left alone."""
     h = _holding(beliefs=["Mara is honest with me.", "Tomas keeps his word."])
     reply = {**_reply(), "notebook": [], "changes": ["Mara is not honest with me."]}
-    questions = _both_batteries(h, reply)
     script = [("change:0:kind", "belief"), ("change:0:belief", "b0"), ("change:0:now", "e0"),
+              ("change:0:replaces", "changes"),
               # The moment says nothing about Mara's honesty, and overturns Tomas's word.
               ("belief:0:touched", "neither"), ("belief:1:touched", "overturns"), ("belief:1:now", "e1")]
-    out, warnings = character_bare.compile_bare(reply, _answer(script)(questions), h)
+    out, warnings = character_bare.compile_bare(reply, _read_back(h, reply, script), h)
     assert warnings == []
     by_target = {(u["operation"], u["target_belief"] or u["belief"]): u for u in out["belief_updates"]}
     revised = by_target[("revise", "Mara is honest with me.")]
@@ -797,9 +806,55 @@ def test_a_mind_changes_its_own_belief_and_the_moment_only_nudges():
     assert weakened["confidence"] == 1.0, "overturned by what happened: the full weakening step"
     assert len(out["belief_updates"]) == 2
     # A line aimed at a held belief that rests on nothing given is not filed.
-    bare = [("change:0:kind", "belief"), ("change:0:belief", "b0")]
-    out, warnings = character_bare.compile_bare(reply, _answer(bare)(questions), h)
+    bare = [("change:0:kind", "belief"), ("change:0:belief", "b0"), ("change:0:replaces", "changes")]
+    out, warnings = character_bare.compile_bare(reply, _read_back(h, reply, bare), h)
     assert out["belief_updates"] == [] and any("rests on nothing" in w for w in warnings)
+
+
+def test_a_line_about_something_else_never_overwrites_a_belief():
+    """The pair check: which held belief a line aims at is the decision
+    model's guess, and a revision REPLACES the belief. Round 11 (2026-09-27),
+    with no check: "He can save more by staying numb than by feeling" became
+    "Luca left the room and I let him go without a word". A pair read as a
+    different thought is a belief of its own; so is one never checked."""
+    h = _holding(beliefs=["Mara is honest with me."])
+    reply = {**_reply(), "notebook": [], "changes": ["Tomas left the room without a word."]}
+    base = [("change:0:kind", "belief"), ("change:0:belief", "b0"), ("change:0:now", "e0")]
+    pairs = jev.belief_pair_questions(h, reply, _answer(base)(_both_batteries(h, reply)))
+    assert set(pairs) == {"change:0:replaces"}
+    assert "Mara is honest with me." in pairs["change:0:replaces"]["instructions"]
+    for extra in ([("change:0:replaces", "separate")], []):
+        answers = _answer(base + extra)(_both_batteries(h, reply))
+        if extra:
+            answers.update(_answer(base + extra)(pairs))
+        out, _ = character_bare.compile_bare(reply, answers, h)
+        (update,) = out["belief_updates"]
+        assert (update["operation"], update["target_belief"], update["belief"]) == (
+            "reinforce", "", "Tomas left the room without a word."), extra
+
+
+
+def test_the_pair_check_is_a_second_request_after_the_read_back(monkeypatch):
+    """`jev.ask_after`: the read-back, then only the pairs its answers call
+    for -- the engine and the replay tool both ask through it."""
+    h = _holding(beliefs=["Mara is honest with me."])
+    reply = {**_reply(), "notebook": [], "changes": ["Tomas left the room without a word."]}
+    asked = []
+
+    def choose(key):
+        if key.endswith(":kind"):
+            return "belief"
+        if key.endswith(":belief"):
+            return "b0"
+        return "separate"
+
+    def fake_ask(state, questions):
+        asked.append(set(questions))
+        return {k: {"type": "choice", "probabilities": {choose(k): 1.0}} for k in questions}
+
+    monkeypatch.setattr(jev, "ask", fake_ask)
+    answers = jev.ask_after(h, reply)
+    assert len(asked) == 2 and asked[1] == {"change:0:replaces"} and "change:0:replaces" in answers
 
 
 def test_an_act_splits_at_its_own_punctuation_and_never_inside_a_number():

@@ -482,6 +482,43 @@ where the provider returns nothing.
 - The body echo: unpleasant on 31 of 33 (-0.1 to -0.87), faintly pleasant
   on 2.
 
+## Round eleven: the owner's choices, replayed
+
+The chains again, from a snapshot of 384b2e5f: association breaking, the
+repetition section, beliefs by the notebook's rule, `ways_on`, and the
+observable floor.
+
+| | Margit (18) | Anselm (16) |
+|---|---|---|
+| Beats read back | 17 (one lost to `{}` three times running) | 16 |
+| Lines / acts | 26 / 21 (round ten: 24 / 19) | 27 / 22 (19 / 19) |
+| Associations reinforced / broken | 6 / 0 (round ten: 23 reinforced) | 4 / 0 (12) |
+| Beliefs revised / reinforced / weakened | 8 / 21 / 11 (round ten: 0 / 49 / 5) | 7 / 10 / 0 (0 / 12 / 6) |
+| `ways_on` shipped | 17 of 17 | 16 of 16 |
+
+- **No conduct cost**, and Anselm's acts now name where he goes: "makes for
+  the infirmary at a hard walk", "heads for the infirmary" (round ten: "moves
+  toward the infirmary door").
+- **The observable floor rarely had to act**: two acts trimmed -- "weight
+  even" and "feeling for the shrapnel fragment's depth ..." dropped -- and two
+  only re-punctuated. The sectioned layout's acts are mostly clean; the floor
+  is a backstop.
+- **Associations**: a cue that merely appeared no longer reinforces; none
+  proved untrue in these grim stories, so none broke.
+- **A regression, found and fixed the same round.** The belief revisions
+  were mostly not revisions: "He can save more by staying numb than by
+  feeling" became "Luca left the room and I let him go without a word"; "A
+  magistrate's questions are not about truth; they are about power" became
+  "I now know the girl's family are tenants of the Castells". Which held
+  belief a line aims at is the decision model's guess (`belief_target`), and
+  the "overturned" gate the notebook's rule dropped had been catching the
+  bad guesses. Now the pair is asked back after the read-back
+  (`belief_replaces`: is this that belief changed, or a different thought?).
+  On the 15 pairs (one reader's labels: 8 unrelated, 3 real changes, 4
+  unclear), that wording kept 7 of the 8 unrelated apart and caught 2 of the
+  3 changes; "does it answer the same question?" kept only 5 apart. A
+  different thought is filed as a belief of its own and overwrites nothing.
+
 ## The old card, reviewed: what the bare card had dropped
 
 The owner: "review the old contract, what have we abandoned from it that

@@ -745,3 +745,39 @@ def ask(state, questions):
     if not questions:
         return {}
     return decisions.decide(state, questions)
+
+
+def belief_pair_questions(h, reply, answers):
+    """THE BELIEF PAIR CHECK: for each `changes` line the read-back took for a
+    belief aimed at a held one, is the new thought that belief changed, or a
+    different thought? Which held belief a line aims at is the decision
+    model's guess (`belief_target`), not the mind's own word, and a changed
+    belief REPLACES the held one -- so the pairing is asked back before
+    anything is overwritten. Measured on the round-11 chains (2026-09-27):
+    with no check, 15 revisions in 34 beats, most replacing a conviction
+    with an unrelated line ("He can save more by staying numb than by
+    feeling" became "Luca left the room and I let him go without a word");
+    asked this way, 7 of 8 unrelated pairs came back a different thought
+    and 2 of 3 real changes a change (one reader's labels)."""
+    lang = h.language
+    qs = {}
+    for j, line in enumerate(lines_of(reply, "changes", MAX_CHANGES)):
+        if pick(answers, f"change:{j}:kind") != "belief":
+            continue
+        held = indexed(answers, f"change:{j}:belief", "b", h.beliefs)
+        if held is not None:
+            qs[f"change:{j}:replaces"] = _choice("belief_replaces", lang, _set("belief_replaces", lang),
+                                                 belief=_text(held), line=line)
+    return qs
+
+
+def ask_after(h, reply):
+    """Everything asked after the call, answers merged: the read-back against
+    this mind's state with its reply, then the belief pair check its answers
+    call for, against the pair alone. The engine's bare path and the replay
+    tool both ask through here."""
+    answers = dict(ask(state_text(h, reply), after_questions(h, reply)) or {})
+    pairs = belief_pair_questions(h, reply, answers)
+    if pairs:
+        answers.update(ask(f"YOU ARE {h.name}.", pairs) or {})
+    return answers

@@ -263,7 +263,7 @@ def _bare_arm(name, sheet, payload, own, layout, feelings, notebook=False, store
                              temperature=character_temperature(sheet))
     h.reasoning = str(providers.last_reasoning.get() or "")
     questions = jev.after_questions(h, raw)
-    answers, after_s = _timed(jev.ask, jev.state_text(h, raw), questions)
+    answers, after_s = _timed(jev.ask_after, h, raw)
     # As the engine does: the note check asked before the call is read with
     # the rest.
     compiled, warnings = character_bare.compile_bare(raw, {**(before or {}), **answers}, h)
