@@ -1175,6 +1175,9 @@
     },
     "tell_payoff": {
       "$text": "character_bare/tell_payoff.txt"
+    },
+    "repetition": {
+      "$text": "character_bare/repetition.txt"
     }
   },
   "character_jev": {
@@ -1358,6 +1361,9 @@
     "echo_body": {
       "$text": "character_jev/echo_body.txt"
     },
+    "cue_held": {
+      "$text": "character_jev/cue_held.txt"
+    },
     "options": {
       "volume": {
         "whisper": "ささやき声で、一人にだけ。",
@@ -1540,6 +1546,11 @@
         "none": "いいえ、体にはよみがえりません。",
         "good": "はい。心地よい感覚です。",
         "hard_good": "はい、強く。心地よい感覚です。"
+      },
+      "cue_held": {
+        "neither": "今のことからは、どちらとも言えない。",
+        "bore_out": "今回は本当だった。",
+        "belied": "今回は本当ではなかった。"
       }
     }
   }

@@ -1371,11 +1371,11 @@ at a fifth of the call time, and reads as well or better. Open, in order:
   beat), intentions 22-30 against 15. The notes showed the likely cause
   (below): a check read against a state that already states the thing
   checked -- the note in the notebook, the memories behind it -- calls
-  almost any beat confirmation. The belief check (`belief_touched`) is
-  asked against a state listing every held belief; asking it against the
-  moment alone (`moment_text`) is the candidate. It changes when a belief
-  can be revised -- today only when the decision model calls it overturned
-  AND a `changes` line aims at it -- so replay it before adopting it.
+  almost any beat confirmation. Since 2026-09-27 (the owner's choice)
+  beliefs follow the notebook's rule: the mind revises one in its own words
+  (a `changes` line aimed at it, resting on something given), and the check,
+  asked against the moment alone, only moves the ones the reply left alone.
+  Not yet replayed.
 - **The notebook** (built 2026-09-27, `mind/notebook.py`): concerns carrying
   what settles them, projects, what the mind thinks of people and things
   and what it thinks they think, and reminders, as one bounded view with
@@ -1406,9 +1406,11 @@ at a fifth of the call time, and reads as well or better. Open, in order:
   owner's.
 - **An act read as cutting someone off when it only walks away** (the
   restored `act_interrupts`: 2 of 30 acts in round nine, 1 of 38 in round
-  ten after the rewording). In play that clips the other's line. Proposed,
-  the owner's call because it is a guard: an act cuts off only the speaker
-  it is aimed at -- its target or its look.
+  ten after the rewording). In play that clips the other's line. A rule
+  that an act cuts off only the speaker it is aimed at was tested and
+  dropped: Jev reads turning away from someone as an act at them (its
+  target or its look named the speaker in both walk-aways), so it would
+  have kept both misreads.
 - Then the default switched, and the full card, its kernel compiler and its
   prompt paragraphs deleted so two contracts do not linger.
 
@@ -1426,10 +1428,11 @@ aims every impact is asked about -- 0 of 227 measured impacts ever served
 it, so drive strain and its rupture window have effectively not run. The
 payload still carries engine key names the full card used to explain and no
 section does yet (the spatial frame, a busy mouth); rendering them in plain
-words is the other half of a bare card. The owner's call, from the review
-of the old contract: whether to carry its navigation and spatial-frame
-guidance, association learning (new cues, extinction), its
-self-repetition clause, and material effects.
+words is the other half of a bare card. From the review of the old
+contract, the owner chose (2026-09-27): association breaking, the
+self-repetition clause (gated on the refrain detector) and beliefs under
+the notebook's rule are built; navigation is next; material effects wait
+on a measurement (does the Director alone keep a body's own emissions?).
 
 <a id="unbuilt-6-18"></a>
 

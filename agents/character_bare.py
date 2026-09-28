@@ -238,6 +238,11 @@ def modules_for(payload, *, disputed=(), rupture_open=False, rupture_forced=Fals
         out.append("tell_variety")
     if self_.get("tell_grounds"):
         out.append("tell_payoff")
+    # The engine's own detector found a shape the recent lines keep reusing
+    # (`agents.character._self_line_refrain`): the full card's self-repetition
+    # clause, said only then.
+    if self_.get("recent_self_refrain"):
+        out.append("repetition")
     if disputed:
         out.append("dispute")
     if rupture_open:
@@ -608,27 +613,48 @@ def compile_bare(reply, answers, h):
         if op and evidence:
             out["intent_ops"].append({"op": op, "id": aim["id"], "why": hinge or _text(aim["text"]),
                                       "evidence": evidence})
+    # HELD BELIEFS, BY THE NOTEBOOK'S RULE: the mind changes a belief in its
+    # own words -- a `changes` line aimed at it, resting on something this
+    # mind was given -- and the decision model's check of the moment only
+    # moves the ones the reply left alone, never rewrites one. A revision
+    # used to wait for the check to call the belief overturned as well, so
+    # a mind's own inference was filed only when the decision model agreed
+    # with it; and read against the whole state, which lists every belief,
+    # the check leaned to "bore it out" (as the notes did).
+    for belief, (line, line_evidence, sure) in belief_targets.items():
+        k = h.beliefs.index(belief)
+        support = line_evidence or _evidence(answers, f"belief:{k}", h)
+        if support:
+            out["belief_updates"].append({
+                "belief": line, "operation": "revise", "target_belief": belief,
+                "confidence": round(0.6 if sure is None else max(0.1, sure), 3), "evidence": support})
+        else:
+            warnings.append(f"a changed belief rests on nothing this mind was given: {line[:80]!r}")
     for k, belief in enumerate(h.beliefs):
+        if belief in belief_targets:
+            continue
         touched = jev.pick(answers, f"belief:{k}:touched")
         evidence = _evidence(answers, f"belief:{k}", h)
-        if touched == "overturns" and belief in belief_targets:
-            line, line_evidence, sure = belief_targets[belief]
-            support = line_evidence or evidence
-            if support:
-                out["belief_updates"].append({
-                    "belief": line, "operation": "revise", "target_belief": belief,
-                    "confidence": round(0.6 if sure is None else max(0.1, sure), 3), "evidence": support})
-        elif touched in ("confirms", "doubts", "overturns") and evidence:
+        if touched in ("confirms", "doubts", "overturns") and evidence:
             out["belief_updates"].append({
                 "belief": belief, "operation": "reinforce" if touched == "confirms" else "weaken",
-                "target_belief": "", "confidence": jev.BELIEF_SUPPORT, "evidence": evidence})
+                "target_belief": "",
+                # Overturned by what happened: the full weakening step.
+                "confidence": 1.0 if touched == "overturns" else jev.BELIEF_SUPPORT, "evidence": evidence})
+    # A LEARNED CUE THAT CAME: its reading proved true this time (reinforced)
+    # or untrue (weakened -- the full card's `extinguish`); a cue that merely
+    # appeared moves nothing. Every appearance used to reinforce, so a
+    # learned fear could only ever grow.
     for k, assoc in enumerate(h.associations):
         evidence = _evidence(answers, f"cue:{k}", h)
-        if jev.yes(answers, f"cue:{k}") and evidence:
+        if not (jev.yes(answers, f"cue:{k}") and evidence):
+            continue
+        operation = {"bore_out": "reinforce", "belied": "extinguish"}.get(jev.pick(answers, f"cue:{k}:held") or "")
+        if operation:
             out["association_updates"].append({
                 "cue": str(assoc["cue"]), "appraisal_bias": str(assoc.get("appraisal_bias") or ""),
                 "response_tendency": str(assoc.get("response_tendency") or ""),
-                "operation": "reinforce", "amount": jev.ASSOCIATION_STEP, "evidence": evidence})
+                "operation": operation, "amount": jev.ASSOCIATION_STEP, "evidence": evidence})
     known = {k.casefold() for k in h.known}
     for p, person in enumerate(h.people):
         if person.casefold() not in known:

@@ -504,7 +504,14 @@ offers reach the payload under engine key names with no section); learning
 an association's breaking (`extinguish`) or a new one -- the read-back only
 reinforces a held cue that fired; the self-repetition clause (recent lines
 and moves as continuity, "do not reset an offer, question, or conversational
-job"); and material effects. None of the restorations is replayed yet.
+job"); and material effects. The owner's choice (2026-09-27): carry
+association breaking (a cue whose reading proves untrue weakens it), the
+self-repetition clause (only when the engine's refrain detector fires),
+beliefs under the notebook's rule (the mind revises in its own words, the
+moment's check only nudges) and navigation; measure material effects
+first; and drop the interrupt rule -- tested, it would have kept both
+walk-away misreads, because Jev reads turning away from someone as an act
+at them.
 
 ## What the replay found in the engine
 

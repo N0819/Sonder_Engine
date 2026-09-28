@@ -68,22 +68,24 @@ def test_a_section_ships_only_when_the_moment_calls_for_it():
     loud = character_bare.modules_for(
         {"self": {"project_review": {"id": "p1"}, "still_waiting_for": [{"what": "rope"}],
                   "crisis": True, "recent_tells": ["a swallow"],
-                  "tell_grounds": [{"cue": "a swallow", "because": "the key"}]},
+                  "tell_grounds": [{"cue": "a swallow", "because": "the key"}],
+                  "recent_self_refrain": {"opening": {"word": "listen", "lines": 4, "of": 5}}},
          "decision": {"they_said_nothing": True, "awaiting_your_answer": {"from": "Mara"},
                       "comes_to_you": [{"offer": "x"}],
                       "speech_budget": {"min_lines": 1, "suggested_lines": 2, "hard_max": 4}},
          "perception": {"impossible_knowledge": [{"line_ref": "o1"}]}, "carried_reports": [{}]},
         disputed=[{"ref": "event:a", "text": "x"}], rupture_open=True, rupture_forced=True)
     assert loud == ["their_silence", "answer_owed", "offers", "speech_budget", "crisis",
-                    "tell_variety", "tell_payoff", "dispute", "drive_rupture", "drive_rupture_forced",
-                    "project_review", "still_waiting", "impossible_knowledge", "carried_reports"]
+                    "tell_variety", "tell_payoff", "repetition", "dispute", "drive_rupture",
+                    "drive_rupture_forced", "project_review", "still_waiting", "impossible_knowledge",
+                    "carried_reports"]
     # Each restored section is the old card's clause, said when it applies,
     # and names the payload key it explains.
     for module, key in (("their_silence", "decision.they_said_nothing"),
                         ("answer_owed", "decision.awaiting_your_answer"),
                         ("offers", "decision.comes_to_you"), ("speech_budget", "decision.speech_budget"),
                         ("crisis", "self.crisis"), ("tell_variety", "self.recent_tells"),
-                        ("tell_payoff", "self.tell_grounds")):
+                        ("tell_payoff", "self.tell_grounds"), ("repetition", "self.recent_self_refrain")):
         for lang in ("en", "ja"):
             assert f"`{key}`" in character_bare.prompt("Wren", [module], lang), (module, lang)
     card = character_bare.prompt("Wren", ["dispute"], "en")
@@ -140,7 +142,7 @@ def test_every_question_reads_only_this_minds_own_holding():
     names is one this mind perceived, was given or already holds."""
     from llm.prompts import character_jev_options
     h = _holding(notebook=_notebook_view())
-    questions = {**jev.before_questions(h), **jev.note_check_questions(h), **jev.after_questions(h, _reply())}
+    questions = {**jev.before_questions(h), **jev.moment_questions(h), **jev.after_questions(h, _reply())}
     assert any(k.startswith("held:") for k in questions), "the note check is covered"
     offered = set()
     for q in questions.values():
@@ -148,7 +150,8 @@ def test_every_question_reads_only_this_minds_own_holding():
     pack = set()
     for name in ("volume", "yesno", "act_kind", "grade", "miss", "channel", "signed", "fit", "tone", "change_kind",
                  "reading_kind", "aim_moved", "belief_touched", "impact", "certain",
-                 "agency", "ability", "choices", "note_kind", "note_touched", "strike_kind", "echo_body"):
+                 "agency", "ability", "choices", "note_kind", "note_touched", "strike_kind", "echo_body",
+                 "cue_held"):
         pack.update(character_jev_options(name, "en").values())
     held = ({e["text"] for e in h.events} | {m["text"] for m in h.memories} | set(h.people) | set(h.known)
             | set(h.beliefs) | set(h.strategies) | {jev._aim_label(a, "en") for a in h.aims}
@@ -203,7 +206,7 @@ SCRIPT = [
     ("change:2:kind", "give_up"), ("change:2:aim", "a0"),
     ("change:3:kind", "stop_waiting"), ("change:3:promise", "w0"),
     ("aim:0:moved", "blocked"), ("aim:0:now", "e0"),
-    ("cue:0", "yes"), ("cue:0:now", "e0"),
+    ("cue:0", "yes"), ("cue:0:now", "e0"), ("cue:0:held", "bore_out"),
     ("rel:0:trust", "much_less"), ("rel:0:break", "yes"), ("rel:0:now", "e0"),
     ("rel:1:warmth", "more"),
     ("concern:0", "yes"), ("keep:0", "yes"), ("mem:shaped", "a1"),
@@ -219,7 +222,7 @@ SCRIPT = [
 
 def test_the_reply_and_the_answers_compile_into_the_engine_shape():
     h, reply = _holding(), _reply()
-    answers = _answer(SCRIPT)(jev.after_questions(h, reply))
+    answers = _answer(SCRIPT)(_both_batteries(h, reply))
     out, warnings = character_bare.compile_bare(reply, answers, h)
     assert warnings == []
     speech, inner, act = out["sequence"]
@@ -476,7 +479,7 @@ def _both_batteries(h, reply):
     """What the engine reads back: the questions asked before the call (the
     dispute check and the note check, `jev.ask_before`) and those asked
     after it (`agents.character` merges the answer sets)."""
-    return {**jev.before_questions(h), **jev.note_check_questions(h), **jev.after_questions(h, reply)}
+    return {**jev.before_questions(h), **jev.moment_questions(h), **jev.after_questions(h, reply)}
 
 
 def test_what_the_character_writes_in_its_notebook_lands_where_it_belongs():
@@ -680,16 +683,20 @@ def test_a_held_note_is_checked_against_the_moment_alone():
     34 instead of 28 (56 hand-labelled checks, 2026-09-27)."""
     h = _holding(notebook=_notebook_view(), beliefs=["Mara is honest with me."],
                  reasoning="I think she lied.")
-    checks = jev.note_check_questions(h)
-    assert set(checks) == {"held:0:touched", "held:0:now", "held:1:touched", "held:1:now"}
-    assert not any(k.startswith("held:") for k in jev.before_questions(h))
-    assert not any(k.startswith("held:") for k in jev.after_questions(h, _reply()))
+    checks = jev.moment_questions(h)
+    assert {k for k in checks if k.startswith("held:")} == {
+        "held:0:touched", "held:0:now", "held:1:touched", "held:1:now"}
+    # Held beliefs and learned cues are checked against the moment too.
+    assert {"belief:0:touched", "belief:0:now", "cue:0", "cue:0:now", "cue:0:held"} <= set(checks)
+    for family in ("held:", "belief:", "cue:"):
+        assert not any(k.startswith(family) for k in jev.before_questions(h)), family
+        assert not any(k.startswith(family) for k in jev.after_questions(h, _reply())), family
     moment = jev.moment_text(h)
     assert "Mara pockets the brass key." in moment and "Mara, Tomas" in moment
     for kept_out in ("Mara keeps secrets", "lent me her coat", "Mara is honest", "recover the key",
                      "I think she lied", "HOW YOU ARE"):
         assert kept_out not in moment, kept_out
-    assert jev.note_check_questions(_holding(notebook=_notebook_view(), events=[])) == {}
+    assert jev.moment_questions(_holding(notebook=_notebook_view(), events=[])) == {}
 
 
 def test_both_checks_before_the_call_are_asked_and_merged(monkeypatch):
@@ -706,7 +713,7 @@ def test_both_checks_before_the_call_are_asked_and_merged(monkeypatch):
     answers = jev.ask_before(h)
     (dispute_state, dispute_keys), (check_state, check_keys) = asked
     assert dispute_keys == {"dispute:0", "dispute:1"} and dispute_state == jev.state_text(h)
-    assert check_keys == set(jev.note_check_questions(h)) and check_state == jev.moment_text(h)
+    assert check_keys == set(jev.moment_questions(h)) and check_state == jev.moment_text(h)
     assert set(answers) == dispute_keys | check_keys
 
 
@@ -746,3 +753,48 @@ def test_a_long_concern_is_struck_and_rewritten_by_its_own_id():
     as_record = {"text": long, "since": 3}
     (shown_record,) = notebook.view({}, 10, concerns=[as_record])["on_your_mind"]
     assert shown_record["id"] == shown["id"] and "since" not in shown_record["note"]
+
+
+def test_a_learned_association_breaks_when_its_reading_proves_untrue():
+    """The full card's `extinguish`: a cue that comes and whose reading proves
+    untrue weakens the association; one that proves true reinforces it; one
+    that merely appears moves nothing. The bare path reinforced every cue
+    that appeared, so a learned fear could only ever grow."""
+    h = _holding()
+    reply = {**_reply(), "notebook": []}
+    questions = _both_batteries(h, reply)
+    assert set(questions["cue:0:held"]["criteria"]) == {"bore_out", "belied", "neither"}
+    assert "suspicion" in questions["cue:0:held"]["instructions"], "the reading is the one it learned"
+    for held, operation in (("bore_out", "reinforce"), ("belied", "extinguish"), ("neither", None)):
+        script = [("cue:0", "yes"), ("cue:0:now", "e0"), ("cue:0:held", held)]
+        out, _ = character_bare.compile_bare(reply, _answer(script)(questions), h)
+        assert [u["operation"] for u in out["association_updates"]] == ([operation] if operation else []), held
+    # A cue that did not come moves nothing, whatever the reading.
+    out, _ = character_bare.compile_bare(reply, _answer([("cue:0", "no"), ("cue:0:held", "belied")])(questions), h)
+    assert out["association_updates"] == []
+
+
+def test_a_mind_changes_its_own_belief_and_the_moment_only_nudges():
+    """Beliefs by the notebook's rule: a `changes` line aimed at a held
+    belief revises it in the mind's own words when it rests on something the
+    mind was given -- without waiting for the decision model to call the
+    belief overturned. The check of the moment moves only the beliefs the
+    reply left alone."""
+    h = _holding(beliefs=["Mara is honest with me.", "Tomas keeps his word."])
+    reply = {**_reply(), "notebook": [], "changes": ["Mara is not honest with me."]}
+    questions = _both_batteries(h, reply)
+    script = [("change:0:kind", "belief"), ("change:0:belief", "b0"), ("change:0:now", "e0"),
+              # The moment says nothing about Mara's honesty, and overturns Tomas's word.
+              ("belief:0:touched", "neither"), ("belief:1:touched", "overturns"), ("belief:1:now", "e1")]
+    out, warnings = character_bare.compile_bare(reply, _answer(script)(questions), h)
+    assert warnings == []
+    by_target = {(u["operation"], u["target_belief"] or u["belief"]): u for u in out["belief_updates"]}
+    revised = by_target[("revise", "Mara is honest with me.")]
+    assert revised["belief"] == "Mara is not honest with me."
+    weakened = by_target[("weaken", "Tomas keeps his word.")]
+    assert weakened["confidence"] == 1.0, "overturned by what happened: the full weakening step"
+    assert len(out["belief_updates"]) == 2
+    # A line aimed at a held belief that rests on nothing given is not filed.
+    bare = [("change:0:kind", "belief"), ("change:0:belief", "b0")]
+    out, warnings = character_bare.compile_bare(reply, _answer(bare)(questions), h)
+    assert out["belief_updates"] == [] and any("rests on nothing" in w for w in warnings)

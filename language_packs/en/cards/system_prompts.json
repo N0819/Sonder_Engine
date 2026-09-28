@@ -1175,6 +1175,9 @@
     },
     "tell_payoff": {
       "$text": "character_bare/tell_payoff.txt"
+    },
+    "repetition": {
+      "$text": "character_bare/repetition.txt"
     }
   },
   "character_jev": {
@@ -1358,6 +1361,9 @@
     "echo_body": {
       "$text": "character_jev/echo_body.txt"
     },
+    "cue_held": {
+      "$text": "character_jev/cue_held.txt"
+    },
     "options": {
       "volume": {
         "whisper": "In a whisper, for one listener.",
@@ -1540,6 +1546,11 @@
         "none": "No, it does not come back in your body.",
         "good": "Yes, and it is pleasant.",
         "hard_good": "Yes, strongly, and it is pleasant."
+      },
+      "cue_held": {
+        "neither": "Nothing just now shows it either way.",
+        "bore_out": "It proved true this time.",
+        "belied": "This time it proved untrue."
       }
     }
   }

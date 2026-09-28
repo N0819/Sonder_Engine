@@ -215,7 +215,7 @@ def notes_in_play(h):
     beat about someone else (held beliefs, asked every beat, were touched
     three times as often as the full card's model touched them).
 
-    ASKED BEFORE THE CALL, AGAINST THE MOMENT ALONE (`note_check_questions`,
+    ASKED BEFORE THE CALL, AGAINST THE MOMENT ALONE (`moment_questions`,
     `moment_text`): what bears a note out is what reached this mind, never
     the mind's own restating of it. Asked after the call, 27 of the 29 nudges
     the round-8 chains made were "bore it out" -- a man sitting down bore out
@@ -364,20 +364,39 @@ def before_questions(h):
             for i, m in enumerate(h.memories)}
 
 
-def note_check_questions(h):
-    """Asked before the call, against the moment alone (`moment_text`): does
-    what just happened bear out, cast doubt on or tell against a note this
-    mind holds about someone or something in play (`notes_in_play`)?"""
+def moment_questions(h):
+    """Asked before the call, against the moment alone (`moment_text`): the
+    checks of what this mind holds that only what just happened can answer.
+    Does it bear out, cast doubt on or tell against a note about someone or
+    something in play (`notes_in_play`), or a held belief? Did a learned cue
+    come, and did its reading prove true this time?
+
+    A cue that comes and proves untrue BREAKS its association (extinction,
+    the full card's `extinguish`): the bare path reinforced every cue that
+    merely appeared, so a learned fear could only ever grow."""
     if not h.events:
         return {}
     lang = h.language
-    touched = dict(_set("note_touched", lang))
     events = [e["text"] for e in h.events]
+    now = _options(events, "nothing_now", lang, "e")
     qs = {}
+    touched = dict(_set("note_touched", lang))
     for k, entry in enumerate(notes_in_play(h)):
         note = note_text({"about": entry.get("about", ""), "note": entry.get("note", "")}, lang)
         qs[f"held:{k}:touched"] = _choice("note_touched", lang, touched, note=note)
-        qs[f"held:{k}:now"] = _choice("based_now", lang, _options(events, "nothing_now", lang, "e"), text=note)
+        qs[f"held:{k}:now"] = _choice("based_now", lang, now, text=note)
+    belief_touched = dict(_set("belief_touched", lang))
+    for k, belief in enumerate(h.beliefs):
+        qs[f"belief:{k}:touched"] = _choice("belief_touched", lang, belief_touched, belief=_text(belief))
+        qs[f"belief:{k}:now"] = _choice("based_now", lang, now, text=_text(belief))
+    yesno = _set("yesno", lang)
+    held = _set("cue_held", lang)
+    for k, assoc in enumerate(h.associations):
+        cue = _text(assoc["cue"])
+        qs[f"cue:{k}"] = _choice("cue_present", lang, yesno, cue=cue)
+        qs[f"cue:{k}:now"] = _choice("based_now", lang, now, text=cue)
+        qs[f"cue:{k}:held"] = _choice("cue_held", lang, held, cue=cue,
+                                      reading=_text(assoc.get("appraisal_bias")) or cue)
     return qs
 
 
@@ -403,14 +422,15 @@ def moment_text(h):
 
 def ask_before(h):
     """Everything asked before the call, answers merged: the dispute check
-    against this mind's whole state, the note check against the moment alone
-    (`moment_text`). The engine's bare path and the replay tool both ask
-    through here, so they cannot drift apart."""
+    against this mind's whole state, the checks of notes, beliefs and cues
+    against the moment alone (`moment_questions`, `moment_text`). The
+    engine's bare path and the replay tool both ask through here, so they
+    cannot drift apart."""
     answers = {}
     disputes = before_questions(h)
     if disputes:
         answers.update(ask(state_text(h), disputes) or {})
-    checks = note_check_questions(h)
+    checks = moment_questions(h)
     if checks:
         answers.update(ask(moment_text(h), checks) or {})
     return answers
@@ -568,17 +588,8 @@ def after_questions(h, reply):
         if events:
             qs[f"aim:{k}:now"] = _choice("based_now", lang, _options(events, "nothing_now", lang, "e"),
                                          text=_text(aim["text"]))
-    touched = dict(_set("belief_touched", lang))
-    for k, belief in enumerate(h.beliefs):
-        qs[f"belief:{k}:touched"] = _choice("belief_touched", lang, touched, belief=_text(belief))
-        if events:
-            qs[f"belief:{k}:now"] = _choice("based_now", lang, _options(events, "nothing_now", lang, "e"),
-                                            text=_text(belief))
-    for k, assoc in enumerate(h.associations):
-        qs[f"cue:{k}"] = _choice("cue_present", lang, yesno, cue=_text(assoc["cue"]))
-        if events:
-            qs[f"cue:{k}:now"] = _choice("based_now", lang, _options(events, "nothing_now", lang, "e"),
-                                         text=_text(assoc["cue"]))
+    # Held beliefs and learned cues are checked before the call, against the
+    # moment alone (`moment_questions`).
     axes = _set("rel_axes", lang)
     signed = _set("signed", lang)
     known = {k.casefold() for k in h.known}

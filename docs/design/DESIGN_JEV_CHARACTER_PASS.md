@@ -966,7 +966,10 @@ card had dropped, `their_silence` (`decision.they_said_nothing`),
 (`decision.comes_to_you`), `speech_budget` (`decision.speech_budget` --
 present every beat, as the full card's clause was), `crisis`
 (`self.crisis`), `tell_variety` (`self.recent_tells`) and `tell_payoff`
-(`self.tell_grounds`), 129-243 characters each in English.
+(`self.tell_grounds`), 129-243 characters each in English -- and
+`repetition`, the full card's self-repetition clause, shipped only when the
+engine's own detector finds a shape the recent lines keep reusing
+(`self.recent_self_refrain`).
 
 ### What the decision model reads back
 
@@ -988,10 +991,10 @@ exactly where commit would have dropped the model's.
 | wants' `serves` and `urgency`; enact/suppress ids | `want_serves`, `want_urgency`; the want is enacted, `held_back` suppressed |
 | tells' `channel`, `subtlety`; "at most two"; "no subtler than 0.4 in a crisis" | `tell_channel`, `tell_subtlety`; `MAX_TELLS` (2) and, under `self.crisis`, the 0.4 ceiling in code |
 | readings of people (`about_entity`, `kind`, `confidence`, evidence) | the character's notebook entries (below); `note_kind`, `note_about`, `based_now` / `based_memory` |
-| beliefs: acquire, reinforce, weaken, revise with exact held text | a `changes` line sorted by `change_kind`; per held belief `belief_touched` (bore out, doubt, overturned); an overturned belief takes the line aimed at it (`belief_target`) as its new wording |
+| beliefs: acquire, reinforce, weaken, revise with exact held text | a `changes` line sorted by `change_kind`; a line aimed at a held belief (`belief_target`) revises it in the mind's own words when it rests on something given -- the notebook's rule, since 2026-09-27; until then the decision model had to call the belief overturned as well; per held belief the reply left alone, `belief_touched` asked against the moment alone (bore out, doubt, overturned: reinforce, weaken, weaken at the full step) |
 | memory re-reading (`memory_ref`, evidence not the disputed row) | `which_memory` + evidence from anything else |
 | intentions add/abandon (the character's) and progress/block/satisfy/nonviable | add and give-up are `changes` lines; `aim_moved` per steering aim |
-| associations, relationships (+-0.05, +-0.2 on a real break) | `cue_present`; five `rel_axis` steps x `REL_STEP` (0.05), x `REL_BREAK_STEP` (0.2) when `rel_break` -- the card's rule, now code |
+| associations (reinforce, `extinguish`), relationships (+-0.05, +-0.2 on a real break) | `cue_present` and `cue_held` against the moment: a cue that came and whose reading proved true reinforces, proved untrue breaks the association (extinction), neither moves nothing -- every appearance used to reinforce, so a learned fear could only grow; five `rel_axis` steps x `REL_STEP` (0.05), x `REL_BREAK_STEP` (0.2) when `rel_break` -- the card's rule, now code |
 | concerns, lines kept, memory effects, salience | new worries are `changes` lines or notebook entries, each kept once (`notebook.concern_id`) and held whole (`notebook.concern_text`); `concern_settled`, `keep_line`, `memory_shaped`, `salience` |
 | giving up a promise (`waiting_ops`, dead in the kernel) | a `changes` line and `which_promise` |
 | the appraisal: six axes, pain and pleasure with a named cause, goal impacts, the memory echo | `novelty`, `control`, `coping`, `norm`, `self_fit`, `pleasant`; `pain` / `body_pleasure` per event (the event is the cause); `impact`, `impact_certain`, `impact_agency` per live aim, the drive included; `echo` and its three grades, and `echo_body` for the signed `somatic_echo` (a tightening or a warmth; written as 0.0 on every bare beat until 2026-09-27). The full card never explained the field and its model wrote small positive strengths (0.01-0.4) on 129 of the 135 echoes in the four stories' captures, 0 on the rest, whatever the memory; `echo_body` came out unpleasant on 24 of round nine's 25 echoes in two grim stories (-0.16 to -0.93) and about nothing on the other -- unmeasured beyond that |
